@@ -80,6 +80,10 @@ Only `postType` is required. All other fields are optional context enrichment.
 - **Dimensions:** 3072 (text-embedding-3-large)
 - **Distance:** Cosine
 
+**Bootstrap:** `QdrantClient::ensure_collection()` checks whether the collection exists (`GET /collections/flavor-agent-patterns`) and creates it if missing (`PUT /collections/flavor-agent-patterns` with vectors config and payload schema). This is called at the start of every sync operation and on the Settings page sync button. The `content` payload field is configured as non-indexed (`"index": false`).
+
+**Payload indexes:** `blockTypes`, `templateTypes`, and `categories` are created as keyword payload indexes to support filtered search (see Step 4).
+
 ### Point Structure
 
 | Field | Type | Source |
@@ -103,31 +107,37 @@ Condensed representation per pattern (~500-800 tokens):
 {description}
 Categories: {categories joined by comma}
 Block types: {blockTypes joined by comma}
+Template types: {templateTypes joined by comma}
 {first 500 characters of content}
 ```
 
-Full markup is too noisy for semantic matching (HTML comments, JSON attributes). The condensed form preserves semantic signal while keeping token cost low.
+Full markup is too noisy for semantic matching (HTML comments, JSON attributes). The condensed form preserves semantic signal while keeping token cost low. `templateTypes` and `blockTypes` are included in both the embedding text and as indexed payload fields for hybrid retrieval.
 
 ### Sync Logic
 
 The `PatternIndex` class orchestrates sync:
 
-1. Read all registered patterns via `ServerCollector::for_patterns()`
-2. Compute fingerprint: `md5()` of sorted `[ name, title, description, categories, md5(content) ]` per pattern. This ensures content or metadata changes trigger re-indexing even when pattern slugs stay the same.
-3. Compare against fingerprint stored as a WP option (`flavor_agent_pattern_fingerprint`)
-4. If match → skip. If stale:
+1. Acquire a sync lock via `wp_options` transient (`flavor_agent_sync_lock`, 5-minute TTL). If lock exists and is not expired, skip. This prevents overlapping syncs from the admin button, lifecycle hooks, and query-time triggers.
+2. Call `QdrantClient::ensure_collection()` to create the collection if it doesn't exist.
+3. Read all registered patterns via `ServerCollector::for_patterns()`
+4. Compute fingerprint: `md5()` of sorted `[ name, title, description, categories, blockTypes, templateTypes, md5(content), EMBEDDING_RECIPE_VERSION ]` per pattern. The `EMBEDDING_RECIPE_VERSION` is a class constant incremented when the embedding text template changes, ensuring recipe changes force re-indexing.
+5. Compare against a composite staleness key stored as WP option `flavor_agent_pattern_index_state`: `{ fingerprint, qdrant_url, embedding_deployment }`. If all match → skip. If any differ (fingerprint changed, Qdrant endpoint changed, embedding model changed), re-index.
+6. If stale:
    - Diff: identify added, removed, and changed patterns
    - Embed new/changed patterns in batches of 100 (Azure OpenAI supports arrays up to 2048 inputs, but batching at 100 keeps per-request token usage and timeout risk manageable)
    - Upsert points to Qdrant, delete removed pattern points
-   - Store new fingerprint in WP option
+   - Store new staleness key in WP option
+7. Release sync lock.
 
 ### Sync Triggers
 
 | Trigger | Mechanism | Timing |
 |---|---|---|
-| Admin button | `POST /flavor-agent/v1/sync-patterns` REST route, nonce-protected, `manage_options` capability. Settings page renders a button that calls this via `apiFetch`. Returns `{ indexed: int, removed: int, fingerprint: string }`. | Immediate, user-initiated |
-| Theme/plugin change | `after_switch_theme`, `activated_plugin`, `deactivated_plugin` hooks → `wp_schedule_single_event` | Background, automatic |
-| Query-time | Fingerprint check at start of `recommend_patterns()`. If stale, triggers background sync via `wp_schedule_single_event` and proceeds with the current index. Does NOT block the request. | Non-blocking, automatic |
+| Admin button | `POST /flavor-agent/v1/sync-patterns` REST route, nonce-protected, `manage_options` capability. Settings page enqueues a small admin JS file (`build/admin.js`) on the settings screen only (`admin_enqueue_scripts` with page hook check) that calls this route via `wp.apiFetch` or `fetch` with `X-WP-Nonce`. Returns `{ indexed: int, removed: int, fingerprint: string }`. Button shows a spinner during the request and a success/error notice on completion. | Immediate, user-initiated |
+| Theme/plugin change | `after_switch_theme`, `activated_plugin`, `deactivated_plugin` hooks → `wp_schedule_single_event( time() + 5, 'flavor_agent_reindex_patterns' )` | Background, automatic |
+| Query-time | Staleness key check at start of `recommend_patterns()`. If stale, schedules `wp_schedule_single_event( time(), 'flavor_agent_reindex_patterns' )` and proceeds with the current index. Does NOT block the request. | Non-blocking, automatic |
+
+**Cron hook:** `flavor_agent_reindex_patterns` is registered in `flavor-agent.php` via `add_action( 'flavor_agent_reindex_patterns', [ PatternIndex::class, 'sync' ] )`. All three background triggers schedule this same hook. The sync lock (step 1 of Sync Logic) ensures that overlapping schedules are harmless — the second invocation sees the lock and exits.
 
 ## Recommend Flow
 
@@ -158,7 +168,7 @@ Body: { "model": "text-embedding-3-large", "input": "<query string>" }
 
 Returns 3072-dimension vector.
 
-### Step 4: Search Qdrant
+### Step 4: Search Qdrant (hybrid: vector + payload filter)
 
 ```
 POST https://...qdrant.io:6333/collections/flavor-agent-patterns/points/query
@@ -166,9 +176,17 @@ Header: api-key: ***
 Body: {
   "query": [<query_vector>],
   "limit": 10,
-  "with_payload": true
+  "with_payload": true,
+  "filter": {
+    "should": [
+      { "key": "templateTypes", "match": { "value": "<templateType>" } },
+      { "key": "blockTypes", "match": { "value": "<blockContext.blockName>" } }
+    ]
+  }
 }
 ```
+
+The `filter.should` clause is only added when `templateType` or `blockContext.blockName` are present in the input. When neither is provided, the query is pure vector similarity with no filter. This uses Qdrant's payload indexes to boost structurally relevant patterns before the LLM ranks them, rather than relying on semantic guesswork alone for template/block-type matching.
 
 Returns top 10 patterns with full payload including `content`.
 
@@ -186,7 +204,7 @@ Body: {
 
 ### Step 6: Parse and Return
 
-Strip markdown fences defensively (matching the existing `Prompt::parse_response()` pattern), parse JSON, validate structure. The `content` field for each recommendation is sourced from the Qdrant payload (trusted data from the WordPress pattern registry), not from the LLM output. The LLM returns pattern `name` references; the implementation maps those back to the original content stored in Qdrant. String fields (`title`, `reason`) are sanitized with `sanitize_text_field()`.
+Strip markdown fences defensively (matching the existing `Prompt::parse_response()` pattern), parse JSON, validate structure. The LLM returns only `name`, `score`, and `reason` per recommendation. All registry-owned fields (`title`, `categories`, `content`) are rehydrated from the Qdrant payload keyed by `name`, not from LLM output. This eliminates drift between the recommendation and the actual registered pattern. Only `score` (float, clamped 0-1) and `reason` (`sanitize_text_field()`) come from the LLM. Pattern names that don't match any Qdrant candidate are dropped.
 
 ## System Prompt (Pattern Ranking)
 
@@ -204,10 +222,8 @@ Respond with a JSON object (no markdown fences, no text outside the JSON):
   "recommendations": [
     {
       "name": "pattern-slug",
-      "title": "Pattern Title",
       "score": 0.85,
-      "reason": "One sentence explaining why this pattern fits",
-      "categories": ["category-slug"]
+      "reason": "One sentence explaining why this pattern fits"
     }
   ]
 }
@@ -218,8 +234,8 @@ Rules:
 - Order by score descending.
 - Consider: post type conventions, block proximity, template structure,
   category relevance, and the user's stated intent.
-- Do not include the pattern content in your response — only name, title,
-  score, reason, and categories. Content is attached from the source data.
+- Return only name, score, and reason per pattern. Title, categories,
+  and content are attached from the source data.
 - Return at most 8 recommendations.
 ```
 
@@ -235,12 +251,14 @@ inc/
 │   └── PatternIndex.php       # NEW — sync orchestrator
 ├── Abilities/
 │   ├── PatternAbilities.php   # MODIFY — implement recommend_patterns()
-│   └── InfraAbilities.php     # MODIFY — make check_status() report recommend-patterns conditionally
+│   └── InfraAbilities.php     # MODIFY — check_status() returns per-ability readiness (see below)
 ├── REST/
 │   └── Agent_Controller.php   # MODIFY — add POST /flavor-agent/v1/sync-patterns route
 └── Settings.php               # MODIFY — add Azure OpenAI + Qdrant settings section + sync button
 
-flavor-agent.php               # MODIFY — add after_switch_theme, activated_plugin, deactivated_plugin hooks
+flavor-agent.php               # MODIFY — add lifecycle hooks + cron hook registration
+src/admin/
+└── sync-button.js             # NEW — settings page sync button (enqueued only on settings screen)
 ```
 
 ### New Settings Fields
@@ -264,9 +282,22 @@ flavor-agent.php               # MODIFY — add after_switch_theme, activated_pl
 
 Both endpoints use the OpenAI-compatible `/openai/v1/` path, which Azure OpenAI supports natively. The `model` field in the request body specifies the deployment name. No `api-version` query parameter is required with this path format.
 
-### Qdrant Collection Configuration
+### check-status Contract Update
 
-The `content` payload field should be marked as non-indexed (`"index": false` in the payload schema) since it is only returned in search results, never used for filtering. This reduces memory usage in Qdrant.
+`InfraAbilities::check_status()` currently returns `{ configured: bool, model: string, availableAbilities: string[] }`. With two independent backend stacks, `configured` as a single boolean is ambiguous. The update:
+
+- `configured` becomes per-backend: `{ "anthropic": bool, "azure_openai": bool, "qdrant": bool }`
+- `availableAbilities` is computed dynamically: abilities whose backend credentials are all present are listed as available. `recommend-block` requires Anthropic; `recommend-patterns` requires Azure OpenAI + Qdrant; read-only abilities are always available.
+- `model` becomes `{ "anthropic": "claude-sonnet-4", "azure_openai": "gpt-5.4" }` or `null` per backend if not configured.
+
+This is a breaking change to the `check-status` output shape but the ability is marked `readonly` and is only consumed by the plugin itself today.
+
+### Adjacent Spec Update
+
+The abilities-api-integration spec (`2026-03-16-abilities-api-integration-design.md`) should be updated in the same pass to reflect:
+- `Agent_Controller.php` and `Settings.php` are now MODIFY (not unchanged)
+- `recommend-patterns` is no longer stubbed
+- `InfraAbilities.php` has a new check-status contract
 
 ## Error Handling
 
@@ -292,7 +323,7 @@ Additional policies:
 
 - WP < 6.9: Abilities hooks don't fire. Pattern indexing infrastructure still loads but is never invoked via abilities. Could be wired to a REST endpoint separately if desired.
 - Missing Azure/Qdrant credentials: `recommend_patterns()` returns `WP_Error('missing_credentials', ...)` with actionable message pointing to Settings.
-- Empty Qdrant collection: First call triggers sync automatically via staleness check.
+- Empty or missing Qdrant collection: First sync call creates the collection via `QdrantClient::ensure_collection()`. Query-time staleness check schedules background sync, which handles bootstrap.
 
 ## Verification
 
