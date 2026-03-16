@@ -26,6 +26,8 @@ add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
 add_action( 'admin_init', [ FlavorAgent\Settings::class, 'register_settings' ] );
+add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\Abilities\Registration::class, 'register_category' ] );
+add_action( 'wp_abilities_api_init', [ FlavorAgent\Abilities\Registration::class, 'register_abilities' ] );
 
 function flavor_agent_enqueue_editor(): void {
     $asset_path = FLAVOR_AGENT_DIR . 'build/index.asset.php';
