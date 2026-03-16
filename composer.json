@@ -1,0 +1,9 @@
+{
+  "name": "flavor-agent/flavor-agent",
+  "type": "wordpress-plugin",
+  "autoload": {
+    "psr-4": {
+      "FlavorAgent\\": "inc/"
+    }
+  }
+}
