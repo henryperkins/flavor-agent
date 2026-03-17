@@ -6,9 +6,10 @@
 import { PanelBody, Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
-import { check, styles as stylesIcon } from '@wordpress/icons';
+import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
+import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
 
 const FEEDBACK_MS = 1200;
 
@@ -25,9 +26,22 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 		};
 	}, [] );
 
+	useEffect( () => {
+		if ( resetTimerRef.current ) {
+			window.clearTimeout( resetTimerRef.current );
+			resetTimerRef.current = null;
+		}
+
+		setAppliedKey( null );
+	}, [ suggestions ] );
+
 	const handleApply = useCallback(
-		( suggestion, key ) => {
-			applySuggestion( clientId, suggestion );
+		async ( suggestion, key ) => {
+			const didApply = await applySuggestion( clientId, suggestion );
+
+			if ( ! didApply ) {
+				return;
+			}
 
 			if ( resetTimerRef.current ) {
 				window.clearTimeout( resetTimerRef.current );
@@ -63,7 +77,7 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 		) {
 			continue;
 		}
-		const key = s.panel || 'general';
+		const key = getSuggestionPanel( s );
 		if ( ! byPanel[ key ] ) {
 			byPanel[ key ] = [];
 		}
@@ -72,72 +86,96 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 
 	return (
 		<PanelBody title="AI Style Suggestions" initialOpen icon={ stylesIcon }>
-			{ variationSuggestions.length > 0 && (
-				<div style={ { marginBottom: '12px' } }>
-					<div className="flavor-agent-section-label">
-						Block Style
+			<div className="flavor-agent-panel">
+				{ variationSuggestions.length > 0 && (
+					<div className="flavor-agent-panel__group">
+						<div className="flavor-agent-panel__group-header">
+							<div className="flavor-agent-panel__group-title">
+								Style Variations
+							</div>
+							<span className="flavor-agent-pill">
+								{ formatCount(
+									variationSuggestions.length,
+									'variation'
+								) }
+							</span>
+						</div>
+
+						<ButtonGroup className="flavor-agent-style-variations">
+							{ variationSuggestions.map( ( s ) => {
+								const key = `variation-${ s.label }`;
+								const applied = appliedKey === key;
+
+								return (
+									<Button
+										key={ key }
+										variant={
+											s.isCurrentStyle || applied
+												? 'primary'
+												: 'secondary'
+										}
+										size="compact"
+										onClick={ () =>
+											void handleApply( s, key )
+										}
+										title={ s.description }
+										icon={ applied ? check : undefined }
+										disabled={ applied }
+										className="flavor-agent-style-variation"
+									>
+										{ s.label }
+										{ s.isRecommended && (
+											<span className="flavor-agent-style-variation__star">
+												★
+											</span>
+										) }
+									</Button>
+								);
+							} ) }
+						</ButtonGroup>
 					</div>
+				) }
 
-					<ButtonGroup className="flavor-agent-style-variations">
-						{ variationSuggestions.map( ( s ) => {
-							const key = `variation-${ s.label }`;
-							const applied = appliedKey === key;
+				{ Object.entries( byPanel ).map( ( [ panel, items ] ) => (
+					<div key={ panel } className="flavor-agent-panel__group">
+						<div className="flavor-agent-panel__group-header">
+							<div className="flavor-agent-panel__group-title">
+								{ panelLabel( panel ) }
+							</div>
+							<span className="flavor-agent-pill">
+								{ formatCount( items.length, 'suggestion' ) }
+							</span>
+						</div>
 
-							return (
-								<Button
-									key={ key }
-									variant={
-										s.isCurrentStyle || applied
-											? 'primary'
-											: 'secondary'
-									}
-									size="compact"
-									onClick={ () => handleApply( s, key ) }
-									title={ s.description }
-									icon={ applied ? check : undefined }
-									disabled={ applied }
-								>
-									{ s.label }
-									{ s.isRecommended && (
-										<span className="flavor-agent-style-variation__star">
-											★
-										</span>
-									) }
-								</Button>
-							);
-						} ) }
-					</ButtonGroup>
-				</div>
-			) }
+						<div className="flavor-agent-panel__group-body">
+							{ items.map( ( s ) => {
+								const key = getSuggestionKey( s );
+								return (
+									<StyleSuggestionRow
+										key={ key }
+										suggestion={ s }
+										onApply={ () =>
+											void handleApply( s, key )
+										}
+										applied={ appliedKey === key }
+									/>
+								);
+							} ) }
+						</div>
+					</div>
+				) ) }
 
-			{ Object.entries( byPanel ).map( ( [ panel, items ] ) => (
-				<div key={ panel } style={ { marginBottom: '10px' } }>
-					<div className="flavor-agent-section-label">{ panel }</div>
-
-					{ items.map( ( s ) => {
-						const key = `${ panel }-${ s.label }`;
-						return (
-							<StyleSuggestionRow
-								key={ key }
-								suggestion={ s }
-								onApply={ () => handleApply( s, key ) }
-								applied={ appliedKey === key }
-							/>
-						);
-					} ) }
-				</div>
-			) ) }
-
-			{ attributeSuggestions.some( ( s ) =>
-				[ 'color', 'typography', 'dimensions', 'border' ].includes(
-					s.panel
-				)
-			) && (
-				<p className="flavor-agent-subpanel-hint">
-					More suggestions appear in the Color, Typography,
-					Dimensions, and Border panels above.
-				</p>
-			) }
+				{ attributeSuggestions.some( ( s ) =>
+					[ 'color', 'typography', 'dimensions', 'border' ].includes(
+						s.panel
+					)
+				) && (
+					<p className="flavor-agent-subpanel-hint flavor-agent-panel__note">
+						More suggestions appear in the Color, Typography,
+						Dimensions, and Border panels above.
+					</p>
+				) }
+			</div>
 		</PanelBody>
 	);
 }
@@ -147,46 +185,31 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 
 	return (
 		<div className="flavor-agent-card">
-			<div
-				style={ {
-					display: 'flex',
-					alignItems: 'center',
-					gap: '8px',
-				} }
-			>
+			<div className="flavor-agent-style-row">
 				{ preview && isColor( preview ) && (
 					<span
-						className="flavor-agent-chip__preview"
+						className="flavor-agent-style-row__preview"
 						style={ {
-							width: '20px',
-							height: '20px',
-							borderRadius: '4px',
-							backgroundColor: preview,
-							flexShrink: 0,
+							'--flavor-agent-style-preview': preview,
 						} }
 					/>
 				) }
 
 				<div className="flavor-agent-style-row__info">
-					<div className="flavor-agent-style-row__label">
-						{ label }
+					<div className="flavor-agent-style-row__header">
+						<div className="flavor-agent-style-row__label">
+							{ label }
+						</div>
+						{ cssVar && (
+							<code className="flavor-agent-pill flavor-agent-pill--code">
+								{ cssVar }
+							</code>
+						) }
 					</div>
 					{ description && (
 						<p className="flavor-agent-style-row__description">
 							{ description }
 						</p>
-					) }
-					{ cssVar && (
-						<code
-							style={ {
-								fontSize: '10px',
-								opacity: 0.5,
-								display: 'block',
-								marginTop: '2px',
-							} }
-						>
-							{ cssVar }
-						</code>
 					) }
 				</div>
 
@@ -194,13 +217,12 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 					variant="tertiary"
 					size="small"
 					onClick={ onApply }
-					icon={ check }
+					icon={ applied ? check : arrowRight }
 					label={ applied ? 'Applied' : 'Apply' }
 					className={ `flavor-agent-card__apply${
 						applied ? ' flavor-agent-card__apply--applied' : ''
-					}` }
+					} flavor-agent-style-row__apply` }
 					disabled={ applied }
-					style={ { flexShrink: 0 } }
 				/>
 			</div>
 		</div>
@@ -209,4 +231,20 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 
 function isColor( str ) {
 	return /^(#|rgb|hsl|var\()/.test( str );
+}
+
+function formatCount( count, noun ) {
+	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
+}
+
+function panelLabel( panel ) {
+	const labels = {
+		general: 'General',
+		layout: 'Layout',
+		position: 'Position',
+		advanced: 'Advanced',
+		effects: 'Effects',
+	};
+
+	return labels[ panel ] || panel;
 }

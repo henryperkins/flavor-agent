@@ -13,7 +13,6 @@ import {
 import {
 	PanelBody,
 	Button,
-	Spinner,
 	Notice,
 	TextareaControl,
 } from '@wordpress/components';
@@ -94,66 +93,91 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						initialOpen={ false }
 						icon={ icon }
 					>
-						{ isContentRestricted && (
-							<Notice
-								status="info"
-								isDismissible={ false }
-								className="flavor-agent-content-notice"
-							>
-								This block is content-restricted. Only content
-								edits are available.
-							</Notice>
-						) }
+						<div className="flavor-agent-panel">
+							{ isContentRestricted && (
+								<Notice
+									status="info"
+									isDismissible={ false }
+									className="flavor-agent-content-notice"
+								>
+									This block is content-restricted. Only
+									content edits are available.
+								</Notice>
+							) }
 
-						<TextareaControl
-							__nextHasNoMarginBottom
-							label="What are you trying to achieve?"
-							hideLabelFromVision
-							placeholder="What are you trying to achieve?"
-							value={ prompt }
-							onChange={ setPrompt }
-							rows={ 2 }
-							className="flavor-agent-prompt"
-						/>
-
-						<Button
-							variant="primary"
-							onClick={ handleFetch }
-							disabled={ isLoading }
-							icon={ icon }
-							className="flavor-agent-fetch-button"
-						>
-							{ isLoading ? <Spinner /> : 'Get Suggestions' }
-						</Button>
-
-						{ error && (
-							<Notice
-								status="error"
-								isDismissible
-								onDismiss={ () => setStatus( 'idle' ) }
-							>
-								{ error }
-							</Notice>
-						) }
-
-						{ recommendations?.explanation && (
-							<p className="flavor-agent-explanation">
-								{ recommendations.explanation }
-							</p>
-						) }
-
-						{ recommendations?.block?.length > 0 && (
-							<div style={ { marginTop: '12px' } }>
-								<div className="flavor-agent-section-label">
-									Block suggestions
-								</div>
-								<SuggestionChips
-									clientId={ clientId }
-									suggestions={ recommendations.block }
-									label="AI block suggestions"
-								/>
+							<div className="flavor-agent-panel__intro">
+								<p className="flavor-agent-panel__eyebrow">
+									Selected Block
+								</p>
+								<p className="flavor-agent-panel__intro-copy">
+									Ask for a specific outcome or fetch
+									recommendations based on the current block
+									context.
+								</p>
 							</div>
-						) }
+
+							<div className="flavor-agent-panel__composer">
+								<TextareaControl
+									__nextHasNoMarginBottom
+									label="What are you trying to achieve?"
+									hideLabelFromVision
+									placeholder="What are you trying to achieve?"
+									value={ prompt }
+									onChange={ setPrompt }
+									rows={ 2 }
+									className="flavor-agent-prompt"
+								/>
+
+								<Button
+									variant="primary"
+									onClick={ handleFetch }
+									disabled={ isLoading }
+									icon={ icon }
+									className="flavor-agent-fetch-button"
+								>
+									{ isLoading
+										? 'Getting Suggestions\u2026'
+										: 'Get Suggestions' }
+								</Button>
+							</div>
+
+							{ error && (
+								<Notice
+									status="error"
+									isDismissible
+									onDismiss={ () => setStatus( 'idle' ) }
+								>
+									{ error }
+								</Notice>
+							) }
+
+							{ recommendations?.explanation && (
+								<p className="flavor-agent-explanation flavor-agent-panel__note">
+									{ recommendations.explanation }
+								</p>
+							) }
+
+							{ recommendations?.block?.length > 0 && (
+								<div className="flavor-agent-panel__group">
+									<div className="flavor-agent-panel__group-header">
+										<div className="flavor-agent-panel__group-title">
+											Block suggestions
+										</div>
+										<span className="flavor-agent-pill">
+											{ recommendations.block.length }{ ' ' }
+											{ recommendations.block.length === 1
+												? 'idea'
+												: 'ideas' }
+										</span>
+									</div>
+									<SuggestionChips
+										clientId={ clientId }
+										suggestions={ recommendations.block }
+										label="AI block suggestions"
+									/>
+								</div>
+							) }
+						</div>
 					</PanelBody>
 
 					{ hasRecs && recommendations.settings.length > 0 && (

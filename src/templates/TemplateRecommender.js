@@ -16,10 +16,21 @@
  * Free-form text (explanation, description, reason) is scanned for
  * entity mentions and linked inline with the same type-aware actions.
  */
-import { Button, Notice, TextareaControl, Tooltip } from '@wordpress/components';
+import {
+	Button,
+	Notice,
+	TextareaControl,
+	Tooltip,
+} from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { check } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
@@ -42,6 +53,96 @@ const ENTITY_PART = 'part';
 const ENTITY_AREA = 'area';
 const ENTITY_PATTERN = 'pattern';
 
+function getSuggestionCardKey( suggestion, index ) {
+	return `${ suggestion.label || 'suggestion' }-${ index }`;
+}
+
+function getTemplatePartKey( slug, area ) {
+	return `${ slug }|${ area }`;
+}
+
+function areAllSuggestionActionsDone(
+	suggestion,
+	appliedParts,
+	insertedPatterns
+) {
+	const templateParts = Array.isArray( suggestion?.templateParts )
+		? suggestion.templateParts
+		: [];
+	const patternSuggestions = Array.isArray( suggestion?.patternSuggestions )
+		? suggestion.patternSuggestions
+		: [];
+
+	if ( templateParts.length + patternSuggestions.length === 0 ) {
+		return false;
+	}
+
+	return (
+		templateParts.every(
+			( part ) =>
+				appliedParts[ getTemplatePartKey( part.slug, part.area ) ]
+		) && patternSuggestions.every( ( name ) => insertedPatterns[ name ] )
+	);
+}
+
+function getPendingSuggestion( suggestion, appliedParts, insertedPatterns ) {
+	const templateParts = Array.isArray( suggestion?.templateParts )
+		? suggestion.templateParts
+		: [];
+	const patternSuggestions = Array.isArray( suggestion?.patternSuggestions )
+		? suggestion.patternSuggestions
+		: [];
+
+	return {
+		...suggestion,
+		templateParts: templateParts.filter(
+			( part ) =>
+				! appliedParts[ getTemplatePartKey( part.slug, part.area ) ]
+		),
+		patternSuggestions: patternSuggestions.filter(
+			( name ) => ! insertedPatterns[ name ]
+		),
+	};
+}
+
+function getApplyAllFeedback( totalCount, successCount ) {
+	const failureCount = totalCount - successCount;
+
+	if ( failureCount <= 0 ) {
+		return null;
+	}
+
+	if ( successCount === 0 ) {
+		return {
+			status: 'error',
+			message:
+				"Couldn't apply any of the suggested changes. Check that the target template areas and patterns are available.",
+		};
+	}
+
+	return {
+		status: 'warning',
+		message: `Applied ${ successCount } of ${ totalCount } changes. ${ failureCount } ${
+			failureCount === 1 ? 'change could' : 'changes could'
+		} not be applied.`,
+	};
+}
+
+function formatCount( count, noun ) {
+	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
+}
+
+function formatTemplateTypeLabel( templateType ) {
+	if ( ! templateType ) {
+		return 'Current Template';
+	}
+
+	return `${ templateType
+		.split( '-' )
+		.map( ( word ) => word.charAt( 0 ).toUpperCase() + word.slice( 1 ) )
+		.join( ' ' ) } Template`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Inline entity linking                                              */
 /* ------------------------------------------------------------------ */
@@ -55,6 +156,10 @@ const ENTITY_PATTERN = 'pattern';
  *   part    → selectBlock (canvas)
  *   area    → selectBlock (canvas)
  *   pattern → open Inserter filtered to that pattern
+ *
+ * @param {Array}  recommendations Template recommendation list.
+ * @param {Object} patternTitleMap Map of pattern names to display titles.
+ * @return {Array} Sorted list of linkable entities.
  */
 function buildEntityMap( recommendations, patternTitleMap ) {
 	const map = new Map();
@@ -69,8 +174,7 @@ function buildEntityMap( recommendations, patternTitleMap ) {
 					map.set( slug, {
 						text: slug,
 						type: ENTITY_PART,
-						action: () =>
-							selectBlockBySlugOrArea( slug, area ),
+						action: () => selectBlockBySlugOrArea( slug, area ),
 						tooltip: `Select \u201c${ slug }\u201d block in editor`,
 					} );
 				}
@@ -99,13 +203,11 @@ function buildEntityMap( recommendations, patternTitleMap ) {
 					} );
 				}
 				if ( title !== name && ! map.has( title ) ) {
-					const n = name;
-					const t = title;
 					map.set( title, {
 						text: title,
 						type: ENTITY_PATTERN,
-						action: () => openInserterForPattern( t ),
-						tooltip: `Browse \u201c${ t }\u201d in pattern inserter`,
+						action: () => openInserterForPattern( title ),
+						tooltip: `Browse \u201c${ title }\u201d in pattern inserter`,
 					} );
 				}
 			}
@@ -123,6 +225,10 @@ function buildEntityMap( recommendations, patternTitleMap ) {
  * A "boundary" is the string edge or any character that is NOT
  * alphanumeric and NOT a hyphen, so slugs like "header-large-title"
  * stay atomic and "header" won't match inside them.
+ *
+ * @param {string} haystack Source text to search.
+ * @param {string} needle   Target text to find.
+ * @return {number} Match index or -1 when no boundary-safe match exists.
  */
 function findWordMatch( haystack, needle ) {
 	const lower = haystack.toLowerCase();
@@ -155,6 +261,11 @@ function findWordMatch( haystack, needle ) {
 /**
  * Render a text string with recognised entities replaced by clickable
  * action links, each styled for its entity type.
+ *
+ * @param {Object} props          Component props.
+ * @param {string} props.text     Text to render.
+ * @param {Array}  props.entities Linkable entity definitions.
+ * @return {*} Rendered linked text.
  */
 function LinkedText( { text, entities } ) {
 	if ( ! text || ! entities || entities.length === 0 ) {
@@ -233,18 +344,25 @@ export default function TemplateRecommender() {
 			: null;
 	}, [] );
 	const templateType = normalizeTemplateType( templateRef );
-	const { recommendations, explanation, error, resultRef, isLoading } =
-		useSelect( ( select ) => {
-			const store = select( STORE_NAME );
+	const {
+		recommendations,
+		explanation,
+		error,
+		resultRef,
+		resultToken,
+		isLoading,
+	} = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
 
-			return {
-				recommendations: store.getTemplateRecommendations(),
-				explanation: store.getTemplateExplanation(),
-				error: store.getTemplateError(),
-				resultRef: store.getTemplateResultRef(),
-				isLoading: store.isTemplateLoading(),
-			};
-		}, [] );
+		return {
+			recommendations: store.getTemplateRecommendations(),
+			explanation: store.getTemplateExplanation(),
+			error: store.getTemplateError(),
+			resultRef: store.getTemplateResultRef(),
+			resultToken: store.getTemplateResultToken(),
+			isLoading: store.isTemplateLoading(),
+		};
+	}, [] );
 	const patternTitleMap = useSelect( ( select ) => {
 		const blockEditor = select( 'core/block-editor' );
 		const settings = blockEditor?.getSettings?.() || {};
@@ -310,53 +428,88 @@ export default function TemplateRecommender() {
 			name="flavor-agent-template-recommendations"
 			title="AI Template Recommendations"
 		>
-			<TextareaControl
-				__nextHasNoMarginBottom
-				label="What are you trying to achieve with this template?"
-				hideLabelFromVision
-				placeholder="Describe the structure or layout you want."
-				value={ prompt }
-				onChange={ setPrompt }
-				rows={ 3 }
-				className="flavor-agent-prompt"
-			/>
+			<div className="flavor-agent-panel">
+				<div className="flavor-agent-panel__intro">
+					<p className="flavor-agent-panel__eyebrow">
+						{ formatTemplateTypeLabel( templateType ) }
+					</p>
+					<p className="flavor-agent-panel__intro-copy">
+						Describe the structure or layout you want. Suggestions
+						can be previewed individually or applied together.
+					</p>
+				</div>
 
-			<Button
-				variant="primary"
-				onClick={ handleFetch }
-				disabled={ isLoading }
-				className="flavor-agent-fetch-button"
-			>
-				{ isLoading ? 'Getting suggestions\u2026' : 'Get Suggestions' }
-			</Button>
-
-			{ isLoading && (
-				<Notice status="info" isDismissible={ false }>
-					Analyzing template structure\u2026
-				</Notice>
-			) }
-
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			) }
-
-			{ hasMatchingResult && explanation && (
-				<p className="flavor-agent-explanation">
-					<LinkedText text={ explanation } entities={ entityMap } />
-				</p>
-			) }
-
-			{ hasSuggestions &&
-				recommendations.map( ( suggestion, index ) => (
-					<TemplateSuggestionCard
-						key={ `${ suggestion.label }-${ index }` }
-						suggestion={ suggestion }
-						patternTitleMap={ patternTitleMap }
-						entityMap={ entityMap }
+				<div className="flavor-agent-panel__composer">
+					<TextareaControl
+						__nextHasNoMarginBottom
+						label="What are you trying to achieve with this template?"
+						hideLabelFromVision
+						placeholder="Describe the structure or layout you want."
+						value={ prompt }
+						onChange={ setPrompt }
+						rows={ 3 }
+						className="flavor-agent-prompt"
 					/>
-				) ) }
+
+					<Button
+						variant="primary"
+						onClick={ handleFetch }
+						disabled={ isLoading }
+						className="flavor-agent-fetch-button"
+					>
+						{ isLoading
+							? 'Getting suggestions\u2026'
+							: 'Get Suggestions' }
+					</Button>
+				</div>
+
+				{ isLoading && (
+					<Notice status="info" isDismissible={ false }>
+						Analyzing template structure\u2026
+					</Notice>
+				) }
+
+				{ error && (
+					<Notice status="error" isDismissible={ false }>
+						{ error }
+					</Notice>
+				) }
+
+				{ hasMatchingResult && explanation && (
+					<p className="flavor-agent-explanation flavor-agent-panel__note">
+						<LinkedText text={ explanation } entities={ entityMap } />
+					</p>
+				) }
+
+				{ hasSuggestions && (
+					<div className="flavor-agent-panel__group">
+						<div className="flavor-agent-panel__group-header">
+							<div className="flavor-agent-panel__group-title">
+								Suggested Composition
+							</div>
+							<span className="flavor-agent-pill">
+								{ formatCount(
+									recommendations.length,
+									'suggestion'
+								) }
+							</span>
+						</div>
+						<div className="flavor-agent-panel__group-body">
+							{ recommendations.map( ( suggestion, index ) => (
+								<TemplateSuggestionCard
+									key={ `${ resultToken }-${ getSuggestionCardKey(
+										suggestion,
+										index
+									) }` }
+									suggestion={ suggestion }
+									patternTitleMap={ patternTitleMap }
+									entityMap={ entityMap }
+								/>
+							) ) }
+						</div>
+					</div>
+				) }
+			</div>
 		</PluginDocumentSettingPanel>
 	);
 }
@@ -372,7 +525,18 @@ function TemplateSuggestionCard( {
 } ) {
 	const [ appliedParts, setAppliedParts ] = useState( {} );
 	const [ insertedPatterns, setInsertedPatterns ] = useState( {} );
-	const [ allApplied, setAllApplied ] = useState( false );
+	const [ feedback, setFeedback ] = useState( null );
+	const allApplied = areAllSuggestionActionsDone(
+		suggestion,
+		appliedParts,
+		insertedPatterns
+	);
+
+	useEffect( () => {
+		setAppliedParts( {} );
+		setInsertedPatterns( {} );
+		setFeedback( null );
+	}, [ suggestion ] );
 
 	/* ---- Navigation (non-destructive) ---- */
 
@@ -384,53 +548,119 @@ function TemplateSuggestionCard( {
 		selectBlockByArea( area );
 	}, [] );
 
-	const handleBrowsePattern = useCallback( ( name ) => {
-		const title = patternTitleMap[ name ] || name;
-		openInserterForPattern( title );
-	}, [ patternTitleMap ] );
+	const handleBrowsePattern = useCallback(
+		( name ) => {
+			const title = patternTitleMap[ name ] || name;
+			openInserterForPattern( title );
+		},
+		[ patternTitleMap ]
+	);
 
 	/* ---- Mutations ---- */
 
-	const handleAssign = useCallback( ( slug, area ) => {
-		if ( assignTemplatePart( slug, area ) ) {
-			setAppliedParts( ( prev ) => ( {
-				...prev,
-				[ `${ slug }|${ area }` ]: true,
-			} ) );
-		}
-	}, [] );
+	const handleInsert = useCallback(
+		( name ) => {
+			const title = patternTitleMap[ name ] || name;
 
-	const handleInsert = useCallback( ( name ) => {
-		if ( insertPatternByName( name ) ) {
-			setInsertedPatterns( ( prev ) => ( { ...prev, [ name ]: true } ) );
-		}
-	}, [] );
+			if ( insertPatternByName( name ) ) {
+				setInsertedPatterns( {
+					...insertedPatterns,
+					[ name ]: true,
+				} );
+				setFeedback( null );
+				return;
+			}
+
+			setFeedback( {
+				status: 'error',
+				message: `Couldn't insert “${ title }” into this template.`,
+			} );
+		},
+		[ insertedPatterns, patternTitleMap ]
+	);
+
+	const handleAssign = useCallback(
+		( slug, area ) => {
+			if ( assignTemplatePart( slug, area ) ) {
+				setAppliedParts( {
+					...appliedParts,
+					[ getTemplatePartKey( slug, area ) ]: true,
+				} );
+				setFeedback( null );
+				return;
+			}
+
+			setFeedback( {
+				status: 'error',
+				message: `Couldn't assign “${ slug }” to the “${ area }” area.`,
+			} );
+		},
+		[ appliedParts ]
+	);
 
 	const handleApplyAll = useCallback( () => {
-		const results = applySuggestion( suggestion );
+		const pendingSuggestion = getPendingSuggestion(
+			suggestion,
+			appliedParts,
+			insertedPatterns
+		);
+		const totalCount =
+			pendingSuggestion.templateParts.length +
+			pendingSuggestion.patternSuggestions.length;
+
+		if ( totalCount === 0 ) {
+			setFeedback( null );
+			return;
+		}
+
+		const results = applySuggestion( pendingSuggestion );
 
 		const nextParts = {};
+		let successCount = 0;
 		for ( const p of results.parts ) {
 			if ( p.applied ) {
-				nextParts[ `${ p.slug }|${ p.area }` ] = true;
+				nextParts[ getTemplatePartKey( p.slug, p.area ) ] = true;
+				successCount += 1;
 			}
 		}
-		setAppliedParts( nextParts );
 
 		const nextPatterns = {};
 		for ( const p of results.patterns ) {
 			if ( p.inserted ) {
 				nextPatterns[ p.name ] = true;
+				successCount += 1;
 			}
 		}
-		setInsertedPatterns( nextPatterns );
-		setAllApplied( true );
-	}, [ suggestion ] );
+
+		setAppliedParts( {
+			...appliedParts,
+			...nextParts,
+		} );
+		setInsertedPatterns( {
+			...insertedPatterns,
+			...nextPatterns,
+		} );
+		setFeedback( getApplyAllFeedback( totalCount, successCount ) );
+	}, [ appliedParts, insertedPatterns, suggestion ] );
 
 	/* ---- Render ---- */
 
 	const hasParts = suggestion.templateParts?.length > 0;
 	const hasPatterns = suggestion.patternSuggestions?.length > 0;
+	const hasActions = hasParts || hasPatterns;
+	const summaryParts = [];
+
+	if ( hasParts ) {
+		summaryParts.push(
+			formatCount( suggestion.templateParts.length, 'part' )
+		);
+	}
+
+	if ( hasPatterns ) {
+		summaryParts.push(
+			formatCount( suggestion.patternSuggestions.length, 'pattern' )
+		);
+	}
 
 	return (
 		<div
@@ -440,14 +670,30 @@ function TemplateSuggestionCard( {
 		>
 			{ /* ---- Header ---- */ }
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
-				<div className="flavor-agent-card__label">
-					{ suggestion.label }
+				<div className="flavor-agent-card__lead">
+					<div className="flavor-agent-card__label">
+						{ suggestion.label }
+					</div>
+					{ ( summaryParts.length > 0 || allApplied ) && (
+						<div className="flavor-agent-card__meta">
+							{ summaryParts.length > 0 && (
+								<span className="flavor-agent-pill">
+									{ summaryParts.join( ' • ' ) }
+								</span>
+							) }
+							{ allApplied && (
+								<span className="flavor-agent-pill flavor-agent-pill--success">
+									Applied
+								</span>
+							) }
+						</div>
+					) }
 				</div>
 				<Button
 					size="small"
 					variant={ allApplied ? 'tertiary' : 'primary' }
 					onClick={ handleApplyAll }
-					disabled={ allApplied }
+					disabled={ allApplied || ! hasActions }
 					icon={ allApplied ? check : undefined }
 					className="flavor-agent-card__apply"
 				>
@@ -464,14 +710,28 @@ function TemplateSuggestionCard( {
 				</p>
 			) }
 
+			{ feedback && (
+				<Notice status={ feedback.status } isDismissible={ false }>
+					{ feedback.message }
+				</Notice>
+			) }
+
 			{ /* ---- Template parts ---- */ }
 			{ hasParts && (
 				<div className="flavor-agent-template-list">
-					<div className="flavor-agent-section-label">
-						Template Parts
+					<div className="flavor-agent-template-list__header">
+						<div className="flavor-agent-section-label">
+							Template Parts
+						</div>
+						<span className="flavor-agent-pill">
+							{ formatCount(
+								suggestion.templateParts.length,
+								'part'
+							) }
+						</span>
 					</div>
 					{ suggestion.templateParts.map( ( part ) => {
-						const key = `${ part.slug }|${ part.area }`;
+						const key = getTemplatePartKey( part.slug, part.area );
 						const isDone = !! appliedParts[ key ];
 
 						return (
@@ -561,8 +821,16 @@ function TemplateSuggestionCard( {
 			{ /* ---- Patterns ---- */ }
 			{ hasPatterns && (
 				<div className="flavor-agent-template-list">
-					<div className="flavor-agent-section-label">
-						Suggested Patterns
+					<div className="flavor-agent-template-list__header">
+						<div className="flavor-agent-section-label">
+							Suggested Patterns
+						</div>
+						<span className="flavor-agent-pill">
+							{ formatCount(
+								suggestion.patternSuggestions.length,
+								'pattern'
+							) }
+						</span>
 					</div>
 					{ suggestion.patternSuggestions.map( ( name ) => {
 						const isDone = !! insertedPatterns[ name ];

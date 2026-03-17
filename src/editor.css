@@ -7,18 +7,178 @@
  */
 
 /* ---------------------------------------------------------------
+ * Shared visual tokens
+ * --------------------------------------------------------------- */
+
+.flavor-agent-panel,
+.flavor-agent-card,
+.flavor-agent-chip.components-button,
+.flavor-agent-action-link.components-button.is-link,
+.flavor-agent-inline-link.components-button.is-link {
+  --flavor-agent-accent: var(--wp-components-color-accent, #3858e9);
+  --flavor-agent-text: var(--wp-components-color-foreground, #1e1e1e);
+  --flavor-agent-muted: var(
+    --wp-components-color-foreground-secondary,
+    #757575
+  );
+  --flavor-agent-surface: color-mix(
+    in srgb,
+    var(--flavor-agent-accent) 3%,
+    var(--wp-components-color-background, #fff)
+  );
+  --flavor-agent-surface-strong: color-mix(
+    in srgb,
+    var(--flavor-agent-accent) 7%,
+    var(--wp-components-color-background, #fff)
+  );
+  --flavor-agent-border: color-mix(
+    in srgb,
+    var(--flavor-agent-accent) 10%,
+    var(--wp-components-color-accent-inverted, #e0e0e0)
+  );
+  --flavor-agent-border-strong: color-mix(
+    in srgb,
+    var(--flavor-agent-accent) 22%,
+    var(--wp-components-color-accent-inverted, #e0e0e0)
+  );
+  --flavor-agent-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* ---------------------------------------------------------------
+ * Shared panel shells
+ * --------------------------------------------------------------- */
+
+.flavor-agent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.flavor-agent-panel__intro,
+.flavor-agent-panel__composer,
+.flavor-agent-panel__group {
+  border: 1px solid var(--flavor-agent-border);
+  border-radius: 10px;
+  background: var(--flavor-agent-surface);
+  box-shadow: var(--flavor-agent-shadow);
+}
+
+.flavor-agent-panel__intro {
+  padding: 12px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(
+        in srgb,
+        var(--flavor-agent-accent) 10%,
+        transparent
+      ),
+      transparent 70%
+    ),
+    var(--flavor-agent-surface);
+}
+
+.flavor-agent-panel__eyebrow {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-accent);
+}
+
+.flavor-agent-panel__intro-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--flavor-agent-muted);
+}
+
+.flavor-agent-panel__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.flavor-agent-panel__composer .components-base-control__field {
+  margin-bottom: 0;
+}
+
+.flavor-agent-panel__group {
+  padding: 12px;
+}
+
+.flavor-agent-panel__group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.flavor-agent-panel__group-title {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-muted);
+}
+
+.flavor-agent-panel__group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flavor-agent-panel__note {
+  margin: 0;
+}
+
+.flavor-agent-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--flavor-agent-border);
+  background: var(--flavor-agent-surface-strong);
+  color: var(--flavor-agent-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.flavor-agent-pill--success {
+  border-color: color-mix(in srgb, #00a32a 18%, transparent);
+  background: color-mix(in srgb, #00a32a 10%, transparent);
+  color: #00782d;
+}
+
+.flavor-agent-pill--code {
+  font-family: monospace;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ---------------------------------------------------------------
  * Shared: Section header (uppercase label above grouped items)
  * Used in: SettingsRecommendations, StylesRecommendations,
  *          InspectorInjector (block suggestions), TemplateRecommender
  * --------------------------------------------------------------- */
 
 .flavor-agent-section-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--wp-components-color-foreground-secondary, #757575);
-  margin-bottom: 6px;
+  letter-spacing: 0.08em;
+  color: var(--flavor-agent-muted);
+  margin-bottom: 8px;
 }
 
 /* ---------------------------------------------------------------
@@ -26,9 +186,10 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-explanation {
-  margin-top: 8px;
+  margin: 0;
   font-size: 12px;
-  color: var(--wp-components-color-foreground-secondary, #757575);
+  line-height: 1.5;
+  color: var(--flavor-agent-muted);
 }
 
 /* ---------------------------------------------------------------
@@ -37,67 +198,119 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-card {
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  background: var(--wp-components-color-background, #f0f0f0);
-  border-radius: 4px;
-  border: 1px solid var(--wp-components-color-accent-inverted, #e0e0e0);
+  padding: 12px;
+  margin-bottom: 0;
+  background: var(--wp-components-color-background, #fff);
+  border-radius: 10px;
+  border: 1px solid var(--flavor-agent-border);
+  box-shadow: var(--flavor-agent-shadow);
 }
 
 .flavor-agent-card--template {
-  margin-top: 12px;
-  padding: 10px;
+  margin-top: 0;
+  padding: 12px;
 }
 
 .flavor-agent-card__header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .flavor-agent-card__header--spaced {
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.flavor-agent-card__lead {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flavor-agent-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .flavor-agent-card__label {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--flavor-agent-text);
 }
 
 .flavor-agent-card__description {
   font-size: 12px;
-  margin: 0 0 8px;
-  color: var(--wp-components-color-foreground-secondary, #757575);
+  margin: 0 0 10px;
+  line-height: 1.5;
+  color: var(--flavor-agent-muted);
 }
 
-.flavor-agent-card__values {
-  display: flex;
+.flavor-agent-card__value-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--wp-components-color-foreground-secondary, #757575);
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.flavor-agent-card__values code {
+.flavor-agent-card__value {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--flavor-agent-border);
+  background: var(--flavor-agent-surface);
+}
+
+.flavor-agent-card__value-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-muted);
+}
+
+.flavor-agent-card__value code {
+  display: block;
   font-size: 11px;
-  padding: 1px 4px;
-  border-radius: 2px;
-  background: var(--wp-components-color-gray-100, #f0f0f0);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  background: none;
+  padding: 0;
+  color: var(--flavor-agent-text);
+}
+
+.flavor-agent-card__value-arrow {
+  color: var(--flavor-agent-muted);
 }
 
 .flavor-agent-card__confidence {
   margin-top: 4px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--wp-components-color-accent-inverted, #e0e0e0);
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-accent) 10%,
+    var(--wp-components-color-accent-inverted, #e0e0e0)
+  );
   overflow: hidden;
 }
 
 .flavor-agent-card__confidence-bar {
   height: 100%;
-  background: var(--wp-components-color-accent, #3858e9);
-  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--flavor-agent-accent),
+    color-mix(in srgb, var(--flavor-agent-accent) 68%, #70c0ff)
+  );
+  border-radius: inherit;
 }
 
 /* ---------------------------------------------------------------
@@ -106,11 +319,12 @@
 
 .flavor-agent-card__apply {
   flex-shrink: 0;
+  border-radius: 999px;
 }
 
 /* Applied state: brief confirmation feedback */
 .flavor-agent-card__apply--applied {
-  color: var(--wp-components-color-accent, #3858e9);
+  color: #00782d;
   pointer-events: none;
 }
 
@@ -122,25 +336,50 @@
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px 0;
+  gap: 6px;
+  padding: 0;
 }
 
-.flavor-agent-chip {
+.flavor-agent-chip.components-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
   font-size: 11px;
-  padding: 2px 8px;
-  height: auto;
-  line-height: 1.6;
+  line-height: 1.4;
+  box-shadow: none;
+}
+
+.flavor-agent-chip.components-button.is-secondary {
+  border-color: var(--flavor-agent-border);
+  background: var(--flavor-agent-surface);
+}
+
+.flavor-agent-chip.is-applied.components-button {
+  border-color: color-mix(in srgb, #00a32a 18%, transparent);
+  background: color-mix(in srgb, #00a32a 12%, transparent);
+  color: #00782d;
+}
+
+.flavor-agent-chip__label {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flavor-agent-chip__preview {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  margin-left: 4px;
-  vertical-align: middle;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.1);
+  background: var(--flavor-agent-chip-preview, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 /* ---------------------------------------------------------------
@@ -150,14 +389,26 @@
 .flavor-agent-style-variations {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.flavor-agent-style-variation.components-button {
+  min-height: 30px;
+  border-radius: 999px;
 }
 
 .flavor-agent-style-variation__star {
-  margin-left: 4px;
-  font-size: 10px;
-  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  background: color-mix(in srgb, #00a32a 10%, transparent);
+  color: #00782d;
 }
 
 /* ---------------------------------------------------------------
@@ -166,29 +417,49 @@
 
 .flavor-agent-style-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
+  gap: 10px;
+  align-items: flex-start;
 }
 
-.flavor-agent-style-row + .flavor-agent-style-row {
-  border-top: 1px solid var(--wp-components-color-accent-inverted, #e0e0e0);
+.flavor-agent-style-row__preview {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--flavor-agent-style-preview, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.flavor-agent-style-row__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .flavor-agent-style-row__info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .flavor-agent-style-row__label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .flavor-agent-style-row__description {
   font-size: 11px;
-  color: var(--wp-components-color-foreground-secondary, #757575);
+  line-height: 1.45;
+  color: var(--flavor-agent-muted);
   margin: 0;
+}
+
+.flavor-agent-style-row__apply {
+  flex-shrink: 0;
 }
 
 /* ---------------------------------------------------------------
@@ -196,12 +467,19 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-prompt {
-  margin-bottom: 8px;
+  margin: 0;
+}
+
+.flavor-agent-prompt textarea {
+  min-height: 78px;
+  border-radius: 8px;
 }
 
 .flavor-agent-fetch-button {
   width: 100%;
   justify-content: center;
+  min-height: 34px;
+  border-radius: 8px;
 }
 
 /* ---------------------------------------------------------------
@@ -209,7 +487,27 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-template-list {
-  margin-bottom: 8px;
+  margin-bottom: 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--flavor-agent-border);
+  background: var(--flavor-agent-surface);
+}
+
+.flavor-agent-template-list + .flavor-agent-template-list {
+  margin-top: 10px;
+}
+
+.flavor-agent-template-list__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.flavor-agent-template-list__header .flavor-agent-section-label {
+  margin-bottom: 0;
 }
 
 /* ---- Interactive suggestion row ---- */
@@ -218,10 +516,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
-  padding: 5px 0;
+  gap: 8px 6px;
+  padding: 7px 0;
   font-size: 12px;
-  border-bottom: 1px solid var(--wp-components-color-accent-inverted, #e0e0e0);
+  border-bottom: 1px solid var(--flavor-agent-border);
 }
 
 .flavor-agent-tpl-row:last-child {
@@ -250,20 +548,20 @@
 .flavor-agent-tpl-row__reason {
   flex-basis: 100%;
   font-size: 11px;
-  line-height: 1.4;
-  color: var(--wp-components-color-foreground-secondary, #757575);
+  line-height: 1.45;
+  color: var(--flavor-agent-muted);
   padding-left: 2px;
 }
 
 /* ---- Action links: shared base ---- */
 
 .flavor-agent-action-link.components-button.is-link {
-  font-size: 12px;
-  padding: 1px 4px;
+  font-size: 11px;
+  padding: 2px 8px;
   height: auto;
   min-height: 0;
   text-decoration: none;
-  border-radius: 2px;
+  border-radius: 999px;
   line-height: 1.4;
 }
 
@@ -318,18 +616,27 @@
 
 .flavor-agent-assign-btn.components-button {
   font-size: 11px;
-  height: 22px;
-  min-height: 22px;
-  padding: 0 8px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 10px;
   flex-shrink: 0;
+  border-radius: 999px;
 }
 
 /* ---- Done badge ---- */
 
 .flavor-agent-done-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  min-height: 22px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #00a32a 18%, transparent);
+  background: color-mix(in srgb, #00a32a 10%, transparent);
   font-size: 11px;
-  color: #00a32a;
-  font-weight: 500;
+  color: #00782d;
+  font-weight: 600;
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -388,8 +695,14 @@
 /* ---- Applied card state ---- */
 
 .flavor-agent-card--template.is-applied {
-  border-color: #00a32a;
-  background: color-mix(in srgb, #00a32a 5%, var(--wp-components-color-background, #f0f0f0));
+  border-color: color-mix(in srgb, #00a32a 24%, var(--flavor-agent-border));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, #00a32a 10%, transparent),
+      transparent 55%
+    ),
+    var(--wp-components-color-background, #fff);
 }
 
 /* ---------------------------------------------------------------
@@ -398,8 +711,9 @@
 
 .flavor-agent-subpanel-hint {
   font-size: 11px;
-  color: var(--wp-components-color-foreground-secondary, #757575);
-  margin-top: 8px;
+  line-height: 1.5;
+  color: var(--flavor-agent-muted);
+  margin: 0;
   font-style: italic;
 }
 

@@ -30,6 +30,7 @@ const DEFAULT_STATE = {
 	templateStatus: 'idle',
 	templateError: null,
 	templateRef: null,
+	templateResultToken: 0,
 };
 
 const actions = {
@@ -95,6 +96,7 @@ const actions = {
 				suggestion,
 				blockContext
 			);
+			let didApply = false;
 
 			if ( Object.keys( allowedUpdates ).length > 0 ) {
 				const safeUpdates = buildSafeAttributeUpdates(
@@ -107,7 +109,12 @@ const actions = {
 						clientId,
 						safeUpdates
 					);
+					didApply = true;
 				}
+			}
+
+			if ( ! didApply ) {
+				return false;
 			}
 
 			localDispatch(
@@ -118,6 +125,8 @@ const actions = {
 					timestamp: new Date().toISOString(),
 				} )
 			);
+
+			return true;
 		};
 	},
 
@@ -280,6 +289,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateRecommendations: action.payload?.suggestions ?? [],
 				templateExplanation: action.payload?.explanation ?? '',
 				templateRef: action.templateRef,
+				templateResultToken: state.templateResultToken + 1,
 				templateStatus: 'ready',
 				templateError: null,
 			};
@@ -291,6 +301,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateStatus: 'idle',
 				templateError: null,
 				templateRef: null,
+				templateResultToken: state.templateResultToken + 1,
 			};
 		default:
 			return state;
@@ -317,6 +328,7 @@ const selectors = {
 	getTemplateExplanation: ( state ) => state.templateExplanation,
 	getTemplateError: ( state ) => state.templateError,
 	getTemplateResultRef: ( state ) => state.templateRef,
+	getTemplateResultToken: ( state ) => state.templateResultToken,
 	isTemplateLoading: ( state ) => state.templateStatus === 'loading',
 	getTemplateStatus: ( state ) => state.templateStatus,
 };

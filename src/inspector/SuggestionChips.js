@@ -8,6 +8,7 @@ import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { check } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
+import { getSuggestionKey } from './suggestion-keys';
 
 const FEEDBACK_MS = 1200;
 
@@ -24,10 +25,24 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 		};
 	}, [] );
 
+	useEffect( () => {
+		if ( resetTimerRef.current ) {
+			window.clearTimeout( resetTimerRef.current );
+			resetTimerRef.current = null;
+		}
+
+		setAppliedKey( null );
+	}, [ suggestions ] );
+
 	const handleApply = useCallback(
-		( suggestion ) => {
-			applySuggestion( clientId, suggestion );
-			const key = `${ suggestion.panel }-${ suggestion.label }`;
+		async ( suggestion ) => {
+			const didApply = await applySuggestion( clientId, suggestion );
+
+			if ( ! didApply ) {
+				return;
+			}
+
+			const key = getSuggestionKey( suggestion );
 
 			if ( resetTimerRef.current ) {
 				window.clearTimeout( resetTimerRef.current );
@@ -46,7 +61,7 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 	return (
 		<div className="flavor-agent-chips" aria-label={ label }>
 			{ suggestions.map( ( s ) => {
-				const key = `${ s.panel }-${ s.label }`;
+				const key = getSuggestionKey( s );
 				const wasApplied = appliedKey === key;
 
 				return (
@@ -54,18 +69,28 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 						key={ key }
 						variant={ wasApplied ? 'primary' : 'secondary' }
 						size="small"
-						onClick={ () => handleApply( s ) }
+						onClick={ () => void handleApply( s ) }
 						title={ s.description || s.label }
 						icon={ wasApplied ? check : undefined }
-						className="flavor-agent-chip"
+						className={ `flavor-agent-chip${
+							wasApplied ? ' is-applied' : ''
+						}` }
+						style={
+							s.preview
+								? {
+										'--flavor-agent-chip-preview':
+											s.preview,
+								  }
+								: undefined
+						}
 					>
-						{ wasApplied ? null : s.label }
+						<span className="flavor-agent-chip__label">
+							{ wasApplied ? 'Applied' : s.label }
+						</span>
 						{ ! wasApplied && s.preview && (
 							<span
 								className="flavor-agent-chip__preview"
-								style={ {
-									backgroundColor: s.preview,
-								} }
+								aria-hidden="true"
 							/>
 						) }
 					</Button>

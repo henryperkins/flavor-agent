@@ -9,6 +9,7 @@ import { Icon, check, arrowRight } from '@wordpress/icons';
 import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
+import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
 
 const FEEDBACK_MS = 1200;
 
@@ -25,10 +26,24 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 		};
 	}, [] );
 
+	useEffect( () => {
+		if ( resetTimerRef.current ) {
+			window.clearTimeout( resetTimerRef.current );
+			resetTimerRef.current = null;
+		}
+
+		setAppliedKey( null );
+	}, [ suggestions ] );
+
 	const handleApply = useCallback(
-		( suggestion ) => {
-			applySuggestion( clientId, suggestion );
-			const key = `${ suggestion.panel }-${ suggestion.label }`;
+		async ( suggestion ) => {
+			const didApply = await applySuggestion( clientId, suggestion );
+
+			if ( ! didApply ) {
+				return;
+			}
+
+			const key = getSuggestionKey( suggestion );
 
 			if ( resetTimerRef.current ) {
 				window.clearTimeout( resetTimerRef.current );
@@ -50,7 +65,7 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 
 	const grouped = {};
 	for ( const s of suggestions ) {
-		const key = s.panel || 'general';
+		const key = getSuggestionPanel( s );
 		if ( ! grouped[ key ] ) {
 			grouped[ key ] = [];
 		}
@@ -59,27 +74,38 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 
 	return (
 		<PanelBody title="AI Settings" initialOpen>
-			{ Object.entries( grouped ).map( ( [ panel, items ] ) => (
-				<div key={ panel } style={ { marginBottom: '12px' } }>
-					{ Object.keys( grouped ).length > 1 && (
-						<div className="flavor-agent-section-label">
-							{ panelLabel( panel ) }
-						</div>
-					) }
+			<div className="flavor-agent-panel">
+				{ Object.entries( grouped ).map( ( [ panel, items ] ) => (
+					<div key={ panel } className="flavor-agent-panel__group">
+						{ Object.keys( grouped ).length > 1 && (
+							<div className="flavor-agent-panel__group-header">
+								<div className="flavor-agent-panel__group-title">
+									{ panelLabel( panel ) }
+								</div>
+								<span className="flavor-agent-pill">
+									{ formatCount( items.length, 'suggestion' ) }
+								</span>
+							</div>
+						) }
 
-					{ items.map( ( suggestion ) => {
-						const key = `${ panel }-${ suggestion.label }`;
-						return (
-							<SuggestionCard
-								key={ key }
-								suggestion={ suggestion }
-								onApply={ () => handleApply( suggestion ) }
-								applied={ appliedKey === key }
-							/>
-						);
-					} ) }
-				</div>
-			) ) }
+						<div className="flavor-agent-panel__group-body">
+							{ items.map( ( suggestion ) => {
+								const key = getSuggestionKey( suggestion );
+								return (
+									<SuggestionCard
+										key={ key }
+										suggestion={ suggestion }
+										onApply={ () =>
+											void handleApply( suggestion )
+										}
+										applied={ appliedKey === key }
+									/>
+								);
+							} ) }
+						</div>
+					</div>
+				) ) }
+			</div>
 		</PanelBody>
 	);
 }
@@ -87,15 +113,30 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 function SuggestionCard( { suggestion, onApply, applied } ) {
 	const { label, description, confidence, currentValue, suggestedValue } =
 		suggestion;
+	const confidenceLabel =
+		confidence !== null && confidence !== undefined
+			? formatConfidenceLabel( confidence )
+			: null;
 
 	return (
 		<div className="flavor-agent-card">
 			<div
 				className={ `flavor-agent-card__header${
-					description ? ' flavor-agent-card__header--spaced' : ''
+					description || confidenceLabel
+						? ' flavor-agent-card__header--spaced'
+						: ''
 				}` }
 			>
-				<span className="flavor-agent-card__label">{ label }</span>
+				<div className="flavor-agent-card__lead">
+					<span className="flavor-agent-card__label">{ label }</span>
+					{ confidenceLabel && (
+						<div className="flavor-agent-card__meta">
+							<span className="flavor-agent-pill">
+								{ confidenceLabel }
+							</span>
+						</div>
+					) }
+				</div>
 				<Button
 					size="small"
 					variant="tertiary"
@@ -116,10 +157,24 @@ function SuggestionCard( { suggestion, onApply, applied } ) {
 			) }
 
 			{ currentValue !== undefined && suggestedValue !== undefined && (
-				<div className="flavor-agent-card__values">
-					<code>{ formatValue( currentValue ) }</code>
-					<Icon icon={ arrowRight } size={ 12 } />
-					<code>{ formatValue( suggestedValue ) }</code>
+				<div className="flavor-agent-card__value-grid">
+					<div className="flavor-agent-card__value">
+						<span className="flavor-agent-card__value-label">
+							Current
+						</span>
+						<code>{ formatValue( currentValue ) }</code>
+					</div>
+					<Icon
+						icon={ arrowRight }
+						size={ 14 }
+						className="flavor-agent-card__value-arrow"
+					/>
+					<div className="flavor-agent-card__value">
+						<span className="flavor-agent-card__value-label">
+							Suggested
+						</span>
+						<code>{ formatValue( suggestedValue ) }</code>
+					</div>
 				</div>
 			) }
 
@@ -150,6 +205,14 @@ function panelLabel( panel ) {
 		bindings: 'Bindings',
 	};
 	return labels[ panel ] || panel;
+}
+
+function formatCount( count, noun ) {
+	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
+}
+
+function formatConfidenceLabel( confidence ) {
+	return `${ clampConfidence( confidence ) }% confidence`;
 }
 
 function formatValue( value ) {
