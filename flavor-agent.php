@@ -91,6 +91,7 @@ function flavor_agent_enqueue_editor(): void {
     }
 
     $asset = include $asset_path;
+    $css_path = FLAVOR_AGENT_DIR . 'build/index.css';
 
     wp_enqueue_script(
         'flavor-agent-editor',
@@ -99,6 +100,15 @@ function flavor_agent_enqueue_editor(): void {
         $asset['version'],
         true
     );
+
+    if ( file_exists( $css_path ) ) {
+        wp_enqueue_style(
+            'flavor-agent-editor',
+            FLAVOR_AGENT_URL . 'build/index.css',
+            [],
+            $asset['version']
+        );
+    }
 
     wp_localize_script( 'flavor-agent-editor', 'flavorAgentData', [
         'restUrl'              => rest_url( 'flavor-agent/v1/' ),

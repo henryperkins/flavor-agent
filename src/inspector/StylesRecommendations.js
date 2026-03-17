@@ -5,12 +5,43 @@
  */
 import { PanelBody, Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
+import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 
+const FEEDBACK_MS = 1200;
+
 export default function StylesRecommendations( { clientId, suggestions } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
+	const [ appliedKey, setAppliedKey ] = useState( null );
+	const resetTimerRef = useRef( null );
+
+	useEffect( () => {
+		return () => {
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
+			}
+		};
+	}, [] );
+
+	const handleApply = useCallback(
+		( suggestion, key ) => {
+			applySuggestion( clientId, suggestion );
+
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
+			}
+
+			setAppliedKey( key );
+
+			resetTimerRef.current = window.setTimeout( () => {
+				setAppliedKey( null );
+				resetTimerRef.current = null;
+			}, FEEDBACK_MS );
+		},
+		[ clientId, applySuggestion ]
+	);
 
 	if ( ! suggestions.length ) {
 		return null;
@@ -43,76 +74,57 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 		<PanelBody title="AI Style Suggestions" initialOpen icon={ stylesIcon }>
 			{ variationSuggestions.length > 0 && (
 				<div style={ { marginBottom: '12px' } }>
-					<div
-						style={ {
-							fontSize: '11px',
-							fontWeight: 600,
-							textTransform: 'uppercase',
-							letterSpacing: '0.5px',
-							color: 'var(--wp-components-color-foreground-secondary)',
-							marginBottom: '8px',
-						} }
-					>
+					<div className="flavor-agent-section-label">
 						Block Style
 					</div>
 
-					<ButtonGroup
-						style={ {
-							display: 'flex',
-							flexWrap: 'wrap',
-							gap: '4px',
-						} }
-					>
-						{ variationSuggestions.map( ( s ) => (
-							<Button
-								key={ `variation-${ s.label }` }
-								variant={
-									s.isCurrentStyle ? 'primary' : 'secondary'
-								}
-								size="compact"
-								onClick={ () => applySuggestion( clientId, s ) }
-								title={ s.description }
-							>
-								{ s.label }
-								{ s.isRecommended && (
-									<span
-										style={ {
-											marginLeft: '4px',
-											fontSize: '10px',
-											opacity: 0.7,
-										} }
-									>
-										*
-									</span>
-								) }
-							</Button>
-						) ) }
+					<ButtonGroup className="flavor-agent-style-variations">
+						{ variationSuggestions.map( ( s ) => {
+							const key = `variation-${ s.label }`;
+							const applied = appliedKey === key;
+
+							return (
+								<Button
+									key={ key }
+									variant={
+										s.isCurrentStyle || applied
+											? 'primary'
+											: 'secondary'
+									}
+									size="compact"
+									onClick={ () => handleApply( s, key ) }
+									title={ s.description }
+									icon={ applied ? check : undefined }
+									disabled={ applied }
+								>
+									{ s.label }
+									{ s.isRecommended && (
+										<span className="flavor-agent-style-variation__star">
+											★
+										</span>
+									) }
+								</Button>
+							);
+						} ) }
 					</ButtonGroup>
 				</div>
 			) }
 
 			{ Object.entries( byPanel ).map( ( [ panel, items ] ) => (
 				<div key={ panel } style={ { marginBottom: '10px' } }>
-					<div
-						style={ {
-							fontSize: '11px',
-							fontWeight: 600,
-							textTransform: 'uppercase',
-							letterSpacing: '0.5px',
-							color: 'var(--wp-components-color-foreground-secondary)',
-							marginBottom: '6px',
-						} }
-					>
-						{ panel }
-					</div>
+					<div className="flavor-agent-section-label">{ panel }</div>
 
-					{ items.map( ( s ) => (
-						<StyleSuggestionRow
-							key={ `${ panel }-${ s.label }` }
-							suggestion={ s }
-							onApply={ () => applySuggestion( clientId, s ) }
-						/>
-					) ) }
+					{ items.map( ( s ) => {
+						const key = `${ panel }-${ s.label }`;
+						return (
+							<StyleSuggestionRow
+								key={ key }
+								suggestion={ s }
+								onApply={ () => handleApply( s, key ) }
+								applied={ appliedKey === key }
+							/>
+						);
+					} ) }
 				</div>
 			) ) }
 
@@ -121,14 +133,7 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 					s.panel
 				)
 			) && (
-				<p
-					style={ {
-						fontSize: '11px',
-						color: 'var(--wp-components-color-foreground-secondary)',
-						marginTop: '8px',
-						fontStyle: 'italic',
-					} }
-				>
+				<p className="flavor-agent-subpanel-hint">
 					More suggestions appear in the Color, Typography,
 					Dimensions, and Border panels above.
 				</p>
@@ -137,79 +142,67 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 	);
 }
 
-function StyleSuggestionRow( { suggestion, onApply } ) {
+function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 	const { label, description, preview, cssVar } = suggestion;
 
 	return (
-		<div
-			style={ {
-				display: 'flex',
-				alignItems: 'center',
-				gap: '8px',
-				padding: '6px 8px',
-				marginBottom: '4px',
-				background: 'var(--wp-components-color-background, #f0f0f0)',
-				borderRadius: '4px',
-				border: '1px solid var(--wp-components-color-accent-inverted, #e0e0e0)',
-			} }
-		>
-			{ preview && isColor( preview ) && (
-				<span
-					style={ {
-						flexShrink: 0,
-						width: '20px',
-						height: '20px',
-						borderRadius: '4px',
-						backgroundColor: preview,
-						border: '1px solid rgba(0,0,0,0.15)',
-					} }
-				/>
-			) }
-
-			<div style={ { flex: 1, minWidth: 0 } }>
-				<div
-					style={ {
-						fontSize: '12px',
-						fontWeight: 500,
-						lineHeight: '1.3',
-					} }
-				>
-					{ label }
-				</div>
-				{ description && (
-					<div
+		<div className="flavor-agent-card">
+			<div
+				style={ {
+					display: 'flex',
+					alignItems: 'center',
+					gap: '8px',
+				} }
+			>
+				{ preview && isColor( preview ) && (
+					<span
+						className="flavor-agent-chip__preview"
 						style={ {
-							fontSize: '11px',
-							color: 'var(--wp-components-color-foreground-secondary)',
-							lineHeight: '1.3',
-							marginTop: '1px',
+							width: '20px',
+							height: '20px',
+							borderRadius: '4px',
+							backgroundColor: preview,
+							flexShrink: 0,
 						} }
-					>
-						{ description }
+					/>
+				) }
+
+				<div className="flavor-agent-style-row__info">
+					<div className="flavor-agent-style-row__label">
+						{ label }
 					</div>
-				) }
-				{ cssVar && (
-					<code
-						style={ {
-							fontSize: '10px',
-							opacity: 0.5,
-							display: 'block',
-							marginTop: '2px',
-						} }
-					>
-						{ cssVar }
-					</code>
-				) }
-			</div>
+					{ description && (
+						<p className="flavor-agent-style-row__description">
+							{ description }
+						</p>
+					) }
+					{ cssVar && (
+						<code
+							style={ {
+								fontSize: '10px',
+								opacity: 0.5,
+								display: 'block',
+								marginTop: '2px',
+							} }
+						>
+							{ cssVar }
+						</code>
+					) }
+				</div>
 
-			<Button
-				variant="tertiary"
-				size="small"
-				onClick={ onApply }
-				icon={ check }
-				label="Apply"
-				style={ { flexShrink: 0 } }
-			/>
+				<Button
+					variant="tertiary"
+					size="small"
+					onClick={ onApply }
+					icon={ check }
+					label={ applied ? 'Applied' : 'Apply' }
+					className={ `flavor-agent-card__apply${
+						applied ? ' flavor-agent-card__apply--applied' : ''
+					}` }
+					disabled={ applied }
+					style={ { flexShrink: 0 } }
+				/>
+			</div>
 		</div>
 	);
 }

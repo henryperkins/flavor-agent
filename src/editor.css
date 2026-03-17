@@ -1,0 +1,438 @@
+/**
+ * Flavor Agent — Editor styles.
+ *
+ * Replaces inline styles across Inspector, Pattern, and Template
+ * recommendation components with class-based rules. Uses WordPress
+ * component CSS variables so the plugin adapts to admin color schemes.
+ */
+
+/* ---------------------------------------------------------------
+ * Shared: Section header (uppercase label above grouped items)
+ * Used in: SettingsRecommendations, StylesRecommendations,
+ *          InspectorInjector (block suggestions), TemplateRecommender
+ * --------------------------------------------------------------- */
+
+.flavor-agent-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+  margin-bottom: 6px;
+}
+
+/* ---------------------------------------------------------------
+ * Shared: Explanation / secondary text
+ * --------------------------------------------------------------- */
+
+.flavor-agent-explanation {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+}
+
+/* ---------------------------------------------------------------
+ * Shared: Suggestion card
+ * Used in: SettingsRecommendations, TemplateRecommender
+ * --------------------------------------------------------------- */
+
+.flavor-agent-card {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--wp-components-color-background, #f0f0f0);
+  border-radius: 4px;
+  border: 1px solid var(--wp-components-color-accent-inverted, #e0e0e0);
+}
+
+.flavor-agent-card--template {
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.flavor-agent-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.flavor-agent-card__header--spaced {
+  margin-bottom: 4px;
+}
+
+.flavor-agent-card__label {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.flavor-agent-card__description {
+  font-size: 12px;
+  margin: 0 0 8px;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+}
+
+.flavor-agent-card__values {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+  margin-bottom: 6px;
+}
+
+.flavor-agent-card__values code {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--wp-components-color-gray-100, #f0f0f0);
+}
+
+.flavor-agent-card__confidence {
+  margin-top: 4px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--wp-components-color-accent-inverted, #e0e0e0);
+  overflow: hidden;
+}
+
+.flavor-agent-card__confidence-bar {
+  height: 100%;
+  background: var(--wp-components-color-accent, #3858e9);
+  border-radius: 2px;
+}
+
+/* ---------------------------------------------------------------
+ * Shared: Apply button within cards
+ * --------------------------------------------------------------- */
+
+.flavor-agent-card__apply {
+  flex-shrink: 0;
+}
+
+/* Applied state: brief confirmation feedback */
+.flavor-agent-card__apply--applied {
+  color: var(--wp-components-color-accent, #3858e9);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------
+ * Suggestion chips (ToolsPanel sub-panels)
+ * --------------------------------------------------------------- */
+
+.flavor-agent-chips {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.flavor-agent-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  height: auto;
+  line-height: 1.6;
+}
+
+.flavor-agent-chip__preview {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ---------------------------------------------------------------
+ * Style variation pills
+ * --------------------------------------------------------------- */
+
+.flavor-agent-style-variations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.flavor-agent-style-variation__star {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------
+ * Style suggestion row (StylesRecommendations overflow items)
+ * --------------------------------------------------------------- */
+
+.flavor-agent-style-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.flavor-agent-style-row + .flavor-agent-style-row {
+  border-top: 1px solid var(--wp-components-color-accent-inverted, #e0e0e0);
+}
+
+.flavor-agent-style-row__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.flavor-agent-style-row__label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.flavor-agent-style-row__description {
+  font-size: 11px;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------
+ * Prompt area (Inspector panel)
+ * --------------------------------------------------------------- */
+
+.flavor-agent-prompt {
+  margin-bottom: 8px;
+}
+
+.flavor-agent-fetch-button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------
+ * Template parts / patterns lists in template cards
+ * --------------------------------------------------------------- */
+
+.flavor-agent-template-list {
+  margin-bottom: 8px;
+}
+
+/* ---- Interactive suggestion row ---- */
+
+.flavor-agent-tpl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 5px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--wp-components-color-accent-inverted, #e0e0e0);
+}
+
+.flavor-agent-tpl-row:last-child {
+  border-bottom: none;
+}
+
+.flavor-agent-tpl-row.is-done {
+  opacity: 0.65;
+}
+
+/* Slug → Area mapping line */
+.flavor-agent-tpl-row__mapping {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.flavor-agent-tpl-row__arrow {
+  color: var(--wp-components-color-foreground-secondary, #757575);
+  flex-shrink: 0;
+}
+
+/* Reason text wraps to full width */
+.flavor-agent-tpl-row__reason {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+  padding-left: 2px;
+}
+
+/* ---- Action links: shared base ---- */
+
+.flavor-agent-action-link.components-button.is-link {
+  font-size: 12px;
+  padding: 1px 4px;
+  height: auto;
+  min-height: 0;
+  text-decoration: none;
+  border-radius: 2px;
+  line-height: 1.4;
+}
+
+.flavor-agent-action-link.components-button.is-link:hover {
+  text-decoration: underline;
+}
+
+.flavor-agent-action-link.components-button.is-link:focus {
+  box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
+    var(--wp-components-color-accent, #3858e9);
+}
+
+.flavor-agent-action-link.components-button.is-link[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Type: template-part slug — monospace pill, blue accent */
+.flavor-agent-action-link--part.components-button.is-link {
+  font-family: monospace;
+  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 10%, transparent);
+  color: var(--wp-components-color-accent, #3858e9);
+}
+
+.flavor-agent-action-link--part.components-button.is-link:hover {
+  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 18%, transparent);
+}
+
+/* Type: area — monospace pill, muted */
+.flavor-agent-action-link--area.components-button.is-link {
+  font-family: monospace;
+  background: var(--wp-components-color-gray-100, #f0f0f0);
+  color: var(--wp-components-color-foreground, #1e1e1e);
+}
+
+.flavor-agent-action-link--area.components-button.is-link:hover {
+  background: var(--wp-components-color-gray-200, #e0e0e0);
+}
+
+/* Type: pattern — normal font, green-ish accent to distinguish from parts */
+.flavor-agent-action-link--pattern.components-button.is-link {
+  font-family: inherit;
+  background: color-mix(in srgb, #00a32a 8%, transparent);
+  color: #00782d;
+}
+
+.flavor-agent-action-link--pattern.components-button.is-link:hover {
+  background: color-mix(in srgb, #00a32a 16%, transparent);
+}
+
+/* ---- Assign / Insert buttons ---- */
+
+.flavor-agent-assign-btn.components-button {
+  font-size: 11px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+/* ---- Done badge ---- */
+
+.flavor-agent-done-badge {
+  font-size: 11px;
+  color: #00a32a;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ---- Inline entity links (in explanation, description, reason) ---- */
+
+.flavor-agent-inline-link.components-button.is-link {
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0 2px;
+  height: auto;
+  min-height: 0;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+}
+
+.flavor-agent-inline-link.components-button.is-link:hover {
+  text-decoration-style: solid;
+}
+
+.flavor-agent-inline-link.components-button.is-link:focus {
+  box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
+    var(--wp-components-color-accent, #3858e9);
+}
+
+/* Inline type: part — blue accent, highlights the slug in running text */
+.flavor-agent-inline-link--part.components-button.is-link {
+  color: var(--wp-components-color-accent, #3858e9);
+}
+
+.flavor-agent-inline-link--part.components-button.is-link:hover {
+  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 8%, transparent);
+}
+
+/* Inline type: area — same accent so "header" / "footer" stand out */
+.flavor-agent-inline-link--area.components-button.is-link {
+  color: var(--wp-components-color-accent, #3858e9);
+  font-weight: 500;
+}
+
+.flavor-agent-inline-link--area.components-button.is-link:hover {
+  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 8%, transparent);
+}
+
+/* Inline type: pattern — green accent so patterns are visually distinct */
+.flavor-agent-inline-link--pattern.components-button.is-link {
+  color: #00782d;
+}
+
+.flavor-agent-inline-link--pattern.components-button.is-link:hover {
+  background: color-mix(in srgb, #00a32a 8%, transparent);
+}
+
+/* ---- Applied card state ---- */
+
+.flavor-agent-card--template.is-applied {
+  border-color: #00a32a;
+  background: color-mix(in srgb, #00a32a 5%, var(--wp-components-color-background, #f0f0f0));
+}
+
+/* ---------------------------------------------------------------
+ * Styles panel: cross-reference hint
+ * --------------------------------------------------------------- */
+
+.flavor-agent-subpanel-hint {
+  font-size: 11px;
+  color: var(--wp-components-color-foreground-secondary, #757575);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* ---------------------------------------------------------------
+ * Inserter badge
+ * --------------------------------------------------------------- */
+
+.flavor-agent-inserter-badge-anchor {
+  position: relative;
+}
+
+.flavor-agent-inserter-badge {
+  position: absolute;
+  top: 2px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--wp-components-color-accent, #3858e9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  cursor: default;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+/* ---------------------------------------------------------------
+ * Content-restricted notice spacing
+ * --------------------------------------------------------------- */
+
+.flavor-agent-content-notice {
+  margin: 0 0 8px;
+}

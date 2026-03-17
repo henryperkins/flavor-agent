@@ -43,11 +43,18 @@ export default function InserterBadge() {
 			}
 		}
 
-		if ( button?.parentElement ) {
-			// Ensure the parent has relative positioning for the badge.
-			button.parentElement.style.position = 'relative';
-			setAnchor( button.parentElement );
+		const parent = button?.parentElement;
+		if ( ! parent ) {
+			return;
 		}
+
+		// Use a CSS class instead of mutating inline styles.
+		parent.classList.add( 'flavor-agent-inserter-badge-anchor' );
+		setAnchor( parent );
+
+		return () => {
+			parent.classList.remove( 'flavor-agent-inserter-badge-anchor' );
+		};
 	}, [ badge ] );
 
 	if ( ! badge || ! anchor ) {
@@ -57,24 +64,8 @@ export default function InserterBadge() {
 	return createPortal(
 		<Tooltip text={ badge }>
 			<span
+				className="flavor-agent-inserter-badge"
 				aria-label="Pattern recommendations available"
-				style={ {
-					position: 'absolute',
-					top: '2px',
-					right: '-4px',
-					width: '16px',
-					height: '16px',
-					borderRadius: '50%',
-					background: '#3858e9',
-					color: '#fff',
-					fontSize: '11px',
-					fontWeight: 700,
-					lineHeight: '16px',
-					textAlign: 'center',
-					cursor: 'default',
-					zIndex: 100,
-					pointerEvents: 'auto',
-				} }
 			>
 				!
 			</span>

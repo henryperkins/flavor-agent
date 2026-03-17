@@ -10,7 +10,13 @@ import {
 	InspectorControls,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { PanelBody, Button, Spinner, Notice } from '@wordpress/components';
+import {
+	PanelBody,
+	Button,
+	Spinner,
+	Notice,
+	TextareaControl,
+} from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useCallback } from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
@@ -92,33 +98,30 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							<Notice
 								status="info"
 								isDismissible={ false }
-								style={ { margin: '0 0 8px' } }
+								className="flavor-agent-content-notice"
 							>
 								This block is content-restricted. Only content
 								edits are available.
 							</Notice>
 						) }
-						<div style={ { marginBottom: '8px' } }>
-							<textarea
-								placeholder="What are you trying to achieve?"
-								value={ prompt }
-								onChange={ ( e ) =>
-									setPrompt( e.target.value )
-								}
-								rows={ 2 }
-								style={ { width: '100%', resize: 'vertical' } }
-								aria-label="Describe what you want to achieve with this block"
-							/>
-						</div>
+
+						<TextareaControl
+							__nextHasNoMarginBottom
+							label="What are you trying to achieve?"
+							hideLabelFromVision
+							placeholder="What are you trying to achieve?"
+							value={ prompt }
+							onChange={ setPrompt }
+							rows={ 2 }
+							className="flavor-agent-prompt"
+						/>
+
 						<Button
 							variant="primary"
 							onClick={ handleFetch }
 							disabled={ isLoading }
 							icon={ icon }
-							style={ {
-								width: '100%',
-								justifyContent: 'center',
-							} }
+							className="flavor-agent-fetch-button"
 						>
 							{ isLoading ? <Spinner /> : 'Get Suggestions' }
 						</Button>
@@ -128,36 +131,20 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								status="error"
 								isDismissible
 								onDismiss={ () => setStatus( 'idle' ) }
-								style={ { marginTop: '8px' } }
 							>
 								{ error }
 							</Notice>
 						) }
 
 						{ recommendations?.explanation && (
-							<p
-								style={ {
-									marginTop: '8px',
-									fontSize: '12px',
-									color: 'var(--wp-components-color-foreground-secondary, #757575)',
-								} }
-							>
+							<p className="flavor-agent-explanation">
 								{ recommendations.explanation }
 							</p>
 						) }
 
 						{ recommendations?.block?.length > 0 && (
 							<div style={ { marginTop: '12px' } }>
-								<div
-									style={ {
-										fontSize: '11px',
-										fontWeight: 600,
-										textTransform: 'uppercase',
-										letterSpacing: '0.5px',
-										color: 'var(--wp-components-color-foreground-secondary, #757575)',
-										marginBottom: '6px',
-									} }
-								>
+								<div className="flavor-agent-section-label">
 									Block suggestions
 								</div>
 								<SuggestionChips

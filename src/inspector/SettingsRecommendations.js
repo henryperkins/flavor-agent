@@ -6,11 +6,43 @@
 import { PanelBody, Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { Icon, check, arrowRight } from '@wordpress/icons';
+import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
 
+const FEEDBACK_MS = 1200;
+
 export default function SettingsRecommendations( { clientId, suggestions } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
+	const [ appliedKey, setAppliedKey ] = useState( null );
+	const resetTimerRef = useRef( null );
+
+	useEffect( () => {
+		return () => {
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
+			}
+		};
+	}, [] );
+
+	const handleApply = useCallback(
+		( suggestion ) => {
+			applySuggestion( clientId, suggestion );
+			const key = `${ suggestion.panel }-${ suggestion.label }`;
+
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
+			}
+
+			setAppliedKey( key );
+
+			resetTimerRef.current = window.setTimeout( () => {
+				setAppliedKey( null );
+				resetTimerRef.current = null;
+			}, FEEDBACK_MS );
+		},
+		[ clientId, applySuggestion ]
+	);
 
 	if ( ! suggestions.length ) {
 		return null;
@@ -30,132 +62,76 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 			{ Object.entries( grouped ).map( ( [ panel, items ] ) => (
 				<div key={ panel } style={ { marginBottom: '12px' } }>
 					{ Object.keys( grouped ).length > 1 && (
-						<div
-							style={ {
-								fontSize: '11px',
-								fontWeight: 600,
-								textTransform: 'uppercase',
-								letterSpacing: '0.5px',
-								color: 'var(--wp-components-color-foreground-secondary, #757575)',
-								marginBottom: '6px',
-							} }
-						>
+						<div className="flavor-agent-section-label">
 							{ panelLabel( panel ) }
 						</div>
 					) }
 
-					{ items.map( ( suggestion ) => (
-						<SuggestionCard
-							key={ `${ panel }-${ suggestion.label }` }
-							suggestion={ suggestion }
-							onApply={ () =>
-								applySuggestion( clientId, suggestion )
-							}
-						/>
-					) ) }
+					{ items.map( ( suggestion ) => {
+						const key = `${ panel }-${ suggestion.label }`;
+						return (
+							<SuggestionCard
+								key={ key }
+								suggestion={ suggestion }
+								onApply={ () => handleApply( suggestion ) }
+								applied={ appliedKey === key }
+							/>
+						);
+					} ) }
 				</div>
 			) ) }
 		</PanelBody>
 	);
 }
 
-function SuggestionCard( { suggestion, onApply } ) {
+function SuggestionCard( { suggestion, onApply, applied } ) {
 	const { label, description, confidence, currentValue, suggestedValue } =
 		suggestion;
 
 	return (
-		<div
-			style={ {
-				padding: '8px 10px',
-				marginBottom: '6px',
-				background: 'var(--wp-components-color-background, #f0f0f0)',
-				borderRadius: '4px',
-				border: '1px solid var(--wp-components-color-accent-inverted, #e0e0e0)',
-			} }
-		>
+		<div className="flavor-agent-card">
 			<div
-				style={ {
-					display: 'flex',
-					justifyContent: 'space-between',
-					alignItems: 'center',
-					marginBottom: description ? '4px' : 0,
-				} }
+				className={ `flavor-agent-card__header${
+					description ? ' flavor-agent-card__header--spaced' : ''
+				}` }
 			>
-				<span style={ { fontWeight: 500, fontSize: '13px' } }>
-					{ label }
-				</span>
+				<span className="flavor-agent-card__label">{ label }</span>
 				<Button
-					variant="primary"
 					size="small"
+					variant="tertiary"
 					onClick={ onApply }
-					icon={ check }
-					label="Apply"
-					style={ {
-						minWidth: 'auto',
-						padding: '0 8px',
-						height: '24px',
-					} }
-				>
-					Apply
-				</Button>
+					icon={ applied ? check : arrowRight }
+					label={ applied ? 'Applied' : 'Apply suggestion' }
+					className={ `flavor-agent-card__apply${
+						applied ? ' flavor-agent-card__apply--applied' : ''
+					}` }
+					disabled={ applied }
+				/>
 			</div>
 
 			{ description && (
-				<p
-					style={ {
-						margin: '0 0 4px',
-						fontSize: '12px',
-						color: 'var(--wp-components-color-foreground-secondary, #757575)',
-						lineHeight: '1.4',
-					} }
-				>
+				<p className="flavor-agent-card__description">
 					{ description }
 				</p>
 			) }
 
 			{ currentValue !== undefined && suggestedValue !== undefined && (
-				<div
-					style={ {
-						display: 'flex',
-						alignItems: 'center',
-						gap: '6px',
-						fontSize: '11px',
-						fontFamily: 'monospace',
-					} }
-				>
-					<span
-						style={ {
-							opacity: 0.6,
-							textDecoration: 'line-through',
-						} }
-					>
-						{ formatValue( currentValue ) }
-					</span>
+				<div className="flavor-agent-card__values">
+					<code>{ formatValue( currentValue ) }</code>
 					<Icon icon={ arrowRight } size={ 12 } />
-					<span style={ { fontWeight: 600 } }>
-						{ formatValue( suggestedValue ) }
-					</span>
+					<code>{ formatValue( suggestedValue ) }</code>
 				</div>
 			) }
 
 			{ confidence !== null && confidence !== undefined && (
 				<div
-					style={ {
-						marginTop: '4px',
-						height: '3px',
-						borderRadius: '2px',
-						background:
-							'var(--wp-components-color-accent-inverted, #e0e0e0)',
-						overflow: 'hidden',
-					} }
+					className="flavor-agent-card__confidence"
+					aria-hidden="true"
 				>
 					<div
+						className="flavor-agent-card__confidence-bar"
 						style={ {
-							width: `${ Math.round( confidence * 100 ) }%`,
-							height: '100%',
-							background:
-								'var(--wp-components-color-accent, #3858e9)',
-							borderRadius: '2px',
+							width: `${ clampConfidence( confidence ) }%`,
 						} }
 					/>
 				</div>
@@ -176,18 +152,26 @@ function panelLabel( panel ) {
 	return labels[ panel ] || panel;
 }
 
-function formatValue( val ) {
-	if ( val === true ) {
+function formatValue( value ) {
+	if ( value === true ) {
 		return 'true';
 	}
-	if ( val === false ) {
+
+	if ( value === false ) {
 		return 'false';
 	}
-	if ( val === null || val === undefined ) {
+
+	if ( value === null || value === undefined ) {
 		return 'none';
 	}
-	if ( typeof val === 'object' ) {
-		return JSON.stringify( val );
+
+	if ( typeof value === 'object' ) {
+		return JSON.stringify( value );
 	}
-	return String( val );
+
+	return String( value );
+}
+
+function clampConfidence( confidence ) {
+	return Math.max( 0, Math.min( 100, Math.round( confidence * 100 ) ) );
 }

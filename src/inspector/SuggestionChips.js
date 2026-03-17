@@ -4,54 +4,73 @@
  */
 import { Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
+import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
+import { check } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 
+const FEEDBACK_MS = 1200;
+
 export default function SuggestionChips( { clientId, suggestions, label } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
+	const [ appliedKey, setAppliedKey ] = useState( null );
+	const resetTimerRef = useRef( null );
+
+	useEffect( () => {
+		return () => {
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
+			}
+		};
+	}, [] );
+
+	const handleApply = useCallback(
+		( suggestion ) => {
+			applySuggestion( clientId, suggestion );
+			const key = `${ suggestion.panel }-${ suggestion.label }`;
+
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
+			}
+
+			setAppliedKey( key );
+
+			resetTimerRef.current = window.setTimeout( () => {
+				setAppliedKey( null );
+				resetTimerRef.current = null;
+			}, FEEDBACK_MS );
+		},
+		[ clientId, applySuggestion ]
+	);
 
 	return (
-		<div
-			style={ {
-				gridColumn: '1 / -1',
-				display: 'flex',
-				flexWrap: 'wrap',
-				gap: '4px',
-				padding: '4px 0',
-			} }
-			aria-label={ label }
-		>
-			{ suggestions.map( ( s ) => (
-				<Button
-					key={ `${ s.panel }-${ s.label }` }
-					variant="secondary"
-					size="small"
-					onClick={ () => applySuggestion( clientId, s ) }
-					title={ s.description || s.label }
-					style={ {
-						fontSize: '11px',
-						padding: '2px 8px',
-						height: 'auto',
-						lineHeight: '1.6',
-					} }
-				>
-					{ s.label }
-					{ s.preview && (
-						<span
-							style={ {
-								display: 'inline-block',
-								width: '12px',
-								height: '12px',
-								borderRadius: '2px',
-								backgroundColor: s.preview,
-								marginLeft: '4px',
-								verticalAlign: 'middle',
-								border: '1px solid rgba(0,0,0,0.1)',
-							} }
-						/>
-					) }
-				</Button>
-			) ) }
+		<div className="flavor-agent-chips" aria-label={ label }>
+			{ suggestions.map( ( s ) => {
+				const key = `${ s.panel }-${ s.label }`;
+				const wasApplied = appliedKey === key;
+
+				return (
+					<Button
+						key={ key }
+						variant={ wasApplied ? 'primary' : 'secondary' }
+						size="small"
+						onClick={ () => handleApply( s ) }
+						title={ s.description || s.label }
+						icon={ wasApplied ? check : undefined }
+						className="flavor-agent-chip"
+					>
+						{ wasApplied ? null : s.label }
+						{ ! wasApplied && s.preview && (
+							<span
+								className="flavor-agent-chip__preview"
+								style={ {
+									backgroundColor: s.preview,
+								} }
+							/>
+						) }
+					</Button>
+				);
+			} ) }
 		</div>
 	);
 }

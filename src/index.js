@@ -8,6 +8,9 @@
  */
 import { registerPlugin } from '@wordpress/plugins';
 
+// Shared editor styles.
+import './editor.css';
+
 // Data store (self-registering).
 import './store';
 
