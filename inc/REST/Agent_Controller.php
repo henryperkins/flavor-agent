@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace FlavorAgent\REST;
 
+use FlavorAgent\Abilities\BlockAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
-use FlavorAgent\LLM\Client;
-use FlavorAgent\LLM\Prompt;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\StringArray;
 
@@ -125,38 +124,18 @@ final class Agent_Controller {
     }
 
     public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-        $api_key = get_option( 'flavor_agent_api_key' );
-        if ( empty( $api_key ) ) {
-            return new \WP_Error(
-                'missing_api_key',
-                'Configure your API key in Settings > Flavor Agent.',
-                [ 'status' => 400 ]
-            );
-        }
-
-        $context   = $request->get_param( 'editorContext' );
-        $prompt    = $request->get_param( 'prompt' );
         $client_id = $request->get_param( 'clientId' );
-
-        $system_prompt = Prompt::build_system();
-        $user_prompt   = Prompt::build_user( $context, $prompt );
-
-        $result = Client::chat( $system_prompt, $user_prompt, $api_key );
+        $result    = BlockAbilities::recommend_block( [
+            'editorContext' => $request->get_param( 'editorContext' ),
+            'prompt'        => $request->get_param( 'prompt' ),
+        ] );
 
         if ( is_wp_error( $result ) ) {
             return $result;
         }
 
-        $payload = Prompt::parse_response( $result );
-
-        if ( is_wp_error( $payload ) ) {
-            return $payload;
-        }
-
-        $payload = Prompt::enforce_block_context_rules( $payload, $context['block'] ?? [] );
-
         return new \WP_REST_Response( [
-            'payload'  => $payload,
+            'payload'  => $result,
             'clientId' => $client_id,
         ], 200 );
     }

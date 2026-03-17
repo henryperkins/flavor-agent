@@ -43,7 +43,6 @@
 
 ## Known Issues
 
-- `recommend-block` still exists in two paths: the REST controller accepts richer client context, while the Abilities API path rebuilds context server-side. They should share one normalization and enforcement layer.
 - There is no automated PHP test suite or PHPCS coverage in the repo yet; current verification is syntax checks plus JS lint/tests/build.
 
 ## Historical Docs
