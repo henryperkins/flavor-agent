@@ -1,3 +1,7 @@
+> **SUPERSEDED** - This document describes an early design (Dispatcher/Generator/Transformer/Executor, REST-only approval flow) that was never implemented. The project evolved to an Abilities API-native, dual-backend architecture. See `STATUS.md` for the current inventory. Kept for historical reference only.
+
+---
+
 Yes — for that kind of agent system, I mean an LLM-powered assistant that sits inside Gutenberg and the Site Editor, understands the current editing context, and produces **recommendations** plus controlled actions for blocks, patterns, templates, and interactive behavior.[1][2][3]
 The key is to design it as a recommendation-and-approval system first, not a fully autonomous editor, because WordPress already provides strong insertion points for patterns and templates while your agent should supply ranking, generation, and guided changes on top.[2][4][1]
 
