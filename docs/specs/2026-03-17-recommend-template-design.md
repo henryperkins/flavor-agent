@@ -26,10 +26,10 @@ Uses the Azure OpenAI chat deployment (`ResponsesClient::rank`). No embeddings o
   PHP: Agent_Controller → TemplateAbilities::recommend_template()
     ↓
   ServerCollector::for_template( $template_ref, $template_type )
-    → get_block_templates() for the edited template
-    → parse_blocks() to find assigned core/template-part blocks
+    → resolve the edited template from the canonical ref, with slug fallback
+    → parse_blocks() recursively to find assigned core/template-part blocks
     → for_template_parts() for all available parts
-    → for_patterns( null, null, [ $template_type ] ) for candidate patterns
+    → collect typed + generic pattern candidates from the registry
     → for_tokens() for theme design tokens
     ↓
   TemplatePrompt::build_system() + build_user( $context, $prompt )
@@ -47,22 +47,40 @@ Uses the Azure OpenAI chat deployment (`ResponsesClient::rank`). No embeddings o
 
 The current stub registers `templateType` as the sole required input field. This spec changes the required field to `templateRef` and demotes `templateType` to optional. Since the stub has always returned 501, no external consumer can currently depend on the old schema. This is a safe migration of an unimplemented contract.
 
-### `ServerCollector::for_template( string $template_ref, ?string $template_type = null )`
+### `ServerCollector::for_template( string $template_ref, ?string $template_type = null ): array|\WP_Error`
 
 New public static method in `inc/Context/ServerCollector.php`.
 
 **Parameters:**
 - `$template_ref` — Template identifier from the Site Editor (`getEditedPostId()`). Treated as an opaque reference until runtime verification confirms it is a plain slug. If confirmed, can be renamed to `$template_slug` in a later iteration.
-- `$template_type` — Optional normalized template type (e.g. `'single'`, `'page'`, `'404'`). Used for pattern filtering. If null, derived from `$template_ref` by taking the portion before the first `-` and checking against the known type vocabulary.
+- `$template_type` — Optional normalized template type (e.g. `'single'`, `'page'`, `'404'`). Used for pattern filtering. If null, derived from `$template_ref` after stripping any `theme//` prefix and normalizing the remaining slug against the known type vocabulary.
 
-**Template lookup:** The `$template_ref` value from `getEditedPostId()` may include a theme prefix (e.g. `theme-slug//single`) in some WordPress versions. The method strips the `theme//` prefix if present before querying:
+**Template lookup:** Keep `$template_ref` intact for lookup. If it is already a canonical template ID (for example `theme-slug//single`), resolve it directly with `get_block_template()`. Only fall back to a slug-based list query when the ref is not already canonical:
 ```php
-$slug = str_contains( $template_ref, '//' )
-    ? substr( $template_ref, strpos( $template_ref, '//' ) + 2 )
-    : $template_ref;
-$templates = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template' );
-$template  = $templates[0] ?? null;
+$template = null;
+
+if ( str_contains( $template_ref, '//' ) ) {
+    $template = get_block_template( $template_ref, 'wp_template' );
+}
+
+if ( ! $template ) {
+    $slug = str_contains( $template_ref, '//' )
+        ? substr( $template_ref, strpos( $template_ref, '//' ) + 2 )
+        : $template_ref;
+
+    $templates = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template' );
+    $template  = $templates[0] ?? null;
+}
+
+if ( ! $template ) {
+    return new \WP_Error(
+        'template_not_found',
+        'Could not resolve the current template from the Site Editor context.',
+        [ 'status' => 404 ]
+    );
+}
 ```
+This keeps the unique identifier path authoritative while still supporting runtime shapes where `getEditedPostId()` yields only a slug.
 
 **Returns:**
 ```php
@@ -76,7 +94,7 @@ $template  = $templates[0] ?? null;
     ],
     'emptyAreas'     => [ 'sidebar' ],
     'availableParts' => [ /* from for_template_parts() */ ],
-    'patterns'       => [ /* from for_patterns() filtered by templateType */ ],
+    'patterns'       => [ /* typed matches + generic fallbacks from the pattern registry */ ],
     'themeTokens'    => [ /* from for_tokens() */ ],
 ]
 ```
@@ -90,9 +108,12 @@ $empty_areas    = array_values( array_diff( $known_areas, $assigned_areas ) );
 Limitation: custom areas not represented by any existing template part will not appear. Areas are theme-defined and discovered from the parts registry, not a fixed vocabulary.
 
 **Internal helpers:**
-- `extract_assigned_parts( string $content ): array` — Calls `parse_blocks()` on template content, walks top-level blocks, returns `[ 'slug' => ..., 'area' => ... ]` for each `core/template-part` block found.
+- `extract_assigned_parts( array $blocks, array $part_area_lookup ): array` — Walks the full parsed block tree recursively, not just top-level blocks. Collects every `core/template-part` block, resolves `slug`, and derives `area` from block attrs when present or from the available-parts lookup keyed by slug.
 - `derive_template_type( string $ref ): ?string` — Normalizes a template ref to the known type vocabulary (`index`, `home`, `front-page`, `singular`, `single`, `page`, `archive`, `author`, `category`, `tag`, `taxonomy`, `date`, `search`, `404`). Returns null if no match.
 - `get_known_areas( array $available_parts ): string[]` — Collects the distinct `area` values from available template parts, representing the areas the theme defines.
+- `collect_template_candidate_patterns( ?string $template_type ): array` — Keeps generic patterns eligible. When `$template_type` is known, include patterns whose `templateTypes` contain it **or** whose `templateTypes` array is empty. Sort typed matches ahead of generic fallbacks, dedupe by `name`, and return the union.
+
+**Pattern candidate selection:** Do not hard-filter to template-typed patterns only. This spec intentionally mirrors the existing recommend-patterns behavior that keeps generic patterns eligible even when `templateType` is present. If the template type is unknown, pass all registry patterns through; if it is known, prefer typed matches but keep generic patterns in the candidate set.
 
 ### `TemplatePrompt` (`inc/LLM/TemplatePrompt.php`)
 
@@ -107,7 +128,7 @@ Heredoc system prompt. Key instructions:
 - `patternSuggestions[]` must be registered pattern `name` values from the `patterns` array (canonical ID)
 - Prioritize empty areas — suggest parts for areas that have no assignment
 - Respect theme tokens — suggest patterns that use the theme's design language
-- If no patterns are available for the template type, focus suggestions on template part composition only and leave `patternSuggestions` empty
+- If no candidate patterns are available after typed + generic collection, focus suggestions on template part composition only and leave `patternSuggestions` empty
 - No markdown fences, no text outside the JSON object
 
 **`build_user( array $context, string $prompt = '' ): string`**
@@ -117,7 +138,7 @@ Markdown sections:
 - `## Assigned Template Parts` — slug + area for each
 - `## Empty Areas` — areas with no part
 - `## Available Template Parts` — slug, title, area for each unused part
-- `## Available Patterns` — name, title, description for each (truncated if list is large)
+- `## Available Patterns` — name, title, description, and whether the pattern is a typed match or generic fallback. If the list is large, keep typed matches first and truncate generic fallbacks last.
 - `## Theme Tokens` — compact token summary (colors, fonts, spacing)
 - `## User Instruction` — the optional prompt, or "Suggest improvements for this template."
 
@@ -139,7 +160,7 @@ Fill the 501 stub in `inc/Abilities/TemplateAbilities.php`.
 1. Extract `$template_ref = $input['templateRef']`, `$template_type = $input['templateType'] ?? null`, `$prompt = $input['prompt'] ?? ''`
 2. Validate `$template_ref` is non-empty
 3. **No explicit config validation.** `ResponsesClient::rank()` already validates the three Azure chat options internally and returns `WP_Error( 'missing_credentials', ..., [ 'status' => 400 ] )` if any are missing. Duplicating the check here would create two error paths with different codes. Let the downstream client handle it.
-4. `$context = ServerCollector::for_template( $template_ref, $template_type )`
+4. `$context = ServerCollector::for_template( $template_ref, $template_type )` — return the `WP_Error` if lookup fails
 5. `$system = TemplatePrompt::build_system()`
 6. `$user = TemplatePrompt::build_user( $context, $prompt )`
 7. `$result = ResponsesClient::rank( $system, $user )` — return the `WP_Error` if it fails
@@ -154,6 +175,7 @@ Return type changes from `\WP_Error` to `array|\WP_Error`.
 
 - Permission: `edit_theme_options`
 - Params: `templateRef` (required string), `templateType` (optional string), `prompt` (optional string)
+- `templateRef` must **not** use `sanitize_key()`, because canonical refs may contain `//`. Use `sanitize_text_field()` plus a non-empty validation callback so the handler preserves `theme-slug//template-slug` identifiers.
 - Handler: thin adapter that assembles `$input` from request params and delegates to `TemplateAbilities::recommend_template( $input )`. Returns `new \WP_REST_Response( $result, 200 )` on success, consistent with `handle_recommend_patterns()`. **No inline LLM logic** — follows the recommend-patterns thin-adapter pattern, not the recommend-block inline anti-pattern.
 
 ### Schema update (`Registration.php`)
@@ -220,24 +242,32 @@ Update the `recommend-template` ability registration:
 **State:**
 ```js
 templateRecommendations: [],
+templateExplanation: '',
 templateStatus: 'idle',   // idle | loading | ready | error
+templateError: null,
+templateRef: null,
 ```
 
 **Actions:**
-- `setTemplateStatus( status )` → `{ type: 'SET_TEMPLATE_STATUS', status }`
-- `setTemplateRecommendations( recommendations )` → `{ type: 'SET_TEMPLATE_RECS', recommendations }`
-- `fetchTemplateRecommendations( input )` — async thunk: sets loading, calls `POST /flavor-agent/v1/recommend-template`, dispatches results or error status
-- `clearTemplateRecommendations()` → `{ type: 'CLEAR_TEMPLATE_RECS' }` — resets to empty array + idle status
+- `setTemplateStatus( status, error = null )` → `{ type: 'SET_TEMPLATE_STATUS', status, error }`
+- `setTemplateRecommendations( templateRef, payload )` → `{ type: 'SET_TEMPLATE_RECS', templateRef, payload }`
+- `fetchTemplateRecommendations( input )` — async thunk with an `AbortController` stored on `actions._templateAbort`, mirroring the existing pattern-request lifecycle. Aborts any in-flight template request, calls `POST /flavor-agent/v1/recommend-template`, and dispatches the response tagged with `input.templateRef`.
+- `clearTemplateRecommendations()` → `{ type: 'CLEAR_TEMPLATE_RECS' }` — resets recommendations, explanation, error, and stored `templateRef`
 
 **Selectors:**
 - `getTemplateRecommendations( state )` → `state.templateRecommendations`
+- `getTemplateExplanation( state )` → `state.templateExplanation`
+- `getTemplateError( state )` → `state.templateError`
+- `getTemplateResultRef( state )` → `state.templateRef`
 - `isTemplateLoading( state )` → `state.templateStatus === 'loading'`
 - `getTemplateStatus( state )` → `state.templateStatus`
 
 **Reducer cases:**
-- `SET_TEMPLATE_STATUS` — updates `templateStatus`
-- `SET_TEMPLATE_RECS` — updates `templateRecommendations`, sets `templateStatus: 'ready'`
-- `CLEAR_TEMPLATE_RECS` — resets `templateRecommendations: []`, `templateStatus: 'idle'`
+- `SET_TEMPLATE_STATUS` — updates `templateStatus` and `templateError`
+- `SET_TEMPLATE_RECS` — updates `templateRecommendations`, `templateExplanation`, `templateRef`, clears `templateError`, sets `templateStatus: 'ready'`
+- `CLEAR_TEMPLATE_RECS` — resets `templateRecommendations: []`, `templateExplanation: ''`, `templateStatus: 'idle'`, `templateError: null`, `templateRef: null`
+
+**Race/staleness guard:** The template request lifecycle must be isolated from block and pattern state, just like `patternStatus` is today. The thunk uses `AbortController` to cancel stale in-flight requests, and the reducer stores the `templateRef` that produced the current results. `TemplateRecommender` only renders explanation/cards when the stored `templateRef` matches the currently edited template.
 
 ### Shared util (`src/utils/template-types.js`)
 
@@ -262,19 +292,26 @@ Renders a `PluginDocumentSettingPanel` in the Template tab of the Site Editor si
 
 **Stale recommendation guard:** When `templateRef` changes (user navigates to a different template), dispatch `clearTemplateRecommendations()`. This ensures the panel never shows cards from a previously edited template.
 
+**Request behavior:**
+- Clicking `Get Suggestions` dispatches `fetchTemplateRecommendations( { templateRef, templateType, prompt } )`
+- If the user switches templates mid-request, the component clears local results and the store aborts the in-flight request
+- The component reads `getTemplateResultRef()` and only renders results when it matches the current `templateRef`
+
 **UI structure:**
 ```
 PluginDocumentSettingPanel title="AI Template Recommendations"
   ├─ <textarea> "What are you trying to achieve with this template?"
   ├─ <Button> "Get Suggestions" (disabled while loading)
   ├─ <Notice status="info"> (if loading)
+  ├─ <Notice status="error"> (if request fails)
   ├─ explanation text (if results)
   └─ suggestion cards (if results):
        ├─ label + description
        ├─ "Template Parts" section:
        │    slug → area (reason)
        └─ "Suggested Patterns" section:
-            pattern name list (informational, not clickable)
+            resolved pattern titles when available from editor settings,
+            falling back to canonical pattern names (informational, not clickable)
 ```
 
 ### Entry point (`src/index.js`)
