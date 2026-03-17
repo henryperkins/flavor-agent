@@ -55,17 +55,17 @@ const actions = {
 					data: { editorContext: context, prompt, clientId },
 				} );
 
-					dispatch(
-						actions.setBlockRecommendations( clientId, {
-							blockName: context.block?.name || '',
-							blockContext: context.block || {},
-							...sanitizeRecommendationsForContext(
-								result.payload || {},
-								context.block || {}
-							),
-							timestamp: Date.now(),
-						} )
-					);
+				dispatch(
+					actions.setBlockRecommendations( clientId, {
+						blockName: context.block?.name || '',
+						blockContext: context.block || {},
+						...sanitizeRecommendationsForContext(
+							result.payload || {},
+							context.block || {}
+						),
+						timestamp: Date.now(),
+					} )
+				);
 				dispatch( actions.setStatus( 'idle' ) );
 			} catch ( err ) {
 				dispatch(
@@ -84,7 +84,8 @@ const actions = {
 				select( STORE_NAME ).getBlockRecommendations( clientId ) || {};
 			const blockContext = storedRecommendations.blockContext || {};
 			const currentAttributes =
-				select( 'core/block-editor' ).getBlockAttributes( clientId ) || {};
+				select( 'core/block-editor' ).getBlockAttributes( clientId ) ||
+				{};
 			const allowedUpdates = getSuggestionAttributeUpdates(
 				suggestion,
 				blockContext

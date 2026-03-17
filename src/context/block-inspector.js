@@ -17,47 +17,55 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 // ── Supports → Inspector panel mapping ──────────────────────
 
 const SUPPORT_TO_PANEL = {
-	'color.background':   'color',
-	'color.text':         'color',
-	'color.link':         'color',
-	'color.heading':      'color',
-	'color.button':       'color',
-	'color.gradients':    'color',
-	'typography.fontSize':   'typography',
+	'color.background': 'color',
+	'color.text': 'color',
+	'color.link': 'color',
+	'color.heading': 'color',
+	'color.button': 'color',
+	'color.gradients': 'color',
+	'typography.fontSize': 'typography',
 	'typography.lineHeight': 'typography',
-	'typography.textAlign':  'typography',
-	'spacing.margin':     'dimensions',
-	'spacing.padding':    'dimensions',
-	'spacing.blockGap':   'dimensions',
+	'typography.textAlign': 'typography',
+	'spacing.margin': 'dimensions',
+	'spacing.padding': 'dimensions',
+	'spacing.blockGap': 'dimensions',
 	'dimensions.aspectRatio': 'dimensions',
-	'dimensions.minHeight':   'dimensions',
-	'dimensions.height':      'dimensions',
-	'dimensions.width':       'dimensions',
-	'border.color':  'border',
+	'dimensions.minHeight': 'dimensions',
+	'dimensions.height': 'dimensions',
+	'dimensions.width': 'dimensions',
+	'border.color': 'border',
 	'border.radius': 'border',
-	'border.style':  'border',
-	'border.width':  'border',
-	'shadow':        'shadow',
+	'border.style': 'border',
+	'border.width': 'border',
+	shadow: 'shadow',
 	'filter.duotone': 'filter',
 	'background.backgroundImage': 'background',
-	'background.backgroundSize':  'background',
+	'background.backgroundSize': 'background',
 	'position.sticky': 'position',
-	'position.fixed':  'position',
-	'layout': 'layout',
-	'anchor': 'advanced',
+	'position.fixed': 'position',
+	layout: 'layout',
+	anchor: 'advanced',
 };
 
 /**
  * Flatten a nested supports object into dot-path → value entries.
+ * @param obj
+ * @param prefix
  */
 function flattenSupports( obj, prefix = '' ) {
 	const entries = [];
-	if ( obj == null || typeof obj !== 'object' ) return entries;
+	if ( obj == null || typeof obj !== 'object' ) {
+		return entries;
+	}
 
 	for ( const [ key, val ] of Object.entries( obj ) ) {
 		const path = prefix ? `${ prefix }.${ key }` : key;
 
-		if ( typeof val === 'boolean' || typeof val === 'string' || Array.isArray( val ) ) {
+		if (
+			typeof val === 'boolean' ||
+			typeof val === 'string' ||
+			Array.isArray( val )
+		) {
 			entries.push( [ path, val ] );
 		} else if ( val === true ) {
 			entries.push( [ path, true ] );
@@ -70,6 +78,7 @@ function flattenSupports( obj, prefix = '' ) {
 
 /**
  * Determine which Inspector panels a block exposes based on supports.
+ * @param supports
  */
 export function resolveInspectorPanels( supports ) {
 	const panels = {};
@@ -78,7 +87,9 @@ export function resolveInspectorPanels( supports ) {
 	for ( const [ path, value ] of flat ) {
 		const panelKey = SUPPORT_TO_PANEL[ path ];
 		if ( panelKey && isTruthy( value ) ) {
-			if ( ! panels[ panelKey ] ) panels[ panelKey ] = [];
+			if ( ! panels[ panelKey ] ) {
+				panels[ panelKey ] = [];
+			}
 			panels[ panelKey ].push( path );
 		}
 	}
@@ -87,20 +98,31 @@ export function resolveInspectorPanels( supports ) {
 }
 
 function isTruthy( val ) {
-	if ( val === true ) return true;
-	if ( val === false || val == null ) return false;
-	if ( Array.isArray( val ) ) return val.length > 0;
-	if ( typeof val === 'object' ) return Object.keys( val ).length > 0;
+	if ( val === true ) {
+		return true;
+	}
+	if ( val === false || val == null ) {
+		return false;
+	}
+	if ( Array.isArray( val ) ) {
+		return val.length > 0;
+	}
+	if ( typeof val === 'object' ) {
+		return Object.keys( val ).length > 0;
+	}
 	return !! val;
 }
 
 /**
  * Introspect a single block type by name.
+ * @param blockName
  */
 export function introspectBlockType( blockName ) {
 	const store = select( blocksStore );
 	const blockType = store.getBlockType( blockName );
-	if ( ! blockType ) return null;
+	if ( ! blockType ) {
+		return null;
+	}
 
 	const supports = blockType.supports || {};
 	const attributes = blockType.attributes || {};
@@ -115,8 +137,12 @@ export function introspectBlockType( blockName ) {
 			default: def.default,
 			role: def.role,
 		};
-		if ( def.enum ) entry.enum = def.enum;
-		if ( def.source ) entry.source = def.source;
+		if ( def.enum ) {
+			entry.enum = def.enum;
+		}
+		if ( def.source ) {
+			entry.source = def.source;
+		}
 
 		if ( def.role === 'content' ) {
 			contentAttrs[ name ] = entry;
@@ -153,14 +179,19 @@ export function introspectBlockType( blockName ) {
 
 /**
  * Introspect a live block instance.
+ * @param clientId
  */
 export function introspectBlockInstance( clientId ) {
 	const editor = select( blockEditorStore );
 	const blockName = editor.getBlockName( clientId );
-	if ( ! blockName ) return null;
+	if ( ! blockName ) {
+		return null;
+	}
 
 	const typeMeta = introspectBlockType( blockName );
-	if ( ! typeMeta ) return null;
+	if ( ! typeMeta ) {
+		return null;
+	}
 
 	const currentAttrs = editor.getBlockAttributes( clientId );
 	const editingMode = editor.getBlockEditingMode( clientId );
@@ -187,7 +218,9 @@ export function introspectBlockInstance( clientId ) {
 }
 
 function extractActiveStyle( className, registeredStyles ) {
-	if ( ! className ) return null;
+	if ( ! className ) {
+		return null;
+	}
 	for ( const style of registeredStyles ) {
 		if ( className.includes( `is-style-${ style.name }` ) ) {
 			return style.name;
@@ -198,28 +231,37 @@ function extractActiveStyle( className, registeredStyles ) {
 
 /**
  * Recursively introspect an entire block tree from a root.
+ * @param rootClientId
+ * @param maxDepth
  */
 export function introspectBlockTree( rootClientId = null, maxDepth = 10 ) {
-	if ( maxDepth <= 0 ) return [];
+	if ( maxDepth <= 0 ) {
+		return [];
+	}
 
 	const editor = select( blockEditorStore );
 	const childIds = editor.getBlockOrder( rootClientId || '' );
 
-	return childIds.map( ( clientId ) => {
-		const instance = introspectBlockInstance( clientId );
-		if ( ! instance ) return null;
+	return childIds
+		.map( ( clientId ) => {
+			const instance = introspectBlockInstance( clientId );
+			if ( ! instance ) {
+				return null;
+			}
 
-		const children = introspectBlockTree( clientId, maxDepth - 1 );
+			const children = introspectBlockTree( clientId, maxDepth - 1 );
 
-		return {
-			...instance,
-			innerBlocks: children.filter( Boolean ),
-		};
-	} ).filter( Boolean );
+			return {
+				...instance,
+				innerBlocks: children.filter( Boolean ),
+			};
+		} )
+		.filter( Boolean );
 }
 
 /**
  * Summarize a full introspected tree for the LLM prompt.
+ * @param tree
  */
 export function summarizeTree( tree ) {
 	return tree.map( ( node ) => {
@@ -228,7 +270,10 @@ export function summarizeTree( tree ) {
 			title: node.title,
 		};
 
-		const meaningful = pickMeaningfulAttributes( node.currentAttributes, node.name );
+		const meaningful = pickMeaningfulAttributes(
+			node.currentAttributes,
+			node.name
+		);
 		if ( Object.keys( meaningful ).length ) {
 			summary.currentValues = meaningful;
 		}
@@ -259,17 +304,23 @@ export function summarizeTree( tree ) {
 }
 
 function pickMeaningfulAttributes( attrs, blockName ) {
-	if ( ! attrs ) return {};
+	if ( ! attrs ) {
+		return {};
+	}
 
-	const SKIP_KEYS = new Set( [
-		'lock', 'metadata', 'className',
-	] );
+	const SKIP_KEYS = new Set( [ 'lock', 'metadata', 'className' ] );
 
 	const result = {};
 	for ( const [ key, val ] of Object.entries( attrs ) ) {
-		if ( SKIP_KEYS.has( key ) ) continue;
-		if ( val === undefined || val === null || val === '' ) continue;
-		if ( typeof val === 'object' && Object.keys( val ).length === 0 ) continue;
+		if ( SKIP_KEYS.has( key ) ) {
+			continue;
+		}
+		if ( val === undefined || val === null || val === '' ) {
+			continue;
+		}
+		if ( typeof val === 'object' && Object.keys( val ).length === 0 ) {
+			continue;
+		}
 
 		result[ key ] = val;
 	}
@@ -279,6 +330,7 @@ function pickMeaningfulAttributes( attrs, blockName ) {
 /**
  * Build a deduplicated block capability index for all unique block types
  * present in a tree.
+ * @param tree
  */
 export function buildCapabilityIndex( tree ) {
 	const index = {};

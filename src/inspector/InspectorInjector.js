@@ -22,16 +22,20 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
 		const { clientId, name, isSelected } = props;
 
-		const { recommendations, isLoading, error } = useSelect( ( sel ) => {
-			const s = sel( STORE_NAME );
-			return {
-				recommendations: s.getBlockRecommendations( clientId ),
-				isLoading: s.isLoading(),
-				error: s.getError(),
-			};
-		}, [ clientId ] );
+		const { recommendations, isLoading, error } = useSelect(
+			( sel ) => {
+				const s = sel( STORE_NAME );
+				return {
+					recommendations: s.getBlockRecommendations( clientId ),
+					isLoading: s.isLoading(),
+					error: s.getError(),
+				};
+			},
+			[ clientId ]
+		);
 
-		const { fetchBlockRecommendations, setStatus } = useDispatch( STORE_NAME );
+		const { fetchBlockRecommendations, setStatus } =
+			useDispatch( STORE_NAME );
 		const [ prompt, setPrompt ] = useState( '' );
 
 		const handleFetch = useCallback( () => {
@@ -45,10 +49,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			return <BlockEdit { ...props } />;
 		}
 
-		const hasRecs = recommendations &&
+		const hasRecs =
+			recommendations &&
 			( recommendations.settings.length > 0 ||
-			  recommendations.styles.length > 0 ||
-			  recommendations.block.length > 0 );
+				recommendations.styles.length > 0 ||
+				recommendations.block.length > 0 );
 
 		return (
 			<>
@@ -64,7 +69,9 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							<textarea
 								placeholder="What are you trying to achieve?"
 								value={ prompt }
-								onChange={ ( e ) => setPrompt( e.target.value ) }
+								onChange={ ( e ) =>
+									setPrompt( e.target.value )
+								}
 								rows={ 2 }
 								style={ { width: '100%', resize: 'vertical' } }
 								aria-label="Describe what you want to achieve with this block"
@@ -75,7 +82,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							onClick={ handleFetch }
 							disabled={ isLoading }
 							icon={ icon }
-							style={ { width: '100%', justifyContent: 'center' } }
+							style={ {
+								width: '100%',
+								justifyContent: 'center',
+							} }
 						>
 							{ isLoading ? <Spinner /> : 'Get Suggestions' }
 						</Button>
@@ -91,36 +101,40 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							</Notice>
 						) }
 
-							{ recommendations?.explanation && (
-								<p style={ {
+						{ recommendations?.explanation && (
+							<p
+								style={ {
 									marginTop: '8px',
 									fontSize: '12px',
 									color: 'var(--wp-components-color-foreground-secondary, #757575)',
-								} }>
-									{ recommendations.explanation }
-								</p>
-							) }
+								} }
+							>
+								{ recommendations.explanation }
+							</p>
+						) }
 
-							{ recommendations?.block?.length > 0 && (
-								<div style={ { marginTop: '12px' } }>
-									<div style={ {
+						{ recommendations?.block?.length > 0 && (
+							<div style={ { marginTop: '12px' } }>
+								<div
+									style={ {
 										fontSize: '11px',
 										fontWeight: 600,
 										textTransform: 'uppercase',
 										letterSpacing: '0.5px',
 										color: 'var(--wp-components-color-foreground-secondary, #757575)',
 										marginBottom: '6px',
-									} }>
-										Block suggestions
-									</div>
-									<SuggestionChips
-										clientId={ clientId }
-										suggestions={ recommendations.block }
-										label="AI block suggestions"
-									/>
+									} }
+								>
+									Block suggestions
 								</div>
-							) }
-						</PanelBody>
+								<SuggestionChips
+									clientId={ clientId }
+									suggestions={ recommendations.block }
+									label="AI block suggestions"
+								/>
+							</div>
+						) }
+					</PanelBody>
 
 					{ hasRecs && recommendations.settings.length > 0 && (
 						<SettingsRecommendations
@@ -141,10 +155,34 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 
 				{ hasRecs && (
 					<>
-						<SubPanelSuggestions group="color" panel="color" clientId={ clientId } suggestions={ recommendations.styles } label="AI color suggestions" />
-						<SubPanelSuggestions group="typography" panel="typography" clientId={ clientId } suggestions={ recommendations.styles } label="AI typography suggestions" />
-						<SubPanelSuggestions group="dimensions" panel="dimensions" clientId={ clientId } suggestions={ recommendations.styles } label="AI spacing suggestions" />
-						<SubPanelSuggestions group="border" panel="border" clientId={ clientId } suggestions={ recommendations.styles } label="AI border suggestions" />
+						<SubPanelSuggestions
+							group="color"
+							panel="color"
+							clientId={ clientId }
+							suggestions={ recommendations.styles }
+							label="AI color suggestions"
+						/>
+						<SubPanelSuggestions
+							group="typography"
+							panel="typography"
+							clientId={ clientId }
+							suggestions={ recommendations.styles }
+							label="AI typography suggestions"
+						/>
+						<SubPanelSuggestions
+							group="dimensions"
+							panel="dimensions"
+							clientId={ clientId }
+							suggestions={ recommendations.styles }
+							label="AI spacing suggestions"
+						/>
+						<SubPanelSuggestions
+							group="border"
+							panel="border"
+							clientId={ clientId }
+							suggestions={ recommendations.styles }
+							label="AI border suggestions"
+						/>
 					</>
 				) }
 			</>
@@ -154,7 +192,9 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 
 function SubPanelSuggestions( { group, panel, clientId, suggestions, label } ) {
 	const filtered = suggestions.filter( ( s ) => s.panel === panel );
-	if ( ! filtered.length ) return null;
+	if ( ! filtered.length ) {
+		return null;
+	}
 	return (
 		<InspectorControls group={ group }>
 			<SuggestionChips
@@ -169,7 +209,7 @@ function SubPanelSuggestions( { group, panel, clientId, suggestions, label } ) {
 addFilter(
 	'editor.BlockEdit',
 	'flavor-agent/ai-recommendations',
-	withAIRecommendations,
+	withAIRecommendations
 );
 
 export default withAIRecommendations;

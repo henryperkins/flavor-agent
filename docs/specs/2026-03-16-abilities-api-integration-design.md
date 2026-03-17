@@ -51,7 +51,7 @@ The Abilities API hooks (`wp_abilities_api_categories_init`, `wp_abilities_api_i
 
 | ID                              | Type      | Input    | Output                                                                                      | Status                                                                                |
 | ------------------------------- | --------- | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `flavor-agent/get-theme-tokens` | Read-only | _(none)_ | `{ colors, gradients, fontSizes, fontFamilies, spacing, shadows, layout, enabledFeatures }` | Implemented                                                                           |
+| `flavor-agent/get-theme-tokens` | Read-only | _(none)_ | `{ colors, gradients, fontSizes, fontFamilies, spacing, shadows, layout, enabledFeatures, blockPseudoStyles }` | Implemented                                                                           |
 | `flavor-agent/check-status`     | Read-only | _(none)_ | `{ configured: bool, model: string                                                          | null, availableAbilities: string[], backends?: { anthropic, azure_openai, qdrant } }` | Implemented with additive backend metadata |
 
 ### Suggestion Schema (shared)
@@ -181,7 +181,7 @@ Stubbed abilities are registered with full `input_schema`/`output_schema` so orc
 - `wp-abilities/v1/abilities` returns all 9 abilities with schemas
 - `wp-abilities/v1/categories` returns `flavor-agent` category
 - `introspect-block` with `{ "blockName": "core/group" }` returns capability manifest
-- `get-theme-tokens` returns current theme's design tokens
+- `get-theme-tokens` returns current theme's design tokens, including block pseudo-class styles when available
 - `check-status` reports API key and model configuration today; the recommend-patterns iteration keeps those top-level fields and adds backend-specific readiness metadata
 - `recommend-block` with `{ "selectedBlock": { "blockName": "core/group", "attributes": { "metadata": { "blockVisibility": false } }, "innerBlocks": [] } }` preserves the explicit boolean visibility state in the prompt (requires API key)
 - `recommend-block` accepts legacy `{ "selectedBlock": { "blockVisibility": { "viewport": { "mobile": false } } } }` input and normalizes it into `attributes.metadata.blockVisibility`

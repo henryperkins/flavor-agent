@@ -17,10 +17,14 @@ import { collectThemeTokens, summarizeTokens } from './theme-tokens';
  * @return {object|null}
  */
 export function collectBlockContext( clientId ) {
-	if ( ! clientId ) return null;
+	if ( ! clientId ) {
+		return null;
+	}
 
 	const instance = introspectBlockInstance( clientId );
-	if ( ! instance ) return null;
+	if ( ! instance ) {
+		return null;
+	}
 
 	const themeTokens = collectThemeTokens();
 	const tokenSummary = summarizeTokens( themeTokens );
@@ -51,11 +55,14 @@ function getSiblingNames( clientId, direction, count ) {
 	const rootId = editor.getBlockRootClientId( clientId );
 	const order = editor.getBlockOrder( rootId || '' );
 	const index = order.indexOf( clientId );
-	if ( index === -1 ) return [];
+	if ( index === -1 ) {
+		return [];
+	}
 
-	const slice = direction === 'before'
-		? order.slice( Math.max( 0, index - count ), index )
-		: order.slice( index + 1, index + 1 + count );
+	const slice =
+		direction === 'before'
+			? order.slice( Math.max( 0, index - count ), index )
+			: order.slice( index + 1, index + 1 + count );
 
 	return slice.map( ( id ) => editor.getBlockName( id ) ).filter( Boolean );
 }
