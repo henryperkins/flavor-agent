@@ -61,6 +61,24 @@ function getContentAttributeKeys( blockContext ) {
 }
 
 /**
+ * Derive editing restrictions from block context.
+ *
+ * WordPress editing modes: 'default' (unrestricted), 'contentOnly', 'disabled'.
+ * 'default' intentionally falls through — no restrictions applied.
+ *
+ * @param {Object} blockContext Block context.
+ * @return {{ contentOnly: boolean, disabled: boolean }} Editing restriction flags.
+ */
+function getEditingRestrictions( blockContext ) {
+	return {
+		disabled: blockContext?.editingMode === 'disabled',
+		contentOnly:
+			blockContext?.isInsideContentOnly ||
+			blockContext?.editingMode === 'contentOnly',
+	};
+}
+
+/**
  * @param {Object}   suggestion           Suggestion candidate.
  * @param {string[]} contentAttributeKeys Allowed content attribute keys.
  * @return {object|null} Filtered suggestion or null when no allowed updates remain.
@@ -153,8 +171,18 @@ export function sanitizeRecommendationsForContext(
 	blockContext = {}
 ) {
 	const normalized = normalizeSuggestionGroups( recommendations );
+	const restrictions = getEditingRestrictions( blockContext );
 
-	if ( ! blockContext?.isInsideContentOnly ) {
+	if ( restrictions.disabled ) {
+		return {
+			...normalized,
+			settings: [],
+			styles: [],
+			block: [],
+		};
+	}
+
+	if ( ! restrictions.contentOnly ) {
 		return normalized;
 	}
 
@@ -185,7 +213,13 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 		return {};
 	}
 
-	if ( ! blockContext?.isInsideContentOnly ) {
+	const restrictions = getEditingRestrictions( blockContext );
+
+	if ( restrictions.disabled ) {
+		return {};
+	}
+
+	if ( ! restrictions.contentOnly ) {
 		return suggestion.attributeUpdates;
 	}
 
