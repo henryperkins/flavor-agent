@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<ruleset name="Flavor Agent PHP">
+	<description>Minimal PHP code style checks for the covered backend slice.</description>
+
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="parallel" value="4"/>
+
+	<file>inc/Abilities/BlockAbilities.php</file>
+	<file>inc/REST/Agent_Controller.php</file>
+	<file>tests/phpunit</file>
+
+	<exclude-pattern>vendor/*</exclude-pattern>
+	<exclude-pattern>tests/phpunit/bootstrap.php</exclude-pattern>
+
+	<rule ref="WordPress-Core">
+		<exclude name="Universal.Arrays.DisallowShortArraySyntax.Found"/>
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+		<exclude name="WordPress.PHP.YodaConditions.NotYoda"/>
+	</rule>
+</ruleset>
