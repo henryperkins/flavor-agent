@@ -11,11 +11,12 @@ use FlavorAgent\LLM\Prompt;
 final class BlockAbilities {
 
     public static function recommend_block( array $input ): array|\WP_Error {
-        $selected = $input['selectedBlock'] ?? [];
-        $block_name   = $selected['blockName'] ?? '';
-        $attributes   = $selected['attributes'] ?? [];
-        $inner_blocks = $selected['innerBlocks'] ?? [];
-        $prompt       = $input['prompt'] ?? '';
+        $selected                = self::normalize_selected_block( $input['selectedBlock'] ?? [] );
+        $block_name              = $selected['blockName'] ?? '';
+        $attributes              = $selected['attributes'] ?? [];
+        $inner_blocks            = $selected['innerBlocks'] ?? [];
+        $is_inside_content_only  = ! empty( $selected['isInsideContentOnly'] );
+        $prompt                  = $input['prompt'] ?? '';
 
         if ( empty( $block_name ) ) {
             return new \WP_Error( 'missing_block_name', 'selectedBlock.blockName is required.', [ 'status' => 400 ] );
@@ -26,7 +27,7 @@ final class BlockAbilities {
             return new \WP_Error( 'missing_api_key', 'Configure your API key in Settings > Flavor Agent.', [ 'status' => 400 ] );
         }
 
-        $context = ServerCollector::for_block( $block_name, $attributes, $inner_blocks );
+        $context = ServerCollector::for_block( $block_name, $attributes, $inner_blocks, $is_inside_content_only );
 
         $system_prompt = Prompt::build_system();
         $user_prompt   = Prompt::build_user( $context, $prompt );
@@ -37,7 +38,13 @@ final class BlockAbilities {
             return $result;
         }
 
-        return Prompt::parse_response( $result );
+        $payload = Prompt::parse_response( $result );
+
+        if ( is_wp_error( $payload ) ) {
+            return $payload;
+        }
+
+        return Prompt::enforce_block_context_rules( $payload, $context['block'] ?? [] );
     }
 
     public static function introspect_block( array $input ): array|\WP_Error {
@@ -54,5 +61,31 @@ final class BlockAbilities {
         }
 
         return $manifest;
+    }
+
+    private static function normalize_selected_block( array $selected ): array {
+        $attributes = $selected['attributes'] ?? [];
+
+        if ( ! is_array( $attributes ) ) {
+            $attributes = [];
+        }
+
+        if (
+            array_key_exists( 'blockVisibility', $selected ) &&
+            ! isset( $attributes['metadata']['blockVisibility'] )
+        ) {
+            $metadata = $attributes['metadata'] ?? [];
+
+            if ( ! is_array( $metadata ) ) {
+                $metadata = [];
+            }
+
+            $metadata['blockVisibility'] = $selected['blockVisibility'];
+            $attributes['metadata']      = $metadata;
+        }
+
+        $selected['attributes'] = $attributes;
+
+        return $selected;
     }
 }

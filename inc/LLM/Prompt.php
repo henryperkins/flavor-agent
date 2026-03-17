@@ -46,6 +46,9 @@ Rules:
 - Only suggest preset values that exist in the provided themeTokens.
 - If the block already has good values, return fewer or no suggestions.
 - Return 2-6 suggestions total. Prioritize high-impact visual improvements.
+- If the block is inside a contentOnly container, only suggest changes to content attributes (role=content). Do not suggest style or settings changes — those panels are locked.
+- You may suggest viewport visibility rules: { "metadata": { "blockVisibility": { "viewport": { "mobile": false } } } } to show/hide the block on specific devices.
+- If theme pseudo-class styles (:hover, :focus, :active, :focus-visible) are provided for a block, use them when suggesting interactive state styles.
 - For style objects in attributeUpdates, use the nested style format:
   { "style": { "color": { "background": "var(--wp--preset--color--accent)" } } }
   or preset attributes like { "backgroundColor": "accent" }.
@@ -85,6 +88,16 @@ SYSTEM;
             $parts[] = 'Editing mode: ' . $block['editingMode'];
         }
 
+        if ( ! empty( $block['isInsideContentOnly'] ) ) {
+            $parts[] = '';
+            $parts[] = '## Content-only container';
+            $parts[] = 'This block is inside a contentOnly container. Only content attributes (role=content) can be edited. Do not suggest style or settings panel changes.';
+        }
+
+        if ( array_key_exists( 'blockVisibility', $block ) && null !== $block['blockVisibility'] ) {
+            $parts[] = 'Block visibility: ' . wp_json_encode( $block['blockVisibility'] );
+        }
+
         $parts[] = '';
         $parts[] = '## Theme Tokens';
 
@@ -110,6 +123,10 @@ SYSTEM;
 
         if ( ! empty( $tokens['layout'] ) ) {
             $parts[] = 'Layout: ' . wp_json_encode( $tokens['layout'] );
+        }
+
+        if ( ! empty( $tokens['blockPseudoStyles'] ) ) {
+            $parts[] = 'Block pseudo-class styles (hover/focus/active): ' . wp_json_encode( $tokens['blockPseudoStyles'] );
         }
 
         if ( ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
@@ -156,6 +173,24 @@ SYSTEM;
         ];
     }
 
+    public static function enforce_block_context_rules( array $payload, array $block ): array {
+        if ( empty( $block['isInsideContentOnly'] ) ) {
+            return $payload;
+        }
+
+        $content_attribute_keys = array_keys( $block['contentAttributes'] ?? [] );
+
+        return [
+            'settings'    => [],
+            'styles'      => [],
+            'block'       => array_values( array_filter( array_map(
+                fn( array $suggestion ) => self::filter_suggestion_for_content_only( $suggestion, $content_attribute_keys ),
+                $payload['block'] ?? []
+            ) ) ),
+            'explanation' => $payload['explanation'] ?? '',
+        ];
+    }
+
     private static function validate_suggestions( array $suggestions ): array {
         $valid = [];
         foreach ( $suggestions as $s ) {
@@ -174,6 +209,28 @@ SYSTEM;
             ];
         }
         return $valid;
+    }
+
+    private static function filter_suggestion_for_content_only( array $suggestion, array $content_attribute_keys ): ?array {
+        if ( ! is_array( $suggestion['attributeUpdates'] ?? null ) ) {
+            return null;
+        }
+
+        $filtered_updates = [];
+
+        foreach ( $suggestion['attributeUpdates'] as $key => $value ) {
+            if ( in_array( $key, $content_attribute_keys, true ) ) {
+                $filtered_updates[ $key ] = $value;
+            }
+        }
+
+        if ( empty( $filtered_updates ) ) {
+            return null;
+        }
+
+        $suggestion['attributeUpdates'] = $filtered_updates;
+
+        return $suggestion;
     }
 
     /**

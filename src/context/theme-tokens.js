@@ -30,6 +30,7 @@ export function collectThemeTokens() {
 		border: collectBorderTokens( features ),
 		background: collectBackgroundTokens( features ),
 		elements: collectElementStyles( features ),
+		blockPseudoStyles: collectBlockPseudoStyles( features ),
 	};
 }
 
@@ -154,6 +155,25 @@ function collectElementStyles( features ) {
 	return result;
 }
 
+function collectBlockPseudoStyles( features ) {
+	const blockStyles = features?.styles?.blocks || {};
+	const pseudoClasses = [ ':hover', ':focus', ':focus-visible', ':active' ];
+	const result = {};
+
+	for ( const [ blockName, styleDef ] of Object.entries( blockStyles ) ) {
+		const pseudos = {};
+		for ( const pseudo of pseudoClasses ) {
+			if ( styleDef?.[ pseudo ] ) {
+				pseudos[ pseudo ] = styleDef[ pseudo ];
+			}
+		}
+		if ( Object.keys( pseudos ).length > 0 ) {
+			result[ blockName ] = pseudos;
+		}
+	}
+	return result;
+}
+
 function mergeOrigins( feature ) {
 	const defaultItems = feature?.default || [];
 	const themeItems = feature?.theme || [];
@@ -205,5 +225,6 @@ export function summarizeTokens( tokens ) {
 			borderColor: tokens.border.color,
 			borderRadius: tokens.border.radius,
 		},
+		blockPseudoStyles: tokens.blockPseudoStyles,
 	};
 }

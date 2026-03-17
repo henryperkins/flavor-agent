@@ -166,6 +166,10 @@ export function introspectBlockInstance( clientId ) {
 	const editingMode = editor.getBlockEditingMode( clientId );
 	const parentIds = editor.getBlockParents( clientId );
 	const childCount = editor.getBlockCount( clientId );
+	const isInsideContentOnly = parentIds.some(
+		( parentId ) => editor.getBlockEditingMode( parentId ) === 'contentOnly'
+	);
+	const blockVisibility = currentAttrs?.metadata?.blockVisibility ?? null;
 
 	return {
 		...typeMeta,
@@ -174,6 +178,8 @@ export function introspectBlockInstance( clientId ) {
 		editingMode,
 		parentChain: parentIds,
 		childCount,
+		isInsideContentOnly,
+		blockVisibility,
 		activeStyle: currentAttrs?.className
 			? extractActiveStyle( currentAttrs.className, typeMeta.styles )
 			: null,

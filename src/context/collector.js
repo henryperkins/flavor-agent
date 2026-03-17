@@ -37,6 +37,8 @@ export function collectBlockContext( clientId ) {
 			contentAttributes: instance.contentAttributes,
 			configAttributes: instance.configAttributes,
 			editingMode: instance.editingMode,
+			isInsideContentOnly: instance.isInsideContentOnly,
+			blockVisibility: instance.blockVisibility,
 		},
 		siblingsBefore: getSiblingNames( clientId, 'before', 3 ),
 		siblingsAfter: getSiblingNames( clientId, 'after', 3 ),

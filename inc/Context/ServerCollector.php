@@ -114,7 +114,8 @@ final class ServerCollector {
     }
 
     public static function for_tokens(): array {
-        $settings = wp_get_global_settings();
+        $settings       = wp_get_global_settings();
+        $global_styles  = wp_get_global_styles();
 
         $colors = [];
         foreach ( self::merge_presets( $settings['color']['palette'] ?? [] ) as $c ) {
@@ -167,24 +168,27 @@ final class ServerCollector {
                 'borderColor'  => $settings['border']['color'] ?? false,
                 'borderRadius' => $settings['border']['radius'] ?? false,
             ],
+            'blockPseudoStyles' => self::collect_block_pseudo_styles( $global_styles ),
         ];
     }
 
-    public static function for_block( string $block_name, array $attributes = [], array $inner_blocks = [] ): array {
+    public static function for_block( string $block_name, array $attributes = [], array $inner_blocks = [], bool $is_inside_content_only = false ): array {
         $type_info = self::introspect_block_type( $block_name );
 
         return [
             'block' => [
-                'name'              => $block_name,
-                'title'             => $type_info['title'] ?? '',
-                'currentAttributes' => $attributes,
-                'inspectorPanels'   => $type_info['inspectorPanels'] ?? [],
-                'styles'            => $type_info['styles'] ?? [],
-                'activeStyle'       => self::extract_active_style( $attributes['className'] ?? '', $type_info['styles'] ?? [] ),
-                'variations'        => $type_info['variations'] ?? [],
-                'contentAttributes' => $type_info['contentAttributes'] ?? [],
-                'configAttributes'  => $type_info['configAttributes'] ?? [],
-                'editingMode'       => 'default',
+                'name'                => $block_name,
+                'title'               => $type_info['title'] ?? '',
+                'currentAttributes'   => $attributes,
+                'inspectorPanels'     => $type_info['inspectorPanels'] ?? [],
+                'styles'              => $type_info['styles'] ?? [],
+                'activeStyle'         => self::extract_active_style( $attributes['className'] ?? '', $type_info['styles'] ?? [] ),
+                'variations'          => $type_info['variations'] ?? [],
+                'contentAttributes'   => $type_info['contentAttributes'] ?? [],
+                'configAttributes'    => $type_info['configAttributes'] ?? [],
+                'editingMode'         => 'default',
+                'isInsideContentOnly' => $is_inside_content_only,
+                'blockVisibility'     => $attributes['metadata']['blockVisibility'] ?? null,
             ],
             'siblingsBefore' => [],
             'siblingsAfter'  => [],
@@ -295,5 +299,28 @@ final class ServerCollector {
             }
         }
         return array_values( $by_slug );
+    }
+
+    private static function collect_block_pseudo_styles( array $styles ): array {
+        $block_styles   = $styles['blocks'] ?? [];
+        $pseudo_classes = [ ':hover', ':focus', ':focus-visible', ':active' ];
+        $result         = [];
+
+        foreach ( $block_styles as $block_name => $style_def ) {
+            if ( ! is_array( $style_def ) ) {
+                continue;
+            }
+            $pseudos = [];
+            foreach ( $pseudo_classes as $pseudo ) {
+                if ( ! empty( $style_def[ $pseudo ] ) ) {
+                    $pseudos[ $pseudo ] = $style_def[ $pseudo ];
+                }
+            }
+            if ( ! empty( $pseudos ) ) {
+                $result[ $block_name ] = $pseudos;
+            }
+        }
+
+        return $result;
     }
 }

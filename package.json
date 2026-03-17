@@ -6,7 +6,8 @@
   "scripts": {
     "build": "wp-scripts build",
     "start": "wp-scripts start",
-    "lint:js": "wp-scripts lint-js src/"
+    "lint:js": "wp-scripts lint-js src/",
+    "test:unit": "wp-scripts test-unit-js"
   },
   "devDependencies": {
     "@wordpress/scripts": "^30.0.0"
@@ -18,8 +19,10 @@
     "@wordpress/components": "^28.0.0",
     "@wordpress/compose": "^7.0.0",
     "@wordpress/data": "^10.0.0",
+    "@wordpress/editor": "^14.0.0",
     "@wordpress/element": "^6.0.0",
     "@wordpress/hooks": "^4.0.0",
-    "@wordpress/icons": "^10.0.0"
+    "@wordpress/icons": "^10.0.0",
+    "@wordpress/plugins": "^7.0.0"
   }
 }

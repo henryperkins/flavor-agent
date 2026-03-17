@@ -33,9 +33,11 @@ final class Registration {
                     'selectedBlock' => [
                         'type'       => 'object',
                         'properties' => [
-                            'blockName'   => [ 'type' => 'string', 'description' => 'Block type name (e.g. core/group)' ],
-                            'attributes'  => [ 'type' => 'object', 'description' => 'Current block attributes' ],
-                            'innerBlocks' => [ 'type' => 'array', 'description' => 'Nested blocks (optional)' ],
+                            'blockName'           => [ 'type' => 'string', 'description' => 'Block type name (e.g. core/group)' ],
+                            'attributes'          => [ 'type' => 'object', 'description' => 'Current block attributes. Canonical visibility state lives in attributes.metadata.blockVisibility.' ],
+                            'innerBlocks'         => [ 'type' => 'array', 'description' => 'Nested blocks (optional)' ],
+                            'isInsideContentOnly' => [ 'type' => 'boolean', 'description' => 'Whether the block is inside a contentOnly editing container' ],
+                            'blockVisibility'     => [ 'description' => 'Deprecated legacy alias for attributes.metadata.blockVisibility. Accepted for backward compatibility.' ],
                         ],
                         'required' => [ 'blockName' ],
                     ],
@@ -100,6 +102,10 @@ final class Registration {
                     ],
                     'templateType' => [ 'type' => 'string' ],
                     'prompt'       => [ 'type' => 'string' ],
+                    'visiblePatternNames' => [
+                        'type'  => 'array',
+                        'items' => [ 'type' => 'string' ],
+                    ],
                 ],
                 'required' => [ 'postType' ],
             ],
@@ -282,8 +288,34 @@ final class Registration {
                 'type'       => 'object',
                 'properties' => [
                     'configured'         => [ 'type' => 'boolean' ],
-                    'model'              => [ 'type' => 'string' ],
+                    'model'              => [ 'type' => [ 'string', 'null' ] ],
                     'availableAbilities' => [ 'type' => 'array', 'items' => [ 'type' => 'string' ] ],
+                    'backends'           => [
+                        'type'       => 'object',
+                        'properties' => [
+                            'anthropic'    => [
+                                'type'       => 'object',
+                                'properties' => [
+                                    'configured' => [ 'type' => 'boolean' ],
+                                    'model'      => [ 'type' => [ 'string', 'null' ] ],
+                                ],
+                            ],
+                            'azure_openai' => [
+                                'type'       => 'object',
+                                'properties' => [
+                                    'configured'          => [ 'type' => 'boolean' ],
+                                    'chatDeployment'      => [ 'type' => [ 'string', 'null' ] ],
+                                    'embeddingDeployment' => [ 'type' => [ 'string', 'null' ] ],
+                                ],
+                            ],
+                            'qdrant'       => [
+                                'type'       => 'object',
+                                'properties' => [
+                                    'configured' => [ 'type' => 'boolean' ],
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
             ],
             'meta'                => [ 'show_in_rest' => true, 'readonly' => true ],

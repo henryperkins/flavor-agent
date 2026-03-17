@@ -13,19 +13,55 @@ final class InfraAbilities {
     }
 
     public static function check_status( array $input ): array {
-        $api_key = get_option( 'flavor_agent_api_key', '' );
-        $model   = get_option( 'flavor_agent_model', 'claude-sonnet-4-20250514' );
+        $anthropic_key   = get_option( 'flavor_agent_api_key', '' );
+        $anthropic_model = get_option( 'flavor_agent_model', 'claude-sonnet-4-20250514' );
+
+        $azure_endpoint  = get_option( 'flavor_agent_azure_openai_endpoint', '' );
+        $azure_key       = get_option( 'flavor_agent_azure_openai_key', '' );
+        $azure_embedding = get_option( 'flavor_agent_azure_embedding_deployment', '' );
+        $azure_chat      = get_option( 'flavor_agent_azure_chat_deployment', '' );
+        $qdrant_url      = get_option( 'flavor_agent_qdrant_url', '' );
+        $qdrant_key      = get_option( 'flavor_agent_qdrant_key', '' );
+
+        $anthropic_configured = ! empty( $anthropic_key );
+        $azure_configured     = ! empty( $azure_endpoint ) && ! empty( $azure_key )
+            && ! empty( $azure_embedding ) && ! empty( $azure_chat );
+        $qdrant_configured    = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
+
+        // Read-only abilities are always available.
+        $abilities = [
+            'flavor-agent/introspect-block',
+            'flavor-agent/list-patterns',
+            'flavor-agent/list-template-parts',
+            'flavor-agent/get-theme-tokens',
+            'flavor-agent/check-status',
+        ];
+
+        if ( $anthropic_configured ) {
+            $abilities[] = 'flavor-agent/recommend-block';
+        }
+
+        if ( $azure_configured && $qdrant_configured ) {
+            $abilities[] = 'flavor-agent/recommend-patterns';
+        }
 
         return [
-            'configured'        => ! empty( $api_key ),
-            'model'             => $model,
-            'availableAbilities' => [
-                'flavor-agent/recommend-block',
-                'flavor-agent/introspect-block',
-                'flavor-agent/list-patterns',
-                'flavor-agent/list-template-parts',
-                'flavor-agent/get-theme-tokens',
-                'flavor-agent/check-status',
+            'configured'         => $anthropic_configured,
+            'model'              => $anthropic_configured ? $anthropic_model : null,
+            'availableAbilities' => $abilities,
+            'backends'           => [
+                'anthropic'    => [
+                    'configured' => $anthropic_configured,
+                    'model'      => $anthropic_configured ? $anthropic_model : null,
+                ],
+                'azure_openai' => [
+                    'configured'          => $azure_configured,
+                    'chatDeployment'      => $azure_configured ? $azure_chat : null,
+                    'embeddingDeployment' => $azure_configured ? $azure_embedding : null,
+                ],
+                'qdrant'       => [
+                    'configured' => $qdrant_configured,
+                ],
             ],
         ];
     }

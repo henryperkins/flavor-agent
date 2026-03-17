@@ -8,7 +8,7 @@ Expose the Flavor Agent plugin's recommendation engine and block/pattern/templat
 
 Two independent consumer paths share the same LLM layer:
 
-1. **JS Inspector path** (existing): Client-side context collection -> `POST /flavor-agent/v1/recommend-block` -> `Prompt` + `Client` -> structured suggestions in Inspector UI. Unchanged.
+1. **JS Inspector path** (existing): Client-side context collection -> `POST /flavor-agent/v1/recommend-block` -> `Prompt` + `Client` -> structured suggestions in Inspector UI. The request/response flow is unchanged, but the client now hard-enforces `contentOnly` restrictions and safely merges nested attribute updates before applying them.
 
 2. **Abilities path** (new): Orchestrator calls ability with minimal input -> server-side context assembly via `ServerCollector` -> `Prompt` + `Client` -> structured output. Self-sufficient; callers need no knowledge of Flavor Agent internals.
 
@@ -22,39 +22,41 @@ The Abilities API hooks (`wp_abilities_api_categories_init`, `wp_abilities_api_i
 
 ### Block-level
 
-| ID | Type | Input | Output | Status |
-|---|---|---|---|---|
-| `flavor-agent/recommend-block` | Action (LLM) | `{ selectedBlock: { blockName, attributes, innerBlocks }, prompt? }` | `{ settings: Suggestion[], styles: Suggestion[], block: Suggestion[], explanation }` | Implemented |
-| `flavor-agent/introspect-block` | Read-only | `{ blockName }` | `{ name, title, category, supports, inspectorPanels, contentAttributes, configAttributes, styles, variations, parent, allowedBlocks }` | Implemented |
+| ID                              | Type         | Input                                                                                                        | Output                                                                                                                                 | Status      |
+| ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `flavor-agent/recommend-block`  | Action (LLM) | `{ selectedBlock: { blockName, attributes, innerBlocks, isInsideContentOnly?, blockVisibility? }, prompt? }` | `{ settings: Suggestion[], styles: Suggestion[], block: Suggestion[], explanation }`                                                   | Implemented |
+| `flavor-agent/introspect-block` | Read-only    | `{ blockName }`                                                                                              | `{ name, title, category, supports, inspectorPanels, contentAttributes, configAttributes, styles, variations, parent, allowedBlocks }` | Implemented |
 
 ### Patterns
 
-| ID | Type | Input | Output | Status |
-|---|---|---|---|---|
-| `flavor-agent/recommend-patterns` | Action (LLM) | `{ postType, blockContext?: { blockName, attributes }, templateType?, prompt? }` | `{ recommendations: [{ name, title, score, reason, categories, content }] }` | Stubbed |
-| `flavor-agent/list-patterns` | Read-only | `{ categories?, blockTypes?, templateTypes? }` | `{ patterns: [{ name, title, description, categories, blockTypes, templateTypes, content }] }` | Implemented |
+| ID                                | Type         | Input                                                                            | Output                                                                                         | Status                                                     |
+| --------------------------------- | ------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `flavor-agent/recommend-patterns` | Action (LLM) | `{ postType, blockContext?: { blockName, attributes }, templateType?, prompt?, visiblePatternNames?: string[] }` | `{ recommendations: [{ name, title, score, reason, categories, content }] }`                   | Implemented; see `2026-03-16-recommend-patterns-design.md` |
+| `flavor-agent/list-patterns`      | Read-only    | `{ categories?, blockTypes?, templateTypes? }`                                   | `{ patterns: [{ name, title, description, categories, blockTypes, templateTypes, content }] }` | Implemented                                                |
 
 ### Templates & Template Parts
 
-| ID | Type | Input | Output | Status |
-|---|---|---|---|---|
-| `flavor-agent/recommend-template` | Action (LLM) | `{ templateType, prompt? }` | `{ suggestions: [{ label, description, templateParts: [{ area, name, reason }], patternSuggestions: string[] }], explanation }` | Stubbed |
-| `flavor-agent/list-template-parts` | Read-only | `{ area? }` | `{ templateParts: [{ slug, title, area, content }] }` | Implemented |
+| ID                                 | Type         | Input                       | Output                                                                                                                          | Status      |
+| ---------------------------------- | ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `flavor-agent/recommend-template`  | Action (LLM) | `{ templateType, prompt? }` | `{ suggestions: [{ label, description, templateParts: [{ area, name, reason }], patternSuggestions: string[] }], explanation }` | Stubbed     |
+| `flavor-agent/list-template-parts` | Read-only    | `{ area? }`                 | `{ templateParts: [{ slug, title, area, content }] }`                                                                           | Implemented |
 
 ### Navigation
 
-| ID | Type | Input | Output | Status |
-|---|---|---|---|---|
+| ID                                  | Type         | Input                                       | Output                                                                                             | Status  |
+| ----------------------------------- | ------------ | ------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------- |
 | `flavor-agent/recommend-navigation` | Action (LLM) | `{ menuId? \| navigationMarkup?, prompt? }` | `{ suggestions: [{ label, description, structureUpdates, overlayRecommendation? }], explanation }` | Stubbed |
 
 ### Infrastructure
 
-| ID | Type | Input | Output | Status |
-|---|---|---|---|---|
-| `flavor-agent/get-theme-tokens` | Read-only | _(none)_ | `{ colors, gradients, fontSizes, fontFamilies, spacing, shadows, layout, enabledFeatures }` | Implemented |
-| `flavor-agent/check-status` | Read-only | _(none)_ | `{ configured: bool, model: string, availableAbilities: string[] }` | Implemented |
+| ID                              | Type      | Input    | Output                                                                                      | Status                                                                                |
+| ------------------------------- | --------- | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `flavor-agent/get-theme-tokens` | Read-only | _(none)_ | `{ colors, gradients, fontSizes, fontFamilies, spacing, shadows, layout, enabledFeatures }` | Implemented                                                                           |
+| `flavor-agent/check-status`     | Read-only | _(none)_ | `{ configured: bool, model: string                                                          | null, availableAbilities: string[], backends?: { anthropic, azure_openai, qdrant } }` | Implemented with additive backend metadata |
 
 ### Suggestion Schema (shared)
+
+Canonical visibility state lives in `selectedBlock.attributes.metadata.blockVisibility`. The top-level `selectedBlock.blockVisibility` field is accepted only as a backward-compatible alias and is normalized server-side before context assembly.
 
 Each suggestion object in `recommend-block` output:
 
@@ -77,13 +79,13 @@ Each suggestion object in `recommend-block` output:
 
 Static methods that build context from PHP APIs:
 
-| Method | PHP Sources | Used By |
-|---|---|---|
-| `for_block( string $block_name, array $attributes, array $inner_blocks )` | `WP_Block_Type_Registry::get_registered()`, `wp_get_global_settings()` | `recommend-block` |
-| `for_tokens()` | `wp_get_global_settings()`, `wp_get_global_styles()` | `get-theme-tokens`, also called internally by `for_block()` |
-| `for_patterns( ?array $categories, ?array $block_types, ?array $template_types )` | `WP_Block_Patterns_Registry::get_all_registered()` | `list-patterns`, `recommend-patterns` |
-| `for_template_parts( ?string $area )` | `get_block_templates( [], 'wp_template_part' )` | `list-template-parts`, `recommend-template` |
-| `introspect_block_type( string $block_name )` | `WP_Block_Type_Registry::get_registered()` | `introspect-block`, also called by `for_block()` |
+| Method                                                                            | PHP Sources                                                            | Used By                                                     |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `for_block( string $block_name, array $attributes, array $inner_blocks )`         | `WP_Block_Type_Registry::get_registered()`, `wp_get_global_settings()` | `recommend-block`                                           |
+| `for_tokens()`                                                                    | `wp_get_global_settings()`, `wp_get_global_styles()`                   | `get-theme-tokens`, also called internally by `for_block()` |
+| `for_patterns( ?array $categories, ?array $block_types, ?array $template_types )` | `WP_Block_Patterns_Registry::get_all_registered()`                     | `list-patterns`, `recommend-patterns`                       |
+| `for_template_parts( ?string $area )`                                             | `get_block_templates( [], 'wp_template_part' )`                        | `list-template-parts`, `recommend-template`                 |
+| `introspect_block_type( string $block_name )`                                     | `WP_Block_Type_Registry::get_registered()`                             | `introspect-block`, also called by `for_block()`            |
 
 ### Block Introspection (PHP equivalent of JS `block-inspector.js`)
 
@@ -105,21 +107,31 @@ Static methods that build context from PHP APIs:
 ```
 inc/
 ├── Abilities/
-│   ├── Registration.php        # Category + all 9 wp_register_ability calls
+│   ├── Registration.php        # Category + all 9 wp_register_ability calls; check-status schema includes backends metadata
 │   ├── BlockAbilities.php      # recommend-block, introspect-block callbacks
-│   ├── PatternAbilities.php    # recommend-patterns (stub), list-patterns callbacks
+│   ├── PatternAbilities.php    # recommend-patterns (implemented), list-patterns callbacks
 │   ├── TemplateAbilities.php   # recommend-template (stub), list-template-parts callbacks
 │   ├── NavigationAbilities.php # recommend-navigation (stub) callback
-│   └── InfraAbilities.php      # get-theme-tokens, check-status callbacks
+│   └── InfraAbilities.php      # get-theme-tokens, check-status (dynamic backend readiness) callbacks
+├── AzureOpenAI/
+│   ├── EmbeddingClient.php     # Azure OpenAI /openai/v1/embeddings client
+│   ├── ResponsesClient.php     # Azure OpenAI /openai/v1/responses client (GPT-5.4)
+│   └── QdrantClient.php        # Qdrant Cloud REST API client
 ├── Context/
 │   └── ServerCollector.php     # Server-side context assembly
 ├── LLM/
 │   ├── Client.php              # (existing, unchanged)
 │   └── Prompt.php              # (existing, unchanged — block system prompt reused)
+├── Patterns/
+│   └── PatternIndex.php        # Pattern sync orchestrator (fingerprint, embed, upsert)
 ├── REST/
-│   └── Agent_Controller.php    # (existing, unchanged)
-└── Settings.php                # (existing, unchanged)
+│   └── Agent_Controller.php    # REST controller with recommend-block, sync-patterns, recommend-patterns routes
+└── Settings.php                # Settings UI with Anthropic, Azure OpenAI, Qdrant sections + sync panel
 ```
+
+## Related Design
+
+- `2026-03-16-recommend-patterns-design.md` is the authoritative implementation design for the `recommend-patterns` ability, the pattern sync lifecycle, the admin sync button, and the additive `check-status` contract expansion.
 
 ## Bootstrap Change
 
@@ -145,17 +157,24 @@ add_action( 'wp_abilities_api_init', [ FlavorAgent\Abilities\Registration::class
 
 ### Stubbed (future iterations)
 
-- `recommend-patterns` — needs patterns-specific LLM system prompt
 - `recommend-template` — needs template-specific LLM system prompt + `ServerCollector::for_template()`
 - `recommend-navigation` — needs navigation-specific LLM system prompt + `ServerCollector::for_navigation()`
 
 Stubbed abilities are registered with full `input_schema`/`output_schema` so orchestrators discover them. Callbacks return `WP_Error('not_implemented', 'This ability is planned but not yet available.', ['status' => 501])`.
 
+### Implemented (recommend-patterns iteration)
+
+- `recommend-patterns` — Azure OpenAI embeddings + Qdrant vector search + GPT-5.4 LLM ranking. See `2026-03-16-recommend-patterns-design.md`.
+- `check-status` — dynamic `availableAbilities` computation + `backends` metadata (additive, backward-compatible)
+- `Agent_Controller.php` — added `POST /flavor-agent/v1/sync-patterns` route
+- `Settings.php` — added Azure OpenAI, Qdrant credential sections + sync status panel + admin JS enqueue
+- `flavor-agent.php` — added lifecycle hooks for pattern index (cron, theme switch, plugin activation/deactivation)
+
 ## Backward Compatibility
 
 - WP 6.5-6.8: Abilities hooks never fire. Plugin works via REST endpoint only.
 - WP 6.9+: Abilities register alongside the existing REST endpoint. Both paths work.
-- The existing JS Inspector flow is completely untouched.
+- Existing JS Inspector consumers keep the same REST contract, with additional client-side guard rails around nested attribute merges and `contentOnly` enforcement.
 
 ## Verification
 
@@ -163,8 +182,9 @@ Stubbed abilities are registered with full `input_schema`/`output_schema` so orc
 - `wp-abilities/v1/categories` returns `flavor-agent` category
 - `introspect-block` with `{ "blockName": "core/group" }` returns capability manifest
 - `get-theme-tokens` returns current theme's design tokens
-- `check-status` reports API key and model configuration
-- `recommend-block` with `{ "selectedBlock": { "blockName": "core/group", "attributes": {}, "innerBlocks": [] } }` returns LLM suggestions (requires API key)
+- `check-status` reports API key and model configuration today; the recommend-patterns iteration keeps those top-level fields and adds backend-specific readiness metadata
+- `recommend-block` with `{ "selectedBlock": { "blockName": "core/group", "attributes": { "metadata": { "blockVisibility": false } }, "innerBlocks": [] } }` preserves the explicit boolean visibility state in the prompt (requires API key)
+- `recommend-block` accepts legacy `{ "selectedBlock": { "blockVisibility": { "viewport": { "mobile": false } } } }` input and normalizes it into `attributes.metadata.blockVisibility`
 - `list-patterns` returns filtered pattern inventory
 - `list-template-parts` returns template parts
 - Stubbed abilities return 501 with descriptive message

@@ -29,6 +29,58 @@ add_action( 'admin_init', [ FlavorAgent\Settings::class, 'register_settings' ] )
 add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\Abilities\Registration::class, 'register_category' ] );
 add_action( 'wp_abilities_api_init', [ FlavorAgent\Abilities\Registration::class, 'register_abilities' ] );
 
+// Pattern index lifecycle hooks.
+add_action( 'flavor_agent_reindex_patterns', [ FlavorAgent\Patterns\PatternIndex::class, 'sync' ] );
+add_action( 'after_switch_theme', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
+add_action( 'activated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
+add_action( 'deactivated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
+add_action( 'upgrader_process_complete', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
+
+foreach ( [
+	'flavor_agent_azure_openai_endpoint',
+	'flavor_agent_azure_openai_key',
+	'flavor_agent_azure_embedding_deployment',
+	'flavor_agent_qdrant_url',
+	'flavor_agent_qdrant_key',
+	'home',
+] as $option_name ) {
+	add_action(
+		"update_option_{$option_name}",
+		[ FlavorAgent\Patterns\PatternIndex::class, 'handle_dependency_change' ],
+		10,
+		3
+	);
+}
+
+// Recommended pattern category for AI-ranked patterns in the inserter.
+add_action( 'init', function () {
+    if ( function_exists( 'register_block_pattern_category' ) ) {
+        register_block_pattern_category( 'recommended', [
+            'label' => __( 'Recommended', 'flavor-agent' ),
+        ] );
+    }
+} );
+
+add_filter( 'block_editor_settings_all', function ( $settings ) {
+    $cats        = $settings['__experimentalBlockPatternCategories'] ?? [];
+    $recommended = null;
+    $rest        = [];
+
+    foreach ( $cats as $cat ) {
+        if ( ( $cat['name'] ?? '' ) === 'recommended' ) {
+            $recommended = $cat;
+        } else {
+            $rest[] = $cat;
+        }
+    }
+
+    if ( $recommended ) {
+        $settings['__experimentalBlockPatternCategories'] = array_merge( [ $recommended ], $rest );
+    }
+
+    return $settings;
+} );
+
 function flavor_agent_enqueue_editor(): void {
     $asset_path = FLAVOR_AGENT_DIR . 'build/index.asset.php';
     if ( ! file_exists( $asset_path ) ) {
@@ -46,8 +98,16 @@ function flavor_agent_enqueue_editor(): void {
     );
 
     wp_localize_script( 'flavor-agent-editor', 'flavorAgentData', [
-        'restUrl'    => rest_url( 'flavor-agent/v1/' ),
-        'nonce'      => wp_create_nonce( 'wp_rest' ),
-        'hasApiKey'  => (bool) get_option( 'flavor_agent_api_key' ),
+        'restUrl'              => rest_url( 'flavor-agent/v1/' ),
+        'nonce'                => wp_create_nonce( 'wp_rest' ),
+        'hasApiKey'            => (bool) get_option( 'flavor_agent_api_key' ),
+        'canRecommendPatterns' => (bool) (
+            get_option( 'flavor_agent_azure_openai_endpoint' )
+            && get_option( 'flavor_agent_azure_openai_key' )
+            && get_option( 'flavor_agent_azure_embedding_deployment' )
+            && get_option( 'flavor_agent_azure_chat_deployment' )
+            && get_option( 'flavor_agent_qdrant_url' )
+            && get_option( 'flavor_agent_qdrant_key' )
+        ),
     ] );
 }
