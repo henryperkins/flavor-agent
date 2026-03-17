@@ -14,7 +14,7 @@ import { collectThemeTokens, summarizeTokens } from './theme-tokens';
  * Build a focused context for a single block's Inspector recommendations.
  *
  * @param {string} clientId
- * @return {object|null}
+ * @return {object|null} Block recommendation context or null when unavailable.
  */
 export function collectBlockContext( clientId ) {
 	if ( ! clientId ) {

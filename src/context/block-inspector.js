@@ -48,13 +48,15 @@ const SUPPORT_TO_PANEL = {
 };
 
 /**
- * Flatten a nested supports object into dot-path → value entries.
- * @param obj
- * @param prefix
+ * Flatten a nested supports object into dot-path -> value entries.
+ *
+ * @param {Object<string, unknown>|null|undefined} obj    Nested support object.
+ * @param {string}                                 prefix Existing dot-path prefix.
+ * @return {Array<[string, unknown]>}                     Flattened support entries.
  */
 function flattenSupports( obj, prefix = '' ) {
 	const entries = [];
-	if ( obj == null || typeof obj !== 'object' ) {
+	if ( obj === null || obj === undefined || typeof obj !== 'object' ) {
 		return entries;
 	}
 
@@ -78,7 +80,9 @@ function flattenSupports( obj, prefix = '' ) {
 
 /**
  * Determine which Inspector panels a block exposes based on supports.
- * @param supports
+ *
+ * @param {Record<string, unknown>} supports Block support flags.
+ * @return {Record<string, string[]>} Supported panel map.
  */
 export function resolveInspectorPanels( supports ) {
 	const panels = {};
@@ -101,7 +105,7 @@ function isTruthy( val ) {
 	if ( val === true ) {
 		return true;
 	}
-	if ( val === false || val == null ) {
+	if ( val === false || val === null || val === undefined ) {
 		return false;
 	}
 	if ( Array.isArray( val ) ) {
@@ -115,7 +119,9 @@ function isTruthy( val ) {
 
 /**
  * Introspect a single block type by name.
- * @param blockName
+ *
+ * @param {string} blockName Registered block name.
+ * @return {object|null} Block type manifest or null when unavailable.
  */
 export function introspectBlockType( blockName ) {
 	const store = select( blocksStore );
@@ -179,7 +185,9 @@ export function introspectBlockType( blockName ) {
 
 /**
  * Introspect a live block instance.
- * @param clientId
+ *
+ * @param {string} clientId Selected block client ID.
+ * @return {object|null} Live block manifest or null when unavailable.
  */
 export function introspectBlockInstance( clientId ) {
 	const editor = select( blockEditorStore );
@@ -231,8 +239,10 @@ function extractActiveStyle( className, registeredStyles ) {
 
 /**
  * Recursively introspect an entire block tree from a root.
- * @param rootClientId
- * @param maxDepth
+ *
+ * @param {?string} rootClientId Root client ID, or null for top level.
+ * @param {number}  maxDepth     Maximum tree depth to traverse.
+ * @return {object[]}            Introspected child block tree.
  */
 export function introspectBlockTree( rootClientId = null, maxDepth = 10 ) {
 	if ( maxDepth <= 0 ) {
@@ -261,7 +271,9 @@ export function introspectBlockTree( rootClientId = null, maxDepth = 10 ) {
 
 /**
  * Summarize a full introspected tree for the LLM prompt.
- * @param tree
+ *
+ * @param {object[]} tree Introspected block tree.
+ * @return {object[]} Prompt-oriented summary tree.
  */
 export function summarizeTree( tree ) {
 	return tree.map( ( node ) => {
@@ -270,10 +282,7 @@ export function summarizeTree( tree ) {
 			title: node.title,
 		};
 
-		const meaningful = pickMeaningfulAttributes(
-			node.currentAttributes,
-			node.name
-		);
+		const meaningful = pickMeaningfulAttributes( node.currentAttributes );
 		if ( Object.keys( meaningful ).length ) {
 			summary.currentValues = meaningful;
 		}
@@ -303,7 +312,7 @@ export function summarizeTree( tree ) {
 	} );
 }
 
-function pickMeaningfulAttributes( attrs, blockName ) {
+function pickMeaningfulAttributes( attrs ) {
 	if ( ! attrs ) {
 		return {};
 	}
@@ -330,7 +339,9 @@ function pickMeaningfulAttributes( attrs, blockName ) {
 /**
  * Build a deduplicated block capability index for all unique block types
  * present in a tree.
- * @param tree
+ *
+ * @param {object[]} tree Introspected block tree.
+ * @return {Record<string, object>} Block capability index keyed by block name.
  */
 export function buildCapabilityIndex( tree ) {
 	const index = {};

@@ -222,7 +222,9 @@ function mergeOrigins( feature ) {
 
 /**
  * Produce a compact token summary for the LLM prompt.
- * @param tokens
+ *
+ * @param {Object} tokens Full editor token manifest.
+ * @return {Object} Compact token summary for the prompt.
  */
 export function summarizeTokens( tokens ) {
 	return {

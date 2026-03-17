@@ -44,7 +44,7 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 						</div>
 					) }
 
-					{ items.map( ( suggestion, i ) => (
+					{ items.map( ( suggestion ) => (
 						<SuggestionCard
 							key={ `${ panel }-${ suggestion.label }` }
 							suggestion={ suggestion }
@@ -138,7 +138,7 @@ function SuggestionCard( { suggestion, onApply } ) {
 				</div>
 			) }
 
-			{ confidence != null && (
+			{ confidence !== null && confidence !== undefined && (
 				<div
 					style={ {
 						marginTop: '4px',
@@ -183,7 +183,7 @@ function formatValue( val ) {
 	if ( val === false ) {
 		return 'false';
 	}
-	if ( val == null ) {
+	if ( val === null || val === undefined ) {
 		return 'none';
 	}
 	if ( typeof val === 'object' ) {
