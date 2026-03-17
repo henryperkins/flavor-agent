@@ -9,6 +9,7 @@ use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Support\StringArray;
 
 final class PatternAbilities {
 
@@ -35,7 +36,7 @@ final class PatternAbilities {
      */
     public static function recommend_patterns( array $input ): array|\WP_Error {
         $visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
-            ? self::sanitize_pattern_names( (array) $input['visiblePatternNames'] )
+            ? StringArray::sanitize( $input['visiblePatternNames'] )
             : null;
 
         if ( is_array( $visible_pattern_names ) && empty( $visible_pattern_names ) ) {
@@ -281,26 +282,6 @@ final class PatternAbilities {
         }
 
         return true;
-    }
-
-    /**
-     * @param mixed[] $pattern_names
-     * @return string[]
-     */
-    private static function sanitize_pattern_names( array $pattern_names ): array {
-        $names = array_map(
-            static fn( $name ): string => sanitize_text_field( (string) $name ),
-            $pattern_names
-        );
-
-        return array_values(
-            array_unique(
-                array_filter(
-                    $names,
-                    static fn( string $name ): bool => $name !== ''
-                )
-            )
-        );
     }
 
     private static function ranking_system_prompt(): string {

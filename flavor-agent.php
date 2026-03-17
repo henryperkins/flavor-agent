@@ -112,5 +112,10 @@ function flavor_agent_enqueue_editor(): void {
             && get_option( 'flavor_agent_qdrant_url' )
             && get_option( 'flavor_agent_qdrant_key' )
         ),
+        'canRecommendTemplates' => (bool) (
+            get_option( 'flavor_agent_azure_openai_endpoint' )
+            && get_option( 'flavor_agent_azure_openai_key' )
+            && get_option( 'flavor_agent_azure_chat_deployment' )
+        ),
     ] );
 }

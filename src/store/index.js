@@ -25,6 +25,11 @@ const DEFAULT_STATE = {
 	patternRecommendations: [],
 	patternStatus: 'idle',
 	patternBadge: null,
+	templateRecommendations: [],
+	templateExplanation: '',
+	templateStatus: 'idle',
+	templateError: null,
+	templateRef: null,
 };
 
 const actions = {
@@ -159,6 +164,76 @@ const actions = {
 			}
 		};
 	},
+
+	setTemplateStatus( status, error = null ) {
+		return { type: 'SET_TEMPLATE_STATUS', status, error };
+	},
+
+	setTemplateRecommendations( templateRef, payload ) {
+		return { type: 'SET_TEMPLATE_RECS', templateRef, payload };
+	},
+
+	clearTemplateRecommendations() {
+		return ( { dispatch } ) => {
+			if ( actions._templateAbort ) {
+				actions._templateAbort.abort();
+				actions._templateAbort = null;
+			}
+
+			dispatch( { type: 'CLEAR_TEMPLATE_RECS' } );
+		};
+	},
+
+	fetchTemplateRecommendations( input ) {
+		return async ( { dispatch } ) => {
+			if ( actions._templateAbort ) {
+				actions._templateAbort.abort();
+			}
+
+			const controller = new AbortController();
+			actions._templateAbort = controller;
+
+			dispatch( actions.setTemplateStatus( 'loading' ) );
+
+			try {
+				const result = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-template',
+					method: 'POST',
+					data: input,
+					signal: controller.signal,
+				} );
+
+				dispatch(
+					actions.setTemplateRecommendations(
+						input.templateRef,
+						result
+					)
+				);
+			} catch ( err ) {
+				if ( err.name === 'AbortError' ) {
+					return;
+				}
+
+				dispatch(
+					actions.setTemplateRecommendations( input.templateRef, {
+						suggestions: [],
+						explanation: '',
+					} )
+				);
+				dispatch(
+					actions.setTemplateStatus(
+						'error',
+						err?.message ||
+							'Template recommendation request failed.'
+					)
+				);
+			} finally {
+				if ( actions._templateAbort === controller ) {
+					actions._templateAbort = null;
+				}
+			}
+		};
+	},
 };
 
 function reducer( state = DEFAULT_STATE, action ) {
@@ -193,6 +268,30 @@ function reducer( state = DEFAULT_STATE, action ) {
 				patternRecommendations: action.recommendations,
 				patternBadge: getPatternBadgeReason( action.recommendations ),
 			};
+		case 'SET_TEMPLATE_STATUS':
+			return {
+				...state,
+				templateStatus: action.status,
+				templateError: action.error ?? null,
+			};
+		case 'SET_TEMPLATE_RECS':
+			return {
+				...state,
+				templateRecommendations: action.payload?.suggestions ?? [],
+				templateExplanation: action.payload?.explanation ?? '',
+				templateRef: action.templateRef,
+				templateStatus: 'ready',
+				templateError: null,
+			};
+		case 'CLEAR_TEMPLATE_RECS':
+			return {
+				...state,
+				templateRecommendations: [],
+				templateExplanation: '',
+				templateStatus: 'idle',
+				templateError: null,
+				templateRef: null,
+			};
 		default:
 			return state;
 	}
@@ -214,6 +313,12 @@ const selectors = {
 	getPatternRecommendations: ( state ) => state.patternRecommendations,
 	getPatternBadge: ( state ) => state.patternBadge,
 	isPatternLoading: ( state ) => state.patternStatus === 'loading',
+	getTemplateRecommendations: ( state ) => state.templateRecommendations,
+	getTemplateExplanation: ( state ) => state.templateExplanation,
+	getTemplateError: ( state ) => state.templateError,
+	getTemplateResultRef: ( state ) => state.templateRef,
+	isTemplateLoading: ( state ) => state.templateStatus === 'loading',
+	getTemplateStatus: ( state ) => state.templateStatus,
 };
 
 const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );

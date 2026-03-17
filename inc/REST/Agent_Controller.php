@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace FlavorAgent\REST;
 
 use FlavorAgent\Abilities\PatternAbilities;
+use FlavorAgent\Abilities\TemplateAbilities;
 use FlavorAgent\LLM\Client;
 use FlavorAgent\LLM\Prompt;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Support\StringArray;
 
 final class Agent_Controller {
 
@@ -78,6 +80,36 @@ final class Agent_Controller {
                 ],
             ],
         ] );
+
+        register_rest_route( self::NAMESPACE, '/recommend-template', [
+            'methods'             => 'POST',
+            'callback'            => [ __CLASS__, 'handle_recommend_template' ],
+            'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+            'args'                => [
+                'templateRef'  => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => static fn( $value ): bool => is_string( $value ) && $value !== '',
+                ],
+                'templateType' => [
+                    'required'          => false,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'prompt'       => [
+                    'required'          => false,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_textarea_field',
+                ],
+                'visiblePatternNames' => [
+                    'required'          => false,
+                    'type'              => 'array',
+                    'validate_callback' => [ __CLASS__, 'validate_string_array' ],
+                    'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
+                ],
+            ],
+        ] );
     }
 
     public static function validate_string_array( $value ): bool {
@@ -89,21 +121,7 @@ final class Agent_Controller {
      * @return string[]
      */
     public static function sanitize_string_array( $value ): array {
-        if ( ! is_array( $value ) ) {
-            return [];
-        }
-
-        return array_values(
-            array_unique(
-                array_filter(
-                    array_map(
-                        static fn( $entry ): string => sanitize_text_field( (string) $entry ),
-                        $value
-                    ),
-                    static fn( string $entry ): bool => $entry !== ''
-                )
-            )
-        );
+        return StringArray::sanitize( $value );
     }
 
     public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
@@ -180,6 +198,39 @@ final class Agent_Controller {
         }
 
         $result = PatternAbilities::recommend_patterns( $input );
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        return new \WP_REST_Response( $result, 200 );
+    }
+
+    /**
+     * Handle POST /recommend-template with a thin ability adapter.
+     */
+    public static function handle_recommend_template( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+        $input = [
+            'templateRef' => $request->get_param( 'templateRef' ),
+        ];
+
+        $template_type = $request->get_param( 'templateType' );
+        if ( is_string( $template_type ) && $template_type !== '' ) {
+            $input['templateType'] = $template_type;
+        }
+
+        $prompt = $request->get_param( 'prompt' );
+        if ( is_string( $prompt ) && $prompt !== '' ) {
+            $input['prompt'] = $prompt;
+        }
+
+        if ( $request->has_param( 'visiblePatternNames' ) ) {
+            $input['visiblePatternNames'] = self::sanitize_string_array(
+                $request->get_param( 'visiblePatternNames' )
+            );
+        }
+
+        $result = TemplateAbilities::recommend_template( $input );
 
         if ( is_wp_error( $result ) ) {
             return $result;

@@ -18,12 +18,14 @@ import './inspector/InspectorInjector';
 // Plugin components.
 import PatternRecommender from './patterns/PatternRecommender';
 import InserterBadge from './patterns/InserterBadge';
+import TemplateRecommender from './templates/TemplateRecommender';
 
 registerPlugin( 'flavor-agent', {
 	render: () => (
 		<>
 			<PatternRecommender />
 			<InserterBadge />
+			<TemplateRecommender />
 		</>
 	),
 } );

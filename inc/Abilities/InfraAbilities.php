@@ -24,8 +24,8 @@ final class InfraAbilities {
         $qdrant_key      = get_option( 'flavor_agent_qdrant_key', '' );
 
         $anthropic_configured = ! empty( $anthropic_key );
-        $azure_configured     = ! empty( $azure_endpoint ) && ! empty( $azure_key )
-            && ! empty( $azure_embedding ) && ! empty( $azure_chat );
+        $azure_chat_configured = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_chat );
+        $azure_configured     = $azure_chat_configured && ! empty( $azure_embedding );
         $qdrant_configured    = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
 
         // Read-only abilities are always available.
@@ -43,6 +43,10 @@ final class InfraAbilities {
 
         if ( $azure_configured && $qdrant_configured ) {
             $abilities[] = 'flavor-agent/recommend-patterns';
+        }
+
+        if ( $azure_chat_configured ) {
+            $abilities[] = 'flavor-agent/recommend-template';
         }
 
         return [

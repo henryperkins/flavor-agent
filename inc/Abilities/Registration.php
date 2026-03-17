@@ -179,16 +179,46 @@ final class Registration {
             'input_schema'        => [
                 'type'       => 'object',
                 'properties' => [
-                    'templateType' => [ 'type' => 'string', 'description' => 'Template type: page, 404, archive, single, index, etc.' ],
+                    'templateRef'  => [ 'type' => 'string', 'description' => 'Template identifier from the Site Editor.' ],
+                    'templateType' => [ 'type' => 'string', 'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.' ],
                     'prompt'       => [ 'type' => 'string' ],
+                    'visiblePatternNames' => [
+                        'type'        => 'array',
+                        'description' => 'Pattern names currently available in the editor inserter for this template context.',
+                        'items'       => [ 'type' => 'string' ],
+                    ],
                 ],
-                'required' => [ 'templateType' ],
+                'required' => [ 'templateRef' ],
             ],
             'output_schema'       => [
                 'type'       => 'object',
                 'properties' => [
-                    'suggestions'  => [ 'type' => 'array' ],
-                    'explanation'  => [ 'type' => 'string' ],
+                    'suggestions' => [
+                        'type'  => 'array',
+                        'items' => [
+                            'type'       => 'object',
+                            'properties' => [
+                                'label'              => [ 'type' => 'string' ],
+                                'description'        => [ 'type' => 'string' ],
+                                'templateParts'      => [
+                                    'type'  => 'array',
+                                    'items' => [
+                                        'type'       => 'object',
+                                        'properties' => [
+                                            'slug'   => [ 'type' => 'string' ],
+                                            'area'   => [ 'type' => 'string' ],
+                                            'reason' => [ 'type' => 'string' ],
+                                        ],
+                                    ],
+                                ],
+                                'patternSuggestions' => [
+                                    'type'  => 'array',
+                                    'items' => [ 'type' => 'string' ],
+                                ],
+                            ],
+                        ],
+                    ],
+                    'explanation' => [ 'type' => 'string' ],
                 ],
             ],
             'meta'                => [ 'show_in_rest' => true ],

@@ -37,6 +37,23 @@ final class ServerCollector {
         'anchor'                     => 'advanced',
     ];
 
+    private const KNOWN_TEMPLATE_TYPES = [
+        'index',
+        'home',
+        'front-page',
+        'singular',
+        'single',
+        'page',
+        'archive',
+        'author',
+        'category',
+        'tag',
+        'taxonomy',
+        'date',
+        'search',
+        '404',
+    ];
+
     public static function introspect_block_type( string $block_name ): ?array {
         $registry   = \WP_Block_Type_Registry::get_instance();
         $block_type = $registry->get_registered( $block_name );
@@ -252,6 +269,251 @@ final class ServerCollector {
         }
 
         return $result;
+    }
+
+    /**
+     * Assemble context for a template recommendation.
+     *
+     * @param string      $template_ref  Template identifier from the Site Editor.
+     * @param string|null $template_type Normalized template type. Derived if null.
+     * @param string[]|null $visible_pattern_names Pattern names visible in the current editor context.
+     * @return array|\WP_Error Template context or error.
+     */
+    public static function for_template(
+        string $template_ref,
+        ?string $template_type = null,
+        ?array $visible_pattern_names = null
+    ): array|\WP_Error {
+        $template = null;
+
+        if ( str_contains( $template_ref, '//' ) ) {
+            $template = get_block_template( $template_ref, 'wp_template' );
+        }
+
+        if ( ! $template ) {
+            $slug = str_contains( $template_ref, '//' )
+                ? substr( $template_ref, strpos( $template_ref, '//' ) + 2 )
+                : $template_ref;
+
+            $templates = get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template' );
+            $template  = $templates[0] ?? null;
+        }
+
+        if ( ! $template ) {
+            return new \WP_Error(
+                'template_not_found',
+                'Could not resolve the current template from the Site Editor context.',
+                [ 'status' => 404 ]
+            );
+        }
+
+        if ( $template_type === null ) {
+            $template_type = self::derive_template_type( $template_ref );
+        }
+
+        $available_parts   = self::for_template_parts();
+        $part_area_lookup  = [];
+        foreach ( $available_parts as $part ) {
+            $slug = (string) ( $part['slug'] ?? '' );
+
+            if ( $slug === '' ) {
+                continue;
+            }
+
+            $part_area_lookup[ $slug ] = (string) ( $part['area'] ?? '' );
+        }
+
+        $slots = self::collect_template_part_slots(
+            parse_blocks( $template->content ?? '' ),
+            $part_area_lookup
+        );
+
+        return [
+            'templateRef'    => $template_ref,
+            'templateType'   => $template_type,
+            'title'          => $template->title ?? $template_ref,
+            'assignedParts'  => $slots['assignedParts'],
+            'emptyAreas'     => $slots['emptyAreas'],
+            'allowedAreas'   => $slots['allowedAreas'],
+            'availableParts' => $available_parts,
+            'patterns'       => self::collect_template_candidate_patterns( $template_type, $visible_pattern_names ),
+            'themeTokens'    => self::for_tokens(),
+        ];
+    }
+
+    /**
+     * Walk parsed blocks recursively and extract template-part slots.
+     *
+     * @param array $blocks           Parsed block array from parse_blocks().
+     * @param array $part_area_lookup Map of slug => area from available parts.
+     * @return array{assignedParts: array, emptyAreas: string[], allowedAreas: string[]}
+     */
+    private static function collect_template_part_slots( array $blocks, array $part_area_lookup ): array {
+        $assigned_parts = [];
+        $empty_areas    = [];
+        $allowed_areas  = [];
+
+        foreach ( $blocks as $block ) {
+            if ( ! is_array( $block ) ) {
+                continue;
+            }
+
+            if ( ( $block['blockName'] ?? '' ) === 'core/template-part' ) {
+                $slug = (string) ( $block['attrs']['slug'] ?? '' );
+                $area = (string) (
+                    $block['attrs']['area'] ?? (
+                        $slug !== '' ? ( $part_area_lookup[ $slug ] ?? '' ) : ''
+                    )
+                );
+
+                if ( $slug !== '' ) {
+                    $assigned_parts[] = [
+                        'slug' => $slug,
+                        'area' => $area,
+                    ];
+                    if ( $area !== '' ) {
+                        $allowed_areas[] = $area;
+                    }
+                } elseif ( self::is_explicit_empty_template_part_area( $area ) ) {
+                    $empty_areas[]   = $area;
+                    $allowed_areas[] = $area;
+                }
+            }
+
+            if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+                $child_slots = self::collect_template_part_slots(
+                    $block['innerBlocks'],
+                    $part_area_lookup
+                );
+
+                $assigned_parts = array_merge( $assigned_parts, $child_slots['assignedParts'] );
+                $empty_areas    = array_merge( $empty_areas, $child_slots['emptyAreas'] );
+                $allowed_areas  = array_merge( $allowed_areas, $child_slots['allowedAreas'] );
+            }
+        }
+
+        return [
+            'assignedParts' => $assigned_parts,
+            'emptyAreas'    => array_values( array_unique( $empty_areas ) ),
+            'allowedAreas'  => array_values(
+                array_unique(
+                    array_filter(
+                        $allowed_areas,
+                        static fn( string $area ): bool => $area !== ''
+                    )
+                )
+            ),
+        ];
+    }
+
+    /**
+     * Normalize a template ref to a known template type.
+     *
+     * @param string $ref Template slug or canonical template ref.
+     * @return string|null Normalized type or null.
+     */
+    private static function derive_template_type( string $ref ): ?string {
+        $slug = str_contains( $ref, '//' )
+            ? substr( $ref, strpos( $ref, '//' ) + 2 )
+            : $ref;
+
+        if ( $slug === '' ) {
+            return null;
+        }
+
+        if ( in_array( $slug, self::KNOWN_TEMPLATE_TYPES, true ) ) {
+            return $slug;
+        }
+
+        $base = explode( '-', $slug )[0];
+
+        if ( in_array( $base, self::KNOWN_TEMPLATE_TYPES, true ) ) {
+            return $base;
+        }
+
+        return null;
+    }
+
+    /**
+     * Return whether an area represents an explicit empty placeholder worth surfacing.
+     *
+     * @param string $area Template-part area from block attributes.
+     * @return bool Whether the area should be treated as explicitly empty.
+     */
+    private static function is_explicit_empty_template_part_area( string $area ): bool {
+        return $area !== '' && $area !== 'uncategorized';
+    }
+
+    /**
+     * Collect candidate patterns for a template type.
+     *
+     * Typed matches sort first, followed by generic patterns with no template
+     * types. Pattern content is removed to avoid prompt bloat.
+     *
+     * @param string|null  $template_type          Normalized template type.
+     * @param string[]|null $visible_pattern_names Pattern names visible in the current editor context.
+     * @return array Pattern candidates.
+     */
+    private static function collect_template_candidate_patterns(
+        ?string $template_type,
+        ?array $visible_pattern_names = null
+    ): array {
+        $all_patterns   = self::for_patterns();
+        $typed          = [];
+        $generic        = [];
+        $unfiltered     = [];
+        $seen           = [];
+        $visible_lookup = is_array( $visible_pattern_names )
+            ? array_fill_keys( $visible_pattern_names, true )
+            : null;
+
+        if ( $visible_lookup !== null && empty( $visible_lookup ) ) {
+            return [];
+        }
+
+        foreach ( $all_patterns as $pattern ) {
+            $name = (string) ( $pattern['name'] ?? '' );
+
+            if (
+                $name === ''
+                || isset( $seen[ $name ] )
+                || ( $visible_lookup !== null && ! isset( $visible_lookup[ $name ] ) )
+            ) {
+                continue;
+            }
+
+            unset( $pattern['content'] );
+
+            $types = $pattern['templateTypes'] ?? [];
+            if ( ! is_array( $types ) ) {
+                $types = [];
+            }
+
+            if ( $template_type === null ) {
+                $unfiltered[] = $pattern;
+                $seen[ $name ] = true;
+                continue;
+            }
+
+            if ( in_array( $template_type, $types, true ) ) {
+                $pattern['matchType'] = 'typed';
+                $typed[]              = $pattern;
+                $seen[ $name ]        = true;
+                continue;
+            }
+
+            if ( empty( $types ) ) {
+                $pattern['matchType'] = 'generic';
+                $generic[]            = $pattern;
+                $seen[ $name ]        = true;
+            }
+        }
+
+        if ( $template_type === null ) {
+            return $unfiltered;
+        }
+
+        return array_merge( $typed, $generic );
     }
 
     private static function flatten_supports( array $obj, string $prefix = '' ): array {

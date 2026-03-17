@@ -11,6 +11,7 @@
 | `flavor-agent/recommend-block` | `BlockAbilities` | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the LLM client |
 | `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | Azure OpenAI embeddings + Qdrant retrieval + LLM reranking |
+| `flavor-agent/recommend-template` | `TemplateAbilities` | Azure OpenAI template composition suggestions for Site Editor templates |
 | `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | Theme preset and global style token extraction |
@@ -22,6 +23,7 @@
 | --- | --- | --- |
 | `POST /flavor-agent/v1/recommend-block` | `edit_posts` | Block recommendations from client-provided editor context |
 | `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | Pattern recommendations for the inserter |
+| `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | Template composition recommendations for the Site Editor |
 | `POST /flavor-agent/v1/sync-patterns` | `manage_options` | Manual pattern index sync |
 
 ### Editor UI
@@ -30,13 +32,13 @@
 - Content-only blocks keep the panel but only allow content-safe suggestions
 - Disabled blocks do not render AI controls
 - Pattern inserter integration with a `Recommended` category and toolbar badge for high-confidence matches
+- Site Editor template recommendation panel for `wp_template` documents
 - Admin settings screen with backend configuration and pattern sync controls
 
 ## Stubbed (501)
 
 | Ability | Permission | What is missing |
 | --- | --- | --- |
-| `flavor-agent/recommend-template` | `edit_theme_options` | Template recommendation implementation |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Navigation recommendation implementation |
 
 ## Known Issues
