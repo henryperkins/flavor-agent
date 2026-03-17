@@ -153,4 +153,212 @@ describe( 'update helpers', () => {
 			)
 		).toEqual( {} );
 	} );
+
+	test( 'sanitizeRecommendationsForContext restricts when block itself is contentOnly', () => {
+		const recommendations = {
+			settings: [
+				{ label: 'Toggle', attributeUpdates: { isToggled: true } },
+			],
+			styles: [
+				{
+					label: 'Bold bg',
+					attributeUpdates: {
+						style: { color: { background: '#000' } },
+					},
+				},
+			],
+			block: [
+				{
+					label: 'Update content',
+					attributeUpdates: {
+						content: 'New text',
+						metadata: { foo: 1 },
+					},
+				},
+			],
+			explanation: 'Test',
+		};
+		const blockContext = {
+			editingMode: 'contentOnly',
+			isInsideContentOnly: false,
+			contentAttributes: { content: { role: 'content' } },
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, blockContext )
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Update content',
+					attributeUpdates: { content: 'New text' },
+				},
+			],
+			explanation: 'Test',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext returns empty for disabled blocks', () => {
+		const recommendations = {
+			settings: [
+				{ label: 'Toggle', attributeUpdates: { isToggled: true } },
+			],
+			styles: [
+				{
+					label: 'Bold bg',
+					attributeUpdates: {
+						style: { color: { background: '#000' } },
+					},
+				},
+			],
+			block: [
+				{
+					label: 'Update content',
+					attributeUpdates: { content: 'New text' },
+				},
+			],
+			explanation: 'Disabled block test',
+		};
+		const blockContext = {
+			editingMode: 'disabled',
+			isInsideContentOnly: false,
+			contentAttributes: { content: { role: 'content' } },
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, blockContext )
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: 'Disabled block test',
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates restricts when block itself is contentOnly', () => {
+		const blockContext = {
+			editingMode: 'contentOnly',
+			isInsideContentOnly: false,
+			contentAttributes: { content: { role: 'content' } },
+		};
+
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						content: 'Hi',
+						backgroundColor: 'accent',
+					},
+				},
+				blockContext
+			)
+		).toEqual( { content: 'Hi' } );
+	} );
+
+	test( 'getSuggestionAttributeUpdates returns empty for disabled blocks', () => {
+		const blockContext = {
+			editingMode: 'disabled',
+			isInsideContentOnly: false,
+			contentAttributes: { content: { role: 'content' } },
+		};
+
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						content: 'Hi',
+					},
+				},
+				blockContext
+			)
+		).toEqual( {} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext: disabled takes precedence over isInsideContentOnly', () => {
+		const recommendations = {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Update content',
+					attributeUpdates: { content: 'New text' },
+				},
+			],
+			explanation: 'Precedence test',
+		};
+		const blockContext = {
+			editingMode: 'disabled',
+			isInsideContentOnly: true,
+			contentAttributes: { content: { role: 'content' } },
+		};
+
+		const result = sanitizeRecommendationsForContext(
+			recommendations,
+			blockContext
+		);
+
+		expect( result.block ).toEqual( [] );
+		expect( result.explanation ).toBe( 'Precedence test' );
+	} );
+
+	test( 'getSuggestionAttributeUpdates preserves nested metadata and style updates when unlocked', () => {
+		const suggestion = {
+			attributeUpdates: {
+				metadata: {
+					blockVisibility: {
+						viewport: {
+							mobile: false,
+						},
+					},
+				},
+				style: {
+					color: {
+						background: 'var(--wp--preset--color--accent)',
+					},
+				},
+			},
+		};
+
+		expect(
+			getSuggestionAttributeUpdates( suggestion, {
+				isInsideContentOnly: false,
+			} )
+		).toEqual( suggestion.attributeUpdates );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves optional UI metadata for unlocked blocks', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Use accent background',
+					type: 'attribute_change',
+					currentValue: 'base',
+					suggestedValue: 'accent',
+					attributeUpdates: {
+						backgroundColor: 'accent',
+					},
+				},
+			],
+			styles: [
+				{
+					label: 'Outline',
+					type: 'style_variation',
+					isCurrentStyle: false,
+					isRecommended: true,
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+			],
+			block: [],
+			explanation: 'Use the theme accent and outline style.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, {
+				isInsideContentOnly: false,
+			} )
+		).toEqual( recommendations );
+	} );
 } );

@@ -6,7 +6,10 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
-import { InspectorControls } from '@wordpress/block-editor';
+import {
+	InspectorControls,
+	store as blockEditorStore,
+} from '@wordpress/block-editor';
 import { PanelBody, Button, Spinner, Notice } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useCallback } from '@wordpress/element';
@@ -20,7 +23,7 @@ import SuggestionChips from './SuggestionChips';
 
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { clientId, name, isSelected } = props;
+		const { clientId, isSelected } = props;
 
 		const { recommendations, isLoading, error } = useSelect(
 			( sel ) => {
@@ -33,10 +36,30 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			},
 			[ clientId ]
 		);
+		const { editingMode, isInsideContentOnly } = useSelect(
+			( sel ) => {
+				const editor = sel( blockEditorStore );
+				const mode = editor.getBlockEditingMode( clientId );
+				const parentIds = editor.getBlockParents( clientId );
+
+				return {
+					editingMode: mode,
+					isInsideContentOnly: parentIds.some(
+						( parentId ) =>
+							editor.getBlockEditingMode( parentId ) ===
+							'contentOnly'
+					),
+				};
+			},
+			[ clientId ]
+		);
 
 		const { fetchBlockRecommendations, setStatus } =
 			useDispatch( STORE_NAME );
 		const [ prompt, setPrompt ] = useState( '' );
+		const isDisabled = editingMode === 'disabled';
+		const isContentRestricted =
+			editingMode === 'contentOnly' || isInsideContentOnly;
 
 		const handleFetch = useCallback( () => {
 			const ctx = collectBlockContext( clientId );
@@ -45,7 +68,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			}
 		}, [ clientId, prompt, fetchBlockRecommendations ] );
 
-		if ( ! isSelected ) {
+		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;
 		}
 
@@ -65,6 +88,16 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						initialOpen={ false }
 						icon={ icon }
 					>
+						{ isContentRestricted && (
+							<Notice
+								status="info"
+								isDismissible={ false }
+								style={ { margin: '0 0 8px' } }
+							>
+								This block is content-restricted. Only content
+								edits are available.
+							</Notice>
+						) }
 						<div style={ { marginBottom: '8px' } }>
 							<textarea
 								placeholder="What are you trying to achieve?"

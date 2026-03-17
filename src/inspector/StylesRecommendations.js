@@ -5,7 +5,7 @@
  */
 import { PanelBody, Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
-import { Icon, check, styles as stylesIcon } from '@wordpress/icons';
+import { check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 

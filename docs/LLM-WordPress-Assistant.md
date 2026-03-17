@@ -1,3 +1,7 @@
+> **SUPERSEDED** - This document describes an early design (Dispatcher/Generator/Transformer/Executor, REST-only approval flow) that was never implemented. The project evolved to an Abilities API-native, dual-backend architecture. See `STATUS.md` for the current inventory. Kept for historical reference only.
+
+---
+
 # Gutenberg block editor APIs for LLM-powered Inspector integration
 
 **WordPress provides a complete, slot-based architecture for injecting AI controls into the native Inspector sidebar.** The `InspectorControls` component's `group` prop maps directly to 12+ named SlotFill pairs across three fixed tabs (Settings, Appearance, List View), while the `core/block-editor` and `core/blocks` data stores expose every block's attributes, supports, styles, and theme design tokens at runtime. Together, these APIs give an LLM recommendation engine everything it needs: full schema introspection, real-time block state, theme context, and clean injection points into the native UI. Here is the complete reference.

@@ -2,6 +2,8 @@
 
 WordPress plugin: LLM-powered block recommendations in the Gutenberg Inspector sidebar + vector-powered pattern recommendations in the inserter.
 
+Entry point: `flavor-agent.php` · Requires WP 6.5+ · PHP 8.0+
+
 ## Commands
 
 ```bash
@@ -14,7 +16,7 @@ npm run test:unit      # Jest unit tests (src/**/__tests__/*.test.js)
 composer install       # install PHP deps (PSR-4 autoloader)
 ```
 
-No standalone PHP test runner is configured yet. JS tests live alongside source files in `__tests__/` directories.
+No standalone PHP test runner is configured yet. JS tests live alongside source files (e.g. `store/update-helpers.test.js`) or in `__tests__/` directories.
 
 ## Architecture
 
@@ -66,9 +68,9 @@ No standalone PHP test runner is configured yet. JS tests live alongside source 
 
 | Service | Options (Settings page) |
 |---------|------------------------|
-| Azure OpenAI (chat) | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment` |
-| Azure OpenAI (embeddings) | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment` |
-| Qdrant vector DB | `flavor_agent_qdrant_url`, `_key` |
+| Azure OpenAI (chat) | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_chat_deployment` |
+| Azure OpenAI (embeddings) | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_embedding_deployment` |
+| Qdrant vector DB | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key` |
 
 The plugin works without these configured — falls back to heuristic-only suggestions (no LLM, no pattern vectors).
 
@@ -79,7 +81,8 @@ The plugin works without these configured — falls back to heuristic-only sugge
 - The `@wordpress/data` store name is `flavor-agent` (hyphenated).
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.
 - The plugin respects `contentOnly` editing mode: suggestions won't propose changes to locked attributes.
-- `vendor/` is committed (no Composer install needed in the container), but run `composer install` locally after cloning.
+- `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
+- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `hasApiKey`, and `canRecommendPatterns` to the editor script.
 
 ## Docs
 

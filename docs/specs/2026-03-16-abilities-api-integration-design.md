@@ -36,10 +36,10 @@ The Abilities API hooks (`wp_abilities_api_categories_init`, `wp_abilities_api_i
 
 ### Templates & Template Parts
 
-| ID                                 | Type         | Input                       | Output                                                                                                                          | Status      |
-| ---------------------------------- | ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `flavor-agent/recommend-template`  | Action (LLM) | `{ templateType, prompt? }` | `{ suggestions: [{ label, description, templateParts: [{ area, name, reason }], patternSuggestions: string[] }], explanation }` | Stubbed     |
-| `flavor-agent/list-template-parts` | Read-only    | `{ area? }`                 | `{ templateParts: [{ slug, title, area, content }] }`                                                                           | Implemented |
+| ID                                 | Type         | Input                                          | Output                                                                                                                          | Status      |
+| ---------------------------------- | ------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `flavor-agent/recommend-template`  | Action (LLM) | `{ templateRef, templateType?, prompt? }`      | `{ suggestions: [{ label, description, templateParts: [{ slug, area, reason }], patternSuggestions: string[] }], explanation }` | Stubbed     |
+| `flavor-agent/list-template-parts` | Read-only    | `{ area? }`                                    | `{ templateParts: [{ slug, title, area, content }] }`                                                                           | Implemented |
 
 ### Navigation
 
@@ -84,6 +84,7 @@ Static methods that build context from PHP APIs:
 | `for_block( string $block_name, array $attributes, array $inner_blocks )`         | `WP_Block_Type_Registry::get_registered()`, `wp_get_global_settings()` | `recommend-block`                                           |
 | `for_tokens()`                                                                    | `wp_get_global_settings()`, `wp_get_global_styles()`                   | `get-theme-tokens`, also called internally by `for_block()` |
 | `for_patterns( ?array $categories, ?array $block_types, ?array $template_types )` | `WP_Block_Patterns_Registry::get_all_registered()`                     | `list-patterns`, `recommend-patterns`                       |
+| `for_template( string $template_ref, ?string $template_type = null )`             | `get_block_template()`, `get_block_templates()`, `parse_blocks()`      | `recommend-template` (planned)                              |
 | `for_template_parts( ?string $area )`                                             | `get_block_templates( [], 'wp_template_part' )`                        | `list-template-parts`, `recommend-template`                 |
 | `introspect_block_type( string $block_name )`                                     | `WP_Block_Type_Registry::get_registered()`                             | `introspect-block`, also called by `for_block()`            |
 

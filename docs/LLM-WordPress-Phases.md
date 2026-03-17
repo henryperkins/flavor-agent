@@ -1,3 +1,7 @@
+> **SUPERSEDED** - This document describes an early design (Dispatcher/Generator/Transformer/Executor, REST-only approval flow) that was never implemented. The project evolved to an Abilities API-native, dual-backend architecture. See `STATUS.md` for the current inventory. Kept for historical reference only.
+
+---
+
 ## Concrete plugin architecture
 
 Yes — based on your notes, I’d build it as a **recommend → validate → approve → apply** system inside Gutenberg. The notes already give you the core pieces: a sidebar/editor plugin, a custom REST proxy with capability checks, editor-context collection from the selected block and block tree, and a safeguard layer that parses AI markup before insertion [^1][^2][^3].
