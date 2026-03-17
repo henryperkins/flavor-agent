@@ -11,6 +11,7 @@ use FlavorAgent\Context\ServerCollector;
 final class PatternIndex {
 
 	public const STATE_OPTION = 'flavor_agent_pattern_index_state';
+	public const CRON_HOOK    = 'flavor_agent_reindex_patterns';
 
 	private const LOCK_TRANSIENT = 'flavor_agent_sync_lock';
 	private const LOCK_TTL       = 300;
@@ -91,13 +92,23 @@ final class PatternIndex {
 	}
 
 	public static function handle_registry_change( ...$args ): void {
+			self::mark_dirty();
+			self::schedule_sync( true );
+	}
+
+	public static function handle_dependency_change( ...$args ): void {
+			self::mark_dirty();
+			self::schedule_sync( true );
+	}
+
+	public static function activate(): void {
 		self::mark_dirty();
 		self::schedule_sync( true );
 	}
 
-	public static function handle_dependency_change( ...$args ): void {
-		self::mark_dirty();
-		self::schedule_sync( true );
+	public static function deactivate(): void {
+		wp_clear_scheduled_hook( self::CRON_HOOK );
+		self::release_lock();
 	}
 
 	/**
@@ -180,7 +191,7 @@ final class PatternIndex {
 	 * Schedule a single background sync event with cooldown protection.
 	 */
 	public static function schedule_sync( bool $force = false ): void {
-		$hook = 'flavor_agent_reindex_patterns';
+			$hook = self::CRON_HOOK;
 
 		if ( ! self::recommendation_backends_configured() ) {
 			return;

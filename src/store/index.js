@@ -9,6 +9,11 @@ import apiFetch from '@wordpress/api-fetch';
 import { createReduxStore, register } from '@wordpress/data';
 
 import { getPatternBadgeReason } from '../patterns/recommendation-utils';
+import {
+	buildSafeAttributeUpdates,
+	getSuggestionAttributeUpdates,
+	sanitizeRecommendationsForContext,
+} from './update-helpers';
 
 const STORE_NAME = 'flavor-agent';
 
@@ -50,16 +55,17 @@ const actions = {
 					data: { editorContext: context, prompt, clientId },
 				} );
 
-				dispatch(
-					actions.setBlockRecommendations( clientId, {
-						blockName: context.block?.name || '',
-						settings: result.payload?.settings || [],
-						styles: result.payload?.styles || [],
-						block: result.payload?.block || [],
-						explanation: result.payload?.explanation || '',
-						timestamp: Date.now(),
-					} )
-				);
+					dispatch(
+						actions.setBlockRecommendations( clientId, {
+							blockName: context.block?.name || '',
+							blockContext: context.block || {},
+							...sanitizeRecommendationsForContext(
+								result.payload || {},
+								context.block || {}
+							),
+							timestamp: Date.now(),
+						} )
+					);
 				dispatch( actions.setStatus( 'idle' ) );
 			} catch ( err ) {
 				dispatch(
@@ -73,16 +79,29 @@ const actions = {
 	},
 
 	applySuggestion( clientId, suggestion ) {
-		return async ( { dispatch: localDispatch } ) => {
-			if ( suggestion.attributeUpdates ) {
-				const { dispatch: wpDispatch } = await import(
-					'@wordpress/data'
+		return async ( { dispatch: localDispatch, select } ) => {
+			const storedRecommendations =
+				select( STORE_NAME ).getBlockRecommendations( clientId ) || {};
+			const blockContext = storedRecommendations.blockContext || {};
+			const currentAttributes =
+				select( 'core/block-editor' ).getBlockAttributes( clientId ) || {};
+			const allowedUpdates = getSuggestionAttributeUpdates(
+				suggestion,
+				blockContext
+			);
+
+			if ( Object.keys( allowedUpdates ).length > 0 ) {
+				const safeUpdates = buildSafeAttributeUpdates(
+					currentAttributes,
+					allowedUpdates
 				);
 
-				wpDispatch( 'core/block-editor' ).updateBlockAttributes(
-					clientId,
-					suggestion.attributeUpdates
-				);
+				if ( Object.keys( safeUpdates ).length > 0 ) {
+					localDispatch( 'core/block-editor' ).updateBlockAttributes(
+						clientId,
+						safeUpdates
+					);
+				}
 			}
 
 			localDispatch(

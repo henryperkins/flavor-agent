@@ -1,161 +1,143 @@
 # Flavor Agent
 
-LLM-powered recommendation assistant for Gutenberg and the Site Editor. Injects AI suggestions directly into the native Inspector sidebar tabs (Settings + Appearance) with full block capability awareness and theme-specific value recommendations.
+Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the block editor.
 
-## How it works
+It currently has two primary editor experiences:
 
-**Per-block (Inspector injection):** Select any block → AI analyzes its supports, attributes, registered styles, and your theme's design tokens → suggestions appear in the native Settings and Appearance tabs alongside WordPress's own controls. Click "Apply" on any suggestion to update the block instantly.
+- Block recommendations in the native Inspector, powered by Anthropic.
+- Pattern recommendations in the native inserter, powered by Azure OpenAI embeddings + responses and Qdrant.
 
-**Page-level (sidebar):** Open the AI Assistant sidebar → describe what you need → the system ranks registered patterns against your page context, post type, template, and theme → approve to insert.
+There is no separate approval sidebar in the current codebase. Pattern recommendations are surfaced inside the inserter's Patterns tab through a `Recommended` category and a small toolbar badge for high-confidence matches.
 
-## Architecture
+## Current Architecture
 
-```
+```text
 flavor-agent/
-├── flavor-agent.php              # Bootstrap, autoloader, editor asset enqueue
-├── package.json                  # @wordpress/scripts build
+├── flavor-agent.php              # Bootstrap, hooks, editor asset enqueue, lifecycle wiring
+├── uninstall.php                 # Removes plugin-owned options, sync state, and scheduled jobs
+├── composer.json                 # PSR-4 autoload for inc/
+├── package.json                  # @wordpress/scripts build, lint, unit tests
+├── webpack.config.js             # Multi-entry build for editor + admin sync button
 │
-├── inc/                          # PHP — server side
-│   ├── Editor/Settings.php       # Injects agent config + contentOnly hints into editor settings
-│   ├── REST/Agent_Controller.php # REST routes: recommend-block, recommend-patterns, approve, etc.
-│   ├── Registry/Pattern_Registry.php  # Auto-registers bundled patterns from /patterns
-│   ├── Theme/Overlay_Support.php      # WP 7 navigation-overlay template-part area
-│   └── Agents/
-│       ├── Dispatcher.php        # Routes operations to handlers, manages approval transients
-│       ├── Block_Recommender.php # ★ Core: produces per-block, per-tab suggestions
-│       ├── Recommender.php       # Ranks patterns/templates against page context
-│       ├── Generator.php         # Creates new patterns, overlays, interactivity via LLM
-│       ├── Transformer.php       # Proposes block-tree transforms (contentOnly-aware)
-│       ├── Validator.php         # Validates LLM output (markup safety, schema)
-│       ├── Executor.php          # Applies approved operations
-│       └── LLM.php              # Pluggable provider (Anthropic, OpenAI, Azure)
+├── inc/
+│   ├── Abilities/                # WordPress Abilities API registrations and callbacks
+│   ├── AzureOpenAI/              # Embeddings, Responses API, and Qdrant REST clients
+│   ├── Context/                  # Server-side block/theme/pattern collectors
+│   ├── LLM/                      # Anthropic client + prompt/response handling
+│   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
+│   ├── REST/                     # Editor-facing REST routes
+│   └── Settings.php              # Settings API page + pattern sync panel
 │
-├── src/                          # JS — editor side
-│   ├── index.js                  # Entry: registers store, Inspector filter, sidebar, inserter
-│   │
-│   ├── introspection/            # ★ Block + theme analysis engine
-│   │   ├── index.js
-│   │   ├── block-introspector.js # Recursive block tree introspection, capability manifests
-│   │   └── theme-tokens.js      # Design token collection from theme.json + global styles
-│   │
-│   ├── inspector/                # ★ Native Inspector tab injection
-│   │   ├── InspectorInjector.js  # editor.BlockEdit filter HOC — injects into all blocks
-│   │   ├── SettingsRecommendations.js  # Settings tab: layout, position, advanced
-│   │   └── StylesRecommendations.js    # Appearance tab: colors, type, spacing, variations
-│   │
-│   ├── store/
-│   │   ├── index.js              # @wordpress/data store (per-block, per-tab state)
-│   │   └── context.js            # Context collector: block tree, tokens, selection, patterns
-│   │
-│   └── ui/
-│       ├── sidebar/AgentSidebar.js    # Page-level pattern/template recommendations
-│       └── inserter/PatternInserter.js # Bridges approve flow → block insertion
+├── src/
+│   ├── admin/                    # Settings-screen sync button script
+│   ├── context/                  # Editor-side block and theme collectors
+│   ├── inspector/                # InspectorControls injection and recommendation UI
+│   ├── patterns/                 # Inserter recommendation patching + toolbar badge
+│   └── store/                    # @wordpress/data store and safe update helpers
 │
-├── patterns/hero-section.php     # Bundled starter pattern
-└── assets/agent-schemas.json     # JSON Schema for all operation types
+└── docs/                         # Specs, plans, and this repo guide
 ```
 
-## What the LLM sees
+## Editor Flows
 
-When you click "Get Suggestions" on a block, the system sends the LLM:
+### Block Recommendations
 
-**Block manifest:**
+When a block is selected, the plugin injects an `AI Recommendations` panel into the native Inspector. Clicking `Get Suggestions` sends a block context snapshot to `POST /flavor-agent/v1/recommend-block`.
 
-- Block name, title, category
-- `inspectorPanels` — which panels this block exposes (color, typography, dimensions, border, shadow, layout, position, advanced)
-- `currentAttributes` — every attribute and its current value
-- `styles` — registered style variations with active/default flags
-- `contentAttributes` / `configAttributes` — separated by `role: content`
-- `editingMode` — whether contentOnly constraints apply
-- `isInsideContentOnly` — derived lock state from ancestor containers
-- `blockVisibility` — mirrored current visibility state from `currentAttributes.metadata.blockVisibility`
+The request includes:
 
-**Theme design tokens:**
+- Block name, current attributes, styles, and supported Inspector panels.
+- Theme token summaries from `theme.json` and global settings.
+- Nearby sibling blocks.
+- Content-only lock state and current `metadata.blockVisibility`, when present.
 
-- Color palette with hex values and CSS vars (`accent: #4f46e5`)
-- Font sizes with fluid values (`large: clamp(1.25rem, 2vw, 1.75rem)`)
-- Font families with full stacks (`heading: 'Inter', sans-serif`)
-- Spacing scale with preset references (`40: 1.5rem`)
-- Shadow presets, border settings, layout constraints
-- Which features are enabled/disabled (custom colors, line height, drop cap, etc.)
+The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state.
 
-**Surrounding context:**
+### Pattern Recommendations
 
-- Sibling blocks before and after
-- Page context (post type, template, title)
+Pattern recommendations are exposed through `POST /flavor-agent/v1/recommend-patterns` and the `flavor-agent/recommend-patterns` ability.
 
-The LLM returns suggestions scoped to specific Inspector panels with exact attribute updates using theme preset slugs and CSS variables — not raw values.
+The client behavior is:
 
-## Inspector injection detail
+- Passive fetch on editor load when Azure/Qdrant configuration is present.
+- Search-triggered refresh when the inserter search box changes.
+- Native pattern patching through `__experimentalBlockPatterns` so matched patterns appear in a `Recommended` category with updated descriptions and enriched keywords.
+- A toolbar `!` badge when any recommendation score is `>= 0.9`.
 
-The plugin uses the `editor.BlockEdit` filter with `createHigherOrderComponent` to wrap every block's edit component. It injects `<InspectorControls>` with different `group` props to target specific tabs and panels:
+The server behavior is:
 
-| Target           | `group` prop   | What renders                                          |
-| ---------------- | -------------- | ----------------------------------------------------- |
-| Settings tab     | _(default)_    | AI Recommendations panel + settings suggestions       |
-| Appearance tab   | `"styles"`     | Style variation pills + general style suggestions     |
-| Color panel      | `"color"`      | Color preset chips inside the native Color ToolsPanel |
-| Typography panel | `"typography"` | Font size/family chips inside Typography ToolsPanel   |
-| Dimensions panel | `"dimensions"` | Spacing chips inside Dimensions ToolsPanel            |
-| Border panel     | `"border"`     | Border chips inside Border ToolsPanel                 |
+- Check persisted pattern index runtime state.
+- Embed the query with Azure OpenAI.
+- Retrieve candidates from Qdrant using semantic and optional structural search passes.
+- Rank candidates with the Azure OpenAI Responses API.
+- Rehydrate registry-owned fields (`title`, `categories`, `content`) from stored payloads.
 
-Sub-panel chips use `grid-column: 1 / -1` to span the full width of the ToolsPanel CSS grid.
+## Settings
 
-## Suggestion types
+The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Each suggestion from the LLM or heuristic engine includes:
+Configured options:
 
-```json
-{
-  "label": "Use theme accent background",
-  "description": "The accent color matches your site's primary brand color.",
-  "panel": "color",
-  "type": "attribute_change",
-  "attributeUpdates": { "backgroundColor": "accent" },
-  "preview": "#4f46e5",
-  "presetSlug": "accent",
-  "cssVar": "var(--wp--preset--color--accent)",
-  "currentValue": null,
-  "suggestedValue": "accent",
-  "confidence": 0.85
-}
-```
+- `flavor_agent_api_key`
+- `flavor_agent_model`
+- `flavor_agent_azure_openai_endpoint`
+- `flavor_agent_azure_openai_key`
+- `flavor_agent_azure_embedding_deployment`
+- `flavor_agent_azure_chat_deployment`
+- `flavor_agent_qdrant_url`
+- `flavor_agent_qdrant_key`
 
-When the user clicks "Apply", the store dispatches `updateBlockAttributes(clientId, attributeUpdates)` directly — no approval flow needed for per-block changes.
+The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and reports the current pattern index status.
 
-## Heuristic fallback
+## Abilities Status
 
-Without an LLM provider configured, Block_Recommender produces basic suggestions:
+Implemented abilities:
 
-- Unset backgrounds → suggest theme accent/primary color
-- No font size set → suggest theme medium/large preset
-- Multiple style variations → list them with current/recommended flags
-- No layout set → suggest constrained layout with theme content width
-- No padding → suggest mid-range spacing preset
+- `flavor-agent/recommend-block`
+- `flavor-agent/introspect-block`
+- `flavor-agent/recommend-patterns`
+- `flavor-agent/list-patterns`
+- `flavor-agent/list-template-parts`
+- `flavor-agent/get-theme-tokens`
+- `flavor-agent/check-status`
 
-These are intentionally conservative (confidence 0.4–0.6) and clearly labeled as heuristic.
+Stubbed abilities returning `501`:
 
-## Setup
+- `flavor-agent/recommend-template`
+- `flavor-agent/recommend-navigation`
+
+The Abilities API path is additive for WordPress versions that expose those hooks. The editor-side REST and injected UI path remains the primary runtime path.
+
+## Pattern Index Lifecycle
+
+Pattern indexing is managed by `FlavorAgent\Patterns\PatternIndex`.
+
+Current lifecycle behavior:
+
+- Activation marks the catalog dirty and schedules a sync when the vector backends are configured.
+- Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
+- Deactivation clears the scheduled reindex hook and any active sync lock.
+- Uninstall removes plugin-owned options, pattern index state, and the scheduled reindex hook.
+
+## Development
+
+Install dependencies:
 
 ```bash
+composer install
 npm install
-npm start        # dev build with watch
-npm run build    # production
 ```
 
-Configure LLM (optional — heuristic fallback works without it):
+Build and verify:
 
-```php
-update_option( 'flavor_agent_llm_provider', 'anthropic' );
-update_option( 'flavor_agent_llm_api_key', 'sk-ant-...' );
-update_option( 'flavor_agent_llm_model', 'claude-sonnet-4-20250514' );
+```bash
+npm run build
+npm run lint:js
+npm run test:unit -- --runInBand
 ```
 
-## WP 7 compatibility
+## Compatibility Notes
 
-- Enforces `contentOnly` editing boundaries before rendering and before applying suggestions
-- Reads `role: content` attributes via introspection
-- Uses `@wordpress/data` stores only — no local state mirrors
-- Relies on `editor.BlockEdit` filter + `InspectorControls` (SlotFill-safe)
-- Uses `attributes.metadata.blockVisibility` as the canonical visibility state and preserves both boolean and viewport-object forms
-- iframe-compatible (no direct `window`/`document` access)
+- Plugin header currently targets WordPress 6.5+ and PHP 8.0+.
+- The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
+- The pattern UI depends on legacy `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` editor settings, isolated behind the pattern recommendation module so the integration can be updated in one place if Gutenberg changes the API surface.

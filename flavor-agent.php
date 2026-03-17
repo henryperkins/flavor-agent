@@ -22,6 +22,9 @@ define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
 
 require_once FLAVOR_AGENT_DIR . 'vendor/autoload.php';
 
+register_activation_hook( FLAVOR_AGENT_FILE, [ FlavorAgent\Patterns\PatternIndex::class, 'activate' ] );
+register_deactivation_hook( FLAVOR_AGENT_FILE, [ FlavorAgent\Patterns\PatternIndex::class, 'deactivate' ] );
+
 add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
@@ -30,7 +33,7 @@ add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\Abilities\Registra
 add_action( 'wp_abilities_api_init', [ FlavorAgent\Abilities\Registration::class, 'register_abilities' ] );
 
 // Pattern index lifecycle hooks.
-add_action( 'flavor_agent_reindex_patterns', [ FlavorAgent\Patterns\PatternIndex::class, 'sync' ] );
+add_action( FlavorAgent\Patterns\PatternIndex::CRON_HOOK, [ FlavorAgent\Patterns\PatternIndex::class, 'sync' ] );
 add_action( 'after_switch_theme', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 add_action( 'activated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 add_action( 'deactivated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );

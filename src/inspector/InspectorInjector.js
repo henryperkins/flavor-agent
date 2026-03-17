@@ -91,16 +91,36 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							</Notice>
 						) }
 
-						{ recommendations?.explanation && (
-							<p style={ {
-								marginTop: '8px',
-								fontSize: '12px',
-								color: 'var(--wp-components-color-foreground-secondary, #757575)',
-							} }>
-								{ recommendations.explanation }
-							</p>
-						) }
-					</PanelBody>
+							{ recommendations?.explanation && (
+								<p style={ {
+									marginTop: '8px',
+									fontSize: '12px',
+									color: 'var(--wp-components-color-foreground-secondary, #757575)',
+								} }>
+									{ recommendations.explanation }
+								</p>
+							) }
+
+							{ recommendations?.block?.length > 0 && (
+								<div style={ { marginTop: '12px' } }>
+									<div style={ {
+										fontSize: '11px',
+										fontWeight: 600,
+										textTransform: 'uppercase',
+										letterSpacing: '0.5px',
+										color: 'var(--wp-components-color-foreground-secondary, #757575)',
+										marginBottom: '6px',
+									} }>
+										Block suggestions
+									</div>
+									<SuggestionChips
+										clientId={ clientId }
+										suggestions={ recommendations.block }
+										label="AI block suggestions"
+									/>
+								</div>
+							) }
+						</PanelBody>
 
 					{ hasRecs && recommendations.settings.length > 0 && (
 						<SettingsRecommendations

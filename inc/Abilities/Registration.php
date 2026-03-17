@@ -272,6 +272,7 @@ final class Registration {
                     'shadows'         => [ 'type' => 'array' ],
                     'layout'          => [ 'type' => 'object' ],
                     'enabledFeatures' => [ 'type' => 'object' ],
+                    'blockPseudoStyles' => [ 'type' => 'object' ],
                 ],
             ],
             'meta'                => [ 'show_in_rest' => true, 'readonly' => true ],
