@@ -31,7 +31,12 @@ Each item in settings/styles/block is an object:
   "label": "Human-readable name (e.g. 'Use theme accent background')",
   "description": "Why this helps (one sentence)",
   "panel": "Which Inspector panel: general|layout|position|advanced|color|typography|dimensions|border|shadow|background",
+  "type": "Optional: attribute_change|style_variation",
   "attributeUpdates": { "attributeName": "value" },
+  "currentValue": "Optional: current value for before/after display",
+  "suggestedValue": "Optional: suggested value for before/after display",
+  "isCurrentStyle": "Optional boolean for style variation items",
+  "isRecommended": "Optional boolean for style variation items",
   "confidence": 0.0-1.0,
   "preview": "Optional: hex color for visual preview swatch",
   "presetSlug": "Optional: theme preset slug being used",
@@ -52,6 +57,8 @@ Rules:
 - For style objects in attributeUpdates, use the nested style format:
   { "style": { "color": { "background": "var(--wp--preset--color--accent)" } } }
   or preset attributes like { "backgroundColor": "accent" }.
+- Preserve Gutenberg attribute key casing exactly in attributeUpdates (for example, backgroundColor and metadata.blockVisibility).
+- If suggesting a registered style variation, use "type": "style_variation" and include the exact attributeUpdates needed to activate it.
 SYSTEM;
     }
 
@@ -201,7 +208,12 @@ SYSTEM;
                 'label'            => sanitize_text_field( $s['label'] ),
                 'description'      => sanitize_text_field( $s['description'] ?? '' ),
                 'panel'            => sanitize_key( $s['panel'] ?? 'general' ),
+                'type'             => isset( $s['type'] ) ? sanitize_key( $s['type'] ) : null,
                 'attributeUpdates' => self::sanitize_attribute_updates( $s['attributeUpdates'] ?? [] ),
+                'currentValue'     => self::sanitize_display_value( $s['currentValue'] ?? null ),
+                'suggestedValue'   => self::sanitize_display_value( $s['suggestedValue'] ?? null ),
+                'isCurrentStyle'   => isset( $s['isCurrentStyle'] ) ? (bool) $s['isCurrentStyle'] : null,
+                'isRecommended'    => isset( $s['isRecommended'] ) ? (bool) $s['isRecommended'] : null,
                 'confidence'       => isset( $s['confidence'] ) ? (float) $s['confidence'] : null,
                 'preview'          => isset( $s['preview'] ) ? sanitize_text_field( $s['preview'] ) : null,
                 'presetSlug'       => isset( $s['presetSlug'] ) ? sanitize_key( $s['presetSlug'] ) : null,
@@ -244,9 +256,24 @@ SYSTEM;
             return sanitize_text_field( $data );
         }
         if ( is_array( $data ) ) {
+            if ( self::is_list_array( $data ) ) {
+                return array_values(
+                    array_map(
+                        fn( mixed $value ) => self::sanitize_attribute_updates( $value, $depth + 1 ),
+                        $data
+                    )
+                );
+            }
+
             $out = [];
             foreach ( $data as $key => $value ) {
-                $out[ sanitize_key( $key ) ] = self::sanitize_attribute_updates( $value, $depth + 1 );
+                $sanitized_key = self::sanitize_attribute_update_key( $key );
+
+                if ( null === $sanitized_key ) {
+                    continue;
+                }
+
+                $out[ $sanitized_key ] = self::sanitize_attribute_updates( $value, $depth + 1 );
             }
             return $out;
         }
@@ -254,5 +281,45 @@ SYSTEM;
             return $data;
         }
         return null;
+    }
+
+    private static function sanitize_display_value( mixed $data ): mixed {
+        return self::sanitize_attribute_updates( $data );
+    }
+
+    private static function sanitize_attribute_update_key( mixed $key ): ?string {
+        if ( is_int( $key ) ) {
+            return (string) $key;
+        }
+
+        if ( ! is_string( $key ) ) {
+            return null;
+        }
+
+        $sanitized_key = trim( wp_strip_all_tags( $key ) );
+
+        if ( '' === $sanitized_key ) {
+            return null;
+        }
+
+        if ( preg_match( '/[\x00-\x1F\x7F]/', $sanitized_key ) ) {
+            return null;
+        }
+
+        return $sanitized_key;
+    }
+
+    private static function is_list_array( array $data ): bool {
+        $expected_index = 0;
+
+        foreach ( $data as $key => $_value ) {
+            if ( $key !== $expected_index ) {
+                return false;
+            }
+
+            $expected_index++;
+        }
+
+        return true;
     }
 }

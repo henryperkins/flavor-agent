@@ -259,7 +259,7 @@ final class ServerCollector {
         foreach ( $obj as $key => $val ) {
             $path = $prefix !== '' ? "{$prefix}.{$key}" : $key;
 
-            if ( is_bool( $val ) || is_string( $val ) || ( is_array( $val ) && array_is_list( $val ) ) ) {
+            if ( is_bool( $val ) || is_string( $val ) || ( is_array( $val ) && self::is_list_array( $val ) ) ) {
                 $entries[] = [ $path, $val ];
             } elseif ( is_array( $val ) ) {
                 $entries = array_merge( $entries, self::flatten_supports( $val, $path ) );
@@ -287,7 +287,7 @@ final class ServerCollector {
 
     private static function merge_presets( array|string $feature ): array {
         if ( ! is_array( $feature ) ) return [];
-        if ( array_is_list( $feature ) ) return $feature;
+        if ( self::is_list_array( $feature ) ) return $feature;
 
         $by_slug = [];
         foreach ( [ 'default', 'theme', 'custom' ] as $origin ) {
@@ -322,5 +322,19 @@ final class ServerCollector {
         }
 
         return $result;
+    }
+
+    private static function is_list_array( array $values ): bool {
+        $expected_index = 0;
+
+        foreach ( $values as $key => $_value ) {
+            if ( $key !== $expected_index ) {
+                return false;
+            }
+
+            $expected_index++;
+        }
+
+        return true;
     }
 }
