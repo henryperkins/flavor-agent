@@ -7,8 +7,13 @@
 import { select } from '@wordpress/data';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 
-import { introspectBlockInstance } from './block-inspector';
+import {
+	introspectBlockInstance,
+	introspectBlockTree,
+	summarizeTree,
+} from './block-inspector';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
+import { buildStructuralContext } from '../utils/structural-identity';
 
 /**
  * Build a focused context for a single block's Inspector recommendations.
@@ -26,8 +31,21 @@ export function collectBlockContext( clientId ) {
 		return null;
 	}
 
+	const structural = buildStructuralContext(
+		introspectBlockTree(),
+		clientId
+	);
 	const themeTokens = collectThemeTokens();
 	const tokenSummary = summarizeTokens( themeTokens );
+	const structuralBranch = structural.branchRoot
+		? summarizeTree( [ structural.branchRoot ], {
+				focusClientId: clientId,
+				includeBlockCapabilities: false,
+				includeStructuralIdentity: true,
+				maxChildren: 6,
+				maxDepth: 3,
+		  } )
+		: [];
 
 	return {
 		block: {
@@ -43,9 +61,13 @@ export function collectBlockContext( clientId ) {
 			editingMode: instance.editingMode,
 			isInsideContentOnly: instance.isInsideContentOnly,
 			blockVisibility: instance.blockVisibility,
+			childCount: instance.childCount,
+			structuralIdentity: structural.blockIdentity,
 		},
 		siblingsBefore: getSiblingNames( clientId, 'before', 3 ),
 		siblingsAfter: getSiblingNames( clientId, 'after', 3 ),
+		structuralAncestors: structural.structuralAncestors,
+		structuralBranch,
 		themeTokens: tokenSummary,
 	};
 }

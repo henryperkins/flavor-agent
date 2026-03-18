@@ -14,8 +14,9 @@
 | `flavor-agent/recommend-template` | `TemplateAbilities` | Azure OpenAI template composition suggestions for Site Editor templates |
 | `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
+| `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | Theme preset and global style token extraction |
-| `flavor-agent/check-status` | `InfraAbilities` | Backend configuration and ability availability status |
+| `flavor-agent/check-status` | `InfraAbilities` | Backend inventory plus current-user ability availability status |
 
 ### REST API
 
@@ -34,6 +35,7 @@
 - Pattern inserter integration with a `Recommended` category and toolbar badge for high-confidence matches
 - Site Editor template recommendation panel for `wp_template` documents
 - Admin settings screen with backend configuration and pattern sync controls
+- WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
 
 ## Stubbed (501)
 
@@ -43,7 +45,7 @@
 
 ## Known Issues
 
-- There is no automated PHP test suite or PHPCS coverage in the repo yet; current verification is syntax checks plus JS lint/tests/build.
+- Automated coverage is still partial: the repo has focused PHPUnit and JS unit suites, but Abilities API registration/execution is not covered directly and still needs live WordPress verification. PHPCS tooling exists, but it is not part of the routine verification path documented here.
 
 ## Historical Docs
 

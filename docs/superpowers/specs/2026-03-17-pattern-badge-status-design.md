@@ -1,4 +1,4 @@
-# Pattern Recommendation Badge — Unified Status Surface
+# Pattern Recommendation Badge - Unified Status Surface
 
 **Date:** 2026-03-17
 **Status:** Draft
@@ -8,161 +8,207 @@
 
 The pattern recommendation system has a working data pipeline (vector search, LLM ranking, inserter patching) but almost no visible UI. The store tracks `patternStatus` through `idle -> loading -> ready/error`, but nothing renders those states. The only visual element is a static "!" badge on the inserter toggle that appears when a single recommendation scores >= 0.9.
 
-The block recommendation side has cards, confidence bars, loading spinners, error notices, and apply buttons. The pattern side needs parity — surfaced through the badge since recommendations live in the native inserter.
+The block recommendation side has cards, confidence bars, loading spinners, error notices, and apply buttons. The pattern side needs parity, surfaced through the badge since recommendations live in the native inserter.
 
 ## Design
 
+### Source of Truth
+
+The store exposes `getPatternStatus( state )`, and `InserterBadge` switches on that selector directly. `patternError`, `patternBadge`, and `recommendations.length` are secondary inputs that fill in copy and styling after the primary state machine is known; they do not replace `patternStatus` as the contract boundary.
+
 ### Badge States
 
-The `InserterBadge` component gains four visual states driven by store selectors:
+| State | Trigger | Badge content | Style | Tooltip | `aria-label` |
+|-------|---------|--------------|-------|---------|--------------|
+| **Hidden** | `patternStatus === 'idle'` with no recommendations, or `patternStatus === 'ready'` with `recommendations.length === 0` | Nothing rendered | -- | -- | -- |
+| **Loading** | `patternStatus === 'loading'` | Empty badge | Accent circle with CSS `pulse` animation | "Finding patterns..." | "Finding pattern recommendations" |
+| **Ready** | `patternStatus === 'ready'` and `recommendations.length > 0` | Count (for example `"3"`) | Accent pill sized for digits | Top reason or generic fallback | Count-derived copy such as "3 pattern recommendations available" |
+| **Error** | `patternStatus === 'error'` | `"!"` | WP error red (`#d63638`) | Store error message or safe fallback | "Pattern recommendation error" |
 
-| State | Trigger | Badge content | Style | Tooltip |
-|-------|---------|--------------|-------|---------|
-| **Hidden** | `idle` with no recommendations, or loading hasn't started (see note below) | Nothing rendered | -- | -- |
-| **Loading** | `patternStatus === 'loading'` | Empty circle | Accent color with CSS `pulse` animation | "Finding patterns..." |
-| **Ready** | `patternStatus === 'ready'` AND `recommendations.length > 0` | Count (e.g. "3") | Static accent circle (current style, sized for digits) | Top reason or generic fallback (see Tooltip Fallback below) |
-| **Error** | `patternStatus === 'error'` AND `patternError` is non-null | "!" | WP error red (`#d63638`) | Error message from API response |
+When `patternStatus === 'ready'` but `recommendations.length === 0`, the badge hides.
 
-When `patternStatus === 'ready'` but `recommendations.length === 0`, badge hides.
+**Tooltip fallback:** `getPatternBadge()` still returns the first high-confidence reason (score >= 0.9). The badge now shows a count for any non-empty recommendation set, so when `getPatternBadge()` is null but count > 0 the tooltip falls back to `"N pattern recommendation"` / `"N pattern recommendations"`.
 
-**Tooltip fallback:** `getPatternBadge()` only returns a reason for recommendations scoring >= 0.9. Under the new design the badge shows a count for any non-empty recommendation set. When `getPatternBadge()` is null but count > 0, use a generic fallback: `"N pattern recommendations"` (e.g. "3 pattern recommendations").
+### Accessibility Requirements
 
-**`canRecommendPatterns` guard:** The badge does not read `window.flavorAgentData.canRecommendPatterns` directly. This is implicitly covered: `PatternRecommender` gates all fetches behind this flag, so when it is false, `patternStatus` stays `idle` and `recommendations` stays empty, which yields the `hidden` state. The `@wordpress/data` store is not persisted across page loads, so stale data cannot leak through.
+- The badge remains non-interactive.
+- Decorative text content is not the only accessible cue; every visible state provides an explicit `aria-label`.
+- Loading uses `"Finding pattern recommendations"`.
+- Ready uses count-derived copy such as `"3 pattern recommendations available"`.
+- Error uses `"Pattern recommendation error"`.
+
+### `canRecommendPatterns` Guard
+
+The badge does not read `window.flavorAgentData.canRecommendPatterns` directly. `PatternRecommender` gates fetches behind that flag, so when it is false `patternStatus` stays `idle` and `recommendations` stays empty, which yields the hidden state. The `@wordpress/data` store is not persisted across page loads, so stale data cannot leak through.
 
 ### Store Changes
 
-Follow the existing `setTemplateStatus(status, error)` pattern — a single action carries both status and optional error message.
+Follow the existing `setTemplateStatus( status, error )` pattern so pattern status and optional error travel together.
 
 **New state field:**
-- `patternError: null` — stores the error message string from failed pattern fetches.
+- `patternError: null` stores the error message string from failed pattern fetches.
 
 **Action changes:**
-- `setPatternStatus( status, error = null )` — gains an optional `error` parameter (matching `setStatus` and `setTemplateStatus` signatures already in the store).
-  ```js
-  setPatternStatus( status, error = null ) {
-      return { type: 'SET_PATTERN_STATUS', status, error };
-  }
-  ```
+- `setPatternStatus( status, error = null )`
 
-**Reducer changes to `SET_PATTERN_STATUS`:**
 ```js
-case 'SET_PATTERN_STATUS':
-    return {
-        ...state,
-        patternStatus: action.status,
-        patternError: action.error ?? null,
-    };
+setPatternStatus( status, error = null ) {
+	return { type: 'SET_PATTERN_STATUS', status, error };
+}
 ```
 
-This ensures status and error are set atomically in a single dispatch, avoiding the ordering bug where separate dispatches could clear the error before setting the status.
-
-**Reducer change to `SET_PATTERN_RECS` (existing):**
-- Also clear `patternError` to `null` on successful recommendation receipt (the success path dispatches `SET_PATTERN_RECS` then `SET_PATTERN_STATUS('ready')` — the first clears the error, the second confirms the status).
-
-**Thunk changes to `fetchPatternRecommendations`:**
-- Success path: no change (already dispatches `SET_PATTERN_RECS` then `setPatternStatus('ready')`).
-- Error path: keep the existing `dispatch( actions.setPatternRecommendations( [] ) )` call (clears stale results), then replace `dispatch( actions.setPatternStatus( 'error' ) )` with `dispatch( actions.setPatternStatus( 'error', err.message || 'Pattern recommendation request failed.' ) )`. The `SET_PATTERN_RECS([])` dispatch momentarily clears `patternError`, but the immediately following `SET_PATTERN_STATUS('error', msg)` atomically re-sets both status and error. This two-dispatch sequence is harmless — the intermediate state is never rendered because React batches synchronous dispatches.
-- Add `finally` block to null `_patternAbort` when the controller matches (consistent with the template thunk pattern).
-
-**New selector:**
-- `getPatternError( state )` returns `state.patternError`.
-
-**Existing selectors (unchanged):**
-- `getPatternBadge( state )` — still returns the top reason string (used for ready-state tooltip when available).
-- `isPatternLoading( state )` — still returns boolean.
-- `getPatternRecommendations( state )` — still returns the array (badge reads `.length` for count).
-
-### Component Changes — `InserterBadge.js`
-
-**Current:** Reads `getPatternBadge()` (string or null). Renders "!" when non-null.
-
-**New:** Reads multiple values and derives a status:
+**Reducer changes to `SET_PATTERN_STATUS`:**
 
 ```js
-const { status, count, badge, error } = useSelect( ( select ) => {
-    const s = select( STORE_NAME );
-    const recs = s.getPatternRecommendations();
-    return {
-        status: s.isPatternLoading() ? 'loading'
-            : s.getPatternError() ? 'error'
-            : recs.length > 0 ? 'ready'
-            : 'hidden',
-        count: recs.length,
-        badge: s.getPatternBadge(),
-        error: s.getPatternError(),
-    };
+case 'SET_PATTERN_STATUS':
+	return {
+		...state,
+		patternStatus: action.status,
+		patternError: action.error ?? null,
+	};
+```
+
+**Reducer changes to `SET_PATTERN_RECS`:**
+- Store recommendations.
+- Recompute `patternBadge` through `getPatternBadgeReason()`.
+- Clear `patternError` to `null`.
+
+This makes successful recommendation receipt the authoritative success path that clears stale errors before `ready` is confirmed.
+
+**Thunk changes to `fetchPatternRecommendations()`:**
+- Abort any previous controller before starting a new request.
+- Dispatch `setPatternStatus( 'loading' )` at request start.
+- On success, dispatch `SET_PATTERN_RECS` and then `setPatternStatus( 'ready' )`.
+- On failure, dispatch `setPatternRecommendations( [] )` followed by `setPatternStatus( 'error', err.message || 'Pattern recommendation request failed.' )`.
+- Use a `finally` block to clear `_patternAbort` only when the current controller still matches.
+
+The error-path contract is the final rendered state, not React batching internals. Brief intermediate store transitions are acceptable; the badge contract is defined by the final `patternStatus` and secondary fields after the thunk completes its synchronous dispatch sequence.
+
+**Selectors:**
+- `getPatternStatus( state )`
+- `getPatternError( state )`
+- `getPatternBadge( state )`
+- `getPatternRecommendations( state )`
+- `isPatternLoading( state )` remains a convenience selector for any existing callers.
+
+**Exports for tests:**
+- Export named `actions`, `selectors`, and `reducer` from `src/store/index.js`.
+- Keep the default registered store export unchanged.
+
+### Pure Badge-State Helper
+
+Create `src/patterns/inserter-badge-state.js` with a pure helper:
+
+```js
+getInserterBadgeState( {
+	status,
+	recommendations,
+	badge,
+	error,
+} )
+```
+
+The helper returns a compact view model for the component:
+- `status`
+- `count`
+- `content`
+- `tooltip`
+- `ariaLabel`
+- `className`
+
+The helper uses this contract:
+- `loading` when `status === 'loading'`
+- `error` when `status === 'error'`
+- `ready` when `status === 'ready'` and `recommendations.length > 0`
+- `hidden` otherwise
+
+The helper is side-effect free. It does not query the DOM, call store selectors, or read globals.
+
+### Component Changes - `InserterBadge.js`
+
+`InserterBadge` reads explicit store selectors, passes them into `getInserterBadgeState()`, and renders from the returned view model.
+
+```js
+const badgeState = useSelect( ( select ) => {
+	const store = select( STORE_NAME );
+
+	return getInserterBadgeState( {
+		status: store.getPatternStatus(),
+		recommendations: store.getPatternRecommendations(),
+		badge: store.getPatternBadge(),
+		error: store.getPatternError(),
+	} );
 }, [] );
 ```
 
-**useEffect dependency change:** The existing `useEffect` that manages the DOM anchor (finding the inserter toggle, toggling the anchor class) currently depends on `[ badge ]`. This changes to `[ status ]` since status is now the gate for portal visibility (not the badge reason string).
+**`useEffect` dependency change:** The DOM-anchor effect now depends on `badgeState.status`, because portal visibility is driven by the explicit status contract rather than the presence of a high-confidence reason string.
 
 **Rendering logic:**
+- `hidden` -> return `null`
+- `loading` -> render the badge with no visible text and loading tooltip/copy
+- `ready` -> render the recommendation count
+- `error` -> render `"!"`
 
-```
-hidden  -> return null (no portal, remove anchor class)
-loading -> portal with pulsing dot, tooltip "Finding patterns..."
-ready   -> portal with count text, tooltip = badge || `${count} pattern recommendation${count !== 1 ? 's' : ''}`
-error   -> portal with "!", tooltip = error message
-```
+The badge stays non-interactive and continues to render through the existing portal and `Tooltip` wrapper.
 
-**Badge class:** The `<span>` gets a state-specific modifier class:
-- `flavor-agent-inserter-badge flavor-agent-inserter-badge--loading`
-- `flavor-agent-inserter-badge flavor-agent-inserter-badge--ready`
-- `flavor-agent-inserter-badge flavor-agent-inserter-badge--error`
+### CSS Changes - `editor.css`
 
-### CSS Changes — `editor.css`
-
-**New rules:**
+The base `.flavor-agent-inserter-badge` rule becomes flexible enough for both empty/loading circles and count pills:
 
 ```css
-/* Loading: pulsing dot */
-.flavor-agent-inserter-badge--loading {
-    background: var(--wp-components-color-accent, #3858e9);
-    animation: flavor-agent-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes flavor-agent-pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.35); opacity: 0.7; }
-}
-
-/* Error: WP red */
-.flavor-agent-inserter-badge--error {
-    background: #d63638;
-}
-
-/* Ready: same accent, allow count digits */
-.flavor-agent-inserter-badge--ready {
-    min-width: 16px;
-    padding: 0 4px;
-    border-radius: 999px;
+.flavor-agent-inserter-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 16px;
+	height: 16px;
+	padding: 0;
+	box-sizing: border-box;
+	border-radius: 999px;
 }
 ```
 
-The base `.flavor-agent-inserter-badge` rule keeps position, font, and z-index. State classes are additive.
+Add state modifiers:
 
-**Sizing:** Single-digit counts (1-9) fit in the current 16px circle. Double digits (10+) get `min-width: 16px` + horizontal padding via `--ready` so the badge pill-stretches. In practice `MAX_RECOMMENDATIONS` is 8, so this won't exceed single digits.
+```css
+.flavor-agent-inserter-badge--loading {
+	animation: flavor-agent-pulse 1.2s ease-in-out infinite;
+}
+
+.flavor-agent-inserter-badge--ready {
+	padding: 0 4px;
+}
+
+.flavor-agent-inserter-badge--error {
+	background: #d63638;
+}
+```
+
+Keep the base positioning and z-index rules intact. The loading state remains visually circular because the extra horizontal padding belongs only to the ready modifier.
 
 ### File Change Summary
 
 | File | Change |
 |------|--------|
-| `src/store/index.js` | Add `patternError` to `DEFAULT_STATE`. Extend `setPatternStatus` with optional `error` param. Update `SET_PATTERN_STATUS` reducer to set `patternError`. Clear `patternError` in `SET_PATTERN_RECS`. Pass error message in thunk catch. Add `finally` to null `_patternAbort`. Add `getPatternError` selector. |
-| `src/patterns/InserterBadge.js` | Replace single `getPatternBadge` selector with multi-value select. Derive status. Change `useEffect` dep from `[badge]` to `[status]`. Render badge content, modifier class, and tooltip per state. Add generic tooltip fallback for ready state. |
-| `src/editor.css` | Add `--loading`, `--error`, `--ready` modifier classes and `@keyframes flavor-agent-pulse`. |
-| `src/patterns/__tests__/inserter-badge.test.js` | New test file: verify derived status logic (loading/ready/error/hidden) and tooltip fallback. |
+| `docs/superpowers/specs/2026-03-17-pattern-badge-status-design.md` | Lock the explicit `getPatternStatus` contract, state-specific accessibility copy, error-path contract, helper-first test strategy, and corrected manual verification wording |
+| `src/store/index.js` | Add `patternError`, explicit pattern selectors, `setPatternStatus( status, error )`, `SET_PATTERN_RECS` error clearing, `_patternAbort` cleanup, and named store primitive exports |
+| `src/patterns/inserter-badge-state.js` | Pure badge-state and copy derivation helper |
+| `src/patterns/InserterBadge.js` | Consume the explicit store contract and render from the helper view model |
+| `src/editor.css` | Flexible base badge layout plus `--loading`, `--ready`, and `--error` modifiers |
+| `src/patterns/__tests__/inserter-badge-state.test.js` | Helper-first coverage for state derivation, tooltip fallback, classes, and accessibility copy |
+| `src/store/__tests__/pattern-status.test.js` | Reducer coverage for pattern status/error transitions and badge recalculation |
 
-### What Does NOT Change
+### What Does Not Change
 
-- `PatternRecommender.js` — headless data fetcher, untouched.
-- `recommendation-utils.js` — patching logic, untouched.
-- `flavor-agent.php` — category registration, untouched.
-- The inserter patching flow (metadata swap, keyword injection, "Recommended" tab) — untouched.
-- `getPatternBadgeReason()` — still called inside the `SET_PATTERN_RECS` reducer to compute `patternBadge`. The `getPatternBadge()` selector is still used for the ready-state tooltip text (with the new generic fallback when it returns null).
+- `PatternRecommender.js` remains the headless fetcher.
+- `recommendation-utils.js` remains the patching utility and still computes high-confidence badge reasons.
+- The inserter patching flow (metadata swap, keyword injection, "Recommended" tab) does not change.
+- `flavor-agent.php` and category registration do not change.
 
 ## Testing
 
-- **Unit (status derivation):** Test the derived status logic in isolation: loading when `isPatternLoading`, error when `getPatternError` is non-null, ready when count > 0, hidden otherwise. Test tooltip fallback: when `getPatternBadge()` is null and count is 3, tooltip should be "3 pattern recommendations".
-- **Unit (reducer):** Test that dispatching the error-path sequence (`SET_PATTERN_STATUS('error', 'Some message')`) produces state where `patternError === 'Some message'` and `patternStatus === 'error'`. Test that `SET_PATTERN_RECS` clears `patternError`. Test the full success cycle: `SET_PATTERN_STATUS('loading')` -> `SET_PATTERN_RECS(recs)` -> `SET_PATTERN_STATUS('ready')` results in `patternError === null`.
-- **Manual:** Verify badge states in the editor: open inserter to trigger fetch, observe loading pulse, see count appear, disconnect Qdrant to trigger error state, confirm tooltip text in each state.
-- **Edge cases:** Double fetch (type in search while passive fetch is in-flight — AbortController cancels first), zero recommendations after fetch (badge should hide), error then successful retry (badge should clear error and show count).
+- **Helper-first unit coverage:** `src/patterns/__tests__/inserter-badge-state.test.js` verifies hidden/loading/ready/error derivation, tooltip fallback, modifier classes, and the exact `aria-label` strings.
+- **Reducer-level coverage:** `src/store/__tests__/pattern-status.test.js` verifies `patternStatus` and `patternError` together, stale error clearing on success, and badge recomputation for empty and non-empty recommendation sets.
+- **Component smoke coverage:** Only add a light component smoke test if helper and reducer coverage leave a gap. The implementation should not start with a brittle jsdom portal harness.
+- **Focused regression check:** Keep `src/patterns/__tests__/recommendation-utils.test.js` in the targeted run so the badge-reason helper remains aligned with the new UI contract.
+- **Manual verification:** The passive request starts on editor load when `canRecommendPatterns` and `postType` are present. Opening the inserter and typing in search trigger additional active requests, not the first request. Manual checks should confirm loading, ready-with-reason, ready-with-fallback, zero-result hidden, and error-recovery behavior.

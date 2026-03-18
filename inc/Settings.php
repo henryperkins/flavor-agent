@@ -78,6 +78,28 @@ final class Settings {
             'default'           => '',
         ] );
 
+        // Cloudflare AI Search.
+        register_setting( self::OPTION_GROUP, 'flavor_agent_cloudflare_ai_search_account_id', [
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default'           => '',
+        ] );
+        register_setting( self::OPTION_GROUP, 'flavor_agent_cloudflare_ai_search_instance_id', [
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default'           => '',
+        ] );
+        register_setting( self::OPTION_GROUP, 'flavor_agent_cloudflare_ai_search_api_token', [
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default'           => '',
+        ] );
+        register_setting( self::OPTION_GROUP, 'flavor_agent_cloudflare_ai_search_max_results', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_grounding_result_count' ],
+            'default'           => 4,
+        ] );
+
         // --- Sections ---
 
         add_settings_section(
@@ -98,6 +120,13 @@ final class Settings {
             'flavor_agent_qdrant',
             'Qdrant Cloud (Vector Store)',
             '__return_false',
+            self::PAGE_SLUG
+        );
+
+        add_settings_section(
+            'flavor_agent_cloudflare',
+            'Cloudflare AI Search (Official WordPress Docs Grounding)',
+            [ __CLASS__, 'render_cloudflare_section' ],
             self::PAGE_SLUG
         );
 
@@ -131,6 +160,21 @@ final class Settings {
         add_settings_field( 'flavor_agent_qdrant_key', 'API Key',
             [ __CLASS__, 'render_text_field' ], self::PAGE_SLUG, 'flavor_agent_qdrant',
             [ 'option' => 'flavor_agent_qdrant_key', 'type' => 'password' ] );
+
+        // --- Cloudflare AI Search fields ---
+
+        add_settings_field( 'flavor_agent_cloudflare_ai_search_account_id', 'Account ID',
+            [ __CLASS__, 'render_text_field' ], self::PAGE_SLUG, 'flavor_agent_cloudflare',
+            [ 'option' => 'flavor_agent_cloudflare_ai_search_account_id', 'placeholder' => 'Cloudflare account ID' ] );
+        add_settings_field( 'flavor_agent_cloudflare_ai_search_instance_id', 'WordPress Docs AI Search ID',
+            [ __CLASS__, 'render_text_field' ], self::PAGE_SLUG, 'flavor_agent_cloudflare',
+            [ 'option' => 'flavor_agent_cloudflare_ai_search_instance_id', 'placeholder' => 'wordpress-developer-docs' ] );
+        add_settings_field( 'flavor_agent_cloudflare_ai_search_api_token', 'API Token',
+            [ __CLASS__, 'render_text_field' ], self::PAGE_SLUG, 'flavor_agent_cloudflare',
+            [ 'option' => 'flavor_agent_cloudflare_ai_search_api_token', 'type' => 'password' ] );
+        add_settings_field( 'flavor_agent_cloudflare_ai_search_max_results', 'Grounding Results',
+            [ __CLASS__, 'render_text_field' ], self::PAGE_SLUG, 'flavor_agent_cloudflare',
+            [ 'option' => 'flavor_agent_cloudflare_ai_search_max_results', 'type' => 'number', 'placeholder' => '4' ] );
     }
 
     public static function render_page(): void {
@@ -182,6 +226,16 @@ final class Settings {
         echo '</select>';
     }
 
+    public static function render_cloudflare_section(): void {
+        printf(
+            '<p class="description">%s</p>',
+            esc_html__(
+                'Flavor Agent only keeps Cloudflare grounding chunks whose source resolves to developer.wordpress.org. Mixed or private content in the configured index is ignored.',
+                'flavor-agent'
+            )
+        );
+    }
+
     /**
      * Generic text/password/url field renderer driven by $args.
      */
@@ -198,6 +252,10 @@ final class Settings {
             esc_attr( $value ),
             esc_attr( $placeholder )
         );
+    }
+
+    public static function sanitize_grounding_result_count( mixed $value ): int {
+        return max( 1, min( 8, (int) $value ) );
     }
 
     // ------------------------------------------------------------------

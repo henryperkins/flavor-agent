@@ -13,7 +13,7 @@ final class Prompt {
         return <<<'SYSTEM'
 You are a WordPress Gutenberg block styling and configuration assistant.
 
-You receive a block's current state, its available Inspector panels (what it supports), and the active theme's design tokens (colors, fonts, spacing, shadows).
+You receive a block's current state, its available Inspector panels (what it supports), its resolved structural identity and surrounding branch context, and the active theme's design tokens (colors, fonts, spacing, shadows).
 
 Your job: suggest specific, actionable attribute changes that improve the block's appearance and configuration. Every suggestion must use the theme's actual preset slugs and CSS custom properties — never raw hex codes or pixel values unless the theme has no presets.
 
@@ -49,6 +49,8 @@ Rules:
 - "block" array: block-level suggestions (style variation changes, structural recommendations).
 - Only suggest changes for panels listed in the block's inspectorPanels.
 - Only suggest preset values that exist in the provided themeTokens.
+- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented Gutenberg capabilities or theme.json standards.
+- When structural identity is provided, treat it as the block's job on this page. Distinguish role and location from raw block name alone (for example, header navigation vs footer navigation, main query vs sidebar query).
 - If the block already has good values, return fewer or no suggestions.
 - Return 2-6 suggestions total. Prioritize high-impact visual improvements.
 - If the block is inside a contentOnly container, only suggest changes to content attributes (role=content). Do not suggest style or settings changes — those panels are locked.
@@ -65,19 +67,19 @@ SYSTEM;
     /**
      * Build the user prompt from editor context.
      */
-    public static function build_user( array $context, string $prompt = '' ): string {
+    public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
         $block  = $context['block'] ?? [];
         $tokens = $context['themeTokens'] ?? [];
 
-        $parts = [];
+	        $parts = [];
 
-        $parts[] = '## Block';
-        $parts[] = 'Name: ' . ( $block['name'] ?? 'unknown' );
-        $parts[] = 'Title: ' . ( $block['title'] ?? '' );
+	        $parts[] = '## Block';
+	        $parts[] = 'Name: ' . ( $block['name'] ?? 'unknown' );
+	        $parts[] = 'Title: ' . ( $block['title'] ?? '' );
 
-        if ( ! empty( $block['inspectorPanels'] ) ) {
-            $parts[] = 'Available panels: ' . wp_json_encode( $block['inspectorPanels'] );
-        }
+	        if ( ! empty( $block['inspectorPanels'] ) ) {
+	            $parts[] = 'Available panels: ' . wp_json_encode( $block['inspectorPanels'] );
+	        }
 
         if ( ! empty( $block['currentAttributes'] ) ) {
             $parts[] = 'Current attributes: ' . wp_json_encode( $block['currentAttributes'] );
@@ -87,13 +89,51 @@ SYSTEM;
             $parts[] = 'Style variations: ' . wp_json_encode( $block['styles'] );
         }
 
-        if ( ! empty( $block['activeStyle'] ) ) {
-            $parts[] = 'Active style: ' . $block['activeStyle'];
-        }
+	        if ( ! empty( $block['activeStyle'] ) ) {
+	            $parts[] = 'Active style: ' . $block['activeStyle'];
+	        }
 
-        if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
-            $parts[] = 'Editing mode: ' . $block['editingMode'];
-        }
+	        if ( ! empty( $block['childCount'] ) ) {
+	            $parts[] = 'Child blocks: ' . (int) $block['childCount'];
+	        }
+
+	        $structural_identity = is_array( $block['structuralIdentity'] ?? null ) ? $block['structuralIdentity'] : [];
+	        if ( ! empty( $structural_identity ) ) {
+	            $parts[] = '';
+	            $parts[] = '## Structural identity';
+
+	            if ( ! empty( $structural_identity['role'] ) ) {
+	                $parts[] = 'Resolved role: ' . $structural_identity['role'];
+	            }
+
+	            if ( ! empty( $structural_identity['job'] ) ) {
+	                $parts[] = 'Resolved job: ' . $structural_identity['job'];
+	            }
+
+	            if ( ! empty( $structural_identity['location'] ) ) {
+	                $parts[] = 'Page location: ' . $structural_identity['location'];
+	            }
+
+	            if ( ! empty( $structural_identity['templateArea'] ) ) {
+	                $parts[] = 'Template area: ' . $structural_identity['templateArea'];
+	            }
+
+	            if ( ! empty( $structural_identity['templatePartSlug'] ) ) {
+	                $parts[] = 'Template part slug: ' . $structural_identity['templatePartSlug'];
+	            }
+
+	            if ( ! empty( $structural_identity['position'] ) ) {
+	                $parts[] = 'Position: ' . wp_json_encode( $structural_identity['position'] );
+	            }
+
+	            if ( ! empty( $structural_identity['evidence'] ) ) {
+	                $parts[] = 'Evidence: ' . wp_json_encode( $structural_identity['evidence'] );
+	            }
+	        }
+
+	        if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
+	            $parts[] = 'Editing mode: ' . $block['editingMode'];
+	        }
 
         if ( ! empty( $block['isInsideContentOnly'] ) ) {
             $parts[] = '';
@@ -136,14 +176,43 @@ SYSTEM;
             $parts[] = 'Block pseudo-class styles (hover/focus/active): ' . wp_json_encode( $tokens['blockPseudoStyles'] );
         }
 
-        if ( ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
+	        if ( ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
+	            $parts[] = '';
+	            $parts[] = '## Surrounding blocks';
+	            if ( ! empty( $context['siblingsBefore'] ) ) {
+	                $parts[] = 'Before: ' . implode( ', ', (array) $context['siblingsBefore'] );
+	            }
+	            if ( ! empty( $context['siblingsAfter'] ) ) {
+	                $parts[] = 'After: ' . implode( ', ', (array) $context['siblingsAfter'] );
+	            }
+	        }
+
+	        if ( ! empty( $context['structuralAncestors'] ) ) {
+	            $parts[] = '';
+	            $parts[] = '## Structural ancestors';
+	            $parts[] = wp_json_encode( $context['structuralAncestors'] );
+	        }
+
+	        if ( ! empty( $context['structuralBranch'] ) ) {
+	            $parts[] = '';
+	            $parts[] = '## Structural branch';
+	            $parts[] = wp_json_encode( $context['structuralBranch'] );
+	        }
+
+	        if ( ! empty( $docs_guidance ) ) {
             $parts[] = '';
-            $parts[] = '## Surrounding blocks';
-            if ( ! empty( $context['siblingsBefore'] ) ) {
-                $parts[] = 'Before: ' . implode( ', ', (array) $context['siblingsBefore'] );
-            }
-            if ( ! empty( $context['siblingsAfter'] ) ) {
-                $parts[] = 'After: ' . implode( ', ', (array) $context['siblingsAfter'] );
+            $parts[] = '## WordPress Developer Guidance';
+
+            foreach ( array_slice( $docs_guidance, 0, 3 ) as $guidance ) {
+                if ( ! is_array( $guidance ) ) {
+                    continue;
+                }
+
+                $summary = self::format_guidance_line( $guidance );
+
+                if ( $summary !== '' ) {
+                    $parts[] = '- ' . $summary;
+                }
             }
         }
 
@@ -154,6 +223,25 @@ SYSTEM;
         }
 
         return implode( "\n", $parts );
+    }
+
+    /**
+     * @param array<string, mixed> $guidance
+     */
+    private static function format_guidance_line( array $guidance ): string {
+        $prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
+
+        if ( $prefix === '' ) {
+            $prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
+        }
+
+        $excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+
+        if ( $excerpt === '' ) {
+            return '';
+        }
+
+        return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
     }
 
     /**

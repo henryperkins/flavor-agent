@@ -1,0 +1,47 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FlavorAgent\Abilities;
+
+use FlavorAgent\Cloudflare\AISearchClient;
+
+final class WordPressDocsAbilities {
+
+	public const REQUIRED_CAPABILITY = 'manage_options';
+
+	public static function can_search_wordpress_docs(): bool {
+		return current_user_can( self::REQUIRED_CAPABILITY );
+	}
+
+	public static function search_wordpress_docs( mixed $input ): array|\WP_Error {
+		$input = self::normalize_input( $input );
+		$query = isset( $input['query'] ) ? sanitize_textarea_field( (string) $input['query'] ) : '';
+
+		if ( $query === '' ) {
+			return new \WP_Error(
+				'missing_query',
+				'A query is required.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$max_results = null;
+		if ( isset( $input['maxResults'] ) ) {
+			$max_results = max( 1, min( 8, (int) $input['maxResults'] ) );
+		}
+
+		return AISearchClient::search( $query, $max_results );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_input( mixed $input ): array {
+		if ( is_object( $input ) ) {
+			$input = get_object_vars( $input );
+		}
+
+		return is_array( $input ) ? $input : [];
+	}
+}

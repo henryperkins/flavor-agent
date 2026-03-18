@@ -1,25 +1,31 @@
 /**
  * Inserter Badge
  *
- * Renders a "!" indicator next to the inserter toggle button
- * when a pattern recommendation scores >= 0.9. Hovering shows
- * a tooltip with the recommendation reason.
+ * Renders the unified pattern recommendation status badge next to
+ * the inserter toggle button.
  */
 import { useSelect } from '@wordpress/data';
 import { useEffect, useState, createPortal } from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
 
 import { STORE_NAME } from '../store';
+import { getInserterBadgeState } from './inserter-badge-state';
 
 export default function InserterBadge() {
-	const badge = useSelect(
-		( select ) => select( STORE_NAME ).getPatternBadge(),
-		[]
-	);
+	const badgeState = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
+
+		return getInserterBadgeState( {
+			status: store.getPatternStatus(),
+			recommendations: store.getPatternRecommendations(),
+			badge: store.getPatternBadge(),
+			error: store.getPatternError(),
+		} );
+	}, [] );
 	const [ anchor, setAnchor ] = useState( null );
 
 	useEffect( () => {
-		if ( ! badge ) {
+		if ( badgeState.status === 'hidden' ) {
 			setAnchor( null );
 			return;
 		}
@@ -45,6 +51,7 @@ export default function InserterBadge() {
 
 		const parent = button?.parentElement;
 		if ( ! parent ) {
+			setAnchor( null );
 			return;
 		}
 
@@ -55,19 +62,19 @@ export default function InserterBadge() {
 		return () => {
 			parent.classList.remove( 'flavor-agent-inserter-badge-anchor' );
 		};
-	}, [ badge ] );
+	}, [ badgeState.status ] );
 
-	if ( ! badge || ! anchor ) {
+	if ( badgeState.status === 'hidden' || ! anchor ) {
 		return null;
 	}
 
 	return createPortal(
-		<Tooltip text={ badge }>
+		<Tooltip text={ badgeState.tooltip }>
 			<span
-				className="flavor-agent-inserter-badge"
-				aria-label="Pattern recommendations available"
+				className={ badgeState.className }
+				aria-label={ badgeState.ariaLabel }
 			>
-				!
+				{ badgeState.content }
 			</span>
 		</Tooltip>,
 		anchor

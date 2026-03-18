@@ -272,40 +272,93 @@ export function introspectBlockTree( rootClientId = null, maxDepth = 10 ) {
 /**
  * Summarize a full introspected tree for the LLM prompt.
  *
- * @param {object[]} tree Introspected block tree.
- * @return {object[]} Prompt-oriented summary tree.
+ * @param {object[]} tree    Introspected block tree.
+ * @param {Object}   options Summary options.
+ * @param {number}   depth   Current recursion depth.
+ * @return {object[]}        Prompt-oriented summary tree.
  */
-export function summarizeTree( tree ) {
-	return tree.map( ( node ) => {
+export function summarizeTree( tree, options = {}, depth = 0 ) {
+	const {
+		focusClientId = '',
+		includeBlockCapabilities = true,
+		includeStructuralIdentity = false,
+		maxChildren = Number.POSITIVE_INFINITY,
+		maxDepth = Number.POSITIVE_INFINITY,
+	} = options;
+
+	return tree.slice( 0, maxChildren ).map( ( node ) => {
 		const summary = {
 			block: node.name,
 			title: node.title,
 		};
 
-		const meaningful = pickMeaningfulAttributes( node.currentAttributes );
-		if ( Object.keys( meaningful ).length ) {
-			summary.currentValues = meaningful;
+		if ( includeBlockCapabilities ) {
+			const meaningful = pickMeaningfulAttributes(
+				node.currentAttributes
+			);
+			if ( Object.keys( meaningful ).length ) {
+				summary.currentValues = meaningful;
+			}
+
+			const panels = Object.keys( node.inspectorPanels );
+			if ( panels.length ) {
+				summary.availablePanels = panels;
+			}
+
+			if ( node.activeStyle ) {
+				summary.activeStyle = node.activeStyle;
+			}
+
+			if ( node.styles.length > 1 ) {
+				summary.styleOptions = node.styles.map( ( s ) => s.name );
+			}
+
+			if ( node.editingMode !== 'default' ) {
+				summary.editingMode = node.editingMode;
+			}
 		}
 
-		const panels = Object.keys( node.inspectorPanels );
-		if ( panels.length ) {
-			summary.availablePanels = panels;
+		if ( includeStructuralIdentity && node.structuralIdentity ) {
+			const identity = node.structuralIdentity;
+
+			if ( identity.role ) {
+				summary.role = identity.role;
+			}
+
+			if ( identity.job ) {
+				summary.job = identity.job;
+			}
+
+			if ( identity.location ) {
+				summary.location = identity.location;
+			}
+
+			if ( identity.templateArea ) {
+				summary.templateArea = identity.templateArea;
+			}
+
+			if ( identity.templatePartSlug ) {
+				summary.templatePartSlug = identity.templatePartSlug;
+			}
 		}
 
-		if ( node.activeStyle ) {
-			summary.activeStyle = node.activeStyle;
+		if ( focusClientId && node.clientId === focusClientId ) {
+			summary.isSelected = true;
 		}
 
-		if ( node.styles.length > 1 ) {
-			summary.styleOptions = node.styles.map( ( s ) => s.name );
+		if ( node.childCount > 0 ) {
+			summary.childCount = node.childCount;
 		}
 
-		if ( node.editingMode !== 'default' ) {
-			summary.editingMode = node.editingMode;
-		}
+		if ( depth + 1 < maxDepth && node.innerBlocks.length ) {
+			const children = node.innerBlocks.slice( 0, maxChildren );
 
-		if ( node.innerBlocks.length ) {
-			summary.children = summarizeTree( node.innerBlocks );
+			summary.children = summarizeTree( children, options, depth + 1 );
+
+			if ( node.innerBlocks.length > children.length ) {
+				summary.moreChildren =
+					node.innerBlocks.length - children.length;
+			}
 		}
 
 		return summary;

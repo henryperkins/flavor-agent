@@ -24,6 +24,7 @@ const DEFAULT_STATE = {
 	activityLog: [],
 	patternRecommendations: [],
 	patternStatus: 'idle',
+	patternError: null,
 	patternBadge: null,
 	templateRecommendations: [],
 	templateExplanation: '',
@@ -130,8 +131,8 @@ const actions = {
 		};
 	},
 
-	setPatternStatus( status ) {
-		return { type: 'SET_PATTERN_STATUS', status };
+	setPatternStatus( status, error = null ) {
+		return { type: 'SET_PATTERN_STATUS', status, error };
 	},
 
 	setPatternRecommendations( recommendations ) {
@@ -169,7 +170,16 @@ const actions = {
 				}
 
 				dispatch( actions.setPatternRecommendations( [] ) );
-				dispatch( actions.setPatternStatus( 'error' ) );
+				dispatch(
+					actions.setPatternStatus(
+						'error',
+						err?.message || 'Pattern recommendation request failed.'
+					)
+				);
+			} finally {
+				if ( actions._patternAbort === controller ) {
+					actions._patternAbort = null;
+				}
 			}
 		};
 	},
@@ -270,12 +280,17 @@ function reducer( state = DEFAULT_STATE, action ) {
 				activityLog: [ ...state.activityLog, action.entry ],
 			};
 		case 'SET_PATTERN_STATUS':
-			return { ...state, patternStatus: action.status };
+			return {
+				...state,
+				patternStatus: action.status,
+				patternError: action.error ?? null,
+			};
 		case 'SET_PATTERN_RECS':
 			return {
 				...state,
 				patternRecommendations: action.recommendations,
 				patternBadge: getPatternBadgeReason( action.recommendations ),
+				patternError: null,
 			};
 		case 'SET_TEMPLATE_STATUS':
 			return {
@@ -322,7 +337,9 @@ const selectors = {
 		state.blockRecommendations[ clientId ]?.block || [],
 	getActivityLog: ( state ) => state.activityLog,
 	getPatternRecommendations: ( state ) => state.patternRecommendations,
+	getPatternStatus: ( state ) => state.patternStatus,
 	getPatternBadge: ( state ) => state.patternBadge,
+	getPatternError: ( state ) => state.patternError,
 	isPatternLoading: ( state ) => state.patternStatus === 'loading',
 	getTemplateRecommendations: ( state ) => state.templateRecommendations,
 	getTemplateExplanation: ( state ) => state.templateExplanation,
@@ -337,5 +354,5 @@ const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );
 
 register( store );
 
+export { actions, reducer, selectors, STORE_NAME };
 export default store;
-export { STORE_NAME };

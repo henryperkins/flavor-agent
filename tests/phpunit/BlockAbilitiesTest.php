@@ -23,11 +23,11 @@ final class BlockAbilitiesTest extends TestCase {
 			[
 				'prompt'        => "Add more contrast\n<script>alert('x')</script>",
 				'editorContext' => (object) [
-					'block'          => (object) [
-						'name'                => 'core/paragraph',
-						'currentAttributes'   => (object) [
-							'content'   => '<strong>Hello</strong>',
-							'className' => 'is-style-outline',
+						'block'          => (object) [
+							'name'                => 'core/paragraph',
+							'currentAttributes'   => (object) [
+								'content'   => '<strong>Hello</strong>',
+								'className' => 'is-style-outline',
 						],
 						'isInsideContentOnly' => true,
 						'editingMode'         => 'disabled',
@@ -47,13 +47,14 @@ final class BlockAbilitiesTest extends TestCase {
 								'label'     => 'Outline',
 								'isDefault' => false,
 							],
-						],
-						'activeStyle'         => 'outline',
-						'variations'          => [
-							(object) [
-								'name'  => 'intro',
-								'title' => 'Intro',
 							],
+							'activeStyle'         => 'outline',
+							'childCount'          => 2,
+							'variations'          => [
+								(object) [
+									'name'  => 'intro',
+									'title' => 'Intro',
+								],
 						],
 						'contentAttributes'   => (object) [
 							'content' => (object) [
@@ -61,18 +62,56 @@ final class BlockAbilitiesTest extends TestCase {
 								'role' => 'content',
 							],
 						],
-						'configAttributes'    => (object) [
-							'dropCap' => (object) [
-								'type' => 'boolean',
+							'configAttributes'    => (object) [
+								'dropCap' => (object) [
+									'type' => 'boolean',
+								],
+							],
+							'structuralIdentity'  => (object) [
+								'role'             => 'footer-paragraph',
+								'job'              => 'Paragraph block in the "footer" template part.',
+								'location'         => 'footer',
+								'templateArea'     => 'footer',
+								'templatePartSlug' => 'footer',
+								'position'         => (object) [
+									'depth'              => 3,
+									'siblingIndex'       => 1,
+									'siblingCount'       => 2,
+									'sameTypeIndex'      => 1,
+									'sameTypeCount'      => 1,
+									'typeOrderInLocation' => 1,
+								],
+								'evidence'         => [ 'ancestor-template-part' ],
 							],
 						],
-					],
-					'siblingsBefore' => [ 'core/heading', '', 'core/image', 'core/heading' ],
-					'siblingsAfter'  => (object) [ 'core/buttons', '' ],
-					'themeTokens'    => (object) [
-						'colors'            => [ 'accent: #f00', '', 'accent: #f00' ],
-						'fontSizes'         => [ 'small: 12px' ],
-						'layout'            => (object) [
+						'siblingsBefore' => [ 'core/heading', '', 'core/image', 'core/heading' ],
+						'siblingsAfter'  => (object) [ 'core/buttons', '' ],
+						'structuralAncestors' => [
+							(object) [
+								'block'        => 'core/template-part',
+								'role'         => 'footer-slot',
+								'job'          => 'Footer template-part slot.',
+								'location'     => 'footer',
+								'templateArea' => 'footer',
+							],
+						],
+						'structuralBranch' => [
+							(object) [
+								'block'    => 'core/template-part',
+								'role'     => 'footer-slot',
+								'children' => [
+									(object) [
+										'block'      => 'core/paragraph',
+										'role'       => 'footer-paragraph',
+										'isSelected' => true,
+									],
+								],
+							],
+						],
+						'themeTokens'    => (object) [
+							'colors'            => [ 'accent: #f00', '', 'accent: #f00' ],
+							'fontSizes'         => [ 'small: 12px' ],
+							'layout'            => (object) [
 							'content' => '640px',
 							'wide'    => '1200px',
 						],
@@ -111,14 +150,18 @@ final class BlockAbilitiesTest extends TestCase {
 				],
 			],
 			$prepared['context']['block']['currentAttributes']['metadata']['blockVisibility']
-		);
-		$this->assertSame( 'outline', $prepared['context']['block']['activeStyle'] );
-		$this->assertSame(
-			[ 'color' => [ 'color.background', 'color.text' ] ],
-			$prepared['context']['block']['inspectorPanels']
-		);
-		$this->assertSame( [ 'accent: #f00' ], $prepared['context']['themeTokens']['colors'] );
-	}
+			);
+			$this->assertSame( 'outline', $prepared['context']['block']['activeStyle'] );
+			$this->assertSame( 2, $prepared['context']['block']['childCount'] );
+			$this->assertSame(
+				[ 'color' => [ 'color.background', 'color.text' ] ],
+				$prepared['context']['block']['inspectorPanels']
+			);
+			$this->assertSame( [ 'accent: #f00' ], $prepared['context']['themeTokens']['colors'] );
+			$this->assertSame( 'footer-paragraph', $prepared['context']['block']['structuralIdentity']['role'] );
+			$this->assertSame( 'footer-slot', $prepared['context']['structuralAncestors'][0]['role'] );
+			$this->assertSame( 'footer-slot', $prepared['context']['structuralBranch'][0]['role'] );
+		}
 
 	public function test_prepare_recommend_block_input_normalizes_selected_block_payload(): void {
 		$prepared = $this->invoke_prepare_recommend_block_input(

@@ -1,0 +1,68 @@
+<?php
+
+declare(strict_types=1);
+
+namespace FlavorAgent\Tests;
+
+use FlavorAgent\Abilities\Registration;
+use FlavorAgent\Tests\Support\WordPressTestState;
+use PHPUnit\Framework\TestCase;
+
+final class RegistrationTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		WordPressTestState::reset();
+	}
+
+	public function test_register_abilities_exposes_current_recommend_block_structural_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$this->assertArrayHasKey( 'flavor-agent', WordPressTestState::$registered_ability_categories );
+		$this->assertArrayHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'];
+
+		$this->assertIsArray( $ability );
+		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
+
+		$selected_block = $ability['input_schema']['properties']['selectedBlock'] ?? null;
+
+		$this->assertIsArray( $selected_block );
+		$this->assertFalse( (bool) ( $selected_block['additionalProperties'] ?? true ) );
+
+		foreach ( [ 'editingMode', 'childCount', 'structuralIdentity', 'structuralAncestors', 'structuralBranch' ] as $field ) {
+			$this->assertArrayHasKey( $field, $selected_block['properties'] );
+		}
+
+		$this->assertTrue( (bool) ( $selected_block['properties']['attributes']['additionalProperties'] ?? false ) );
+		$this->assertTrue( (bool) ( $selected_block['properties']['blockVisibility']['additionalProperties'] ?? false ) );
+		$this->assertTrue( (bool) ( $selected_block['properties']['structuralIdentity']['additionalProperties'] ?? false ) );
+		$this->assertTrue(
+			(bool) (
+				$selected_block['properties']['structuralIdentity']['properties']['position']['additionalProperties']
+				?? false
+			)
+		);
+		$this->assertTrue(
+			(bool) (
+				$selected_block['properties']['structuralAncestors']['items']['additionalProperties']
+				?? false
+			)
+		);
+		$this->assertTrue(
+			(bool) (
+				$selected_block['properties']['structuralBranch']['items']['additionalProperties']
+				?? false
+			)
+		);
+		$this->assertTrue(
+			(bool) (
+				$selected_block['properties']['structuralBranch']['items']['properties']['children']['items']['additionalProperties']
+				?? false
+			)
+		);
+	}
+}

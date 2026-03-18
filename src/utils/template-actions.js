@@ -13,6 +13,7 @@ import { parse } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { dispatch, select } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
+import { matchesTemplatePartArea } from './template-part-areas';
 
 /* ------------------------------------------------------------------ */
 /*  Block-tree helpers                                                 */
@@ -60,11 +61,12 @@ export function findBlockByArea( area ) {
 	const blocks = getBlocks();
 	const empty = findTemplatePart(
 		blocks,
-		( b ) => b.attributes?.area === area && ! b.attributes?.slug
+		( b ) => matchesTemplatePartArea( b, area ) && ! b.attributes?.slug
 	);
+
 	return (
 		empty ||
-		findTemplatePart( blocks, ( b ) => b.attributes?.area === area )
+		findTemplatePart( blocks, ( b ) => matchesTemplatePartArea( b, area ) )
 	);
 }
 

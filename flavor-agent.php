@@ -127,5 +127,6 @@ function flavor_agent_enqueue_editor(): void {
             && get_option( 'flavor_agent_azure_openai_key' )
             && get_option( 'flavor_agent_azure_chat_deployment' )
         ),
+        'templatePartAreas'    => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
     ] );
 }

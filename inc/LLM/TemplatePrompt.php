@@ -40,6 +40,7 @@ Rules:
 - templateParts[].slug MUST be a slug that appears in the Available Template Parts list.
 - templateParts[].area MUST be an area already present in the assigned template parts or Explicitly Empty Areas list.
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
+- When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Prioritize explicitly empty template-part placeholders before replacing existing assignments.
 - Respect the theme's design tokens when suggesting patterns.
 - If no candidate patterns are available, focus on template part composition and leave patternSuggestions as an empty array.
@@ -55,7 +56,7 @@ SYSTEM;
 	 * @param array  $context Template context from ServerCollector::for_template().
 	 * @param string $prompt  Optional user instruction.
 	 */
-	public static function build_user( array $context, string $prompt = '' ): string {
+	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
 		$sections = [];
 
 		$type     = (string) ( $context['templateType'] ?? 'unknown' );
@@ -165,12 +166,51 @@ SYSTEM;
 			}
 		}
 
+		if ( ! empty( $docs_guidance ) ) {
+			$lines = [];
+
+			foreach ( array_slice( $docs_guidance, 0, 3 ) as $guidance ) {
+				if ( ! is_array( $guidance ) ) {
+					continue;
+				}
+
+				$summary = self::format_guidance_line( $guidance );
+
+				if ( $summary !== '' ) {
+					$lines[] = '- ' . $summary;
+				}
+			}
+
+			if ( count( $lines ) > 0 ) {
+				$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $lines );
+			}
+		}
+
 		$instruction = trim( $prompt ) !== ''
 			? trim( $prompt )
 			: 'Suggest improvements for this template.';
 		$sections[] = "## User Instruction\n{$instruction}";
 
 		return implode( "\n\n", $sections );
+	}
+
+	/**
+	 * @param array<string, mixed> $guidance
+	 */
+	private static function format_guidance_line( array $guidance ): string {
+		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
+
+		if ( $prefix === '' ) {
+			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
+		}
+
+		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+
+		if ( $excerpt === '' ) {
+			return '';
+		}
+
+		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
 	}
 
 	/**
@@ -188,7 +228,10 @@ SYSTEM;
 			return new \WP_Error(
 				'parse_error',
 				'Failed to parse template recommendation response as JSON: ' . json_last_error_msg(),
-				[ 'status' => 502, 'raw' => substr( $raw, 0, 500 ) ]
+				[
+					'status' => 502,
+					'raw'    => substr( $raw, 0, 500 ),
+				]
 			);
 		}
 
@@ -211,7 +254,10 @@ SYSTEM;
 			return new \WP_Error(
 				'invalid_recommendations',
 				'Template recommendation response contained no actionable suggestions after validation.',
-				[ 'status' => 502, 'raw' => substr( $raw, 0, 500 ) ]
+				[
+					'status' => 502,
+					'raw'    => substr( $raw, 0, 500 ),
+				]
 			);
 		}
 
@@ -241,12 +287,12 @@ SYSTEM;
 				continue;
 			}
 
-			$entry = [
-				'label'       => sanitize_text_field( (string) $suggestion['label'] ),
-				'description' => sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) ),
-				'templateParts' => [],
-				'patternSuggestions' => [],
-			];
+				$entry = [
+					'label'              => sanitize_text_field( (string) $suggestion['label'] ),
+					'description'        => sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) ),
+					'templateParts'      => [],
+					'patternSuggestions' => [],
+				];
 
 			if ( isset( $suggestion['templateParts'] ) && is_array( $suggestion['templateParts'] ) ) {
 				$seen_template_parts = [];

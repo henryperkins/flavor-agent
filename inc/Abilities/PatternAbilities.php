@@ -20,7 +20,8 @@ final class PatternAbilities {
 	private const MAX_LLM_CANDIDATES       = 12;
 	private const MAX_RECOMMENDATIONS      = 8;
 
-    public static function list_patterns( array $input ): array {
+    public static function list_patterns( mixed $input ): array {
+        $input          = self::normalize_input( $input );
         $categories     = $input['categories'] ?? null;
         $block_types    = $input['blockTypes'] ?? null;
         $template_types = $input['templateTypes'] ?? null;
@@ -34,7 +35,9 @@ final class PatternAbilities {
      * Vector-powered pattern recommendation: embed query, two-pass Qdrant
      * search, LLM ranking, rehydrate from Qdrant payloads.
      */
-    public static function recommend_patterns( array $input ): array|\WP_Error {
+    public static function recommend_patterns( mixed $input ): array|\WP_Error {
+        $input = self::normalize_input( $input );
+
         $visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
             ? StringArray::sanitize( $input['visiblePatternNames'] )
             : null;
@@ -315,5 +318,19 @@ Rules:
   and content are attached from the source data.
 - Return at most 8 recommendations.
 SYSTEM;
+    }
+
+    /**
+     * Normalize Abilities API object inputs to the array shape used internally.
+     *
+     * @param mixed $input Raw ability input.
+     * @return array<string, mixed>
+     */
+    private static function normalize_input( mixed $input ): array {
+        if ( is_object( $input ) ) {
+            $input = get_object_vars( $input );
+        }
+
+        return is_array( $input ) ? $input : [];
     }
 }

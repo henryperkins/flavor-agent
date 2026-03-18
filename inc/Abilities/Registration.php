@@ -8,7 +8,8 @@ final class Registration {
 
     public static function register_category(): void {
         wp_register_ability_category( 'flavor-agent', [
-            'label' => __( 'Flavor Agent', 'flavor-agent' ),
+            'label'       => __( 'Flavor Agent', 'flavor-agent' ),
+            'description' => __( 'LLM-assisted editing, pattern, template, and diagnostic abilities for the WordPress editor.', 'flavor-agent' ),
         ] );
     }
 
@@ -17,6 +18,7 @@ final class Registration {
         self::register_pattern_abilities();
         self::register_template_abilities();
         self::register_navigation_abilities();
+        self::register_wordpress_docs_abilities();
         self::register_infra_abilities();
     }
 
@@ -25,7 +27,7 @@ final class Registration {
             'label'               => __( 'Get block recommendations', 'flavor-agent' ),
             'description'         => __( 'Suggest attribute and style changes for a block using theme design tokens.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ BlockAbilities::class, 'recommend_block' ],
+            'execute_callback'    => [ BlockAbilities::class, 'recommend_block' ],
             'permission_callback' => fn() => current_user_can( 'edit_posts' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -53,7 +55,7 @@ final class Registration {
             'label'               => __( 'Introspect block type', 'flavor-agent' ),
             'description'         => __( 'Return a block type\'s capabilities: supports, Inspector panels, attributes, styles, and variations.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ BlockAbilities::class, 'introspect_block' ],
+            'execute_callback'    => [ BlockAbilities::class, 'introspect_block' ],
             'permission_callback' => fn() => current_user_can( 'edit_posts' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -87,7 +89,7 @@ final class Registration {
             'label'               => __( 'Recommend patterns', 'flavor-agent' ),
             'description'         => __( 'Rank existing block patterns for the current editing context using LLM.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ PatternAbilities::class, 'recommend_patterns' ],
+            'execute_callback'    => [ PatternAbilities::class, 'recommend_patterns' ],
             'permission_callback' => fn() => current_user_can( 'edit_posts' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -135,7 +137,7 @@ final class Registration {
             'label'               => __( 'List block patterns', 'flavor-agent' ),
             'description'         => __( 'Return registered block patterns, optionally filtered by category, block type, or template type.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ PatternAbilities::class, 'list_patterns' ],
+            'execute_callback'    => [ PatternAbilities::class, 'list_patterns' ],
             'permission_callback' => fn() => current_user_can( 'edit_posts' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -174,7 +176,7 @@ final class Registration {
             'label'               => __( 'Recommend template structure', 'flavor-agent' ),
             'description'         => __( 'Suggest template-part arrangements and patterns for a template type.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ TemplateAbilities::class, 'recommend_template' ],
+            'execute_callback'    => [ TemplateAbilities::class, 'recommend_template' ],
             'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -228,7 +230,7 @@ final class Registration {
             'label'               => __( 'List template parts', 'flavor-agent' ),
             'description'         => __( 'Return registered template parts, optionally filtered by area.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ TemplateAbilities::class, 'list_template_parts' ],
+            'execute_callback'    => [ TemplateAbilities::class, 'list_template_parts' ],
             'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -262,7 +264,7 @@ final class Registration {
             'label'               => __( 'Recommend navigation structure', 'flavor-agent' ),
             'description'         => __( 'Suggest navigation menu structure, overlay behavior, and organization.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ NavigationAbilities::class, 'recommend_navigation' ],
+            'execute_callback'    => [ NavigationAbilities::class, 'recommend_navigation' ],
             'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
             'input_schema'        => [
                 'type'       => 'object',
@@ -283,12 +285,51 @@ final class Registration {
         ] );
     }
 
+    private static function register_wordpress_docs_abilities(): void {
+        wp_register_ability( 'flavor-agent/search-wordpress-docs', [
+            'label'               => __( 'Search WordPress developer docs', 'flavor-agent' ),
+            'description'         => __( 'Query the configured Cloudflare AI Search index for official WordPress developer documentation.', 'flavor-agent' ),
+            'category'            => 'flavor-agent',
+            'execute_callback'    => [ WordPressDocsAbilities::class, 'search_wordpress_docs' ],
+            'permission_callback' => [ WordPressDocsAbilities::class, 'can_search_wordpress_docs' ],
+            'input_schema'        => [
+                'type'       => 'object',
+                'properties' => [
+                    'query'      => [ 'type' => 'string', 'description' => 'Search query for WordPress developer documentation.' ],
+                    'maxResults' => [ 'type' => 'integer', 'description' => 'Optional result cap between 1 and 8.' ],
+                ],
+                'required' => [ 'query' ],
+            ],
+            'output_schema'       => [
+                'type'       => 'object',
+                'properties' => [
+                    'query'    => [ 'type' => 'string' ],
+                    'guidance' => [
+                        'type'  => 'array',
+                        'items' => [
+                            'type'       => 'object',
+                            'properties' => [
+                                'id'        => [ 'type' => 'string' ],
+                                'title'     => [ 'type' => 'string' ],
+                                'sourceKey' => [ 'type' => 'string' ],
+                                'url'       => [ 'type' => 'string' ],
+                                'excerpt'   => [ 'type' => 'string' ],
+                                'score'     => [ 'type' => 'number' ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'meta'                => [ 'show_in_rest' => true, 'readonly' => true ],
+        ] );
+    }
+
     private static function register_infra_abilities(): void {
         wp_register_ability( 'flavor-agent/get-theme-tokens', [
             'label'               => __( 'Get theme design tokens', 'flavor-agent' ),
             'description'         => __( 'Return the current theme\'s color palette, font sizes, font families, spacing, shadows, and layout constraints.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ InfraAbilities::class, 'get_theme_tokens' ],
+            'execute_callback'    => [ InfraAbilities::class, 'get_theme_tokens' ],
             'permission_callback' => fn() => current_user_can( 'edit_posts' ),
             'input_schema'        => [ 'type' => 'object', 'properties' => [] ],
             'output_schema'       => [
@@ -310,17 +351,27 @@ final class Registration {
 
         wp_register_ability( 'flavor-agent/check-status', [
             'label'               => __( 'Check Flavor Agent status', 'flavor-agent' ),
-            'description'         => __( 'Report whether the LLM API key is configured and which model is active.', 'flavor-agent' ),
+            'description'         => __( 'Report configured Flavor Agent backends, active models, and abilities currently available to the current user.', 'flavor-agent' ),
             'category'            => 'flavor-agent',
-            'callback'            => [ InfraAbilities::class, 'check_status' ],
+            'execute_callback'    => [ InfraAbilities::class, 'check_status' ],
             'permission_callback' => fn() => current_user_can( 'edit_posts' ),
             'input_schema'        => [ 'type' => 'object', 'properties' => [] ],
             'output_schema'       => [
                 'type'       => 'object',
                 'properties' => [
-                    'configured'         => [ 'type' => 'boolean' ],
-                    'model'              => [ 'type' => [ 'string', 'null' ] ],
-                    'availableAbilities' => [ 'type' => 'array', 'items' => [ 'type' => 'string' ] ],
+                    'configured'         => [
+                        'type'        => 'boolean',
+                        'description' => 'Whether at least one recommendation or docs backend is configured.',
+                    ],
+                    'model'              => [
+                        'type'        => [ 'string', 'null' ],
+                        'description' => 'Legacy primary model identifier. Returns the Anthropic model when configured, otherwise the Azure chat deployment, otherwise null.',
+                    ],
+                    'availableAbilities' => [
+                        'type'        => 'array',
+                        'description' => 'Abilities currently available to the requesting user under the active backend configuration.',
+                        'items'       => [ 'type' => 'string' ],
+                    ],
                     'backends'           => [
                         'type'       => 'object',
                         'properties' => [
@@ -343,6 +394,13 @@ final class Registration {
                                 'type'       => 'object',
                                 'properties' => [
                                     'configured' => [ 'type' => 'boolean' ],
+                                ],
+                            ],
+                            'cloudflare_ai_search' => [
+                                'type'       => 'object',
+                                'properties' => [
+                                    'configured' => [ 'type' => 'boolean' ],
+                                    'instanceId' => [ 'type' => [ 'string', 'null' ] ],
                                 ],
                             ],
                         ],

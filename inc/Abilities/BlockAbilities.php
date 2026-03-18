@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\Client;
 use FlavorAgent\LLM\Prompt;
@@ -11,7 +12,9 @@ use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
 
-	public static function recommend_block( array $input ): array|\WP_Error {
+	public static function recommend_block( mixed $input ): array|\WP_Error {
+		$input = self::normalize_map( $input );
+
 		$prepared = self::prepare_recommend_block_input( $input );
 
 		if ( is_wp_error( $prepared ) ) {
@@ -27,7 +30,11 @@ final class BlockAbilities {
 		}
 
 		$system_prompt = Prompt::build_system();
-		$user_prompt   = Prompt::build_user( $context, $prompt );
+		$user_prompt   = Prompt::build_user(
+			$context,
+			$prompt,
+			self::collect_wordpress_docs_guidance( $context, $prompt )
+		);
 
 		$result = Client::chat( $system_prompt, $user_prompt, $api_key );
 
@@ -44,7 +51,8 @@ final class BlockAbilities {
 		return Prompt::enforce_block_context_rules( $payload, $context['block'] ?? [] );
 	}
 
-	public static function introspect_block( array $input ): array|\WP_Error {
+	public static function introspect_block( mixed $input ): array|\WP_Error {
+		$input      = self::normalize_map( $input );
 		$block_name = $input['blockName'] ?? '';
 
 		if ( empty( $block_name ) ) {
@@ -123,20 +131,30 @@ final class BlockAbilities {
 			$normalized['block']['inspectorPanels'] = $inspector_panels;
 		}
 
-		$styles = self::normalize_list( $block['styles'] ?? [] );
-		if ( ! empty( $styles ) ) {
-			$normalized['block']['styles'] = $styles;
-		}
+			$styles = self::normalize_list( $block['styles'] ?? [] );
+			if ( ! empty( $styles ) ) {
+				$normalized['block']['styles'] = $styles;
+			}
 
-		$active_style = is_string( $block['activeStyle'] ?? null ) ? sanitize_text_field( $block['activeStyle'] ) : '';
-		if ( '' !== $active_style ) {
-			$normalized['block']['activeStyle'] = $active_style;
-		}
+			$active_style = is_string( $block['activeStyle'] ?? null ) ? sanitize_text_field( $block['activeStyle'] ) : '';
+			if ( '' !== $active_style ) {
+				$normalized['block']['activeStyle'] = $active_style;
+			}
 
-		$variations = self::normalize_list( $block['variations'] ?? [] );
-		if ( ! empty( $variations ) ) {
-			$normalized['block']['variations'] = $variations;
-		}
+			$child_count = $block['childCount'] ?? null;
+			if ( is_int( $child_count ) || ( is_numeric( $child_count ) && (int) $child_count >= 0 ) ) {
+				$normalized['block']['childCount'] = (int) $child_count;
+			}
+
+			$structural_identity = self::normalize_map( $block['structuralIdentity'] ?? [] );
+			if ( ! empty( $structural_identity ) ) {
+				$normalized['block']['structuralIdentity'] = $structural_identity;
+			}
+
+			$variations = self::normalize_list( $block['variations'] ?? [] );
+			if ( ! empty( $variations ) ) {
+				$normalized['block']['variations'] = $variations;
+			}
 
 		$content_attributes = self::normalize_map( $block['contentAttributes'] ?? [] );
 		if ( ! empty( $content_attributes ) ) {
@@ -148,13 +166,23 @@ final class BlockAbilities {
 			$normalized['block']['configAttributes'] = $config_attributes;
 		}
 
-		$normalized['siblingsBefore'] = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
-		$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
+			$normalized['siblingsBefore'] = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
+			$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
 
-		$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
-		if ( ! empty( $theme_tokens ) ) {
-			$normalized['themeTokens'] = $theme_tokens;
-		}
+			$structural_ancestors = self::normalize_list( $context['structuralAncestors'] ?? [] );
+			if ( ! empty( $structural_ancestors ) ) {
+				$normalized['structuralAncestors'] = $structural_ancestors;
+			}
+
+			$structural_branch = self::normalize_list( $context['structuralBranch'] ?? [] );
+			if ( ! empty( $structural_branch ) ) {
+				$normalized['structuralBranch'] = $structural_branch;
+			}
+
+			$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+			if ( ! empty( $theme_tokens ) ) {
+				$normalized['themeTokens'] = $theme_tokens;
+			}
 
 		return $normalized;
 	}
@@ -170,14 +198,21 @@ final class BlockAbilities {
 			return new \WP_Error( 'missing_block_name', 'selectedBlock.blockName is required.', [ 'status' => 400 ] );
 		}
 
-		$context                         = ServerCollector::for_block( $block_name, $attributes, $inner_blocks, $is_inside_content_only );
-		$context['block']['editingMode'] = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
-		$context['siblingsBefore']       = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
-		$context['siblingsAfter']        = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
-		$context['themeTokens']          = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+			$context                         = ServerCollector::for_block( $block_name, $attributes, $inner_blocks, $is_inside_content_only );
+			$context['block']['editingMode'] = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
+			$context['siblingsBefore']       = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
+			$context['siblingsAfter']        = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
+			$context['structuralAncestors']  = self::normalize_list( $selected['structuralAncestors'] ?? [] );
+			$context['structuralBranch']     = self::normalize_list( $selected['structuralBranch'] ?? [] );
+			$context['themeTokens']          = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 
-		return $context;
-	}
+			$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
+			if ( ! empty( $structural_identity ) ) {
+				$context['block']['structuralIdentity'] = $structural_identity;
+			}
+
+			return $context;
+		}
 
 	private static function normalize_selected_block( array $selected ): array {
 		$selected   = self::normalize_map( $selected );
@@ -224,6 +259,88 @@ final class BlockAbilities {
 			'enabledFeatures'   => self::normalize_map( $tokens['enabledFeatures'] ?? [] ),
 			'blockPseudoStyles' => self::normalize_map( $tokens['blockPseudoStyles'] ?? [] ),
 		];
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
+		$query = self::build_wordpress_docs_query( $context, $prompt );
+
+		if ( $query === '' ) {
+			return [];
+		}
+
+		return AISearchClient::maybe_search( $query );
+	}
+
+	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
+		$block         = self::normalize_map( $context['block'] ?? [] );
+		$block_name    = is_string( $block['name'] ?? null ) ? sanitize_text_field( $block['name'] ) : '';
+		$block_title   = is_string( $block['title'] ?? null ) ? sanitize_text_field( $block['title'] ) : '';
+		$panel_keys    = array_keys( self::normalize_map( $block['inspectorPanels'] ?? [] ) );
+		$panel_summary = array_values(
+			array_filter(
+				array_map(
+					static fn( $panel ): string => sanitize_key( (string) $panel ),
+					$panel_keys
+				)
+			)
+		);
+			$parts        = [ 'WordPress Gutenberg block editor best practices and design tool guidance' ];
+
+		if ( $block_name !== '' ) {
+			$parts[] = "block type {$block_name}";
+		}
+
+		if ( $block_title !== '' ) {
+			$parts[] = "block title {$block_title}";
+		}
+
+		if ( ! empty( $panel_summary ) ) {
+			$parts[] = 'inspector panels ' . implode( ', ', $panel_summary );
+		}
+
+			if ( ! empty( $block['isInsideContentOnly'] ) ) {
+				$parts[] = 'contentOnly editing constraints';
+			}
+
+			$identity        = self::normalize_map( $block['structuralIdentity'] ?? [] );
+			$structural_role = is_string( $identity['role'] ?? null ) ? sanitize_key( (string) $identity['role'] ) : '';
+			$location        = is_string( $identity['location'] ?? null ) ? sanitize_key( (string) $identity['location'] ) : '';
+			$template_area   = is_string( $identity['templateArea'] ?? null ) ? sanitize_key( (string) $identity['templateArea'] ) : '';
+
+			if ( $structural_role !== '' ) {
+				$parts[] = 'structural role ' . $structural_role;
+			}
+
+			if ( $location !== '' ) {
+				$parts[] = 'page location ' . $location;
+			}
+
+			if ( $template_area !== '' ) {
+				$parts[] = 'template area ' . $template_area;
+			}
+
+			if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
+				$parts[] = 'editing mode ' . sanitize_key( (string) $block['editingMode'] );
+			}
+
+		if ( $prompt !== '' ) {
+			$parts[] = $prompt;
+		}
+
+		$parts[] = 'theme.json presets, block supports, inspector controls, and editor standards';
+
+		return implode(
+			'. ',
+			array_values(
+				array_filter(
+					$parts,
+					static fn( string $part ): bool => $part !== ''
+				)
+			)
+		);
 	}
 
 	private static function normalize_map( mixed $value ): array {

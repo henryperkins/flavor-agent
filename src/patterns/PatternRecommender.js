@@ -204,20 +204,14 @@ export default function PatternRecommender() {
 		}
 
 		function findSearchInput() {
-			const inserter = document.querySelector(
-				'.block-editor-inserter__panel-content, .block-editor-inserter__content'
-			);
-
-			if ( ! inserter ) {
-				return null;
-			}
-
-			return (
-				inserter.querySelector( '[role="searchbox"]' ) ||
-				inserter.querySelector(
-					'.block-editor-inserter__search input'
-				) ||
-				inserter.querySelector( 'input[type="search"]' )
+			return document.querySelector(
+				[
+					'.block-editor-inserter__search input',
+					'.editor-inserter-sidebar__content input[type="search"]',
+					'.block-editor-tabbed-sidebar input[type="search"]',
+					'.block-editor-inserter__menu input[type="search"]',
+					'[role="searchbox"]',
+				].join( ', ' )
 			);
 		}
 

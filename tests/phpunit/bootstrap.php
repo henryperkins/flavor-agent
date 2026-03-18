@@ -14,6 +14,10 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $options = [];
 
+		public static array $capabilities = [];
+
+		public static array $block_templates = [];
+
 		public static array $remote_post_response = [];
 
 		public static function reset(): void {
@@ -21,6 +25,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$global_styles        = [];
 			self::$last_remote_post     = [];
 			self::$options              = [];
+			self::$capabilities         = [];
+			self::$block_templates      = [];
 			self::$remote_post_response = [];
 
 			\WP_Block_Type_Registry::get_instance()->reset();
@@ -181,6 +187,12 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'current_user_can' ) ) {
+		function current_user_can( string $capability, ...$args ): bool {
+			return (bool) ( WordPressTestState::$capabilities[ $capability ] ?? false );
+		}
+	}
+
 	if ( ! function_exists( 'is_wp_error' ) ) {
 		function is_wp_error( $value ): bool {
 			return $value instanceof WP_Error;
@@ -226,6 +238,48 @@ namespace {
 	if ( ! function_exists( 'wp_get_global_styles' ) ) {
 		function wp_get_global_styles(): array {
 			return WordPressTestState::$global_styles;
+		}
+	}
+
+	if ( ! function_exists( 'get_block_templates' ) ) {
+		function get_block_templates( array $query = [], string $template_type = 'wp_template' ): array {
+			$templates = WordPressTestState::$block_templates[ $template_type ] ?? [];
+			$result    = [];
+
+			foreach ( $templates as $template ) {
+				$template = is_object( $template ) ? $template : (object) $template;
+
+				if ( isset( $query['area'] ) && (string) ( $template->area ?? '' ) !== (string) $query['area'] ) {
+					continue;
+				}
+
+				if (
+					! empty( $query['slug__in'] ) &&
+					! in_array( (string) ( $template->slug ?? '' ), (array) $query['slug__in'], true )
+				) {
+					continue;
+				}
+
+				if ( isset( $query['wp_id'] ) && (int) ( $template->wp_id ?? 0 ) !== (int) $query['wp_id'] ) {
+					continue;
+				}
+
+				$result[] = $template;
+			}
+
+			return $result;
+		}
+	}
+
+	if ( ! function_exists( 'get_block_template' ) ) {
+		function get_block_template( string $id, string $template_type = 'wp_template' ) {
+			foreach ( get_block_templates( [], $template_type ) as $template ) {
+				if ( (string) ( $template->id ?? '' ) === $id ) {
+					return $template;
+				}
+			}
+
+			return null;
 		}
 	}
 

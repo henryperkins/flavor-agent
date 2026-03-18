@@ -252,23 +252,57 @@ final class ServerCollector {
         return $result;
     }
 
-    public static function for_template_parts( ?string $area = null ): array {
-        $parts  = get_block_templates( [], 'wp_template_part' );
+    public static function for_template_parts( ?string $area = null, bool $include_content = true ): array {
+        $query = [];
+
+        if ( $area !== null && $area !== '' ) {
+            $query['area'] = sanitize_key( $area );
+        }
+
+        $parts  = get_block_templates( $query, 'wp_template_part' );
         $result = [];
 
         foreach ( $parts as $part ) {
-            if ( $area !== null && ( $part->area ?? '' ) !== $area ) {
-                continue;
-            }
-            $result[] = [
+            $entry = [
                 'slug'    => $part->slug ?? '',
                 'title'   => $part->title ?? '',
                 'area'    => $part->area ?? '',
-                'content' => $part->content ?? '',
             ];
+
+            if ( $include_content ) {
+                $entry['content'] = $part->content ?? '';
+            }
+
+            $result[] = $entry;
         }
 
         return $result;
+    }
+
+    /**
+     * Return a normalized slug => area map for registered template parts.
+     *
+     * @return array<string, string>
+     */
+    public static function for_template_part_areas(): array {
+        $lookup = [];
+
+        foreach ( self::for_template_parts( null, false ) as $part ) {
+            $slug = isset( $part['slug'] )
+                ? sanitize_key( (string) $part['slug'] )
+                : '';
+            $area = isset( $part['area'] )
+                ? sanitize_key( (string) $part['area'] )
+                : '';
+
+            if ( $slug === '' || $area === '' ) {
+                continue;
+            }
+
+            $lookup[ $slug ] = $area;
+        }
+
+        return $lookup;
     }
 
     /**
@@ -311,7 +345,7 @@ final class ServerCollector {
             $template_type = self::derive_template_type( $template_ref );
         }
 
-        $available_parts   = self::for_template_parts();
+        $available_parts   = self::for_template_parts( null, false );
         $part_area_lookup  = [];
         foreach ( $available_parts as $part ) {
             $slug = (string) ( $part['slug'] ?? '' );
