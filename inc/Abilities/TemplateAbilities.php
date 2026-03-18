@@ -30,10 +30,10 @@ final class TemplateAbilities {
 	public static function recommend_template( mixed $input ): array|\WP_Error {
 		$input = self::normalize_input( $input );
 
-		$template_ref  = isset( $input['templateRef'] )
+		$template_ref          = isset( $input['templateRef'] )
 			? trim( (string) $input['templateRef'] )
 			: '';
-		$template_type = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
+		$template_type         = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
 			? $input['templateType']
 			: null;
 		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';

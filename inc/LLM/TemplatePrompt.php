@@ -59,13 +59,13 @@ SYSTEM;
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
 		$sections = [];
 
-		$type     = (string) ( $context['templateType'] ?? 'unknown' );
-		$title    = (string) ( $context['title'] ?? $type );
+		$type       = (string) ( $context['templateType'] ?? 'unknown' );
+		$title      = (string) ( $context['title'] ?? $type );
 		$sections[] = "## Template\nType: {$type}\nTitle: {$title}";
 
 		$assigned = is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [];
 		if ( count( $assigned ) > 0 ) {
-			$lines = array_map(
+			$lines      = array_map(
 				static fn( array $part ): string => sprintf(
 					'- `%s` -> area: `%s`',
 					(string) ( $part['slug'] ?? '' ),
@@ -91,7 +91,7 @@ SYSTEM;
 			)
 		);
 		if ( count( $available ) > 0 ) {
-			$lines = array_map(
+			$lines      = array_map(
 				static fn( array $part ): string => sprintf(
 					'- `%s` - %s (area: %s)',
 					(string) ( $part['slug'] ?? '' ),
@@ -189,7 +189,7 @@ SYSTEM;
 		$instruction = trim( $prompt ) !== ''
 			? trim( $prompt )
 			: 'Suggest improvements for this template.';
-		$sections[] = "## User Instruction\n{$instruction}";
+		$sections[]  = "## User Instruction\n{$instruction}";
 
 		return implode( "\n\n", $sections );
 	}
@@ -294,66 +294,66 @@ SYSTEM;
 					'patternSuggestions' => [],
 				];
 
-			if ( isset( $suggestion['templateParts'] ) && is_array( $suggestion['templateParts'] ) ) {
-				$seen_template_parts = [];
+				if ( isset( $suggestion['templateParts'] ) && is_array( $suggestion['templateParts'] ) ) {
+					$seen_template_parts = [];
 
-				foreach ( $suggestion['templateParts'] as $template_part ) {
-					if ( ! is_array( $template_part ) || empty( $template_part['slug'] ) || empty( $template_part['area'] ) ) {
-						continue;
-					}
+					foreach ( $suggestion['templateParts'] as $template_part ) {
+						if ( ! is_array( $template_part ) || empty( $template_part['slug'] ) || empty( $template_part['area'] ) ) {
+							continue;
+						}
 
-					$slug = sanitize_key( (string) $template_part['slug'] );
-					$area = sanitize_key( (string) $template_part['area'] );
+						$slug = sanitize_key( (string) $template_part['slug'] );
+						$area = sanitize_key( (string) $template_part['area'] );
 
-					if (
+						if (
 						$slug === ''
 						|| $area === ''
 						|| ! isset( $unused_part_lookup[ $slug ] )
 						|| ! isset( $allowed_area_lookup[ $area ] )
-					) {
-						continue;
-					}
+						) {
+							continue;
+						}
 
-					$key = "{$slug}|{$area}";
-					if ( isset( $seen_template_parts[ $key ] ) ) {
-						continue;
-					}
-					$seen_template_parts[ $key ] = true;
+						$key = "{$slug}|{$area}";
+						if ( isset( $seen_template_parts[ $key ] ) ) {
+							continue;
+						}
+						$seen_template_parts[ $key ] = true;
 
-					$entry['templateParts'][] = [
-						'slug'   => $slug,
-						'area'   => $area,
-						'reason' => sanitize_text_field( (string) ( $template_part['reason'] ?? '' ) ),
-					];
+						$entry['templateParts'][] = [
+							'slug'   => $slug,
+							'area'   => $area,
+							'reason' => sanitize_text_field( (string) ( $template_part['reason'] ?? '' ) ),
+						];
+					}
 				}
-			}
 
-			if ( isset( $suggestion['patternSuggestions'] ) && is_array( $suggestion['patternSuggestions'] ) ) {
-				$entry['patternSuggestions'] = array_values(
-					array_unique(
-						array_filter(
-							array_map(
-								static function ( $name ) use ( $pattern_lookup ): string {
-									$sanitized = sanitize_text_field( (string) $name );
+				if ( isset( $suggestion['patternSuggestions'] ) && is_array( $suggestion['patternSuggestions'] ) ) {
+					$entry['patternSuggestions'] = array_values(
+						array_unique(
+							array_filter(
+								array_map(
+									static function ( $name ) use ( $pattern_lookup ): string {
+										$sanitized = sanitize_text_field( (string) $name );
 
-									return isset( $pattern_lookup[ $sanitized ] ) ? $sanitized : '';
-								},
-								$suggestion['patternSuggestions']
-							),
-							static fn( string $name ): bool => $name !== ''
+										return isset( $pattern_lookup[ $sanitized ] ) ? $sanitized : '';
+									},
+									$suggestion['patternSuggestions']
+								),
+								static fn( string $name ): bool => $name !== ''
+							)
 						)
-					)
-				);
-			}
+					);
+				}
 
-			if (
+				if (
 				count( $entry['templateParts'] ) === 0
 				&& count( $entry['patternSuggestions'] ) === 0
-			) {
-				continue;
-			}
+				) {
+					continue;
+				}
 
-			$valid[] = $entry;
+				$valid[] = $entry;
 		}
 
 		return array_slice( $valid, 0, 3 );

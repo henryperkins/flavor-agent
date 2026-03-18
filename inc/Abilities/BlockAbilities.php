@@ -132,29 +132,29 @@ final class BlockAbilities {
 		}
 
 			$styles = self::normalize_list( $block['styles'] ?? [] );
-			if ( ! empty( $styles ) ) {
-				$normalized['block']['styles'] = $styles;
-			}
+		if ( ! empty( $styles ) ) {
+			$normalized['block']['styles'] = $styles;
+		}
 
 			$active_style = is_string( $block['activeStyle'] ?? null ) ? sanitize_text_field( $block['activeStyle'] ) : '';
-			if ( '' !== $active_style ) {
-				$normalized['block']['activeStyle'] = $active_style;
-			}
+		if ( '' !== $active_style ) {
+			$normalized['block']['activeStyle'] = $active_style;
+		}
 
 			$child_count = $block['childCount'] ?? null;
-			if ( is_int( $child_count ) || ( is_numeric( $child_count ) && (int) $child_count >= 0 ) ) {
-				$normalized['block']['childCount'] = (int) $child_count;
-			}
+		if ( is_int( $child_count ) || ( is_numeric( $child_count ) && (int) $child_count >= 0 ) ) {
+			$normalized['block']['childCount'] = (int) $child_count;
+		}
 
 			$structural_identity = self::normalize_map( $block['structuralIdentity'] ?? [] );
-			if ( ! empty( $structural_identity ) ) {
-				$normalized['block']['structuralIdentity'] = $structural_identity;
-			}
+		if ( ! empty( $structural_identity ) ) {
+			$normalized['block']['structuralIdentity'] = $structural_identity;
+		}
 
 			$variations = self::normalize_list( $block['variations'] ?? [] );
-			if ( ! empty( $variations ) ) {
-				$normalized['block']['variations'] = $variations;
-			}
+		if ( ! empty( $variations ) ) {
+			$normalized['block']['variations'] = $variations;
+		}
 
 		$content_attributes = self::normalize_map( $block['contentAttributes'] ?? [] );
 		if ( ! empty( $content_attributes ) ) {
@@ -170,19 +170,19 @@ final class BlockAbilities {
 			$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
 
 			$structural_ancestors = self::normalize_list( $context['structuralAncestors'] ?? [] );
-			if ( ! empty( $structural_ancestors ) ) {
-				$normalized['structuralAncestors'] = $structural_ancestors;
-			}
+		if ( ! empty( $structural_ancestors ) ) {
+			$normalized['structuralAncestors'] = $structural_ancestors;
+		}
 
 			$structural_branch = self::normalize_list( $context['structuralBranch'] ?? [] );
-			if ( ! empty( $structural_branch ) ) {
-				$normalized['structuralBranch'] = $structural_branch;
-			}
+		if ( ! empty( $structural_branch ) ) {
+			$normalized['structuralBranch'] = $structural_branch;
+		}
 
 			$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
-			if ( ! empty( $theme_tokens ) ) {
-				$normalized['themeTokens'] = $theme_tokens;
-			}
+		if ( ! empty( $theme_tokens ) ) {
+			$normalized['themeTokens'] = $theme_tokens;
+		}
 
 		return $normalized;
 	}
@@ -207,12 +207,12 @@ final class BlockAbilities {
 			$context['themeTokens']          = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 
 			$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
-			if ( ! empty( $structural_identity ) ) {
-				$context['block']['structuralIdentity'] = $structural_identity;
-			}
+		if ( ! empty( $structural_identity ) ) {
+			$context['block']['structuralIdentity'] = $structural_identity;
+		}
 
 			return $context;
-		}
+	}
 
 	private static function normalize_selected_block( array $selected ): array {
 		$selected   = self::normalize_map( $selected );
@@ -287,7 +287,7 @@ final class BlockAbilities {
 				)
 			)
 		);
-			$parts        = [ 'WordPress Gutenberg block editor best practices and design tool guidance' ];
+			$parts     = [ 'WordPress Gutenberg block editor best practices and design tool guidance' ];
 
 		if ( $block_name !== '' ) {
 			$parts[] = "block type {$block_name}";
@@ -301,30 +301,30 @@ final class BlockAbilities {
 			$parts[] = 'inspector panels ' . implode( ', ', $panel_summary );
 		}
 
-			if ( ! empty( $block['isInsideContentOnly'] ) ) {
-				$parts[] = 'contentOnly editing constraints';
-			}
+		if ( ! empty( $block['isInsideContentOnly'] ) ) {
+			$parts[] = 'contentOnly editing constraints';
+		}
 
 			$identity        = self::normalize_map( $block['structuralIdentity'] ?? [] );
 			$structural_role = is_string( $identity['role'] ?? null ) ? sanitize_key( (string) $identity['role'] ) : '';
 			$location        = is_string( $identity['location'] ?? null ) ? sanitize_key( (string) $identity['location'] ) : '';
 			$template_area   = is_string( $identity['templateArea'] ?? null ) ? sanitize_key( (string) $identity['templateArea'] ) : '';
 
-			if ( $structural_role !== '' ) {
-				$parts[] = 'structural role ' . $structural_role;
-			}
+		if ( $structural_role !== '' ) {
+			$parts[] = 'structural role ' . $structural_role;
+		}
 
-			if ( $location !== '' ) {
-				$parts[] = 'page location ' . $location;
-			}
+		if ( $location !== '' ) {
+			$parts[] = 'page location ' . $location;
+		}
 
-			if ( $template_area !== '' ) {
-				$parts[] = 'template area ' . $template_area;
-			}
+		if ( $template_area !== '' ) {
+			$parts[] = 'template area ' . $template_area;
+		}
 
-			if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
-				$parts[] = 'editing mode ' . sanitize_key( (string) $block['editingMode'] );
-			}
+		if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
+			$parts[] = 'editing mode ' . sanitize_key( (string) $block['editingMode'] );
+		}
 
 		if ( $prompt !== '' ) {
 			$parts[] = $prompt;

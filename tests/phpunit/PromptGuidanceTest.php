@@ -17,15 +17,15 @@ final class PromptGuidanceTest extends TestCase {
 						'name' => 'core/group',
 					],
 					'themeTokens' => [],
-			],
-			'Tighten layout spacing.',
-			[
-				[
-					'sourceKey' => 'developer.wordpress.org/block-supports',
-					'excerpt'   => 'Use block supports to expose design tools instead of ad hoc attributes.',
 				],
-			]
-		);
+				'Tighten layout spacing.',
+				[
+					[
+						'sourceKey' => 'developer.wordpress.org/block-supports',
+						'excerpt'   => 'Use block supports to expose design tools instead of ad hoc attributes.',
+					],
+				]
+			);
 
 		$this->assertStringContainsString( '## WordPress Developer Guidance', $prompt );
 		$this->assertStringContainsString( 'Use block supports to expose design tools instead of ad hoc attributes.', $prompt );

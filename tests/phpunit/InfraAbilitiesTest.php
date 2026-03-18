@@ -18,10 +18,10 @@ final class InfraAbilitiesTest extends TestCase {
 
 	public function test_check_status_marks_cloudflare_docs_backend_as_configured(): void {
 		WordPressTestState::$capabilities = [
-			'edit_posts'    => true,
+			'edit_posts'     => true,
 			'manage_options' => true,
 		];
-		WordPressTestState::$options = [
+		WordPressTestState::$options      = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
@@ -40,7 +40,7 @@ final class InfraAbilitiesTest extends TestCase {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
 		];
-		WordPressTestState::$options = [
+		WordPressTestState::$options      = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
@@ -57,7 +57,7 @@ final class InfraAbilitiesTest extends TestCase {
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$options = [
+		WordPressTestState::$options      = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',

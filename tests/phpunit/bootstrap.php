@@ -18,16 +18,25 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $block_templates = [];
 
-		public static array $remote_post_response = [];
+		public static array $transients = [];
+
+		public static array $registered_abilities = [];
+
+		public static array $registered_ability_categories = [];
+
+		public static mixed $remote_post_response = [];
 
 		public static function reset(): void {
-			self::$global_settings      = [];
-			self::$global_styles        = [];
-			self::$last_remote_post     = [];
-			self::$options              = [];
-			self::$capabilities         = [];
-			self::$block_templates      = [];
-			self::$remote_post_response = [];
+			self::$global_settings             = [];
+			self::$global_styles               = [];
+			self::$last_remote_post            = [];
+			self::$options                     = [];
+			self::$capabilities                = [];
+			self::$block_templates             = [];
+			self::$transients                  = [];
+			self::$registered_abilities        = [];
+			self::$registered_ability_categories = [];
+			self::$remote_post_response        = [];
 
 			\WP_Block_Type_Registry::get_instance()->reset();
 		}
@@ -187,9 +196,39 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'get_transient' ) ) {
+		function get_transient( string $name ) {
+			return array_key_exists( $name, WordPressTestState::$transients )
+				? WordPressTestState::$transients[ $name ]
+				: false;
+		}
+	}
+
+	if ( ! function_exists( 'set_transient' ) ) {
+		function set_transient( string $name, $value, int $expiration = 0 ): bool {
+			WordPressTestState::$transients[ $name ] = $value;
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'delete_transient' ) ) {
+		function delete_transient( string $name ): bool {
+			unset( WordPressTestState::$transients[ $name ] );
+
+			return true;
+		}
+	}
+
 	if ( ! function_exists( 'current_user_can' ) ) {
 		function current_user_can( string $capability, ...$args ): bool {
 			return (bool) ( WordPressTestState::$capabilities[ $capability ] ?? false );
+		}
+	}
+
+	if ( ! function_exists( '__' ) ) {
+		function __( string $text, string $domain = 'default' ): string {
+			return $text;
 		}
 	}
 
@@ -286,6 +325,18 @@ namespace {
 	if ( ! function_exists( 'wp_json_encode' ) ) {
 		function wp_json_encode( $value ) {
 			return json_encode( $value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		}
+	}
+
+	if ( ! function_exists( 'wp_register_ability' ) ) {
+		function wp_register_ability( string $id, array $args ): void {
+			WordPressTestState::$registered_abilities[ $id ] = $args;
+		}
+	}
+
+	if ( ! function_exists( 'wp_register_ability_category' ) ) {
+		function wp_register_ability_category( string $id, array $args ): void {
+			WordPressTestState::$registered_ability_categories[ $id ] = $args;
 		}
 	}
 

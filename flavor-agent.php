@@ -12,7 +12,7 @@
 declare(strict_types=1);
 
 if ( ! defined( 'ABSPATH' ) ) {
-    exit;
+	exit;
 }
 
 define( 'FLAVOR_AGENT_VERSION', '0.1.0' );
@@ -56,77 +56,90 @@ foreach ( [
 }
 
 // Recommended pattern category for AI-ranked patterns in the inserter.
-add_action( 'init', function () {
-    if ( function_exists( 'register_block_pattern_category' ) ) {
-        register_block_pattern_category( 'recommended', [
-            'label' => __( 'Recommended', 'flavor-agent' ),
-        ] );
-    }
-} );
+add_action(
+	'init',
+	function () {
+		if ( function_exists( 'register_block_pattern_category' ) ) {
+			register_block_pattern_category(
+				'recommended',
+				[
+					'label' => __( 'Recommended', 'flavor-agent' ),
+				]
+			);
+		}
+	}
+);
 
-add_filter( 'block_editor_settings_all', function ( $settings ) {
-    $cats        = $settings['__experimentalBlockPatternCategories'] ?? [];
-    $recommended = null;
-    $rest        = [];
+add_filter(
+	'block_editor_settings_all',
+	function ( $settings ) {
+		$cats        = $settings['__experimentalBlockPatternCategories'] ?? [];
+		$recommended = null;
+		$rest        = [];
 
-    foreach ( $cats as $cat ) {
-        if ( ( $cat['name'] ?? '' ) === 'recommended' ) {
-            $recommended = $cat;
-        } else {
-            $rest[] = $cat;
-        }
-    }
+		foreach ( $cats as $cat ) {
+			if ( ( $cat['name'] ?? '' ) === 'recommended' ) {
+				$recommended = $cat;
+			} else {
+				$rest[] = $cat;
+			}
+		}
 
-    if ( $recommended ) {
-        $settings['__experimentalBlockPatternCategories'] = array_merge( [ $recommended ], $rest );
-    }
+		if ( $recommended ) {
+			$settings['__experimentalBlockPatternCategories'] = array_merge( [ $recommended ], $rest );
+		}
 
-    return $settings;
-} );
+		return $settings;
+	}
+);
 
 function flavor_agent_enqueue_editor(): void {
-    $asset_path = FLAVOR_AGENT_DIR . 'build/index.asset.php';
-    if ( ! file_exists( $asset_path ) ) {
-        return;
-    }
+	$asset_path = FLAVOR_AGENT_DIR . 'build/index.asset.php';
+	if ( ! file_exists( $asset_path ) ) {
+		return;
+	}
 
-    $asset = include $asset_path;
-    $css_path = FLAVOR_AGENT_DIR . 'build/index.css';
+	$asset    = include $asset_path;
+	$css_path = FLAVOR_AGENT_DIR . 'build/index.css';
 
-    wp_enqueue_script(
-        'flavor-agent-editor',
-        FLAVOR_AGENT_URL . 'build/index.js',
-        $asset['dependencies'],
-        $asset['version'],
-        true
-    );
+	wp_enqueue_script(
+		'flavor-agent-editor',
+		FLAVOR_AGENT_URL . 'build/index.js',
+		$asset['dependencies'],
+		$asset['version'],
+		true
+	);
 
-    if ( file_exists( $css_path ) ) {
-        wp_enqueue_style(
-            'flavor-agent-editor',
-            FLAVOR_AGENT_URL . 'build/index.css',
-            [],
-            $asset['version']
-        );
-    }
+	if ( file_exists( $css_path ) ) {
+		wp_enqueue_style(
+			'flavor-agent-editor',
+			FLAVOR_AGENT_URL . 'build/index.css',
+			[],
+			$asset['version']
+		);
+	}
 
-    wp_localize_script( 'flavor-agent-editor', 'flavorAgentData', [
-        'restUrl'              => rest_url( 'flavor-agent/v1/' ),
-        'nonce'                => wp_create_nonce( 'wp_rest' ),
-        'hasApiKey'            => (bool) get_option( 'flavor_agent_api_key' ),
-        'canRecommendPatterns' => (bool) (
-            get_option( 'flavor_agent_azure_openai_endpoint' )
-            && get_option( 'flavor_agent_azure_openai_key' )
-            && get_option( 'flavor_agent_azure_embedding_deployment' )
-            && get_option( 'flavor_agent_azure_chat_deployment' )
-            && get_option( 'flavor_agent_qdrant_url' )
-            && get_option( 'flavor_agent_qdrant_key' )
-        ),
-        'canRecommendTemplates' => (bool) (
-            get_option( 'flavor_agent_azure_openai_endpoint' )
-            && get_option( 'flavor_agent_azure_openai_key' )
-            && get_option( 'flavor_agent_azure_chat_deployment' )
-        ),
-        'templatePartAreas'    => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
-    ] );
+	wp_localize_script(
+		'flavor-agent-editor',
+		'flavorAgentData',
+		[
+			'restUrl'               => rest_url( 'flavor-agent/v1/' ),
+			'nonce'                 => wp_create_nonce( 'wp_rest' ),
+			'hasApiKey'             => (bool) get_option( 'flavor_agent_api_key' ),
+			'canRecommendPatterns'  => (bool) (
+				get_option( 'flavor_agent_azure_openai_endpoint' )
+				&& get_option( 'flavor_agent_azure_openai_key' )
+				&& get_option( 'flavor_agent_azure_embedding_deployment' )
+				&& get_option( 'flavor_agent_azure_chat_deployment' )
+				&& get_option( 'flavor_agent_qdrant_url' )
+				&& get_option( 'flavor_agent_qdrant_key' )
+			),
+			'canRecommendTemplates' => (bool) (
+				get_option( 'flavor_agent_azure_openai_endpoint' )
+				&& get_option( 'flavor_agent_azure_openai_key' )
+				&& get_option( 'flavor_agent_azure_chat_deployment' )
+			),
+			'templatePartAreas'     => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
+		]
+	);
 }

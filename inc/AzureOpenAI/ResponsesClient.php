@@ -25,11 +25,13 @@ final class ResponsesClient {
 		}
 
 		$url  = rtrim( $endpoint, '/' ) . '/openai/v1/responses';
-		$body = wp_json_encode( [
-			'model'        => $deployment,
-			'instructions' => $instructions,
-			'input'        => $input,
-		] );
+		$body = wp_json_encode(
+			[
+				'model'        => $deployment,
+				'instructions' => $instructions,
+				'input'        => $input,
+			]
+		);
 
 		return self::request( $url, $api_key, $body );
 	}
@@ -38,14 +40,17 @@ final class ResponsesClient {
 	 * @return string|\WP_Error The text content from the response.
 	 */
 	private static function request( string $url, string $api_key, string $body, bool $is_retry = false ): string|\WP_Error {
-		$response = wp_remote_post( $url, [
-			'timeout' => 30,
-			'headers' => [
-				'Content-Type' => 'application/json',
-				'api-key'      => $api_key,
-			],
-			'body' => $body,
-		] );
+		$response = wp_remote_post(
+			$url,
+			[
+				'timeout' => 30,
+				'headers' => [
+					'Content-Type' => 'application/json',
+					'api-key'      => $api_key,
+				],
+				'body'    => $body,
+			]
+		);
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -54,7 +59,8 @@ final class ResponsesClient {
 		$status = wp_remote_retrieve_response_code( $response );
 
 		if ( $status === 429 && ! $is_retry ) {
-			$retry_after = (int) ( wp_remote_retrieve_header( $response, 'retry-after' ) ?: 2 );
+			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
+			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
 			sleep( min( $retry_after, 10 ) );
 			return self::request( $url, $api_key, $body, true );
 		}

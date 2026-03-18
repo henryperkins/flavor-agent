@@ -24,7 +24,7 @@ The Abilities API hooks (`wp_abilities_api_categories_init`, `wp_abilities_api_i
 
 | ID                              | Type         | Input                                                                                                        | Output                                                                                                                                 | Status      |
 | ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `flavor-agent/recommend-block`  | Action (LLM) | `{ selectedBlock: { blockName, attributes, innerBlocks, isInsideContentOnly?, blockVisibility? }, prompt? }` | `{ settings: Suggestion[], styles: Suggestion[], block: Suggestion[], explanation }`                                                   | Implemented |
+| `flavor-agent/recommend-block`  | Action (LLM) | `{ selectedBlock: { blockName, attributes, innerBlocks, isInsideContentOnly?, editingMode?, childCount?, structuralIdentity?, structuralAncestors?, structuralBranch?, blockVisibility? }, prompt? }` | `{ settings: Suggestion[], styles: Suggestion[], block: Suggestion[], explanation }`                                                   | Implemented |
 | `flavor-agent/introspect-block` | Read-only    | `{ blockName }`                                                                                              | `{ name, title, category, supports, inspectorPanels, contentAttributes, configAttributes, styles, variations, parent, allowedBlocks }` | Implemented |
 
 ### Patterns
@@ -57,6 +57,8 @@ The Abilities API hooks (`wp_abilities_api_categories_init`, `wp_abilities_api_i
 ### Suggestion Schema (shared)
 
 Canonical visibility state lives in `selectedBlock.attributes.metadata.blockVisibility`. The top-level `selectedBlock.blockVisibility` field is accepted only as a backward-compatible alias and is normalized server-side before context assembly.
+
+Schema parity note: the current JS collector also supplies `selectedBlock.editingMode`, `selectedBlock.childCount`, `selectedBlock.structuralIdentity`, `selectedBlock.structuralAncestors`, and `selectedBlock.structuralBranch`. The Abilities registration must stay aligned with that stable top-level payload whenever the collector adds new fields. Dynamic nested containers such as `attributes`, `structuralIdentity.position`, and structural ancestor/branch summary items intentionally remain open so evolving editor context survives validation.
 
 Each suggestion object in `recommend-block` output:
 

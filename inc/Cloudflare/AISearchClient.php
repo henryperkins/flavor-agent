@@ -6,10 +6,12 @@ namespace FlavorAgent\Cloudflare;
 
 final class AISearchClient {
 
-	private const DEFAULT_MAX_RESULTS = 4;
-	private const MAX_MAX_RESULTS = 8;
-	private const ALLOWED_DOC_HOSTS = [ 'developer.wordpress.org' ];
+	private const DEFAULT_MAX_RESULTS       = 4;
+	private const MAX_MAX_RESULTS           = 8;
+	private const ALLOWED_DOC_HOST          = 'developer.wordpress.org';
 	private const ALLOWED_SOURCE_KEY_PREFIX = 'developer.wordpress.org/';
+	private const CACHE_KEY_PREFIX          = 'flavor_agent_ai_search_';
+	private const CACHE_TTL                 = 21600;
 
 	public static function is_configured(): bool {
 		$account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
@@ -43,7 +45,7 @@ final class AISearchClient {
 		$result_limit = self::normalize_max_results( $max_results );
 		$body         = wp_json_encode(
 			[
-				'messages' => [
+				'messages'          => [
 					[
 						'role'    => 'user',
 						'content' => $query,
@@ -100,11 +102,14 @@ final class AISearchClient {
 			);
 		}
 
-		$result = is_array( $data['result'] ?? null ) ? $data['result'] : [];
+		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
+		$guidance = self::normalize_chunks( is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [] );
+
+		self::write_cached_guidance( $query, $result_limit, $guidance );
 
 		return [
 			'query'    => sanitize_text_field( (string) ( $result['search_query'] ?? $query ) ),
-			'guidance' => self::normalize_chunks( is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [] ),
+			'guidance' => $guidance,
 		];
 	}
 
@@ -114,17 +119,22 @@ final class AISearchClient {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public static function maybe_search( string $query, ?int $max_results = null ): array {
-		if ( ! self::is_configured() ) {
+		$query = sanitize_textarea_field( $query );
+
+		if ( $query === '' || ! self::is_configured() ) {
 			return [];
 		}
 
-		$result = self::search( $query, $max_results );
+		$guidance = self::read_cached_guidance(
+			$query,
+			self::normalize_max_results( $max_results )
+		);
 
-		if ( is_wp_error( $result ) ) {
+		if ( ! is_array( $guidance ) ) {
 			return [];
 		}
 
-		return is_array( $result['guidance'] ?? null ) ? $result['guidance'] : [];
+		return $guidance;
 	}
 
 	/**
@@ -164,6 +174,110 @@ final class AISearchClient {
 		return max( 1, min( self::MAX_MAX_RESULTS, (int) $max_results ) );
 	}
 
+	private static function build_cache_key( string $query, int $max_results ): string {
+		$payload = wp_json_encode(
+			[
+				'query'      => $query,
+				'maxResults' => $max_results,
+			]
+		);
+
+		if ( ! is_string( $payload ) || $payload === '' ) {
+			$payload = "{$query}|{$max_results}";
+		}
+
+		return self::CACHE_KEY_PREFIX . md5( $payload );
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>|null
+	 */
+	private static function read_cached_guidance( string $query, int $max_results ): ?array {
+		$cache_key = self::build_cache_key( $query, $max_results );
+		$cached    = get_transient( $cache_key );
+
+		if ( false === $cached ) {
+			return null;
+		}
+
+		if ( ! is_array( $cached ) ) {
+			delete_transient( $cache_key );
+
+			return null;
+		}
+
+		$guidance = self::normalize_cached_guidance( $cached );
+
+		if ( [] === $guidance && [] !== $cached ) {
+			delete_transient( $cache_key );
+
+			return null;
+		}
+
+		if ( $guidance !== $cached ) {
+			set_transient( $cache_key, $guidance, self::CACHE_TTL );
+		}
+
+		return $guidance;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $guidance
+	 */
+	private static function write_cached_guidance( string $query, int $max_results, array $guidance ): void {
+		set_transient(
+			self::build_cache_key( $query, $max_results ),
+			self::normalize_cached_guidance( $guidance ),
+			self::CACHE_TTL
+		);
+	}
+
+	/**
+	 * @param array<int, mixed> $guidance
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_cached_guidance( array $guidance ): array {
+		$normalized = [];
+
+		foreach ( $guidance as $item ) {
+			$normalized_item = self::normalize_cached_guidance_item( $item );
+
+			if ( null === $normalized_item ) {
+				continue;
+			}
+
+			$normalized[] = $normalized_item;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private static function normalize_cached_guidance_item( mixed $item ): ?array {
+		if ( ! is_array( $item ) ) {
+			return null;
+		}
+
+		$source_key = sanitize_text_field( (string) ( $item['sourceKey'] ?? '' ) );
+		$url        = self::normalize_trusted_guidance_url( $item['url'] ?? null );
+		$excerpt    = self::sanitize_excerpt( (string) ( $item['excerpt'] ?? '' ) );
+
+		if ( $url === '' || $excerpt === '' || ! self::is_allowed_guidance_source( $source_key, $url ) ) {
+			return null;
+		}
+
+		return [
+			'id'        => sanitize_text_field( (string) ( $item['id'] ?? '' ) ),
+			'title'     => sanitize_text_field( (string) ( $item['title'] ?? '' ) ),
+			'sourceKey' => $source_key,
+			'url'       => $url,
+			'excerpt'   => $excerpt,
+			'score'     => isset( $item['score'] ) ? max( 0.0, min( 1.0, (float) $item['score'] ) ) : 0.0,
+		];
+	}
+
 	/**
 	 * @param array<int, mixed> $chunks Raw chunk list from Cloudflare AI Search.
 	 * @return array<int, array<string, mixed>>
@@ -180,10 +294,10 @@ final class AISearchClient {
 			$metadata     = is_array( $item['metadata'] ?? null ) ? $item['metadata'] : [];
 			$parsed_chunk = self::parse_chunk_text( (string) ( $chunk['text'] ?? '' ) );
 			$source_key   = sanitize_text_field( (string) ( $item['key'] ?? '' ) );
-			$url          = self::sanitize_url_value( $metadata['url'] ?? $parsed_chunk['url'] );
+			$url          = self::normalize_guidance_url( $metadata['url'] ?? null, $parsed_chunk['url'] );
 			$text         = self::sanitize_excerpt( $parsed_chunk['excerpt'] );
 
-			if ( $text === '' || ! self::is_allowed_guidance_source( $source_key, $url ) ) {
+			if ( $text === '' || $url === '' || ! self::is_allowed_guidance_source( $source_key, $url ) ) {
 				continue;
 			}
 
@@ -211,58 +325,130 @@ final class AISearchClient {
 		return $text;
 	}
 
-	private static function sanitize_url_value( mixed $value ): string {
+	private static function normalize_guidance_url( mixed $metadata_url, string $frontmatter_url ): string {
+		$has_metadata_url    = is_string( $metadata_url ) && trim( $metadata_url ) !== '';
+		$has_frontmatter_url = trim( $frontmatter_url ) !== '';
+
+		$normalized_metadata_url    = self::normalize_trusted_guidance_url( $metadata_url );
+		$normalized_frontmatter_url = self::normalize_trusted_guidance_url( $frontmatter_url );
+
+		if ( $has_metadata_url && $normalized_metadata_url === '' ) {
+			return '';
+		}
+
+		if ( $has_frontmatter_url && $normalized_frontmatter_url === '' ) {
+			return '';
+		}
+
+		if (
+			$normalized_metadata_url !== '' &&
+			$normalized_frontmatter_url !== '' &&
+			! self::guidance_urls_match( $normalized_metadata_url, $normalized_frontmatter_url )
+		) {
+			return '';
+		}
+
+		if ( $normalized_metadata_url !== '' ) {
+			return $normalized_metadata_url;
+		}
+
+		return $normalized_frontmatter_url;
+	}
+
+	private static function normalize_trusted_guidance_url( mixed $value ): string {
 		if ( ! is_string( $value ) ) {
 			return '';
 		}
 
-		$sanitized = filter_var( trim( $value ), FILTER_SANITIZE_URL );
+		$url = trim( $value );
 
-		return is_string( $sanitized ) ? $sanitized : '';
+		if ( $url === '' ) {
+			return '';
+		}
+
+		$parts = parse_url( $url );
+
+		if ( ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$scheme = is_string( $parts['scheme'] ?? null ) ? strtolower( $parts['scheme'] ) : '';
+		$host   = is_string( $parts['host'] ?? null ) ? strtolower( $parts['host'] ) : '';
+		$path   = $parts['path'] ?? null;
+
+		if (
+			$scheme !== 'https' ||
+			$host !== self::ALLOWED_DOC_HOST ||
+			( isset( $parts['user'] ) && $parts['user'] !== '' ) ||
+			( isset( $parts['pass'] ) && $parts['pass'] !== '' ) ||
+			( isset( $parts['port'] ) && (int) $parts['port'] !== 443 ) ||
+			! is_string( $path ) ||
+			$path === ''
+		) {
+			return '';
+		}
+
+		$normalized_path = preg_replace( '#/+#', '/', $path );
+
+		if ( ! is_string( $normalized_path ) || $normalized_path === '' ) {
+			return '';
+		}
+
+		return 'https://' . self::ALLOWED_DOC_HOST . '/' . ltrim( $normalized_path, '/' );
 	}
 
 	private static function is_allowed_guidance_source( string $source_key, string $url ): bool {
-		if ( $source_key === '' && $url === '' ) {
+		$url_identity = self::normalize_guidance_identity( $url );
+
+		if ( $url_identity === '' ) {
 			return false;
 		}
 
-		if ( $source_key !== '' && ! self::is_allowed_source_key( $source_key ) ) {
-			return false;
-		}
-
-		if ( $url !== '' && ! self::is_allowed_guidance_url( $url ) ) {
-			return false;
-		}
-
-		return true;
-	}
-
-	private static function is_allowed_source_key( string $source_key ): bool {
-		$normalized = strtolower( trim( $source_key ) );
-
-		if ( $normalized === '' ) {
-			return false;
-		}
-
-		if ( str_starts_with( $normalized, self::ALLOWED_SOURCE_KEY_PREFIX ) ) {
+		if ( $source_key === '' ) {
 			return true;
 		}
 
-		if ( str_starts_with( $normalized, 'https://' ) || str_starts_with( $normalized, 'http://' ) ) {
-			return self::is_allowed_guidance_url( $normalized );
-		}
-
-		return false;
+		return self::normalize_source_key_identity( $source_key ) === $url_identity;
 	}
 
-	private static function is_allowed_guidance_url( string $url ): bool {
-		$host = parse_url( $url, PHP_URL_HOST );
+	private static function normalize_source_key_identity( string $source_key ): string {
+		$normalized = strtolower( trim( $source_key ) );
 
-		if ( ! is_string( $host ) || $host === '' ) {
-			return false;
+		if ( $normalized === '' ) {
+			return '';
 		}
 
-		return in_array( strtolower( $host ), self::ALLOWED_DOC_HOSTS, true );
+		if ( str_starts_with( $normalized, self::ALLOWED_SOURCE_KEY_PREFIX ) ) {
+			$normalized = 'https://' . $normalized;
+		}
+
+		return self::normalize_guidance_identity( $normalized );
+	}
+
+	private static function normalize_guidance_identity( string $url ): string {
+		$normalized = self::normalize_trusted_guidance_url( $url );
+
+		if ( $normalized === '' ) {
+			return '';
+		}
+
+		$path = parse_url( $normalized, PHP_URL_PATH );
+
+		if ( ! is_string( $path ) ) {
+			return '';
+		}
+
+		$normalized_path = rtrim( $path, '/' );
+
+		if ( $normalized_path === '' ) {
+			$normalized_path = '/';
+		}
+
+		return 'https://' . self::ALLOWED_DOC_HOST . $normalized_path;
+	}
+
+	private static function guidance_urls_match( string $left, string $right ): bool {
+		return self::normalize_guidance_identity( $left ) === self::normalize_guidance_identity( $right );
 	}
 
 	/**

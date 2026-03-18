@@ -26,17 +26,17 @@ final class PatternIndex {
 
 	public static function get_state(): array {
 		$defaults = [
-			'status'               => 'uninitialized',
-			'fingerprint'          => '',
-			'qdrant_url'           => '',
-			'qdrant_collection'    => '',
-			'azure_openai_endpoint'=> '',
-			'embedding_deployment' => '',
-			'last_synced_at'       => null,
-			'last_attempt_at'      => null,
-			'indexed_count'        => 0,
-			'last_error'           => null,
-			'pattern_fingerprints' => [],
+			'status'                => 'uninitialized',
+			'fingerprint'           => '',
+			'qdrant_url'            => '',
+			'qdrant_collection'     => '',
+			'azure_openai_endpoint' => '',
+			'embedding_deployment'  => '',
+			'last_synced_at'        => null,
+			'last_attempt_at'       => null,
+			'indexed_count'         => 0,
+			'last_error'            => null,
+			'pattern_fingerprints'  => [],
 		];
 
 		return wp_parse_args( get_option( self::STATE_OPTION, $defaults ), $defaults );
@@ -236,11 +236,11 @@ final class PatternIndex {
 		$fingerprint = self::compute_fingerprint( $patterns );
 
 		// Steps 4-6: Determine if re-index is needed.
-		$state                = self::get_state();
-		$qdrant_url           = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_collection    = QdrantClient::get_collection_name();
+		$state                 = self::get_state();
+		$qdrant_url            = get_option( 'flavor_agent_qdrant_url', '' );
+		$qdrant_collection     = QdrantClient::get_collection_name();
 		$azure_openai_endpoint = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$embedding_deployment = get_option( 'flavor_agent_azure_embedding_deployment', '' );
+		$embedding_deployment  = get_option( 'flavor_agent_azure_embedding_deployment', '' );
 
 		$needs_reindex = $state['status'] !== 'ready'
 			|| $state['fingerprint'] !== $fingerprint
@@ -258,11 +258,11 @@ final class PatternIndex {
 			];
 		}
 
-		$current                    = [];
+		$current                      = [];
 		$current_pattern_fingerprints = [];
 		foreach ( $patterns as $pattern ) {
-			$uuid                                = self::pattern_uuid( $pattern['name'] ?? '' );
-			$current[ $uuid ]                    = $pattern;
+			$uuid                                  = self::pattern_uuid( $pattern['name'] ?? '' );
+			$current[ $uuid ]                      = $pattern;
 			$current_pattern_fingerprints[ $uuid ] = self::compute_pattern_fingerprint( $pattern );
 		}
 
@@ -363,19 +363,21 @@ final class PatternIndex {
 		}
 
 		// Persist ready state.
-		self::save_state( [
-			'status'               => 'ready',
-			'fingerprint'          => $fingerprint,
-			'qdrant_url'           => $qdrant_url,
-			'qdrant_collection'    => $qdrant_collection,
-			'azure_openai_endpoint'=> $azure_openai_endpoint,
-			'embedding_deployment' => $embedding_deployment,
-			'last_synced_at'       => gmdate( 'c' ),
-			'last_attempt_at'      => $state['last_attempt_at'],
-			'indexed_count'        => count( $current ),
-			'last_error'           => null,
-			'pattern_fingerprints' => $current_pattern_fingerprints,
-		] );
+		self::save_state(
+			[
+				'status'                => 'ready',
+				'fingerprint'           => $fingerprint,
+				'qdrant_url'            => $qdrant_url,
+				'qdrant_collection'     => $qdrant_collection,
+				'azure_openai_endpoint' => $azure_openai_endpoint,
+				'embedding_deployment'  => $embedding_deployment,
+				'last_synced_at'        => gmdate( 'c' ),
+				'last_attempt_at'       => $state['last_attempt_at'],
+				'indexed_count'         => count( $current ),
+				'last_error'            => null,
+				'pattern_fingerprints'  => $current_pattern_fingerprints,
+			]
+		);
 
 		return [
 			'indexed'     => count( $uuids_to_embed ),

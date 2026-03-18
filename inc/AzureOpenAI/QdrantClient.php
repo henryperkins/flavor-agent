@@ -11,13 +11,14 @@ final class QdrantClient {
 	private const VECTOR_SIZE            = 3072;
 
 	public static function get_collection_name(): string {
-		$scope = [
+		$scope      = [
 			'home_url'    => untrailingslashit( home_url( '/' ) ),
 			'blog_id'     => (string) get_current_blog_id(),
 			'environment' => wp_get_environment_type(),
 		];
-		$hash  = substr(
-			hash( 'sha256', wp_json_encode( $scope ) ?: '' ),
+		$scope_json = wp_json_encode( $scope );
+		$hash       = substr(
+			hash( 'sha256', false !== $scope_json ? $scope_json : '' ),
 			0,
 			self::COLLECTION_HASH_LENGTH
 		);
@@ -315,7 +316,8 @@ final class QdrantClient {
 		$status = wp_remote_retrieve_response_code( $response );
 
 		if ( $status === 429 && ! $is_retry ) {
-			$retry_after = (int) ( wp_remote_retrieve_header( $response, 'retry-after' ) ?: 2 );
+			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
+			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
 			sleep( min( $retry_after, 10 ) );
 
 			return self::request( $method, $url, $operation, $error_code, $body, $accepted_statuses, true );

@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-03-17
+> Last updated: 2026-03-18
 
 ## Working
 
@@ -36,6 +36,7 @@
 - Site Editor template recommendation panel for `wp_template` documents
 - Admin settings screen with backend configuration and pattern sync controls
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
+- Recommendation-time WordPress docs grounding is cache-only; explicit `flavor-agent/search-wordpress-docs` requests perform the Cloudflare fetch and seed later recommendation prompts
 
 ## Stubbed (501)
 
@@ -45,7 +46,20 @@
 
 ## Known Issues
 
-- Automated coverage is still partial: the repo has focused PHPUnit and JS unit suites, but Abilities API registration/execution is not covered directly and still needs live WordPress verification. PHPCS tooling exists, but it is not part of the routine verification path documented here.
+- `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
+- First-request WordPress docs grounding is intentionally reduced: uncached `recommend-block` and `recommend-template` requests now return without Cloudflare guidance until an explicit `flavor-agent/search-wordpress-docs` request seeds cache.
+- Live recommendation execution with valid LLM credentials was not rerun in this pass. Live verification covered ability schema validation and authenticated ability discovery, not end-to-end editor submissions.
+
+## Recent Verification
+
+- 2026-03-18 remediation: `vendor/bin/phpunit --filter 'AISearchClientTest|InfraAbilitiesTest|PromptGuidanceTest|ServerCollectorTest|BlockAbilitiesTest|RegistrationTest'` passed.
+- 2026-03-18 remediation: `npm run test:unit -- --runInBand src/patterns/__tests__/find-inserter-search-input.test.js src/patterns/__tests__/inserter-badge-state.test.js src/store/__tests__/pattern-status.test.js src/utils/__tests__/structural-identity.test.js src/utils/__tests__/template-part-areas.test.js` passed.
+- 2026-03-18 remediation: `npm run lint:js` and `npm run build` passed.
+- 2026-03-18 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Cloudflare/AISearchClient.php inc/Abilities/Registration.php inc/LLM/TemplatePrompt.php tests/phpunit/AISearchClientTest.php tests/phpunit/RegistrationTest.php tests/phpunit/bootstrap.php` passed.
+- 2026-03-18 remediation: widened `phpcs.xml.dist` coverage and reran `composer lint:php`; it passed.
+- 2026-03-18 remediation: `composer test:php` passed after the repo-wide PHPCS cleanup.
+- 2026-03-18 remediation: `wp --path=/home/hperkins-wp/htdocs/wp.hperkins.com eval '...'` validated `flavor-agent/recommend-block` input with the new structural fields and returned `bool(true)`.
+- 2026-03-18 remediation: authenticated `rest_do_request( new WP_REST_Request( 'GET', '/wp-abilities/v1/abilities' ) )` returned `200`, and the exported `selectedBlock` keys included `editingMode`, `childCount`, `structuralIdentity`, `structuralAncestors`, and `structuralBranch`.
 
 ## Historical Docs
 

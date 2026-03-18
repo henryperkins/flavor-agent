@@ -39,10 +39,12 @@ final class EmbeddingClient {
 		}
 
 		$url  = rtrim( $endpoint, '/' ) . '/openai/v1/embeddings';
-		$body = wp_json_encode( [
-			'model' => $deployment,
-			'input' => $inputs,
-		] );
+		$body = wp_json_encode(
+			[
+				'model' => $deployment,
+				'input' => $inputs,
+			]
+		);
 
 		$data = self::request( $url, $api_key, $body );
 		if ( is_wp_error( $data ) ) {
@@ -61,14 +63,17 @@ final class EmbeddingClient {
 	 * @return array|\WP_Error Decoded response body.
 	 */
 	private static function request( string $url, string $api_key, string $body, bool $is_retry = false ): array|\WP_Error {
-		$response = wp_remote_post( $url, [
-			'timeout' => 30,
-			'headers' => [
-				'Content-Type' => 'application/json',
-				'api-key'      => $api_key,
-			],
-			'body' => $body,
-		] );
+		$response = wp_remote_post(
+			$url,
+			[
+				'timeout' => 30,
+				'headers' => [
+					'Content-Type' => 'application/json',
+					'api-key'      => $api_key,
+				],
+				'body'    => $body,
+			]
+		);
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -77,7 +82,8 @@ final class EmbeddingClient {
 		$status = wp_remote_retrieve_response_code( $response );
 
 		if ( $status === 429 && ! $is_retry ) {
-			$retry_after = (int) ( wp_remote_retrieve_header( $response, 'retry-after' ) ?: 2 );
+			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
+			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
 			sleep( min( $retry_after, 10 ) );
 			return self::request( $url, $api_key, $body, true );
 		}
