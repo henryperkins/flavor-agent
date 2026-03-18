@@ -548,4 +548,4 @@ Expected:
 - Do not widen scope into `PatternRecommender.js` unless manual verification proves the current request timing or DOM selectors are broken.
 - If component testing becomes heavy, stop at the helper-first and reducer-first coverage described above instead of building a brittle jsdom harness around portal behavior.
 
-Implementation note: manual verification showed the active inserter search field lived outside the old `.block-editor-inserter__panel-content, .block-editor-inserter__content` selector path, so the work widened into `src/patterns/PatternRecommender.js` to target the current sidebar/searchbox DOM and restore active recommendation requests.
+Implementation note: manual verification showed the active inserter search field lived outside the old `.block-editor-inserter__panel-content, .block-editor-inserter__content` selector path, so the work widened into `src/patterns/PatternRecommender.js` to target the live inserter sidebar/search DOM only and restore active recommendation requests without falling back to arbitrary page searchboxes.

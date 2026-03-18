@@ -83,7 +83,10 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 									{ panelLabel( panel ) }
 								</div>
 								<span className="flavor-agent-pill">
-									{ formatCount( items.length, 'suggestion' ) }
+									{ formatCount(
+										items.length,
+										'suggestion'
+									) }
 								</span>
 							</div>
 						) }

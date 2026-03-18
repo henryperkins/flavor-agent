@@ -19,6 +19,7 @@ import {
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useEffect, useRef } from '@wordpress/element';
 
+import { findInserterSearchInput } from './find-inserter-search-input';
 import { patchPatternMetadata } from './recommendation-utils';
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';
@@ -203,19 +204,7 @@ export default function PatternRecommender() {
 			listenerRef.current = { el: searchInput, fn };
 		}
 
-		function findSearchInput() {
-			return document.querySelector(
-				[
-					'.block-editor-inserter__search input',
-					'.editor-inserter-sidebar__content input[type="search"]',
-					'.block-editor-tabbed-sidebar input[type="search"]',
-					'.block-editor-inserter__menu input[type="search"]',
-					'[role="searchbox"]',
-				].join( ', ' )
-			);
-		}
-
-		const existing = findSearchInput();
+		const existing = findInserterSearchInput( document );
 
 		if ( existing ) {
 			attachToSearch( existing );
@@ -227,7 +216,7 @@ export default function PatternRecommender() {
 		}
 
 		const observer = new window.MutationObserver( () => {
-			const input = findSearchInput();
+			const input = findInserterSearchInput( document );
 
 			if ( ! input ) {
 				return;

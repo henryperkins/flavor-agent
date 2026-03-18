@@ -477,7 +477,10 @@ export default function TemplateRecommender() {
 
 				{ hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
-						<LinkedText text={ explanation } entities={ entityMap } />
+						<LinkedText
+							text={ explanation }
+							entities={ entityMap }
+						/>
 					</p>
 				) }
 
