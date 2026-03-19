@@ -4,11 +4,11 @@
 
 ## Working
 
-### Abilities API (WordPress 6.9+)
+### Abilities API (WordPress 7.0+)
 
 | Ability | Handler | Description |
 | --- | --- | --- |
-| `flavor-agent/recommend-block` | `BlockAbilities` | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the LLM client |
+| `flavor-agent/recommend-block` | `BlockAbilities` | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client |
 | `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | Azure OpenAI embeddings + Qdrant retrieval + LLM reranking |
 | `flavor-agent/recommend-template` | `TemplateAbilities` | Azure OpenAI template composition suggestions for Site Editor templates |
@@ -33,7 +33,7 @@
 - Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping
 - Site Editor template recommendation panel for `wp_template` documents with advisory-only review and browse actions
-- Admin settings screen with backend configuration and pattern sync controls
+- Admin settings screen with Azure/Qdrant/Cloudflare configuration and pattern sync controls; block providers come from `Settings > Connectors`
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
@@ -56,14 +56,12 @@
 - 2026-03-19 remediation: `npm run test:unit -- --runInBand` passed.
 - 2026-03-19 remediation: `npm run build` passed.
 - 2026-03-19 remediation: `vendor/bin/phpunit` passed.
-- 2026-03-19 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Abilities/BlockAbilities.php inc/Abilities/TemplateAbilities.php inc/Context/ServerCollector.php inc/LLM/Prompt.php tests/phpunit/BlockAbilitiesTest.php tests/phpunit/PromptRulesTest.php tests/phpunit/PromptGuidanceTest.php` passed.
+- 2026-03-19 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist flavor-agent.php inc/Abilities/BlockAbilities.php inc/Abilities/InfraAbilities.php inc/Abilities/Registration.php inc/Context/ServerCollector.php inc/LLM/Prompt.php inc/LLM/WordPressAIClient.php inc/Settings.php uninstall.php tests/phpunit/AgentControllerTest.php tests/phpunit/InfraAbilitiesTest.php tests/phpunit/PromptGuidanceTest.php tests/phpunit/RegistrationTest.php tests/phpunit/ServerCollectorTest.php` passed.
 
-## Historical Docs
+## Documentation
 
-These docs describe earlier designs that are no longer the source of truth:
+- **`docs/SOURCE_OF_TRUTH.md`** -- Definitive project reference: scope, architecture, inventory, roadmap, definition of done
+- **`docs/flavor-agent-readme.md`** -- Architecture details and editor flow reference
+- **`docs/2026-03-18-cloudflare-ai-search-grounding-assessment.md`** -- Cloudflare AI Search integration assessment
 
-- `docs/LLM-WordPress-Assistant.md`
-- `docs/LLM-WordPress-Assistant-Notes.md`
-- `docs/LLM-WordPress-Phases.md`
-
-Use `docs/flavor-agent-readme.md` and this file for the current architecture and feature inventory.
+Historical docs (superseded early designs) have been moved to `docs/historical/`.

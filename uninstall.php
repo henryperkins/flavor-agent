@@ -21,6 +21,10 @@ foreach ( [
 	'flavor_agent_azure_chat_deployment',
 	'flavor_agent_qdrant_url',
 	'flavor_agent_qdrant_key',
+	'flavor_agent_cloudflare_ai_search_account_id',
+	'flavor_agent_cloudflare_ai_search_instance_id',
+	'flavor_agent_cloudflare_ai_search_api_token',
+	'flavor_agent_cloudflare_ai_search_max_results',
 	'flavor_agent_pattern_index_state',
 ] as $option_name ) {
 	delete_option( $option_name );

@@ -62,18 +62,20 @@ final class ServerCollector {
 			return null;
 		}
 
-		$supports   = $block_type->supports ?? [];
-		$attributes = $block_type->attributes ?? [];
-		$styles     = $block_type->styles ?? [];
-		$variations = $block_type->variations ?? [];
+		$supports              = $block_type->supports ?? [];
+		$supports_content_role = ! empty( $supports['contentRole'] );
+		$attributes            = $block_type->attributes ?? [];
+		$styles                = $block_type->styles ?? [];
+		$variations            = $block_type->variations ?? [];
 
 		$content_attrs = [];
 		$config_attrs  = [];
 		foreach ( $attributes as $name => $def ) {
+			$role  = self::resolve_attribute_role( $def );
 			$entry = [
 				'type'    => $def['type'] ?? null,
 				'default' => $def['default'] ?? null,
-				'role'    => $def['role'] ?? null,
+				'role'    => $role,
 			];
 			if ( isset( $def['enum'] ) ) {
 				$entry['enum'] = $def['enum'];
@@ -82,7 +84,7 @@ final class ServerCollector {
 				$entry['source'] = $def['source'];
 			}
 
-			if ( ( $def['role'] ?? '' ) === 'content' ) {
+			if ( 'content' === $role ) {
 				$content_attrs[ $name ] = $entry;
 			} else {
 				$config_attrs[ $name ] = $entry;
@@ -90,15 +92,16 @@ final class ServerCollector {
 		}
 
 		return [
-			'name'              => $block_name,
-			'title'             => $block_type->title ?? '',
-			'category'          => $block_type->category ?? '',
-			'description'       => $block_type->description ?? '',
-			'supports'          => $supports,
-			'inspectorPanels'   => self::resolve_inspector_panels( $supports ),
-			'contentAttributes' => $content_attrs,
-			'configAttributes'  => $config_attrs,
-			'styles'            => array_map(
+			'name'                => $block_name,
+			'title'               => $block_type->title ?? '',
+			'category'            => $block_type->category ?? '',
+			'description'         => $block_type->description ?? '',
+			'supports'            => $supports,
+			'supportsContentRole' => $supports_content_role,
+			'inspectorPanels'     => self::resolve_inspector_panels( $supports ),
+			'contentAttributes'   => $content_attrs,
+			'configAttributes'    => $config_attrs,
+			'styles'              => array_map(
 				fn( $s ) => [
 					'name'      => $s['name'] ?? '',
 					'label'     => $s['label'] ?? '',
@@ -106,7 +109,7 @@ final class ServerCollector {
 				],
 				$styles
 			),
-			'variations'        => array_map(
+			'variations'          => array_map(
 				fn( $v ) => [
 					'name'        => $v['name'] ?? '',
 					'title'       => $v['title'] ?? '',
@@ -115,9 +118,9 @@ final class ServerCollector {
 				],
 				array_slice( $variations, 0, 10 )
 			),
-			'parent'            => $block_type->parent ?? null,
-			'allowedBlocks'     => $block_type->allowed_blocks ?? null,
-			'apiVersion'        => $block_type->api_version ?? 1,
+			'parent'              => $block_type->parent ?? null,
+			'allowedBlocks'       => $block_type->allowed_blocks ?? null,
+			'apiVersion'          => $block_type->api_version ?? 1,
 		];
 	}
 
@@ -207,6 +210,7 @@ final class ServerCollector {
 				'styles'              => $type_info['styles'] ?? [],
 				'activeStyle'         => self::extract_active_style( $attributes['className'] ?? '', $type_info['styles'] ?? [] ),
 				'variations'          => $type_info['variations'] ?? [],
+				'supportsContentRole' => ! empty( $type_info['supportsContentRole'] ),
 				'contentAttributes'   => $type_info['contentAttributes'] ?? [],
 				'configAttributes'    => $type_info['configAttributes'] ?? [],
 				'editingMode'         => 'default',
@@ -579,6 +583,12 @@ final class ServerCollector {
 			}
 		}
 		return null;
+	}
+
+	private static function resolve_attribute_role( array $definition ): ?string {
+		$role = $definition['role'] ?? $definition['__experimentalRole'] ?? null;
+
+		return is_string( $role ) && '' !== $role ? $role : null;
 	}
 
 	private static function merge_presets( array|string $feature ): array {

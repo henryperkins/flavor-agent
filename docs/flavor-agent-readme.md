@@ -4,7 +4,7 @@ Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directl
 
 It currently has two primary editor experiences:
 
-- Block recommendations in the native Inspector, powered by Anthropic.
+- Block recommendations in the native Inspector, powered by the WordPress AI Client and core Connectors.
 - Pattern recommendations in the native inserter, powered by Azure OpenAI embeddings + responses and Qdrant.
 
 There is no separate approval sidebar in the current codebase. Pattern recommendations are surfaced inside the inserter's Patterns tab through a `Recommended` category and a small toolbar badge for high-confidence matches.
@@ -23,7 +23,7 @@ flavor-agent/
 │   ├── Abilities/                # WordPress Abilities API registrations and callbacks
 │   ├── AzureOpenAI/              # Embeddings, Responses API, and Qdrant REST clients
 │   ├── Context/                  # Server-side block/theme/pattern collectors
-│   ├── LLM/                      # Anthropic client + prompt/response handling
+│   ├── LLM/                      # WordPress AI client wrapper + prompt/response handling
 │   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
 │   ├── REST/                     # Editor-facing REST routes
 │   └── Settings.php              # Settings API page + pattern sync panel
@@ -95,16 +95,20 @@ The server behavior is:
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
+Block recommendation providers are configured separately in the core `Settings > Connectors` screen.
+
 Configured options:
 
-- `flavor_agent_api_key`
-- `flavor_agent_model`
 - `flavor_agent_azure_openai_endpoint`
 - `flavor_agent_azure_openai_key`
 - `flavor_agent_azure_embedding_deployment`
 - `flavor_agent_azure_chat_deployment`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
+- `flavor_agent_cloudflare_ai_search_account_id`
+- `flavor_agent_cloudflare_ai_search_instance_id`
+- `flavor_agent_cloudflare_ai_search_api_token`
+- `flavor_agent_cloudflare_ai_search_max_results`
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and reports the current pattern index status.
 
@@ -136,7 +140,7 @@ Current lifecycle behavior:
 - Activation marks the catalog dirty and schedules a sync when the vector backends are configured.
 - Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
 - Deactivation clears the scheduled reindex hook and any active sync lock.
-- Uninstall removes plugin-owned options, pattern index state, and the scheduled reindex hook.
+- Uninstall removes plugin-owned options, Cloudflare grounding options, pattern index state, and the scheduled reindex hook.
 
 ## Development
 
@@ -157,6 +161,6 @@ npm run test:unit -- --runInBand
 
 ## Compatibility Notes
 
-- Plugin header currently targets WordPress 6.5+ and PHP 8.0+.
+- Plugin header now targets WordPress 7.0+ and PHP 8.0+.
 - The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
 - The pattern UI depends on legacy `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` editor settings, isolated behind the pattern recommendation module so the integration can be updated in one place if Gutenberg changes the API surface.

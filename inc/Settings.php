@@ -35,26 +35,6 @@ final class Settings {
 	}
 
 	public static function register_settings(): void {
-		// Anthropic.
-		register_setting(
-			self::OPTION_GROUP,
-			'flavor_agent_api_key',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-			]
-		);
-		register_setting(
-			self::OPTION_GROUP,
-			'flavor_agent_model',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => 'claude-sonnet-4-20250514',
-			]
-		);
-
 		// Azure OpenAI.
 		register_setting(
 			self::OPTION_GROUP,
@@ -154,13 +134,6 @@ final class Settings {
 		// --- Sections ---
 
 		add_settings_section(
-			'flavor_agent_main',
-			'Anthropic (Block Recommendations)',
-			'__return_false',
-			self::PAGE_SLUG
-		);
-
-		add_settings_section(
 			'flavor_agent_azure',
 			'Azure OpenAI (Pattern Recommendations)',
 			'__return_false',
@@ -179,23 +152,6 @@ final class Settings {
 			'Cloudflare AI Search (Official WordPress Docs Grounding)',
 			[ __CLASS__, 'render_cloudflare_section' ],
 			self::PAGE_SLUG
-		);
-
-		// --- Anthropic fields ---
-
-		add_settings_field(
-			'flavor_agent_api_key',
-			'Anthropic API Key',
-			[ __CLASS__, 'render_api_key_field' ],
-			self::PAGE_SLUG,
-			'flavor_agent_main'
-		);
-		add_settings_field(
-			'flavor_agent_model',
-			'Model',
-			[ __CLASS__, 'render_model_field' ],
-			self::PAGE_SLUG,
-			'flavor_agent_main'
 		);
 
 		// --- Azure OpenAI fields ---
@@ -325,6 +281,14 @@ final class Settings {
 		?>
 		<div class="wrap">
 			<h1>Flavor Agent Settings</h1>
+			<p class="description">
+				<?php
+				echo esc_html__(
+					'Block recommendations use the core Settings > Connectors screen and the WordPress AI Client. This page only manages Azure, Qdrant, Cloudflare, and pattern sync settings.',
+					'flavor-agent'
+				);
+				?>
+			</p>
 			<form method="post" action="options.php">
 				<?php
 				settings_fields( self::OPTION_GROUP );
@@ -343,32 +307,6 @@ final class Settings {
 	// ------------------------------------------------------------------
 	// Field renderers
 	// ------------------------------------------------------------------
-
-	public static function render_api_key_field(): void {
-		$value = get_option( 'flavor_agent_api_key', '' );
-		printf(
-			'<input type="password" name="flavor_agent_api_key" value="%s" class="regular-text" autocomplete="off" />',
-			esc_attr( $value )
-		);
-	}
-
-	public static function render_model_field(): void {
-		$value  = get_option( 'flavor_agent_model', 'claude-sonnet-4-20250514' );
-		$models = [
-			'claude-sonnet-4-20250514'  => 'Claude Sonnet 4',
-			'claude-haiku-4-5-20251001' => 'Claude Haiku 4.5',
-		];
-		echo '<select name="flavor_agent_model">';
-		foreach ( $models as $id => $label ) {
-			printf(
-				'<option value="%s" %s>%s</option>',
-				esc_attr( $id ),
-				selected( $value, $id, false ),
-				esc_html( $label )
-			);
-		}
-		echo '</select>';
-	}
 
 	public static function render_cloudflare_section(): void {
 		printf(

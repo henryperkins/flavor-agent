@@ -117,6 +117,18 @@ function isTruthy( val ) {
 	return !! val;
 }
 
+function getAttributeRole( definition = {} ) {
+	if ( definition?.role ) {
+		return definition.role;
+	}
+
+	if ( definition?.__experimentalRole ) {
+		return definition.__experimentalRole;
+	}
+
+	return undefined;
+}
+
 /**
  * Introspect a single block type by name.
  *
@@ -131,6 +143,7 @@ export function introspectBlockType( blockName ) {
 	}
 
 	const supports = blockType.supports || {};
+	const supportsContentRole = supports?.contentRole === true;
 	const attributes = blockType.attributes || {};
 	const styles = store.getBlockStyles( blockName ) || [];
 	const variations = store.getBlockVariations( blockName, 'block' ) || [];
@@ -138,10 +151,11 @@ export function introspectBlockType( blockName ) {
 	const contentAttrs = {};
 	const configAttrs = {};
 	for ( const [ name, def ] of Object.entries( attributes ) ) {
+		const role = getAttributeRole( def );
 		const entry = {
 			type: def.type,
 			default: def.default,
-			role: def.role,
+			role,
 		};
 		if ( def.enum ) {
 			entry.enum = def.enum;
@@ -150,7 +164,7 @@ export function introspectBlockType( blockName ) {
 			entry.source = def.source;
 		}
 
-		if ( def.role === 'content' ) {
+		if ( role === 'content' ) {
 			contentAttrs[ name ] = entry;
 		} else {
 			configAttrs[ name ] = entry;
@@ -163,6 +177,7 @@ export function introspectBlockType( blockName ) {
 		category: blockType.category,
 		description: blockType.description,
 		supports,
+		supportsContentRole,
 		inspectorPanels: resolveInspectorPanels( supports ),
 		contentAttributes: contentAttrs,
 		configAttributes: configAttrs,

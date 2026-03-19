@@ -115,4 +115,13 @@ final class PromptGuidanceTest extends TestCase {
 			$prompt
 		);
 	}
+
+	public function test_block_system_prompt_mentions_aspect_ratio_and_height_exclusivity(): void {
+		$prompt = Prompt::build_system();
+
+		$this->assertStringContainsString(
+			'Choose aspectRatio or height, not both.',
+			$prompt
+		);
+	}
 }

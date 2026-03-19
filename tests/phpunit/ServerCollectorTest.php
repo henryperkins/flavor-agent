@@ -61,4 +61,31 @@ final class ServerCollectorTest extends TestCase {
 			ServerCollector::for_template_part_areas()
 		);
 	}
+
+	public function test_introspect_block_type_supports_content_role_and_experimental_role(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/content-block',
+			[
+				'title'      => 'Content Block',
+				'supports'   => [
+					'contentRole' => true,
+				],
+				'attributes' => [
+					'legacyContent' => [
+						'type'               => 'string',
+						'__experimentalRole' => 'content',
+					],
+					'className'     => [
+						'type' => 'string',
+					],
+				],
+			]
+		);
+
+		$manifest = ServerCollector::introspect_block_type( 'plugin/content-block' );
+
+		$this->assertTrue( $manifest['supportsContentRole'] );
+		$this->assertSame( 'content', $manifest['contentAttributes']['legacyContent']['role'] );
+		$this->assertArrayNotHasKey( 'legacyContent', $manifest['configAttributes'] );
+	}
 }

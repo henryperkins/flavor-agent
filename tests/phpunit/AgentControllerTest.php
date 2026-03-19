@@ -17,7 +17,7 @@ final class AgentControllerTest extends TestCase {
 		$this->register_paragraph_block();
 		$this->stub_successful_llm_response();
 
-		WordPressTestState::$global_settings = [
+		WordPressTestState::$global_settings     = [
 			'color' => [
 				'palette' => [
 					[
@@ -27,11 +27,7 @@ final class AgentControllerTest extends TestCase {
 				],
 			],
 		];
-
-		WordPressTestState::$options = [
-			'flavor_agent_api_key' => 'test-api-key',
-			'flavor_agent_model'   => 'test-model',
-		];
+		WordPressTestState::$ai_client_supported = true;
 	}
 
 	public function test_handle_recommend_block_wraps_payload_with_client_id(): void {
@@ -67,17 +63,14 @@ final class AgentControllerTest extends TestCase {
 			],
 			$response->get_data()
 		);
-		$this->assertSame(
-			'https://api.anthropic.com/v1/messages',
-			WordPressTestState::$last_remote_post['url']
+		$this->assertStringContainsString(
+			'core/paragraph',
+			WordPressTestState::$last_ai_client_prompt['text'] ?? ''
 		);
-
-		$request_body = json_decode(
-			WordPressTestState::$last_remote_post['args']['body'],
-			true
+		$this->assertStringContainsString(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			WordPressTestState::$last_ai_client_prompt['system'] ?? ''
 		);
-
-		$this->assertSame( 'test-model', $request_body['model'] );
 	}
 
 	private function register_paragraph_block(): void {
@@ -106,26 +99,13 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	private function stub_successful_llm_response(): void {
-		WordPressTestState::$remote_post_response = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'content' => [
-						[
-							'text' => wp_json_encode(
-								[
-									'settings'    => [],
-									'styles'      => [],
-									'block'       => [],
-									'explanation' => 'Use the accent color.',
-								]
-							),
-						],
-					],
-				]
-			),
-		];
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Use the accent color.',
+			]
+		);
 	}
 }

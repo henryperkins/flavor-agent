@@ -6,8 +6,8 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
-use FlavorAgent\LLM\Client;
 use FlavorAgent\LLM\Prompt;
+use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
@@ -28,11 +28,6 @@ final class BlockAbilities {
 			return self::get_empty_recommendation_payload();
 		}
 
-		$api_key = get_option( 'flavor_agent_api_key', '' );
-		if ( empty( $api_key ) ) {
-			return new \WP_Error( 'missing_api_key', 'Configure your API key in Settings > Flavor Agent.', [ 'status' => 400 ] );
-		}
-
 		$system_prompt = Prompt::build_system();
 		$user_prompt   = Prompt::build_user(
 			$context,
@@ -40,7 +35,7 @@ final class BlockAbilities {
 			self::collect_wordpress_docs_guidance( $context, $prompt )
 		);
 
-		$result = Client::chat( $system_prompt, $user_prompt, $api_key );
+		$result = WordPressAIClient::chat( $system_prompt, $user_prompt );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -155,10 +150,14 @@ final class BlockAbilities {
 			$normalized['block']['structuralIdentity'] = $structural_identity;
 		}
 
-			$variations = self::normalize_list( $block['variations'] ?? [] );
+		$variations = self::normalize_list( $block['variations'] ?? [] );
 		if ( ! empty( $variations ) ) {
 			$normalized['block']['variations'] = $variations;
 		}
+
+		$normalized['block']['supportsContentRole'] =
+			! empty( $block['supportsContentRole'] )
+			|| ! empty( $normalized['block']['supportsContentRole'] );
 
 		$content_attributes = self::normalize_map( $block['contentAttributes'] ?? [] );
 		if ( ! empty( $content_attributes ) ) {
@@ -202,13 +201,14 @@ final class BlockAbilities {
 			return new \WP_Error( 'missing_block_name', 'selectedBlock.blockName is required.', [ 'status' => 400 ] );
 		}
 
-			$context                         = ServerCollector::for_block( $block_name, $attributes, $inner_blocks, $is_inside_content_only );
-			$context['block']['editingMode'] = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
-			$context['siblingsBefore']       = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
-			$context['siblingsAfter']        = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
-			$context['structuralAncestors']  = self::normalize_list( $selected['structuralAncestors'] ?? [] );
-			$context['structuralBranch']     = self::normalize_list( $selected['structuralBranch'] ?? [] );
-			$context['themeTokens']          = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+			$context                                 = ServerCollector::for_block( $block_name, $attributes, $inner_blocks, $is_inside_content_only );
+			$context['block']['editingMode']         = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
+			$context['siblingsBefore']               = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
+			$context['siblingsAfter']                = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
+			$context['structuralAncestors']          = self::normalize_list( $selected['structuralAncestors'] ?? [] );
+			$context['structuralBranch']             = self::normalize_list( $selected['structuralBranch'] ?? [] );
+			$context['themeTokens']                  = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+			$context['block']['supportsContentRole'] = ! empty( $selected['supportsContentRole'] ) || ! empty( $context['block']['supportsContentRole'] );
 
 			$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
 		if ( ! empty( $structural_identity ) ) {
@@ -225,6 +225,7 @@ final class BlockAbilities {
 		$selected['blockName']           = is_string( $selected['blockName'] ?? null ) ? sanitize_text_field( $selected['blockName'] ) : '';
 		$selected['editingMode']         = self::normalize_editing_mode( $selected['editingMode'] ?? 'default' );
 		$selected['isInsideContentOnly'] = ! empty( $selected['isInsideContentOnly'] );
+		$selected['supportsContentRole'] = ! empty( $selected['supportsContentRole'] );
 		$selected['innerBlocks']         = self::normalize_list( $selected['innerBlocks'] ?? [] );
 
 		$metadata = self::normalize_map( $attributes['metadata'] ?? [] );

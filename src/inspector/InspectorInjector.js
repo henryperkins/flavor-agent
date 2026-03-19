@@ -29,6 +29,10 @@ import SuggestionChips from './SuggestionChips';
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
 		const { clientId, isSelected } = props;
+		const canRecommendBlocks =
+			typeof window === 'undefined'
+				? true
+				: window.flavorAgentData?.canRecommendBlocks ?? true;
 
 		const { recommendations, isLoading, error } = useSelect(
 			( sel ) => {
@@ -67,11 +71,20 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			editingMode === 'contentOnly' || isInsideContentOnly;
 
 		const handleFetch = useCallback( () => {
+			if ( ! canRecommendBlocks ) {
+				return;
+			}
+
 			const ctx = collectBlockContext( clientId );
 			if ( ctx ) {
 				fetchBlockRecommendations( clientId, ctx, prompt );
 			}
-		}, [ clientId, prompt, fetchBlockRecommendations ] );
+		}, [
+			canRecommendBlocks,
+			clientId,
+			prompt,
+			fetchBlockRecommendations,
+		] );
 
 		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;
@@ -94,6 +107,17 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						icon={ icon }
 					>
 						<div className="flavor-agent-panel">
+							{ ! canRecommendBlocks && (
+								<Notice
+									status="warning"
+									isDismissible={ false }
+								>
+									Configure a text-generation provider in
+									Settings &gt; Connectors to enable block
+									recommendations.
+								</Notice>
+							) }
+
 							{ isContentRestricted && (
 								<Notice
 									status="info"
@@ -119,6 +143,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							<div className="flavor-agent-panel__composer">
 								<TextareaControl
 									__nextHasNoMarginBottom
+									disabled={ ! canRecommendBlocks }
 									label="What are you trying to achieve?"
 									hideLabelFromVision
 									placeholder="What are you trying to achieve?"
@@ -131,7 +156,9 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								<Button
 									variant="primary"
 									onClick={ handleFetch }
-									disabled={ isLoading }
+									disabled={
+										isLoading || ! canRecommendBlocks
+									}
 									icon={ icon }
 									className="flavor-agent-fetch-button"
 								>

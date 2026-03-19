@@ -33,7 +33,7 @@ final class RegistrationTest extends TestCase {
 		$this->assertIsArray( $selected_block );
 		$this->assertFalse( (bool) ( $selected_block['additionalProperties'] ?? true ) );
 
-		foreach ( [ 'editingMode', 'childCount', 'structuralIdentity', 'structuralAncestors', 'structuralBranch' ] as $field ) {
+		foreach ( [ 'editingMode', 'childCount', 'supportsContentRole', 'structuralIdentity', 'structuralAncestors', 'structuralBranch' ] as $field ) {
 			$this->assertArrayHasKey( $field, $selected_block['properties'] );
 		}
 

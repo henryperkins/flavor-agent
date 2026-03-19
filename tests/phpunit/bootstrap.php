@@ -12,6 +12,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $last_remote_post = [];
 
+		public static array $last_ai_client_prompt = [];
+
 		public static array $options = [];
 
 		public static array $capabilities = [];
@@ -26,10 +28,15 @@ namespace FlavorAgent\Tests\Support {
 
 		public static mixed $remote_post_response = [];
 
+		public static bool $ai_client_supported = false;
+
+		public static mixed $ai_client_generate_text_result = '';
+
 		public static function reset(): void {
 			self::$global_settings             = [];
 			self::$global_styles               = [];
 			self::$last_remote_post            = [];
+			self::$last_ai_client_prompt       = [];
 			self::$options                     = [];
 			self::$capabilities                = [];
 			self::$block_templates             = [];
@@ -37,8 +44,43 @@ namespace FlavorAgent\Tests\Support {
 			self::$registered_abilities        = [];
 			self::$registered_ability_categories = [];
 			self::$remote_post_response        = [];
+			self::$ai_client_supported         = false;
+			self::$ai_client_generate_text_result = '';
 
 			\WP_Block_Type_Registry::get_instance()->reset();
+		}
+	}
+}
+
+namespace WordPress\AI_Client {
+
+	use FlavorAgent\Tests\Support\WordPressTestState;
+
+	final class AI_Client {
+
+		public static function prompt_with_wp_error( string $text ): FakePromptBuilder {
+			WordPressTestState::$last_ai_client_prompt = [
+				'text' => $text,
+			];
+
+			return new FakePromptBuilder();
+		}
+	}
+
+	final class FakePromptBuilder {
+
+		public function using_system_instruction( string $text ): self {
+			WordPressTestState::$last_ai_client_prompt['system'] = $text;
+
+			return $this;
+		}
+
+		public function is_supported_for_text_generation(): bool {
+			return WordPressTestState::$ai_client_supported;
+		}
+
+		public function generate_text(): mixed {
+			return WordPressTestState::$ai_client_generate_text_result;
 		}
 	}
 }

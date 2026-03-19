@@ -56,6 +56,7 @@ export function collectBlockContext( clientId ) {
 			styles: instance.styles,
 			activeStyle: instance.activeStyle,
 			variations: instance.variations,
+			supportsContentRole: instance.supportsContentRole,
 			contentAttributes: instance.contentAttributes,
 			configAttributes: instance.configAttributes,
 			editingMode: instance.editingMode,

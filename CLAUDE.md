@@ -2,7 +2,7 @@
 
 WordPress plugin: LLM-powered block recommendations in the Gutenberg Inspector sidebar + vector-powered pattern recommendations in the inserter.
 
-Entry point: `flavor-agent.php` · Requires WP 6.5+ · PHP 8.0+
+Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
 ## Commands
 
@@ -16,7 +16,7 @@ npm run test:unit      # Jest unit tests (src/**/__tests__/*.test.js)
 composer install       # install PHP deps (PSR-4 autoloader)
 ```
 
-No standalone PHP test runner is configured yet. JS tests live alongside source files (e.g. `store/update-helpers.test.js`) or in `__tests__/` directories.
+PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `store/update-helpers.test.js`) or in `__tests__/` directories.
 
 ## Architecture
 
@@ -24,8 +24,8 @@ No standalone PHP test runner is configured yet. JS tests live alongside source 
 
 | Namespace | Purpose |
 |-----------|---------|
-| `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, approve, pattern-index) |
-| `LLM\Client` | HTTP calls to the LLM provider |
+| `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-template, sync-patterns) |
+| `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations |
 | `LLM\Prompt` | System/user prompt assembly for block and pattern recommendations |
 | `Context\ServerCollector` | Gathers server-side context (post type, template, theme.json tokens) |
 | `AzureOpenAI\EmbeddingClient` | Azure OpenAI embeddings API |
@@ -34,7 +34,7 @@ No standalone PHP test runner is configured yet. JS tests live alongside source 
 | `Patterns\PatternIndex` | Embeds registered patterns into Qdrant; syncs on theme/plugin changes |
 | `Abilities\Registration` | Registers abilities + category with WordPress Abilities API (WP 6.9+) |
 | `Abilities\*Abilities` | Individual ability handlers (Block, Pattern, Infra, Navigation, Template) |
-| `Settings` | Admin settings page (API keys, endpoints) |
+| `Settings` | Admin settings page (Azure/Qdrant/Cloudflare + pattern sync) |
 
 **JS frontend** (`src/`, built with `@wordpress/scripts`):
 
@@ -68,11 +68,13 @@ No standalone PHP test runner is configured yet. JS tests live alongside source 
 
 | Service | Options (Settings page) |
 |---------|------------------------|
+| WordPress AI Client providers | Core `Settings > Connectors` screen |
 | Azure OpenAI (chat) | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_chat_deployment` |
 | Azure OpenAI (embeddings) | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_embedding_deployment` |
 | Qdrant vector DB | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key` |
+| Cloudflare AI Search | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
 
-The plugin works without these configured — falls back to heuristic-only suggestions (no LLM, no pattern vectors).
+Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Gotchas
 
@@ -82,8 +84,10 @@ The plugin works without these configured — falls back to heuristic-only sugge
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.
 - The plugin respects `contentOnly` editing mode: suggestions won't propose changes to locked attributes.
 - `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
-- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `hasApiKey`, and `canRecommendPatterns` to the editor script.
+- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, and `canRecommendPatterns` to the editor script.
 
 ## Docs
 
+- `docs/SOURCE_OF_TRUTH.md` — definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - `docs/flavor-agent-readme.md` — detailed architecture and LLM prompt/response format
+- `STATUS.md` — working/stubbed features and verification log

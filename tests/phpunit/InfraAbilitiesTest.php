@@ -36,6 +36,20 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'wp-dev-docs', $status['backends']['cloudflare_ai_search']['instanceId'] );
 	}
 
+	public function test_check_status_marks_wordpress_ai_client_backend_as_configured(): void {
+		WordPressTestState::$capabilities        = [
+			'edit_posts' => true,
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
+		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
+	}
+
 	public function test_check_status_filters_admin_only_docs_ability_for_non_admin_users(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,

@@ -6,6 +6,7 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\LLM\WordPressAIClient;
 
 final class InfraAbilities {
 
@@ -14,25 +15,22 @@ final class InfraAbilities {
 	}
 
 	public static function check_status( mixed $input ): array {
-		$anthropic_key   = get_option( 'flavor_agent_api_key', '' );
-		$anthropic_model = get_option( 'flavor_agent_model', 'claude-sonnet-4-20250514' );
+		$block_recommendations_configured = WordPressAIClient::is_supported();
+		$azure_endpoint                   = get_option( 'flavor_agent_azure_openai_endpoint', '' );
+		$azure_key                        = get_option( 'flavor_agent_azure_openai_key', '' );
+		$azure_embedding                  = get_option( 'flavor_agent_azure_embedding_deployment', '' );
+		$azure_chat                       = get_option( 'flavor_agent_azure_chat_deployment', '' );
+		$qdrant_url                       = get_option( 'flavor_agent_qdrant_url', '' );
+		$qdrant_key                       = get_option( 'flavor_agent_qdrant_key', '' );
+		$cloudflare_ai_search_id          = get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' );
 
-		$azure_endpoint          = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$azure_key               = get_option( 'flavor_agent_azure_openai_key', '' );
-		$azure_embedding         = get_option( 'flavor_agent_azure_embedding_deployment', '' );
-		$azure_chat              = get_option( 'flavor_agent_azure_chat_deployment', '' );
-		$qdrant_url              = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_key              = get_option( 'flavor_agent_qdrant_key', '' );
-		$cloudflare_ai_search_id = get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' );
-
-		$anthropic_configured  = ! empty( $anthropic_key );
 		$azure_chat_configured = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_chat );
 		$azure_configured      = $azure_chat_configured && ! empty( $azure_embedding );
 		$qdrant_configured     = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
 		$cloudflare_configured = AISearchClient::is_configured();
 
 		$abilities = self::available_abilities(
-			$anthropic_configured,
+			$block_recommendations_configured,
 			$azure_chat_configured,
 			$azure_configured,
 			$qdrant_configured,
@@ -40,13 +38,12 @@ final class InfraAbilities {
 		);
 
 		return [
-			'configured'         => $anthropic_configured || $azure_chat_configured || $cloudflare_configured || ( $azure_configured && $qdrant_configured ),
-			'model'              => self::resolve_primary_model( $anthropic_configured, (string) $anthropic_model, $azure_chat_configured, (string) $azure_chat ),
+			'configured'         => $block_recommendations_configured || $azure_chat_configured || $cloudflare_configured || ( $azure_configured && $qdrant_configured ),
+			'model'              => self::resolve_primary_model( $block_recommendations_configured, $azure_chat_configured, (string) $azure_chat ),
 			'availableAbilities' => $abilities,
 			'backends'           => [
-				'anthropic'            => [
-					'configured' => $anthropic_configured,
-					'model'      => $anthropic_configured ? $anthropic_model : null,
+				'wordpress_ai_client'  => [
+					'configured' => $block_recommendations_configured,
 				],
 				'azure_openai'         => [
 					'configured'          => $azure_chat_configured,
@@ -65,13 +62,12 @@ final class InfraAbilities {
 	}
 
 	private static function resolve_primary_model(
-		bool $anthropic_configured,
-		string $anthropic_model,
+		bool $block_recommendations_configured,
 		bool $azure_chat_configured,
 		string $azure_chat
 	): ?string {
-		if ( $anthropic_configured ) {
-			return $anthropic_model;
+		if ( $block_recommendations_configured ) {
+			return 'provider-managed';
 		}
 
 		if ( $azure_chat_configured ) {
@@ -85,7 +81,7 @@ final class InfraAbilities {
 	 * @return string[]
 	 */
 	private static function available_abilities(
-		bool $anthropic_configured,
+		bool $block_recommendations_configured,
 		bool $azure_chat_configured,
 		bool $azure_configured,
 		bool $qdrant_configured,
@@ -98,7 +94,7 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-template-parts', 'edit_theme_options' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-tokens', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/check-status', 'edit_posts' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-block', 'edit_posts', $anthropic_configured );
+		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-block', 'edit_posts', $block_recommendations_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-patterns', 'edit_posts', $azure_configured && $qdrant_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template', 'edit_theme_options', $azure_chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/search-wordpress-docs', WordPressDocsAbilities::REQUIRED_CAPABILITY, $cloudflare_configured );

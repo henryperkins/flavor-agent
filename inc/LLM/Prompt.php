@@ -59,6 +59,7 @@ Rules:
 - For style objects in attributeUpdates, use the nested style format:
   { "style": { "color": { "background": "var(--wp--preset--color--accent)" } } }
   or preset attributes like { "backgroundColor": "accent" }.
+- When a block supports both aspect ratio and explicit height, never suggest setting both in the same recommendation. Choose aspectRatio or height, not both.
 - Preserve Gutenberg attribute key casing exactly in attributeUpdates (for example, backgroundColor and metadata.blockVisibility).
 - If suggesting a registered style variation, use "type": "style_variation" and include the exact attributeUpdates needed to activate it.
 SYSTEM;
@@ -83,6 +84,10 @@ SYSTEM;
 
 		if ( ! empty( $block['currentAttributes'] ) ) {
 			$parts[] = 'Current attributes: ' . wp_json_encode( $block['currentAttributes'] );
+		}
+
+		if ( ! empty( $block['supportsContentRole'] ) ) {
+			$parts[] = 'Block declares supports.contentRole: true';
 		}
 
 		if ( ! empty( $block['styles'] ) ) {

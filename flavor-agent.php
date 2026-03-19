@@ -5,7 +5,7 @@
  * Version: 0.1.0
  * Author: Lakefront Digital
  * Text Domain: flavor-agent
- * Requires at least: 6.5
+ * Requires at least: 7.0
  * Requires PHP: 8.0
  */
 
@@ -125,7 +125,7 @@ function flavor_agent_enqueue_editor(): void {
 		[
 			'restUrl'               => rest_url( 'flavor-agent/v1/' ),
 			'nonce'                 => wp_create_nonce( 'wp_rest' ),
-			'hasApiKey'             => (bool) get_option( 'flavor_agent_api_key' ),
+			'canRecommendBlocks'    => FlavorAgent\LLM\WordPressAIClient::is_supported(),
 			'canRecommendPatterns'  => (bool) (
 				get_option( 'flavor_agent_azure_openai_endpoint' )
 				&& get_option( 'flavor_agent_azure_openai_key' )

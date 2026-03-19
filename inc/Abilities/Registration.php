@@ -71,17 +71,18 @@ final class Registration {
 				'output_schema'       => [
 					'type'       => 'object',
 					'properties' => [
-						'name'              => [ 'type' => 'string' ],
-						'title'             => [ 'type' => 'string' ],
-						'category'          => [ 'type' => 'string' ],
-						'supports'          => [ 'type' => 'object' ],
-						'inspectorPanels'   => [ 'type' => 'object' ],
-						'contentAttributes' => [ 'type' => 'object' ],
-						'configAttributes'  => [ 'type' => 'object' ],
-						'styles'            => [ 'type' => 'array' ],
-						'variations'        => [ 'type' => 'array' ],
-						'parent'            => [ 'type' => [ 'array', 'null' ] ],
-						'allowedBlocks'     => [ 'type' => [ 'array', 'null' ] ],
+						'name'                => [ 'type' => 'string' ],
+						'title'               => [ 'type' => 'string' ],
+						'category'            => [ 'type' => 'string' ],
+						'supports'            => [ 'type' => 'object' ],
+						'inspectorPanels'     => [ 'type' => 'object' ],
+						'contentAttributes'   => [ 'type' => 'object' ],
+						'configAttributes'    => [ 'type' => 'object' ],
+						'styles'              => [ 'type' => 'array' ],
+						'variations'          => [ 'type' => 'array' ],
+						'supportsContentRole' => [ 'type' => 'boolean' ],
+						'parent'              => [ 'type' => [ 'array', 'null' ] ],
+						'allowedBlocks'       => [ 'type' => [ 'array', 'null' ] ],
 					],
 				],
 				'meta'                => [
@@ -451,7 +452,7 @@ final class Registration {
 						],
 						'model'              => [
 							'type'        => [ 'string', 'null' ],
-							'description' => 'Legacy primary model identifier. Returns the Anthropic model when configured, otherwise the Azure chat deployment, otherwise null.',
+							'description' => 'Legacy model indicator. Returns provider-managed when block recommendations are backed by the WordPress AI Client, otherwise the Azure chat deployment or null.',
 						],
 						'availableAbilities' => [
 							'type'        => 'array',
@@ -461,11 +462,10 @@ final class Registration {
 						'backends'           => [
 							'type'       => 'object',
 							'properties' => [
-								'anthropic'            => [
+								'wordpress_ai_client'  => [
 									'type'       => 'object',
 									'properties' => [
 										'configured' => [ 'type' => 'boolean' ],
-										'model'      => [ 'type' => [ 'string', 'null' ] ],
 									],
 								],
 								'azure_openai'         => [
@@ -521,6 +521,10 @@ final class Registration {
 				'isInsideContentOnly' => [
 					'type'        => 'boolean',
 					'description' => 'Whether the block is inside a contentOnly editing container.',
+				],
+				'supportsContentRole' => [
+					'type'        => 'boolean',
+					'description' => 'Whether the block declares supports.contentRole and is content-editable through inner blocks or content attributes.',
 				],
 				'editingMode'         => [
 					'type'        => 'string',
