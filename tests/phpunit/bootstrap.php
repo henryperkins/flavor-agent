@@ -12,6 +12,12 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $last_remote_post = [];
 
+		public static array $last_remote_get = [];
+
+		public static array $remote_post_calls = [];
+
+		public static array $remote_get_calls = [];
+
 		public static array $last_ai_client_prompt = [];
 
 		public static array $options = [];
@@ -26,7 +32,11 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $registered_ability_categories = [];
 
+		public static array $settings_errors = [];
+
 		public static mixed $remote_post_response = [];
+
+		public static mixed $remote_get_response = [];
 
 		public static bool $ai_client_supported = false;
 
@@ -36,6 +46,9 @@ namespace FlavorAgent\Tests\Support {
 			self::$global_settings             = [];
 			self::$global_styles               = [];
 			self::$last_remote_post            = [];
+			self::$last_remote_get             = [];
+			self::$remote_post_calls           = [];
+			self::$remote_get_calls            = [];
 			self::$last_ai_client_prompt       = [];
 			self::$options                     = [];
 			self::$capabilities                = [];
@@ -43,7 +56,9 @@ namespace FlavorAgent\Tests\Support {
 			self::$transients                  = [];
 			self::$registered_abilities        = [];
 			self::$registered_ability_categories = [];
+			self::$settings_errors             = [];
 			self::$remote_post_response        = [];
+			self::$remote_get_response         = [];
 			self::$ai_client_supported         = false;
 			self::$ai_client_generate_text_result = '';
 
@@ -388,12 +403,29 @@ namespace {
 				'url'  => $url,
 				'args' => $args,
 			];
+			WordPressTestState::$remote_post_calls[] = WordPressTestState::$last_remote_post;
 
 			if ( empty( WordPressTestState::$remote_post_response ) ) {
 				return new WP_Error( 'missing_remote_stub', 'No remote response stub configured.' );
 			}
 
 			return WordPressTestState::$remote_post_response;
+		}
+	}
+
+	if ( ! function_exists( 'wp_remote_get' ) ) {
+		function wp_remote_get( string $url, array $args = [] ) {
+			WordPressTestState::$last_remote_get = [
+				'url'  => $url,
+				'args' => $args,
+			];
+			WordPressTestState::$remote_get_calls[] = WordPressTestState::$last_remote_get;
+
+			if ( empty( WordPressTestState::$remote_get_response ) ) {
+				return new WP_Error( 'missing_remote_stub', 'No remote response stub configured.' );
+			}
+
+			return WordPressTestState::$remote_get_response;
 		}
 	}
 
@@ -416,6 +448,82 @@ namespace {
 	if ( ! function_exists( 'wp_strip_all_tags' ) ) {
 		function wp_strip_all_tags( string $text ): string {
 			return strip_tags( $text );
+		}
+	}
+
+	if ( ! function_exists( 'wp_unslash' ) ) {
+		function wp_unslash( $value ) {
+			if ( is_array( $value ) ) {
+				return array_map( 'wp_unslash', $value );
+			}
+
+			return is_string( $value ) ? stripslashes( $value ) : $value;
+		}
+	}
+
+	if ( ! function_exists( 'add_settings_error' ) ) {
+		function add_settings_error( string $setting, string $code, string $message, string $type = 'error' ): void {
+			WordPressTestState::$settings_errors[] = [
+				'setting' => $setting,
+				'code'    => $code,
+				'message' => $message,
+				'type'    => $type,
+			];
+		}
+	}
+
+	if ( ! function_exists( 'get_settings_errors' ) ) {
+		function get_settings_errors( string $setting = '', bool $sanitize = false ): array {
+			if ( ! empty( $_GET['settings-updated'] ) ) {
+				$transient_errors = get_transient( 'settings_errors' );
+
+				if ( is_array( $transient_errors ) && [] !== $transient_errors ) {
+					WordPressTestState::$settings_errors = array_merge(
+						WordPressTestState::$settings_errors,
+						$transient_errors
+					);
+					delete_transient( 'settings_errors' );
+				}
+			}
+
+			if ( '' === $setting ) {
+				return WordPressTestState::$settings_errors;
+			}
+
+			return array_values(
+				array_filter(
+					WordPressTestState::$settings_errors,
+					static fn ( array $details ): bool => ( $details['setting'] ?? '' ) === $setting
+				)
+			);
+		}
+	}
+
+	if ( ! function_exists( 'settings_errors' ) ) {
+		function settings_errors( string $setting = '', bool $sanitize = false, bool $hide_on_update = false ): void {
+			if ( $hide_on_update && ! empty( $_GET['settings-updated'] ) ) {
+				return;
+			}
+
+			$settings_errors = get_settings_errors( $setting, $sanitize );
+
+			if ( [] === $settings_errors ) {
+				return;
+			}
+
+			foreach ( $settings_errors as $details ) {
+				$type = (string) ( $details['type'] ?? 'error' );
+
+				if ( 'updated' === $type ) {
+					$type = 'success';
+				}
+
+				printf(
+					"<div class='notice notice-%s settings-error'><p><strong>%s</strong></p></div>\n",
+					htmlspecialchars( $type, ENT_QUOTES, 'UTF-8' ),
+					htmlspecialchars( (string) ( $details['message'] ?? '' ), ENT_QUOTES, 'UTF-8' )
+				);
+			}
 		}
 	}
 

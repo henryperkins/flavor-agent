@@ -12,6 +12,13 @@ final class Settings {
 	private const OPTION_GROUP = 'flavor_agent_settings';
 	private const PAGE_SLUG    = 'flavor-agent';
 
+	/**
+	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
+	 */
+	private static ?array $cloudflare_validation_state = null;
+
+	private static bool $cloudflare_validation_error_reported = false;
+
 	public static function add_menu(): void {
 		$hook = add_options_page(
 			'Flavor Agent',
@@ -99,7 +106,7 @@ final class Settings {
 			'flavor_agent_cloudflare_ai_search_account_id',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_cloudflare_account_id' ],
 				'default'           => '',
 			]
 		);
@@ -108,7 +115,7 @@ final class Settings {
 			'flavor_agent_cloudflare_ai_search_instance_id',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_cloudflare_instance_id' ],
 				'default'           => '',
 			]
 		);
@@ -117,7 +124,7 @@ final class Settings {
 			'flavor_agent_cloudflare_ai_search_api_token',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_cloudflare_api_token' ],
 				'default'           => '',
 			]
 		);
@@ -281,6 +288,7 @@ final class Settings {
 		?>
 		<div class="wrap">
 			<h1>Flavor Agent Settings</h1>
+			<?php self::render_settings_notices(); ?>
 			<p class="description">
 				<?php
 				echo esc_html__(
@@ -308,11 +316,17 @@ final class Settings {
 	// Field renderers
 	// ------------------------------------------------------------------
 
+	private static function render_settings_notices(): void {
+		// Render all Settings API notices so core success messages and plugin-specific
+		// validation errors both survive the post-save redirect.
+		settings_errors();
+	}
+
 	public static function render_cloudflare_section(): void {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Flavor Agent only keeps Cloudflare grounding chunks whose source resolves to developer.wordpress.org. Mixed or private content in the configured index is ignored.',
+				'Flavor Agent only keeps Cloudflare grounding chunks whose source resolves to developer.wordpress.org. Mixed or private content in the configured index is ignored, and the configured account, instance, and token are validated only when those credentials change. The target instance must be enabled, not paused, and must return trusted developer.wordpress.org guidance before new credentials are saved.',
 				'flavor-agent'
 			)
 		);
@@ -338,6 +352,191 @@ final class Settings {
 
 	public static function sanitize_grounding_result_count( mixed $value ): int {
 		return max( 1, min( 8, (int) $value ) );
+	}
+
+	public static function sanitize_cloudflare_account_id( mixed $value ): string {
+		return self::sanitize_cloudflare_text_option(
+			$value,
+			'flavor_agent_cloudflare_ai_search_account_id'
+		);
+	}
+
+	public static function sanitize_cloudflare_instance_id( mixed $value ): string {
+		return self::sanitize_cloudflare_text_option(
+			$value,
+			'flavor_agent_cloudflare_ai_search_instance_id'
+		);
+	}
+
+	public static function sanitize_cloudflare_api_token( mixed $value ): string {
+		return self::sanitize_cloudflare_text_option(
+			$value,
+			'flavor_agent_cloudflare_ai_search_api_token'
+		);
+	}
+
+	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
+		$sanitized_value = sanitize_text_field( $value );
+		$resolved_values = self::resolve_cloudflare_submission_values(
+			[
+				$option_name => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_cloudflare_validation_error( $resolved_values );
+
+			return (string) get_option( $option_name, '' );
+		}
+
+		return $resolved_values[ $option_name ] ?? $sanitized_value;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array<string, string>|\WP_Error
+	 */
+	private static function resolve_cloudflare_submission_values( array $overrides = [] ): array|\WP_Error {
+		$current_values = self::get_current_cloudflare_values();
+		$values         = [
+			'flavor_agent_cloudflare_ai_search_account_id' => self::read_posted_cloudflare_value(
+				'flavor_agent_cloudflare_ai_search_account_id',
+				$current_values['flavor_agent_cloudflare_ai_search_account_id']
+			),
+			'flavor_agent_cloudflare_ai_search_instance_id' => self::read_posted_cloudflare_value(
+				'flavor_agent_cloudflare_ai_search_instance_id',
+				$current_values['flavor_agent_cloudflare_ai_search_instance_id']
+			),
+			'flavor_agent_cloudflare_ai_search_api_token'  => self::read_posted_cloudflare_value(
+				'flavor_agent_cloudflare_ai_search_api_token',
+				$current_values['flavor_agent_cloudflare_ai_search_api_token']
+			),
+		];
+
+		foreach ( $overrides as $option_name => $override_value ) {
+			$values[ $option_name ] = sanitize_text_field( $override_value );
+		}
+
+		if ( ! self::should_validate_cloudflare_submission() ) {
+			return $values;
+		}
+
+		if (
+			$values['flavor_agent_cloudflare_ai_search_account_id'] === '' ||
+			$values['flavor_agent_cloudflare_ai_search_instance_id'] === '' ||
+			$values['flavor_agent_cloudflare_ai_search_api_token'] === ''
+		) {
+			return $values;
+		}
+
+		if ( ! self::cloudflare_values_require_validation( $values, $current_values ) ) {
+			return $values;
+		}
+
+		$fingerprint_payload = wp_json_encode( $values );
+
+		if ( ! is_string( $fingerprint_payload ) || $fingerprint_payload === '' ) {
+			$fingerprint_payload = implode( '|', $values );
+		}
+
+		$fingerprint = md5( $fingerprint_payload );
+
+		if (
+			is_array( self::$cloudflare_validation_state ) &&
+			( self::$cloudflare_validation_state['fingerprint'] ?? '' ) === $fingerprint
+		) {
+			return self::$cloudflare_validation_state['error'] instanceof \WP_Error
+				? self::$cloudflare_validation_state['error']
+				: self::$cloudflare_validation_state['values'];
+		}
+
+		$validation = \FlavorAgent\Cloudflare\AISearchClient::validate_configuration(
+			$values['flavor_agent_cloudflare_ai_search_account_id'],
+			$values['flavor_agent_cloudflare_ai_search_instance_id'],
+			$values['flavor_agent_cloudflare_ai_search_api_token']
+		);
+
+		self::$cloudflare_validation_state = [
+			'fingerprint' => $fingerprint,
+			'values'      => $values,
+			'error'       => is_wp_error( $validation ) ? $validation : null,
+		];
+
+		return is_wp_error( $validation ) ? $validation : $values;
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function get_current_cloudflare_values(): array {
+		return [
+			'flavor_agent_cloudflare_ai_search_account_id' => sanitize_text_field(
+				(string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' )
+			),
+			'flavor_agent_cloudflare_ai_search_instance_id' => sanitize_text_field(
+				(string) get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' )
+			),
+			'flavor_agent_cloudflare_ai_search_api_token'  => sanitize_text_field(
+				(string) get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' )
+			),
+		];
+	}
+
+	/**
+	 * @param array<string, string> $values
+	 * @param array<string, string> $current_values
+	 */
+	private static function cloudflare_values_require_validation( array $values, array $current_values ): bool {
+		foreach ( $current_values as $option_name => $current_value ) {
+			if ( ( $values[ $option_name ] ?? '' ) !== $current_value ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static function should_validate_cloudflare_submission(): bool {
+		$option_page = $_POST['option_page'] ?? null;
+
+		if ( ! is_string( $option_page ) ) {
+			return false;
+		}
+
+		if ( function_exists( 'wp_unslash' ) ) {
+			$option_page = wp_unslash( $option_page );
+		}
+
+		return sanitize_text_field( $option_page ) === self::OPTION_GROUP;
+	}
+
+	private static function read_posted_cloudflare_value( string $option_name, string $fallback ): string {
+		$value = $_POST[ $option_name ] ?? null;
+
+		if ( ! is_string( $value ) ) {
+			return sanitize_text_field( $fallback );
+		}
+
+		if ( function_exists( 'wp_unslash' ) ) {
+			$value = wp_unslash( $value );
+		}
+
+		return sanitize_text_field( $value );
+	}
+
+	private static function report_cloudflare_validation_error( \WP_Error $error ): void {
+		if ( self::$cloudflare_validation_error_reported ) {
+			return;
+		}
+
+		add_settings_error(
+			self::OPTION_GROUP,
+			'flavor_agent_cloudflare_ai_search_validation',
+			$error->get_error_message(),
+			'error'
+		);
+
+		self::$cloudflare_validation_error_reported = true;
 	}
 
 	// ------------------------------------------------------------------

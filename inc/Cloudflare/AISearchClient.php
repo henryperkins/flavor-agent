@@ -14,6 +14,8 @@ final class AISearchClient {
 	private const CACHE_TTL                 = 21600;
 	private const ENTITY_CACHE_PREFIX       = 'flavor_agent_docs_entity_';
 	private const ENTITY_CACHE_TTL          = 43200;
+	private const VALIDATION_PROBE_QUERY    = 'block editor';
+	private const VALIDATION_PROBE_RESULTS  = 3;
 
 	public static function is_configured(): bool {
 		$account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
@@ -21,6 +23,109 @@ final class AISearchClient {
 		$api_token   = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) );
 
 		return $account_id !== '' && $instance_id !== '' && $api_token !== '';
+	}
+
+	/**
+	 * Validate that the configured Cloudflare AI Search instance is reachable.
+	 *
+	 * @return array{id: string, source: string, enabled: bool, paused: bool}|\WP_Error
+	 */
+	public static function validate_configuration(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): array|\WP_Error {
+		$config = self::get_config( $account_id, $instance_id, $api_token );
+
+		if ( is_wp_error( $config ) ) {
+			return $config;
+		}
+
+		$response = wp_remote_get(
+			$config['instanceUrl'],
+			[
+				'timeout' => 20,
+				'headers' => [
+					'Authorization' => 'Bearer ' . $config['apiToken'],
+				],
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$status = wp_remote_retrieve_response_code( $response );
+		$raw    = wp_remote_retrieve_body( $response );
+		$data   = json_decode( $raw, true );
+
+		if ( $status !== 200 ) {
+			$message = is_array( $data ) ? self::extract_error_message( $data, $status ) : "Cloudflare AI Search returned HTTP {$status}";
+
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_error',
+				$message,
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_parse_error',
+				'Failed to parse Cloudflare AI Search validation response.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$result                = is_array( $data['result'] ?? null ) ? $data['result'] : [];
+		$validated_instance_id = sanitize_text_field( (string) ( $result['id'] ?? '' ) );
+		$enabled               = ! isset( $result['enable'] ) || ! empty( $result['enable'] );
+		$paused                = ! empty( $result['paused'] );
+
+		if ( $validated_instance_id === '' ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_missing_instance',
+				'Cloudflare AI Search validation response did not include an instance id.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( $validated_instance_id !== $config['instanceId'] ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_instance_mismatch',
+				'Cloudflare AI Search validation returned a different instance than requested.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( ! $enabled ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_disabled',
+				'Cloudflare AI Search validation found a disabled instance. Enable it before saving these credentials.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( $paused ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_paused',
+				'Cloudflare AI Search validation found a paused instance. Resume it before saving these credentials.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$guidance = self::validate_trusted_wordpress_docs_source( $config );
+
+		if ( is_wp_error( $guidance ) ) {
+			return $guidance;
+		}
+
+		return [
+			'id'      => $validated_instance_id,
+			'source'  => sanitize_text_field( (string) ( $result['source'] ?? '' ) ),
+			'enabled' => $enabled,
+			'paused'  => $paused,
+		];
 	}
 
 	/**
@@ -45,63 +150,17 @@ final class AISearchClient {
 		}
 
 		$result_limit = self::normalize_max_results( $max_results );
-		$body         = wp_json_encode(
-			[
-				'messages'          => [
-					[
-						'role'    => 'user',
-						'content' => $query,
-					],
-				],
-				'ai_search_options' => [
-					'retrieval' => [
-						'retrieval_type'    => 'hybrid',
-						'max_num_results'   => $result_limit,
-						'match_threshold'   => 0.2,
-						'context_expansion' => 1,
-						'fusion_method'     => 'rrf',
-						'return_on_failure' => true,
-					],
-				],
-			]
+		$data         = self::request_search(
+			$config,
+			$query,
+			$result_limit,
+			'cloudflare_ai_search_error',
+			'cloudflare_ai_search_parse_error',
+			502
 		);
 
-		$response = wp_remote_post(
-			$config['url'],
-			[
-				'timeout' => 20,
-				'headers' => [
-					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $config['apiToken'],
-				],
-				'body'    => $body,
-			]
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$status = wp_remote_retrieve_response_code( $response );
-		$raw    = wp_remote_retrieve_body( $response );
-		$data   = json_decode( $raw, true );
-
-		if ( $status !== 200 ) {
-			$message = is_array( $data ) ? self::extract_error_message( $data, $status ) : "Cloudflare AI Search returned HTTP {$status}";
-
-			return new \WP_Error(
-				'cloudflare_ai_search_error',
-				$message,
-				[ 'status' => 502 ]
-			);
-		}
-
-		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) ) {
-			return new \WP_Error(
-				'cloudflare_ai_search_parse_error',
-				'Failed to parse Cloudflare AI Search response.',
-				[ 'status' => 502 ]
-			);
+		if ( is_wp_error( $data ) ) {
+			return $data;
 		}
 
 		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
@@ -249,12 +308,16 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @return array{url: string, apiToken: string}|\WP_Error
+	 * @return array{instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
 	 */
-	private static function get_config(): array|\WP_Error {
-		$account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
-		$instance_id = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' ) );
-		$api_token   = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) );
+	private static function get_config(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): array|\WP_Error {
+		$account_id  = trim( (string) ( null !== $account_id ? $account_id : get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) ) );
+		$instance_id = trim( (string) ( null !== $instance_id ? $instance_id : get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' ) ) );
+		$api_token   = trim( (string) ( null !== $api_token ? $api_token : get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) ) );
 
 		if ( $account_id === '' || $instance_id === '' || $api_token === '' ) {
 			return new \WP_Error(
@@ -265,12 +328,18 @@ final class AISearchClient {
 		}
 
 		return [
-			'url'      => sprintf(
+			'instanceId'  => $instance_id,
+			'instanceUrl' => sprintf(
+				'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances/%s',
+				rawurlencode( $account_id ),
+				rawurlencode( $instance_id )
+			),
+			'searchUrl'   => sprintf(
 				'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances/%s/search',
 				rawurlencode( $account_id ),
 				rawurlencode( $instance_id )
 			),
-			'apiToken' => $api_token,
+			'apiToken'    => $api_token,
 		];
 	}
 
@@ -283,6 +352,84 @@ final class AISearchClient {
 		}
 
 		return max( 1, min( self::MAX_MAX_RESULTS, (int) $max_results ) );
+	}
+
+	/**
+	 * @param array{instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function request_search(
+		array $config,
+		string $query,
+		int $result_limit,
+		string $error_code,
+		string $parse_error_code,
+		int $error_status
+	): array|\WP_Error {
+		$response = wp_remote_post(
+			$config['searchUrl'],
+			[
+				'timeout' => 20,
+				'headers' => [
+					'Content-Type'  => 'application/json',
+					'Authorization' => 'Bearer ' . $config['apiToken'],
+				],
+				'body'    => self::build_search_request_body( $query, $result_limit ),
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$status = wp_remote_retrieve_response_code( $response );
+		$raw    = wp_remote_retrieve_body( $response );
+		$data   = json_decode( $raw, true );
+
+		if ( $status !== 200 ) {
+			$message = is_array( $data ) ? self::extract_error_message( $data, $status ) : "Cloudflare AI Search returned HTTP {$status}";
+
+			return new \WP_Error(
+				$error_code,
+				$message,
+				[ 'status' => $error_status ]
+			);
+		}
+
+		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) ) {
+			return new \WP_Error(
+				$parse_error_code,
+				'Failed to parse Cloudflare AI Search response.',
+				[ 'status' => $error_status ]
+			);
+		}
+
+		return $data;
+	}
+
+	private static function build_search_request_body( string $query, int $result_limit ): string {
+		$body = wp_json_encode(
+			[
+				'messages'          => [
+					[
+						'role'    => 'user',
+						'content' => $query,
+					],
+				],
+				'ai_search_options' => [
+					'retrieval' => [
+						'retrieval_type'    => 'hybrid',
+						'max_num_results'   => $result_limit,
+						'match_threshold'   => 0.2,
+						'context_expansion' => 1,
+						'fusion_method'     => 'rrf',
+						'return_on_failure' => true,
+					],
+				],
+			]
+		);
+
+		return is_string( $body ) ? $body : '';
 	}
 
 	private static function build_cache_key( string $query, int $max_results ): string {
@@ -318,6 +465,38 @@ final class AISearchClient {
 		}
 
 		return preg_match( '/^[a-z0-9-]+\/[a-z0-9-]+$/', $entity_key ) === 1 ? $entity_key : '';
+	}
+
+	/**
+	 * @param array{instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
+	 * @return array<int, array<string, mixed>>|\WP_Error
+	 */
+	private static function validate_trusted_wordpress_docs_source( array $config ): array|\WP_Error {
+		$data = self::request_search(
+			$config,
+			self::VALIDATION_PROBE_QUERY,
+			self::VALIDATION_PROBE_RESULTS,
+			'cloudflare_ai_search_validation_probe_error',
+			'cloudflare_ai_search_validation_probe_parse_error',
+			400
+		);
+
+		if ( is_wp_error( $data ) ) {
+			return $data;
+		}
+
+		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
+		$guidance = self::normalize_chunks( is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [] );
+
+		if ( [] === $guidance ) {
+			return new \WP_Error(
+				'cloudflare_ai_search_validation_untrusted_source',
+				'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from this instance. Use the official WordPress developer docs index before saving these credentials.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		return $guidance;
 	}
 
 	/**

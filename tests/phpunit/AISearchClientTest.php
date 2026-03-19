@@ -85,6 +85,226 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
+	public function test_validate_configuration_queries_cloudflare_instance_endpoint_and_probe_search(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_get_response  = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'id'     => 'wp-dev-docs',
+						'source' => 'website',
+						'enable' => true,
+						'paused' => false,
+					],
+				]
+			),
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'   => 'probe-chunk',
+								'item' => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+									'metadata' => [],
+								],
+								'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\n---\nUse block supports to expose design tools.",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration();
+
+		$this->assertSame(
+			[
+				'id'      => 'wp-dev-docs',
+				'source'  => 'website',
+				'enabled' => true,
+				'paused'  => false,
+			],
+			$result
+		);
+		$this->assertSame(
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs',
+			WordPressTestState::$last_remote_get['url']
+		);
+		$this->assertSame(
+			'Bearer token-xyz',
+			WordPressTestState::$last_remote_get['args']['headers']['Authorization']
+		);
+		$this->assertSame(
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs/search',
+			WordPressTestState::$last_remote_post['url']
+		);
+		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+
+		$request_body = json_decode(
+			WordPressTestState::$last_remote_post['args']['body'],
+			true
+		);
+
+		$this->assertSame( 'block editor', $request_body['messages'][0]['content'] );
+		$this->assertSame( 3, $request_body['ai_search_options']['retrieval']['max_num_results'] );
+	}
+
+	public function test_validate_configuration_surfaces_cloudflare_errors(): void {
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 403,
+			],
+			'body'     => wp_json_encode(
+				[
+					'errors' => [
+						[
+							'message' => 'Authentication error',
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration(
+			'account-123',
+			'wp-dev-docs',
+			'token-xyz'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_validation_error', $result->get_error_code() );
+		$this->assertSame( 'Authentication error', $result->get_error_message() );
+	}
+
+	public function test_validate_configuration_rejects_disabled_instances(): void {
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'id'     => 'wp-dev-docs',
+						'enable' => false,
+						'paused' => false,
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration(
+			'account-123',
+			'wp-dev-docs',
+			'token-xyz'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_validation_disabled', $result->get_error_code() );
+		$this->assertSame(
+			'Cloudflare AI Search validation found a disabled instance. Enable it before saving these credentials.',
+			$result->get_error_message()
+		);
+	}
+
+	public function test_validate_configuration_rejects_paused_instances(): void {
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'id'     => 'wp-dev-docs',
+						'enable' => true,
+						'paused' => true,
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration(
+			'account-123',
+			'wp-dev-docs',
+			'token-xyz'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_validation_paused', $result->get_error_code() );
+		$this->assertSame(
+			'Cloudflare AI Search validation found a paused instance. Resume it before saving these credentials.',
+			$result->get_error_message()
+		);
+	}
+
+	public function test_validate_configuration_rejects_instances_without_trusted_wordpress_docs_probe_results(): void {
+		WordPressTestState::$remote_get_response  = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'id'     => 'wp-dev-docs',
+						'enable' => true,
+						'paused' => false,
+					],
+				]
+			),
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'   => 'private-chunk',
+								'item' => [
+									'key'      => 'internal/wiki/theme-roadmap',
+									'metadata' => [
+										'url' => 'https://intranet.example.com/wiki/theme-roadmap',
+									],
+								],
+								'text' => 'Private roadmap content that should never reach editor prompts.',
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration(
+			'account-123',
+			'wp-dev-docs',
+			'token-xyz'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_validation_untrusted_source', $result->get_error_code() );
+		$this->assertSame(
+			'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from this instance. Use the official WordPress developer docs index before saving these credentials.',
+			$result->get_error_message()
+		);
+		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_search_requires_configuration(): void {
 		$result = AISearchClient::search( 'template parts' );
 

@@ -97,6 +97,8 @@ The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
 Block recommendation providers are configured separately in the core `Settings > Connectors` screen.
 
+When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the plugin validates the configured account, instance, and token against the Cloudflare instance endpoint during settings saves, rejects disabled or paused instances, runs a lightweight compatibility probe that must return trusted `developer.wordpress.org` guidance, and keeps the previous values if validation fails. Successful saves still use the standard Settings API notice flow, and failed validation surfaces the Cloudflare error on the same screen.
+
 Configured options:
 
 - `flavor_agent_azure_openai_endpoint`

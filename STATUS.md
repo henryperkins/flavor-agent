@@ -34,7 +34,9 @@
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping
 - Site Editor template recommendation panel for `wp_template` documents with advisory-only review and browse actions
 - Admin settings screen with Azure/Qdrant/Cloudflare configuration and pattern sync controls; block providers come from `Settings > Connectors`
+- Settings saves now surface the standard Settings API success notice plus plugin-scoped Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
+- Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must target an enabled, unpaused instance that also returns trusted `developer.wordpress.org` guidance before they are saved
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
 
@@ -48,6 +50,7 @@
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - First-request WordPress docs grounding is still intentionally reduced: uncached `recommend-block` and `recommend-template` requests return without Cloudflare guidance until either an exact-query cache entry or the matching warmed entity cache is available.
+- Azure OpenAI and Qdrant credentials are still accepted without live remote validation on save; only Cloudflare AI Search currently validates changed credentials against instance state plus trusted WordPress developer-doc compatibility.
 - Live recommendation execution with valid LLM credentials and manual Site Editor smoke checks were not rerun in this pass.
 
 ## Recent Verification
@@ -55,7 +58,8 @@
 - 2026-03-19 remediation: `npm run lint:js` passed.
 - 2026-03-19 remediation: `npm run test:unit -- --runInBand` passed.
 - 2026-03-19 remediation: `npm run build` passed.
-- 2026-03-19 remediation: `vendor/bin/phpunit` passed.
+- 2026-03-19 remediation: `vendor/bin/phpunit` passed (`51` tests, `231` assertions).
+- 2026-03-19 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Cloudflare/AISearchClient.php inc/Settings.php tests/phpunit/AISearchClientTest.php tests/phpunit/SettingsTest.php` passed.
 - 2026-03-19 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist flavor-agent.php inc/Abilities/BlockAbilities.php inc/Abilities/InfraAbilities.php inc/Abilities/Registration.php inc/Context/ServerCollector.php inc/LLM/Prompt.php inc/LLM/WordPressAIClient.php inc/Settings.php uninstall.php tests/phpunit/AgentControllerTest.php tests/phpunit/InfraAbilitiesTest.php tests/phpunit/PromptGuidanceTest.php tests/phpunit/RegistrationTest.php tests/phpunit/ServerCollectorTest.php` passed.
 
 ## Documentation

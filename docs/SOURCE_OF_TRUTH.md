@@ -106,6 +106,7 @@ flavor-agent/
       PromptRulesTest.php
       BlockAbilitiesTest.php
       PromptGuidanceTest.php
+      SettingsTest.php
     (JS tests live alongside source in __tests__/ dirs and *.test.js files)
 
   docs/
@@ -208,6 +209,9 @@ Block recommendation providers are configured separately in core under `Settings
 
 Plus pattern sync status panel with manual trigger.
 
+When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the settings save flow validates the configured account, instance, and token against the instance endpoint, rejects disabled or paused instances, runs a lightweight probe search, and preserves the previous values if validation fails.
+Successful saves still use the standard Settings API notice flow, and failed Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
+
 ### Stubbed (Not Implemented)
 
 | Feature | Current State | What's Missing |
@@ -233,7 +237,7 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 ### Known Issues and Gaps
 
 1. **Cold-start docs grounding**: First request for a block/template context returns without WordPress developer-doc guidance until cache is warmed.
-2. **No live Azure/Qdrant/Cloudflare credential verification**: The plugin settings page accepts those credentials but doesn't validate them against the remote APIs on save.
+2. **No live Azure/Qdrant credential verification**: Cloudflare AI Search credentials are now validated on credential changes against the configured instance state plus trusted WordPress-doc compatibility, but Azure OpenAI and Qdrant settings are still accepted without remote verification.
 3. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
 4. **Inserter search detection is DOM-coupled**: `find-inserter-search-input.js` uses 5 container selectors x 4 input selectors. Fragile across Gutenberg versions.
 5. **Pattern inserter patching uses legacy APIs**: `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` are experimental. Could break if Gutenberg stabilizes these.
@@ -317,15 +321,16 @@ User editing wp_template in Site Editor
 | Test File | Tests | What's Covered |
 |-----------|-------|---------------|
 | `AgentControllerTest` | 1 | REST recommend-block wraps clientId, correct API call |
-| `ServerCollectorTest` | 2 | Template parts metadata, area lookup |
-| `InfraAbilitiesTest` | 3 | check-status: Cloudflare backend, admin filtering, model fallback |
+| `ServerCollectorTest` | 3 | Template parts metadata, area lookup, context normalization |
+| `InfraAbilitiesTest` | 4 | check-status: Cloudflare backend, admin filtering, model fallback |
 | `RegistrationTest` | 2 | Ability schema structure, entityKey schema |
 | `DocsGroundingEntityCacheTest` | 6 | Two-tier cache: query vs entity, seeding, inference |
-| `AISearchClientTest` | 13 | Search flow, config, cache, source filtering, URL trust, entity keys |
+| `AISearchClientTest` | 18 | Search flow, config, cache, source filtering, URL trust, entity keys, instance validation states, trusted-docs compatibility probe |
 | `PromptRulesTest` | 3 | Content-only rules, disabled blocks, container behavior |
 | `BlockAbilitiesTest` | 3 | Input normalization, XSS sanitization, disabled block short-circuit |
-| `PromptGuidanceTest` | 4 | Guidance sections in prompts, structural identity, content-only |
-| **Total** | **37** | |
+| `PromptGuidanceTest` | 5 | Guidance sections in prompts, structural identity, content-only |
+| `SettingsTest` | 6 | Changed-vs-unchanged Cloudflare save validation, rollback, partial credentials, and settings notice rendering |
+| **Total** | **51** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
@@ -358,11 +363,12 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
 - [x] Admin settings page with backend configuration
+- [x] Cloudflare AI Search credential validation on changed settings saves
+- [x] Settings page success/error feedback for credential validation
 - [x] Clean uninstall
-- [ ] Fix: live credential validation on Azure/Qdrant/Cloudflare settings save
+- [ ] Fix: live credential validation on Azure OpenAI/Qdrant settings save
 - [ ] Navigation recommendations (replace 501 stub)
 - [ ] Integration tests (at minimum: Playwright smoke for each editor surface)
-- [ ] Settings page UI polish (success/error feedback for credential validation)
 
 ### Should Have (v1.x)
 
