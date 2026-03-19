@@ -357,6 +357,10 @@ final class Registration {
 							'type'        => 'string',
 							'description' => 'Search query for WordPress developer documentation.',
 						],
+						'entityKey'  => [
+							'type'        => 'string',
+							'description' => 'Optional normalized entity cache key to warm alongside the exact query cache. Use namespace/block-name for blocks or template:single, template:404, etc. for templates.',
+						],
 						'maxResults' => [
 							'type'        => 'integer',
 							'description' => 'Optional result cap between 1 and 8.',

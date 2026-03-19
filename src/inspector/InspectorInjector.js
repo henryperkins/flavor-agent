@@ -35,8 +35,8 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				const s = sel( STORE_NAME );
 				return {
 					recommendations: s.getBlockRecommendations( clientId ),
-					isLoading: s.isLoading(),
-					error: s.getError(),
+					isLoading: s.isBlockLoading( clientId ),
+					error: s.getBlockError( clientId ),
 				};
 			},
 			[ clientId ]
@@ -59,7 +59,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			[ clientId ]
 		);
 
-		const { fetchBlockRecommendations, setStatus } =
+		const { fetchBlockRecommendations, clearBlockError } =
 			useDispatch( STORE_NAME );
 		const [ prompt, setPrompt ] = useState( '' );
 		const isDisabled = editingMode === 'disabled';
@@ -145,7 +145,9 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								<Notice
 									status="error"
 									isDismissible
-									onDismiss={ () => setStatus( 'idle' ) }
+									onDismiss={ () =>
+										clearBlockError( clientId )
+									}
 								>
 									{ error }
 								</Notice>

@@ -172,7 +172,7 @@ final class BlockAbilitiesTest extends TestCase {
 						'content'   => 'Hello world',
 						'className' => 'is-style-outline',
 					],
-					'editingMode'         => 'default',
+					'editingMode'         => 'contentOnly',
 					'isInsideContentOnly' => false,
 					'blockVisibility'     => [
 						'viewport' => [
@@ -185,6 +185,7 @@ final class BlockAbilitiesTest extends TestCase {
 
 		$this->assertSame( '', $prepared['prompt'] );
 		$this->assertSame( 'core/paragraph', $prepared['context']['block']['name'] );
+		$this->assertSame( 'contentOnly', $prepared['context']['block']['editingMode'] );
 		$this->assertSame(
 			[
 				'viewport' => [
@@ -196,6 +197,30 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( 'outline', $prepared['context']['block']['activeStyle'] );
 		$this->assertSame( [ 'accent: #f00' ], $prepared['context']['themeTokens']['colors'] );
 		$this->assertSame( [ 'small: 12px' ], $prepared['context']['themeTokens']['fontSizes'] );
+	}
+
+	public function test_recommend_block_short_circuits_disabled_blocks_before_api_key_validation(): void {
+		$result = BlockAbilities::recommend_block(
+			[
+				'selectedBlock' => [
+					'blockName'   => 'core/paragraph',
+					'attributes'  => [
+						'content' => 'Hello world',
+					],
+					'editingMode' => 'disabled',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => '',
+			],
+			$result
+		);
 	}
 
 	/**

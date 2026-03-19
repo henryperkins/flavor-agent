@@ -51,7 +51,7 @@ The request includes:
 - Nearby sibling blocks.
 - Content-only lock state and current `metadata.blockVisibility`, when present.
 
-The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state.
+The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
 
 ### Pattern Recommendations
 
@@ -71,6 +71,25 @@ The server behavior is:
 - Retrieve candidates from Qdrant using semantic and optional structural search passes.
 - Rank candidates with the Azure OpenAI Responses API.
 - Rehydrate registry-owned fields (`title`, `categories`, `content`) from stored payloads.
+
+`visiblePatternNames` is now derived from the active inserter root, so nested insertion contexts only receive patterns WordPress already allows in that specific surface.
+
+### Template Recommendations
+
+Template recommendations are exposed through `POST /flavor-agent/v1/recommend-template` and the `flavor-agent/recommend-template` ability.
+
+The client behavior is:
+
+- Available only while editing a `wp_template` entity in the Site Editor.
+- Advisory-only: template part rows link back to the relevant block or area, and pattern rows open the inserter filtered to that pattern.
+- Template-global by design: the shipped panel does not send inserter-root `visiblePatternNames`, so template candidate patterns are not silently narrowed by the current insertion surface.
+
+The server behavior is:
+
+- Resolve the active template from the Site Editor reference.
+- Collect assigned template-part slots, available template parts, and typed plus generic pattern candidates.
+- Rank template composition suggestions with the Azure OpenAI Responses API.
+- Validate returned template parts and pattern names against the collected context before rendering them in the panel.
 
 ## Settings
 
@@ -96,6 +115,7 @@ Implemented abilities:
 - `flavor-agent/recommend-block`
 - `flavor-agent/introspect-block`
 - `flavor-agent/recommend-patterns`
+- `flavor-agent/recommend-template`
 - `flavor-agent/list-patterns`
 - `flavor-agent/list-template-parts`
 - `flavor-agent/get-theme-tokens`
@@ -103,7 +123,6 @@ Implemented abilities:
 
 Stubbed abilities returning `501`:
 
-- `flavor-agent/recommend-template`
 - `flavor-agent/recommend-navigation`
 
 The Abilities API path is additive for WordPress versions that expose those hooks. The editor-side REST and injected UI path remains the primary runtime path.

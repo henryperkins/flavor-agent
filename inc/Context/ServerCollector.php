@@ -314,15 +314,16 @@ final class ServerCollector {
 	/**
 	 * Assemble context for a template recommendation.
 	 *
+	 * Template recommendations stay template-global unless a dedicated
+	 * design update explicitly introduces inserter-root narrowing.
+	 *
 	 * @param string      $template_ref  Template identifier from the Site Editor.
 	 * @param string|null $template_type Normalized template type. Derived if null.
-	 * @param string[]|null $visible_pattern_names Pattern names visible in the current editor context.
 	 * @return array|\WP_Error Template context or error.
 	 */
 	public static function for_template(
 		string $template_ref,
-		?string $template_type = null,
-		?array $visible_pattern_names = null
+		?string $template_type = null
 	): array|\WP_Error {
 		$template = null;
 
@@ -376,7 +377,7 @@ final class ServerCollector {
 			'emptyAreas'     => $slots['emptyAreas'],
 			'allowedAreas'   => $slots['allowedAreas'],
 			'availableParts' => $available_parts,
-			'patterns'       => self::collect_template_candidate_patterns( $template_type, $visible_pattern_names ),
+			'patterns'       => self::collect_template_candidate_patterns( $template_type ),
 			'themeTokens'    => self::for_tokens(),
 		];
 	}
@@ -490,35 +491,20 @@ final class ServerCollector {
 	 * Typed matches sort first, followed by generic patterns with no template
 	 * types. Pattern content is removed to avoid prompt bloat.
 	 *
-	 * @param string|null  $template_type          Normalized template type.
-	 * @param string[]|null $visible_pattern_names Pattern names visible in the current editor context.
+	 * @param string|null $template_type Normalized template type.
 	 * @return array Pattern candidates.
 	 */
-	private static function collect_template_candidate_patterns(
-		?string $template_type,
-		?array $visible_pattern_names = null
-	): array {
-		$all_patterns   = self::for_patterns();
-		$typed          = [];
-		$generic        = [];
-		$unfiltered     = [];
-		$seen           = [];
-		$visible_lookup = is_array( $visible_pattern_names )
-			? array_fill_keys( $visible_pattern_names, true )
-			: null;
-
-		if ( $visible_lookup !== null && empty( $visible_lookup ) ) {
-			return [];
-		}
+	private static function collect_template_candidate_patterns( ?string $template_type ): array {
+		$all_patterns = self::for_patterns();
+		$typed        = [];
+		$generic      = [];
+		$unfiltered   = [];
+		$seen         = [];
 
 		foreach ( $all_patterns as $pattern ) {
 			$name = (string) ( $pattern['name'] ?? '' );
 
-			if (
-				$name === ''
-				|| isset( $seen[ $name ] )
-				|| ( $visible_lookup !== null && ! isset( $visible_lookup[ $name ] ) )
-			) {
+			if ( $name === '' || isset( $seen[ $name ] ) ) {
 				continue;
 			}
 

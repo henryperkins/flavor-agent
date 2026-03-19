@@ -31,6 +31,13 @@ final class WordPressDocsAbilities {
 			$max_results = max( 1, min( 8, (int) $input['maxResults'] ) );
 		}
 
+		$entity_key = isset( $input['entityKey'] ) ? (string) $input['entityKey'] : '';
+		$entity_key = AISearchClient::resolve_entity_key( $entity_key, $query );
+
+		if ( $entity_key !== '' ) {
+			return AISearchClient::warm_entity( $entity_key, $query, $max_results );
+		}
+
 		return AISearchClient::search( $query, $max_results );
 	}
 

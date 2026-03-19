@@ -7,9 +7,7 @@
  *   - Patterns → setIsInserterOpened (opens the Inserter on the
  *     Patterns tab, pre-filtered to the exact pattern so the user sees
  *     a live preview and can choose an insertion point).
- *   - Assign / Insert → direct block-tree mutations.
  */
-import { parse } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { dispatch, select } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
@@ -36,18 +34,6 @@ function findTemplatePart( blocks, predicate ) {
 
 function getBlocks() {
 	return select( blockEditorStore ).getBlocks();
-}
-
-/**
- * Count every block in a tree, including nested inner blocks.
- *
- * @param {Array} blocks Block tree to count.
- * @return {number} Number of blocks in the tree.
- */
-function countBlocksRecursively( blocks ) {
-	return blocks.reduce( ( count, block ) => {
-		return count + 1 + countBlocksRecursively( block.innerBlocks || [] );
-	}, 0 );
 }
 
 /**
@@ -138,113 +124,4 @@ export function openInserterForPattern( filterValue ) {
 	} catch {
 		return false;
 	}
-}
-
-/* ------------------------------------------------------------------ */
-/*  Mutation actions                                                   */
-/* ------------------------------------------------------------------ */
-
-/**
- * Assign a template-part slug to an area's placeholder block,
- * then select the block so the user sees the result.
- *
- * @param {string} slug Template part slug to assign.
- * @param {string} area Template area to target.
- * @return {boolean} Whether the assignment was applied.
- */
-export function assignTemplatePart( slug, area ) {
-	const block = findBlockByArea( area );
-	if ( ! block ) {
-		return false;
-	}
-
-	dispatch( blockEditorStore ).updateBlockAttributes( block.clientId, {
-		slug,
-	} );
-
-	const updatedBlock = select( blockEditorStore ).getBlock( block.clientId );
-
-	if ( updatedBlock?.attributes?.slug !== slug ) {
-		return false;
-	}
-
-	dispatch( blockEditorStore ).selectBlock( block.clientId );
-
-	return true;
-}
-
-/**
- * Get a registered pattern by name from block editor settings.
- *
- * @param {string} name Pattern registry name.
- * @return {Object|null} Pattern definition or null.
- */
-export function getPatternByName( name ) {
-	const settings = select( blockEditorStore ).getSettings();
-	const patterns = settings?.__experimentalBlockPatterns || [];
-	return patterns.find( ( p ) => p.name === name ) || null;
-}
-
-/**
- * Parse a pattern's content into blocks (for preview or insertion).
- *
- * @param {string} name Pattern registry name.
- * @return {Array} Parsed block list.
- */
-export function parsePatternBlocks( name ) {
-	const pattern = getPatternByName( name );
-	if ( ! pattern?.content ) {
-		return [];
-	}
-	return parse( pattern.content );
-}
-
-/**
- * Insert a pattern's parsed blocks into the editor root.
- *
- * @param {string} name Pattern registry name.
- * @return {boolean} Whether blocks were inserted into the editor.
- */
-export function insertPatternByName( name ) {
-	const blocks = parsePatternBlocks( name );
-	if ( blocks.length === 0 ) {
-		return false;
-	}
-
-	const beforeCount = countBlocksRecursively( getBlocks() );
-	dispatch( blockEditorStore ).insertBlocks( blocks );
-	const afterCount = countBlocksRecursively( getBlocks() );
-
-	return afterCount > beforeCount;
-}
-
-/**
- * Apply an entire template suggestion — assign all parts, insert all patterns.
- *
- * @param {Object} suggestion Template suggestion to apply.
- * @return {{parts: Array, patterns: Array}} Per-item apply results.
- */
-export function applySuggestion( suggestion ) {
-	const results = { parts: [], patterns: [] };
-
-	if ( suggestion.templateParts?.length > 0 ) {
-		for ( const part of suggestion.templateParts ) {
-			results.parts.push( {
-				slug: part.slug,
-				area: part.area,
-				applied: assignTemplatePart( part.slug, part.area ),
-			} );
-		}
-	}
-
-	if ( suggestion.patternSuggestions?.length > 0 ) {
-		for ( const name of suggestion.patternSuggestions ) {
-			results.patterns.push( {
-				name,
-				inserted: insertPatternByName( name ),
-			} );
-		}
-	}
-
-	return results;
 }

@@ -5,9 +5,10 @@ import { extractPatternNames } from './pattern-names';
 /**
  * Return the current editor-visible pattern names.
  *
+ * @param {?string} rootClientId Inserter root client ID.
  * @return {string[]} Visible pattern names for the current inserter context.
  */
-export function getVisiblePatternNames() {
+export function getVisiblePatternNames( rootClientId = null ) {
 	const blockEditor = registrySelect( blockEditorStore );
 
 	if ( ! blockEditor ) {
@@ -16,7 +17,7 @@ export function getVisiblePatternNames() {
 
 	if ( typeof blockEditor.__experimentalGetAllowedPatterns === 'function' ) {
 		return extractPatternNames(
-			blockEditor.__experimentalGetAllowedPatterns( null )
+			blockEditor.__experimentalGetAllowedPatterns( rootClientId )
 		);
 	}
 

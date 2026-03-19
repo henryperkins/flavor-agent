@@ -24,6 +24,10 @@ final class BlockAbilities {
 		$context = $prepared['context'];
 		$prompt  = $prepared['prompt'];
 
+		if ( self::normalize_editing_mode( $context['block']['editingMode'] ?? 'default' ) === 'disabled' ) {
+			return self::get_empty_recommendation_payload();
+		}
+
 		$api_key = get_option( 'flavor_agent_api_key', '' );
 		if ( empty( $api_key ) ) {
 			return new \WP_Error( 'missing_api_key', 'Configure your API key in Settings > Flavor Agent.', [ 'status' => 400 ] );
@@ -265,13 +269,17 @@ final class BlockAbilities {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query = self::build_wordpress_docs_query( $context, $prompt );
+		$query      = self::build_wordpress_docs_query( $context, $prompt );
+		$entity_key = self::build_wordpress_docs_entity_key( $context );
 
-		if ( $query === '' ) {
-			return [];
-		}
+		return AISearchClient::maybe_search_with_entity_fallback( $query, $entity_key );
+	}
 
-		return AISearchClient::maybe_search( $query );
+	private static function build_wordpress_docs_entity_key( array $context ): string {
+		$block      = self::normalize_map( $context['block'] ?? [] );
+		$block_name = is_string( $block['name'] ?? null ) ? sanitize_text_field( (string) $block['name'] ) : '';
+
+		return AISearchClient::resolve_entity_key( $block_name );
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
@@ -302,6 +310,10 @@ final class BlockAbilities {
 		}
 
 		if ( ! empty( $block['isInsideContentOnly'] ) ) {
+			$parts[] = 'contentOnly editing constraints';
+		}
+
+		if ( self::normalize_editing_mode( $block['editingMode'] ?? 'default' ) === 'contentOnly' ) {
 			$parts[] = 'contentOnly editing constraints';
 		}
 
@@ -388,8 +400,21 @@ final class BlockAbilities {
 			return 'default';
 		}
 
-		$value = sanitize_key( $value );
+		$value = strtolower( preg_replace( '/[^a-z]/i', '', $value ) ?? '' );
 
-		return '' === $value ? 'default' : $value;
+		return match ( $value ) {
+			'contentonly' => 'contentOnly',
+			'disabled' => 'disabled',
+			default => 'default',
+		};
+	}
+
+	private static function get_empty_recommendation_payload(): array {
+		return [
+			'settings'    => [],
+			'styles'      => [],
+			'block'       => [],
+			'explanation' => '',
+		];
 	}
 }

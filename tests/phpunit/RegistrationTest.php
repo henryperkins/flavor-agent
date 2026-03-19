@@ -65,4 +65,26 @@ final class RegistrationTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/search-wordpress-docs'] ?? null;
+
+		$this->assertIsArray( $ability );
+		$this->assertSame( [ 'query' ], $ability['input_schema']['required'] ?? null );
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['entityKey']['type'] ?? null
+		);
+		$this->assertStringContainsString(
+			'namespace/block-name',
+			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'template:404',
+			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
+		);
+	}
 }

@@ -12,6 +12,8 @@ final class AISearchClient {
 	private const ALLOWED_SOURCE_KEY_PREFIX = 'developer.wordpress.org/';
 	private const CACHE_KEY_PREFIX          = 'flavor_agent_ai_search_';
 	private const CACHE_TTL                 = 21600;
+	private const ENTITY_CACHE_PREFIX       = 'flavor_agent_docs_entity_';
+	private const ENTITY_CACHE_TTL          = 43200;
 
 	public static function is_configured(): bool {
 		$account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
@@ -138,6 +140,115 @@ final class AISearchClient {
 	}
 
 	/**
+	 * Best-effort cache lookup for prompt grounding.
+	 * Exact-query cache remains authoritative; entity cache is only a fallback.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function maybe_search_with_entity_fallback( string $query, string $entity_key = '', ?int $max_results = null ): array {
+		$guidance = self::maybe_search( $query, $max_results );
+
+		if ( [] !== $guidance ) {
+			return $guidance;
+		}
+
+		return self::maybe_search_entity( $entity_key );
+	}
+
+	/**
+	 * Best-effort entity lookup for prompt grounding. Never blocks recommendation flows.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function maybe_search_entity( string $entity_key ): array {
+		$entity_key = self::normalize_entity_key( $entity_key );
+
+		if ( $entity_key === '' || ! self::is_configured() ) {
+			return [];
+		}
+
+		$guidance = self::read_cached_guidance_by_key(
+			self::build_entity_cache_key( $entity_key ),
+			self::ENTITY_CACHE_TTL
+		);
+
+		if ( ! is_array( $guidance ) ) {
+			return [];
+		}
+
+		return $guidance;
+	}
+
+	/**
+	 * Perform an explicit search and seed the shared entity cache when possible.
+	 *
+	 * @return array{query: string, guidance: array<int, array<string, mixed>>}|\WP_Error
+	 */
+	public static function warm_entity( string $entity_key, string $query, ?int $max_results = null ): array|\WP_Error {
+		$result = self::search( $query, $max_results );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		self::cache_entity_guidance( $entity_key, $result['guidance'] );
+
+		return $result;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $guidance
+	 */
+	public static function cache_entity_guidance( string $entity_key, array $guidance ): void {
+		$entity_key = self::normalize_entity_key( $entity_key );
+
+		if ( $entity_key === '' ) {
+			return;
+		}
+
+		self::write_cached_guidance_by_key(
+			self::build_entity_cache_key( $entity_key ),
+			$guidance,
+			self::ENTITY_CACHE_TTL
+		);
+	}
+
+	public static function resolve_entity_key( string $entity_key = '', string $query = '' ): string {
+		$entity_key = self::normalize_entity_key( $entity_key );
+
+		if ( $entity_key !== '' ) {
+			return $entity_key;
+		}
+
+		return self::infer_entity_key_from_query( $query );
+	}
+
+	public static function infer_entity_key_from_query( string $query ): string {
+		$query = sanitize_textarea_field( $query );
+
+		if ( $query === '' ) {
+			return '';
+		}
+
+		if ( preg_match( '/\bblock type ([a-z0-9-]+\/[a-z0-9-]+)\b/i', $query, $matches ) ) {
+			return self::normalize_entity_key( (string) ( $matches[1] ?? '' ) );
+		}
+
+		if ( preg_match( '/\btemplate type ([a-z0-9_-]+)\b/i', $query, $matches ) ) {
+			return self::normalize_entity_key( 'template:' . (string) ( $matches[1] ?? '' ) );
+		}
+
+		if (
+			preg_match( '/\b(block|gutenberg)\b/i', $query )
+			&& preg_match( '/\b([a-z0-9-]+\/[a-z0-9-]+)\b/i', $query, $matches )
+		) {
+			return self::normalize_entity_key( (string) ( $matches[1] ?? '' ) );
+		}
+
+		return '';
+	}
+
+	/**
 	 * @return array{url: string, apiToken: string}|\WP_Error
 	 */
 	private static function get_config(): array|\WP_Error {
@@ -189,12 +300,52 @@ final class AISearchClient {
 		return self::CACHE_KEY_PREFIX . md5( $payload );
 	}
 
+	private static function build_entity_cache_key( string $entity_key ): string {
+		return self::ENTITY_CACHE_PREFIX . md5( $entity_key );
+	}
+
+	private static function normalize_entity_key( string $entity_key ): string {
+		$entity_key = strtolower( trim( sanitize_text_field( $entity_key ) ) );
+
+		if ( $entity_key === '' ) {
+			return '';
+		}
+
+		if ( str_starts_with( $entity_key, 'template:' ) ) {
+			$template_type = sanitize_key( substr( $entity_key, strlen( 'template:' ) ) );
+
+			return $template_type !== '' ? 'template:' . $template_type : '';
+		}
+
+		return preg_match( '/^[a-z0-9-]+\/[a-z0-9-]+$/', $entity_key ) === 1 ? $entity_key : '';
+	}
+
 	/**
 	 * @return array<int, array<string, mixed>>|null
 	 */
 	private static function read_cached_guidance( string $query, int $max_results ): ?array {
-		$cache_key = self::build_cache_key( $query, $max_results );
-		$cached    = get_transient( $cache_key );
+		return self::read_cached_guidance_by_key(
+			self::build_cache_key( $query, $max_results ),
+			self::CACHE_TTL
+		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $guidance
+	 */
+	private static function write_cached_guidance( string $query, int $max_results, array $guidance ): void {
+		self::write_cached_guidance_by_key(
+			self::build_cache_key( $query, $max_results ),
+			$guidance,
+			self::CACHE_TTL
+		);
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>|null
+	 */
+	private static function read_cached_guidance_by_key( string $cache_key, int $ttl ): ?array {
+		$cached = get_transient( $cache_key );
 
 		if ( false === $cached ) {
 			return null;
@@ -215,7 +366,7 @@ final class AISearchClient {
 		}
 
 		if ( $guidance !== $cached ) {
-			set_transient( $cache_key, $guidance, self::CACHE_TTL );
+			set_transient( $cache_key, $guidance, $ttl );
 		}
 
 		return $guidance;
@@ -224,11 +375,11 @@ final class AISearchClient {
 	/**
 	 * @param array<int, array<string, mixed>> $guidance
 	 */
-	private static function write_cached_guidance( string $query, int $max_results, array $guidance ): void {
+	private static function write_cached_guidance_by_key( string $cache_key, array $guidance, int $ttl ): void {
 		set_transient(
-			self::build_cache_key( $query, $max_results ),
+			$cache_key,
 			self::normalize_cached_guidance( $guidance ),
-			self::CACHE_TTL
+			$ttl
 		);
 	}
 

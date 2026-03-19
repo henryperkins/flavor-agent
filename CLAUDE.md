@@ -87,5 +87,3 @@ The plugin works without these configured — falls back to heuristic-only sugge
 ## Docs
 
 - `docs/flavor-agent-readme.md` — detailed architecture and LLM prompt/response format
-- `docs/specs/` — design specs for Abilities API integration, pattern recommendations, editor UI
-- `docs/plans/` — implementation plans with step-by-step breakdowns

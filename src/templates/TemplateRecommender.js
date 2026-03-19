@@ -1,17 +1,15 @@
 /**
  * Template Recommender
  *
- * Interactive AI template composition suggestions in the Site Editor
- * sidebar.  Every block-editor entity the LLM mentions is wired to the
- * correct editor element:
+ * Advisory AI template composition suggestions in the Site Editor
+ * sidebar. Every block-editor entity the LLM mentions is wired to the
+ * correct review surface:
  *
- *   Template-part slugs / areas  →  selectBlock  (highlights in canvas,
+ *   Template-part slugs / areas  →  selectBlock (highlights in canvas,
  *       block inspector shows the template-part controls)
  *   Pattern names                →  opens the block Inserter on the
  *       Patterns tab, pre-filtered to that pattern so the user sees
- *       a live preview and can choose an insertion point
- *   "Assign" / "Insert" buttons  →  direct mutations
- *   "Apply All"                  →  batch-applies the entire suggestion
+ *       a live preview and chooses where to insert it
  *
  * Free-form text (explanation, description, reason) is scanned for
  * entity mentions and linked inline with the same type-aware actions.
@@ -31,193 +29,25 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { check } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';
 import {
-	applySuggestion,
-	assignTemplatePart,
-	insertPatternByName,
 	openInserterForPattern,
 	selectBlockByArea,
 	selectBlockBySlugOrArea,
 } from '../utils/template-actions';
-import { getVisiblePatternNames } from '../utils/visible-patterns';
-
-/* ------------------------------------------------------------------ */
-/*  Entity types                                                       */
-/* ------------------------------------------------------------------ */
-
-const ENTITY_PART = 'part';
-const ENTITY_AREA = 'area';
-const ENTITY_PATTERN = 'pattern';
-
-function getSuggestionCardKey( suggestion, index ) {
-	return `${ suggestion.label || 'suggestion' }-${ index }`;
-}
-
-function getTemplatePartKey( slug, area ) {
-	return `${ slug }|${ area }`;
-}
-
-function areAllSuggestionActionsDone(
-	suggestion,
-	appliedParts,
-	insertedPatterns
-) {
-	const templateParts = Array.isArray( suggestion?.templateParts )
-		? suggestion.templateParts
-		: [];
-	const patternSuggestions = Array.isArray( suggestion?.patternSuggestions )
-		? suggestion.patternSuggestions
-		: [];
-
-	if ( templateParts.length + patternSuggestions.length === 0 ) {
-		return false;
-	}
-
-	return (
-		templateParts.every(
-			( part ) =>
-				appliedParts[ getTemplatePartKey( part.slug, part.area ) ]
-		) && patternSuggestions.every( ( name ) => insertedPatterns[ name ] )
-	);
-}
-
-function getPendingSuggestion( suggestion, appliedParts, insertedPatterns ) {
-	const templateParts = Array.isArray( suggestion?.templateParts )
-		? suggestion.templateParts
-		: [];
-	const patternSuggestions = Array.isArray( suggestion?.patternSuggestions )
-		? suggestion.patternSuggestions
-		: [];
-
-	return {
-		...suggestion,
-		templateParts: templateParts.filter(
-			( part ) =>
-				! appliedParts[ getTemplatePartKey( part.slug, part.area ) ]
-		),
-		patternSuggestions: patternSuggestions.filter(
-			( name ) => ! insertedPatterns[ name ]
-		),
-	};
-}
-
-function getApplyAllFeedback( totalCount, successCount ) {
-	const failureCount = totalCount - successCount;
-
-	if ( failureCount <= 0 ) {
-		return null;
-	}
-
-	if ( successCount === 0 ) {
-		return {
-			status: 'error',
-			message:
-				"Couldn't apply any of the suggested changes. Check that the target template areas and patterns are available.",
-		};
-	}
-
-	return {
-		status: 'warning',
-		message: `Applied ${ successCount } of ${ totalCount } changes. ${ failureCount } ${
-			failureCount === 1 ? 'change could' : 'changes could'
-		} not be applied.`,
-	};
-}
-
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
-}
-
-function formatTemplateTypeLabel( templateType ) {
-	if ( ! templateType ) {
-		return 'Current Template';
-	}
-
-	return `${ templateType
-		.split( '-' )
-		.map( ( word ) => word.charAt( 0 ).toUpperCase() + word.slice( 1 ) )
-		.join( ' ' ) } Template`;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Inline entity linking                                              */
-/* ------------------------------------------------------------------ */
-
-/**
- * Build a de-duped, length-sorted list of linkable entities from every
- * suggestion in the response.
- *
- * Each entity carries a `type` so the renderer can apply type-specific
- * styles and the correct editor action:
- *   part    → selectBlock (canvas)
- *   area    → selectBlock (canvas)
- *   pattern → open Inserter filtered to that pattern
- *
- * @param {Array}  recommendations Template recommendation list.
- * @param {Object} patternTitleMap Map of pattern names to display titles.
- * @return {Array} Sorted list of linkable entities.
- */
-function buildEntityMap( recommendations, patternTitleMap ) {
-	const map = new Map();
-
-	for ( const s of recommendations ) {
-		/* Template parts → slug + area */
-		if ( s.templateParts?.length > 0 ) {
-			for ( const part of s.templateParts ) {
-				if ( part.slug && ! map.has( part.slug ) ) {
-					const slug = part.slug;
-					const area = part.area;
-					map.set( slug, {
-						text: slug,
-						type: ENTITY_PART,
-						action: () => selectBlockBySlugOrArea( slug, area ),
-						tooltip: `Select \u201c${ slug }\u201d block in editor`,
-					} );
-				}
-				if ( part.area && ! map.has( part.area ) ) {
-					const area = part.area;
-					map.set( area, {
-						text: area,
-						type: ENTITY_AREA,
-						action: () => selectBlockByArea( area ),
-						tooltip: `Select \u201c${ area }\u201d area in editor`,
-					} );
-				}
-			}
-		}
-
-		/* Patterns → slug + display title */
-		if ( s.patternSuggestions?.length > 0 ) {
-			for ( const name of s.patternSuggestions ) {
-				const title = patternTitleMap[ name ] || name;
-				if ( ! map.has( name ) ) {
-					map.set( name, {
-						text: name,
-						type: ENTITY_PATTERN,
-						action: () => openInserterForPattern( title ),
-						tooltip: `Browse \u201c${ title }\u201d in pattern inserter`,
-					} );
-				}
-				if ( title !== name && ! map.has( title ) ) {
-					map.set( title, {
-						text: title,
-						type: ENTITY_PATTERN,
-						action: () => openInserterForPattern( title ),
-						tooltip: `Browse \u201c${ title }\u201d in pattern inserter`,
-					} );
-				}
-			}
-		}
-	}
-
-	return Array.from( map.values() ).sort(
-		( a, b ) => b.text.length - a.text.length
-	);
-}
+import {
+	buildEntityMap,
+	buildTemplateFetchInput,
+	buildTemplateSuggestionViewModel,
+	ENTITY_ACTION_BROWSE_PATTERN,
+	ENTITY_ACTION_SELECT_AREA,
+	ENTITY_ACTION_SELECT_PART,
+	formatCount,
+	formatTemplateTypeLabel,
+	getSuggestionCardKey,
+} from './template-recommender-helpers';
 
 /**
  * Case-insensitive word-boundary search.
@@ -253,21 +83,24 @@ function findWordMatch( haystack, needle ) {
 		if ( okBefore && okAfter ) {
 			return idx;
 		}
+
 		start = idx + 1;
 	}
+
 	return -1;
 }
 
 /**
- * Render a text string with recognised entities replaced by clickable
+ * Render a text string with recognized entities replaced by clickable
  * action links, each styled for its entity type.
  *
- * @param {Object} props          Component props.
- * @param {string} props.text     Text to render.
- * @param {Array}  props.entities Linkable entity definitions.
+ * @param {Object}   props               Component props.
+ * @param {string}   props.text          Text to render.
+ * @param {Array}    props.entities      Linkable entity definitions.
+ * @param {Function} props.onEntityClick Entity click handler.
  * @return {*} Rendered linked text.
  */
-function LinkedText( { text, entities } ) {
+function LinkedText( { text, entities, onEntityClick } ) {
 	if ( ! text || ! entities || entities.length === 0 ) {
 		return text || null;
 	}
@@ -306,7 +139,7 @@ function LinkedText( { text, entities } ) {
 				<Button
 					size="small"
 					variant="link"
-					onClick={ bestEntity.action }
+					onClick={ () => onEntityClick( bestEntity ) }
 					className={ `flavor-agent-inline-link flavor-agent-inline-link--${ bestEntity.type }` }
 				>
 					{ matched }
@@ -319,10 +152,6 @@ function LinkedText( { text, entities } ) {
 
 	return <>{ segments }</>;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Main component                                                     */
-/* ------------------------------------------------------------------ */
 
 export default function TemplateRecommender() {
 	const canRecommend = window.flavorAgentData?.canRecommendTemplates;
@@ -395,29 +224,41 @@ export default function TemplateRecommender() {
 
 	const hasMatchingResult = resultRef === templateRef;
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
-
 	const entityMap = useMemo(
 		() => buildEntityMap( recommendations, patternTitleMap ),
 		[ recommendations, patternTitleMap ]
 	);
+	const suggestionCards = useMemo(
+		() =>
+			recommendations.map( ( suggestion ) =>
+				buildTemplateSuggestionViewModel( suggestion, patternTitleMap )
+			),
+		[ recommendations, patternTitleMap ]
+	);
 
-	const handleFetch = () => {
-		const input = {
-			templateRef,
-			visiblePatternNames: getVisiblePatternNames(),
-		};
-		const trimmedPrompt = prompt.trim();
+	const handleFetch = useCallback( () => {
+		fetchTemplateRecommendations(
+			buildTemplateFetchInput( {
+				templateRef,
+				templateType,
+				prompt,
+			} )
+		);
+	}, [ fetchTemplateRecommendations, prompt, templateRef, templateType ] );
 
-		if ( templateType ) {
-			input.templateType = templateType;
+	const handleEntityAction = useCallback( ( entity ) => {
+		switch ( entity?.actionType ) {
+			case ENTITY_ACTION_SELECT_PART:
+				selectBlockBySlugOrArea( entity.slug, entity.area );
+				break;
+			case ENTITY_ACTION_SELECT_AREA:
+				selectBlockByArea( entity.area );
+				break;
+			case ENTITY_ACTION_BROWSE_PATTERN:
+				openInserterForPattern( entity.filterValue || entity.name );
+				break;
 		}
-
-		if ( trimmedPrompt ) {
-			input.prompt = trimmedPrompt;
-		}
-
-		fetchTemplateRecommendations( input );
-	};
+	}, [] );
 
 	if ( ! canRecommend || ! templateRef ) {
 		return null;
@@ -435,7 +276,9 @@ export default function TemplateRecommender() {
 					</p>
 					<p className="flavor-agent-panel__intro-copy">
 						Describe the structure or layout you want. Suggestions
-						can be previewed individually or applied together.
+						stay advisory so you can review template parts and
+						browse candidate patterns in the editor before changing
+						the template.
 					</p>
 				</div>
 
@@ -458,14 +301,14 @@ export default function TemplateRecommender() {
 						className="flavor-agent-fetch-button"
 					>
 						{ isLoading
-							? 'Getting suggestions\u2026'
+							? 'Getting suggestions…'
 							: 'Get Suggestions' }
 					</Button>
 				</div>
 
 				{ isLoading && (
 					<Notice status="info" isDismissible={ false }>
-						Analyzing template structure\u2026
+						Analyzing template structure…
 					</Notice>
 				) }
 
@@ -480,6 +323,7 @@ export default function TemplateRecommender() {
 						<LinkedText
 							text={ explanation }
 							entities={ entityMap }
+							onEntityClick={ handleEntityAction }
 						/>
 					</p>
 				) }
@@ -492,21 +336,21 @@ export default function TemplateRecommender() {
 							</div>
 							<span className="flavor-agent-pill">
 								{ formatCount(
-									recommendations.length,
+									suggestionCards.length,
 									'suggestion'
 								) }
 							</span>
 						</div>
 						<div className="flavor-agent-panel__group-body">
-							{ recommendations.map( ( suggestion, index ) => (
+							{ suggestionCards.map( ( suggestion, index ) => (
 								<TemplateSuggestionCard
 									key={ `${ resultToken }-${ getSuggestionCardKey(
 										suggestion,
 										index
 									) }` }
 									suggestion={ suggestion }
-									patternTitleMap={ patternTitleMap }
 									entityMap={ entityMap }
+									onEntityClick={ handleEntityAction }
 								/>
 							) ) }
 						</div>
@@ -517,140 +361,13 @@ export default function TemplateRecommender() {
 	);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Interactive suggestion card                                        */
-/* ------------------------------------------------------------------ */
-
 function TemplateSuggestionCard( {
 	suggestion,
-	patternTitleMap = {},
 	entityMap = [],
+	onEntityClick,
 } ) {
-	const [ appliedParts, setAppliedParts ] = useState( {} );
-	const [ insertedPatterns, setInsertedPatterns ] = useState( {} );
-	const [ feedback, setFeedback ] = useState( null );
-	const allApplied = areAllSuggestionActionsDone(
-		suggestion,
-		appliedParts,
-		insertedPatterns
-	);
-
-	useEffect( () => {
-		setAppliedParts( {} );
-		setInsertedPatterns( {} );
-		setFeedback( null );
-	}, [ suggestion ] );
-
-	/* ---- Navigation (non-destructive) ---- */
-
-	const handleFocusPart = useCallback( ( slug, area ) => {
-		selectBlockBySlugOrArea( slug, area );
-	}, [] );
-
-	const handleFocusArea = useCallback( ( area ) => {
-		selectBlockByArea( area );
-	}, [] );
-
-	const handleBrowsePattern = useCallback(
-		( name ) => {
-			const title = patternTitleMap[ name ] || name;
-			openInserterForPattern( title );
-		},
-		[ patternTitleMap ]
-	);
-
-	/* ---- Mutations ---- */
-
-	const handleInsert = useCallback(
-		( name ) => {
-			const title = patternTitleMap[ name ] || name;
-
-			if ( insertPatternByName( name ) ) {
-				setInsertedPatterns( {
-					...insertedPatterns,
-					[ name ]: true,
-				} );
-				setFeedback( null );
-				return;
-			}
-
-			setFeedback( {
-				status: 'error',
-				message: `Couldn't insert “${ title }” into this template.`,
-			} );
-		},
-		[ insertedPatterns, patternTitleMap ]
-	);
-
-	const handleAssign = useCallback(
-		( slug, area ) => {
-			if ( assignTemplatePart( slug, area ) ) {
-				setAppliedParts( {
-					...appliedParts,
-					[ getTemplatePartKey( slug, area ) ]: true,
-				} );
-				setFeedback( null );
-				return;
-			}
-
-			setFeedback( {
-				status: 'error',
-				message: `Couldn't assign “${ slug }” to the “${ area }” area.`,
-			} );
-		},
-		[ appliedParts ]
-	);
-
-	const handleApplyAll = useCallback( () => {
-		const pendingSuggestion = getPendingSuggestion(
-			suggestion,
-			appliedParts,
-			insertedPatterns
-		);
-		const totalCount =
-			pendingSuggestion.templateParts.length +
-			pendingSuggestion.patternSuggestions.length;
-
-		if ( totalCount === 0 ) {
-			setFeedback( null );
-			return;
-		}
-
-		const results = applySuggestion( pendingSuggestion );
-
-		const nextParts = {};
-		let successCount = 0;
-		for ( const p of results.parts ) {
-			if ( p.applied ) {
-				nextParts[ getTemplatePartKey( p.slug, p.area ) ] = true;
-				successCount += 1;
-			}
-		}
-
-		const nextPatterns = {};
-		for ( const p of results.patterns ) {
-			if ( p.inserted ) {
-				nextPatterns[ p.name ] = true;
-				successCount += 1;
-			}
-		}
-
-		setAppliedParts( {
-			...appliedParts,
-			...nextParts,
-		} );
-		setInsertedPatterns( {
-			...insertedPatterns,
-			...nextPatterns,
-		} );
-		setFeedback( getApplyAllFeedback( totalCount, successCount ) );
-	}, [ appliedParts, insertedPatterns, suggestion ] );
-
-	/* ---- Render ---- */
-
 	const hasParts = suggestion.templateParts?.length > 0;
 	const hasPatterns = suggestion.patternSuggestions?.length > 0;
-	const hasActions = hasParts || hasPatterns;
 	const summaryParts = [];
 
 	if ( hasParts ) {
@@ -666,42 +383,20 @@ function TemplateSuggestionCard( {
 	}
 
 	return (
-		<div
-			className={ `flavor-agent-card flavor-agent-card--template${
-				allApplied ? ' is-applied' : ''
-			}` }
-		>
-			{ /* ---- Header ---- */ }
+		<div className="flavor-agent-card flavor-agent-card--template">
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
 					<div className="flavor-agent-card__label">
 						{ suggestion.label }
 					</div>
-					{ ( summaryParts.length > 0 || allApplied ) && (
+					{ summaryParts.length > 0 && (
 						<div className="flavor-agent-card__meta">
-							{ summaryParts.length > 0 && (
-								<span className="flavor-agent-pill">
-									{ summaryParts.join( ' • ' ) }
-								</span>
-							) }
-							{ allApplied && (
-								<span className="flavor-agent-pill flavor-agent-pill--success">
-									Applied
-								</span>
-							) }
+							<span className="flavor-agent-pill">
+								{ summaryParts.join( ' • ' ) }
+							</span>
 						</div>
 					) }
 				</div>
-				<Button
-					size="small"
-					variant={ allApplied ? 'tertiary' : 'primary' }
-					onClick={ handleApplyAll }
-					disabled={ allApplied || ! hasActions }
-					icon={ allApplied ? check : undefined }
-					className="flavor-agent-card__apply"
-				>
-					{ allApplied ? 'Applied' : 'Apply All' }
-				</Button>
 			</div>
 
 			{ suggestion.description && (
@@ -709,17 +404,11 @@ function TemplateSuggestionCard( {
 					<LinkedText
 						text={ suggestion.description }
 						entities={ entityMap }
+						onEntityClick={ onEntityClick }
 					/>
 				</p>
 			) }
 
-			{ feedback && (
-				<Notice status={ feedback.status } isDismissible={ false }>
-					{ feedback.message }
-				</Notice>
-			) }
-
-			{ /* ---- Template parts ---- */ }
 			{ hasParts && (
 				<div className="flavor-agent-template-list">
 					<div className="flavor-agent-template-list__header">
@@ -733,95 +422,65 @@ function TemplateSuggestionCard( {
 							) }
 						</span>
 					</div>
-					{ suggestion.templateParts.map( ( part ) => {
-						const key = getTemplatePartKey( part.slug, part.area );
-						const isDone = !! appliedParts[ key ];
-
-						return (
-							<div
-								key={ key }
-								className={ `flavor-agent-tpl-row${
-									isDone ? ' is-done' : ''
-								}` }
-							>
-								<span className="flavor-agent-tpl-row__mapping">
-									<Tooltip
-										text={ `Select \u201c${ part.slug }\u201d block in editor` }
+					{ suggestion.templateParts.map( ( part ) => (
+						<div key={ part.key } className="flavor-agent-tpl-row">
+							<span className="flavor-agent-tpl-row__mapping">
+								<Tooltip
+									text={ `Select “${ part.slug }” block in editor` }
+								>
+									<Button
+										size="small"
+										variant="link"
+										onClick={ () =>
+											selectBlockBySlugOrArea(
+												part.slug,
+												part.area
+											)
+										}
+										className="flavor-agent-action-link flavor-agent-action-link--part"
 									>
-										<Button
-											size="small"
-											variant="link"
-											onClick={ () =>
-												handleFocusPart(
-													part.slug,
-													part.area
-												)
-											}
-											className="flavor-agent-action-link flavor-agent-action-link--part"
-										>
-											{ part.slug }
-										</Button>
-									</Tooltip>
+										{ part.slug }
+									</Button>
+								</Tooltip>
 
-									<span className="flavor-agent-tpl-row__arrow">
-										\u2192
-									</span>
-
-									<Tooltip
-										text={ `Select \u201c${ part.area }\u201d area in editor` }
-									>
-										<Button
-											size="small"
-											variant="link"
-											onClick={ () =>
-												handleFocusArea( part.area )
-											}
-											className="flavor-agent-action-link flavor-agent-action-link--area"
-										>
-											{ part.area }
-										</Button>
-									</Tooltip>
+								<span className="flavor-agent-tpl-row__arrow">
+									→
 								</span>
 
-								{ isDone ? (
-									<span className="flavor-agent-done-badge">
-										\u2713 Assigned
-									</span>
-								) : (
-									<Tooltip
-										text={ `Assign \u201c${ part.slug }\u201d to the \u201c${ part.area }\u201d area` }
+								<Tooltip
+									text={ `Select “${ part.area }” area in editor` }
+								>
+									<Button
+										size="small"
+										variant="link"
+										onClick={ () =>
+											selectBlockByArea( part.area )
+										}
+										className="flavor-agent-action-link flavor-agent-action-link--area"
 									>
-										<Button
-											size="small"
-											variant="tertiary"
-											onClick={ () =>
-												handleAssign(
-													part.slug,
-													part.area
-												)
-											}
-											className="flavor-agent-assign-btn"
-										>
-											Assign
-										</Button>
-									</Tooltip>
-								) }
+										{ part.area }
+									</Button>
+								</Tooltip>
+							</span>
 
-								{ part.reason && (
-									<div className="flavor-agent-tpl-row__reason">
-										<LinkedText
-											text={ part.reason }
-											entities={ entityMap }
-										/>
-									</div>
-								) }
-							</div>
-						);
-					} ) }
+							<span className="flavor-agent-pill">
+								{ part.ctaLabel }
+							</span>
+
+							{ part.reason && (
+								<div className="flavor-agent-tpl-row__reason">
+									<LinkedText
+										text={ part.reason }
+										entities={ entityMap }
+										onEntityClick={ onEntityClick }
+									/>
+								</div>
+							) }
+						</div>
+					) ) }
 				</div>
 			) }
 
-			{ /* ---- Patterns ---- */ }
 			{ hasPatterns && (
 				<div className="flavor-agent-template-list">
 					<div className="flavor-agent-template-list__header">
@@ -835,62 +494,38 @@ function TemplateSuggestionCard( {
 							) }
 						</span>
 					</div>
-					{ suggestion.patternSuggestions.map( ( name ) => {
-						const isDone = !! insertedPatterns[ name ];
-						const title = patternTitleMap[ name ] || name;
-
-						return (
-							<div
-								key={ name }
-								className={ `flavor-agent-tpl-row${
-									isDone ? ' is-done' : ''
-								}` }
+					{ suggestion.patternSuggestions.map( ( pattern ) => (
+						<div
+							key={ pattern.name }
+							className="flavor-agent-tpl-row"
+						>
+							<Tooltip
+								text={ `Browse “${ pattern.title }” in pattern inserter` }
 							>
-								{ /* Name link → opens Inserter filtered to this pattern */ }
-								<Tooltip
-									text={
-										isDone
-											? `\u201c${ title }\u201d inserted`
-											: `Browse \u201c${ title }\u201d in pattern inserter`
+								<Button
+									size="small"
+									variant="link"
+									onClick={ () =>
+										openInserterForPattern( pattern.title )
 									}
+									className="flavor-agent-action-link flavor-agent-action-link--pattern"
 								>
-									<Button
-										size="small"
-										variant="link"
-										onClick={ () =>
-											handleBrowsePattern( name )
-										}
-										className="flavor-agent-action-link flavor-agent-action-link--pattern"
-									>
-										{ patternTitleMap[ name ] || (
-											<code>{ name }</code>
-										) }
-									</Button>
-								</Tooltip>
+									{ pattern.title }
+								</Button>
+							</Tooltip>
 
-								{ isDone ? (
-									<span className="flavor-agent-done-badge">
-										\u2713 Inserted
-									</span>
-								) : (
-									<Tooltip
-										text={ `Insert \u201c${ title }\u201d directly into template` }
-									>
-										<Button
-											size="small"
-											variant="tertiary"
-											onClick={ () =>
-												handleInsert( name )
-											}
-											className="flavor-agent-assign-btn"
-										>
-											Insert
-										</Button>
-									</Tooltip>
-								) }
-							</div>
-						);
-					} ) }
+							<Button
+								size="small"
+								variant="tertiary"
+								onClick={ () =>
+									openInserterForPattern( pattern.title )
+								}
+								className="flavor-agent-assign-btn"
+							>
+								{ pattern.ctaLabel }
+							</Button>
+						</div>
+					) ) }
 				</div>
 			) }
 		</div>

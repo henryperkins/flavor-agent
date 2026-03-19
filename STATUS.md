@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-03-18
+> Last updated: 2026-03-19
 
 ## Working
 
@@ -29,14 +29,14 @@
 
 ### Editor UI
 
-- Inspector sidebar recommendation panel for selected, editable blocks
-- Content-only blocks keep the panel but only allow content-safe suggestions
-- Disabled blocks do not render AI controls
-- Pattern inserter integration with a `Recommended` category and toolbar badge for high-confidence matches
-- Site Editor template recommendation panel for `wp_template` documents
+- Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
+- Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
+- Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping
+- Site Editor template recommendation panel for `wp_template` documents with advisory-only review and browse actions
 - Admin settings screen with backend configuration and pattern sync controls
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
-- Recommendation-time WordPress docs grounding is cache-only; explicit `flavor-agent/search-wordpress-docs` requests perform the Cloudflare fetch and seed later recommendation prompts
+- Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
+- Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
 
 ## Stubbed (501)
 
@@ -47,19 +47,16 @@
 ## Known Issues
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
-- First-request WordPress docs grounding is intentionally reduced: uncached `recommend-block` and `recommend-template` requests now return without Cloudflare guidance until an explicit `flavor-agent/search-wordpress-docs` request seeds cache.
-- Live recommendation execution with valid LLM credentials was not rerun in this pass. Live verification covered ability schema validation and authenticated ability discovery, not end-to-end editor submissions.
+- First-request WordPress docs grounding is still intentionally reduced: uncached `recommend-block` and `recommend-template` requests return without Cloudflare guidance until either an exact-query cache entry or the matching warmed entity cache is available.
+- Live recommendation execution with valid LLM credentials and manual Site Editor smoke checks were not rerun in this pass.
 
 ## Recent Verification
 
-- 2026-03-18 remediation: `vendor/bin/phpunit --filter 'AISearchClientTest|InfraAbilitiesTest|PromptGuidanceTest|ServerCollectorTest|BlockAbilitiesTest|RegistrationTest'` passed.
-- 2026-03-18 remediation: `npm run test:unit -- --runInBand src/patterns/__tests__/find-inserter-search-input.test.js src/patterns/__tests__/inserter-badge-state.test.js src/store/__tests__/pattern-status.test.js src/utils/__tests__/structural-identity.test.js src/utils/__tests__/template-part-areas.test.js` passed.
-- 2026-03-18 remediation: `npm run lint:js` and `npm run build` passed.
-- 2026-03-18 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Cloudflare/AISearchClient.php inc/Abilities/Registration.php inc/LLM/TemplatePrompt.php tests/phpunit/AISearchClientTest.php tests/phpunit/RegistrationTest.php tests/phpunit/bootstrap.php` passed.
-- 2026-03-18 remediation: widened `phpcs.xml.dist` coverage and reran `composer lint:php`; it passed.
-- 2026-03-18 remediation: `composer test:php` passed after the repo-wide PHPCS cleanup.
-- 2026-03-18 remediation: `wp --path=/home/hperkins-wp/htdocs/wp.hperkins.com eval '...'` validated `flavor-agent/recommend-block` input with the new structural fields and returned `bool(true)`.
-- 2026-03-18 remediation: authenticated `rest_do_request( new WP_REST_Request( 'GET', '/wp-abilities/v1/abilities' ) )` returned `200`, and the exported `selectedBlock` keys included `editingMode`, `childCount`, `structuralIdentity`, `structuralAncestors`, and `structuralBranch`.
+- 2026-03-19 remediation: `npm run lint:js` passed.
+- 2026-03-19 remediation: `npm run test:unit -- --runInBand` passed.
+- 2026-03-19 remediation: `npm run build` passed.
+- 2026-03-19 remediation: `vendor/bin/phpunit` passed.
+- 2026-03-19 remediation: `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Abilities/BlockAbilities.php inc/Abilities/TemplateAbilities.php inc/Context/ServerCollector.php inc/LLM/Prompt.php tests/phpunit/BlockAbilitiesTest.php tests/phpunit/PromptRulesTest.php tests/phpunit/PromptGuidanceTest.php` passed.
 
 ## Historical Docs
 

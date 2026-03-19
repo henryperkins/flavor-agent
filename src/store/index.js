@@ -16,11 +16,15 @@ import {
 } from './update-helpers';
 
 const STORE_NAME = 'flavor-agent';
-
-const DEFAULT_STATE = {
+const DEFAULT_BLOCK_REQUEST_STATE = {
 	status: 'idle',
 	error: null,
+	requestToken: 0,
+};
+
+const DEFAULT_STATE = {
 	blockRecommendations: {},
+	blockRequestState: {},
 	activityLog: [],
 	patternRecommendations: [],
 	patternStatus: 'idle',
@@ -34,17 +38,52 @@ const DEFAULT_STATE = {
 	templateResultToken: 0,
 };
 
+function getStoredBlockRequestState( state, clientId ) {
+	return state.blockRequestState[ clientId ] || DEFAULT_BLOCK_REQUEST_STATE;
+}
+
+function isStaleBlockRequest( state, clientId, requestToken ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	return (
+		requestToken <
+		getStoredBlockRequestState( state, clientId ).requestToken
+	);
+}
+
 const actions = {
-	setStatus( status, error = null ) {
-		return { type: 'SET_STATUS', status, error };
+	setBlockRequestState(
+		clientId,
+		status,
+		error = null,
+		requestToken = null
+	) {
+		return {
+			type: 'SET_BLOCK_REQUEST_STATE',
+			clientId,
+			status,
+			error,
+			requestToken,
+		};
 	},
 
-	setBlockRecommendations( clientId, recommendations ) {
-		return { type: 'SET_BLOCK_RECS', clientId, recommendations };
+	setBlockRecommendations( clientId, recommendations, requestToken = null ) {
+		return {
+			type: 'SET_BLOCK_RECS',
+			clientId,
+			recommendations,
+			requestToken,
+		};
 	},
 
 	clearBlockRecommendations( clientId ) {
 		return { type: 'CLEAR_BLOCK_RECS', clientId };
+	},
+
+	clearBlockError( clientId ) {
+		return { type: 'CLEAR_BLOCK_ERROR', clientId };
 	},
 
 	logActivity( entry ) {
@@ -52,8 +91,18 @@ const actions = {
 	},
 
 	fetchBlockRecommendations( clientId, context, prompt = '' ) {
-		return async ( { dispatch } ) => {
-			dispatch( actions.setStatus( 'loading' ) );
+		return async ( { dispatch, select } ) => {
+			const requestToken =
+				select( STORE_NAME ).getBlockRequestToken( clientId ) + 1;
+
+			dispatch(
+				actions.setBlockRequestState(
+					clientId,
+					'loading',
+					null,
+					requestToken
+				)
+			);
 
 			try {
 				const result = await apiFetch( {
@@ -63,22 +112,35 @@ const actions = {
 				} );
 
 				dispatch(
-					actions.setBlockRecommendations( clientId, {
-						blockName: context.block?.name || '',
-						blockContext: context.block || {},
-						...sanitizeRecommendationsForContext(
-							result.payload || {},
-							context.block || {}
-						),
-						timestamp: Date.now(),
-					} )
+					actions.setBlockRecommendations(
+						clientId,
+						{
+							blockName: context.block?.name || '',
+							blockContext: context.block || {},
+							...sanitizeRecommendationsForContext(
+								result.payload || {},
+								context.block || {}
+							),
+							timestamp: Date.now(),
+						},
+						requestToken
+					)
 				);
-				dispatch( actions.setStatus( 'idle' ) );
+				dispatch(
+					actions.setBlockRequestState(
+						clientId,
+						'ready',
+						null,
+						requestToken
+					)
+				);
 			} catch ( err ) {
 				dispatch(
-					actions.setStatus(
+					actions.setBlockRequestState(
+						clientId,
 						'error',
-						err.message || 'Request failed.'
+						err.message || 'Request failed.',
+						requestToken
 					)
 				);
 			}
@@ -257,9 +319,47 @@ const actions = {
 
 function reducer( state = DEFAULT_STATE, action ) {
 	switch ( action.type ) {
-		case 'SET_STATUS':
-			return { ...state, status: action.status, error: action.error };
+		case 'SET_BLOCK_REQUEST_STATE': {
+			if (
+				isStaleBlockRequest(
+					state,
+					action.clientId,
+					action.requestToken
+				)
+			) {
+				return state;
+			}
+
+			const currentEntry = getStoredBlockRequestState(
+				state,
+				action.clientId
+			);
+
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...currentEntry,
+						status: action.status,
+						error: action.error ?? null,
+						requestToken:
+							action.requestToken ?? currentEntry.requestToken,
+					},
+				},
+			};
+		}
 		case 'SET_BLOCK_RECS':
+			if (
+				isStaleBlockRequest(
+					state,
+					action.clientId,
+					action.requestToken
+				)
+			) {
+				return state;
+			}
+
 			return {
 				...state,
 				blockRecommendations: {
@@ -268,11 +368,42 @@ function reducer( state = DEFAULT_STATE, action ) {
 				},
 			};
 		case 'CLEAR_BLOCK_RECS': {
-			const next = { ...state.blockRecommendations };
+			const nextRecommendations = { ...state.blockRecommendations };
+			const nextRequestState = { ...state.blockRequestState };
 
-			delete next[ action.clientId ];
+			delete nextRecommendations[ action.clientId ];
+			delete nextRequestState[ action.clientId ];
 
-			return { ...state, blockRecommendations: next };
+			return {
+				...state,
+				blockRecommendations: nextRecommendations,
+				blockRequestState: nextRequestState,
+			};
+		}
+		case 'CLEAR_BLOCK_ERROR': {
+			if ( ! state.blockRequestState[ action.clientId ] ) {
+				return state;
+			}
+
+			const currentEntry = getStoredBlockRequestState(
+				state,
+				action.clientId
+			);
+
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...currentEntry,
+						status:
+							currentEntry.status === 'error'
+								? 'idle'
+								: currentEntry.status,
+						error: null,
+					},
+				},
+			};
 		}
 		case 'LOG_ACTIVITY':
 			return {
@@ -324,9 +455,22 @@ function reducer( state = DEFAULT_STATE, action ) {
 }
 
 const selectors = {
-	getStatus: ( state ) => state.status,
-	getError: ( state ) => state.error,
-	isLoading: ( state ) => state.status === 'loading',
+	getBlockRequestState: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ),
+	getBlockStatus: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).status,
+	getBlockError: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).error,
+	getBlockRequestToken: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).requestToken,
+	isBlockLoading: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).status === 'loading',
+	getStatus: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).status,
+	getError: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).error,
+	isLoading: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).status === 'loading',
 	getBlockRecommendations: ( state, clientId ) =>
 		state.blockRecommendations[ clientId ] || null,
 	getSettingsSuggestions: ( state, clientId ) =>

@@ -24,22 +24,22 @@ final class TemplateAbilities {
 	/**
 	 * Recommend template-part composition and patterns for a template.
 	 *
-	 * @param array $input { templateRef: string, templateType?: string, prompt?: string, visiblePatternNames?: string[] }
+	 * The shipped template panel keeps this request template-global and
+	 * advisory-only. It does not pass inserter-root pattern allowlists.
+	 *
+	 * @param array $input { templateRef: string, templateType?: string, prompt?: string }
 	 * @return array|\WP_Error Suggestions payload or error.
 	 */
 	public static function recommend_template( mixed $input ): array|\WP_Error {
 		$input = self::normalize_input( $input );
 
-		$template_ref          = isset( $input['templateRef'] )
+		$template_ref  = isset( $input['templateRef'] )
 			? trim( (string) $input['templateRef'] )
 			: '';
-		$template_type         = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
+		$template_type = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
 			? $input['templateType']
 			: null;
-		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
-		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
-			? StringArray::sanitize( $input['visiblePatternNames'] )
-			: null;
+		$prompt        = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
 
 		if ( $template_ref === '' ) {
 			return new \WP_Error(
@@ -49,11 +49,7 @@ final class TemplateAbilities {
 			);
 		}
 
-		$context = ServerCollector::for_template(
-			$template_ref,
-			$template_type,
-			$visible_pattern_names
-		);
+		$context = ServerCollector::for_template( $template_ref, $template_type );
 		if ( is_wp_error( $context ) ) {
 			return $context;
 		}
@@ -91,13 +87,20 @@ final class TemplateAbilities {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query = self::build_wordpress_docs_query( $context, $prompt );
+		$query      = self::build_wordpress_docs_query( $context, $prompt );
+		$entity_key = self::build_wordpress_docs_entity_key( $context );
 
-		if ( $query === '' ) {
-			return [];
-		}
+		return AISearchClient::maybe_search_with_entity_fallback( $query, $entity_key );
+	}
 
-		return AISearchClient::maybe_search( $query );
+	private static function build_wordpress_docs_entity_key( array $context ): string {
+		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+			? sanitize_key( $context['templateType'] )
+			: '';
+
+		return AISearchClient::resolve_entity_key(
+			$template_type !== '' ? 'template:' . $template_type : ''
+		);
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {

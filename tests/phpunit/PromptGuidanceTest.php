@@ -89,4 +89,30 @@ final class PromptGuidanceTest extends TestCase {
 		$this->assertStringContainsString( '## Structural ancestors', $prompt );
 		$this->assertStringContainsString( '## Structural branch', $prompt );
 	}
+
+	public function test_block_prompt_describes_block_level_content_only_restrictions(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'       => [
+					'name'        => 'core/paragraph',
+					'editingMode' => 'contentOnly',
+					'title'       => 'Paragraph',
+				],
+				'themeTokens' => [],
+			]
+		);
+
+		$this->assertStringContainsString(
+			'## Content-only restrictions',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'This block is in contentOnly editing mode.',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Only content attributes (role=content) can be edited.',
+			$prompt
+		);
+	}
 }

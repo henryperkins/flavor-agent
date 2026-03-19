@@ -135,10 +135,15 @@ SYSTEM;
 			$parts[] = 'Editing mode: ' . $block['editingMode'];
 		}
 
-		if ( ! empty( $block['isInsideContentOnly'] ) ) {
+		$restrictions = self::get_block_restrictions( $block );
+
+		if ( $restrictions['contentOnly'] ) {
 			$parts[] = '';
-			$parts[] = '## Content-only container';
-			$parts[] = 'This block is inside a contentOnly container. Only content attributes (role=content) can be edited. Do not suggest style or settings panel changes.';
+			$parts[] = '## Content-only restrictions';
+			$parts[] = ! empty( $block['isInsideContentOnly'] )
+				? 'This block is inside a contentOnly container.'
+				: 'This block is in contentOnly editing mode.';
+			$parts[] = 'Only content attributes (role=content) can be edited. Do not suggest style or settings panel changes.';
 		}
 
 		if ( array_key_exists( 'blockVisibility', $block ) && null !== $block['blockVisibility'] ) {
@@ -272,7 +277,18 @@ SYSTEM;
 	}
 
 	public static function enforce_block_context_rules( array $payload, array $block ): array {
-		if ( empty( $block['isInsideContentOnly'] ) ) {
+		$restrictions = self::get_block_restrictions( $block );
+
+		if ( $restrictions['disabled'] ) {
+			return [
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => '',
+			];
+		}
+
+		if ( ! $restrictions['contentOnly'] ) {
 			return $payload;
 		}
 
@@ -338,6 +354,29 @@ SYSTEM;
 		$suggestion['attributeUpdates'] = $filtered_updates;
 
 		return $suggestion;
+	}
+
+	private static function get_block_restrictions( array $block ): array {
+		$editing_mode = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
+
+		return [
+			'disabled'    => $editing_mode === 'disabled',
+			'contentOnly' => ! empty( $block['isInsideContentOnly'] ) || $editing_mode === 'contentOnly',
+		];
+	}
+
+	private static function normalize_editing_mode( mixed $value ): string {
+		if ( ! is_string( $value ) ) {
+			return 'default';
+		}
+
+		$value = strtolower( preg_replace( '/[^a-z]/i', '', $value ) ?? '' );
+
+		return match ( $value ) {
+			'contentonly' => 'contentOnly',
+			'disabled' => 'disabled',
+			default => 'default',
+		};
 	}
 
 	/**
