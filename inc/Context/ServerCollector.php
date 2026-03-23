@@ -666,4 +666,232 @@ final class ServerCollector {
 
 		return true;
 	}
+
+	/**
+	 * Assemble context for a navigation recommendation.
+	 *
+	 * Accepts either a wp_navigation post ID or raw navigation block markup.
+	 * Extracts menu item structure, overlay configuration, and overlay
+	 * template parts (WP 7.0+ navigation-overlay area).
+	 *
+	 * @param int    $menu_id  wp_navigation post ID. 0 to skip.
+	 * @param string $markup   Serialized navigation block markup. Empty to skip.
+	 * @return array|\WP_Error Navigation context or error.
+	 */
+	public static function for_navigation( int $menu_id = 0, string $markup = '' ): array|\WP_Error {
+		$nav_content = '';
+		$nav_attrs   = [];
+
+		// Resolve content from wp_navigation post if menu ID is provided.
+		if ( $menu_id > 0 ) {
+			$post = get_post( $menu_id );
+
+			if ( ! $post || $post->post_type !== 'wp_navigation' ) {
+				return new \WP_Error(
+					'navigation_not_found',
+					"No wp_navigation post found with ID {$menu_id}.",
+					[ 'status' => 404 ]
+				);
+			}
+
+			$nav_content = $post->post_content ?? '';
+		}
+
+		// If raw markup is provided, use it (overrides or supplements menu ID).
+		if ( $markup !== '' ) {
+			$nav_content = $markup;
+		}
+
+		// Parse the navigation block(s) to extract structure.
+		$blocks = parse_blocks( $nav_content );
+
+		// Find the core/navigation block (may be top-level or the markup may
+		// be just the inner blocks of a navigation).
+		$nav_block = self::find_navigation_block( $blocks );
+
+		if ( $nav_block !== null ) {
+			$nav_attrs   = $nav_block['attrs'] ?? [];
+			$inner       = $nav_block['innerBlocks'] ?? [];
+		} else {
+			// Treat all parsed blocks as inner blocks of an implicit navigation.
+			$inner = $blocks;
+		}
+
+		$menu_items = self::extract_menu_items( $inner );
+
+		// Extract key navigation attributes.
+		$attributes = [
+			'overlayMenu'        => self::extract_string_attr( $nav_attrs, 'overlayMenu', 'mobile' ),
+			'hasIcon'            => ! empty( $nav_attrs['hasIcon'] ),
+			'icon'               => self::extract_string_attr( $nav_attrs, 'icon', 'handle' ),
+			'openSubmenusOnClick' => ! empty( $nav_attrs['openSubmenusOnClick'] ),
+			'showSubmenuIcon'    => $nav_attrs['showSubmenuIcon'] ?? true,
+			'maxNestingLevel'    => isset( $nav_attrs['maxNestingLevel'] ) ? (int) $nav_attrs['maxNestingLevel'] : 0,
+		];
+
+		// Detect location from menu ID reference (if the navigation block
+		// references this menu from a template part, we can infer location).
+		$location = 'unknown';
+		if ( $menu_id > 0 ) {
+			$location = self::infer_navigation_location( $menu_id );
+		}
+
+		// Collect navigation-overlay template parts (WP 7.0+).
+		$overlay_parts = self::for_template_parts( 'navigation-overlay', false );
+
+		return [
+			'menuId'               => $menu_id > 0 ? $menu_id : null,
+			'location'             => $location,
+			'attributes'           => $attributes,
+			'menuItems'            => $menu_items,
+			'menuItemCount'        => self::count_menu_items_recursive( $menu_items ),
+			'maxDepth'             => self::measure_menu_depth( $menu_items ),
+			'overlayTemplateParts' => $overlay_parts,
+			'themeTokens'          => self::for_tokens(),
+		];
+	}
+
+	/**
+	 * Find a core/navigation block in parsed blocks (top-level only).
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @return array|null The navigation block or null.
+	 */
+	private static function find_navigation_block( array $blocks ): ?array {
+		foreach ( $blocks as $block ) {
+			if ( ( $block['blockName'] ?? '' ) === 'core/navigation' ) {
+				return $block;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Extract a flat/nested menu item structure from parsed inner blocks.
+	 *
+	 * @param array $blocks Parsed inner blocks of a navigation.
+	 * @return array Menu item tree.
+	 */
+	private static function extract_menu_items( array $blocks ): array {
+		$items = [];
+
+		foreach ( $blocks as $block ) {
+			$name  = $block['blockName'] ?? '';
+			$attrs = $block['attrs'] ?? [];
+			$inner = $block['innerBlocks'] ?? [];
+
+			if ( $name === null || $name === '' ) {
+				continue;
+			}
+
+			$item = [
+				'type' => self::simplify_block_name( $name ),
+			];
+
+			// Extract label and URL for navigation links/submenus.
+			if ( $name === 'core/navigation-link' || $name === 'core/navigation-submenu' ) {
+				$item['label'] = self::extract_string_attr( $attrs, 'label', '' );
+				$item['url']   = self::extract_string_attr( $attrs, 'url', '' );
+			} elseif ( $name === 'core/page-list' ) {
+				$item['label'] = 'Page List (auto-generated)';
+			} elseif ( $name === 'core/home-link' ) {
+				$item['label'] = self::extract_string_attr( $attrs, 'label', 'Home' );
+			} else {
+				// Other allowed inner blocks (spacer, search, social-links, etc.).
+				$item['label'] = '';
+			}
+
+			// Recurse for submenus.
+			if ( is_array( $inner ) && count( $inner ) > 0 ) {
+				$item['children'] = self::extract_menu_items( $inner );
+			}
+
+			$items[] = $item;
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Strip the core/ prefix for readability in prompts.
+	 */
+	private static function simplify_block_name( string $name ): string {
+		if ( str_starts_with( $name, 'core/' ) ) {
+			return substr( $name, 5 );
+		}
+
+		return $name;
+	}
+
+	/**
+	 * Safely extract a string attribute with a default.
+	 */
+	private static function extract_string_attr( array $attrs, string $key, string $default ): string {
+		return isset( $attrs[ $key ] ) && is_string( $attrs[ $key ] ) ? $attrs[ $key ] : $default;
+	}
+
+	/**
+	 * Count all menu items recursively.
+	 */
+	private static function count_menu_items_recursive( array $items ): int {
+		$count = count( $items );
+
+		foreach ( $items as $item ) {
+			if ( isset( $item['children'] ) && is_array( $item['children'] ) ) {
+				$count += self::count_menu_items_recursive( $item['children'] );
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Measure the maximum nesting depth of a menu item tree.
+	 */
+	private static function measure_menu_depth( array $items, int $current = 1 ): int {
+		if ( count( $items ) === 0 ) {
+			return 0;
+		}
+
+		$max = $current;
+
+		foreach ( $items as $item ) {
+			if ( isset( $item['children'] ) && is_array( $item['children'] ) && count( $item['children'] ) > 0 ) {
+				$child_depth = self::measure_menu_depth( $item['children'], $current + 1 );
+				$max         = max( $max, $child_depth );
+			}
+		}
+
+		return $max;
+	}
+
+	/**
+	 * Infer where a navigation menu is used by scanning template parts.
+	 *
+	 * Checks header and footer template parts for references to the given
+	 * wp_navigation post ID. Falls back to 'unknown'.
+	 *
+	 * @param int $menu_id wp_navigation post ID.
+	 * @return string Location identifier (header, footer, or unknown).
+	 */
+	private static function infer_navigation_location( int $menu_id ): string {
+		$parts = self::for_template_parts( null, true );
+
+		foreach ( $parts as $part ) {
+			$content = $part['content'] ?? '';
+			$area    = $part['area'] ?? '';
+
+			if ( $content === '' || $area === '' ) {
+				continue;
+			}
+
+			// Look for a navigation block referencing this menu ID.
+			if ( str_contains( $content, '"ref":' . $menu_id ) || str_contains( $content, '"ref": ' . $menu_id ) ) {
+				return $area;
+			}
+		}
+
+		return 'unknown';
+	}
 }

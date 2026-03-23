@@ -27,6 +27,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-template, sync-patterns) |
 | `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations |
 | `LLM\Prompt` | System/user prompt assembly for block and pattern recommendations |
+| `LLM\NavigationPrompt` | Navigation recommendation prompt assembly and response parsing |
 | `Context\ServerCollector` | Gathers server-side context (post type, template, theme.json tokens) |
 | `AzureOpenAI\EmbeddingClient` | Azure OpenAI embeddings API |
 | `AzureOpenAI\QdrantClient` | Qdrant vector DB for pattern similarity search |

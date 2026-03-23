@@ -52,7 +52,9 @@ flavor-agent/
       BlockAbilities.php    recommend-block, introspect-block
       PatternAbilities.php  recommend-patterns, list-patterns
       TemplateAbilities.php recommend-template, list-template-parts
-      NavigationAbilities.php  recommend-navigation (STUB: 501)
+      NavigationAbilities.php  recommend-navigation
+    LLM/
+      NavigationPrompt.php  Navigation recommendation prompt assembly and response parsing
       InfraAbilities.php    get-theme-tokens, check-status
       WordPressDocsAbilities.php  search-wordpress-docs
     Support/
@@ -106,6 +108,7 @@ flavor-agent/
       PromptRulesTest.php
       BlockAbilitiesTest.php
       PromptGuidanceTest.php
+      NavigationAbilitiesTest.php
       SettingsTest.php
     (JS tests live alongside source in __tests__/ dirs and *.test.js files)
 
@@ -183,7 +186,7 @@ All abilities registered with full JSON Schema input/output definitions:
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | `manage_options` | Working (readonly) |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | `edit_posts` | Working (readonly) |
 | `flavor-agent/check-status` | `InfraAbilities` | `edit_posts` | Working (readonly) |
-| `flavor-agent/recommend-navigation` | `NavigationAbilities` | `edit_theme_options` | **Stub (501)** |
+| `flavor-agent/recommend-navigation` | `NavigationAbilities` | `edit_theme_options` | Working |
 
 #### WordPress Docs Grounding (Cloudflare AI Search)
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
@@ -211,12 +214,6 @@ Plus pattern sync status panel with manual trigger.
 
 When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the settings save flow validates the configured account, instance, and token against the instance endpoint, rejects disabled or paused instances, runs a lightweight probe search, and preserves the previous values if validation fails.
 Successful saves still use the standard Settings API notice flow, and failed Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
-
-### Stubbed (Not Implemented)
-
-| Feature | Current State | What's Missing |
-|---------|--------------|----------------|
-| Navigation recommendations | `NavigationAbilities::recommend_navigation()` returns 501 | Full implementation: menu structure analysis, nav item ordering, mobile overlay suggestions |
 
 ### Not Yet Built (From Original Vision)
 
@@ -315,6 +312,24 @@ User editing wp_template in Site Editor
      -> Pattern links -> openInserterForPattern()
 ```
 
+### Navigation Recommendation Flow
+```
+External AI agent calls flavor-agent/recommend-navigation ability
+  -> NavigationAbilities::recommend_navigation(input)
+     -> ServerCollector::for_navigation(menuId, markup)
+        -> get_post(menuId) for wp_navigation content
+        -> parse_blocks() to extract menu item tree
+        -> Extract navigation block attributes
+        -> for_template_parts('navigation-overlay') for WP 7.0 overlay parts
+        -> infer_navigation_location() from template part refs
+        -> for_tokens() for theme design tokens
+     -> AISearchClient::maybe_search_with_entity_fallback()
+     -> NavigationPrompt::build_system() + build_user()
+     -> ResponsesClient::rank(instructions, input)
+     -> NavigationPrompt::parse_response() (validates categories, change types)
+  <- JSON response: { suggestions, explanation }
+```
+
 ## Test Coverage
 
 ### PHP (PHPUnit)
@@ -330,7 +345,8 @@ User editing wp_template in Site Editor
 | `BlockAbilitiesTest` | 3 | Input normalization, XSS sanitization, disabled block short-circuit |
 | `PromptGuidanceTest` | 5 | Guidance sections in prompts, structural identity, content-only |
 | `SettingsTest` | 6 | Changed-vs-unchanged Cloudflare save validation, rollback, partial credentials, and settings notice rendering |
-| **Total** | **51** | |
+| `NavigationAbilitiesTest` | 12 | Input validation, prompt assembly, response parsing, system prompt content |
+| **Total** | **63** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
@@ -367,7 +383,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Settings page success/error feedback for credential validation
 - [x] Clean uninstall
 - [ ] Fix: live credential validation on Azure OpenAI/Qdrant settings save
-- [ ] Navigation recommendations (replace 501 stub)
+- [x] Navigation recommendations (replace 501 stub)
 - [ ] Integration tests (at minimum: Playwright smoke for each editor surface)
 
 ### Should Have (v1.x)

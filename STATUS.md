@@ -16,6 +16,7 @@
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | Theme preset and global style token extraction |
+| `flavor-agent/recommend-navigation` | `NavigationAbilities` | Navigation structure, overlay behavior, and organization recommendations |
 | `flavor-agent/check-status` | `InfraAbilities` | Backend inventory plus current-user ability availability status |
 
 ### REST API
@@ -39,12 +40,6 @@
 - Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must target an enabled, unpaused instance that also returns trusted `developer.wordpress.org` guidance before they are saved
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
-
-## Stubbed (501)
-
-| Ability | Permission | What is missing |
-| --- | --- | --- |
-| `flavor-agent/recommend-navigation` | `edit_theme_options` | Navigation recommendation implementation |
 
 ## Known Issues
 

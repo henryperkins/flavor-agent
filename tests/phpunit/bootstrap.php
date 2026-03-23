@@ -34,6 +34,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $settings_errors = [];
 
+		/** @var array<int, object> */
+		public static array $posts = [];
+
 		public static mixed $remote_post_response = [];
 
 		public static mixed $remote_get_response = [];
@@ -57,6 +60,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$registered_abilities        = [];
 			self::$registered_ability_categories = [];
 			self::$settings_errors             = [];
+			self::$posts                       = [];
 			self::$remote_post_response        = [];
 			self::$remote_get_response         = [];
 			self::$ai_client_supported         = false;
@@ -563,9 +567,86 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'get_post' ) ) {
+		function get_post( $post_id = null ) {
+			if ( $post_id === null ) {
+				return null;
+			}
+
+			$id = (int) ( is_object( $post_id ) ? ( $post_id->ID ?? 0 ) : $post_id );
+
+			return WordPressTestState::$posts[ $id ] ?? null;
+		}
+	}
+
 	if ( ! function_exists( 'parse_blocks' ) ) {
 		function parse_blocks( string $content ): array {
-			return [];
+			$blocks  = [];
+			$pattern = '/<!--\s+wp:([a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)\s*(\{[^}]*\})?\s*(\/)?-->/';
+			$offset  = 0;
+
+			while ( preg_match( $pattern, $content, $match, PREG_OFFSET_CAPTURE, $offset ) ) {
+				$full_match = $match[0][0];
+				$match_pos  = $match[0][1];
+				$block_name = 'core/' . $match[1][0];
+
+				if ( str_contains( $match[1][0], '/' ) ) {
+					$block_name = $match[1][0];
+				}
+
+				$attrs_json   = $match[2][0] ?? '';
+				$self_closing = ! empty( $match[3][0] );
+
+				$attrs = [];
+				if ( $attrs_json !== '' ) {
+					$decoded = json_decode( $attrs_json, true );
+					if ( is_array( $decoded ) ) {
+						$attrs = $decoded;
+					}
+				}
+
+				if ( $self_closing ) {
+					$blocks[] = [
+						'blockName'    => $block_name,
+						'attrs'        => $attrs,
+						'innerBlocks'  => [],
+						'innerHTML'    => '',
+						'innerContent' => [],
+					];
+					$offset = $match_pos + strlen( $full_match );
+				} else {
+					$close_tag = '<!-- /wp:' . $match[1][0] . ' -->';
+					$close_pos = strpos( $content, $close_tag, $match_pos + strlen( $full_match ) );
+
+					if ( $close_pos !== false ) {
+						$inner_html = substr(
+							$content,
+							$match_pos + strlen( $full_match ),
+							$close_pos - ( $match_pos + strlen( $full_match ) )
+						);
+
+						$blocks[] = [
+							'blockName'    => $block_name,
+							'attrs'        => $attrs,
+							'innerBlocks'  => parse_blocks( $inner_html ),
+							'innerHTML'    => $inner_html,
+							'innerContent' => [ $inner_html ],
+						];
+
+						$offset = $close_pos + strlen( $close_tag );
+					} else {
+						$offset = $match_pos + strlen( $full_match );
+					}
+				}
+			}
+
+			return $blocks;
+		}
+	}
+
+	if ( ! function_exists( 'str_starts_with' ) ) {
+		function str_starts_with( string $haystack, string $needle ): bool {
+			return strncmp( $haystack, $needle, strlen( $needle ) ) === 0;
 		}
 	}
 
