@@ -79,6 +79,22 @@ final class QdrantClient {
 			);
 		}
 
+		// Ensure the response looks like a Qdrant /collections payload.
+		if (
+			! isset( $data['status'] ) ||
+			'ok' !== $data['status'] ||
+			! isset( $data['result'] ) ||
+			! is_array( $data['result'] ) ||
+			! array_key_exists( 'collections', $data['result'] ) ||
+			! is_array( $data['result']['collections'] )
+		) {
+			return new \WP_Error(
+				'qdrant_validation_unexpected_response',
+				'Qdrant validation response did not contain the expected collections list.',
+				[ 'status' => 400 ]
+			);
+		}
+
 		return true;
 	}
 

@@ -30,8 +30,18 @@ final class ConfigurationValidator {
 			);
 		}
 
-		$body['model'] = $deployment;
-		$response      = wp_remote_post(
+		$body['model']   = $deployment;
+		$encoded_body    = wp_json_encode( $body );
+
+		if ( false === $encoded_body ) {
+			return new \WP_Error(
+				$error_code . '_encode_error',
+				"Failed to encode {$fallback_message} validation request.",
+				[ 'status' => 400 ]
+			);
+		}
+
+		$response = wp_remote_post(
 			rtrim( $endpoint, '/' ) . $path,
 			[
 				'timeout' => 20,
@@ -39,7 +49,7 @@ final class ConfigurationValidator {
 					'Content-Type' => 'application/json',
 					'api-key'      => $api_key,
 				],
-				'body'    => wp_json_encode( $body ),
+				'body'    => $encoded_body,
 			]
 		);
 
@@ -67,6 +77,35 @@ final class ConfigurationValidator {
 			return new \WP_Error(
 				$error_code . '_parse_error',
 				"Failed to parse {$fallback_message} validation response.",
+				[ 'status' => 400 ]
+			);
+		}
+
+		$has_expected_shape = false;
+
+		// Minimal shape checks to reduce false positives when validating configuration.
+		// Accept common Azure OpenAI response formats:
+		// - Embeddings / similar: non-empty "data" array.
+		// - Chat/completions: non-empty "choices" array.
+		// - Responses that expose text directly: non-empty "output_text" or "output[0].content[0].text".
+		if ( isset( $data['data'] ) && is_array( $data['data'] ) && ! empty( $data['data'] ) ) {
+			$has_expected_shape = true;
+		} elseif ( isset( $data['choices'] ) && is_array( $data['choices'] ) && ! empty( $data['choices'] ) ) {
+			$has_expected_shape = true;
+		} elseif ( isset( $data['output_text'] ) && is_string( $data['output_text'] ) && $data['output_text'] !== '' ) {
+			$has_expected_shape = true;
+		} elseif (
+			isset( $data['output'][0]['content'][0]['text'] )
+			&& is_string( $data['output'][0]['content'][0]['text'] )
+			&& $data['output'][0]['content'][0]['text'] !== ''
+		) {
+			$has_expected_shape = true;
+		}
+
+		if ( ! $has_expected_shape ) {
+			return new \WP_Error(
+				$error_code . '_invalid_shape',
+				"Unexpected {$fallback_message} validation response format.",
 				[ 'status' => 400 ]
 			);
 		}
