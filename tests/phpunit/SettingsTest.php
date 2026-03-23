@@ -18,13 +18,13 @@ final class SettingsTest extends TestCase {
 		WordPressTestState::reset();
 		$_POST = [];
 		$_GET  = [];
-		$this->reset_cloudflare_validation_state();
+		$this->reset_validation_state();
 	}
 
 	protected function tearDown(): void {
 		$_POST = [];
 		$_GET  = [];
-		$this->reset_cloudflare_validation_state();
+		$this->reset_validation_state();
 
 		parent::tearDown();
 	}
@@ -49,6 +49,264 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_azure_settings_skip_remote_validation_when_credentials_are_unchanged(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
+		];
+		$_POST                       = [
+			'option_page'                            => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'     => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'          => 'azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+			'flavor_agent_azure_chat_deployment'     => 'chat-deployment',
+		];
+
+		$this->assertSame(
+			'https://example.openai.azure.com/',
+			Settings::sanitize_azure_openai_endpoint( 'https://example.openai.azure.com/' )
+		);
+		$this->assertSame( 'azure-key', Settings::sanitize_azure_openai_key( 'azure-key' ) );
+		$this->assertSame(
+			'embed-deployment',
+			Settings::sanitize_azure_embedding_deployment( 'embed-deployment' )
+		);
+		$this->assertSame(
+			'chat-deployment',
+			Settings::sanitize_azure_chat_deployment( 'chat-deployment' )
+		);
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_azure_settings_accept_verified_values_and_validate_once_per_save(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'old-key',
+			'flavor_agent_azure_embedding_deployment' => 'old-embed',
+			'flavor_agent_azure_chat_deployment'      => 'old-chat',
+		];
+		$_POST                       = [
+			'option_page'                            => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'     => 'https://new.openai.azure.com/',
+			'flavor_agent_azure_openai_key'          => 'new-key',
+			'flavor_agent_azure_embedding_deployment' => 'new-embed',
+			'flavor_agent_azure_chat_deployment'     => 'new-chat',
+		];
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'data' => [
+						[
+							'embedding' => [ 0.1, 0.2 ],
+						],
+					],
+				]
+			),
+		];
+
+		$this->assertSame(
+			'https://new.openai.azure.com/',
+			Settings::sanitize_azure_openai_endpoint( 'https://new.openai.azure.com/' )
+		);
+		$this->assertSame( 'new-key', Settings::sanitize_azure_openai_key( 'new-key' ) );
+		$this->assertSame( 'new-embed', Settings::sanitize_azure_embedding_deployment( 'new-embed' ) );
+		$this->assertSame( 'new-chat', Settings::sanitize_azure_chat_deployment( 'new-chat' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'https://new.openai.azure.com/openai/v1/embeddings',
+			WordPressTestState::$remote_post_calls[0]['url']
+		);
+		$this->assertSame(
+			'https://new.openai.azure.com/openai/v1/responses',
+			WordPressTestState::$remote_post_calls[1]['url']
+		);
+	}
+
+	public function test_sanitize_azure_settings_revert_invalid_values_and_report_one_error(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'old-key',
+			'flavor_agent_azure_embedding_deployment' => 'old-embed',
+			'flavor_agent_azure_chat_deployment'      => 'old-chat',
+		];
+		$_POST                       = [
+			'option_page'                            => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'     => 'https://bad.openai.azure.com/',
+			'flavor_agent_azure_openai_key'          => 'bad-key',
+			'flavor_agent_azure_embedding_deployment' => 'bad-embed',
+			'flavor_agent_azure_chat_deployment'     => 'bad-chat',
+		];
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 403,
+			],
+			'body'     => wp_json_encode(
+				[
+					'error' => [
+						'message' => 'Azure authentication failed',
+					],
+				]
+			),
+		];
+
+		$this->assertSame(
+			'https://old.openai.azure.com/',
+			Settings::sanitize_azure_openai_endpoint( 'https://bad.openai.azure.com/' )
+		);
+		$this->assertSame( 'old-key', Settings::sanitize_azure_openai_key( 'bad-key' ) );
+		$this->assertSame( 'old-embed', Settings::sanitize_azure_embedding_deployment( 'bad-embed' ) );
+		$this->assertSame( 'old-chat', Settings::sanitize_azure_chat_deployment( 'bad-chat' ) );
+		$this->assertCount( 1, WordPressTestState::$settings_errors );
+		$this->assertSame( 'Azure authentication failed', WordPressTestState::$settings_errors[0]['message'] );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_azure_settings_allow_partial_credentials_without_remote_validation(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
+		];
+		$_POST                       = [
+			'option_page'                            => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'     => '',
+			'flavor_agent_azure_openai_key'          => 'azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+			'flavor_agent_azure_chat_deployment'     => 'chat-deployment',
+		];
+
+		$this->assertSame( '', Settings::sanitize_azure_openai_endpoint( '' ) );
+		$this->assertSame( 'azure-key', Settings::sanitize_azure_openai_key( 'azure-key' ) );
+		$this->assertSame(
+			'embed-deployment',
+			Settings::sanitize_azure_embedding_deployment( 'embed-deployment' )
+		);
+		$this->assertSame(
+			'chat-deployment',
+			Settings::sanitize_azure_chat_deployment( 'chat-deployment' )
+		);
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_qdrant_settings_skip_remote_validation_when_credentials_are_unchanged(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+		$_POST                       = [
+			'option_page'            => 'flavor_agent_settings',
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+
+		$this->assertSame(
+			'https://example.cloud.qdrant.io:6333',
+			Settings::sanitize_qdrant_url( 'https://example.cloud.qdrant.io:6333' )
+		);
+		$this->assertSame( 'qdrant-key', Settings::sanitize_qdrant_key( 'qdrant-key' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_sanitize_qdrant_settings_accept_verified_values_and_validate_once(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_qdrant_url' => 'https://old.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'old-key',
+		];
+		$_POST                       = [
+			'option_page'            => 'flavor_agent_settings',
+			'flavor_agent_qdrant_url' => 'https://new.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'new-key',
+		];
+
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'collections' => [],
+					],
+				]
+			),
+		];
+
+		$this->assertSame(
+			'https://new.cloud.qdrant.io:6333',
+			Settings::sanitize_qdrant_url( 'https://new.cloud.qdrant.io:6333' )
+		);
+		$this->assertSame( 'new-key', Settings::sanitize_qdrant_key( 'new-key' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertSame(
+			'https://new.cloud.qdrant.io:6333/collections',
+			WordPressTestState::$last_remote_get['url']
+		);
+	}
+
+	public function test_sanitize_qdrant_settings_revert_invalid_values_and_report_one_error(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_qdrant_url' => 'https://old.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'old-key',
+		];
+		$_POST                       = [
+			'option_page'            => 'flavor_agent_settings',
+			'flavor_agent_qdrant_url' => 'https://bad.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'bad-key',
+		];
+
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 401,
+			],
+			'body'     => wp_json_encode(
+				[
+					'status' => [
+						'error' => 'Invalid Qdrant API key',
+					],
+				]
+			),
+		];
+
+		$this->assertSame(
+			'https://old.cloud.qdrant.io:6333',
+			Settings::sanitize_qdrant_url( 'https://bad.cloud.qdrant.io:6333' )
+		);
+		$this->assertSame( 'old-key', Settings::sanitize_qdrant_key( 'bad-key' ) );
+		$this->assertCount( 1, WordPressTestState::$settings_errors );
+		$this->assertSame( 'Invalid Qdrant API key', WordPressTestState::$settings_errors[0]['message'] );
+		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_sanitize_qdrant_settings_allow_partial_credentials_without_remote_validation(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+		$_POST                       = [
+			'option_page'            => 'flavor_agent_settings',
+			'flavor_agent_qdrant_url' => '',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+
+		$this->assertSame( '', Settings::sanitize_qdrant_url( '' ) );
+		$this->assertSame( 'qdrant-key', Settings::sanitize_qdrant_key( 'qdrant-key' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 	}
 
 	public function test_sanitize_cloudflare_settings_accepts_verified_values_and_validates_once(): void {
@@ -269,7 +527,23 @@ final class SettingsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'settings_errors', WordPressTestState::$transients );
 	}
 
-	private function reset_cloudflare_validation_state(): void {
+	private function reset_validation_state(): void {
+		$azure_state = new ReflectionProperty( Settings::class, 'azure_validation_state' );
+		$azure_state->setAccessible( true );
+		$azure_state->setValue( null, null );
+
+		$azure_reported = new ReflectionProperty( Settings::class, 'azure_validation_error_reported' );
+		$azure_reported->setAccessible( true );
+		$azure_reported->setValue( null, false );
+
+		$qdrant_state = new ReflectionProperty( Settings::class, 'qdrant_validation_state' );
+		$qdrant_state->setAccessible( true );
+		$qdrant_state->setValue( null, null );
+
+		$qdrant_reported = new ReflectionProperty( Settings::class, 'qdrant_validation_error_reported' );
+		$qdrant_reported->setAccessible( true );
+		$qdrant_reported->setValue( null, false );
+
 		$state = new ReflectionProperty( Settings::class, 'cloudflare_validation_state' );
 		$state->setAccessible( true );
 		$state->setValue( null, null );

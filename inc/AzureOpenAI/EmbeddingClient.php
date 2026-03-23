@@ -6,6 +6,24 @@ namespace FlavorAgent\AzureOpenAI;
 
 final class EmbeddingClient {
 
+	public static function validate_configuration(
+		?string $endpoint = null,
+		?string $api_key = null,
+		?string $deployment = null
+	): true|\WP_Error {
+		return ConfigurationValidator::validate(
+			(string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
+			(string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
+			(string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
+			'/openai/v1/embeddings',
+			[
+				'input' => [ 'validation' ],
+			],
+			'embedding_validation_error',
+			'Azure OpenAI embeddings'
+		);
+	}
+
 	/**
 	 * Embed a single input string.
 	 *

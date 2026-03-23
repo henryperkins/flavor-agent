@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace FlavorAgent;
 
+use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Patterns\PatternIndex;
 
 final class Settings {
@@ -18,6 +20,20 @@ final class Settings {
 	private static ?array $cloudflare_validation_state = null;
 
 	private static bool $cloudflare_validation_error_reported = false;
+
+	/**
+	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
+	 */
+	private static ?array $azure_validation_state = null;
+
+	private static bool $azure_validation_error_reported = false;
+
+	/**
+	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
+	 */
+	private static ?array $qdrant_validation_state = null;
+
+	private static bool $qdrant_validation_error_reported = false;
 
 	public static function add_menu(): void {
 		$hook = add_options_page(
@@ -48,7 +64,7 @@ final class Settings {
 			'flavor_agent_azure_openai_endpoint',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_url',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_azure_openai_endpoint' ],
 				'default'           => '',
 			]
 		);
@@ -57,7 +73,7 @@ final class Settings {
 			'flavor_agent_azure_openai_key',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_azure_openai_key' ],
 				'default'           => '',
 			]
 		);
@@ -66,7 +82,7 @@ final class Settings {
 			'flavor_agent_azure_embedding_deployment',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_azure_embedding_deployment' ],
 				'default'           => '',
 			]
 		);
@@ -75,7 +91,7 @@ final class Settings {
 			'flavor_agent_azure_chat_deployment',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_azure_chat_deployment' ],
 				'default'           => '',
 			]
 		);
@@ -86,7 +102,7 @@ final class Settings {
 			'flavor_agent_qdrant_url',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_url',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_qdrant_url' ],
 				'default'           => '',
 			]
 		);
@@ -95,7 +111,7 @@ final class Settings {
 			'flavor_agent_qdrant_key',
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_qdrant_key' ],
 				'default'           => '',
 			]
 		);
@@ -354,6 +370,68 @@ final class Settings {
 		return max( 1, min( 8, (int) $value ) );
 	}
 
+	public static function sanitize_azure_openai_endpoint( mixed $value ): string {
+		return self::sanitize_azure_url_option(
+			$value,
+			'flavor_agent_azure_openai_endpoint'
+		);
+	}
+
+	public static function sanitize_azure_openai_key( mixed $value ): string {
+		return self::sanitize_azure_text_option(
+			$value,
+			'flavor_agent_azure_openai_key'
+		);
+	}
+
+	public static function sanitize_azure_embedding_deployment( mixed $value ): string {
+		return self::sanitize_azure_text_option(
+			$value,
+			'flavor_agent_azure_embedding_deployment'
+		);
+	}
+
+	public static function sanitize_azure_chat_deployment( mixed $value ): string {
+		return self::sanitize_azure_text_option(
+			$value,
+			'flavor_agent_azure_chat_deployment'
+		);
+	}
+
+	public static function sanitize_qdrant_url( mixed $value ): string {
+		$sanitized_value = self::sanitize_url_value( $value );
+		$resolved_values = self::resolve_qdrant_submission_values(
+			[
+				'flavor_agent_qdrant_url' => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_qdrant_validation_error( $resolved_values );
+
+			return (string) get_option( 'flavor_agent_qdrant_url', '' );
+		}
+
+		return $resolved_values['flavor_agent_qdrant_url'] ?? $sanitized_value;
+	}
+
+	public static function sanitize_qdrant_key( mixed $value ): string {
+		$sanitized_value = sanitize_text_field( $value );
+		$resolved_values = self::resolve_qdrant_submission_values(
+			[
+				'flavor_agent_qdrant_key' => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_qdrant_validation_error( $resolved_values );
+
+			return (string) get_option( 'flavor_agent_qdrant_key', '' );
+		}
+
+		return $resolved_values['flavor_agent_qdrant_key'] ?? $sanitized_value;
+	}
+
 	public static function sanitize_cloudflare_account_id( mixed $value ): string {
 		return self::sanitize_cloudflare_text_option(
 			$value,
@@ -375,6 +453,40 @@ final class Settings {
 		);
 	}
 
+	private static function sanitize_azure_url_option( mixed $value, string $option_name ): string {
+		$sanitized_value = self::sanitize_url_value( $value );
+		$resolved_values = self::resolve_azure_submission_values(
+			[
+				$option_name => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_azure_validation_error( $resolved_values );
+
+			return (string) get_option( $option_name, '' );
+		}
+
+		return $resolved_values[ $option_name ] ?? $sanitized_value;
+	}
+
+	private static function sanitize_azure_text_option( mixed $value, string $option_name ): string {
+		$sanitized_value = sanitize_text_field( $value );
+		$resolved_values = self::resolve_azure_submission_values(
+			[
+				$option_name => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_azure_validation_error( $resolved_values );
+
+			return (string) get_option( $option_name, '' );
+		}
+
+		return $resolved_values[ $option_name ] ?? $sanitized_value;
+	}
+
 	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
 		$sanitized_value = sanitize_text_field( $value );
 		$resolved_values = self::resolve_cloudflare_submission_values(
@@ -390,6 +502,151 @@ final class Settings {
 		}
 
 		return $resolved_values[ $option_name ] ?? $sanitized_value;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array<string, string>|\WP_Error
+	 */
+	private static function resolve_azure_submission_values( array $overrides = [] ): array|\WP_Error {
+		$current_values = self::get_current_azure_values();
+		$values         = [
+			'flavor_agent_azure_openai_endpoint'        => self::read_posted_url_value(
+				'flavor_agent_azure_openai_endpoint',
+				$current_values['flavor_agent_azure_openai_endpoint']
+			),
+			'flavor_agent_azure_openai_key'             => self::read_posted_text_value(
+				'flavor_agent_azure_openai_key',
+				$current_values['flavor_agent_azure_openai_key']
+			),
+			'flavor_agent_azure_embedding_deployment'   => self::read_posted_text_value(
+				'flavor_agent_azure_embedding_deployment',
+				$current_values['flavor_agent_azure_embedding_deployment']
+			),
+			'flavor_agent_azure_chat_deployment'        => self::read_posted_text_value(
+				'flavor_agent_azure_chat_deployment',
+				$current_values['flavor_agent_azure_chat_deployment']
+			),
+		];
+
+		foreach ( $overrides as $option_name => $override_value ) {
+			$values[ $option_name ] = 'flavor_agent_azure_openai_endpoint' === $option_name
+				? self::sanitize_url_value( $override_value )
+				: sanitize_text_field( $override_value );
+		}
+
+		if ( ! self::should_validate_provider_submission() ) {
+			return $values;
+		}
+
+		if (
+			'' === $values['flavor_agent_azure_openai_endpoint'] ||
+			'' === $values['flavor_agent_azure_openai_key'] ||
+			'' === $values['flavor_agent_azure_embedding_deployment'] ||
+			'' === $values['flavor_agent_azure_chat_deployment']
+		) {
+			return $values;
+		}
+
+		if ( ! self::values_require_validation( $values, $current_values ) ) {
+			return $values;
+		}
+
+		$fingerprint = self::build_validation_fingerprint( $values );
+
+		if (
+			is_array( self::$azure_validation_state ) &&
+			( self::$azure_validation_state['fingerprint'] ?? '' ) === $fingerprint
+		) {
+			return self::$azure_validation_state['error'] instanceof \WP_Error
+				? self::$azure_validation_state['error']
+				: self::$azure_validation_state['values'];
+		}
+
+		$validation = EmbeddingClient::validate_configuration(
+			$values['flavor_agent_azure_openai_endpoint'],
+			$values['flavor_agent_azure_openai_key'],
+			$values['flavor_agent_azure_embedding_deployment']
+		);
+
+		if ( ! is_wp_error( $validation ) ) {
+			$validation = ResponsesClient::validate_configuration(
+				$values['flavor_agent_azure_openai_endpoint'],
+				$values['flavor_agent_azure_openai_key'],
+				$values['flavor_agent_azure_chat_deployment']
+			);
+		}
+
+		self::$azure_validation_state = [
+			'fingerprint' => $fingerprint,
+			'values'      => $values,
+			'error'       => is_wp_error( $validation ) ? $validation : null,
+		];
+
+		return is_wp_error( $validation ) ? $validation : $values;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array<string, string>|\WP_Error
+	 */
+	private static function resolve_qdrant_submission_values( array $overrides = [] ): array|\WP_Error {
+		$current_values = self::get_current_qdrant_values();
+		$values         = [
+			'flavor_agent_qdrant_url' => self::read_posted_url_value(
+				'flavor_agent_qdrant_url',
+				$current_values['flavor_agent_qdrant_url']
+			),
+			'flavor_agent_qdrant_key' => self::read_posted_text_value(
+				'flavor_agent_qdrant_key',
+				$current_values['flavor_agent_qdrant_key']
+			),
+		];
+
+		foreach ( $overrides as $option_name => $override_value ) {
+			$values[ $option_name ] = 'flavor_agent_qdrant_url' === $option_name
+				? self::sanitize_url_value( $override_value )
+				: sanitize_text_field( $override_value );
+		}
+
+		if ( ! self::should_validate_provider_submission() ) {
+			return $values;
+		}
+
+		if (
+			'' === $values['flavor_agent_qdrant_url'] ||
+			'' === $values['flavor_agent_qdrant_key']
+		) {
+			return $values;
+		}
+
+		if ( ! self::values_require_validation( $values, $current_values ) ) {
+			return $values;
+		}
+
+		$fingerprint = self::build_validation_fingerprint( $values );
+
+		if (
+			is_array( self::$qdrant_validation_state ) &&
+			( self::$qdrant_validation_state['fingerprint'] ?? '' ) === $fingerprint
+		) {
+			return self::$qdrant_validation_state['error'] instanceof \WP_Error
+				? self::$qdrant_validation_state['error']
+				: self::$qdrant_validation_state['values'];
+		}
+
+		$validation = QdrantClient::validate_configuration(
+			$values['flavor_agent_qdrant_url'],
+			$values['flavor_agent_qdrant_key']
+		);
+
+		self::$qdrant_validation_state = [
+			'fingerprint' => $fingerprint,
+			'values'      => $values,
+			'error'       => is_wp_error( $validation ) ? $validation : null,
+		];
+
+		return is_wp_error( $validation ) ? $validation : $values;
 	}
 
 	/**
@@ -417,7 +674,7 @@ final class Settings {
 			$values[ $option_name ] = sanitize_text_field( $override_value );
 		}
 
-		if ( ! self::should_validate_cloudflare_submission() ) {
+		if ( ! self::should_validate_provider_submission() ) {
 			return $values;
 		}
 
@@ -429,17 +686,11 @@ final class Settings {
 			return $values;
 		}
 
-		if ( ! self::cloudflare_values_require_validation( $values, $current_values ) ) {
+		if ( ! self::values_require_validation( $values, $current_values ) ) {
 			return $values;
 		}
 
-		$fingerprint_payload = wp_json_encode( $values );
-
-		if ( ! is_string( $fingerprint_payload ) || $fingerprint_payload === '' ) {
-			$fingerprint_payload = implode( '|', $values );
-		}
-
-		$fingerprint = md5( $fingerprint_payload );
+		$fingerprint = self::build_validation_fingerprint( $values );
 
 		if (
 			is_array( self::$cloudflare_validation_state ) &&
@@ -468,6 +719,40 @@ final class Settings {
 	/**
 	 * @return array<string, string>
 	 */
+	private static function get_current_azure_values(): array {
+		return [
+			'flavor_agent_azure_openai_endpoint'      => self::sanitize_url_value(
+				(string) get_option( 'flavor_agent_azure_openai_endpoint', '' )
+			),
+			'flavor_agent_azure_openai_key'           => sanitize_text_field(
+				(string) get_option( 'flavor_agent_azure_openai_key', '' )
+			),
+			'flavor_agent_azure_embedding_deployment' => sanitize_text_field(
+				(string) get_option( 'flavor_agent_azure_embedding_deployment', '' )
+			),
+			'flavor_agent_azure_chat_deployment'      => sanitize_text_field(
+				(string) get_option( 'flavor_agent_azure_chat_deployment', '' )
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function get_current_qdrant_values(): array {
+		return [
+			'flavor_agent_qdrant_url' => self::sanitize_url_value(
+				(string) get_option( 'flavor_agent_qdrant_url', '' )
+			),
+			'flavor_agent_qdrant_key' => sanitize_text_field(
+				(string) get_option( 'flavor_agent_qdrant_key', '' )
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
 	private static function get_current_cloudflare_values(): array {
 		return [
 			'flavor_agent_cloudflare_ai_search_account_id' => sanitize_text_field(
@@ -486,7 +771,7 @@ final class Settings {
 	 * @param array<string, string> $values
 	 * @param array<string, string> $current_values
 	 */
-	private static function cloudflare_values_require_validation( array $values, array $current_values ): bool {
+	private static function values_require_validation( array $values, array $current_values ): bool {
 		foreach ( $current_values as $option_name => $current_value ) {
 			if ( ( $values[ $option_name ] ?? '' ) !== $current_value ) {
 				return true;
@@ -496,7 +781,7 @@ final class Settings {
 		return false;
 	}
 
-	private static function should_validate_cloudflare_submission(): bool {
+	private static function should_validate_provider_submission(): bool {
 		$option_page = $_POST['option_page'] ?? null;
 
 		if ( ! is_string( $option_page ) ) {
@@ -511,6 +796,10 @@ final class Settings {
 	}
 
 	private static function read_posted_cloudflare_value( string $option_name, string $fallback ): string {
+		return self::read_posted_text_value( $option_name, $fallback );
+	}
+
+	private static function read_posted_text_value( string $option_name, string $fallback ): string {
 		$value = $_POST[ $option_name ] ?? null;
 
 		if ( ! is_string( $value ) ) {
@@ -522,6 +811,71 @@ final class Settings {
 		}
 
 		return sanitize_text_field( $value );
+	}
+
+	private static function read_posted_url_value( string $option_name, string $fallback ): string {
+		$value = $_POST[ $option_name ] ?? null;
+
+		if ( ! is_string( $value ) ) {
+			return self::sanitize_url_value( $fallback );
+		}
+
+		if ( function_exists( 'wp_unslash' ) ) {
+			$value = wp_unslash( $value );
+		}
+
+		return self::sanitize_url_value( $value );
+	}
+
+	/**
+	 * @param array<string, string> $values
+	 */
+	private static function build_validation_fingerprint( array $values ): string {
+		$fingerprint_payload = wp_json_encode( $values );
+
+		if ( ! is_string( $fingerprint_payload ) || '' === $fingerprint_payload ) {
+			$fingerprint_payload = implode( '|', $values );
+		}
+
+		return md5( $fingerprint_payload );
+	}
+
+	private static function sanitize_url_value( mixed $value ): string {
+		if ( function_exists( 'sanitize_url' ) ) {
+			return (string) sanitize_url( (string) $value );
+		}
+
+		return sanitize_text_field( $value );
+	}
+
+	private static function report_azure_validation_error( \WP_Error $error ): void {
+		if ( self::$azure_validation_error_reported ) {
+			return;
+		}
+
+		add_settings_error(
+			self::OPTION_GROUP,
+			'flavor_agent_azure_validation',
+			$error->get_error_message(),
+			'error'
+		);
+
+		self::$azure_validation_error_reported = true;
+	}
+
+	private static function report_qdrant_validation_error( \WP_Error $error ): void {
+		if ( self::$qdrant_validation_error_reported ) {
+			return;
+		}
+
+		add_settings_error(
+			self::OPTION_GROUP,
+			'flavor_agent_qdrant_validation',
+			$error->get_error_message(),
+			'error'
+		);
+
+		self::$qdrant_validation_error_reported = true;
 	}
 
 	private static function report_cloudflare_validation_error( \WP_Error $error ): void {

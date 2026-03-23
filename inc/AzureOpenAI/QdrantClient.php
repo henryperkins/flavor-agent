@@ -26,6 +26,78 @@ final class QdrantClient {
 		return self::COLLECTION_PREFIX . '-' . $hash;
 	}
 
+	public static function validate_configuration(
+		?string $base_url = null,
+		?string $api_key = null
+	): true|\WP_Error {
+		$base_url = trim( (string) ( $base_url ?? get_option( 'flavor_agent_qdrant_url', '' ) ) );
+		$api_key  = trim( (string) ( $api_key ?? get_option( 'flavor_agent_qdrant_key', '' ) ) );
+
+		if ( '' === $base_url || '' === $api_key ) {
+			return new \WP_Error(
+				'missing_credentials',
+				'Qdrant credentials are not configured. Go to Settings > Flavor Agent.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$response = wp_remote_get(
+			rtrim( $base_url, '/' ) . '/collections',
+			[
+				'timeout' => 10,
+				'headers' => [
+					'api-key' => $api_key,
+				],
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$status = wp_remote_retrieve_response_code( $response );
+		$raw    = wp_remote_retrieve_body( $response );
+		$data   = json_decode( $raw, true );
+
+		if ( $status < 200 || $status >= 300 ) {
+			$message = is_array( $data )
+				? ( $data['status']['error'] ?? $data['error'] ?? $data['message'] ?? "Qdrant validation returned HTTP {$status}" )
+				: "Qdrant validation returned HTTP {$status}";
+
+			return new \WP_Error(
+				'qdrant_validation_error',
+				is_string( $message ) ? $message : "Qdrant validation returned HTTP {$status}",
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) ) {
+			return new \WP_Error(
+				'qdrant_validation_parse_error',
+				'Failed to parse Qdrant validation response.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		// Ensure the response looks like a Qdrant /collections payload.
+		if (
+			! isset( $data['status'] ) ||
+			'ok' !== $data['status'] ||
+			! isset( $data['result'] ) ||
+			! is_array( $data['result'] ) ||
+			! array_key_exists( 'collections', $data['result'] ) ||
+			! is_array( $data['result']['collections'] )
+		) {
+			return new \WP_Error(
+				'qdrant_validation_unexpected_response',
+				'Qdrant validation response did not contain the expected collections list.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		return true;
+	}
+
 	/**
 	 * Ensure the Qdrant collection exists, creating it if missing.
 	 */
