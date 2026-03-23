@@ -499,6 +499,7 @@ final class ServerCollector {
 	 * @return array Pattern candidates.
 	 */
 	private static function collect_template_candidate_patterns( ?string $template_type ): array {
+		$max_candidates = 30;
 		$all_patterns = self::for_patterns();
 		$typed        = [];
 		$generic      = [];
@@ -540,10 +541,10 @@ final class ServerCollector {
 		}
 
 		if ( $template_type === null ) {
-			return $unfiltered;
+			return array_slice( $unfiltered, 0, $max_candidates );
 		}
 
-		return array_merge( $typed, $generic );
+		return array_slice( array_merge( $typed, $generic ), 0, $max_candidates );
 	}
 
 	private static function flatten_supports( array $obj, string $prefix = '' ): array {
