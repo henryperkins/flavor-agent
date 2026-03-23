@@ -160,14 +160,14 @@ final class Settings {
 		add_settings_section(
 			'flavor_agent_azure',
 			'Azure OpenAI (Pattern Recommendations)',
-			'__return_false',
+			[ __CLASS__, 'render_azure_section' ],
 			self::PAGE_SLUG
 		);
 
 		add_settings_section(
 			'flavor_agent_qdrant',
 			'Qdrant Cloud (Vector Store)',
-			'__return_false',
+			[ __CLASS__, 'render_qdrant_section' ],
 			self::PAGE_SLUG
 		);
 
@@ -182,14 +182,15 @@ final class Settings {
 
 		add_settings_field(
 			'flavor_agent_azure_openai_endpoint',
-			'Endpoint',
+			'Resource Endpoint',
 			[ __CLASS__, 'render_text_field' ],
 			self::PAGE_SLUG,
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_openai_endpoint',
 				'type'        => 'url',
-				'placeholder' => 'https://....openai.azure.com/',
+				'placeholder' => 'https://my-resource.openai.azure.com/',
+				'description' => 'The base URL of your Azure OpenAI resource. Azure Portal &gt; your resource &gt; <strong>Endpoint</strong>.',
 			]
 		);
 		add_settings_field(
@@ -199,30 +200,34 @@ final class Settings {
 			self::PAGE_SLUG,
 			'flavor_agent_azure',
 			[
-				'option' => 'flavor_agent_azure_openai_key',
-				'type'   => 'password',
+				'option'      => 'flavor_agent_azure_openai_key',
+				'type'        => 'password',
+				'placeholder' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+				'description' => 'Either KEY 1 or KEY 2 from your Azure OpenAI resource. Azure Portal &gt; your resource &gt; <strong>Keys and Endpoint</strong>.',
 			]
 		);
 		add_settings_field(
 			'flavor_agent_azure_embedding_deployment',
-			'Embedding Deployment',
+			'Embedding Deployment Name',
 			[ __CLASS__, 'render_text_field' ],
 			self::PAGE_SLUG,
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_embedding_deployment',
 				'placeholder' => 'text-embedding-3-large',
+				'description' => 'The deployment name (not the model name) for your embeddings model. Azure Portal &gt; your resource &gt; <strong>Model deployments</strong>.',
 			]
 		);
 		add_settings_field(
 			'flavor_agent_azure_chat_deployment',
-			'Chat Deployment',
+			'Chat Deployment Name',
 			[ __CLASS__, 'render_text_field' ],
 			self::PAGE_SLUG,
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_chat_deployment',
 				'placeholder' => 'gpt-5.4',
+				'description' => 'The deployment name for your chat/responses model. Azure Portal &gt; your resource &gt; <strong>Model deployments</strong>.',
 			]
 		);
 
@@ -230,14 +235,15 @@ final class Settings {
 
 		add_settings_field(
 			'flavor_agent_qdrant_url',
-			'Qdrant URL',
+			'Cluster URL',
 			[ __CLASS__, 'render_text_field' ],
 			self::PAGE_SLUG,
 			'flavor_agent_qdrant',
 			[
 				'option'      => 'flavor_agent_qdrant_url',
 				'type'        => 'url',
-				'placeholder' => 'https://....cloud.qdrant.io:6333',
+				'placeholder' => 'https://my-cluster.cloud.qdrant.io:6333',
+				'description' => 'The REST endpoint of your Qdrant cluster including port. Qdrant Cloud console &gt; Clusters &gt; your cluster &gt; <strong>URL</strong>.',
 			]
 		);
 		add_settings_field(
@@ -247,8 +253,10 @@ final class Settings {
 			self::PAGE_SLUG,
 			'flavor_agent_qdrant',
 			[
-				'option' => 'flavor_agent_qdrant_key',
-				'type'   => 'password',
+				'option'      => 'flavor_agent_qdrant_key',
+				'type'        => 'password',
+				'placeholder' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+				'description' => 'A Qdrant Cloud API key with read/write access to collections. Qdrant Cloud console &gt; Clusters &gt; your cluster &gt; <strong>API Keys</strong>.',
 			]
 		);
 
@@ -262,18 +270,20 @@ final class Settings {
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_account_id',
-				'placeholder' => 'Cloudflare account ID',
+				'placeholder' => 'e.g. 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
+				'description' => 'Your 32-character hex Cloudflare account ID. Cloudflare dashboard &gt; any domain &gt; right sidebar &gt; <strong>Account ID</strong>, or the URL path after <code>/accounts/</code>.',
 			]
 		);
 		add_settings_field(
 			'flavor_agent_cloudflare_ai_search_instance_id',
-			'WordPress Docs AI Search ID',
+			'AI Search Instance ID',
 			[ __CLASS__, 'render_text_field' ],
 			self::PAGE_SLUG,
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_instance_id',
 				'placeholder' => 'wordpress-developer-docs',
+				'description' => 'The slug of your AI Search instance. Cloudflare dashboard &gt; AI &gt; AI Search &gt; your instance name.',
 			]
 		);
 		add_settings_field(
@@ -283,8 +293,10 @@ final class Settings {
 			self::PAGE_SLUG,
 			'flavor_agent_cloudflare',
 			[
-				'option' => 'flavor_agent_cloudflare_ai_search_api_token',
-				'type'   => 'password',
+				'option'      => 'flavor_agent_cloudflare_ai_search_api_token',
+				'type'        => 'password',
+				'placeholder' => 'Cloudflare API token',
+				'description' => 'A Cloudflare API token with <strong>AI Search Read</strong> permission. Create one at <code>dash.cloudflare.com/profile/api-tokens</code>.',
 			]
 		);
 		add_settings_field(
@@ -297,6 +309,7 @@ final class Settings {
 				'option'      => 'flavor_agent_cloudflare_ai_search_max_results',
 				'type'        => 'number',
 				'placeholder' => '4',
+				'description' => 'Number of documentation excerpts to include as grounding context per request (1&ndash;8). Higher values improve accuracy but increase latency.',
 			]
 		);
 	}
@@ -339,6 +352,26 @@ final class Settings {
 		settings_errors();
 	}
 
+	public static function render_azure_section(): void {
+		printf(
+			'<p class="description">%s</p>',
+			esc_html__(
+				'Connects to Azure OpenAI for embedding patterns and ranking recommendations. Find these credentials in the Azure Portal under your OpenAI resource > Keys and Endpoint.',
+				'flavor-agent'
+			)
+		);
+	}
+
+	public static function render_qdrant_section(): void {
+		printf(
+			'<p class="description">%s</p>',
+			esc_html__(
+				'Qdrant stores pattern embeddings for similarity search. Find your cluster URL and API key in the Qdrant Cloud console under Clusters > your cluster > Access.',
+				'flavor-agent'
+			)
+		);
+	}
+
 	public static function render_cloudflare_section(): void {
 		printf(
 			'<p class="description">%s</p>',
@@ -358,6 +391,7 @@ final class Settings {
 		$option      = $args['option'] ?? '';
 		$type        = $args['type'] ?? 'text';
 		$placeholder = $args['placeholder'] ?? '';
+		$description = $args['description'] ?? '';
 		$value       = get_option( $option, '' );
 
 		printf(
@@ -367,6 +401,10 @@ final class Settings {
 			esc_attr( $value ),
 			esc_attr( $placeholder )
 		);
+
+		if ( $description ) {
+			printf( '<p class="description">%s</p>', wp_kses_post( $description ) );
+		}
 	}
 
 	public static function sanitize_grounding_result_count( mixed $value ): int {

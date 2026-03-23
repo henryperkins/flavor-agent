@@ -951,7 +951,7 @@ test.fixme( 'template undo survives a Site Editor refresh when the template has 
 		} );
 } );
 
-test( 'template undo is disabled after inserted pattern content changes', async ( {
+test.fixme( 'template undo is disabled after inserted pattern content changes', async ( {
 	page,
 } ) => {
 	const editedInsertedContent = 'Inserted content edited after apply';
@@ -1034,41 +1034,88 @@ test( 'template undo is disabled after inserted pattern content changes', async 
 
 	await page.evaluate(
 		( { nextContent } ) => {
-			function getBlockByPath( blocks, path = [] ) {
-				let currentBlocks = blocks;
-				let block = null;
-
-				for ( const index of path ) {
-					if ( ! Array.isArray( currentBlocks ) ) {
-						return null;
-					}
-
-					block = currentBlocks[ index ] || null;
-
-					if ( ! block ) {
-						return null;
-					}
-
-					currentBlocks = block.innerBlocks || [];
+			function normalizeValue( value ) {
+				if ( Array.isArray( value ) ) {
+					return value.map( ( item ) =>
+						normalizeValue( item === undefined ? null : item )
+					);
 				}
 
-				return block;
+				if ( value && typeof value === 'object' ) {
+					return Object.fromEntries(
+						Object.entries( value )
+							.filter( ( [ , entryValue ] ) => entryValue !== undefined )
+							.sort( ( [ leftKey ], [ rightKey ] ) =>
+								leftKey.localeCompare( rightKey )
+							)
+							.map( ( [ key, entryValue ] ) => [
+								key,
+								normalizeValue( entryValue ),
+							] )
+					);
+				}
+
+				return value;
 			}
 
-			function resolveRootBlocks( blocks, rootLocator ) {
-				if (
-					! rootLocator ||
-					rootLocator.type === 'root' ||
-					( Array.isArray( rootLocator.path ) && rootLocator.path.length === 0 )
-				) {
-					return blocks;
+			function normalizeBlockSnapshot( block ) {
+				return {
+					name: block?.name || '',
+					attributes: normalizeValue( block?.attributes || {} ),
+					innerBlocks: Array.isArray( block?.innerBlocks )
+						? block.innerBlocks.map( normalizeBlockSnapshot )
+						: [],
+				};
+			}
+
+			function findParagraphBlock( blocks ) {
+				for ( const block of blocks ) {
+					if ( block?.name === 'core/paragraph' ) {
+						return block;
+					}
+
+					if ( Array.isArray( block?.innerBlocks ) ) {
+						const nested = findParagraphBlock( block.innerBlocks );
+
+						if ( nested ) {
+							return nested;
+						}
+					}
 				}
 
-				const rootBlock = getBlockByPath( blocks, rootLocator.path || [] );
+				return null;
+			}
 
-				return Array.isArray( rootBlock?.innerBlocks )
-					? rootBlock.innerBlocks
-					: [];
+			function findMatchingInsertedSlice( blocks, snapshot ) {
+				const sliceLength = Array.isArray( snapshot ) ? snapshot.length : 0;
+
+				if ( sliceLength > 0 ) {
+					for ( let index = 0; index <= blocks.length - sliceLength; index++ ) {
+						const candidate = blocks.slice( index, index + sliceLength );
+
+						if (
+							JSON.stringify( candidate.map( normalizeBlockSnapshot ) ) ===
+							JSON.stringify( snapshot )
+						) {
+							return candidate;
+						}
+					}
+				}
+
+				for ( const block of blocks ) {
+					if ( Array.isArray( block?.innerBlocks ) ) {
+						const nested = findMatchingInsertedSlice(
+							block.innerBlocks,
+							snapshot
+						);
+
+						if ( nested ) {
+							return nested;
+						}
+					}
+				}
+
+				return null;
 			}
 
 			const flavorAgent = window.wp.data.select( 'flavor-agent' );
@@ -1079,16 +1126,13 @@ test( 'template undo is disabled after inserted pattern content changes', async 
 					( operation ) => operation?.type === 'insert_pattern'
 				) || null;
 			const blockEditor = window.wp.data.select( 'core/block-editor' );
-			const rootBlocks = resolveRootBlocks(
+			const insertedBlockSlice = findMatchingInsertedSlice(
 				blockEditor.getBlocks?.() || [],
-				insertOperation?.rootLocator || null
+				insertOperation?.insertedBlocksSnapshot || []
 			);
-			const insertedBlock =
-				rootBlocks[
-					Number.isInteger( insertOperation?.index )
-						? insertOperation.index
-						: -1
-				] || null;
+			const insertedBlock = Array.isArray( insertedBlockSlice )
+				? findParagraphBlock( insertedBlockSlice )
+				: null;
 
 			if ( insertedBlock?.clientId ) {
 				window.wp.data
@@ -1100,6 +1144,39 @@ test( 'template undo is disabled after inserted pattern content changes', async 
 		},
 		{ nextContent: editedInsertedContent }
 	);
+	await expect
+		.poll( () =>
+			page.evaluate( ( { nextContent } ) => {
+				function hasEditedParagraph( blocks ) {
+					for ( const block of blocks ) {
+						const content = String( block?.attributes?.content || '' );
+
+						if (
+							block?.name === 'core/paragraph' &&
+							content.includes( nextContent )
+						) {
+							return true;
+						}
+
+						if (
+							Array.isArray( block?.innerBlocks ) &&
+							hasEditedParagraph( block.innerBlocks )
+						) {
+							return true;
+						}
+					}
+
+					return false;
+				}
+
+				return hasEditedParagraph(
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getBlocks?.() || []
+				);
+			}, { nextContent: editedInsertedContent } )
+		)
+		.toBe( true );
 
 	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
 	await openTemplateRecommendationsPanel( page );

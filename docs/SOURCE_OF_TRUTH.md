@@ -8,7 +8,7 @@
 
 Flavor Agent is a WordPress plugin that adds AI-powered recommendations directly into the native Gutenberg editor. It does not insert or mutate content automatically -- it recommends, and the user decides.
 
-Applied AI changes are now tracked per editor session and can be reversed from the UI when the live document still matches the recorded post-apply state.
+Applied AI changes are now tracked per editor session and can be reversed from the UI when the live document still matches the recorded post-apply state; template actions now persist stable locators plus recorded post-apply block snapshots so same-session refreshes can still resolve undo targets.
 
 Three recommendation surfaces exist today:
 
@@ -197,14 +197,14 @@ The plugin works in degraded mode without any services configured. Each surface 
 - **LLM:** Azure OpenAI Responses API via `ResponsesClient::rank()`.
 - **Response:** Max 3 suggestions, each with validated structured operations. Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`.
 - **UI:** Entity mentions in text become clickable links: template-part slugs/areas highlight blocks in canvas; pattern names open the inserter pre-filtered. Suggestions can also be previewed and explicitly confirmed before apply.
-- **Apply:** Deterministic client executor validates the full operation list before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, and pattern insertion resolves the current insertion point and inserts parsed pattern blocks. Applied operations record the exact undo metadata needed to restore template-part assignments or remove inserted pattern blocks.
+- **Apply:** Deterministic client executor now validates template suggestions against a working-state copy before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, pattern insertion resolves the current insertion point and inserts parsed pattern blocks, and applied operations persist stable undo locators plus recorded post-apply snapshots for inserted subtrees.
 - **Guardrails:** Free-form template tree rewrites are intentionally out of scope. If any operation fails validation, the entire apply is rejected before mutation.
 
 #### AI Activity And Undo
 - **Schema:** Block and template apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
-- **Persistence:** Activity records are stored in `sessionStorage` and keyed by the current post/template reference, so history survives a same-session refresh but not a new browser session.
+- **Persistence:** Activity records are stored in `sessionStorage` and keyed by the current post/template reference, so history survives a same-session refresh but not a new browser session. Template activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
 - **UI:** Both the Block Inspector and Template Compositor show inline `Undo` on the latest applied action plus a `Recent AI Actions` section with the last few records.
-- **Undo rules:** Only the most recent AI action is auto-undoable. Undo validates that the live editor state still matches the post-apply snapshot before restoring prior block attributes or removing inserted template pattern blocks.
+- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template-part undo resolves the current block from a stable area/slug locator, and inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot.
 
 #### Pattern Index Lifecycle
 - **Sync:** Diffs current registered patterns against Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
@@ -282,7 +282,7 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 4. **Inserter search detection is DOM-coupled (mitigated)**: `compat.js` centralizes container (5) and input (4) selectors behind `findInserterSearchInput`. Still DOM-based, but changes are now confined to one file.
 5. **Pattern inserter patching uses compat adapter**: `compat.js` prefers stable `blockPatterns`/`blockPatternCategories` keys when present, falls back to `__experimentalBlockPatterns`/`__experimentalBlockPatternCategories`, and degrades to empty arrays when neither exists. Migration to fully stable APIs requires only updating the adapter.
 6. **Two experimental APIs remain outside compat scope**: `__experimentalFeatures` (theme-tokens.js) and `__experimentalRole` (block-inspector.js) have no stable replacement yet and are used directly.
-7. **Browser smoke coverage is still shallow**: Playwright now covers block apply/persist/undo, pattern request/badge flow, and template preview/apply/undo, but it still runs on a stable WordPress `6.9.4` Playground harness because the available Playground `7.0` beta editor runtime breaks before plugin bootstrap.
+7. **Browser smoke coverage is still shallow**: Playwright now covers block apply/persist/undo, pattern request/badge flow, and template preview/apply/undo, but it still runs on a stable WordPress `6.9.4` Playground harness. Exact Site Editor refresh/drift cases are checked in as `fixme` because revisiting the template canvas route in the Playground harness still crashes the PHP-WASM controller.
 8. **Template apply scope is intentionally narrow**: The first executable version supports validated template-part assignment/replacement and pattern insertion only. Free-form template tree rewrites and subtree transforms remain future work.
 9. **Activity history is not a permanent audit trail**: The current adapter is intentionally session-scoped via `sessionStorage`. There is no server-backed log, cross-device history, or DataViews audit UI yet.
 
@@ -400,18 +400,18 @@ External AI agent calls flavor-agent/recommend-navigation ability
 | `SettingsTest` | 14 | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, and settings notice rendering |
 | `AzureBackendValidationTest` | 7 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks |
 | `NavigationAbilitiesTest` | 13 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
-| `TemplatePromptTest` | 2 | Structured template operation parsing, validation, and legacy fallback normalization |
+| `TemplatePromptTest` | 6 | Structured template operation parsing, conflicting multi-step validation, and legacy fallback normalization |
 | `DocsPrewarmTest` | 19 | Warm set definition, cache seeding, state recording, throttling (same creds, changed creds, expired window), partial/total failure, schedule/should prewarm, diagnostics, resilience |
-| **Total** | **106** | |
+| **Total** | **117** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
 |-----------|---------------|
-| `store/__tests__/activity-history.test.js` | Activity scope resolution, session storage persistence, latest-applied/undoable stack rules |
-| `store/__tests__/activity-history-state.test.js` | Reducer hydration of persisted activity state and undo side effects |
+| `store/__tests__/activity-history.test.js` | Activity scope resolution, session storage persistence, legacy template-entry downgrade, latest-applied/undoable stack rules |
+| `store/__tests__/activity-history-state.test.js` | Reducer hydration of persisted activity state, legacy non-undoable template entries, and undo side effects |
 | `store/__tests__/block-request-state.test.js` | Per-block request state, stale token rejection |
 | `store/__tests__/pattern-status.test.js` | Pattern status/error transitions, badge recalculation |
-| `store/__tests__/store-actions.test.js` | Block/template apply logging, session persistence, and undo thunk behavior |
+| `store/__tests__/store-actions.test.js` | Block/template apply logging, client-side template validation failures, session persistence, and undo thunk behavior |
 | `store/__tests__/template-apply-state.test.js` | Template preview/apply reducer state transitions |
 | `store/update-helpers.test.js` | Safe merge, content-only filtering, editing restrictions, and undo snapshot comparison |
 | `patterns/__tests__/inserter-badge-state.test.js` | Badge view-model derivation (all 4 states) |
@@ -421,7 +421,7 @@ External AI agent calls flavor-agent/recommend-navigation ability
 | `templates/__tests__/template-recommender-helpers.test.js` | Entity map, suggestion view models, format helpers |
 | `inspector/suggestion-keys.test.js` | Key generation |
 | `utils/__tests__/structural-identity.test.js` | Role annotation, location resolution, position tracking |
-| `utils/__tests__/template-actions.test.js` | Template operation preparation, execution, and undo validation |
+| `utils/__tests__/template-actions.test.js` | Template operation preparation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
 | `utils/__tests__/template-part-areas.test.js` | Area resolution priority chain |
 | `utils/__tests__/template-types.test.js` | Slug normalization |
 | `utils/__tests__/visible-patterns.test.js` | Inserter-scoped pattern list |
