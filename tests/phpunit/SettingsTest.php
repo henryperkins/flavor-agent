@@ -18,13 +18,13 @@ final class SettingsTest extends TestCase {
 		WordPressTestState::reset();
 		$_POST = [];
 		$_GET  = [];
-		$this->reset_cloudflare_validation_state();
+		$this->reset_validation_state();
 	}
 
 	protected function tearDown(): void {
 		$_POST = [];
 		$_GET  = [];
-		$this->reset_cloudflare_validation_state();
+		$this->reset_validation_state();
 
 		parent::tearDown();
 	}
@@ -527,7 +527,7 @@ final class SettingsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'settings_errors', WordPressTestState::$transients );
 	}
 
-	private function reset_cloudflare_validation_state(): void {
+	private function reset_validation_state(): void {
 		$azure_state = new ReflectionProperty( Settings::class, 'azure_validation_state' );
 		$azure_state->setAccessible( true );
 		$azure_state->setValue( null, null );
