@@ -14,7 +14,16 @@ final class ServerCollectorTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+
 		WordPressTestState::$block_templates = [
+			'wp_template'      => [
+				(object) [
+					'id'      => 'theme//home',
+					'slug'    => 'home',
+					'title'   => 'Home',
+					'content' => '<!-- wp:group --><div>Home</div><!-- /wp:group -->',
+				],
+			],
 			'wp_template_part' => [
 				(object) [
 					'slug'    => 'header',
@@ -30,6 +39,13 @@ final class ServerCollectorTest extends TestCase {
 				],
 			],
 		];
+	}
+
+	private function register_pattern( string $name, array $properties ): void {
+		if ( ! class_exists( '\WP_Block_Patterns_Registry' ) ) {
+			$this->markTestSkipped( 'WP_Block_Patterns_Registry is not available.' );
+		}
+		\WP_Block_Patterns_Registry::get_instance()->register( $name, $properties );
 	}
 
 	public function test_for_template_parts_can_skip_content_when_only_metadata_is_needed(): void {
@@ -89,6 +105,59 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertArrayNotHasKey( 'legacyContent', $manifest['configAttributes'] );
 	}
 
+	public function test_for_template_limits_candidate_patterns_after_typed_then_generic_ordering(): void {
+		for ( $index = 1; $index <= 20; $index++ ) {
+			$this->register_pattern(
+				"plugin/typed-{$index}",
+				[
+					'title'         => "Typed {$index}",
+					'templateTypes' => [ 'home' ],
+					'content'       => "<!-- wp:paragraph --><p>Typed {$index}</p><!-- /wp:paragraph -->",
+				]
+			);
+		}
+
+		for ( $index = 1; $index <= 15; $index++ ) {
+			$this->register_pattern(
+				"plugin/generic-{$index}",
+				[
+					'title'         => "Generic {$index}",
+					'templateTypes' => [],
+					'content'       => "<!-- wp:paragraph --><p>Generic {$index}</p><!-- /wp:paragraph -->",
+				]
+			);
+		}
+
+		$result   = ServerCollector::for_template( 'theme//home', 'home' );
+		$patterns = $result['patterns'];
+
+		$this->assertCount( 30, $patterns );
+		$this->assertSame(
+			array_map(
+				static fn ( int $index ): string => "plugin/typed-{$index}",
+				range( 1, 20 )
+			),
+			array_column( array_slice( $patterns, 0, 20 ), 'name' )
+		);
+		$this->assertSame(
+			array_map(
+				static fn ( int $index ): string => "plugin/generic-{$index}",
+				range( 1, 10 )
+			),
+			array_column( array_slice( $patterns, 20 ), 'name' )
+		);
+		$this->assertSame(
+			array_fill( 0, 20, 'typed' ),
+			array_column( array_slice( $patterns, 0, 20 ), 'matchType' )
+		);
+		$this->assertSame(
+			array_fill( 0, 10, 'generic' ),
+			array_column( array_slice( $patterns, 20 ), 'matchType' )
+		);
+
+		foreach ( $patterns as $pattern ) {
+			$this->assertArrayNotHasKey( 'content', $pattern );
+		}
 	public function test_for_tokens_includes_duotone_presets_in_compact_summary(): void {
 		WordPressTestState::$global_settings = [
 			'color'      => [

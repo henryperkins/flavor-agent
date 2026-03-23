@@ -63,6 +63,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_generate_text_result = '';
 
 			\WP_Block_Type_Registry::get_instance()->reset();
+			\WP_Block_Patterns_Registry::get_instance()->reset();
 		}
 	}
 }
@@ -239,6 +240,41 @@ namespace {
 				}
 
 				$this->registered[ $block_name ] = $block_type;
+			}
+
+			public function reset(): void {
+				$this->registered = [];
+			}
+		}
+	}
+
+	if ( ! class_exists( 'WP_Block_Patterns_Registry' ) ) {
+		class WP_Block_Patterns_Registry {
+
+			private static ?self $instance = null;
+
+			/**
+			 * @var array<string, array<string, mixed>>
+			 */
+			private array $registered = [];
+
+			public static function get_instance(): self {
+				if ( null === self::$instance ) {
+					self::$instance = new self();
+				}
+
+				return self::$instance;
+			}
+
+			public function register( string $pattern_name, array $pattern_properties ): void {
+				$this->registered[ $pattern_name ] = array_merge( $pattern_properties, [ 'name' => $pattern_name ] );
+			}
+
+			/**
+			 * @return array<int, array<string, mixed>>
+			 */
+			public function get_all_registered(): array {
+				return array_values( $this->registered );
 			}
 
 			public function reset(): void {
@@ -524,6 +560,12 @@ namespace {
 					htmlspecialchars( (string) ( $details['message'] ?? '' ), ENT_QUOTES, 'UTF-8' )
 				);
 			}
+		}
+	}
+
+	if ( ! function_exists( 'parse_blocks' ) ) {
+		function parse_blocks( string $content ): array {
+			return [];
 		}
 	}
 
