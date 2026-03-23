@@ -6,6 +6,8 @@ namespace FlavorAgent\Context;
 
 final class ServerCollector {
 
+	public const TEMPLATE_PATTERN_CANDIDATE_CAP = 30;
+
 	private const SUPPORT_TO_PANEL = [
 		'color.background'           => 'color',
 		'color.text'                 => 'color',
@@ -499,7 +501,7 @@ final class ServerCollector {
 	 * @return array Pattern candidates.
 	 */
 	private static function collect_template_candidate_patterns( ?string $template_type ): array {
-		$max_candidates = 30;
+		$max_candidates = self::TEMPLATE_PATTERN_CANDIDATE_CAP;
 		$all_patterns = self::for_patterns();
 		$typed        = [];
 		$generic      = [];

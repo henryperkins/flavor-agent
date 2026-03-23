@@ -14,13 +14,11 @@ final class ServerCollectorTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		if ( class_exists( '\WP_Block_Patterns_Registry' ) && method_exists( \WP_Block_Patterns_Registry::get_instance(), 'reset' ) ) {
-			\WP_Block_Patterns_Registry::get_instance()->reset();
-		}
 
 		WordPressTestState::$block_templates = [
 			'wp_template'      => [
 				(object) [
+					'id'      => 'theme//home',
 					'slug'    => 'home',
 					'title'   => 'Home',
 					'content' => '<!-- wp:group --><div>Home</div><!-- /wp:group -->',
@@ -44,6 +42,9 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	private function register_pattern( string $name, array $properties ): void {
+		if ( ! class_exists( '\WP_Block_Patterns_Registry' ) ) {
+			$this->markTestSkipped( 'WP_Block_Patterns_Registry is not available.' );
+		}
 		\WP_Block_Patterns_Registry::get_instance()->register( $name, $properties );
 	}
 
@@ -130,7 +131,6 @@ final class ServerCollectorTest extends TestCase {
 		$result   = ServerCollector::for_template( 'theme//home', 'home' );
 		$patterns = $result['patterns'];
 
-		$this->assertLessThanOrEqual( 30, count( $patterns ) );
 		$this->assertCount( 30, $patterns );
 		$this->assertSame(
 			array_map(
