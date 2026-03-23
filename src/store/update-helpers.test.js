@@ -216,7 +216,11 @@ describe( 'update helpers', () => {
 				{
 					label: 'Change wrapper spacing',
 					attributeUpdates: {
-						style: { spacing: { padding: 'var(--wp--preset--spacing--40)' } },
+						style: {
+							spacing: {
+								padding: 'var(--wp--preset--spacing--40)',
+							},
+						},
 					},
 				},
 			],

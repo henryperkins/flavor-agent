@@ -63,13 +63,13 @@ final class NavigationAbilitiesTest extends TestCase {
 
 	public function test_prompt_build_user_includes_menu_structure(): void {
 		$context = [
-			'location'   => 'header',
-			'attributes' => [
+			'location'             => 'header',
+			'attributes'           => [
 				'overlayMenu'         => 'mobile',
 				'hasIcon'             => true,
 				'openSubmenusOnClick' => false,
 			],
-			'menuItems'  => [
+			'menuItems'            => [
 				[
 					'type'  => 'navigation-link',
 					'label' => 'Home',
@@ -94,7 +94,7 @@ final class NavigationAbilitiesTest extends TestCase {
 					'title' => 'Mobile Overlay',
 				],
 			],
-			'themeTokens' => [
+			'themeTokens'          => [
 				'colors' => [ 'primary: #0073aa' ],
 			],
 		];
@@ -156,35 +156,37 @@ final class NavigationAbilitiesTest extends TestCase {
 	}
 
 	public function test_parse_response_validates_suggestion_categories(): void {
-		$raw = wp_json_encode( [
-			'suggestions' => [
-				[
-					'label'       => 'Group related pages',
-					'description' => 'Move About and Team under a single submenu.',
-					'category'    => 'structure',
-					'changes'     => [
-						[
-							'type'   => 'group',
-							'target' => 'About, Team links',
-							'detail' => 'Create About submenu containing Team.',
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Group related pages',
+						'description' => 'Move About and Team under a single submenu.',
+						'category'    => 'structure',
+						'changes'     => [
+							[
+								'type'   => 'group',
+								'target' => 'About, Team links',
+								'detail' => 'Create About submenu containing Team.',
+							],
+						],
+					],
+					[
+						'label'       => 'Invalid category suggestion',
+						'description' => 'This has a bad category.',
+						'category'    => 'nonexistent',
+						'changes'     => [
+							[
+								'type'   => 'reorder',
+								'target' => 'Something',
+								'detail' => 'Move it.',
+							],
 						],
 					],
 				],
-				[
-					'label'       => 'Invalid category suggestion',
-					'description' => 'This has a bad category.',
-					'category'    => 'nonexistent',
-					'changes'     => [
-						[
-							'type'   => 'reorder',
-							'target' => 'Something',
-							'detail' => 'Move it.',
-						],
-					],
-				],
-			],
-			'explanation' => 'Grouping simplifies the top-level menu.',
-		] );
+				'explanation' => 'Grouping simplifies the top-level menu.',
+			]
+		);
 
 		$result = NavigationPrompt::parse_response( $raw, [] );
 
@@ -196,40 +198,42 @@ final class NavigationAbilitiesTest extends TestCase {
 	}
 
 	public function test_parse_response_rejects_invalid_change_types(): void {
-		$raw = wp_json_encode( [
-			'suggestions' => [
-				[
-					'label'       => 'Bad changes only',
-					'description' => 'All changes have invalid types.',
-					'category'    => 'structure',
-					'changes'     => [
-						[
-							'type'   => 'delete',
-							'target' => 'Something',
-							'detail' => 'Remove it.',
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Bad changes only',
+						'description' => 'All changes have invalid types.',
+						'category'    => 'structure',
+						'changes'     => [
+							[
+								'type'   => 'delete',
+								'target' => 'Something',
+								'detail' => 'Remove it.',
+							],
+						],
+					],
+					[
+						'label'       => 'Mixed changes',
+						'description' => 'One good, one bad.',
+						'category'    => 'overlay',
+						'changes'     => [
+							[
+								'type'   => 'invalid-type',
+								'target' => 'Bad',
+								'detail' => 'Nope.',
+							],
+							[
+								'type'   => 'set-attribute',
+								'target' => 'overlayMenu',
+								'detail' => 'Set to always for full-screen overlay.',
+							],
 						],
 					],
 				],
-				[
-					'label'       => 'Mixed changes',
-					'description' => 'One good, one bad.',
-					'category'    => 'overlay',
-					'changes'     => [
-						[
-							'type'   => 'invalid-type',
-							'target' => 'Bad',
-							'detail' => 'Nope.',
-						],
-						[
-							'type'   => 'set-attribute',
-							'target' => 'overlayMenu',
-							'detail' => 'Set to always for full-screen overlay.',
-						],
-					],
-				],
-			],
-			'explanation' => 'Testing validation.',
-		] );
+				'explanation' => 'Testing validation.',
+			]
+		);
 
 		$result = NavigationPrompt::parse_response( $raw, [] );
 
@@ -249,23 +253,25 @@ final class NavigationAbilitiesTest extends TestCase {
 	}
 
 	public function test_parse_response_strips_markdown_fences(): void {
-		$json = wp_json_encode( [
-			'suggestions' => [
-				[
-					'label'       => 'Fenced suggestion',
-					'description' => 'Wrapped in markdown code fences.',
-					'category'    => 'accessibility',
-					'changes'     => [
-						[
-							'type'   => 'set-attribute',
-							'target' => 'showSubmenuIcon',
-							'detail' => 'Enable submenu indicators for keyboard users.',
+		$json = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Fenced suggestion',
+						'description' => 'Wrapped in markdown code fences.',
+						'category'    => 'accessibility',
+						'changes'     => [
+							[
+								'type'   => 'set-attribute',
+								'target' => 'showSubmenuIcon',
+								'detail' => 'Enable submenu indicators for keyboard users.',
+							],
 						],
 					],
 				],
-			],
-			'explanation' => 'Accessibility improvement.',
-		] );
+				'explanation' => 'Accessibility improvement.',
+			]
+		);
 
 		$fenced = "```json\n{$json}\n```";
 		$result = NavigationPrompt::parse_response( $fenced, [] );
@@ -291,10 +297,12 @@ final class NavigationAbilitiesTest extends TestCase {
 			];
 		}
 
-		$raw    = wp_json_encode( [
-			'suggestions' => $suggestions,
-			'explanation' => 'Five suggestions submitted.',
-		] );
+		$raw    = wp_json_encode(
+			[
+				'suggestions' => $suggestions,
+				'explanation' => 'Five suggestions submitted.',
+			]
+		);
 		$result = NavigationPrompt::parse_response( $raw, [] );
 
 		$this->assertCount( 3, $result['suggestions'] );

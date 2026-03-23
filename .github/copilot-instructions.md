@@ -7,7 +7,8 @@ Flavor Agent is a WordPress plugin that adds AI-assisted recommendations to Gute
 Install dependencies first:
 
 ```bash
-npm install
+source ~/.nvm/nvm.sh && nvm use 20
+npm ci
 composer install
 ```
 
@@ -32,6 +33,12 @@ Run all unit tests:
 ```bash
 npm run test:unit -- --runInBand
 vendor/bin/phpunit
+```
+
+Run browser smoke tests:
+
+```bash
+npm run test:e2e
 ```
 
 Run a single JS test file:

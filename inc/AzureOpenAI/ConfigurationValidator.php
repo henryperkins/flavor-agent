@@ -31,8 +31,8 @@ final class ConfigurationValidator {
 			);
 		}
 
-		$body['model']   = $deployment;
-		$encoded_body    = wp_json_encode( $body );
+		$body['model'] = $deployment;
+		$encoded_body  = wp_json_encode( $body );
 
 		if ( false === $encoded_body ) {
 			return new \WP_Error(

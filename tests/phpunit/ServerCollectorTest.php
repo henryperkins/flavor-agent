@@ -158,6 +158,8 @@ final class ServerCollectorTest extends TestCase {
 		foreach ( $patterns as $pattern ) {
 			$this->assertArrayNotHasKey( 'content', $pattern );
 		}
+	}
+
 	public function test_for_tokens_includes_duotone_presets_in_compact_summary(): void {
 		WordPressTestState::$global_settings = [
 			'color'      => [

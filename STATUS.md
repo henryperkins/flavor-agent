@@ -47,15 +47,20 @@
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - First-request WordPress docs grounding is still intentionally reduced: uncached `recommend-block` and `recommend-template` requests return without Cloudflare guidance until either an exact-query cache entry or the matching warmed entity cache is available.
-- `npm ci` currently fails because `package.json` and `package-lock.json` are out of sync.
-- `npm run lint:js` currently fails on a Prettier formatting violation in `src/store/update-helpers.test.js`.
-- Live recommendation execution with valid LLM credentials and manual Site Editor smoke checks were not rerun in this pass.
+- JS tooling now expects Node `20.x` with npm `10.x`; on this host, the global Node `24.14.0` / npm `11.9.0` pair fails `npm ci` immediately via `engine-strict` (`EBADENGINE`), so the repo now pins the supported toolchain instead of assuming the global default.
+- Browser smoke coverage now runs on a stable WordPress `6.9.4` Playground harness and covers the block inspector recommendation render, the pattern inserter search/request badge flow, and the Site Editor template recommender fetch plus pattern-browse action. A WordPress `7.0` Playground run does boot the post editor, but the Site Editor path currently crashes the Playground runtime with `Invalid state: Controller is already closed`, so the checked-in harness remains on `6.9.4`.
+- Live recommendation execution with valid LLM credentials was not rerun in this pass.
 
 ## Recent Verification
 
-- 2026-03-23 remediation: `npm run test:unit -- --runInBand` passed (`13` suites, `60` tests).
-- 2026-03-23 remediation: `npm run build` passed.
-- 2026-03-23 remediation: `npm run lint:js` failed on `src/store/update-helpers.test.js:219` (`prettier/prettier`).
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm ci` passed (`1849` packages added; peer/deprecation warnings only).
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run lint:js` passed.
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand` passed (`13` suites, `60` tests).
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed.
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e -- --reporter=line` passed (`3` Playwright smoke tests).
+- 2026-03-23 exploratory: `PLAYWRIGHT_PORT=9403 npm run test:e2e -- --reporter=line` against a manual WordPress `7.0` Playground server passed the two post-editor smokes, then failed on `/wp-admin/site-editor.php` when the Playground runtime crashed (`Invalid state: Controller is already closed` -> `ERR_CONNECTION_REFUSED`).
+- 2026-03-23 remediation: `vendor/bin/phpunit` passed (`84` tests, `379` assertions).
+- 2026-03-23 remediation: `composer lint:php` passed.
 - 2026-03-19 remediation: `npm run lint:js` passed.
 - 2026-03-19 remediation: `npm run test:unit -- --runInBand` passed.
 - 2026-03-19 remediation: `npm run build` passed.

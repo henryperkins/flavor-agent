@@ -60,7 +60,7 @@ SYSTEM;
 		$sections = [];
 
 		// Navigation identity.
-		$location = (string) ( $context['location'] ?? 'unknown' );
+		$location   = (string) ( $context['location'] ?? 'unknown' );
 		$sections[] = "## Navigation\nLocation: {$location}";
 
 		// Current attributes.
@@ -85,7 +85,7 @@ SYSTEM;
 		// Overlay template parts (WP 7.0+).
 		$overlay_parts = is_array( $context['overlayTemplateParts'] ?? null ) ? $context['overlayTemplateParts'] : [];
 		if ( count( $overlay_parts ) > 0 ) {
-			$lines = array_map(
+			$lines      = array_map(
 				static fn( array $part ): string => sprintf(
 					'- `%s`: %s',
 					(string) ( $part['slug'] ?? '' ),
@@ -97,7 +97,7 @@ SYSTEM;
 		}
 
 		// Theme tokens.
-		$tokens = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
+		$tokens      = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
 		$token_lines = self::format_theme_tokens( $tokens );
 		if ( $token_lines !== '' ) {
 			$sections[] = "## Theme Design Tokens\n{$token_lines}";
@@ -114,7 +114,7 @@ SYSTEM;
 				},
 				$docs_guidance
 			);
-			$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines );
+			$sections[]     = "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines );
 		}
 
 		// User prompt.

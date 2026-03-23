@@ -238,10 +238,11 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 
 1. **Cold-start docs grounding**: First request for a block/template context returns without WordPress developer-doc guidance until cache is warmed.
 2. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
-3. **Inserter search detection is DOM-coupled**: `find-inserter-search-input.js` uses 5 container selectors x 4 input selectors. Fragile across Gutenberg versions.
-4. **Pattern inserter patching uses legacy APIs**: `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` are experimental. Could break if Gutenberg stabilizes these.
-5. **No integration/E2E tests**: Only unit tests exist (Jest for JS, PHPUnit for PHP with stub bootstrap). No Playwright or browser-level tests.
-6. **Template recommender is advisory-only**: No apply/execute path. Users must manually act on suggestions.
+3. **JS toolchain must stay on Node 20 / npm 10**: This repo now pins that combo because Node 24 / npm 11 on this host fails `npm ci` immediately via `engine-strict` (`EBADENGINE`).
+4. **Inserter search detection is DOM-coupled**: `find-inserter-search-input.js` uses 5 container selectors x 4 input selectors. Fragile across Gutenberg versions.
+5. **Pattern inserter patching uses legacy APIs**: `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` are experimental. Could break if Gutenberg stabilizes these.
+6. **Browser smoke coverage is shallow**: Playwright now covers the three editor surfaces at smoke level, but it currently runs on a stable WordPress `6.9.4` Playground harness because the available Playground `7.0` beta editor runtime breaks before plugin bootstrap. Pattern/template recommendation execution and apply flows still lack deeper E2E assertions.
+7. **Template recommender is advisory-only**: No apply/execute path. Users must manually act on suggestions.
 
 ## Data Flow Diagrams
 
@@ -387,7 +388,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Clean uninstall
 - [x] Live credential validation on Azure OpenAI/Qdrant settings save
 - [x] Navigation recommendations (replace 501 stub)
-- [ ] Integration tests (at minimum: Playwright smoke for each editor surface)
+- [x] Integration tests (at minimum: Playwright smoke for each editor surface)
 
 ### Should Have (v1.x)
 
@@ -429,11 +430,13 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 
 ```bash
 # JS
-npm install                          # Install JS deps
+source ~/.nvm/nvm.sh && nvm use 20   # Supported JS toolchain
+npm ci                               # Install JS deps reproducibly
 npm run build                        # Production build -> build/index.js, build/admin.js
 npm start                            # Dev build with watch
 npm run lint:js                      # ESLint on src/
 npm run test:unit -- --runInBand     # Jest unit tests
+npm run test:e2e                     # Playwright smoke coverage
 
 # PHP
 composer install                     # PSR-4 autoloader

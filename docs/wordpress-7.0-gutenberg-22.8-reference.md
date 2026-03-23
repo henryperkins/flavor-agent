@@ -6,6 +6,7 @@
 
 ### Official References
 
+- [WordPress 7.0 Beta 5](https://wordpress.org/news/2026/03/wordpress-7-0-beta-5/) -- Official beta announcement with Playground / ZIP / WP-CLI test paths
 - [What's New for Developers (March 2026)](https://developer.wordpress.org/news/2026/03/whats-new-for-developers-march-2026/) -- Monthly roundup
 - [WordPress 7.0 Release Page](https://make.wordpress.org/core/7-0/) -- Schedule, leads, milestones
 - [Planning for 7.0](https://make.wordpress.org/core/2025/12/11/planning-for-7-0/) -- Feature targets and roadmap

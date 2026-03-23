@@ -177,7 +177,7 @@ final class ServerCollector {
 
 		$duotone = [];
 		foreach ( self::merge_presets( $settings['color']['duotone'] ?? [] ) as $preset ) {
-			$slug   = (string) ( $preset['slug'] ?? '' );
+			$slug          = (string) ( $preset['slug'] ?? '' );
 			$preset_colors = is_array( $preset['colors'] ?? null ) ? $preset['colors'] : [];
 
 			if ( $slug === '' ) {
@@ -518,11 +518,11 @@ final class ServerCollector {
 	 */
 	private static function collect_template_candidate_patterns( ?string $template_type ): array {
 		$max_candidates = self::TEMPLATE_PATTERN_CANDIDATE_CAP;
-		$all_patterns = self::for_patterns();
-		$typed        = [];
-		$generic      = [];
-		$unfiltered   = [];
-		$seen         = [];
+		$all_patterns   = self::for_patterns();
+		$typed          = [];
+		$generic        = [];
+		$unfiltered     = [];
+		$seen           = [];
 
 		foreach ( $all_patterns as $pattern ) {
 			$name = (string) ( $pattern['name'] ?? '' );
@@ -710,8 +710,8 @@ final class ServerCollector {
 		$nav_block = self::find_navigation_block( $blocks );
 
 		if ( $nav_block !== null ) {
-			$nav_attrs   = $nav_block['attrs'] ?? [];
-			$inner       = $nav_block['innerBlocks'] ?? [];
+			$nav_attrs = $nav_block['attrs'] ?? [];
+			$inner     = $nav_block['innerBlocks'] ?? [];
 		} else {
 			// Treat all parsed blocks as inner blocks of an implicit navigation.
 			$inner = $blocks;
@@ -721,12 +721,12 @@ final class ServerCollector {
 
 		// Extract key navigation attributes.
 		$attributes = [
-			'overlayMenu'        => self::extract_string_attr( $nav_attrs, 'overlayMenu', 'mobile' ),
-			'hasIcon'            => ! empty( $nav_attrs['hasIcon'] ),
-			'icon'               => self::extract_string_attr( $nav_attrs, 'icon', 'handle' ),
+			'overlayMenu'         => self::extract_string_attr( $nav_attrs, 'overlayMenu', 'mobile' ),
+			'hasIcon'             => ! empty( $nav_attrs['hasIcon'] ),
+			'icon'                => self::extract_string_attr( $nav_attrs, 'icon', 'handle' ),
 			'openSubmenusOnClick' => ! empty( $nav_attrs['openSubmenusOnClick'] ),
-			'showSubmenuIcon'    => $nav_attrs['showSubmenuIcon'] ?? true,
-			'maxNestingLevel'    => isset( $nav_attrs['maxNestingLevel'] ) ? (int) $nav_attrs['maxNestingLevel'] : 0,
+			'showSubmenuIcon'     => $nav_attrs['showSubmenuIcon'] ?? true,
+			'maxNestingLevel'     => isset( $nav_attrs['maxNestingLevel'] ) ? (int) $nav_attrs['maxNestingLevel'] : 0,
 		];
 
 		// Detect location from menu ID reference (if the navigation block
@@ -827,8 +827,8 @@ final class ServerCollector {
 	/**
 	 * Safely extract a string attribute with a default.
 	 */
-	private static function extract_string_attr( array $attrs, string $key, string $default ): string {
-		return isset( $attrs[ $key ] ) && is_string( $attrs[ $key ] ) ? $attrs[ $key ] : $default;
+	private static function extract_string_attr( array $attrs, string $key, string $default_value ): string {
+		return isset( $attrs[ $key ] ) && is_string( $attrs[ $key ] ) ? $attrs[ $key ] : $default_value;
 	}
 
 	/**

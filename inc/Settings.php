@@ -511,19 +511,19 @@ final class Settings {
 	private static function resolve_azure_submission_values( array $overrides = [] ): array|\WP_Error {
 		$current_values = self::get_current_azure_values();
 		$values         = [
-			'flavor_agent_azure_openai_endpoint'        => self::read_posted_url_value(
+			'flavor_agent_azure_openai_endpoint'      => self::read_posted_url_value(
 				'flavor_agent_azure_openai_endpoint',
 				$current_values['flavor_agent_azure_openai_endpoint']
 			),
-			'flavor_agent_azure_openai_key'             => self::read_posted_text_value(
+			'flavor_agent_azure_openai_key'           => self::read_posted_text_value(
 				'flavor_agent_azure_openai_key',
 				$current_values['flavor_agent_azure_openai_key']
 			),
-			'flavor_agent_azure_embedding_deployment'   => self::read_posted_text_value(
+			'flavor_agent_azure_embedding_deployment' => self::read_posted_text_value(
 				'flavor_agent_azure_embedding_deployment',
 				$current_values['flavor_agent_azure_embedding_deployment']
 			),
-			'flavor_agent_azure_chat_deployment'        => self::read_posted_text_value(
+			'flavor_agent_azure_chat_deployment'      => self::read_posted_text_value(
 				'flavor_agent_azure_chat_deployment',
 				$current_values['flavor_agent_azure_chat_deployment']
 			),

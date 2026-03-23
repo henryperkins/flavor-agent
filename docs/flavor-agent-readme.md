@@ -150,7 +150,8 @@ Install dependencies:
 
 ```bash
 composer install
-npm install
+source ~/.nvm/nvm.sh && nvm use 20
+npm ci
 ```
 
 Build and verify:
@@ -159,6 +160,7 @@ Build and verify:
 npm run build
 npm run lint:js
 npm run test:unit -- --runInBand
+npm run test:e2e
 ```
 
 ## Compatibility Notes

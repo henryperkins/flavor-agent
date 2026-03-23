@@ -96,7 +96,7 @@ final class NavigationAbilities {
 			$parts[] = $location . ' navigation';
 		}
 
-		$has_overlay = ! empty( $context['overlayTemplateParts'] );
+		$has_overlay  = ! empty( $context['overlayTemplateParts'] );
 		$overlay_attr = $context['attributes']['overlayMenu'] ?? '';
 		if ( $has_overlay || ( is_string( $overlay_attr ) && $overlay_attr !== 'never' ) ) {
 			$parts[] = 'overlay responsive menu';

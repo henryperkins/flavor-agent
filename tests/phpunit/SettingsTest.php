@@ -59,11 +59,11 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 		$_POST                       = [
-			'option_page'                            => 'flavor_agent_settings',
-			'flavor_agent_azure_openai_endpoint'     => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'          => 'azure-key',
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
-			'flavor_agent_azure_chat_deployment'     => 'chat-deployment',
+			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 
 		$this->assertSame(
@@ -91,11 +91,11 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		$_POST                       = [
-			'option_page'                            => 'flavor_agent_settings',
-			'flavor_agent_azure_openai_endpoint'     => 'https://new.openai.azure.com/',
-			'flavor_agent_azure_openai_key'          => 'new-key',
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => 'https://new.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'new-key',
 			'flavor_agent_azure_embedding_deployment' => 'new-embed',
-			'flavor_agent_azure_chat_deployment'     => 'new-chat',
+			'flavor_agent_azure_chat_deployment'      => 'new-chat',
 		];
 
 		WordPressTestState::$remote_post_responses = [
@@ -160,11 +160,11 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		$_POST                       = [
-			'option_page'                            => 'flavor_agent_settings',
-			'flavor_agent_azure_openai_endpoint'     => 'https://bad.openai.azure.com/',
-			'flavor_agent_azure_openai_key'          => 'bad-key',
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => 'https://bad.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'bad-key',
 			'flavor_agent_azure_embedding_deployment' => 'bad-embed',
-			'flavor_agent_azure_chat_deployment'     => 'bad-chat',
+			'flavor_agent_azure_chat_deployment'      => 'bad-chat',
 		];
 
 		WordPressTestState::$remote_post_response = [
@@ -200,11 +200,11 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 		$_POST                       = [
-			'option_page'                            => 'flavor_agent_settings',
-			'flavor_agent_azure_openai_endpoint'     => '',
-			'flavor_agent_azure_openai_key'          => 'azure-key',
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => '',
+			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
-			'flavor_agent_azure_chat_deployment'     => 'chat-deployment',
+			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 
 		$this->assertSame( '', Settings::sanitize_azure_openai_endpoint( '' ) );
@@ -227,7 +227,7 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];
 		$_POST                       = [
-			'option_page'            => 'flavor_agent_settings',
+			'option_page'             => 'flavor_agent_settings',
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];
@@ -247,7 +247,7 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_qdrant_key' => 'old-key',
 		];
 		$_POST                       = [
-			'option_page'            => 'flavor_agent_settings',
+			'option_page'             => 'flavor_agent_settings',
 			'flavor_agent_qdrant_url' => 'https://new.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'new-key',
 		];
@@ -285,7 +285,7 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_qdrant_key' => 'old-key',
 		];
 		$_POST                       = [
-			'option_page'            => 'flavor_agent_settings',
+			'option_page'             => 'flavor_agent_settings',
 			'flavor_agent_qdrant_url' => 'https://bad.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'bad-key',
 		];
@@ -319,7 +319,7 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];
 		$_POST                       = [
-			'option_page'            => 'flavor_agent_settings',
+			'option_page'             => 'flavor_agent_settings',
 			'flavor_agent_qdrant_url' => '',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];

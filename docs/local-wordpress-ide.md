@@ -86,8 +86,11 @@ Inside the devcontainer or on the host, depending on your preference:
 
 ```bash
 composer install
-npm install
+source ~/.nvm/nvm.sh && nvm use 20
+npm ci
 npm start
 ```
 
 The plugin source is bind-mounted into the live WordPress plugins directory, so PHP and built assets update immediately in the local site.
+
+On the host, stay on Node `20.x` / npm `10.x`. Newer npm `11` installs on this repo have produced nested `@wordpress/*` unpack `ENOENT` failures during `npm ci`.
