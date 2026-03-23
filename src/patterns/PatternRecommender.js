@@ -8,18 +8,21 @@
  * Two modes:
  * - Passive: fetches on editor load using postType
  * - Active: fetches on inserter search input with prompt
+ *
+ * All pattern data access goes through the compatibility adapter
+ * (./compat.js) so the feature degrades cleanly when Gutenberg
+ * promotes experimental APIs to stable equivalents.
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
-import {
-	useDispatch,
-	useSelect,
-	select as registrySelect,
-	dispatch as registryDispatch,
-} from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useEffect, useRef } from '@wordpress/element';
 
-import { findInserterSearchInput } from './find-inserter-search-input';
+import {
+	getBlockPatterns,
+	setBlockPatterns,
+	findInserterSearchInput,
+} from './compat';
 import { patchPatternMetadata } from './recommendation-utils';
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';
@@ -35,17 +38,16 @@ const OBSERVER_TIMEOUT_MS = 3000;
 const originalMetadata = new Map();
 
 /**
- * Read-modify-write on __experimentalBlockPatterns.
+ * Read-modify-write on block patterns via compatibility adapter.
  *
  * @param {Array} recommendations Current recommendation set.
  *
  * @return {void}
  */
 function patchInserterPatterns( recommendations ) {
-	const settings = registrySelect( blockEditorStore ).getSettings();
-	const patterns = settings.__experimentalBlockPatterns;
+	const patterns = getBlockPatterns();
 
-	if ( ! Array.isArray( patterns ) ) {
+	if ( patterns.length === 0 ) {
 		return;
 	}
 
@@ -55,9 +57,7 @@ function patchInserterPatterns( recommendations ) {
 		originalMetadata
 	);
 
-	registryDispatch( blockEditorStore ).updateSettings( {
-		__experimentalBlockPatterns: patched,
-	} );
+	setBlockPatterns( patched );
 }
 
 export default function PatternRecommender() {

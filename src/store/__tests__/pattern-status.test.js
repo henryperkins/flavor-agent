@@ -1,3 +1,9 @@
+jest.mock( '../../utils/template-actions', () => ( {
+	applyTemplateSuggestionOperations: jest.fn(),
+	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	undoTemplateSuggestionOperations: jest.fn(),
+} ) );
+
 import { actions, reducer } from '../index';
 
 describe( 'pattern status store contract', () => {

@@ -240,6 +240,19 @@ final class Registration {
 								'properties' => [
 									'label'              => [ 'type' => 'string' ],
 									'description'        => [ 'type' => 'string' ],
+									'operations'         => [
+										'type'  => 'array',
+										'items' => [
+											'type'       => 'object',
+											'properties' => [
+												'type' => [ 'type' => 'string' ],
+												'slug' => [ 'type' => 'string' ],
+												'area' => [ 'type' => 'string' ],
+												'currentSlug' => [ 'type' => 'string' ],
+												'patternName' => [ 'type' => 'string' ],
+											],
+										],
+									],
 									'templateParts'      => [
 										'type'  => 'array',
 										'items' => [

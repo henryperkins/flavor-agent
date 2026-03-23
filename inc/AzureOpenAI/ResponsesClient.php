@@ -18,7 +18,7 @@ final class ResponsesClient {
 			'/openai/v1/responses',
 			[
 				'input'             => 'validation',
-				'max_output_tokens' => 1,
+				'max_output_tokens' => 16,
 			],
 			'responses_validation_error',
 			'Azure OpenAI responses',

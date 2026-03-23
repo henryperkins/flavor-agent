@@ -22,8 +22,21 @@ define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
 
 require_once FLAVOR_AGENT_DIR . 'vendor/autoload.php';
 
-register_activation_hook( FLAVOR_AGENT_FILE, [ FlavorAgent\Patterns\PatternIndex::class, 'activate' ] );
-register_deactivation_hook( FLAVOR_AGENT_FILE, [ FlavorAgent\Patterns\PatternIndex::class, 'deactivate' ] );
+register_activation_hook(
+	FLAVOR_AGENT_FILE,
+	function () {
+		FlavorAgent\Patterns\PatternIndex::activate();
+		FlavorAgent\Cloudflare\AISearchClient::schedule_prewarm();
+	}
+);
+register_deactivation_hook(
+	FLAVOR_AGENT_FILE,
+	function () {
+		FlavorAgent\Patterns\PatternIndex::deactivate();
+		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK );
+		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK );
+	}
+);
 
 add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
@@ -55,6 +68,16 @@ foreach ( [
 	);
 }
 
+// Docs grounding prewarm cron hook.
+add_action(
+	FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK,
+	[ FlavorAgent\Cloudflare\AISearchClient::class, 'prewarm' ]
+);
+add_action(
+	FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK,
+	[ FlavorAgent\Cloudflare\AISearchClient::class, 'process_context_warm_queue' ]
+);
+
 // Recommended pattern category for AI-ranked patterns in the inserter.
 add_action(
 	'init',
@@ -73,7 +96,12 @@ add_action(
 add_filter(
 	'block_editor_settings_all',
 	function ( $settings ) {
-		$cats        = $settings['__experimentalBlockPatternCategories'] ?? [];
+		// Prefer stable key when core promotes it; fall back to experimental.
+		$cats_key = isset( $settings['blockPatternCategories'] )
+			? 'blockPatternCategories'
+			: '__experimentalBlockPatternCategories';
+
+		$cats        = $settings[ $cats_key ] ?? [];
 		$recommended = null;
 		$rest        = [];
 
@@ -86,7 +114,7 @@ add_filter(
 		}
 
 		if ( $recommended ) {
-			$settings['__experimentalBlockPatternCategories'] = array_merge( [ $recommended ], $rest );
+			$settings[ $cats_key ] = array_merge( [ $recommended ], $rest );
 		}
 
 		return $settings;

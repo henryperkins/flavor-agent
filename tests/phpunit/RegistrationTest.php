@@ -87,4 +87,34 @@ final class RegistrationTest extends TestCase {
 			(string) ( $ability['input_schema']['properties']['entityKey']['description'] ?? '' )
 		);
 	}
+
+	public function test_register_abilities_exposes_structured_template_operation_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-template'] ?? null;
+
+		$this->assertIsArray( $ability );
+		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
+
+		$suggestion = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
+
+		$this->assertIsArray( $suggestion );
+		$this->assertSame(
+			'array',
+			$suggestion['properties']['operations']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['type']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['currentSlug']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['patternName']['type'] ?? null
+		);
+	}
 }

@@ -153,6 +153,61 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_block_docs_guidance_uses_family_cache_before_entity_cache(): void {
+		$family_guidance = [
+			[
+				'id'        => 'family-chunk',
+				'title'     => 'Footer navigation guidance',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Footer menus should keep submenu spacing compact and labels concise.',
+				'score'     => 0.9,
+			],
+		];
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Navigation block reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Generic navigation block guidance.',
+				'score'     => 0.82,
+			],
+		];
+		$context         = [
+			'block' => [
+				'name'               => 'core/navigation',
+				'inspectorPanels'    => [
+					'color'   => true,
+					'spacing' => true,
+				],
+				'structuralIdentity' => [
+					'role'     => 'footer-navigation',
+					'location' => 'footer',
+				],
+			],
+		];
+		$prompt          = 'Simplify footer links.';
+		$family_context  = $this->invoke_private_array_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_family_context',
+			[ $context ]
+		);
+
+		WordPressTestState::$transients[ $this->build_family_cache_key( $family_context, 4 ) ] = $family_guidance;
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/navigation' ) ]  = $entity_guidance;
+
+		$this->assertSame(
+			$family_guidance,
+			$this->invoke_private_array_method(
+				BlockAbilities::class,
+				'collect_wordpress_docs_guidance',
+				[ $context, $prompt ]
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_explicit_docs_search_seeds_entity_cache_from_entity_key(): void {
 		$this->prime_search_response(
 			'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
@@ -243,6 +298,20 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		$method->setAccessible( true );
 
 		$result = $method->invokeArgs( null, $arguments );
+
+		$this->assertIsString( $result );
+
+		return $result;
+	}
+
+	/**
+	 * @param array<string, mixed> $family_context
+	 */
+	private function build_family_cache_key( array $family_context, int $max_results ): string {
+		$method = new ReflectionMethod( AISearchClient::class, 'build_family_cache_key' );
+		$method->setAccessible( true );
+
+		$result = $method->invoke( null, $family_context, $max_results );
 
 		$this->assertIsString( $result );
 

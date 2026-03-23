@@ -1,26 +1,37 @@
 import {
 	buildEntityMap,
 	buildTemplateFetchInput,
+	buildTemplateOperationViewModel,
 	buildTemplateSuggestionViewModel,
 	ENTITY_ACTION_BROWSE_PATTERN,
 	ENTITY_ACTION_SELECT_AREA,
 	ENTITY_ACTION_SELECT_PART,
 	PATTERN_BROWSE_ACTION,
+	TEMPLATE_OPERATION_ASSIGN,
+	TEMPLATE_OPERATION_INSERT_PATTERN,
+	TEMPLATE_OPERATION_REPLACE,
 	TEMPLATE_PART_REVIEW_ACTION,
 } from '../template-recommender-helpers';
 
 describe( 'template recommender helpers', () => {
-	test( 'buildTemplateFetchInput trims prompt and omits advisory-scope drift fields', () => {
+	test( 'buildTemplateFetchInput trims prompt and includes visible patterns when provided', () => {
 		expect(
 			buildTemplateFetchInput( {
 				templateRef: 'theme//single',
 				templateType: 'single',
 				prompt: '  Tighten the footer layout.  ',
+				visiblePatternNames: [
+					'theme/hero',
+					'',
+					'theme/hero',
+					'theme/footer',
+				],
 			} )
 		).toEqual( {
 			templateRef: 'theme//single',
 			templateType: 'single',
 			prompt: 'Tighten the footer layout.',
+			visiblePatternNames: [ 'theme/hero', 'theme/footer' ],
 		} );
 	} );
 
@@ -35,11 +46,42 @@ describe( 'template recommender helpers', () => {
 		expect( input ).not.toHaveProperty( 'visiblePatternNames' );
 	} );
 
-	test( 'buildTemplateSuggestionViewModel exposes advisory-only template part review actions', () => {
+	test( 'buildTemplateOperationViewModel normalizes supported operation types', () => {
+		expect(
+			buildTemplateOperationViewModel( {
+				type: TEMPLATE_OPERATION_REPLACE,
+				currentSlug: 'header',
+				slug: 'header-minimal',
+				area: 'header',
+			} )
+		).toEqual( {
+			key: 'replace_template_part|header|header-minimal|header',
+			type: TEMPLATE_OPERATION_REPLACE,
+			slug: 'header-minimal',
+			area: 'header',
+			currentSlug: 'header',
+			patternName: '',
+			patternTitle: '',
+			badgeLabel: 'Replace',
+		} );
+	} );
+
+	test( 'buildTemplateSuggestionViewModel derives review and apply data from executable operations', () => {
 		const model = buildTemplateSuggestionViewModel( {
 			label: 'Strengthen the footer',
 			description:
 				'Review the footer slot and browse a social links pattern.',
+			operations: [
+				{
+					type: TEMPLATE_OPERATION_ASSIGN,
+					slug: 'footer',
+					area: 'footer',
+				},
+				{
+					type: TEMPLATE_OPERATION_INSERT_PATTERN,
+					patternName: 'theme/social-links',
+				},
+			],
 			templateParts: [
 				{
 					slug: 'footer',
@@ -60,15 +102,40 @@ describe( 'template recommender helpers', () => {
 			},
 		] );
 
-		expect( JSON.stringify( model ) ).not.toMatch(
-			/Assign|Insert|Apply All/
-		);
+		expect( model.operations ).toEqual( [
+			{
+				key: 'assign_template_part|footer|footer',
+				type: TEMPLATE_OPERATION_ASSIGN,
+				slug: 'footer',
+				area: 'footer',
+				currentSlug: '',
+				patternName: '',
+				patternTitle: '',
+				badgeLabel: 'Assign',
+			},
+			{
+				key: 'insert_pattern|theme/social-links',
+				type: TEMPLATE_OPERATION_INSERT_PATTERN,
+				slug: '',
+				area: '',
+				currentSlug: '',
+				patternName: 'theme/social-links',
+				patternTitle: 'theme/social-links',
+				badgeLabel: 'Insert',
+			},
+		] );
+		expect( model.canApply ).toBe( true );
 	} );
 
-	test( 'buildTemplateSuggestionViewModel exposes browse-only pattern actions', () => {
+	test( 'buildTemplateSuggestionViewModel resolves pattern titles from insert operations', () => {
 		const model = buildTemplateSuggestionViewModel(
 			{
-				patternSuggestions: [ 'theme/social-links' ],
+				operations: [
+					{
+						type: TEMPLATE_OPERATION_INSERT_PATTERN,
+						patternName: 'theme/social-links',
+					},
+				],
 			},
 			{
 				'theme/social-links': 'Social Links',
@@ -83,15 +150,42 @@ describe( 'template recommender helpers', () => {
 				ctaLabel: 'Browse pattern',
 			},
 		] );
-		expect( JSON.stringify( model ) ).not.toMatch(
-			/Assign|Insert|Apply All/
-		);
 	} );
 
-	test( 'buildEntityMap de-dupes duplicate entity text and preserves pattern title aliases', () => {
+	test( 'buildTemplateSuggestionViewModel drops conflicting raw operations from the preview model', () => {
+		const model = buildTemplateSuggestionViewModel( {
+			operations: [
+				{
+					type: TEMPLATE_OPERATION_ASSIGN,
+					slug: 'header-minimal',
+					area: 'header',
+				},
+				{
+					type: TEMPLATE_OPERATION_REPLACE,
+					currentSlug: 'header-minimal',
+					slug: 'header-large',
+					area: 'header',
+				},
+			],
+		} );
+
+		expect( model.operations ).toEqual( [] );
+		expect( model.canApply ).toBe( false );
+		expect( model.executionError ).toContain( 'targets the “header” area more than once' );
+	} );
+
+	test( 'buildEntityMap de-dupes duplicate entity text and includes current template-part aliases', () => {
 		const entities = buildEntityMap(
 			[
 				{
+					operations: [
+						{
+							type: TEMPLATE_OPERATION_REPLACE,
+							currentSlug: 'header',
+							slug: 'header-minimal',
+							area: 'header',
+						},
+					],
 					templateParts: [
 						{ slug: 'header', area: 'header' },
 						{ slug: 'header', area: 'header' },
@@ -119,6 +213,13 @@ describe( 'template recommender helpers', () => {
 	test( 'buildEntityMap keeps area actions and tolerates missing optional arrays', () => {
 		const entities = buildEntityMap( [
 			{
+				operations: [
+					{
+						type: TEMPLATE_OPERATION_ASSIGN,
+						slug: 'footer',
+						area: 'site-footer',
+					},
+				],
 				templateParts: [ { slug: 'footer', area: 'site-footer' } ],
 			},
 			{

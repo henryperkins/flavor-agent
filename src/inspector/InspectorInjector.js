@@ -22,9 +22,39 @@ import { starFilled as icon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 import { collectBlockContext } from '../context/collector';
+import AIActivitySection from '../components/AIActivitySection';
 import SettingsRecommendations from './SettingsRecommendations';
 import StylesRecommendations from './StylesRecommendations';
 import SuggestionChips from './SuggestionChips';
+
+function findBlockPath( blocks, clientId, path = [] ) {
+	for ( let index = 0; index < blocks.length; index++ ) {
+		const block = blocks[ index ];
+		const nextPath = [ ...path, index ];
+
+		if ( block?.clientId === clientId ) {
+			return nextPath;
+		}
+
+		if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
+			const nestedPath = findBlockPath(
+				block.innerBlocks,
+				clientId,
+				nextPath
+			);
+
+			if ( nestedPath ) {
+				return nestedPath;
+			}
+		}
+	}
+
+	return null;
+}
+
+function blockPathMatches( left, right ) {
+	return JSON.stringify( left || [] ) === JSON.stringify( right || [] );
+}
 
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
@@ -34,13 +64,49 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				? true
 				: window.flavorAgentData?.canRecommendBlocks ?? true;
 
-		const { recommendations, isLoading, error } = useSelect(
+		const {
+			recommendations,
+			isLoading,
+			error,
+			blockActivityEntries,
+			latestBlockActivity,
+			latestUndoableActivityId,
+			undoError,
+			undoStatus,
+			lastUndoneActivityId,
+		} = useSelect(
 			( sel ) => {
 				const s = sel( STORE_NAME );
+				const blockEditor = sel( blockEditorStore );
+				const currentBlockPath = findBlockPath(
+					blockEditor.getBlocks?.() || [],
+					clientId
+				);
+				const activityLog = s.getActivityLog() || [];
+				const blockEntries = activityLog.filter(
+					( entry ) =>
+						entry?.surface === 'block' &&
+						( entry?.target?.clientId === clientId ||
+							blockPathMatches(
+								entry?.target?.blockPath,
+								currentBlockPath
+							) )
+				);
+
 				return {
 					recommendations: s.getBlockRecommendations( clientId ),
 					isLoading: s.isBlockLoading( clientId ),
 					error: s.getBlockError( clientId ),
+					blockActivityEntries: [ ...blockEntries ]
+						.slice( -3 )
+						.reverse(),
+					latestBlockActivity:
+						blockEntries[ blockEntries.length - 1 ] || null,
+					latestUndoableActivityId:
+						s.getLatestUndoableActivity()?.id || null,
+					undoError: s.getUndoError(),
+					undoStatus: s.getUndoStatus(),
+					lastUndoneActivityId: s.getLastUndoneActivityId(),
 				};
 			},
 			[ clientId ]
@@ -63,8 +129,12 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			[ clientId ]
 		);
 
-		const { fetchBlockRecommendations, clearBlockError } =
-			useDispatch( STORE_NAME );
+		const {
+			fetchBlockRecommendations,
+			clearBlockError,
+			clearUndoError,
+			undoActivity,
+		} = useDispatch( STORE_NAME );
 		const [ prompt, setPrompt ] = useState( '' );
 		const isDisabled = editingMode === 'disabled';
 		const isContentRestricted =
@@ -85,6 +155,12 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			prompt,
 			fetchBlockRecommendations,
 		] );
+		const handleUndo = useCallback(
+			( activityId ) => {
+				undoActivity( activityId );
+			},
+			[ undoActivity ]
+		);
 
 		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;
@@ -180,11 +256,76 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								</Notice>
 							) }
 
+							{ undoStatus === 'error' && undoError && (
+								<Notice
+									status="error"
+									isDismissible
+									onDismiss={ clearUndoError }
+								>
+									{ undoError }
+								</Notice>
+							) }
+
+							{ latestBlockActivity &&
+								latestBlockActivity.id ===
+									latestUndoableActivityId && (
+									<Notice
+										status="success"
+										isDismissible={ false }
+									>
+										Applied{ ' ' }
+										<strong>
+											{ latestBlockActivity.suggestion }
+										</strong>
+										.{ ' ' }
+										<Button
+											variant="link"
+											onClick={ () =>
+												handleUndo(
+													latestBlockActivity.id
+												)
+											}
+											disabled={
+												undoStatus === 'undoing'
+											}
+										>
+											{ undoStatus === 'undoing'
+												? 'Undoing…'
+												: 'Undo' }
+										</Button>
+									</Notice>
+								) }
+
+							{ latestBlockActivity &&
+								undoStatus === 'success' &&
+								lastUndoneActivityId ===
+									latestBlockActivity.id && (
+									<Notice
+										status="success"
+										isDismissible={ false }
+									>
+										Undid{ ' ' }
+										<strong>
+											{ latestBlockActivity.suggestion }
+										</strong>
+										.
+									</Notice>
+								) }
+
 							{ recommendations?.explanation && (
 								<p className="flavor-agent-explanation flavor-agent-panel__note">
 									{ recommendations.explanation }
 								</p>
 							) }
+
+							<AIActivitySection
+								entries={ blockActivityEntries }
+								latestUndoableActivityId={
+									latestUndoableActivityId
+								}
+								isUndoing={ undoStatus === 'undoing' }
+								onUndo={ handleUndo }
+							/>
 
 							{ recommendations?.block?.length > 0 && (
 								<div className="flavor-agent-panel__group">

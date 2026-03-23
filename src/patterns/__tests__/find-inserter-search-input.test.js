@@ -1,6 +1,15 @@
+jest.mock( '@wordpress/block-editor', () => ( {
+	store: 'core/block-editor',
+} ) );
+
+jest.mock( '@wordpress/data', () => ( {
+	select: jest.fn(),
+	dispatch: jest.fn(),
+} ) );
+
 import { findInserterSearchInput } from '../find-inserter-search-input';
 
-describe( 'findInserterSearchInput', () => {
+describe( 'findInserterSearchInput (re-export)', () => {
 	beforeEach( () => {
 		document.body.innerHTML = '';
 	} );

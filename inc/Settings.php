@@ -7,6 +7,7 @@ namespace FlavorAgent;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Patterns\PatternIndex;
 
 final class Settings {
@@ -346,6 +347,8 @@ final class Settings {
 				'flavor-agent'
 			)
 		);
+
+		self::render_prewarm_diagnostics();
 	}
 
 	/**
@@ -701,7 +704,7 @@ final class Settings {
 				: self::$cloudflare_validation_state['values'];
 		}
 
-		$validation = \FlavorAgent\Cloudflare\AISearchClient::validate_configuration(
+		$validation = AISearchClient::validate_configuration(
 			$values['flavor_agent_cloudflare_ai_search_account_id'],
 			$values['flavor_agent_cloudflare_ai_search_instance_id'],
 			$values['flavor_agent_cloudflare_ai_search_api_token']
@@ -712,6 +715,14 @@ final class Settings {
 			'values'      => $values,
 			'error'       => is_wp_error( $validation ) ? $validation : null,
 		];
+
+		if ( ! is_wp_error( $validation ) ) {
+			AISearchClient::schedule_prewarm(
+				$values['flavor_agent_cloudflare_ai_search_account_id'],
+				$values['flavor_agent_cloudflare_ai_search_instance_id'],
+				$values['flavor_agent_cloudflare_ai_search_api_token']
+			);
+		}
 
 		return is_wp_error( $validation ) ? $validation : $values;
 	}
@@ -891,6 +902,53 @@ final class Settings {
 		);
 
 		self::$cloudflare_validation_error_reported = true;
+	}
+
+	// ------------------------------------------------------------------
+	// Prewarm diagnostics panel
+	// ------------------------------------------------------------------
+
+	private static function render_prewarm_diagnostics(): void {
+		if ( ! AISearchClient::is_configured() ) {
+			return;
+		}
+
+		$state = AISearchClient::get_prewarm_state();
+
+		$status_labels = [
+			'never'     => 'Never run',
+			'ok'        => 'OK',
+			'partial'   => 'Partial (some entities failed)',
+			'failed'    => 'Failed',
+			'throttled' => 'Throttled (skipped, too recent)',
+		];
+
+		$label = $status_labels[ $state['status'] ] ?? $state['status'];
+		?>
+		<table class="form-table" role="presentation" style="margin-top:0">
+			<tr>
+				<th scope="row"><?php echo esc_html__( 'Docs Prewarm', 'flavor-agent' ); ?></th>
+				<td>
+					<strong><?php echo esc_html( $label ); ?></strong>
+					<?php if ( $state['timestamp'] !== '' ) : ?>
+						&mdash; <?php echo esc_html( $state['timestamp'] ); ?> UTC
+					<?php endif; ?>
+					<?php if ( $state['warmed'] > 0 || $state['failed'] > 0 ) : ?>
+						<br /><span class="description">
+							<?php
+							printf(
+								/* translators: 1: warmed count, 2: failed count */
+								esc_html__( '%1$d warmed, %2$d failed', 'flavor-agent' ),
+								$state['warmed'],
+								$state['failed']
+							);
+							?>
+						</span>
+					<?php endif; ?>
+				</td>
+			</tr>
+		</table>
+		<?php
 	}
 
 	// ------------------------------------------------------------------

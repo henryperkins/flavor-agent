@@ -3,11 +3,15 @@
  *
  * Renders the unified pattern recommendation status badge next to
  * the inserter toggle button.
+ *
+ * Toggle button discovery goes through the compatibility adapter
+ * (./compat.js) so DOM selectors are centralized.
  */
 import { useSelect } from '@wordpress/data';
 import { useEffect, useState, createPortal } from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
 
+import { findInserterToggle } from './compat';
 import { STORE_NAME } from '../store';
 import { getInserterBadgeState } from './inserter-badge-state';
 
@@ -30,25 +34,7 @@ export default function InserterBadge() {
 			return;
 		}
 
-		// Primary: stable class selector.
-		let button = document.querySelector(
-			'button.block-editor-inserter__toggle'
-		);
-
-		// Fallback: aria-label containing "inserter" (case-insensitive).
-		if ( ! button ) {
-			const allButtons = document.querySelectorAll(
-				'.edit-post-header-toolbar button, .edit-site-header__start button'
-			);
-			for ( const b of allButtons ) {
-				const label = b.getAttribute( 'aria-label' ) || '';
-				if ( /inserter/i.test( label ) ) {
-					button = b;
-					break;
-				}
-			}
-		}
-
+		const button = findInserterToggle();
 		const parent = button?.parentElement;
 		if ( ! parent ) {
 			setAnchor( null );

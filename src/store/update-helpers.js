@@ -151,6 +151,51 @@ export function buildSafeAttributeUpdates(
 }
 
 /**
+ * Build a restoration patch that can revert an applied attribute snapshot.
+ *
+ * Keys that existed only in the applied snapshot are explicitly unset so the
+ * block returns to the previous serialized shape.
+ *
+ * @param {Object} previousAttributes Snapshot taken before apply.
+ * @param {Object} nextAttributes     Snapshot taken after apply.
+ * @return {Object} Restoration patch suitable for updateBlockAttributes().
+ */
+export function buildUndoAttributeUpdates(
+	previousAttributes = {},
+	nextAttributes = {}
+) {
+	const restoreUpdates = {};
+	const keys = new Set( [
+		...Object.keys( nextAttributes || {} ),
+		...Object.keys( previousAttributes || {} ),
+	] );
+
+	for ( const key of keys ) {
+		if ( Object.prototype.hasOwnProperty.call( previousAttributes, key ) ) {
+			restoreUpdates[ key ] = previousAttributes[ key ];
+		} else {
+			restoreUpdates[ key ] = undefined;
+		}
+	}
+
+	return restoreUpdates;
+}
+
+/**
+ * @param {Object} previousSnapshot Stored snapshot.
+ * @param {Object} currentSnapshot  Current live attributes.
+ * @return {boolean} Whether the snapshots still match closely enough to undo.
+ */
+export function attributeSnapshotsMatch(
+	previousSnapshot = {},
+	currentSnapshot = {}
+) {
+	return (
+		JSON.stringify( previousSnapshot ) === JSON.stringify( currentSnapshot )
+	);
+}
+
+/**
  * @param {Object}   attributeUpdates          Suggested attribute updates.
  * @param {string[]} [contentAttributeKeys=[]] Allowed content attribute keys.
  * @return {Object} Filtered content-only-safe attribute updates.

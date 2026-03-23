@@ -1,3 +1,5 @@
+import { validateTemplateOperationSequence } from '../utils/template-operation-sequence';
+
 export const ENTITY_PART = 'part';
 export const ENTITY_AREA = 'area';
 export const ENTITY_PATTERN = 'pattern';
@@ -8,6 +10,9 @@ export const ENTITY_ACTION_BROWSE_PATTERN = 'browse-pattern';
 
 export const TEMPLATE_PART_REVIEW_ACTION = 'review-template-part';
 export const PATTERN_BROWSE_ACTION = 'browse-pattern';
+export const TEMPLATE_OPERATION_ASSIGN = 'assign_template_part';
+export const TEMPLATE_OPERATION_REPLACE = 'replace_template_part';
+export const TEMPLATE_OPERATION_INSERT_PATTERN = 'insert_pattern';
 
 export function getSuggestionCardKey( suggestion = {}, index ) {
 	return `${ suggestion.label || 'suggestion' }-${ index }`;
@@ -15,6 +20,23 @@ export function getSuggestionCardKey( suggestion = {}, index ) {
 
 export function getTemplatePartKey( slug = '', area = '' ) {
 	return `${ slug }|${ area }`;
+}
+
+export function getTemplateOperationKey( operation = {} ) {
+	switch ( operation?.type ) {
+		case TEMPLATE_OPERATION_ASSIGN:
+			return `${ operation.type }|${ operation.slug || '' }|${
+				operation.area || ''
+			}`;
+		case TEMPLATE_OPERATION_REPLACE:
+			return `${ operation.type }|${ operation.currentSlug || '' }|${
+				operation.slug || ''
+			}|${ operation.area || '' }`;
+		case TEMPLATE_OPERATION_INSERT_PATTERN:
+			return `${ operation.type }|${ operation.patternName || '' }`;
+		default:
+			return `${ operation?.type || 'operation' }`;
+	}
 }
 
 export function formatCount( count, noun ) {
@@ -36,6 +58,7 @@ export function buildTemplateFetchInput( {
 	templateRef,
 	templateType,
 	prompt,
+	visiblePatternNames = [],
 } ) {
 	const input = { templateRef };
 	const trimmedPrompt = prompt.trim();
@@ -46,6 +69,15 @@ export function buildTemplateFetchInput( {
 
 	if ( trimmedPrompt ) {
 		input.prompt = trimmedPrompt;
+	}
+
+	if (
+		Array.isArray( visiblePatternNames ) &&
+		visiblePatternNames.filter( Boolean ).length > 0
+	) {
+		input.visiblePatternNames = Array.from(
+			new Set( visiblePatternNames.filter( Boolean ) )
+		);
 	}
 
 	return input;
@@ -62,6 +94,9 @@ export function buildEntityMap( recommendations = [], patternTitleMap = {} ) {
 			suggestion?.patternSuggestions
 		)
 			? suggestion.patternSuggestions
+			: [];
+		const operations = Array.isArray( suggestion?.operations )
+			? suggestion.operations
 			: [];
 
 		for ( const part of templateParts ) {
@@ -83,6 +118,22 @@ export function buildEntityMap( recommendations = [], patternTitleMap = {} ) {
 					actionType: ENTITY_ACTION_SELECT_AREA,
 					area: part.area,
 					tooltip: `Select “${ part.area }” area in editor`,
+				} );
+			}
+		}
+
+		for ( const operation of operations ) {
+			if (
+				operation?.currentSlug &&
+				! map.has( operation.currentSlug )
+			) {
+				map.set( operation.currentSlug, {
+					text: operation.currentSlug,
+					type: ENTITY_PART,
+					actionType: ENTITY_ACTION_SELECT_PART,
+					slug: operation.currentSlug,
+					area: operation.area || '',
+					tooltip: `Select “${ operation.currentSlug }” block in editor`,
 				} );
 			}
 		}
@@ -123,6 +174,52 @@ export function buildEntityMap( recommendations = [], patternTitleMap = {} ) {
 	);
 }
 
+export function buildTemplateOperationViewModel(
+	operation = {},
+	patternTitleMap = {}
+) {
+	switch ( operation?.type ) {
+		case TEMPLATE_OPERATION_ASSIGN:
+			return {
+				key: getTemplateOperationKey( operation ),
+				type: TEMPLATE_OPERATION_ASSIGN,
+				slug: operation?.slug || '',
+				area: operation?.area || '',
+				currentSlug: '',
+				patternName: '',
+				patternTitle: '',
+				badgeLabel: 'Assign',
+			};
+		case TEMPLATE_OPERATION_REPLACE:
+			return {
+				key: getTemplateOperationKey( operation ),
+				type: TEMPLATE_OPERATION_REPLACE,
+				slug: operation?.slug || '',
+				area: operation?.area || '',
+				currentSlug: operation?.currentSlug || '',
+				patternName: '',
+				patternTitle: '',
+				badgeLabel: 'Replace',
+			};
+		case TEMPLATE_OPERATION_INSERT_PATTERN:
+			return {
+				key: getTemplateOperationKey( operation ),
+				type: TEMPLATE_OPERATION_INSERT_PATTERN,
+				slug: '',
+				area: '',
+				currentSlug: '',
+				patternName: operation?.patternName || '',
+				patternTitle:
+					patternTitleMap[ operation?.patternName ] ||
+					operation?.patternName ||
+					'',
+				badgeLabel: 'Insert',
+			};
+		default:
+			return null;
+	}
+}
+
 export function buildTemplateSuggestionViewModel(
 	suggestion = {},
 	patternTitleMap = {}
@@ -130,28 +227,58 @@ export function buildTemplateSuggestionViewModel(
 	const templateParts = Array.isArray( suggestion?.templateParts )
 		? suggestion.templateParts
 		: [];
-	const patternSuggestions = Array.isArray( suggestion?.patternSuggestions )
-		? suggestion.patternSuggestions
+	const executableOperations = validateTemplateOperationSequence(
+		suggestion?.operations
+	);
+	const partReasonLookup = templateParts.reduce( ( acc, part ) => {
+		const key = getTemplatePartKey( part?.slug || '', part?.area || '' );
+		acc[ key ] = part?.reason || '';
+		return acc;
+	}, {} );
+	const operations = executableOperations.ok
+		? executableOperations.operations
+				.map( ( operation ) =>
+					buildTemplateOperationViewModel(
+						operation,
+						patternTitleMap
+					)
+				)
+				.filter( Boolean )
 		: [];
+	const templateOperations = operations.filter(
+		( operation ) =>
+			operation.type === TEMPLATE_OPERATION_ASSIGN ||
+			operation.type === TEMPLATE_OPERATION_REPLACE
+	);
+	const patternOperations = operations.filter(
+		( operation ) => operation.type === TEMPLATE_OPERATION_INSERT_PATTERN
+	);
 
 	return {
+		suggestionKey: suggestion?.suggestionKey || '',
 		label: suggestion?.label || '',
 		description: suggestion?.description || '',
-		templateParts: templateParts.map( ( part ) => ( {
-			key: getTemplatePartKey( part?.slug || '', part?.area || '' ),
-			slug: part?.slug || '',
-			area: part?.area || '',
-			reason: part?.reason || '',
+		executionError: executableOperations.ok
+			? ''
+			: executableOperations.error || '',
+		operations,
+		templateParts: templateOperations.map( ( operation ) => ( {
+			key: getTemplatePartKey( operation.slug, operation.area ),
+			slug: operation.slug,
+			area: operation.area,
+			reason:
+				partReasonLookup[
+					getTemplatePartKey( operation.slug, operation.area )
+				] || '',
 			actionType: TEMPLATE_PART_REVIEW_ACTION,
 			ctaLabel: 'Review in editor',
 		} ) ),
-		patternSuggestions: patternSuggestions
-			.filter( Boolean )
-			.map( ( name ) => ( {
-				name,
-				title: patternTitleMap[ name ] || name,
-				actionType: PATTERN_BROWSE_ACTION,
-				ctaLabel: 'Browse pattern',
-			} ) ),
+		patternSuggestions: patternOperations.map( ( operation ) => ( {
+			name: operation.patternName,
+			title: operation.patternTitle,
+			actionType: PATTERN_BROWSE_ACTION,
+			ctaLabel: 'Browse pattern',
+		} ) ),
+		canApply: executableOperations.ok && operations.length > 0,
 	};
 }

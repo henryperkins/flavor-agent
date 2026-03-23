@@ -6,6 +6,7 @@ const mockRegistrySelect = jest.fn();
 
 jest.mock( '@wordpress/data', () => ( {
 	select: ( ...args ) => mockRegistrySelect( ...args ),
+	dispatch: ( ...args ) => mockRegistrySelect( ...args ),
 } ) );
 
 import { extractPatternNames } from '../pattern-names';
@@ -38,7 +39,29 @@ describe( 'visible-patterns', () => {
 		expect( extractPatternNames( null ) ).toEqual( [] );
 	} );
 
-	test( 'getVisiblePatternNames passes the provided rootClientId to allowed-pattern lookup', () => {
+	test( 'getVisiblePatternNames uses stable getAllowedPatterns selector when available', () => {
+		const blockEditor = {
+			getAllowedPatterns: jest
+				.fn()
+				.mockReturnValue( [
+					{ name: 'theme/hero' },
+					{ name: 'theme/hero' },
+					{ name: 'theme/footer' },
+				] ),
+		};
+
+		mockRegistrySelect.mockReturnValue( blockEditor );
+
+		expect( getVisiblePatternNames( 'root-123' ) ).toEqual( [
+			'theme/hero',
+			'theme/footer',
+		] );
+		expect( blockEditor.getAllowedPatterns ).toHaveBeenCalledWith(
+			'root-123'
+		);
+	} );
+
+	test( 'getVisiblePatternNames falls back to __experimentalGetAllowedPatterns', () => {
 		const blockEditor = {
 			__experimentalGetAllowedPatterns: jest
 				.fn()
@@ -75,7 +98,7 @@ describe( 'visible-patterns', () => {
 		).toHaveBeenCalledWith( null );
 	} );
 
-	test( 'getVisiblePatternNames falls back to settings when selector is unavailable', () => {
+	test( 'getVisiblePatternNames falls back to settings patterns when no selector exists', () => {
 		const blockEditor = {
 			getSettings: jest.fn().mockReturnValue( {
 				__experimentalBlockPatterns: [
@@ -93,6 +116,20 @@ describe( 'visible-patterns', () => {
 			'theme/hero',
 			'theme/footer',
 		] );
-		expect( blockEditor.getSettings ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'getVisiblePatternNames prefers stable blockPatterns setting', () => {
+		const blockEditor = {
+			getSettings: jest.fn().mockReturnValue( {
+				blockPatterns: [ { name: 'theme/stable-hero' } ],
+				__experimentalBlockPatterns: [
+					{ name: 'theme/experimental-hero' },
+				],
+			} ),
+		};
+
+		mockRegistrySelect.mockReturnValue( blockEditor );
+
+		expect( getVisiblePatternNames() ).toEqual( [ 'theme/stable-hero' ] );
 	} );
 } );

@@ -270,10 +270,11 @@ final class BlockAbilities {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query      = self::build_wordpress_docs_query( $context, $prompt );
-		$entity_key = self::build_wordpress_docs_entity_key( $context );
+		$query          = self::build_wordpress_docs_query( $context, $prompt );
+		$entity_key     = self::build_wordpress_docs_entity_key( $context );
+		$family_context = self::build_wordpress_docs_family_context( $context );
 
-		return AISearchClient::maybe_search_with_entity_fallback( $query, $entity_key );
+		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
 	}
 
 	private static function build_wordpress_docs_entity_key( array $context ): string {
@@ -354,6 +355,65 @@ final class BlockAbilities {
 				)
 			)
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_wordpress_docs_family_context( array $context ): array {
+		$entity_key = self::build_wordpress_docs_entity_key( $context );
+
+		if ( $entity_key === '' ) {
+			return [];
+		}
+
+		$block         = self::normalize_map( $context['block'] ?? [] );
+		$panel_keys    = array_keys( self::normalize_map( $block['inspectorPanels'] ?? [] ) );
+		$panel_summary = array_values(
+			array_filter(
+				array_map(
+					static fn( $panel ): string => sanitize_key( (string) $panel ),
+					$panel_keys
+				)
+			)
+		);
+		sort( $panel_summary );
+
+		$identity        = self::normalize_map( $block['structuralIdentity'] ?? [] );
+		$structural_role = is_string( $identity['role'] ?? null ) ? sanitize_key( (string) $identity['role'] ) : '';
+		$location        = is_string( $identity['location'] ?? null ) ? sanitize_key( (string) $identity['location'] ) : '';
+		$template_area   = is_string( $identity['templateArea'] ?? null ) ? sanitize_key( (string) $identity['templateArea'] ) : '';
+		$editing_mode    = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
+		$family_context  = [
+			'surface'   => 'block',
+			'entityKey' => $entity_key,
+		];
+
+		if ( ! empty( $panel_summary ) ) {
+			$family_context['inspectorPanels'] = $panel_summary;
+		}
+
+		if ( $structural_role !== '' ) {
+			$family_context['structuralRole'] = $structural_role;
+		}
+
+		if ( $location !== '' ) {
+			$family_context['location'] = $location;
+		}
+
+		if ( $template_area !== '' ) {
+			$family_context['templateArea'] = $template_area;
+		}
+
+		if ( ! empty( $block['isInsideContentOnly'] ) || $editing_mode === 'contentOnly' ) {
+			$family_context['contentOnly'] = true;
+		}
+
+		if ( $editing_mode !== 'default' ) {
+			$family_context['editingMode'] = $editing_mode;
+		}
+
+		return $family_context;
 	}
 
 	private static function normalize_map( mixed $value ): array {

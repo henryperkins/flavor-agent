@@ -19,6 +19,7 @@ import './store';
 import './inspector/InspectorInjector';
 
 // Plugin components.
+import ActivitySessionBootstrap from './components/ActivitySessionBootstrap';
 import PatternRecommender from './patterns/PatternRecommender';
 import InserterBadge from './patterns/InserterBadge';
 import TemplateRecommender from './templates/TemplateRecommender';
@@ -26,6 +27,7 @@ import TemplateRecommender from './templates/TemplateRecommender';
 registerPlugin( 'flavor-agent', {
 	render: () => (
 		<>
+			<ActivitySessionBootstrap />
 			<PatternRecommender />
 			<InserterBadge />
 			<TemplateRecommender />

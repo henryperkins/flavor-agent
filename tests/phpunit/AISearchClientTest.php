@@ -393,6 +393,35 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_cache_keys_are_scoped_to_the_configured_cloudflare_instance(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		$family_context = [
+			'surface'   => 'navigation',
+			'entityKey' => 'core/navigation',
+			'location'  => 'footer',
+		];
+		$query_key_a    = $this->build_cache_key( 'navigation footer guidance', 4 );
+		$family_key_a   = $this->build_family_cache_key( $family_context, 4 );
+		$entity_key_a   = $this->build_entity_cache_key( 'core/navigation' );
+
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token'] = 'rotated-token';
+
+		$this->assertSame( $query_key_a, $this->build_cache_key( 'navigation footer guidance', 4 ) );
+		$this->assertSame( $family_key_a, $this->build_family_cache_key( $family_context, 4 ) );
+		$this->assertSame( $entity_key_a, $this->build_entity_cache_key( 'core/navigation' ) );
+
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs-preview';
+
+		$this->assertNotSame( $query_key_a, $this->build_cache_key( 'navigation footer guidance', 4 ) );
+		$this->assertNotSame( $family_key_a, $this->build_family_cache_key( $family_context, 4 ) );
+		$this->assertNotSame( $entity_key_a, $this->build_entity_cache_key( 'core/navigation' ) );
+	}
+
 	public function test_maybe_search_entity_returns_cached_guidance_without_querying_cloudflare(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -449,6 +478,56 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_maybe_search_with_cache_fallbacks_prefers_family_cache_before_entity_cache(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		$family_context  = [
+			'surface'         => 'block',
+			'entityKey'       => 'core/navigation',
+			'location'        => 'footer',
+			'structuralRole'  => 'footer-navigation',
+			'inspectorPanels' => [ 'color', 'spacing' ],
+		];
+		$family_guidance = [
+			[
+				'id'        => 'family-chunk',
+				'title'     => 'Footer navigation guidance',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Footer menus should keep submenu spacing compact and labels concise.',
+				'score'     => 0.9,
+			],
+		];
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Navigation block reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Generic navigation block guidance.',
+				'score'     => 0.82,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_family_cache_key( $family_context, 4 ) ] = $family_guidance;
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/navigation' ) ]  = $entity_guidance;
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'missing query cache',
+			'core/navigation',
+			$family_context,
+			4
+		);
+
+		$this->assertSame( $family_guidance, $result );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertArrayNotHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+	}
+
 	public function test_maybe_search_with_entity_fallback_ignores_invalid_entity_keys(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -486,6 +565,118 @@ final class AISearchClientTest extends TestCase {
 			)
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_maybe_search_with_cache_fallbacks_queues_async_warm_after_query_and_family_miss(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		$family_context  = [
+			'surface'      => 'template',
+			'entityKey'    => 'template:404',
+			'templateType' => '404',
+			'allowedAreas' => [ 'footer', 'header' ],
+		];
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Template hierarchy',
+				'sourceKey' => 'developer.wordpress.org/themes/templates/template-hierarchy',
+				'url'       => 'https://developer.wordpress.org/themes/templates/template-hierarchy/',
+				'excerpt'   => '404 templates should prioritize recovery paths.',
+				'score'     => 0.88,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'template:404' ) ] = $entity_guidance;
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'missing query cache',
+			'template:404',
+			$family_context,
+			4
+		);
+
+		$this->assertSame( $entity_guidance, $result );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$queue = WordPressTestState::$options['flavor_agent_docs_warm_queue'] ?? [];
+
+		$this->assertCount( 1, $queue );
+		$this->assertSame( 'missing query cache', array_values( $queue )[0]['query'] ?? '' );
+	}
+
+	public function test_process_context_warm_queue_seeds_exact_family_and_entity_caches(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'    => 'chunk-1',
+								'score' => 0.91,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+									'metadata' => [],
+								],
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/\"\n---\nUse clear labels and keep footer navigation compact.",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$family_context = [
+			'surface'         => 'block',
+			'entityKey'       => 'core/navigation',
+			'location'        => 'footer',
+			'structuralRole'  => 'footer-navigation',
+			'inspectorPanels' => [ 'color', 'spacing' ],
+		];
+
+		$this->assertSame(
+			[],
+			AISearchClient::maybe_search_with_cache_fallbacks(
+				'navigation footer guidance',
+				'core/navigation',
+				$family_context,
+				4
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+
+		AISearchClient::process_context_warm_queue();
+
+		$this->assertArrayHasKey(
+			$this->build_cache_key( 'navigation footer guidance', 4 ),
+			WordPressTestState::$transients
+		);
+		$this->assertArrayHasKey(
+			$this->build_family_cache_key( $family_context, 4 ),
+			WordPressTestState::$transients
+		);
+		$this->assertArrayHasKey(
+			$this->build_entity_cache_key( 'core/navigation' ),
+			WordPressTestState::$transients
+		);
+		$this->assertSame(
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs/search',
+			WordPressTestState::$last_remote_post['url']
+		);
+		$this->assertSame( [], WordPressTestState::$options['flavor_agent_docs_warm_queue'] ?? [] );
 	}
 
 	public function test_search_filters_chunks_to_official_wordpress_docs_sources(): void {
@@ -697,6 +888,20 @@ final class AISearchClientTest extends TestCase {
 		$method->setAccessible( true );
 
 		$result = $method->invoke( null, $entity_key );
+
+		$this->assertIsString( $result );
+
+		return $result;
+	}
+
+	/**
+	 * @param array<string, mixed> $family_context
+	 */
+	private function build_family_cache_key( array $family_context, int $max_results ): string {
+		$method = new \ReflectionMethod( AISearchClient::class, 'build_family_cache_key' );
+		$method->setAccessible( true );
+
+		$result = $method->invoke( null, $family_context, $max_results );
 
 		$this->assertIsString( $result );
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Settings;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -391,6 +392,55 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_cloudflare_settings_schedules_prewarm_on_first_successful_save(): void {
+		$_POST = [
+			'option_page'                                  => 'flavor_agent_settings',
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		WordPressTestState::$remote_get_response  = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'id' => 'wp-dev-docs',
+					],
+				]
+			),
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'   => 'probe-chunk',
+								'item' => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+									'metadata' => [],
+								],
+								'text' => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/\"\n---\nUse block supports to expose design tools.",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$this->assertSame( 'account-123', Settings::sanitize_cloudflare_account_id( 'account-123' ) );
+		$this->assertSame( 'wp-dev-docs', Settings::sanitize_cloudflare_instance_id( 'wp-dev-docs' ) );
+		$this->assertSame( 'token-xyz', Settings::sanitize_cloudflare_api_token( 'token-xyz' ) );
+		$this->assertArrayHasKey( AISearchClient::PREWARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_ai_search_account_id', WordPressTestState::$options );
 	}
 
 	public function test_sanitize_cloudflare_settings_reverts_invalid_values_and_reports_error_once(): void {

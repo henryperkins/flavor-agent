@@ -20,6 +20,7 @@ import {
 	TextareaControl,
 	Tooltip,
 } from '@wordpress/components';
+import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import {
@@ -30,9 +31,13 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import AIActivitySection from '../components/AIActivitySection';
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';
+import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
+import { getVisiblePatternNames } from '../utils/visible-patterns';
 import {
+	getTemplateActivityUndoState,
 	openInserterForPattern,
 	selectBlockByArea,
 	selectBlockBySlugOrArea,
@@ -47,6 +52,9 @@ import {
 	formatCount,
 	formatTemplateTypeLabel,
 	getSuggestionCardKey,
+	TEMPLATE_OPERATION_ASSIGN,
+	TEMPLATE_OPERATION_INSERT_PATTERN,
+	TEMPLATE_OPERATION_REPLACE,
 } from './template-recommender-helpers';
 
 /**
@@ -153,6 +161,47 @@ function LinkedText( { text, entities, onEntityClick } ) {
 	return <>{ segments }</>;
 }
 
+function formatBlockLabel( block ) {
+	if ( ! block ) {
+		return 'the template';
+	}
+
+	if ( block.name === 'core/template-part' ) {
+		return (
+			block.attributes?.slug ||
+			block.attributes?.area ||
+			'current template part'
+		);
+	}
+
+	return block.name
+		? block.name.replace( 'core/', '' ).replaceAll( '-', ' ' )
+		: 'the current block';
+}
+
+function describeInsertionPoint( {
+	selectedBlock,
+	rootBlock,
+	insertionPoint,
+} ) {
+	if ( selectedBlock ) {
+		return `after ${ formatBlockLabel( selectedBlock ) }`;
+	}
+
+	if ( rootBlock ) {
+		return `inside ${ formatBlockLabel( rootBlock ) }`;
+	}
+
+	if (
+		Number.isFinite( insertionPoint?.index ) &&
+		insertionPoint.index === 0
+	) {
+		return 'at the start of the template';
+	}
+
+	return 'at the end of the template';
+}
+
 export default function TemplateRecommender() {
 	const canRecommend = window.flavorAgentData?.canRecommendTemplates;
 	const templateRef = useSelect( ( select ) => {
@@ -180,35 +229,112 @@ export default function TemplateRecommender() {
 		resultRef,
 		resultToken,
 		isLoading,
-	} = useSelect( ( select ) => {
-		const store = select( STORE_NAME );
+		selectedSuggestionKey,
+		applyStatus,
+		applyError,
+		lastAppliedSuggestionKey,
+		lastAppliedOperations,
+		templateActivityEntries,
+		latestTemplateActivity,
+		latestUndoableActivityId,
+		undoError,
+		undoStatus,
+		lastUndoneActivityId,
+	} = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+			const blockEditor = select( blockEditorStore );
+			const activityLog = store.getActivityLog() || [];
+			const templateEntries = activityLog
+				.filter(
+					( entry ) =>
+						entry?.surface === 'template' &&
+						entry?.target?.templateRef === templateRef
+				)
+				.map( ( entry ) => ( {
+					...entry,
+					undo: getTemplateActivityUndoState(
+						entry,
+						blockEditor
+					),
+				} ) );
+			const latestTemplateActivity =
+				templateEntries[ templateEntries.length - 1 ] || null;
+			const latestUndoableActivityId =
+				latestTemplateActivity?.undo?.canUndo === true &&
+				latestTemplateActivity?.undo?.status === 'available'
+					? latestTemplateActivity.id
+					: null;
+
+			return {
+				recommendations: store.getTemplateRecommendations(),
+				explanation: store.getTemplateExplanation(),
+				error: store.getTemplateError(),
+				resultRef: store.getTemplateResultRef(),
+				resultToken: store.getTemplateResultToken(),
+				isLoading: store.isTemplateLoading(),
+				selectedSuggestionKey: store.getTemplateSelectedSuggestionKey(),
+				applyStatus: store.getTemplateApplyStatus(),
+				applyError: store.getTemplateApplyError(),
+				lastAppliedSuggestionKey:
+					store.getTemplateLastAppliedSuggestionKey(),
+				lastAppliedOperations: store.getTemplateLastAppliedOperations(),
+				templateActivityEntries: [ ...templateEntries ]
+					.slice( -3 )
+					.reverse(),
+				latestTemplateActivity,
+				latestUndoableActivityId,
+				undoError: store.getUndoError(),
+				undoStatus: store.getUndoStatus(),
+				lastUndoneActivityId: store.getLastUndoneActivityId(),
+			};
+		},
+		[ templateRef ]
+	);
+	const { patternTitleMap, visiblePatternNames } = useSelect( ( select ) => {
+		const inserterRootClientId =
+			select( blockEditorStore ).getBlockInsertionPoint?.()
+				?.rootClientId ?? null;
+		const patterns = getCompatBlockPatterns();
 
 		return {
-			recommendations: store.getTemplateRecommendations(),
-			explanation: store.getTemplateExplanation(),
-			error: store.getTemplateError(),
-			resultRef: store.getTemplateResultRef(),
-			resultToken: store.getTemplateResultToken(),
-			isLoading: store.isTemplateLoading(),
+			patternTitleMap: patterns.reduce( ( acc, pattern ) => {
+				if ( pattern?.name ) {
+					acc[ pattern.name ] = pattern.title || pattern.name;
+				}
+
+				return acc;
+			}, {} ),
+			visiblePatternNames: getVisiblePatternNames( inserterRootClientId ),
 		};
 	}, [] );
-	const patternTitleMap = useSelect( ( select ) => {
+	const insertionPointLabel = useSelect( ( select ) => {
 		const blockEditor = select( 'core/block-editor' );
-		const settings = blockEditor?.getSettings?.() || {};
-		const patterns = Array.isArray( settings.__experimentalBlockPatterns )
-			? settings.__experimentalBlockPatterns
-			: [];
+		const selectedBlockClientId =
+			blockEditor?.getSelectedBlockClientId?.() || null;
+		const selectedBlock = selectedBlockClientId
+			? blockEditor?.getBlock?.( selectedBlockClientId )
+			: null;
+		const insertionPoint = blockEditor?.getBlockInsertionPoint?.() || null;
+		const rootClientId = insertionPoint?.rootClientId || null;
+		const rootBlock = rootClientId
+			? blockEditor?.getBlock?.( rootClientId )
+			: null;
 
-		return patterns.reduce( ( acc, pattern ) => {
-			if ( pattern?.name ) {
-				acc[ pattern.name ] = pattern.title || pattern.name;
-			}
-
-			return acc;
-		}, {} );
+		return describeInsertionPoint( {
+			selectedBlock,
+			rootBlock,
+			insertionPoint,
+		} );
 	}, [] );
-	const { fetchTemplateRecommendations, clearTemplateRecommendations } =
-		useDispatch( STORE_NAME );
+	const {
+		applyTemplateSuggestion,
+		clearUndoError,
+		clearTemplateRecommendations,
+		fetchTemplateRecommendations,
+		setTemplateSelectedSuggestion,
+		undoActivity,
+	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const previousTemplateRef = useRef( templateRef );
 
@@ -230,8 +356,17 @@ export default function TemplateRecommender() {
 	);
 	const suggestionCards = useMemo(
 		() =>
-			recommendations.map( ( suggestion ) =>
-				buildTemplateSuggestionViewModel( suggestion, patternTitleMap )
+			recommendations.map( ( suggestion, index ) =>
+				buildTemplateSuggestionViewModel(
+					{
+						...suggestion,
+						suggestionKey: getSuggestionCardKey(
+							suggestion,
+							index
+						),
+					},
+					patternTitleMap
+				)
 			),
 		[ recommendations, patternTitleMap ]
 	);
@@ -242,9 +377,16 @@ export default function TemplateRecommender() {
 				templateRef,
 				templateType,
 				prompt,
+				visiblePatternNames,
 			} )
 		);
-	}, [ fetchTemplateRecommendations, prompt, templateRef, templateType ] );
+	}, [
+		fetchTemplateRecommendations,
+		prompt,
+		templateRef,
+		templateType,
+		visiblePatternNames,
+	] );
 
 	const handleEntityAction = useCallback( ( entity ) => {
 		switch ( entity?.actionType ) {
@@ -259,6 +401,27 @@ export default function TemplateRecommender() {
 				break;
 		}
 	}, [] );
+	const handlePreviewSuggestion = useCallback(
+		( suggestionKey ) => {
+			setTemplateSelectedSuggestion( suggestionKey );
+		},
+		[ setTemplateSelectedSuggestion ]
+	);
+	const handleCancelPreview = useCallback( () => {
+		setTemplateSelectedSuggestion( null );
+	}, [ setTemplateSelectedSuggestion ] );
+	const handleApplySuggestion = useCallback(
+		( suggestion ) => {
+			applyTemplateSuggestion( suggestion );
+		},
+		[ applyTemplateSuggestion ]
+	);
+	const handleUndo = useCallback(
+		( activityId ) => {
+			undoActivity( activityId );
+		},
+		[ undoActivity ]
+	);
 
 	if ( ! canRecommend || ! templateRef ) {
 		return null;
@@ -275,10 +438,9 @@ export default function TemplateRecommender() {
 						{ formatTemplateTypeLabel( templateType ) }
 					</p>
 					<p className="flavor-agent-panel__intro-copy">
-						Describe the structure or layout you want. Suggestions
-						stay advisory so you can review template parts and
-						browse candidate patterns in the editor before changing
-						the template.
+						Describe the structure or layout you want. Review each
+						suggested template-part change or pattern insertion,
+						then confirm before Flavor Agent mutates the template.
 					</p>
 				</div>
 
@@ -318,6 +480,60 @@ export default function TemplateRecommender() {
 					</Notice>
 				) }
 
+				{ undoStatus === 'error' && undoError && (
+					<Notice
+						status="error"
+						isDismissible
+						onDismiss={ clearUndoError }
+					>
+						{ undoError }
+					</Notice>
+				) }
+
+				{ applyStatus === 'error' && applyError && (
+					<Notice status="error" isDismissible={ false }>
+						{ applyError }
+					</Notice>
+				) }
+
+				{ applyStatus === 'success' &&
+					lastAppliedSuggestionKey &&
+					lastAppliedOperations.length > 0 &&
+					latestTemplateActivity &&
+					latestTemplateActivity.id === latestUndoableActivityId && (
+						<Notice status="success" isDismissible={ false }>
+							Applied{ ' ' }
+							{ formatCount(
+								lastAppliedOperations.length,
+								'template operation'
+							) }
+							.{ ' ' }
+							<Button
+								variant="link"
+								onClick={ () =>
+									handleUndo( latestTemplateActivity.id )
+								}
+								disabled={ undoStatus === 'undoing' }
+							>
+								{ undoStatus === 'undoing'
+									? 'Undoing…'
+									: 'Undo' }
+							</Button>
+						</Notice>
+					) }
+
+				{ latestTemplateActivity &&
+					undoStatus === 'success' &&
+					lastUndoneActivityId === latestTemplateActivity.id && (
+						<Notice status="success" isDismissible={ false }>
+							Undid{ ' ' }
+							<strong>
+								{ latestTemplateActivity.suggestion }
+							</strong>
+							.
+						</Notice>
+					) }
+
 				{ hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
 						<LinkedText
@@ -327,6 +543,13 @@ export default function TemplateRecommender() {
 						/>
 					</p>
 				) }
+
+				<AIActivitySection
+					entries={ templateActivityEntries }
+					latestUndoableActivityId={ latestUndoableActivityId }
+					isUndoing={ undoStatus === 'undoing' }
+					onUndo={ handleUndo }
+				/>
 
 				{ hasSuggestions && (
 					<div className="flavor-agent-panel__group">
@@ -350,7 +573,22 @@ export default function TemplateRecommender() {
 									) }` }
 									suggestion={ suggestion }
 									entityMap={ entityMap }
+									insertionPointLabel={ insertionPointLabel }
+									isApplied={
+										lastAppliedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									isApplying={ applyStatus === 'applying' }
+									isSelected={
+										selectedSuggestionKey ===
+										suggestion.suggestionKey
+									}
 									onEntityClick={ handleEntityAction }
+									onApplySuggestion={ handleApplySuggestion }
+									onCancelPreview={ handleCancelPreview }
+									onPreviewSuggestion={
+										handlePreviewSuggestion
+									}
 								/>
 							) ) }
 						</div>
@@ -364,7 +602,14 @@ export default function TemplateRecommender() {
 function TemplateSuggestionCard( {
 	suggestion,
 	entityMap = [],
+	insertionPointLabel,
+	isApplied = false,
+	isApplying = false,
+	isSelected = false,
+	onApplySuggestion,
+	onCancelPreview,
 	onEntityClick,
+	onPreviewSuggestion,
 } ) {
 	const hasParts = suggestion.templateParts?.length > 0;
 	const hasPatterns = suggestion.patternSuggestions?.length > 0;
@@ -383,7 +628,11 @@ function TemplateSuggestionCard( {
 	}
 
 	return (
-		<div className="flavor-agent-card flavor-agent-card--template">
+		<div
+			className={ `flavor-agent-card flavor-agent-card--template${
+				isApplied ? ' is-applied' : ''
+			}` }
+		>
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
 					<div className="flavor-agent-card__label">
@@ -394,9 +643,32 @@ function TemplateSuggestionCard( {
 							<span className="flavor-agent-pill">
 								{ summaryParts.join( ' • ' ) }
 							</span>
+							{ isApplied && (
+								<span className="flavor-agent-done-badge">
+									Applied
+								</span>
+							) }
 						</div>
 					) }
 				</div>
+
+				{ suggestion.canApply && (
+					<Button
+						size="small"
+						variant={ isSelected ? 'secondary' : 'primary' }
+						onClick={ () =>
+							isSelected
+								? onCancelPreview()
+								: onPreviewSuggestion(
+										suggestion.suggestionKey
+								  )
+						}
+						className="flavor-agent-card__apply"
+						disabled={ isApplying && ! isSelected }
+					>
+						{ isSelected ? 'Cancel Preview' : 'Preview Apply' }
+					</Button>
+				) }
 			</div>
 
 			{ suggestion.description && (
@@ -406,6 +678,12 @@ function TemplateSuggestionCard( {
 						entities={ entityMap }
 						onEntityClick={ onEntityClick }
 					/>
+				</p>
+			) }
+
+			{ suggestion.executionError && (
+				<p className="flavor-agent-card__description">
+					{ suggestion.executionError }
 				</p>
 			) }
 
@@ -528,6 +806,116 @@ function TemplateSuggestionCard( {
 					) ) }
 				</div>
 			) }
+
+			{ isSelected && suggestion.operations?.length > 0 && (
+				<div className="flavor-agent-template-preview">
+					<div className="flavor-agent-template-list">
+						<div className="flavor-agent-template-list__header">
+							<div className="flavor-agent-section-label">
+								Review Before Apply
+							</div>
+							<span className="flavor-agent-pill">
+								{ formatCount(
+									suggestion.operations.length,
+									'operation'
+								) }
+							</span>
+						</div>
+						{ suggestion.operations.map( ( operation ) => (
+							<TemplateOperationPreviewRow
+								key={ operation.key }
+								insertionPointLabel={ insertionPointLabel }
+								operation={ operation }
+							/>
+						) ) }
+					</div>
+					<p className="flavor-agent-subpanel-hint">
+						Pattern insertions use the current insertion point. To
+						change where a pattern lands, select a different block
+						in the canvas before confirming.
+					</p>
+					<div className="flavor-agent-template-preview__actions">
+						<Button
+							variant="primary"
+							onClick={ () => onApplySuggestion( suggestion ) }
+							disabled={ isApplying }
+							className="flavor-agent-card__apply"
+						>
+							{ isApplying ? 'Applying…' : 'Confirm Apply' }
+						</Button>
+					</div>
+				</div>
+			) }
 		</div>
 	);
+}
+
+function TemplateOperationPreviewRow( { operation, insertionPointLabel } ) {
+	switch ( operation.type ) {
+		case TEMPLATE_OPERATION_ASSIGN:
+			return (
+				<div className="flavor-agent-tpl-row">
+					<span className="flavor-agent-tpl-row__mapping">
+						<span className="flavor-agent-action-link flavor-agent-action-link--part">
+							{ operation.slug }
+						</span>
+						<span className="flavor-agent-tpl-row__arrow">→</span>
+						<span className="flavor-agent-action-link flavor-agent-action-link--area">
+							{ operation.area }
+						</span>
+					</span>
+					<span className="flavor-agent-pill">
+						{ operation.badgeLabel }
+					</span>
+					<div className="flavor-agent-tpl-row__reason">
+						Assign <code>{ operation.slug }</code> to the{ ' ' }
+						<code>{ operation.area }</code> area.
+					</div>
+				</div>
+			);
+
+		case TEMPLATE_OPERATION_REPLACE:
+			return (
+				<div className="flavor-agent-tpl-row">
+					<span className="flavor-agent-tpl-row__mapping">
+						<span className="flavor-agent-action-link flavor-agent-action-link--part">
+							{ operation.currentSlug }
+						</span>
+						<span className="flavor-agent-tpl-row__arrow">→</span>
+						<span className="flavor-agent-action-link flavor-agent-action-link--part">
+							{ operation.slug }
+						</span>
+					</span>
+					<span className="flavor-agent-pill">
+						{ operation.badgeLabel }
+					</span>
+					<div className="flavor-agent-tpl-row__reason">
+						Replace the current{ ' ' }
+						<code>{ operation.currentSlug }</code> template part in
+						the <code>{ operation.area }</code> area with{ ' ' }
+						<code>{ operation.slug }</code>.
+					</div>
+				</div>
+			);
+
+		case TEMPLATE_OPERATION_INSERT_PATTERN:
+			return (
+				<div className="flavor-agent-tpl-row">
+					<span className="flavor-agent-tpl-row__mapping">
+						<span className="flavor-agent-action-link flavor-agent-action-link--pattern">
+							{ operation.patternTitle }
+						</span>
+					</span>
+					<span className="flavor-agent-pill">
+						{ operation.badgeLabel }
+					</span>
+					<div className="flavor-agent-tpl-row__reason">
+						Insert <code>{ operation.patternTitle }</code>{ ' ' }
+						{ insertionPointLabel }.
+					</div>
+				</div>
+			);
+	}
+
+	return null;
 }

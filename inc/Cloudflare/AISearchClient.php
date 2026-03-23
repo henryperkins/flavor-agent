@@ -12,15 +12,54 @@ final class AISearchClient {
 	private const ALLOWED_SOURCE_KEY_PREFIX = 'developer.wordpress.org/';
 	private const CACHE_KEY_PREFIX          = 'flavor_agent_ai_search_';
 	private const CACHE_TTL                 = 21600;
+	private const FAMILY_CACHE_PREFIX       = 'flavor_agent_docs_family_';
+	private const FAMILY_CACHE_TTL          = 28800;
 	private const ENTITY_CACHE_PREFIX       = 'flavor_agent_docs_entity_';
 	private const ENTITY_CACHE_TTL          = 43200;
 	private const VALIDATION_PROBE_QUERY    = 'block editor';
 	private const VALIDATION_PROBE_RESULTS  = 3;
+	private const PREWARM_STATE_OPTION      = 'flavor_agent_docs_prewarm_state';
+	private const WARM_QUEUE_OPTION         = 'flavor_agent_docs_warm_queue';
+	private const PREWARM_THROTTLE_SECONDS  = 3600;
 
-	public static function is_configured(): bool {
-		$account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
-		$instance_id = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' ) );
-		$api_token   = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) );
+	public const PREWARM_CRON_HOOK      = 'flavor_agent_prewarm_docs';
+	public const CONTEXT_WARM_CRON_HOOK = 'flavor_agent_warm_docs_context';
+
+	/**
+	 * Entity keys and corresponding search queries for the initial warm set.
+	 *
+	 * Covers the highest-frequency block types used by the inspector surface,
+	 * template entity keys used by the Site Editor, and core/navigation.
+	 *
+	 * @var array<string, string>
+	 */
+	private const WARM_SET = [
+		'core/paragraph'   => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/paragraph. typography, spacing, color inspector controls.',
+		'core/heading'     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/heading. typography, spacing, color inspector controls.',
+		'core/image'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/image. dimensions, border, color inspector controls.',
+		'core/group'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/group. layout, spacing, background, border inspector controls.',
+		'core/columns'     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/columns. layout, spacing, color inspector controls.',
+		'core/button'      => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/button. typography, color, border, spacing inspector controls.',
+		'core/list'        => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/list. typography, spacing, color inspector controls.',
+		'core/cover'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/cover. color overlay, dimensions, spacing, typography inspector controls.',
+		'core/navigation'  => 'WordPress navigation block. menu structure and organization best practices. overlay responsive menu.',
+		'template:single'  => 'WordPress block theme, site editor, and template part best practices. template type single. template files, template parts, block themes, and theme.json guidance.',
+		'template:page'    => 'WordPress block theme, site editor, and template part best practices. template type page. template files, template parts, block themes, and theme.json guidance.',
+		'template:archive' => 'WordPress block theme, site editor, and template part best practices. template type archive. template files, template parts, block themes, and theme.json guidance.',
+		'template:home'    => 'WordPress block theme, site editor, and template part best practices. template type home. template files, template parts, block themes, and theme.json guidance.',
+		'template:404'     => 'WordPress block theme, site editor, and template part best practices. template type 404. template files, template parts, block themes, and theme.json guidance.',
+		'template:index'   => 'WordPress block theme, site editor, and template part best practices. template type index. template files, template parts, block themes, and theme.json guidance.',
+		'template:search'  => 'WordPress block theme, site editor, and template part best practices. template type search. template files, template parts, block themes, and theme.json guidance.',
+	];
+
+	public static function is_configured(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): bool {
+		$account_id  = self::resolve_config_value( $account_id, 'flavor_agent_cloudflare_ai_search_account_id' );
+		$instance_id = self::resolve_config_value( $instance_id, 'flavor_agent_cloudflare_ai_search_instance_id' );
+		$api_token   = self::resolve_config_value( $api_token, 'flavor_agent_cloudflare_ai_search_api_token' );
 
 		return $account_id !== '' && $instance_id !== '' && $api_token !== '';
 	}
@@ -215,6 +254,69 @@ final class AISearchClient {
 	}
 
 	/**
+	 * Best-effort cache lookup for prompt grounding.
+	 *
+	 * Checks exact-query cache first, then a stable context-family cache, and
+	 * finally falls back to the broad entity cache. If exact/family caches miss,
+	 * it schedules an async warm so the next request can hit a more specific key.
+	 *
+	 * @param array<string, mixed> $family_context
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function maybe_search_with_cache_fallbacks(
+		string $query,
+		string $entity_key = '',
+		array $family_context = [],
+		?int $max_results = null
+	): array {
+		$guidance = self::maybe_search( $query, $max_results );
+
+		if ( [] !== $guidance ) {
+			return $guidance;
+		}
+
+		$guidance = self::maybe_search_family( $family_context, $max_results );
+
+		if ( [] !== $guidance ) {
+			return $guidance;
+		}
+
+		$guidance = self::maybe_search_entity( $entity_key );
+
+		self::schedule_context_warm( $query, $entity_key, $family_context, $max_results );
+
+		return $guidance;
+	}
+
+	/**
+	 * Best-effort family-context lookup for prompt grounding. Never blocks recommendation flows.
+	 *
+	 * @param array<string, mixed> $family_context
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function maybe_search_family( array $family_context, ?int $max_results = null ): array {
+		$family_context = self::normalize_family_context( $family_context );
+
+		if ( [] === $family_context || ! self::is_configured() ) {
+			return [];
+		}
+
+		$guidance = self::read_cached_guidance_by_key(
+			self::build_family_cache_key(
+				$family_context,
+				self::normalize_max_results( $max_results )
+			),
+			self::FAMILY_CACHE_TTL
+		);
+
+		if ( ! is_array( $guidance ) ) {
+			return [];
+		}
+
+		return $guidance;
+	}
+
+	/**
 	 * Best-effort entity lookup for prompt grounding. Never blocks recommendation flows.
 	 *
 	 * @return array<int, array<string, mixed>>
@@ -272,6 +374,51 @@ final class AISearchClient {
 		);
 	}
 
+	/**
+	 * @param array<string, mixed>            $family_context
+	 * @param array<int, array<string, mixed>> $guidance
+	 */
+	public static function cache_family_guidance( array $family_context, array $guidance, ?int $max_results = null ): void {
+		$family_context = self::normalize_family_context( $family_context );
+
+		if ( [] === $family_context ) {
+			return;
+		}
+
+		self::write_cached_guidance_by_key(
+			self::build_family_cache_key(
+				$family_context,
+				self::normalize_max_results( $max_results )
+			),
+			$guidance,
+			self::FAMILY_CACHE_TTL
+		);
+	}
+
+	/**
+	 * Perform an explicit search and seed exact, family, and entity caches when possible.
+	 *
+	 * @param array<string, mixed> $family_context
+	 * @return array{query: string, guidance: array<int, array<string, mixed>>}|\WP_Error
+	 */
+	public static function warm_context(
+		string $query,
+		string $entity_key = '',
+		array $family_context = [],
+		?int $max_results = null
+	): array|\WP_Error {
+		$result = self::search( $query, $max_results );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		self::cache_family_guidance( $family_context, $result['guidance'], $max_results );
+		self::cache_entity_guidance( $entity_key, $result['guidance'] );
+
+		return $result;
+	}
+
 	public static function resolve_entity_key( string $entity_key = '', string $query = '' ): string {
 		$entity_key = self::normalize_entity_key( $entity_key );
 
@@ -305,6 +452,355 @@ final class AISearchClient {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Prewarm the entity cache for the standard warm set of entities.
+	 *
+	 * Iterates all entries in WARM_SET, calls warm_entity() for each, and records
+	 * a structured result summary in the prewarm state option. Respects throttling
+	 * based on credential fingerprint and elapsed time.
+	 *
+	 * @return array{warmed: int, failed: int, skipped: int, entities: array<string, string>}
+	 */
+	public static function prewarm(): array {
+		$summary = [
+			'warmed'   => 0,
+			'failed'   => 0,
+			'skipped'  => 0,
+			'entities' => [],
+		];
+
+		if ( ! self::is_configured() ) {
+			self::write_prewarm_state( $summary, 'not_configured' );
+
+			return $summary;
+		}
+
+		$fingerprint = self::build_credentials_fingerprint();
+		$state       = self::read_prewarm_state();
+
+		if ( self::is_prewarm_throttled( $state, $fingerprint ) ) {
+			$summary['skipped'] = count( self::WARM_SET );
+			self::write_prewarm_state(
+				$summary,
+				$fingerprint,
+				[
+					'timestamp' => (string) ( $state['timestamp'] ?? '' ),
+				]
+			);
+
+			return $summary;
+		}
+
+		foreach ( self::WARM_SET as $entity_key => $query ) {
+			$result = self::warm_entity( $entity_key, $query );
+
+			if ( is_wp_error( $result ) ) {
+				++$summary['failed'];
+				$summary['entities'][ $entity_key ] = 'error: ' . $result->get_error_message();
+			} else {
+				++$summary['warmed'];
+				$summary['entities'][ $entity_key ] = 'ok (' . count( $result['guidance'] ) . ' chunks)';
+			}
+		}
+
+		self::write_prewarm_state( $summary, $fingerprint );
+
+		return $summary;
+	}
+
+	/**
+	 * Schedule an async prewarm via WP-Cron if not already scheduled.
+	 */
+	public static function schedule_prewarm(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): void {
+		if ( ! self::is_configured( $account_id, $instance_id, $api_token ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( self::PREWARM_CRON_HOOK ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_schedule_single_event' ) ) {
+			wp_schedule_single_event( time() + 5, self::PREWARM_CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Check whether a prewarm should run based on credential changes and throttle window.
+	 */
+	public static function should_prewarm(): bool {
+		if ( ! self::is_configured() ) {
+			return false;
+		}
+
+		$fingerprint = self::build_credentials_fingerprint();
+		$state       = self::read_prewarm_state();
+
+		return ! self::is_prewarm_throttled( $state, $fingerprint );
+	}
+
+	/**
+	 * Return the current warm set entity keys and queries.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function get_warm_set(): array {
+		return self::WARM_SET;
+	}
+
+	/**
+	 * Return the last prewarm state for admin diagnostics.
+	 *
+	 * @return array{timestamp: string, fingerprint: string, warmed: int, failed: int, skipped: int, status: string}
+	 */
+	public static function get_prewarm_state(): array {
+		$state = self::read_prewarm_state();
+
+		return [
+			'timestamp'   => (string) ( $state['timestamp'] ?? '' ),
+			'fingerprint' => (string) ( $state['fingerprint'] ?? '' ),
+			'warmed'      => (int) ( $state['warmed'] ?? 0 ),
+			'failed'      => (int) ( $state['failed'] ?? 0 ),
+			'skipped'     => (int) ( $state['skipped'] ?? 0 ),
+			'status'      => self::resolve_prewarm_status_label( $state ),
+		];
+	}
+
+	/**
+	 * Queue a best-effort async warm for exact/family/entity cache layers.
+	 *
+	 * @param array<string, mixed> $family_context
+	 */
+	public static function schedule_context_warm(
+		string $query,
+		string $entity_key = '',
+		array $family_context = [],
+		?int $max_results = null
+	): void {
+		if ( ! self::is_configured() ) {
+			return;
+		}
+
+		$entry = self::normalize_context_warm_queue_entry(
+			[
+				'query'         => $query,
+				'entityKey'     => $entity_key,
+				'familyContext' => $family_context,
+				'maxResults'    => self::normalize_max_results( $max_results ),
+			]
+		);
+
+		if ( null === $entry ) {
+			return;
+		}
+
+		$queue = self::read_context_warm_queue();
+		$queue[ self::build_context_warm_queue_key( $entry ) ] = $entry;
+		self::write_context_warm_queue( $queue );
+
+		if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( self::CONTEXT_WARM_CRON_HOOK ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_schedule_single_event' ) ) {
+			wp_schedule_single_event( time() + 5, self::CONTEXT_WARM_CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Drain the queued async warm requests.
+	 */
+	public static function process_context_warm_queue(): void {
+		$queue = self::read_context_warm_queue();
+
+		if ( [] === $queue ) {
+			return;
+		}
+
+		self::write_context_warm_queue( [] );
+
+		foreach ( $queue as $entry ) {
+			$normalized_entry = self::normalize_context_warm_queue_entry( $entry );
+
+			if ( null === $normalized_entry ) {
+				continue;
+			}
+
+			self::warm_context(
+				$normalized_entry['query'],
+				$normalized_entry['entityKey'],
+				$normalized_entry['familyContext'],
+				$normalized_entry['maxResults']
+			);
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// Prewarm internals
+	// ------------------------------------------------------------------
+
+	private static function resolve_config_value( ?string $value, string $option_name ): string {
+		if ( null !== $value ) {
+			return trim( $value );
+		}
+
+		return trim( (string) get_option( $option_name, '' ) );
+	}
+
+	private static function build_credentials_fingerprint(): string {
+		$payload = wp_json_encode(
+			[
+				'account_id'  => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_account_id' ),
+				'instance_id' => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_instance_id' ),
+				'api_token'   => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_api_token' ),
+			]
+		);
+
+		if ( ! is_string( $payload ) || $payload === '' ) {
+			return '';
+		}
+
+		return md5( $payload );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function read_prewarm_state(): array {
+		$state = get_option( self::PREWARM_STATE_OPTION, [] );
+
+		return is_array( $state ) ? $state : [];
+	}
+
+	/**
+	 * @return array<string, array{query: string, entityKey: string, familyContext: array<string, mixed>, maxResults: int}>
+	 */
+	private static function read_context_warm_queue(): array {
+		$queue = get_option( self::WARM_QUEUE_OPTION, [] );
+
+		if ( ! is_array( $queue ) ) {
+			return [];
+		}
+
+		$normalized = [];
+
+		foreach ( $queue as $entry ) {
+			$normalized_entry = self::normalize_context_warm_queue_entry( $entry );
+
+			if ( null === $normalized_entry ) {
+				continue;
+			}
+
+			$normalized[ self::build_context_warm_queue_key( $normalized_entry ) ] = $normalized_entry;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<string, array{query: string, entityKey: string, familyContext: array<string, mixed>, maxResults: int}> $queue
+	 */
+	private static function write_context_warm_queue( array $queue ): void {
+		update_option( self::WARM_QUEUE_OPTION, $queue, false );
+	}
+
+	/**
+	 * @return array{query: string, entityKey: string, familyContext: array<string, mixed>, maxResults: int}|null
+	 */
+	private static function normalize_context_warm_queue_entry( mixed $entry ): ?array {
+		if ( ! is_array( $entry ) ) {
+			return null;
+		}
+
+		$query = sanitize_textarea_field( (string) ( $entry['query'] ?? '' ) );
+
+		if ( $query === '' ) {
+			return null;
+		}
+
+		return [
+			'query'         => $query,
+			'entityKey'     => self::normalize_entity_key( (string) ( $entry['entityKey'] ?? '' ) ),
+			'familyContext' => self::normalize_family_context(
+				is_array( $entry['familyContext'] ?? null ) ? $entry['familyContext'] : []
+			),
+			'maxResults'    => self::normalize_max_results(
+				isset( $entry['maxResults'] ) ? (int) $entry['maxResults'] : null
+			),
+		];
+	}
+
+	/**
+	 * @param array{warmed: int, failed: int, skipped: int, entities: array<string, string>} $summary
+	 * @param array{timestamp?: string} $meta
+	 */
+	private static function write_prewarm_state( array $summary, string $fingerprint, array $meta = [] ): void {
+		$timestamp = isset( $meta['timestamp'] ) && is_string( $meta['timestamp'] ) && $meta['timestamp'] !== ''
+			? $meta['timestamp']
+			: gmdate( 'Y-m-d H:i:s' );
+
+		$state = [
+			'timestamp'   => $timestamp,
+			'fingerprint' => $fingerprint,
+			'warmed'      => $summary['warmed'],
+			'failed'      => $summary['failed'],
+			'skipped'     => $summary['skipped'],
+		];
+
+		update_option( self::PREWARM_STATE_OPTION, $state, false );
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 */
+	private static function is_prewarm_throttled( array $state, string $fingerprint ): bool {
+		$last_fingerprint = (string) ( $state['fingerprint'] ?? '' );
+		$last_timestamp   = (string) ( $state['timestamp'] ?? '' );
+
+		if ( $last_fingerprint === '' || $last_timestamp === '' ) {
+			return false;
+		}
+
+		if ( $last_fingerprint !== $fingerprint ) {
+			return false;
+		}
+
+		$elapsed = time() - (int) strtotime( $last_timestamp . ' UTC' );
+
+		return $elapsed < self::PREWARM_THROTTLE_SECONDS;
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 */
+	private static function resolve_prewarm_status_label( array $state ): string {
+		if ( empty( $state['timestamp'] ) ) {
+			return 'never';
+		}
+
+		$warmed  = (int) ( $state['warmed'] ?? 0 );
+		$failed  = (int) ( $state['failed'] ?? 0 );
+		$skipped = (int) ( $state['skipped'] ?? 0 );
+
+		if ( $skipped > 0 && $warmed === 0 && $failed === 0 ) {
+			return 'throttled';
+		}
+
+		if ( $failed > 0 && $warmed === 0 ) {
+			return 'failed';
+		}
+
+		if ( $failed > 0 ) {
+			return 'partial';
+		}
+
+		return 'ok';
 	}
 
 	/**
@@ -432,9 +928,25 @@ final class AISearchClient {
 		return is_string( $body ) ? $body : '';
 	}
 
+	private static function build_cache_namespace(): string {
+		$payload = wp_json_encode(
+			[
+				'account_id'  => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_account_id' ),
+				'instance_id' => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_instance_id' ),
+			]
+		);
+
+		if ( ! is_string( $payload ) || $payload === '' ) {
+			return '';
+		}
+
+		return md5( $payload );
+	}
+
 	private static function build_cache_key( string $query, int $max_results ): string {
 		$payload = wp_json_encode(
 			[
+				'namespace'  => self::build_cache_namespace(),
 				'query'      => $query,
 				'maxResults' => $max_results,
 			]
@@ -447,8 +959,48 @@ final class AISearchClient {
 		return self::CACHE_KEY_PREFIX . md5( $payload );
 	}
 
+	/**
+	 * @param array<string, mixed> $family_context
+	 */
+	private static function build_family_cache_key( array $family_context, int $max_results ): string {
+		$payload = wp_json_encode(
+			[
+				'namespace'     => self::build_cache_namespace(),
+				'familyContext' => self::normalize_family_context( $family_context ),
+				'maxResults'    => $max_results,
+			]
+		);
+
+		if ( ! is_string( $payload ) || $payload === '' ) {
+			$payload = self::build_cache_namespace() . '|' . $max_results;
+		}
+
+		return self::FAMILY_CACHE_PREFIX . md5( $payload );
+	}
+
 	private static function build_entity_cache_key( string $entity_key ): string {
-		return self::ENTITY_CACHE_PREFIX . md5( $entity_key );
+		return self::ENTITY_CACHE_PREFIX . md5( self::build_cache_namespace() . '|' . $entity_key );
+	}
+
+	/**
+	 * @param array{query: string, entityKey: string, familyContext: array<string, mixed>, maxResults: int} $entry
+	 */
+	private static function build_context_warm_queue_key( array $entry ): string {
+		$payload = wp_json_encode(
+			[
+				'namespace'     => self::build_cache_namespace(),
+				'query'         => $entry['query'],
+				'entityKey'     => $entry['entityKey'],
+				'familyContext' => $entry['familyContext'],
+				'maxResults'    => $entry['maxResults'],
+			]
+		);
+
+		if ( ! is_string( $payload ) || $payload === '' ) {
+			$payload = self::build_cache_namespace() . '|' . $entry['query'] . '|' . $entry['entityKey'];
+		}
+
+		return md5( $payload );
 	}
 
 	private static function normalize_entity_key( string $entity_key ): string {
@@ -465,6 +1017,62 @@ final class AISearchClient {
 		}
 
 		return preg_match( '/^[a-z0-9-]+\/[a-z0-9-]+$/', $entity_key ) === 1 ? $entity_key : '';
+	}
+
+	/**
+	 * @param array<string, mixed> $family_context
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_family_context( array $family_context ): array {
+		$normalized = self::normalize_family_context_value( $family_context );
+
+		return is_array( $normalized ) ? $normalized : [];
+	}
+
+	/**
+	 * @return array<string, mixed>|bool|float|int|string|null
+	 */
+	private static function normalize_family_context_value( mixed $value ): array|bool|float|int|string|null {
+		if ( is_object( $value ) ) {
+			$value = get_object_vars( $value );
+		}
+
+		if ( is_array( $value ) ) {
+			$is_list    = array_keys( $value ) === range( 0, count( $value ) - 1 );
+			$normalized = [];
+
+			foreach ( $value as $key => $entry ) {
+				$normalized_entry = self::normalize_family_context_value( $entry );
+
+				if ( null === $normalized_entry || [] === $normalized_entry || '' === $normalized_entry ) {
+					continue;
+				}
+
+				if ( $is_list ) {
+					$normalized[] = $normalized_entry;
+				} else {
+					$normalized[ sanitize_key( (string) $key ) ] = $normalized_entry;
+				}
+			}
+
+			if ( ! $is_list ) {
+				ksort( $normalized );
+			}
+
+			return $normalized;
+		}
+
+		if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
+			return $value;
+		}
+
+		if ( is_string( $value ) ) {
+			$value = trim( sanitize_text_field( $value ) );
+
+			return $value !== '' ? $value : null;
+		}
+
+		return null;
 	}
 
 	/**

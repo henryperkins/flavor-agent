@@ -79,10 +79,11 @@ final class NavigationAbilities {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query      = self::build_wordpress_docs_query( $context, $prompt );
-		$entity_key = 'core/navigation';
+		$query          = self::build_wordpress_docs_query( $context, $prompt );
+		$entity_key     = 'core/navigation';
+		$family_context = self::build_wordpress_docs_family_context( $context );
 
-		return AISearchClient::maybe_search_with_entity_fallback( $query, $entity_key );
+		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
 	}
 
 	/**
@@ -109,5 +110,29 @@ final class NavigationAbilities {
 		$parts[] = 'menu structure and organization best practices';
 
 		return implode( '. ', $parts );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_wordpress_docs_family_context( array $context ): array {
+		$location       = sanitize_key( (string) ( $context['location'] ?? '' ) );
+		$has_overlay    = ! empty( $context['overlayTemplateParts'] );
+		$overlay_attr   = $context['attributes']['overlayMenu'] ?? '';
+		$uses_overlay   = $has_overlay || ( is_string( $overlay_attr ) && $overlay_attr !== 'never' );
+		$family_context = [
+			'surface'   => 'navigation',
+			'entityKey' => 'core/navigation',
+		];
+
+		if ( $location !== '' && $location !== 'unknown' ) {
+			$family_context['location'] = $location;
+		}
+
+		if ( $uses_overlay ) {
+			$family_context['overlay'] = true;
+		}
+
+		return $family_context;
 	}
 }

@@ -9,6 +9,10 @@ namespace FlavorAgent\LLM;
 
 final class TemplatePrompt {
 
+	private const TEMPLATE_OPERATION_ASSIGN         = 'assign_template_part';
+	private const TEMPLATE_OPERATION_REPLACE        = 'replace_template_part';
+	private const TEMPLATE_OPERATION_INSERT_PATTERN = 'insert_pattern';
+
 	/**
 	 * Build the system prompt for template recommendations.
 	 */
@@ -23,6 +27,23 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
     {
       "label": "Short title for this suggestion",
       "description": "Why this improves the template",
+      "operations": [
+        {
+          "type": "assign_template_part",
+          "slug": "part-slug-from-availableParts",
+          "area": "target-area"
+        },
+        {
+          "type": "replace_template_part",
+          "currentSlug": "currently-assigned-part-slug",
+          "slug": "replacement-part-slug-from-availableParts",
+          "area": "target-area"
+        },
+        {
+          "type": "insert_pattern",
+          "patternName": "pattern/name-from-patterns-list"
+        }
+      ],
       "templateParts": [
         {
           "slug": "part-slug-from-availableParts",
@@ -37,14 +58,23 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
 }
 
 Rules:
+- operations[] MUST be the executable source of truth for the suggestion.
+- Supported operation types are ONLY: assign_template_part, replace_template_part, insert_pattern.
+- assign_template_part MUST include slug and area.
+- assign_template_part MUST target an area from the Explicitly Empty Areas list and must not replace an already assigned template part.
+- replace_template_part MUST include currentSlug, slug, and area.
+- insert_pattern MUST include patternName.
+- replace_template_part.currentSlug MUST be a slug already present in the Assigned Template Parts list.
 - templateParts[].slug MUST be a slug that appears in the Available Template Parts list.
 - templateParts[].area MUST be an area already present in the assigned template parts or Explicitly Empty Areas list.
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
+- Keep templateParts and patternSuggestions aligned with the operations you return.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Prioritize explicitly empty template-part placeholders before replacing existing assignments.
 - Respect the theme's design tokens when suggesting patterns.
 - If no candidate patterns are available, focus on template part composition and leave patternSuggestions as an empty array.
 - Do not invent new template-part areas when no Explicitly Empty Areas are listed.
+- Do not propose free-form template rewrites or raw block markup.
 - Return 1-3 suggestions. Each should be distinct and actionable.
 - Keep labels under 60 characters. Keep descriptions under 200 characters.
 SYSTEM;
@@ -243,11 +273,19 @@ SYSTEM;
 			);
 		}
 
+		$unused_part_lookup   = self::build_unused_template_part_lookup( $context );
+		$assigned_part_lookup = self::build_assigned_template_part_lookup( $context );
+		$allowed_area_lookup  = self::build_allowed_area_lookup( $context );
+		$empty_area_lookup    = self::build_empty_area_lookup( $context );
+		$pattern_lookup       = self::build_pattern_lookup( $context );
+
 		$suggestions = self::validate_template_suggestions(
 			$data['suggestions'],
-			self::build_unused_template_part_lookup( $context ),
-			self::build_allowed_area_lookup( $context ),
-			self::build_pattern_lookup( $context )
+			$unused_part_lookup,
+			$assigned_part_lookup,
+			$allowed_area_lookup,
+			$empty_area_lookup,
+			$pattern_lookup
 		);
 
 		if ( count( $suggestions ) === 0 ) {
@@ -270,14 +308,18 @@ SYSTEM;
 	/**
 	 * @param array $suggestions        Raw suggestion array from the LLM.
 	 * @param array $unused_part_lookup Unused template-part slug lookup.
+	 * @param array $assigned_part_lookup Assigned template-part lookup.
 	 * @param array $allowed_area_lookup Allowed area lookup.
+	 * @param array $empty_area_lookup Explicitly empty area lookup.
 	 * @param array $pattern_lookup Candidate pattern lookup.
 	 * @return array Sanitized suggestions.
 	 */
 	private static function validate_template_suggestions(
 		array $suggestions,
 		array $unused_part_lookup,
+		array $assigned_part_lookup,
 		array $allowed_area_lookup,
+		array $empty_area_lookup,
 		array $pattern_lookup
 	): array {
 		$valid = [];
@@ -287,81 +329,91 @@ SYSTEM;
 				continue;
 			}
 
-				$entry = [
-					'label'              => sanitize_text_field( (string) $suggestion['label'] ),
-					'description'        => sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) ),
-					'templateParts'      => [],
-					'patternSuggestions' => [],
-				];
+			$entry = [
+				'label'              => sanitize_text_field( (string) $suggestion['label'] ),
+				'description'        => sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) ),
+				'operations'         => [],
+				'templateParts'      => [],
+				'patternSuggestions' => [],
+			];
 
-				if ( isset( $suggestion['templateParts'] ) && is_array( $suggestion['templateParts'] ) ) {
-					$seen_template_parts = [];
+			$validated_template_parts      = self::validate_template_part_summaries(
+				is_array( $suggestion['templateParts'] ?? null ) ? $suggestion['templateParts'] : [],
+				$unused_part_lookup,
+				$assigned_part_lookup,
+				$empty_area_lookup,
+				$allowed_area_lookup
+			);
+			$validated_pattern_suggestions = self::validate_pattern_summaries(
+				is_array( $suggestion['patternSuggestions'] ?? null ) ? $suggestion['patternSuggestions'] : [],
+				$pattern_lookup
+			);
+			$validated_operations_result   = self::validate_template_operations(
+				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
+				$unused_part_lookup,
+				$assigned_part_lookup,
+				$allowed_area_lookup,
+				$empty_area_lookup,
+				$pattern_lookup
+			);
+			$validated_operations          = $validated_operations_result['operations'];
 
-					foreach ( $suggestion['templateParts'] as $template_part ) {
-						if ( ! is_array( $template_part ) || empty( $template_part['slug'] ) || empty( $template_part['area'] ) ) {
-							continue;
-						}
+			if ( ! empty( $validated_operations_result['invalid'] ) ) {
+				continue;
+			}
 
-						$slug = sanitize_key( (string) $template_part['slug'] );
-						$area = sanitize_key( (string) $template_part['area'] );
+			if ( count( $validated_operations ) === 0 ) {
+				$derived_operations = self::derive_template_operations(
+					$validated_template_parts,
+					$validated_pattern_suggestions,
+					$assigned_part_lookup,
+					$empty_area_lookup
+				);
 
-						if (
-						$slug === ''
-						|| $area === ''
-						|| ! isset( $unused_part_lookup[ $slug ] )
-						|| ! isset( $allowed_area_lookup[ $area ] )
-						) {
-							continue;
-						}
-
-						$key = "{$slug}|{$area}";
-						if ( isset( $seen_template_parts[ $key ] ) ) {
-							continue;
-						}
-						$seen_template_parts[ $key ] = true;
-
-						$entry['templateParts'][] = [
-							'slug'   => $slug,
-							'area'   => $area,
-							'reason' => sanitize_text_field( (string) ( $template_part['reason'] ?? '' ) ),
-						];
-					}
-				}
-
-				if ( isset( $suggestion['patternSuggestions'] ) && is_array( $suggestion['patternSuggestions'] ) ) {
-					$entry['patternSuggestions'] = array_values(
-						array_unique(
-							array_filter(
-								array_map(
-									static function ( $name ) use ( $pattern_lookup ): string {
-										$sanitized = sanitize_text_field( (string) $name );
-
-										return isset( $pattern_lookup[ $sanitized ] ) ? $sanitized : '';
-									},
-									$suggestion['patternSuggestions']
-								),
-								static fn( string $name ): bool => $name !== ''
-							)
-						)
-					);
-				}
-
-				if (
-				count( $entry['templateParts'] ) === 0
-				&& count( $entry['patternSuggestions'] ) === 0
-				) {
+				if ( ! empty( $derived_operations['invalid'] ) ) {
 					continue;
 				}
 
-				$valid[] = $entry;
+				$validated_operations = $derived_operations['operations'];
+			}
+
+			$entry['operations']         = $validated_operations;
+			$entry['templateParts']      = self::summarize_template_parts_from_operations(
+				$validated_operations,
+				$validated_template_parts
+			);
+			$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
+				$validated_operations
+			);
+
+			if ( count( $entry['operations'] ) === 0 ) {
+				continue;
+			}
+
+			$valid[] = $entry;
 		}
 
 		return array_slice( $valid, 0, 3 );
 	}
 
 	/**
+	 * @param array{bySlug: array<string, array{slug: string, area: string}>, byArea: array<string, array{slug: string, area: string}>} $assigned_part_lookup
+	 * @param array<string, true> $empty_area_lookup Explicitly empty area lookup.
+	 * @return array{bySlug: array<string, array{slug: string, area: string}>, byArea: array<string, array{slug: string, area: string}>, emptyAreas: array<string, true>, mutatedAreas: array<string, true>, patternInsertCount: int}
+	 */
+	private static function build_template_operation_state( array $assigned_part_lookup, array $empty_area_lookup ): array {
+		return [
+			'bySlug'             => is_array( $assigned_part_lookup['bySlug'] ?? null ) ? $assigned_part_lookup['bySlug'] : [],
+			'byArea'             => is_array( $assigned_part_lookup['byArea'] ?? null ) ? $assigned_part_lookup['byArea'] : [],
+			'emptyAreas'         => $empty_area_lookup,
+			'mutatedAreas'       => [],
+			'patternInsertCount' => 0,
+		];
+	}
+
+	/**
 	 * @param array $context Template context used to build the prompt.
-	 * @return array<string, true> Lookup of unused template-part slugs.
+	 * @return array<string, array{area: string}> Lookup of unused template-part slugs.
 	 */
 	private static function build_unused_template_part_lookup( array $context ): array {
 		$assigned_lookup = [];
@@ -384,12 +436,52 @@ SYSTEM;
 			}
 
 			$slug = sanitize_key( (string) ( $part['slug'] ?? '' ) );
+			$area = sanitize_key( (string) ( $part['area'] ?? '' ) );
 			if ( $slug !== '' && ! isset( $assigned_lookup[ $slug ] ) ) {
-				$lookup[ $slug ] = true;
+				$lookup[ $slug ] = [
+					'area' => $area,
+				];
 			}
 		}
 
 		return $lookup;
+	}
+
+	/**
+	 * @param array $context Template context used to build the prompt.
+	 * @return array{bySlug: array<string, array{slug: string, area: string}>, byArea: array<string, array{slug: string, area: string}>}
+	 */
+	private static function build_assigned_template_part_lookup( array $context ): array {
+		$by_slug = [];
+		$by_area = [];
+
+		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
+			if ( ! is_array( $part ) ) {
+				continue;
+			}
+
+			$slug = sanitize_key( (string) ( $part['slug'] ?? '' ) );
+			$area = sanitize_key( (string) ( $part['area'] ?? '' ) );
+
+			if ( $slug === '' ) {
+				continue;
+			}
+
+			$entry            = [
+				'slug' => $slug,
+				'area' => $area,
+			];
+			$by_slug[ $slug ] = $entry;
+
+			if ( $area !== '' && ! isset( $by_area[ $area ] ) ) {
+				$by_area[ $area ] = $entry;
+			}
+		}
+
+		return [
+			'bySlug' => $by_slug,
+			'byArea' => $by_area,
+		];
 	}
 
 	/**
@@ -425,6 +517,23 @@ SYSTEM;
 
 	/**
 	 * @param array $context Template context used to build the prompt.
+	 * @return array<string, true> Lookup of explicitly empty template-part areas.
+	 */
+	private static function build_empty_area_lookup( array $context ): array {
+		$lookup = [];
+
+		foreach ( is_array( $context['emptyAreas'] ?? null ) ? $context['emptyAreas'] : [] as $area ) {
+			$sanitized = sanitize_key( (string) $area );
+			if ( $sanitized !== '' ) {
+				$lookup[ $sanitized ] = true;
+			}
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array $context Template context used to build the prompt.
 	 * @return array<string, true> Lookup of candidate pattern names.
 	 */
 	private static function build_pattern_lookup( array $context ): array {
@@ -442,5 +551,442 @@ SYSTEM;
 		}
 
 		return $lookup;
+	}
+
+	/**
+	 * @param array $template_parts Raw template-part summaries.
+	 * @param array $unused_part_lookup Unused template-part lookup.
+	 * @param array $assigned_part_lookup Assigned template-part lookup.
+	 * @param array $empty_area_lookup Explicitly empty area lookup.
+	 * @param array $allowed_area_lookup Allowed area lookup.
+	 * @return array<int, array{slug: string, area: string, reason: string}>
+	 */
+	private static function validate_template_part_summaries(
+		array $template_parts,
+		array $unused_part_lookup,
+		array $assigned_part_lookup,
+		array $empty_area_lookup,
+		array $allowed_area_lookup
+	): array {
+		$valid = [];
+		$seen  = [];
+
+		foreach ( $template_parts as $template_part ) {
+			if ( ! is_array( $template_part ) ) {
+				continue;
+			}
+
+			$slug = sanitize_key( (string) ( $template_part['slug'] ?? '' ) );
+			$area = sanitize_key( (string) ( $template_part['area'] ?? '' ) );
+
+			if (
+				! self::is_valid_template_part_summary(
+					$slug,
+					$area,
+					$unused_part_lookup,
+					$assigned_part_lookup,
+					$empty_area_lookup,
+					$allowed_area_lookup
+				)
+			) {
+				continue;
+			}
+
+			$key = "{$slug}|{$area}";
+
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+
+			$seen[ $key ] = true;
+			$valid[]      = [
+				'slug'   => $slug,
+				'area'   => $area,
+				'reason' => sanitize_text_field( (string) ( $template_part['reason'] ?? '' ) ),
+			];
+		}
+
+		return $valid;
+	}
+
+	/**
+	 * @param array $pattern_suggestions Raw pattern suggestion list.
+	 * @param array $pattern_lookup Candidate pattern lookup.
+	 * @return string[]
+	 */
+	private static function validate_pattern_summaries( array $pattern_suggestions, array $pattern_lookup ): array {
+		return array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static function ( $name ) use ( $pattern_lookup ): string {
+							$sanitized = sanitize_text_field( (string) $name );
+
+							return isset( $pattern_lookup[ $sanitized ] ) ? $sanitized : '';
+						},
+						$pattern_suggestions
+					),
+					static fn( string $name ): bool => $name !== ''
+				)
+			)
+		);
+	}
+
+	/**
+	 * @param array $operations Raw operations from the LLM.
+	 * @param array $unused_part_lookup Unused template-part lookup.
+	 * @param array $assigned_part_lookup Assigned template-part lookup.
+	 * @param array $allowed_area_lookup Allowed area lookup.
+	 * @param array $empty_area_lookup Explicitly empty area lookup.
+	 * @param array $pattern_lookup Candidate pattern lookup.
+	 * @return array{operations: array<int, array<string, string>>, invalid: bool}
+	 */
+	private static function validate_template_operations(
+		array $operations,
+		array $unused_part_lookup,
+		array $assigned_part_lookup,
+		array $allowed_area_lookup,
+		array $empty_area_lookup,
+		array $pattern_lookup
+	): array {
+		$valid = [];
+		$state = self::build_template_operation_state( $assigned_part_lookup, $empty_area_lookup );
+
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
+
+			switch ( $type ) {
+				case self::TEMPLATE_OPERATION_ASSIGN:
+					$slug = sanitize_key( (string) ( $operation['slug'] ?? '' ) );
+					$area = sanitize_key( (string) ( $operation['area'] ?? '' ) );
+
+					if ( isset( $state['mutatedAreas'][ $area ] ) ) {
+						return [
+							'operations' => [],
+							'invalid'    => true,
+						];
+					}
+
+					if (
+						! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup )
+						|| ! isset( $state['emptyAreas'][ $area ] )
+						|| isset( $state['byArea'][ $area ] )
+					) {
+						continue 2;
+					}
+
+					$valid[]      = [
+						'type' => $type,
+						'slug' => $slug,
+						'area' => $area,
+					];
+					$state['byArea'][ $area ]       = [
+						'slug' => $slug,
+						'area' => $area,
+					];
+					$state['bySlug'][ $slug ]       = $state['byArea'][ $area ];
+					$state['mutatedAreas'][ $area ] = true;
+					unset( $state['emptyAreas'][ $area ] );
+					break;
+
+				case self::TEMPLATE_OPERATION_REPLACE:
+					$slug         = sanitize_key( (string) ( $operation['slug'] ?? '' ) );
+					$area         = sanitize_key( (string) ( $operation['area'] ?? '' ) );
+					$current_slug = sanitize_key(
+						(string) ( $operation['currentSlug'] ?? $operation['fromSlug'] ?? '' )
+					);
+
+					if ( $current_slug !== '' ) {
+						$assigned_part = $state['bySlug'][ $current_slug ] ?? null;
+					} else {
+						$assigned_part = $state['byArea'][ $area ] ?? null;
+						$current_slug  = sanitize_key( (string) ( $assigned_part['slug'] ?? '' ) );
+					}
+
+					if ( ! is_array( $assigned_part ) || $current_slug === '' ) {
+						continue 2;
+					}
+
+					if ( $area === '' ) {
+						$area = sanitize_key( (string) ( $assigned_part['area'] ?? '' ) );
+					}
+
+					if ( $area === '' ) {
+						continue 2;
+					}
+
+					if ( isset( $state['mutatedAreas'][ $area ] ) ) {
+						return [
+							'operations' => [],
+							'invalid'    => true,
+						];
+					}
+
+					if ( ! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup ) ) {
+						continue 2;
+					}
+
+					if (
+						sanitize_key( (string) ( $assigned_part['area'] ?? '' ) ) !== ''
+						&& sanitize_key( (string) ( $assigned_part['area'] ?? '' ) ) !== $area
+					) {
+						continue 2;
+					}
+
+					if ( $current_slug === $slug ) {
+						continue 2;
+					}
+
+					$valid[]      = [
+						'type'        => $type,
+						'currentSlug' => $current_slug,
+						'slug'        => $slug,
+						'area'        => $area,
+					];
+					unset( $state['bySlug'][ $current_slug ] );
+					$state['byArea'][ $area ]       = [
+						'slug' => $slug,
+						'area' => $area,
+					];
+					$state['bySlug'][ $slug ]       = $state['byArea'][ $area ];
+					$state['mutatedAreas'][ $area ] = true;
+					unset( $state['emptyAreas'][ $area ] );
+					break;
+
+				case self::TEMPLATE_OPERATION_INSERT_PATTERN:
+					$pattern_name = sanitize_text_field(
+						(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
+					);
+
+					if ( $pattern_name === '' || ! isset( $pattern_lookup[ $pattern_name ] ) ) {
+						continue 2;
+					}
+
+					if ( $state['patternInsertCount'] > 0 ) {
+						return [
+							'operations' => [],
+							'invalid'    => true,
+						];
+					}
+
+					$valid[]      = [
+						'type'        => $type,
+						'patternName' => $pattern_name,
+					];
+					++$state['patternInsertCount'];
+					break;
+			}
+		}
+
+		return [
+			'operations' => array_slice( $valid, 0, 4 ),
+			'invalid'    => false,
+		];
+	}
+
+	/**
+	 * @param array<int, array{slug: string, area: string, reason: string}> $template_parts
+	 * @param string[] $pattern_suggestions
+	 * @param array $assigned_part_lookup Assigned template-part lookup.
+	 * @param array<string, true> $empty_area_lookup Explicitly empty area lookup.
+	 * @return array{operations: array<int, array<string, string>>, invalid: bool}
+	 */
+	private static function derive_template_operations(
+		array $template_parts,
+		array $pattern_suggestions,
+		array $assigned_part_lookup,
+		array $empty_area_lookup
+	): array {
+		$operations = [];
+		$seen_areas = [];
+
+		if ( count( $pattern_suggestions ) > 1 ) {
+			return [
+				'operations' => [],
+				'invalid'    => true,
+			];
+		}
+
+		foreach ( $template_parts as $template_part ) {
+			$area          = sanitize_key( (string) ( $template_part['area'] ?? '' ) );
+			$slug          = sanitize_key( (string) ( $template_part['slug'] ?? '' ) );
+			$assigned_part = $area !== '' ? ( $assigned_part_lookup['byArea'][ $area ] ?? null ) : null;
+			$current_slug  = sanitize_key( (string) ( $assigned_part['slug'] ?? '' ) );
+
+			if ( $slug === '' || $area === '' ) {
+				continue;
+			}
+
+			if ( isset( $seen_areas[ $area ] ) ) {
+				return [
+					'operations' => [],
+					'invalid'    => true,
+				];
+			}
+
+			$seen_areas[ $area ] = true;
+
+			if ( $current_slug !== '' && $current_slug !== $slug ) {
+				$operations[] = [
+					'type'        => self::TEMPLATE_OPERATION_REPLACE,
+					'currentSlug' => $current_slug,
+					'slug'        => $slug,
+					'area'        => $area,
+				];
+				continue;
+			}
+
+			if ( $current_slug === '' && isset( $empty_area_lookup[ $area ] ) ) {
+				$operations[] = [
+					'type' => self::TEMPLATE_OPERATION_ASSIGN,
+					'slug' => $slug,
+					'area' => $area,
+				];
+			}
+		}
+
+		foreach ( $pattern_suggestions as $pattern_name ) {
+			$operations[] = [
+				'type'        => self::TEMPLATE_OPERATION_INSERT_PATTERN,
+				'patternName' => $pattern_name,
+			];
+		}
+
+		return [
+			'operations' => array_slice( $operations, 0, 4 ),
+			'invalid'    => false,
+		];
+	}
+
+	/**
+	 * @param array<int, array<string, string>> $operations
+	 * @param array<int, array{slug: string, area: string, reason: string}> $validated_template_parts
+	 * @return array<int, array{slug: string, area: string, reason: string}>
+	 */
+	private static function summarize_template_parts_from_operations(
+		array $operations,
+		array $validated_template_parts
+	): array {
+		$reason_lookup = [];
+		$summaries     = [];
+
+		foreach ( $validated_template_parts as $template_part ) {
+			$key                   = sprintf(
+				'%s|%s',
+				(string) ( $template_part['slug'] ?? '' ),
+				(string) ( $template_part['area'] ?? '' )
+			);
+			$reason_lookup[ $key ] = sanitize_text_field( (string) ( $template_part['reason'] ?? '' ) );
+		}
+
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
+
+			if (
+				self::TEMPLATE_OPERATION_ASSIGN !== $type
+				&& self::TEMPLATE_OPERATION_REPLACE !== $type
+			) {
+				continue;
+			}
+
+			$slug = sanitize_key( (string) ( $operation['slug'] ?? '' ) );
+			$area = sanitize_key( (string) ( $operation['area'] ?? '' ) );
+			$key  = "{$slug}|{$area}";
+
+			if ( $slug === '' || $area === '' || isset( $summaries[ $key ] ) ) {
+				continue;
+			}
+
+			$summaries[ $key ] = [
+				'slug'   => $slug,
+				'area'   => $area,
+				'reason' => $reason_lookup[ $key ] ?? '',
+			];
+		}
+
+		return array_values( $summaries );
+	}
+
+	/**
+	 * @param array<int, array<string, string>> $operations
+	 * @return string[]
+	 */
+	private static function summarize_pattern_suggestions_from_operations( array $operations ): array {
+		$summaries = [];
+
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			if ( sanitize_key( (string) ( $operation['type'] ?? '' ) ) !== self::TEMPLATE_OPERATION_INSERT_PATTERN ) {
+				continue;
+			}
+
+			$pattern_name = sanitize_text_field( (string) ( $operation['patternName'] ?? '' ) );
+
+			if ( $pattern_name !== '' ) {
+				$summaries[ $pattern_name ] = $pattern_name;
+			}
+		}
+
+		return array_values( $summaries );
+	}
+
+	/**
+	 * @param array<string, array{area: string}> $unused_part_lookup
+	 * @param array<string, true> $allowed_area_lookup
+	 */
+	private static function is_valid_unused_template_part(
+		string $slug,
+		string $area,
+		array $unused_part_lookup,
+		array $allowed_area_lookup
+	): bool {
+		if (
+			$slug === ''
+			|| $area === ''
+			|| ! isset( $unused_part_lookup[ $slug ] )
+			|| ! isset( $allowed_area_lookup[ $area ] )
+		) {
+			return false;
+		}
+
+		$part_area = sanitize_key( (string) ( $unused_part_lookup[ $slug ]['area'] ?? '' ) );
+
+		if ( $part_area !== '' && $part_area !== 'uncategorized' && $part_area !== $area ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param array<string, array{area: string}> $unused_part_lookup
+	 * @param array{byArea?: array<string, array{slug: string, area: string}>} $assigned_part_lookup
+	 * @param array<string, true> $empty_area_lookup
+	 * @param array<string, true> $allowed_area_lookup
+	 */
+	private static function is_valid_template_part_summary(
+		string $slug,
+		string $area,
+		array $unused_part_lookup,
+		array $assigned_part_lookup,
+		array $empty_area_lookup,
+		array $allowed_area_lookup
+	): bool {
+		if ( ! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup ) ) {
+			return false;
+		}
+
+		return isset( $empty_area_lookup[ $area ] ) || isset( $assigned_part_lookup['byArea'][ $area ] );
 	}
 }

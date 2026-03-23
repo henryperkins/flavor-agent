@@ -1,5 +1,7 @@
 import {
+	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
+	buildUndoAttributeUpdates,
 	getSuggestionAttributeUpdates,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
@@ -422,5 +424,52 @@ describe( 'update helpers', () => {
 				isInsideContentOnly: false,
 			} )
 		).toEqual( recommendations );
+	} );
+
+	test( 'buildUndoAttributeUpdates restores removed keys and previous nested objects', () => {
+		expect(
+			buildUndoAttributeUpdates(
+				{
+					content: 'Old copy',
+					style: {
+						color: {
+							background: '#fff',
+						},
+					},
+				},
+				{
+					content: 'New copy',
+					style: {
+						color: {
+							background: '#000',
+						},
+					},
+					className: 'is-style-contrast',
+				}
+			)
+		).toEqual( {
+			content: 'Old copy',
+			style: {
+				color: {
+					background: '#fff',
+				},
+			},
+			className: undefined,
+		} );
+	} );
+
+	test( 'attributeSnapshotsMatch compares serialized snapshots for undo safety checks', () => {
+		expect(
+			attributeSnapshotsMatch(
+				{ content: 'Same', className: 'alpha' },
+				{ content: 'Same', className: 'alpha' }
+			)
+		).toBe( true );
+		expect(
+			attributeSnapshotsMatch(
+				{ content: 'Same', className: 'alpha' },
+				{ content: 'Changed', className: 'alpha' }
+			)
+		).toBe( false );
 	} );
 } );

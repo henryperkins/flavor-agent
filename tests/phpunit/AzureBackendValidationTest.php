@@ -69,6 +69,9 @@ final class AzureBackendValidationTest extends TestCase {
 			'https://example.openai.azure.com/openai/v1/responses',
 			WordPressTestState::$last_remote_post['url']
 		);
+		$request_body = json_decode( (string) WordPressTestState::$last_remote_post['args']['body'], true );
+		$this->assertIsArray( $request_body );
+		$this->assertSame( 16, $request_body['max_output_tokens'] ?? null );
 	}
 
 	public function test_embedding_validation_rejects_responses_payload_shape(): void {

@@ -38,6 +38,15 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $settings_errors = [];
 
+		/** @var array<string, array{hook: string, timestamp: int}> */
+		public static array $scheduled_events = [];
+
+		/** @var array<string, mixed> */
+		public static array $updated_options = [];
+
+		/** @var array<string> */
+		public static array $cleared_cron_hooks = [];
+
 		/** @var array<int, object> */
 		public static array $posts = [];
 
@@ -66,6 +75,9 @@ namespace FlavorAgent\Tests\Support {
 			self::$registered_abilities        = [];
 			self::$registered_ability_categories = [];
 			self::$settings_errors             = [];
+			self::$scheduled_events            = [];
+			self::$updated_options              = [];
+			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
 			self::$remote_post_response        = [];
 			self::$remote_get_response         = [];
@@ -661,6 +673,46 @@ namespace {
 	if ( ! function_exists( 'str_starts_with' ) ) {
 		function str_starts_with( string $haystack, string $needle ): bool {
 			return strncmp( $haystack, $needle, strlen( $needle ) ) === 0;
+		}
+	}
+
+	if ( ! function_exists( 'update_option' ) ) {
+		function update_option( string $name, $value, $autoload = null ): bool {
+			WordPressTestState::$options[ $name ] = $value;
+			WordPressTestState::$updated_options[ $name ] = $value;
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'wp_schedule_single_event' ) ) {
+		function wp_schedule_single_event( int $timestamp, string $hook, array $args = [] ): bool {
+			WordPressTestState::$scheduled_events[ $hook ] = [
+				'hook'      => $hook,
+				'timestamp' => $timestamp,
+				'args'      => $args,
+			];
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'wp_next_scheduled' ) ) {
+		function wp_next_scheduled( string $hook, array $args = [] ) {
+			if ( isset( WordPressTestState::$scheduled_events[ $hook ] ) ) {
+				return WordPressTestState::$scheduled_events[ $hook ]['timestamp'];
+			}
+
+			return false;
+		}
+	}
+
+	if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
+		function wp_clear_scheduled_hook( string $hook, array $args = [] ): int {
+			WordPressTestState::$cleared_cron_hooks[] = $hook;
+			unset( WordPressTestState::$scheduled_events[ $hook ] );
+
+			return 1;
 		}
 	}
 

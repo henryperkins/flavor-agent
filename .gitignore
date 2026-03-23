@@ -1,5 +1,11 @@
+# Dependencies
 node_modules/
 vendor/
+
+# Build and test artifacts
 build/
+output/
+.phpunit.result.cache
+
+# Local environment
 .env
-output/playwright/

@@ -32,8 +32,10 @@
 
 - Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
 - Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
-- Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping
-- Site Editor template recommendation panel for `wp_template` documents with advisory-only review and browse actions
+- Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
+- Site Editor template recommendation panel for `wp_template` documents with review-confirm-apply support for validated template-part assignment/replacement and pattern insertion operations
+- Block and template apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal `Recent AI Actions` session history in the active panel
+- AI activity history is session-durable per post/template via `sessionStorage`; only the most recent AI action can be undone automatically, and undo is rejected if the live editor state drifted after apply
 - Admin settings screen with Azure/Qdrant/Cloudflare configuration and pattern sync controls; block providers come from `Settings > Connectors`
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
@@ -42,24 +44,30 @@
 - Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must target an enabled, unpaused instance that also returns trusted `developer.wordpress.org` guidance before they are saved
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
+- Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation) using the same trust-filtered Cloudflare search pipeline; throttled by credential fingerprint + 1-hour cooldown; admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts
 
 ## Known Issues
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
-- First-request WordPress docs grounding is still intentionally reduced: uncached `recommend-block` and `recommend-template` requests return without Cloudflare guidance until either an exact-query cache entry or the matching warmed entity cache is available.
 - JS tooling now expects Node `20.x` with npm `10.x`; on this host, the global Node `24.14.0` / npm `11.9.0` pair fails `npm ci` immediately via `engine-strict` (`EBADENGINE`), so the repo now pins the supported toolchain instead of assuming the global default.
-- Browser smoke coverage now runs on a stable WordPress `6.9.4` Playground harness and covers the block inspector recommendation render, the pattern inserter search/request badge flow, and the Site Editor template recommender fetch plus pattern-browse action. A WordPress `7.0` Playground run does boot the post editor, but the Site Editor path currently crashes the Playground runtime with `Invalid state: Controller is already closed`, so the checked-in harness remains on `6.9.4`.
+- Browser smoke coverage now runs on a stable WordPress `6.9.4` Playground harness and covers block apply-plus-undo with same-session refresh persistence, the pattern inserter search/request badge flow, and the Site Editor template preview-apply-undo flow. A WordPress `7.0` Playground run does boot the post editor, but the Site Editor path currently crashes the Playground runtime with `Invalid state: Controller is already closed`, so the checked-in harness remains on `6.9.4`.
+- AI activity history is still session-scoped only; there is no server-backed audit log or cross-session review UI yet.
 - Live recommendation execution with valid LLM credentials was not rerun in this pass.
+- Pattern surface now uses a central compatibility adapter (`src/patterns/compat.js`) that prefers stable APIs, falls back to `__experimental*` variants, and degrades cleanly when neither exists. DOM inserter selectors are also centralized there. `__experimentalFeatures` (theme-tokens) and `__experimentalRole` (block-inspector) remain in their original files since they have no stable replacement yet.
 
 ## Recent Verification
 
+- 2026-03-23 compat: `npm run lint:js` passed (after `--fix`).
+- 2026-03-23 compat: `npm run test:unit -- --runInBand` passed (`19` suites, `115` tests).
+- 2026-03-23 compat: `composer lint:php` passed.
+- 2026-03-23 prewarm: `vendor/bin/phpunit` passed (`106` tests, `526` assertions).
 - 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm ci` passed (`1849` packages added; peer/deprecation warnings only).
 - 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run lint:js` passed.
-- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand` passed (`13` suites, `60` tests).
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand` passed (`18` suites, `81` tests).
 - 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed.
-- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e -- --reporter=line` passed (`3` Playwright smoke tests).
+- 2026-03-23 remediation: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e -- --reporter=line` passed (`3` Playwright smoke tests: block apply/persist/undo, pattern badge flow, template preview/apply/undo).
 - 2026-03-23 exploratory: `PLAYWRIGHT_PORT=9403 npm run test:e2e -- --reporter=line` against a manual WordPress `7.0` Playground server passed the two post-editor smokes, then failed on `/wp-admin/site-editor.php` when the Playground runtime crashed (`Invalid state: Controller is already closed` -> `ERR_CONNECTION_REFUSED`).
-- 2026-03-23 remediation: `vendor/bin/phpunit` passed (`84` tests, `379` assertions).
+- 2026-03-23 remediation: `vendor/bin/phpunit` passed (`87` tests, `392` assertions).
 - 2026-03-23 remediation: `composer lint:php` passed.
 - 2026-03-19 remediation: `npm run lint:js` passed.
 - 2026-03-19 remediation: `npm run test:unit -- --runInBand` passed.
@@ -72,6 +80,9 @@
 
 - **`docs/SOURCE_OF_TRUTH.md`** -- Definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - **`docs/flavor-agent-readme.md`** -- Architecture details and editor flow reference
+- **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
+- **`docs/NEXT_STEPS_PLAN.md`** -- Execution-plan snapshot from the 2026-03-23 repo review; several early phases are now implemented in the tree
+- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 compatibility reference
 - **`docs/2026-03-18-cloudflare-ai-search-grounding-assessment.md`** -- Cloudflare AI Search integration assessment
 
 Historical docs (superseded early designs) have been moved to `docs/historical/`.

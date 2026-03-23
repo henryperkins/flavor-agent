@@ -1,3 +1,9 @@
+jest.mock( '../../utils/template-actions', () => ( {
+	applyTemplateSuggestionOperations: jest.fn(),
+	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	undoTemplateSuggestionOperations: jest.fn(),
+} ) );
+
 import { actions, reducer, selectors } from '../index';
 
 describe( 'block request state', () => {

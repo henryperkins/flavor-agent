@@ -2,40 +2,56 @@
 
 Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the block editor.
 
-It currently has two primary editor experiences:
+It currently has three primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and core Connectors.
 - Pattern recommendations in the native inserter, powered by Azure OpenAI embeddings + responses and Qdrant.
+- Template recommendations in the Site Editor, powered by the Azure OpenAI Responses API with validated template-part and pattern operations.
 
-There is no separate approval sidebar in the current codebase. Pattern recommendations are surfaced inside the inserter's Patterns tab through a `Recommended` category and a small toolbar badge for high-confidence matches.
+There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, and template suggestions use a review-confirm-apply flow inside the document settings panel. Block and template applies also write session-scoped AI activity entries with inline undo.
 
 ## Current Architecture
 
 ```text
 flavor-agent/
-├── flavor-agent.php              # Bootstrap, hooks, editor asset enqueue, lifecycle wiring
-├── uninstall.php                 # Removes plugin-owned options, sync state, and scheduled jobs
-├── composer.json                 # PSR-4 autoload for inc/
-├── package.json                  # @wordpress/scripts build, lint, unit tests
-├── webpack.config.js             # Multi-entry build for editor + admin sync button
+├── flavor-agent.php              # Bootstrap, lifecycle hooks, REST + Abilities registration, editor asset enqueue
+├── uninstall.php                 # Removes plugin-owned options, sync state, grounding caches, and cron hooks
+├── composer.json                 # PSR-4 autoload + PHP tooling
+├── package.json                  # @wordpress/scripts build, lint, unit/e2e tests
+├── .env.example                  # Local WordPress/Docker defaults
+├── .nvmrc                        # Supported Node major version
+├── .npmrc                        # engine-strict pin for Node 20 / npm 10
+├── docker-compose.yml            # Local WordPress + MariaDB + phpMyAdmin stack
+├── .devcontainer/                # VS Code devcontainer config
+├── docker/                       # Local WordPress dev image
+├── scripts/                      # Local WordPress helper scripts
 │
 ├── inc/
-│   ├── Abilities/                # WordPress Abilities API registrations and callbacks
-│   ├── AzureOpenAI/              # Embeddings, Responses API, and Qdrant REST clients
-│   ├── Context/                  # Server-side block/theme/pattern collectors
+│   ├── Abilities/                # Block, pattern, template, navigation, docs, and infra ability handlers
+│   ├── AzureOpenAI/              # Deployment validation, embeddings, Responses API, and Qdrant clients
+│   ├── Cloudflare/               # AI Search grounding + prewarm pipeline
+│   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
 │   ├── LLM/                      # WordPress AI client wrapper + prompt/response handling
 │   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
 │   ├── REST/                     # Editor-facing REST routes
-│   └── Settings.php              # Settings API page + pattern sync panel
+│   ├── Support/                  # Shared sanitization helpers
+│   └── Settings.php              # Settings API page, validation, and sync/diagnostics panels
 │
 ├── src/
 │   ├── admin/                    # Settings-screen sync button script
+│   ├── components/               # Shared activity history/session bootstrap UI
 │   ├── context/                  # Editor-side block and theme collectors
 │   ├── inspector/                # InspectorControls injection and recommendation UI
-│   ├── patterns/                 # Inserter recommendation patching + toolbar badge
-│   └── store/                    # @wordpress/data store and safe update helpers
+│   ├── patterns/                 # Inserter recommendation patching, badge, and compat adapter
+│   ├── store/                    # @wordpress/data store, undo state, and persistence
+│   ├── templates/                # Site Editor template recommender + preview/apply helpers
+│   └── utils/                    # Template execution, pattern scoping, and structural helpers
 │
-└── docs/                         # Specs, plans, and this repo guide
+├── tests/
+│   ├── e2e/                      # Playwright smoke tests + Playground MU loader
+│   └── phpunit/                  # PHPUnit suites and WP stubs
+│
+└── docs/                         # Specs, references, local dev notes, plans, and repo guides
 ```
 
 ## Editor Flows
@@ -61,7 +77,7 @@ The client behavior is:
 
 - Passive fetch on editor load when Azure/Qdrant configuration is present.
 - Search-triggered refresh when the inserter search box changes.
-- Native pattern patching through `__experimentalBlockPatterns` so matched patterns appear in a `Recommended` category with updated descriptions and enriched keywords.
+- Native pattern patching through `src/patterns/compat.js`, which prefers stable `blockPatterns` / `blockPatternCategories` keys and falls back to `__experimental*` variants when needed.
 - A toolbar `!` badge when any recommendation score is `>= 0.9`.
 
 The server behavior is:
@@ -81,15 +97,20 @@ Template recommendations are exposed through `POST /flavor-agent/v1/recommend-te
 The client behavior is:
 
 - Available only while editing a `wp_template` entity in the Site Editor.
-- Advisory-only: template part rows link back to the relevant block or area, and pattern rows open the inserter filtered to that pattern.
-- Template-global by design: the shipped panel does not send inserter-root `visiblePatternNames`, so template candidate patterns are not silently narrowed by the current insertion surface.
+- Suggestions can be previewed before apply; the user explicitly confirms each validated operation set before the template is mutated.
+- Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`.
+- Template candidate patterns are narrowed by current inserter-root `visiblePatternNames` when the editor exposes that context.
 
 The server behavior is:
 
 - Resolve the active template from the Site Editor reference.
 - Collect assigned template-part slots, available template parts, and typed plus generic pattern candidates.
 - Rank template composition suggestions with the Azure OpenAI Responses API.
-- Validate returned template parts and pattern names against the collected context before rendering them in the panel.
+- Validate returned operations, template parts, and pattern names against the collected context before rendering or applying them in the panel.
+
+### AI Activity and Undo
+
+Applied block and template suggestions write structured activity records into `sessionStorage`, keyed to the current post or template. The latest compatible action can be undone from the inline success notice or the shared `Recent AI Actions` list when the live editor state still matches the recorded post-apply snapshot.
 
 ## Settings
 
@@ -121,17 +142,15 @@ Implemented abilities:
 - `flavor-agent/recommend-block`
 - `flavor-agent/introspect-block`
 - `flavor-agent/recommend-patterns`
-- `flavor-agent/recommend-template`
 - `flavor-agent/list-patterns`
+- `flavor-agent/recommend-template`
 - `flavor-agent/list-template-parts`
+- `flavor-agent/search-wordpress-docs`
 - `flavor-agent/get-theme-tokens`
+- `flavor-agent/recommend-navigation`
 - `flavor-agent/check-status`
 
-Stubbed abilities returning `501`:
-
-- `flavor-agent/recommend-navigation`
-
-The Abilities API path is additive for WordPress versions that expose those hooks. The editor-side REST and injected UI path remains the primary runtime path.
+All currently registered abilities in the tree are implemented. The Abilities API path is additive for WordPress versions that expose those hooks; the editor-side REST and injected UI path remains the primary runtime path.
 
 ## Pattern Index Lifecycle
 
@@ -161,10 +180,13 @@ npm run build
 npm run lint:js
 npm run test:unit -- --runInBand
 npm run test:e2e
+composer lint:php
+vendor/bin/phpunit
 ```
 
 ## Compatibility Notes
 
 - Plugin header now targets WordPress 7.0+ and PHP 8.0+.
 - The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
-- The pattern UI depends on legacy `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` editor settings, isolated behind the pattern recommendation module so the integration can be updated in one place if Gutenberg changes the API surface.
+- The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, preferring stable APIs and falling back to `__experimental*` variants only when needed.
+- `__experimentalFeatures` in `src/context/theme-tokens.js` and `__experimentalRole` in `src/context/block-inspector.js` still have no stable replacements and remain direct integrations.
