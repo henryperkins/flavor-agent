@@ -195,7 +195,7 @@ final class ServerCollector {
 			'fontFamilies'      => $font_families,
 			'spacing'           => $spacing,
 			'shadows'           => $shadows,
-			'duotone'          => $duotone,
+			'duotone'           => $duotone,
 			'layout'            => [
 				'content' => $settings['layout']['contentSize'] ?? '',
 				'wide'    => $settings['layout']['wideSize'] ?? '',
