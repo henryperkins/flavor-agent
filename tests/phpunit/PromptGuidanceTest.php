@@ -157,16 +157,57 @@ final class PromptGuidanceTest extends TestCase {
 		$prompt = Prompt::build_user(
 			[
 				'block'       => [
-					'name' => 'core/image',
+					'name'              => 'core/image',
+					'currentAttributes' => [
+						'metadata' => [
+							'bindings' => [
+								'url' => [
+									'source' => 'core/post-meta',
+								],
+							],
+						],
+					],
 				],
 				'themeTokens' => [
-					'duotone' => [ 'midnight: #111111 / #f5f5f5' ],
+					'duotone'         => [ 'midnight: #111111 / #f5f5f5' ],
+					'duotonePresets'  => [
+						[
+							'slug'   => 'midnight',
+							'colors' => [ '#111111', '#f5f5f5' ],
+						],
+					],
+					'enabledFeatures' => [
+						'backgroundImage' => true,
+					],
+					'elementStyles'   => [
+						'heading' => [
+							'base' => [
+								'text' => 'var(--wp--preset--color--contrast)',
+							],
+						],
+					],
 				],
 			]
 		);
 
 		$this->assertStringContainsString(
 			'Duotone presets: midnight: #111111 / #f5f5f5',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Duotone preset details:',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Block bindings:',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Theme feature flags:',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Global element styles:',
 			$prompt
 		);
 	}
@@ -176,6 +217,10 @@ final class PromptGuidanceTest extends TestCase {
 
 		$this->assertStringContainsString(
 			'Choose aspectRatio or height/minHeight, not both.',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'For duotone, use style.color.duotone.',
 			$prompt
 		);
 	}

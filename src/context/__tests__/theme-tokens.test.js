@@ -27,6 +27,10 @@ describe( 'summarizeTokens', () => {
 				customColors: true,
 				linkEnabled: false,
 			},
+			background: {
+				backgroundImage: true,
+				backgroundSize: false,
+			},
 			typography: {
 				fontSizes: [],
 				fontFamilies: [],
@@ -45,10 +49,21 @@ describe( 'summarizeTokens', () => {
 			layout: {
 				contentSize: '680px',
 				wideSize: '1200px',
+				allowEditing: false,
+				allowCustomContentAndWideSize: true,
 			},
 			border: {
 				color: false,
 				radius: false,
+				style: true,
+				width: false,
+			},
+			elements: {
+				button: {
+					base: {
+						text: 'var(--wp--preset--color--contrast)',
+					},
+				},
 			},
 			blockPseudoStyles: {},
 		} );
@@ -57,5 +72,35 @@ describe( 'summarizeTokens', () => {
 			'midnight: #111111 / #f5f5f5',
 			'sepia',
 		] );
+		expect( summary.duotonePresets ).toEqual( [
+			{
+				slug: 'midnight',
+				colors: [ '#111111', '#f5f5f5' ],
+			},
+			{
+				slug: 'sepia',
+				colors: [],
+			},
+		] );
+		expect( summary.layout ).toEqual( {
+			content: '680px',
+			wide: '1200px',
+			allowEditing: false,
+			allowCustomContentAndWideSize: true,
+		} );
+		expect( summary.enabledFeatures ).toEqual(
+			expect.objectContaining( {
+				backgroundImage: true,
+				backgroundSize: false,
+				borderStyle: true,
+			} )
+		);
+		expect( summary.elementStyles ).toEqual( {
+			button: {
+				base: {
+					text: 'var(--wp--preset--color--contrast)',
+				},
+			},
+		} );
 	} );
 } );

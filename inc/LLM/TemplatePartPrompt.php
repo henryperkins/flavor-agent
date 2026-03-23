@@ -1,0 +1,552 @@
+<?php
+/**
+ * Template-part-specific LLM prompt assembly and response parsing.
+ */
+
+declare(strict_types=1);
+
+namespace FlavorAgent\LLM;
+
+final class TemplatePartPrompt {
+
+	/**
+	 * Build the system prompt for template-part recommendations.
+	 */
+	public static function build_system(): string {
+		return <<<'SYSTEM'
+You are a WordPress template-part composition advisor. Given a single template part's area, block-tree structure, candidate patterns, theme design tokens, and WordPress guidance, suggest how to improve that one template part.
+
+Return ONLY a JSON object with this exact shape. Do not use markdown fences or add any text outside the JSON object:
+
+{
+  "suggestions": [
+    {
+      "label": "Short title for this suggestion",
+      "description": "Why this improves the template part",
+      "blockHints": [
+        {
+          "path": [0, 1],
+          "label": "Navigation block",
+          "reason": "Why this block is the right place to focus"
+        }
+      ],
+      "patternSuggestions": ["pattern/name-from-patterns-list"]
+    }
+  ],
+  "explanation": "Overall reasoning for these recommendations"
+}
+
+Rules:
+- blockHints[].path MUST be a real path from the Current Block Tree.
+- blockHints[].label should be short and human-readable.
+- patternSuggestions[] MUST be pattern name values from the Available Patterns list.
+- Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
+- Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
+- When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
+- Respect the theme's design tokens when suggesting patterns or structural changes.
+- If no matching patterns are available, leave patternSuggestions as an empty array.
+- Return 1-3 suggestions. Each should be distinct and actionable.
+- Keep labels under 60 characters. Keep descriptions under 200 characters.
+SYSTEM;
+	}
+
+	/**
+	 * Build the user prompt from template-part context.
+	 *
+	 * @param array  $context Template-part context from ServerCollector::for_template_part().
+	 * @param string $prompt  Optional user instruction.
+	 * @param array  $docs_guidance WordPress docs grounding chunks.
+	 */
+	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
+		$sections = [];
+
+		$ref   = (string) ( $context['templatePartRef'] ?? 'unknown' );
+		$slug  = (string) ( $context['slug'] ?? '' );
+		$title = (string) ( $context['title'] ?? $slug );
+		$area  = (string) ( $context['area'] ?? 'uncategorized' );
+
+		$sections[] = "## Template Part\nRef: {$ref}\nSlug: {$slug}\nTitle: {$title}\nArea: {$area}";
+
+		$top_level_blocks = is_array( $context['topLevelBlocks'] ?? null ) ? $context['topLevelBlocks'] : [];
+		if ( count( $top_level_blocks ) > 0 ) {
+			$sections[] = '## Top-Level Blocks' . "\n" . implode( ', ', $top_level_blocks );
+		}
+
+		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$block_counts    = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
+		$structure_lines = [];
+
+		if ( isset( $structure_stats['blockCount'] ) ) {
+			$structure_lines[] = 'Block count: ' . (int) $structure_stats['blockCount'];
+		}
+
+		if ( isset( $structure_stats['maxDepth'] ) ) {
+			$structure_lines[] = 'Max depth: ' . (int) $structure_stats['maxDepth'];
+		}
+
+		if ( ! empty( $structure_stats['firstTopLevelBlock'] ) ) {
+			$structure_lines[] = 'First top-level block: ' . (string) $structure_stats['firstTopLevelBlock'];
+		}
+
+		if ( ! empty( $structure_stats['lastTopLevelBlock'] ) ) {
+			$structure_lines[] = 'Last top-level block: ' . (string) $structure_stats['lastTopLevelBlock'];
+		}
+
+		if ( array_key_exists( 'hasSingleWrapperGroup', $structure_stats ) ) {
+			$structure_lines[] = 'Single wrapper group: ' . ( $structure_stats['hasSingleWrapperGroup'] ? 'yes' : 'no' );
+		}
+
+		if ( array_key_exists( 'isNearlyEmpty', $structure_stats ) ) {
+			$structure_lines[] = 'Nearly empty: ' . ( $structure_stats['isNearlyEmpty'] ? 'yes' : 'no' );
+		}
+
+		if ( ! empty( $block_counts ) ) {
+			$formatted_counts = [];
+
+			foreach ( $block_counts as $block_name => $count ) {
+				$formatted_counts[] = "{$block_name} × " . (int) $count;
+			}
+
+			$structure_lines[] = 'Block counts: ' . implode( ', ', array_slice( $formatted_counts, 0, 10 ) );
+		}
+
+		if ( count( $structure_lines ) > 0 ) {
+			$sections[] = "## Structure Summary\n" . implode( "\n", $structure_lines );
+		}
+
+		$block_tree = is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : [];
+		if ( count( $block_tree ) > 0 ) {
+			$sections[] = "## Current Block Tree\n" . self::format_block_tree( $block_tree );
+		} else {
+			$sections[] = "## Current Block Tree\nThis template part is empty.";
+		}
+
+		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
+		if ( count( $patterns ) > 0 ) {
+			$max   = 20;
+			$shown = array_slice( $patterns, 0, $max );
+			$lines = array_map(
+				static function ( array $pattern ): string {
+					$name        = (string) ( $pattern['name'] ?? '' );
+					$title       = (string) ( $pattern['title'] ?? '' );
+					$description = (string) ( $pattern['description'] ?? '' );
+					$match_type  = (string) ( $pattern['matchType'] ?? '' );
+					$line        = "- `{$name}`";
+
+					if ( $title !== '' ) {
+						$line .= " - {$title}";
+					}
+
+					if ( $match_type !== '' ) {
+						$line .= " [{$match_type}]";
+					}
+
+					if ( $description !== '' ) {
+						$line .= ": {$description}";
+					}
+
+					return $line;
+				},
+				$shown
+			);
+
+			$header = "## Available Patterns\n";
+			if ( count( $patterns ) > $max ) {
+				$header .= 'Showing ' . $max . ' of ' . count( $patterns ) . " patterns.\n";
+			}
+
+			$sections[] = $header . implode( "\n", $lines );
+		} else {
+			$sections[] = "## Available Patterns\nNo area-relevant patterns are available.";
+		}
+
+		$theme_tokens = self::format_theme_tokens(
+			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
+		);
+		if ( $theme_tokens !== '' ) {
+			$sections[] = "## Theme Tokens\n{$theme_tokens}";
+		}
+
+		if ( count( $docs_guidance ) > 0 ) {
+			$lines = [];
+
+			foreach ( array_slice( $docs_guidance, 0, 3 ) as $guidance ) {
+				if ( ! is_array( $guidance ) ) {
+					continue;
+				}
+
+				$summary = self::format_guidance_line( $guidance );
+
+				if ( $summary !== '' ) {
+					$lines[] = '- ' . $summary;
+				}
+			}
+
+			if ( count( $lines ) > 0 ) {
+				$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $lines );
+			}
+		}
+
+		$instruction = trim( $prompt ) !== ''
+			? trim( $prompt )
+			: 'Suggest improvements for this template part.';
+		$sections[]  = "## User Instruction\n{$instruction}";
+
+		return implode( "\n\n", $sections );
+	}
+
+	/**
+	 * Parse and validate an LLM response for template-part recommendations.
+	 *
+	 * @param string $raw     Raw LLM response text.
+	 * @param array  $context Template-part context used to build the prompt.
+	 * @return array|\WP_Error Validated payload or error.
+	 */
+	public static function parse_response( string $raw, array $context ): array|\WP_Error {
+		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw ) );
+		$data    = json_decode( is_string( $cleaned ) ? $cleaned : '', true );
+
+		if ( json_last_error() !== JSON_ERROR_NONE ) {
+			return new \WP_Error(
+				'parse_error',
+				'Failed to parse template-part recommendation response as JSON: ' . json_last_error_msg(),
+				[
+					'status' => 502,
+					'raw'    => substr( $raw, 0, 500 ),
+				]
+			);
+		}
+
+		if ( ! isset( $data['suggestions'] ) || ! is_array( $data['suggestions'] ) ) {
+			return new \WP_Error(
+				'parse_error',
+				'Template-part recommendation response missing "suggestions" array.',
+				[ 'status' => 502 ]
+			);
+		}
+
+		$block_lookup   = self::build_block_lookup(
+			is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : []
+		);
+		$pattern_lookup = self::build_pattern_lookup( $context );
+		$suggestions    = self::validate_suggestions(
+			$data['suggestions'],
+			$block_lookup,
+			$pattern_lookup
+		);
+
+		if ( count( $suggestions ) === 0 ) {
+			return new \WP_Error(
+				'invalid_recommendations',
+				'Template-part recommendation response contained no actionable suggestions after validation.',
+				[
+					'status' => 502,
+					'raw'    => substr( $raw, 0, 500 ),
+				]
+			);
+		}
+
+		return [
+			'suggestions' => $suggestions,
+			'explanation' => sanitize_text_field( (string) ( $data['explanation'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $guidance
+	 */
+	private static function format_guidance_line( array $guidance ): string {
+		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
+
+		if ( $prefix === '' ) {
+			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
+		}
+
+		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+
+		if ( $excerpt === '' ) {
+			return '';
+		}
+
+		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $tree
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_block_lookup( array $tree ): array {
+		$lookup = [];
+
+		foreach ( $tree as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $node['path'] ?? null );
+
+			if ( $path !== null ) {
+				$lookup[ self::block_path_key( $path ) ] = [
+					'name' => (string) ( $node['name'] ?? '' ),
+					'path' => $path,
+				];
+			}
+
+			$children = is_array( $node['children'] ?? null ) ? $node['children'] : [];
+			$lookup   = array_merge( $lookup, self::build_block_lookup( $children ) );
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @return array<string, true>
+	 */
+	private static function build_pattern_lookup( array $context ): array {
+		$lookup = [];
+
+		foreach ( is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [] as $pattern ) {
+			if ( ! is_array( $pattern ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $pattern['name'] ?? '' ) );
+
+			if ( $name !== '' ) {
+				$lookup[ $name ] = true;
+			}
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array<int, mixed>                   $suggestions
+	 * @param array<string, array<string, mixed>> $block_lookup
+	 * @param array<string, true>                 $pattern_lookup
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function validate_suggestions( array $suggestions, array $block_lookup, array $pattern_lookup ): array {
+		$valid = [];
+
+		foreach ( $suggestions as $suggestion ) {
+			if ( ! is_array( $suggestion ) ) {
+				continue;
+			}
+
+			$label = sanitize_text_field( substr( (string) ( $suggestion['label'] ?? '' ), 0, 60 ) );
+			$description = sanitize_text_field(
+				substr(
+					(string) ( $suggestion['description'] ?? '' ),
+					0,
+					200
+				)
+			);
+
+			if ( $label === '' || $description === '' ) {
+				continue;
+			}
+
+			$block_hints = self::validate_block_hints(
+				is_array( $suggestion['blockHints'] ?? null ) ? $suggestion['blockHints'] : [],
+				$block_lookup
+			);
+			$pattern_suggestions = self::validate_pattern_suggestions(
+				is_array( $suggestion['patternSuggestions'] ?? null ) ? $suggestion['patternSuggestions'] : [],
+				$pattern_lookup
+			);
+
+			if ( count( $block_hints ) === 0 && count( $pattern_suggestions ) === 0 ) {
+				continue;
+			}
+
+			$valid[] = [
+				'label'              => $label,
+				'description'        => $description,
+				'blockHints'         => $block_hints,
+				'patternSuggestions' => $pattern_suggestions,
+			];
+		}
+
+		return array_slice( $valid, 0, 3 );
+	}
+
+	/**
+	 * @param array<int, mixed>                   $block_hints
+	 * @param array<string, array<string, mixed>> $block_lookup
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function validate_block_hints( array $block_hints, array $block_lookup ): array {
+		$valid = [];
+		$seen  = [];
+
+		foreach ( $block_hints as $hint ) {
+			if ( ! is_array( $hint ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $hint['path'] ?? null );
+
+			if ( $path === null ) {
+				continue;
+			}
+
+			$key = self::block_path_key( $path );
+
+			if ( isset( $seen[ $key ] ) || ! isset( $block_lookup[ $key ] ) ) {
+				continue;
+			}
+
+			$block_name = sanitize_text_field( (string) ( $block_lookup[ $key ]['name'] ?? '' ) );
+			$label      = sanitize_text_field( substr( (string) ( $hint['label'] ?? '' ), 0, 80 ) );
+
+			if ( $label === '' ) {
+				$label = self::humanize_block_name( $block_name );
+			}
+
+			$valid[]     = [
+				'path'      => $path,
+				'label'     => $label,
+				'blockName' => $block_name,
+				'reason'    => sanitize_text_field( substr( (string) ( $hint['reason'] ?? '' ), 0, 160 ) ),
+			];
+			$seen[ $key ] = true;
+		}
+
+		return array_slice( $valid, 0, 4 );
+	}
+
+	/**
+	 * @param array<int, mixed>   $patterns
+	 * @param array<string, true> $pattern_lookup
+	 * @return string[]
+	 */
+	private static function validate_pattern_suggestions( array $patterns, array $pattern_lookup ): array {
+		$valid = [];
+		$seen  = [];
+
+		foreach ( $patterns as $pattern ) {
+			$name = '';
+
+			if ( is_array( $pattern ) ) {
+				$name = sanitize_text_field( (string) ( $pattern['name'] ?? '' ) );
+			} elseif ( is_string( $pattern ) ) {
+				$name = sanitize_text_field( $pattern );
+			}
+
+			if ( $name === '' || isset( $seen[ $name ] ) || ! isset( $pattern_lookup[ $name ] ) ) {
+				continue;
+			}
+
+			$valid[]      = $name;
+			$seen[ $name ] = true;
+		}
+
+		return array_slice( $valid, 0, 3 );
+	}
+
+	/**
+	 * @param mixed $path
+	 * @return int[]|null
+	 */
+	private static function sanitize_block_path( mixed $path ): ?array {
+		if ( ! is_array( $path ) || count( $path ) === 0 ) {
+			return null;
+		}
+
+		$normalized = [];
+
+		foreach ( $path as $segment ) {
+			if ( ! is_int( $segment ) && ! is_numeric( $segment ) ) {
+				return null;
+			}
+
+			$segment = (int) $segment;
+
+			if ( $segment < 0 ) {
+				return null;
+			}
+
+			$normalized[] = $segment;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param int[] $path
+	 */
+	private static function block_path_key( array $path ): string {
+		return implode( '.', $path );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $tree
+	 */
+	private static function format_block_tree( array $tree, int $depth = 0 ): string {
+		$lines  = [];
+		$indent = str_repeat( '  ', $depth );
+
+		foreach ( $tree as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path        = self::sanitize_block_path( $node['path'] ?? null ) ?? [];
+			$path_string = '[' . implode( ', ', $path ) . ']';
+			$name        = (string) ( $node['name'] ?? 'unknown' );
+			$attributes  = is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [];
+			$attr_suffix = '';
+
+			if ( count( $attributes ) > 0 ) {
+				$pairs = [];
+
+				foreach ( $attributes as $key => $value ) {
+					$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
+					$pairs[] = "{$key}={$display}";
+				}
+
+				$attr_suffix = ' {' . implode( ', ', $pairs ) . '}';
+			}
+
+			$lines[] = "{$indent}- {$path_string} {$name}{$attr_suffix}";
+
+			$children = is_array( $node['children'] ?? null ) ? $node['children'] : [];
+			if ( count( $children ) > 0 ) {
+				$lines[] = self::format_block_tree( $children, $depth + 1 );
+			}
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	private static function humanize_block_name( string $block_name ): string {
+		if ( str_starts_with( $block_name, 'core/' ) ) {
+			$block_name = substr( $block_name, 5 );
+		}
+
+		return ucwords( str_replace( '-', ' ', $block_name ) );
+	}
+
+	private static function format_theme_tokens( array $tokens ): string {
+		$lines = [];
+
+		if ( ! empty( $tokens['colors'] ) ) {
+			$lines[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 12 ) );
+		}
+
+		if ( ! empty( $tokens['fontFamilies'] ) ) {
+			$lines[] = 'Fonts: ' . implode( ', ', (array) $tokens['fontFamilies'] );
+		}
+
+		if ( ! empty( $tokens['fontSizes'] ) ) {
+			$lines[] = 'Font sizes: ' . implode( ', ', (array) $tokens['fontSizes'] );
+		}
+
+		if ( ! empty( $tokens['spacing'] ) ) {
+			$lines[] = 'Spacing scale: ' . implode( ', ', array_slice( (array) $tokens['spacing'], 0, 7 ) );
+		}
+
+		return implode( "\n", $lines );
+	}
+}

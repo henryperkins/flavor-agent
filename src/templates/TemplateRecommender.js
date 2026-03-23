@@ -43,6 +43,7 @@ import {
 } from '../utils/template-actions';
 import {
 	buildEntityMap,
+	buildEditorTemplateSlotSnapshot,
 	buildTemplateFetchInput,
 	buildTemplateSuggestionViewModel,
 	ENTITY_ACTION_BROWSE_PATTERN,
@@ -203,6 +204,11 @@ function describeInsertionPoint( {
 
 export default function TemplateRecommender() {
 	const canRecommend = window.flavorAgentData?.canRecommendTemplates;
+	const templateBlocks = useSelect(
+		( select ) =>
+			select( blockEditorStore )?.getBlocks?.() || [],
+		[]
+	);
 	const templateRef = useSelect( ( select ) => {
 		const editSite = select( 'core/edit-site' );
 
@@ -330,19 +336,53 @@ export default function TemplateRecommender() {
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const previousTemplateRef = useRef( templateRef );
+	const editorSlots = useMemo(
+		() =>
+			Array.isArray( templateBlocks ) && templateBlocks.length > 0
+				? buildEditorTemplateSlotSnapshot( templateBlocks )
+				: null,
+		[ templateBlocks ]
+	);
+	const editorSlotsSignature = useMemo(
+		() => JSON.stringify( editorSlots || null ),
+		[ editorSlots ]
+	);
+	const previousEditorSlotsSignature = useRef( editorSlotsSignature );
+	const hasMatchingResult = resultRef === templateRef;
+	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
 
 	useEffect( () => {
-		if ( previousTemplateRef.current === templateRef ) {
+		const templateChanged = previousTemplateRef.current !== templateRef;
+		const slotsChanged =
+			previousEditorSlotsSignature.current !== editorSlotsSignature;
+
+		if ( ! templateChanged && ! slotsChanged ) {
+			return;
+		}
+
+		const shouldClearRecommendations =
+			templateChanged || ( slotsChanged && ( hasMatchingResult || isLoading ) );
+
+		previousTemplateRef.current = templateRef;
+		previousEditorSlotsSignature.current = editorSlotsSignature;
+
+		if ( ! shouldClearRecommendations ) {
 			return;
 		}
 
 		clearTemplateRecommendations();
-		setPrompt( '' );
-		previousTemplateRef.current = templateRef;
-	}, [ templateRef, clearTemplateRecommendations ] );
 
-	const hasMatchingResult = resultRef === templateRef;
-	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
+		if ( templateChanged ) {
+			setPrompt( '' );
+		}
+	}, [
+		clearTemplateRecommendations,
+		editorSlotsSignature,
+		hasMatchingResult,
+		isLoading,
+		templateRef,
+	] );
+
 	const entityMap = useMemo(
 		() => buildEntityMap( recommendations, patternTitleMap ),
 		[ recommendations, patternTitleMap ]
@@ -370,9 +410,16 @@ export default function TemplateRecommender() {
 				templateRef,
 				templateType,
 				prompt,
+				editorSlots,
 			} )
 		);
-	}, [ fetchTemplateRecommendations, prompt, templateRef, templateType ] );
+	}, [
+		editorSlots,
+		fetchTemplateRecommendations,
+		prompt,
+		templateRef,
+		templateType,
+	] );
 
 	const handleEntityAction = useCallback( ( entity ) => {
 		switch ( entity?.actionType ) {

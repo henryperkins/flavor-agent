@@ -222,6 +222,29 @@ final class Registration {
 							'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.',
 						],
 						'prompt'              => [ 'type' => 'string' ],
+						'editorSlots'         => [
+							'type'       => 'object',
+							'properties' => [
+								'assignedParts' => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'slug' => [ 'type' => 'string' ],
+											'area' => [ 'type' => 'string' ],
+										],
+									],
+								],
+								'emptyAreas'    => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+								'allowedAreas'  => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+							],
+						],
 					],
 					'required'   => [ 'templateRef' ],
 				],
@@ -256,6 +279,64 @@ final class Registration {
 												'slug'   => [ 'type' => 'string' ],
 												'area'   => [ 'type' => 'string' ],
 												'reason' => [ 'type' => 'string' ],
+											],
+										],
+									],
+									'patternSuggestions' => [
+										'type'  => 'array',
+										'items' => [ 'type' => 'string' ],
+									],
+								],
+							],
+						],
+						'explanation' => [ 'type' => 'string' ],
+					],
+				],
+				'meta'                => [ 'show_in_rest' => true ],
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/recommend-template-part',
+			[
+				'label'               => __( 'Recommend template-part structure', 'flavor-agent' ),
+				'description'         => __( 'Suggest focused structural improvements and patterns for a single template part.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ TemplateAbilities::class, 'recommend_template_part' ],
+				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'templatePartRef' => [
+							'type'        => 'string',
+							'description' => 'Template-part identifier from the Site Editor.',
+						],
+						'prompt'          => [ 'type' => 'string' ],
+					],
+					'required'   => [ 'templatePartRef' ],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => [
+						'suggestions' => [
+							'type'  => 'array',
+							'items' => [
+								'type'       => 'object',
+								'properties' => [
+									'label'              => [ 'type' => 'string' ],
+									'description'        => [ 'type' => 'string' ],
+									'blockHints'         => [
+										'type'  => 'array',
+										'items' => [
+											'type'       => 'object',
+											'properties' => [
+												'path'      => [
+													'type'  => 'array',
+													'items' => [ 'type' => 'integer' ],
+												],
+												'label'     => [ 'type' => 'string' ],
+												'blockName' => [ 'type' => 'string' ],
+												'reason'    => [ 'type' => 'string' ],
 											],
 										],
 									],

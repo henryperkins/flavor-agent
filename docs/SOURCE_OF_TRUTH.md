@@ -10,13 +10,14 @@ Flavor Agent is a WordPress plugin that adds AI-powered recommendations directly
 
 Applied AI changes are now tracked per editor session and can be reversed from the UI when the live document still matches the recorded post-apply state; template actions now persist stable locators plus recorded post-apply block snapshots so same-session refreshes can still resolve undo targets.
 
-Three recommendation surfaces exist today:
+Four recommendation surfaces exist today:
 
 1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector sidebar tabs.
 2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through the native block inserter with a "Recommended" category.
 3. **Template Compositor** -- Reviewable template-part and pattern composition suggestions for Site Editor templates with a narrow confirm-before-apply path.
+4. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
 
-A fourth surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents (WP 6.9+).
+A fifth surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents (WP 6.9+).
 
 ## Repository Layout
 
@@ -53,6 +54,9 @@ flavor-agent/
       Prompt.php            Block recommendation prompt assembly and response parsing
       TemplatePrompt.php    Template recommendation prompt assembly and structured operation parsing
       NavigationPrompt.php  Navigation recommendation prompt assembly and response parsing
+      TemplatePartPrompt.php  Template-part recommendation prompt assembly and response parsing
+    OpenAI/
+      Provider.php          Provider selection (Azure OpenAI vs OpenAI Native), credential fallback chain
     AzureOpenAI/
       ConfigurationValidator.php  Deployment and backend validation helpers
       EmbeddingClient.php   Azure OpenAI embeddings (3072-dim vectors)
@@ -65,10 +69,10 @@ flavor-agent/
     Patterns/
       PatternIndex.php      Pattern embedding lifecycle: sync, diff, cron, fingerprint
     Abilities/
-      Registration.php      Abilities API category + 10 ability registrations
+      Registration.php      Abilities API category + 11 ability registrations
       BlockAbilities.php    recommend-block, introspect-block
       PatternAbilities.php  recommend-patterns, list-patterns
-      TemplateAbilities.php recommend-template, list-template-parts
+      TemplateAbilities.php recommend-template, recommend-template-part, list-template-parts
       NavigationAbilities.php recommend-navigation
       InfraAbilities.php    get-theme-tokens, check-status
       WordPressDocsAbilities.php  search-wordpress-docs
@@ -106,6 +110,8 @@ flavor-agent/
     templates/
       TemplateRecommender.js  Site Editor review-confirm-apply panel with linked entities
       template-recommender-helpers.js  Pure helpers for template UI and executable operation view models
+    template-parts/
+      TemplatePartRecommender.js  Template-part-scoped AI recommendations panel
     admin/
       sync-button.js        Settings page: manual pattern index sync
     utils/
@@ -138,6 +144,7 @@ flavor-agent/
       ServerCollectorTest.php
       SettingsTest.php
       TemplatePromptTest.php
+      TemplatePartPromptTest.php
     (JS tests live alongside source in __tests__/ dirs and *.test.js files)
 
   docs/
@@ -165,8 +172,11 @@ flavor-agent/
 | Service | Purpose | Required For | Config Options |
 |---------|---------|-------------|----------------|
 | WordPress AI Client + Connectors | Block recommendation LLM | Block Inspector recommendations | Core-managed in `Settings > Connectors` |
-| Azure OpenAI Embeddings | Pattern embedding (3072-dim) | Pattern index + pattern recommendations | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment` |
-| Azure OpenAI Responses | LLM ranking / chat | Pattern ranking, template recommendations | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment` |
+| Provider selection | Chooses between Azure OpenAI and OpenAI Native | Pattern/template/navigation recommendations | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`) |
+| Azure OpenAI Embeddings | Pattern embedding (3072-dim) | Pattern index + pattern recommendations (Azure provider) | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment` |
+| Azure OpenAI Responses | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Azure provider) | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment` |
+| OpenAI Native Embeddings | Pattern embedding | Pattern index + pattern recommendations (Native provider) | `flavor_agent_openai_native_api_key`, `_embedding_model` |
+| OpenAI Native Chat | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Native provider) | `flavor_agent_openai_native_api_key`, `_chat_model` |
 | Qdrant | Vector similarity search | Pattern recommendations | `flavor_agent_qdrant_url`, `_key` |
 | Cloudflare AI Search | WordPress dev-doc grounding | Supplemental doc context for block/template recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results` |
 
@@ -222,6 +232,7 @@ All abilities registered with full JSON Schema input/output definitions:
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | `edit_posts` | Working |
 | `flavor-agent/list-patterns` | `PatternAbilities` | `edit_posts` | Working (readonly) |
 | `flavor-agent/recommend-template` | `TemplateAbilities` | `edit_theme_options` | Working |
+| `flavor-agent/recommend-template-part` | `TemplateAbilities` | `edit_theme_options` | Working |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | `edit_theme_options` | Working (readonly) |
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | `manage_options` | Working (readonly) |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | `edit_posts` | Working (readonly) |
@@ -240,11 +251,14 @@ All abilities registered with full JSON Schema input/output definitions:
 | `/flavor-agent/v1/recommend-block` | POST | `edit_posts` | `BlockAbilities::recommend_block` |
 | `/flavor-agent/v1/recommend-patterns` | POST | `edit_posts` | `PatternAbilities::recommend_patterns` |
 | `/flavor-agent/v1/recommend-template` | POST | `edit_theme_options` | `TemplateAbilities::recommend_template` |
+| `/flavor-agent/v1/recommend-template-part` | POST | `edit_theme_options` | `TemplateAbilities::recommend_template_part` |
 | `/flavor-agent/v1/sync-patterns` | POST | `manage_options` | `PatternIndex::sync` |
 
 #### Admin Settings
-Settings page at Settings > Flavor Agent with three sections:
+Settings page at Settings > Flavor Agent with five sections:
+- OpenAI Provider (select Azure OpenAI or OpenAI Native for pattern/template/navigation recommendations)
 - Azure OpenAI (endpoint, key, embedding deployment, chat deployment)
+- OpenAI Native (API key, chat model, embedding model)
 - Qdrant (URL, key)
 - Cloudflare AI Search (account ID, instance ID, API token, max results)
 
@@ -300,7 +314,7 @@ User selects block -> InspectorInjector renders AI panel
      -> POST /flavor-agent/v1/recommend-block
         -> Agent_Controller -> BlockAbilities::recommend_block()
            -> ServerCollector::introspect_block_type() (server enrichment)
-           -> AISearchClient::maybe_search_with_entity_fallback() (docs grounding)
+           -> AISearchClient::maybe_search_with_cache_fallbacks() (docs grounding)
            -> Prompt::build_system() + Prompt::build_user()
            -> WordPressAIClient::chat() (core AI client)
            -> Prompt::parse_response()
@@ -346,7 +360,7 @@ User editing wp_template in Site Editor
            -> ServerCollector::for_template(ref, type)
               -> Walks parsed blocks for template-part slots
               -> Collects available parts, empty areas, candidate patterns
-           -> AISearchClient::maybe_search_with_entity_fallback()
+           -> AISearchClient::maybe_search_with_cache_fallbacks()
            -> TemplatePrompt::build_system() + build_user()
            -> ResponsesClient::rank(instructions, input)
            -> TemplatePrompt::parse_response() (validates against context, normalizes executable operations)
@@ -376,11 +390,29 @@ External AI agent calls flavor-agent/recommend-navigation ability
         -> for_template_parts('navigation-overlay') for WP 7.0 overlay parts
         -> infer_navigation_location() from template part refs
         -> for_tokens() for theme design tokens
-     -> AISearchClient::maybe_search_with_entity_fallback()
+     -> AISearchClient::maybe_search_with_cache_fallbacks()
      -> NavigationPrompt::build_system() + build_user()
      -> ResponsesClient::rank(instructions, input)
      -> NavigationPrompt::parse_response() (validates categories, change types)
   <- JSON response: { suggestions, explanation }
+```
+
+### Template Part Recommendation Flow
+```
+User editing wp_template_part in Site Editor
+  -> TemplatePartRecommender.js renders PluginDocumentSettingPanel
+  -> User clicks "Get Suggestions"
+  -> store thunk: fetchTemplatePartRecommendations(input)
+     -> POST /flavor-agent/v1/recommend-template-part
+        -> Agent_Controller -> TemplateAbilities::recommend_template_part()
+           -> ServerCollector::for_template_part(ref)
+           -> AISearchClient::maybe_search_with_cache_fallbacks()
+           -> TemplatePartPrompt::build_system() + build_user()
+           -> ResponsesClient::rank(instructions, input)
+           -> TemplatePartPrompt::parse_response()
+        <- JSON response: { suggestions, explanation }
+  -> store: SET_TEMPLATE_RECS
+  -> UI: Template part suggestion cards with operations
 ```
 
 ## Test Coverage
@@ -401,8 +433,9 @@ External AI agent calls flavor-agent/recommend-navigation ability
 | `AzureBackendValidationTest` | 7 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks |
 | `NavigationAbilitiesTest` | 13 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
 | `TemplatePromptTest` | 6 | Structured template operation parsing, conflicting multi-step validation, and legacy fallback normalization |
+| `TemplatePartPromptTest` | 2 | Template-part prompt assembly and response parsing |
 | `DocsPrewarmTest` | 19 | Warm set definition, cache seeding, state recording, throttling (same creds, changed creds, expired window), partial/total failure, schedule/should prewarm, diagnostics, resilience |
-| **Total** | **117** | |
+| **Total** | **119** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
@@ -437,6 +470,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Pattern recommendations via vector search + LLM ranking
 - [x] Native inserter integration (Recommended category, badge)
 - [x] Template composition panel with review-confirm-apply for validated operations
+- [x] Template-part recommendations panel
 - [x] Undoable block/template AI actions with session-scoped activity history
 - [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates)
 - [x] WordPress Abilities API integration (all working abilities)

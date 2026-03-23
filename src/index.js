@@ -23,6 +23,7 @@ import ActivitySessionBootstrap from './components/ActivitySessionBootstrap';
 import PatternRecommender from './patterns/PatternRecommender';
 import InserterBadge from './patterns/InserterBadge';
 import TemplateRecommender from './templates/TemplateRecommender';
+import TemplatePartRecommender from './template-parts/TemplatePartRecommender';
 
 registerPlugin( 'flavor-agent', {
 	render: () => (
@@ -31,6 +32,7 @@ registerPlugin( 'flavor-agent', {
 			<PatternRecommender />
 			<InserterBadge />
 			<TemplateRecommender />
+			<TemplatePartRecommender />
 		</>
 	),
 } );

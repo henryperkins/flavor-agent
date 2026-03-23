@@ -110,13 +110,29 @@ final class BlockAbilitiesTest extends TestCase {
 					],
 					'themeTokens'         => (object) [
 						'colors'            => [ 'accent: #f00', '', 'accent: #f00' ],
+						'duotone'           => [ 'midnight: #111111 / #f5f5f5' ],
+						'duotonePresets'    => [
+							(object) [
+								'slug'   => 'midnight',
+								'colors' => [ '#111111', '#f5f5f5' ],
+							],
+						],
 						'fontSizes'         => [ 'small: 12px' ],
 						'layout'            => (object) [
-							'content' => '640px',
-							'wide'    => '1200px',
+							'content'      => '640px',
+							'wide'         => '1200px',
+							'allowEditing' => false,
 						],
 						'enabledFeatures'   => (object) [
-							'lineHeight' => true,
+							'lineHeight'      => true,
+							'backgroundImage' => true,
+						],
+						'elementStyles'     => (object) [
+							'button' => (object) [
+								'base' => (object) [
+									'text' => 'var(--wp--preset--color--contrast)',
+								],
+							],
 						],
 						'blockPseudoStyles' => (object) [
 							'core/button' => (object) [
@@ -158,6 +174,10 @@ final class BlockAbilitiesTest extends TestCase {
 				$prepared['context']['block']['inspectorPanels']
 			);
 			$this->assertSame( [ 'accent: #f00' ], $prepared['context']['themeTokens']['colors'] );
+			$this->assertSame( [ 'midnight: #111111 / #f5f5f5' ], $prepared['context']['themeTokens']['duotone'] );
+			$this->assertSame( 'midnight', $prepared['context']['themeTokens']['duotonePresets'][0]['slug'] );
+			$this->assertTrue( $prepared['context']['themeTokens']['enabledFeatures']['backgroundImage'] );
+			$this->assertSame( 'var(--wp--preset--color--contrast)', $prepared['context']['themeTokens']['elementStyles']['button']['base']['text'] );
 			$this->assertSame( 'footer-paragraph', $prepared['context']['block']['structuralIdentity']['role'] );
 			$this->assertSame( 'footer-slot', $prepared['context']['structuralAncestors'][0]['role'] );
 			$this->assertSame( 'footer-slot', $prepared['context']['structuralBranch'][0]['role'] );
@@ -197,6 +217,11 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( 'outline', $prepared['context']['block']['activeStyle'] );
 		$this->assertSame( [ 'accent: #f00' ], $prepared['context']['themeTokens']['colors'] );
 		$this->assertSame( [ 'small: 12px' ], $prepared['context']['themeTokens']['fontSizes'] );
+		$this->assertSame( [ 'midnight: #111111 / #f5f5f5' ], $prepared['context']['themeTokens']['duotone'] );
+		$this->assertSame( 'midnight', $prepared['context']['themeTokens']['duotonePresets'][0]['slug'] );
+		$this->assertFalse( $prepared['context']['themeTokens']['layout']['allowEditing'] );
+		$this->assertTrue( $prepared['context']['themeTokens']['enabledFeatures']['backgroundImage'] );
+		$this->assertSame( 'var(--wp--preset--color--contrast)', $prepared['context']['themeTokens']['elementStyles']['button']['base']['text'] );
 	}
 
 	public function test_recommend_block_short_circuits_disabled_blocks_before_api_key_validation(): void {
@@ -246,12 +271,36 @@ final class BlockAbilitiesTest extends TestCase {
 						'color' => '#f00',
 					],
 				],
+				'duotone' => [
+					[
+						'slug'   => 'midnight',
+						'colors' => [ '#111111', '#f5f5f5' ],
+					],
+				],
 			],
 			'typography' => [
 				'fontSizes' => [
 					[
 						'slug' => 'small',
 						'size' => '12px',
+					],
+				],
+			],
+			'spacing'    => [
+				'blockGap' => true,
+			],
+			'layout'     => [
+				'allowEditing' => false,
+			],
+			'background' => [
+				'backgroundImage' => true,
+			],
+		];
+		WordPressTestState::$global_styles   = [
+			'elements' => [
+				'button' => [
+					'color' => [
+						'text' => 'var(--wp--preset--color--contrast)',
 					],
 				],
 			],

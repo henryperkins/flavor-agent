@@ -370,6 +370,27 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				{ hasRecs && (
 					<>
 						<SubPanelSuggestions
+							group="position"
+							panel="position"
+							clientId={ clientId }
+							suggestions={ recommendations.settings }
+							label="AI position suggestions"
+						/>
+						<SubPanelSuggestions
+							group="advanced"
+							panel="advanced"
+							clientId={ clientId }
+							suggestions={ recommendations.settings }
+							label="AI advanced suggestions"
+						/>
+						<SubPanelSuggestions
+							group="bindings"
+							panel="bindings"
+							clientId={ clientId }
+							suggestions={ recommendations.settings }
+							label="AI bindings suggestions"
+						/>
+						<SubPanelSuggestions
 							group="color"
 							panel="color"
 							clientId={ clientId }
@@ -403,6 +424,13 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							clientId={ clientId }
 							suggestions={ recommendations.styles }
 							label="AI filter suggestions"
+						/>
+						<SubPanelSuggestions
+							group="background"
+							panel="background"
+							clientId={ clientId }
+							suggestions={ recommendations.styles }
+							label="AI background suggestions"
 						/>
 					</>
 				) }

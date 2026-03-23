@@ -9,6 +9,7 @@ use FlavorAgent\OpenAI\Provider;
 final class ResponsesClient {
 
 	private const REASONING_EFFORT = 'high';
+	private const REQUEST_TIMEOUT  = 90;
 
 	public static function validate_configuration(
 		?string $endpoint = null,
@@ -93,14 +94,19 @@ final class ResponsesClient {
 		$response = wp_remote_post(
 			$url,
 			[
-				'timeout' => 30,
+				'timeout' => self::REQUEST_TIMEOUT,
 				'headers' => $headers,
 				'body'    => $body,
 			]
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return ConfigurationValidator::normalize_transport_error(
+				$response,
+				$label,
+				$url,
+				self::REQUEST_TIMEOUT
+			);
 		}
 
 		$status = wp_remote_retrieve_response_code( $response );

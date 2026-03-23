@@ -120,5 +120,48 @@ final class RegistrationTest extends TestCase {
 			'visiblePatternNames',
 			$ability['input_schema']['properties'] ?? []
 		);
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['editorSlots']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['editorSlots']['properties']['assignedParts']['items']['properties']['slug']['type'] ?? null
+		);
+	}
+
+	public function test_register_abilities_exposes_template_part_recommendation_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-template-part'] ?? null;
+
+		$this->assertIsArray( $ability );
+		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
+		$this->assertSame( [ 'templatePartRef' ], $ability['input_schema']['required'] ?? null );
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['templatePartRef']['type'] ?? null
+		);
+
+		$suggestion = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
+
+		$this->assertIsArray( $suggestion );
+		$this->assertSame(
+			'array',
+			$suggestion['properties']['blockHints']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$suggestion['properties']['blockHints']['items']['properties']['path']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['blockHints']['items']['properties']['blockName']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['patternSuggestions']['items']['type'] ?? null
+		);
 	}
 }

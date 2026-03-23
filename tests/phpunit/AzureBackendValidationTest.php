@@ -132,6 +132,7 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 'system prompt', $request_body['instructions'] ?? null );
 		$this->assertSame( 'user prompt', $request_body['input'] ?? null );
 		$this->assertSame( 'high', $request_body['reasoning']['effort'] ?? null );
+		$this->assertSame( 90, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
 	}
 
 	public function test_rank_extracts_text_from_later_output_item(): void {
@@ -232,6 +233,105 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertIsArray( $request_body );
 		$this->assertSame( 'gpt-5.4', $request_body['model'] ?? null );
 		$this->assertSame( 'high', $request_body['reasoning']['effort'] ?? null );
+	}
+
+	public function test_openai_native_rank_falls_back_to_connector_key(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_openai_provider'          => 'openai_native',
+			'connectors_ai_openai_api_key'          => 'connector-key',
+			'flavor_agent_openai_native_chat_model' => 'gpt-5.4',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => 'connector ranked output',
+				]
+			),
+		];
+
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
+
+		$this->assertSame( 'connector ranked output', $result );
+		$this->assertSame( 'https://api.openai.com/v1/responses', WordPressTestState::$last_remote_post['url'] );
+		$this->assertSame(
+			'Bearer connector-key',
+			WordPressTestState::$last_remote_post['args']['headers']['Authorization'] ?? null
+		);
+	}
+
+	public function test_openai_native_rank_falls_back_to_openai_env_var(): void {
+		putenv( 'OPENAI_API_KEY=env-native-key' );
+
+		try {
+			WordPressTestState::$options              = [
+				'flavor_agent_openai_provider'          => 'openai_native',
+				'flavor_agent_openai_native_chat_model' => 'gpt-5.4',
+			];
+			WordPressTestState::$remote_post_response = [
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'output_text' => 'env ranked output',
+					]
+				),
+			];
+
+			$result = ResponsesClient::rank( 'env system prompt', 'env user prompt' );
+
+			$this->assertSame( 'env ranked output', $result );
+			$this->assertSame(
+				'Bearer env-native-key',
+				WordPressTestState::$last_remote_post['args']['headers']['Authorization'] ?? null
+			);
+		} finally {
+			putenv( 'OPENAI_API_KEY' );
+		}
+	}
+
+	public function test_rank_wraps_transport_timeout_with_backend_context(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+		];
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'cURL error 28: Operation timed out after 30002 milliseconds with 0 bytes received'
+		);
+
+		$result = ResponsesClient::rank( 'system prompt', 'user prompt' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'http_request_failed', $result->get_error_code() );
+		$this->assertStringContainsString(
+			'Azure OpenAI responses request timed out after 90 seconds while contacting example.openai.azure.com.',
+			$result->get_error_message()
+		);
+	}
+
+	public function test_embedding_validation_wraps_transport_timeout_with_backend_context(): void {
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'cURL error 28: Operation timed out after 30002 milliseconds with 0 bytes received'
+		);
+
+		$result = EmbeddingClient::validate_configuration(
+			'https://example.openai.azure.com/',
+			'azure-key',
+			'embed-deployment'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'http_request_failed', $result->get_error_code() );
+		$this->assertStringContainsString(
+			'Azure OpenAI embeddings request timed out after 30 seconds while contacting example.openai.azure.com.',
+			$result->get_error_message()
+		);
 	}
 
 	public function test_embedding_validation_rejects_responses_payload_shape(): void {

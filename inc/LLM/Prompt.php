@@ -13,7 +13,7 @@ final class Prompt {
 		return <<<'SYSTEM'
 You are a WordPress Gutenberg block styling and configuration assistant.
 
-You receive a block's current state, its available Inspector panels (what it supports), its resolved structural identity and surrounding branch context, and the active theme's design tokens (colors, duotone presets, fonts, spacing, shadows).
+You receive a block's current state, its available Inspector panels (what it supports), its resolved structural identity and surrounding branch context, and the active theme's design tokens (colors, duotone presets, fonts, spacing, shadows, feature flags, and global element styles).
 
 Your job: suggest specific, actionable attribute changes that improve the block's appearance and configuration. Every suggestion must use the theme's actual preset slugs and CSS custom properties — never raw hex codes or pixel values unless the theme has no presets.
 
@@ -57,9 +57,11 @@ Rules:
 - If a block only exposes content through supports.contentRole inner blocks and has no direct content attributes, do not suggest direct wrapper attribute changes.
 - You may suggest viewport visibility rules: { "metadata": { "blockVisibility": { "viewport": { "mobile": false } } } } to show/hide the block on specific devices.
 - If theme pseudo-class styles (:hover, :focus, :active, :focus-visible) are provided for a block, use them when suggesting interactive state styles.
+- Treat themeTokens.enabledFeatures and themeTokens.layout as hard capability constraints. Avoid suggesting controls the theme has disabled or locked.
 - For style objects in attributeUpdates, use the nested style format:
   { "style": { "color": { "background": "var(--wp--preset--color--accent)" } } }
   or preset attributes like { "backgroundColor": "accent" }.
+- For duotone, use style.color.duotone. Preset references must use the canonical format "var:preset|duotone|{slug}".
 - When a block supports both aspect ratio and explicit height, never suggest setting both in the same recommendation. Choose aspectRatio or height/minHeight, not both.
 - Preserve Gutenberg attribute key casing exactly in attributeUpdates (for example, backgroundColor and metadata.blockVisibility).
 - If suggesting a registered style variation, use "type": "style_variation" and include the exact attributeUpdates needed to activate it.
@@ -85,6 +87,10 @@ SYSTEM;
 
 		if ( ! empty( $block['currentAttributes'] ) ) {
 			$parts[] = 'Current attributes: ' . wp_json_encode( $block['currentAttributes'] );
+		}
+
+		if ( ! empty( $block['currentAttributes']['metadata']['bindings'] ) ) {
+			$parts[] = 'Block bindings: ' . wp_json_encode( $block['currentAttributes']['metadata']['bindings'] );
 		}
 
 		if ( ! empty( $block['supportsContentRole'] ) ) {
@@ -190,8 +196,20 @@ SYSTEM;
 			$parts[] = 'Duotone presets: ' . implode( ', ', (array) $tokens['duotone'] );
 		}
 
+		if ( ! empty( $tokens['duotonePresets'] ) ) {
+			$parts[] = 'Duotone preset details: ' . wp_json_encode( $tokens['duotonePresets'] );
+		}
+
 		if ( ! empty( $tokens['layout'] ) ) {
 			$parts[] = 'Layout: ' . wp_json_encode( $tokens['layout'] );
+		}
+
+		if ( ! empty( $tokens['enabledFeatures'] ) ) {
+			$parts[] = 'Theme feature flags: ' . wp_json_encode( $tokens['enabledFeatures'] );
+		}
+
+		if ( ! empty( $tokens['elementStyles'] ) ) {
+			$parts[] = 'Global element styles: ' . wp_json_encode( $tokens['elementStyles'] );
 		}
 
 		if ( ! empty( $tokens['blockPseudoStyles'] ) ) {

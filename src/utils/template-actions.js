@@ -397,7 +397,7 @@ function prepareTemplatePartOperation(
 
 	if ( ! block ) {
 		return {
-			error: `Could not find a template-part block for the “${ area }” area.`,
+			error: `The template no longer has a live template-part block for the “${ area }” area. Regenerate recommendations and try again.`,
 		};
 	}
 
@@ -1016,6 +1016,27 @@ export function findBlockBySlug( slug ) {
 		getBlocks(),
 		( b ) => b.attributes?.slug === slug
 	);
+}
+
+/**
+ * Select and scroll-to a block by its current structural path.
+ *
+ * @param {number[]} path Block path from the current editor root.
+ * @return {boolean} Whether a matching block was selected.
+ */
+export function selectBlockByPath( path ) {
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
+		return false;
+	}
+
+	const block = getBlockByPath( getBlocks(), path );
+
+	if ( block?.clientId ) {
+		dispatch( blockEditorStore ).selectBlock( block.clientId );
+		return true;
+	}
+
+	return false;
 }
 
 /* ------------------------------------------------------------------ */

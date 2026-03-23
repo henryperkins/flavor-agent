@@ -260,8 +260,11 @@ final class BlockAbilities {
 			'fontFamilies'      => StringArray::sanitize( $tokens['fontFamilies'] ?? [] ),
 			'spacing'           => StringArray::sanitize( $tokens['spacing'] ?? [] ),
 			'shadows'           => StringArray::sanitize( $tokens['shadows'] ?? [] ),
+			'duotone'           => StringArray::sanitize( $tokens['duotone'] ?? [] ),
+			'duotonePresets'    => self::normalize_list( $tokens['duotonePresets'] ?? [] ),
 			'layout'            => self::normalize_map( $tokens['layout'] ?? [] ),
 			'enabledFeatures'   => self::normalize_map( $tokens['enabledFeatures'] ?? [] ),
+			'elementStyles'     => self::normalize_map( $tokens['elementStyles'] ?? [] ),
 			'blockPseudoStyles' => self::normalize_map( $tokens['blockPseudoStyles'] ?? [] ),
 		];
 	}

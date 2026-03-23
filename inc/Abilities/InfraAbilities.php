@@ -17,19 +17,18 @@ final class InfraAbilities {
 
 	public static function check_status( mixed $input ): array {
 		$block_recommendations_configured = WordPressAIClient::is_supported();
+		$native_embedding_config          = Provider::embedding_configuration( Provider::NATIVE );
+		$native_chat_config               = Provider::chat_configuration( Provider::NATIVE );
 		$azure_endpoint                   = get_option( 'flavor_agent_azure_openai_endpoint', '' );
 		$azure_key                        = get_option( 'flavor_agent_azure_openai_key', '' );
 		$azure_embedding                  = get_option( 'flavor_agent_azure_embedding_deployment', '' );
 		$azure_chat                       = get_option( 'flavor_agent_azure_chat_deployment', '' );
-		$openai_native_key                = get_option( 'flavor_agent_openai_native_api_key', '' );
-		$openai_native_embedding          = get_option( 'flavor_agent_openai_native_embedding_model', '' );
-		$openai_native_chat               = get_option( 'flavor_agent_openai_native_chat_model', '' );
 		$qdrant_url                       = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key                       = get_option( 'flavor_agent_qdrant_key', '' );
 		$cloudflare_ai_search_id          = get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' );
 
 		$azure_chat_configured         = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_chat );
-		$openai_native_chat_configured = ! empty( $openai_native_key ) && ! empty( $openai_native_chat );
+		$openai_native_chat_configured = $native_chat_config['configured'];
 		$qdrant_configured             = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
 		$cloudflare_configured         = AISearchClient::is_configured();
 		$active_chat_configured        = Provider::chat_configured();
@@ -58,8 +57,8 @@ final class InfraAbilities {
 				],
 				'openai_native'        => [
 					'configured'     => $openai_native_chat_configured,
-					'chatModel'      => $openai_native_chat_configured ? $openai_native_chat : null,
-					'embeddingModel' => ! empty( $openai_native_embedding ) ? $openai_native_embedding : null,
+					'chatModel'      => $openai_native_chat_configured ? $native_chat_config['model'] : null,
+					'embeddingModel' => ! empty( $native_embedding_config['model'] ) ? $native_embedding_config['model'] : null,
 				],
 				'qdrant'               => [
 					'configured' => $qdrant_configured,
@@ -107,6 +106,7 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-block', 'edit_posts', $block_recommendations_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-patterns', 'edit_posts', $pattern_provider_configured && $qdrant_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template', 'edit_theme_options', $chat_configured );
+		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template-part', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/search-wordpress-docs', WordPressDocsAbilities::REQUIRED_CAPABILITY, $cloudflare_configured );
 
 		return $abilities;

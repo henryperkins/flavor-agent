@@ -315,7 +315,7 @@ final class Settings {
 				'option'      => 'flavor_agent_openai_native_api_key',
 				'type'        => 'password',
 				'placeholder' => 'sk-...',
-				'description' => 'Your OpenAI API key. Flavor Agent uses the official OpenAI API at <code>https://api.openai.com/v1</code> when this provider is selected.',
+				'description' => 'Optional override for the OpenAI API key. Leave blank to inherit the core OpenAI connector key from <code>Settings &gt; Connectors</code> or <code>OPENAI_API_KEY</code>. Flavor Agent uses <code>https://api.openai.com/v1</code> when this provider is selected.',
 			]
 		);
 		add_settings_field(
@@ -488,7 +488,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Used when the provider is set to OpenAI Native. Flavor Agent sends requests directly to the official OpenAI Responses and Embeddings APIs.',
+				'Used when the provider is set to OpenAI Native. Flavor Agent sends requests directly to the official OpenAI Responses and Embeddings APIs. The API key can be stored here as a plugin-specific override or inherited from Settings > Connectors while model IDs remain plugin-managed.',
 				'flavor-agent'
 			)
 		);
@@ -859,6 +859,9 @@ final class Settings {
 			$values[ $option_name ] = sanitize_text_field( $override_value );
 		}
 
+		$current_effective_api_key = Provider::native_effective_api_key( $current_values );
+		$effective_api_key         = Provider::native_effective_api_key( $values );
+
 		if ( ! self::should_validate_provider_submission() ) {
 			return $values;
 		}
@@ -868,18 +871,24 @@ final class Settings {
 		}
 
 		if (
-			'' === $values['flavor_agent_openai_native_api_key'] ||
+			'' === $effective_api_key ||
 			'' === $values['flavor_agent_openai_native_embedding_model'] ||
 			'' === $values['flavor_agent_openai_native_chat_model']
 		) {
 			return $values;
 		}
 
-		if ( ! self::values_require_validation( $values, $current_values ) ) {
+		$comparison_values                                       = $values;
+		$comparison_values['flavor_agent_openai_native_api_key'] = $effective_api_key;
+
+		$current_comparison_values                                       = $current_values;
+		$current_comparison_values['flavor_agent_openai_native_api_key'] = $current_effective_api_key;
+
+		if ( ! self::values_require_validation( $comparison_values, $current_comparison_values ) ) {
 			return $values;
 		}
 
-		$fingerprint = self::build_validation_fingerprint( $values );
+		$fingerprint = self::build_validation_fingerprint( $comparison_values );
 
 		if (
 			is_array( self::$native_openai_validation_state ) &&
@@ -892,7 +901,7 @@ final class Settings {
 
 		$validation = EmbeddingClient::validate_configuration(
 			null,
-			$values['flavor_agent_openai_native_api_key'],
+			$effective_api_key,
 			$values['flavor_agent_openai_native_embedding_model'],
 			Provider::NATIVE
 		);
@@ -900,7 +909,7 @@ final class Settings {
 		if ( ! is_wp_error( $validation ) ) {
 			$validation = ResponsesClient::validate_configuration(
 				null,
-				$values['flavor_agent_openai_native_api_key'],
+				$effective_api_key,
 				$values['flavor_agent_openai_native_chat_model'],
 				Provider::NATIVE
 			);

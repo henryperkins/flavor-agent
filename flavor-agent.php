@@ -63,6 +63,7 @@ foreach ( [
 	'flavor_agent_openai_native_api_key',
 	'flavor_agent_openai_native_embedding_model',
 	'flavor_agent_openai_native_chat_model',
+	'connectors_ai_openai_api_key',
 	'flavor_agent_qdrant_url',
 	'flavor_agent_qdrant_key',
 	'home',
@@ -168,6 +169,7 @@ function flavor_agent_enqueue_editor(): void {
 				&& get_option( 'flavor_agent_qdrant_key' )
 			),
 			'canRecommendTemplates' => Provider::chat_configured(),
+			'canRecommendTemplateParts' => Provider::chat_configured(),
 			'templatePartAreas'     => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
 		]
 	);

@@ -10,7 +10,9 @@ final class Provider {
 	public const AZURE       = 'azure_openai';
 	public const NATIVE      = 'openai_native';
 
-	private const NATIVE_BASE_URL = 'https://api.openai.com';
+	private const CONNECTOR_OPENAI_OPTION = 'connectors_ai_openai_api_key';
+	private const NATIVE_API_KEY_ENV_VAR  = 'OPENAI_API_KEY';
+	private const NATIVE_BASE_URL         = 'https://api.openai.com';
 
 	/**
 	 * @return array<string, string>
@@ -52,6 +54,41 @@ final class Provider {
 	}
 
 	/**
+	 * Resolve the effective OpenAI native API key.
+	 *
+	 * Flavor Agent prefers its own saved key for backward compatibility, but will
+	 * fall back to the core OpenAI connector lifecycle when the plugin-specific key
+	 * is blank.
+	 *
+	 * @param array<string, string> $overrides
+	 */
+	public static function native_effective_api_key( array $overrides = [] ): string {
+		if ( array_key_exists( 'flavor_agent_openai_native_api_key', $overrides ) ) {
+			$api_key = (string) $overrides['flavor_agent_openai_native_api_key'];
+		} else {
+			$api_key = (string) get_option( 'flavor_agent_openai_native_api_key', '' );
+		}
+
+		if ( '' !== $api_key ) {
+			return $api_key;
+		}
+
+		$api_key = getenv( self::NATIVE_API_KEY_ENV_VAR );
+		if ( false !== $api_key && '' !== $api_key ) {
+			return (string) $api_key;
+		}
+
+		if ( defined( self::NATIVE_API_KEY_ENV_VAR ) ) {
+			$constant_value = constant( self::NATIVE_API_KEY_ENV_VAR );
+			if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
+				return (string) $constant_value;
+			}
+		}
+
+		return (string) get_option( self::CONNECTOR_OPENAI_OPTION, '' );
+	}
+
+	/**
 	 * @param array<string, string> $overrides
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
@@ -59,7 +96,7 @@ final class Provider {
 		$provider = self::normalize_provider( $provider ?? self::get() );
 
 		if ( self::is_native( $provider ) ) {
-			$api_key = self::option_value( $overrides, 'flavor_agent_openai_native_api_key' );
+			$api_key = self::native_effective_api_key( $overrides );
 			$model   = self::option_value( $overrides, 'flavor_agent_openai_native_chat_model' );
 
 			return [
@@ -98,7 +135,7 @@ final class Provider {
 		$provider = self::normalize_provider( $provider ?? self::get() );
 
 		if ( self::is_native( $provider ) ) {
-			$api_key = self::option_value( $overrides, 'flavor_agent_openai_native_api_key' );
+			$api_key = self::native_effective_api_key( $overrides );
 			$model   = self::option_value( $overrides, 'flavor_agent_openai_native_embedding_model' );
 
 			return [

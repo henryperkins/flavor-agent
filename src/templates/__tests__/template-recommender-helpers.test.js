@@ -1,5 +1,6 @@
 import {
 	buildEntityMap,
+	buildEditorTemplateSlotSnapshot,
 	buildTemplateFetchInput,
 	buildTemplateOperationViewModel,
 	buildTemplateSuggestionViewModel,
@@ -20,11 +21,21 @@ describe( 'template recommender helpers', () => {
 				templateRef: 'theme//single',
 				templateType: 'single',
 				prompt: '  Tighten the footer layout.  ',
+				editorSlots: {
+					assignedParts: [ { slug: 'site-header', area: 'header' } ],
+					emptyAreas: [ 'footer' ],
+					allowedAreas: [ 'header', 'footer' ],
+				},
 			} )
 		).toEqual( {
 			templateRef: 'theme//single',
 			templateType: 'single',
 			prompt: 'Tighten the footer layout.',
+			editorSlots: {
+				assignedParts: [ { slug: 'site-header', area: 'header' } ],
+				emptyAreas: [ 'footer' ],
+				allowedAreas: [ 'header', 'footer' ],
+			},
 		} );
 	} );
 
@@ -36,6 +47,42 @@ describe( 'template recommender helpers', () => {
 		} );
 
 		expect( input ).toEqual( { templateRef: 'theme//index' } );
+	} );
+
+	test( 'buildEditorTemplateSlotSnapshot mirrors live template-part slots from the editor tree', () => {
+		expect(
+			buildEditorTemplateSlotSnapshot(
+				[
+					{
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [
+							{
+								name: 'core/template-part',
+								attributes: {
+									slug: 'site-header',
+								},
+								innerBlocks: [],
+							},
+						],
+					},
+					{
+						name: 'core/template-part',
+						attributes: {
+							area: 'footer',
+						},
+						innerBlocks: [],
+					},
+				],
+				{
+					'site-header': 'header',
+				}
+			)
+		).toEqual( {
+			assignedParts: [ { slug: 'site-header', area: 'header' } ],
+			emptyAreas: [ 'footer' ],
+			allowedAreas: [ 'footer', 'header' ],
+		} );
 	} );
 
 	test( 'buildTemplateOperationViewModel normalizes supported operation types', () => {

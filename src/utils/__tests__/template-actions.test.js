@@ -307,6 +307,37 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'prepareTemplateSuggestionOperations surfaces a stale live-template error when the target area no longer exists', () => {
+		setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'tp-footer',
+					name: 'core/template-part',
+					attributes: {
+						slug: 'footer',
+						area: 'footer',
+					},
+					innerBlocks: [],
+				},
+			],
+		} );
+
+		const result = prepareTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'assign_template_part',
+					slug: 'header-minimal',
+					area: 'header',
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'The template no longer has a live template-part block for the “header” area. Regenerate recommendations and try again.',
+		} );
+	} );
+
 	test( 'applyTemplateSuggestionOperations executes updates in order and records a stable inserted snapshot', () => {
 		const {
 			blockEditorDispatch: {

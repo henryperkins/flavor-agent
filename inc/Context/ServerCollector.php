@@ -152,7 +152,11 @@ final class ServerCollector {
 
 		$gradients = [];
 		foreach ( self::merge_presets( $settings['color']['gradients'] ?? [] ) as $g ) {
-			$gradients[] = $g['slug'] ?? '';
+			$slug        = (string) ( $g['slug'] ?? '' );
+			$gradient    = (string) ( $g['gradient'] ?? '' );
+			$gradients[] = $gradient !== ''
+				? "{$slug}: {$gradient}"
+				: $slug;
 		}
 
 		$font_sizes = [];
@@ -198,20 +202,35 @@ final class ServerCollector {
 			'spacing'           => $spacing,
 			'shadows'           => $shadows,
 			'duotone'           => $duotone,
+			'duotonePresets'    => array_map(
+				static fn( array $preset ): array => [
+					'slug'   => (string) ( $preset['slug'] ?? '' ),
+					'colors' => is_array( $preset['colors'] ?? null ) ? array_values( $preset['colors'] ) : [],
+				],
+				self::merge_presets( $settings['color']['duotone'] ?? [] )
+			),
 			'layout'            => [
-				'content' => $settings['layout']['contentSize'] ?? '',
-				'wide'    => $settings['layout']['wideSize'] ?? '',
+				'content'                       => $settings['layout']['contentSize'] ?? '',
+				'wide'                          => $settings['layout']['wideSize'] ?? '',
+				'allowEditing'                  => $settings['layout']['allowEditing'] ?? true,
+				'allowCustomContentAndWideSize' => $settings['layout']['allowCustomContentAndWideSize'] ?? true,
 			],
 			'enabledFeatures'   => [
-				'lineHeight'   => $settings['typography']['lineHeight'] ?? false,
-				'dropCap'      => $settings['typography']['dropCap'] ?? true,
-				'customColors' => $settings['color']['custom'] ?? true,
-				'linkColor'    => $settings['color']['link'] ?? false,
-				'margin'       => $settings['spacing']['margin'] ?? false,
-				'padding'      => $settings['spacing']['padding'] ?? false,
-				'borderColor'  => $settings['border']['color'] ?? false,
-				'borderRadius' => $settings['border']['radius'] ?? false,
+				'lineHeight'      => $settings['typography']['lineHeight'] ?? false,
+				'dropCap'         => $settings['typography']['dropCap'] ?? true,
+				'customColors'    => $settings['color']['custom'] ?? true,
+				'linkColor'       => $settings['color']['link'] ?? false,
+				'margin'          => $settings['spacing']['margin'] ?? false,
+				'padding'         => $settings['spacing']['padding'] ?? false,
+				'blockGap'        => $settings['spacing']['blockGap'] ?? null,
+				'borderColor'     => $settings['border']['color'] ?? false,
+				'borderRadius'    => $settings['border']['radius'] ?? false,
+				'borderStyle'     => $settings['border']['style'] ?? false,
+				'borderWidth'     => $settings['border']['width'] ?? false,
+				'backgroundImage' => $settings['background']['backgroundImage'] ?? false,
+				'backgroundSize'  => $settings['background']['backgroundSize'] ?? false,
 			],
+			'elementStyles'     => self::collect_element_styles( $global_styles ),
 			'blockPseudoStyles' => self::collect_block_pseudo_styles( $global_styles ),
 		];
 	}
@@ -308,6 +327,77 @@ final class ServerCollector {
 	}
 
 	/**
+	 * Assemble context for a single template-part document.
+	 *
+	 * @param string $template_part_ref Template-part identifier from the Site Editor.
+	 * @return array|\WP_Error Template-part context or error.
+	 */
+	public static function for_template_part( string $template_part_ref ): array|\WP_Error {
+		$template_part = self::resolve_template_part( $template_part_ref );
+
+		if ( ! $template_part ) {
+			return new \WP_Error(
+				'template_part_not_found',
+				'Could not resolve the current template part from the Site Editor context.',
+				[ 'status' => 404 ]
+			);
+		}
+
+		$content          = (string) ( $template_part->content ?? '' );
+		$slug             = sanitize_key( (string) ( $template_part->slug ?? '' ) );
+		$area             = sanitize_key( (string) ( $template_part->area ?? '' ) );
+		$title_source     = (string) ( $template_part->title ?? '' );
+		$title            = sanitize_text_field(
+			$title_source !== ''
+				? $title_source
+				: ( $slug !== '' ? $slug : $template_part_ref )
+		);
+		$blocks           = parse_blocks( $content );
+		$block_tree       = self::summarize_template_part_block_tree( $blocks );
+		$top_level_blocks = array_values(
+			array_filter(
+				array_map(
+					static fn( array $block ): string => (string) ( $block['blockName'] ?? '' ),
+					array_filter( $blocks, 'is_array' )
+				),
+				static fn( string $name ): bool => $name !== ''
+			)
+		);
+		$summary_stats    = self::collect_template_part_block_stats( $blocks );
+		$block_counts     = $summary_stats['blockCounts'];
+
+		return [
+			'templatePartRef' => self::resolve_template_part_ref( $template_part_ref, $template_part ),
+			'slug'            => $slug,
+			'title'           => $title !== '' ? $title : $template_part_ref,
+			'area'            => $area,
+			'blockTree'       => $block_tree,
+			'topLevelBlocks'  => $top_level_blocks,
+			'blockCounts'     => $block_counts,
+			'structureStats'  => [
+				'blockCount'           => $summary_stats['blockCount'],
+				'maxDepth'             => $summary_stats['maxDepth'],
+				'hasNavigation'        => ! empty( $block_counts['core/navigation'] ),
+				'containsLogo'         => ! empty( $block_counts['core/site-logo'] ),
+				'containsSiteTitle'    => ! empty( $block_counts['core/site-title'] ),
+				'containsSearch'       => ! empty( $block_counts['core/search'] ),
+				'containsSocialLinks'  => ! empty( $block_counts['core/social-links'] ),
+				'containsQuery'        => ! empty( $block_counts['core/query'] ),
+				'containsColumns'      => ! empty( $block_counts['core/columns'] ),
+				'containsButtons'      => ! empty( $block_counts['core/buttons'] ),
+				'containsSpacer'       => ! empty( $block_counts['core/spacer'] ),
+				'containsSeparator'    => ! empty( $block_counts['core/separator'] ),
+				'firstTopLevelBlock'   => $top_level_blocks[0] ?? '',
+				'lastTopLevelBlock'    => count( $top_level_blocks ) > 0 ? $top_level_blocks[ count( $top_level_blocks ) - 1 ] : '',
+				'hasSingleWrapperGroup' => count( $top_level_blocks ) === 1 && $top_level_blocks[0] === 'core/group',
+				'isNearlyEmpty'        => $summary_stats['blockCount'] <= 1,
+			],
+			'patterns'        => self::collect_template_part_candidate_patterns( $area ),
+			'themeTokens'     => self::for_tokens(),
+		];
+	}
+
+	/**
 	 * Return a normalized slug => area map for registered template parts.
 	 *
 	 * @return array<string, string>
@@ -331,6 +421,48 @@ final class ServerCollector {
 		}
 
 		return $lookup;
+	}
+
+	/**
+	 * Resolve a template-part object from a canonical ref or slug.
+	 *
+	 * @param string $template_part_ref Template-part identifier from the Site Editor.
+	 * @return object|null
+	 */
+	private static function resolve_template_part( string $template_part_ref ): ?object {
+		$template_part = null;
+
+		if ( str_contains( $template_part_ref, '//' ) ) {
+			$template_part = get_block_template( $template_part_ref, 'wp_template_part' );
+		}
+
+		if ( ! $template_part ) {
+			$slug           = self::extract_template_part_slug( $template_part_ref );
+			$template_parts = $slug !== ''
+				? get_block_templates( [ 'slug__in' => [ $slug ] ], 'wp_template_part' )
+				: [];
+			$template_part  = $template_parts[0] ?? null;
+		}
+
+		return is_object( $template_part ) ? $template_part : null;
+	}
+
+	private static function extract_template_part_slug( string $template_part_ref ): string {
+		return str_contains( $template_part_ref, '//' )
+			? substr( $template_part_ref, strpos( $template_part_ref, '//' ) + 2 )
+			: $template_part_ref;
+	}
+
+	private static function resolve_template_part_ref( string $requested_ref, object $template_part ): string {
+		$resolved_id = (string) ( $template_part->id ?? '' );
+
+		if ( $resolved_id !== '' ) {
+			return $resolved_id;
+		}
+
+		return $requested_ref !== ''
+			? $requested_ref
+			: (string) ( $template_part->slug ?? '' );
 	}
 
 	/**
@@ -565,6 +697,326 @@ final class ServerCollector {
 		return array_slice( array_merge( $typed, $generic ), 0, $max_candidates );
 	}
 
+	/**
+	 * Collect candidate patterns for a template-part area.
+	 *
+	 * Strong area matches sort first, followed by generic fallback patterns.
+	 * Pattern content is removed to avoid prompt bloat.
+	 *
+	 * @param string|null $area Template-part area slug.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function collect_template_part_candidate_patterns( ?string $area ): array {
+		$max_candidates = self::TEMPLATE_PATTERN_CANDIDATE_CAP;
+		$all_patterns   = self::for_patterns();
+		$area_key       = sanitize_key( (string) $area );
+		$area_terms     = self::template_part_area_terms( $area_key );
+		$matched        = [];
+		$generic        = [];
+		$unfiltered     = [];
+		$seen           = [];
+		$index          = 0;
+
+		foreach ( $all_patterns as $pattern ) {
+			$name = (string) ( $pattern['name'] ?? '' );
+
+			if ( $name === '' || isset( $seen[ $name ] ) ) {
+				continue;
+			}
+
+			unset( $pattern['content'] );
+			$pattern['_sortIndex'] = $index++;
+
+			if ( $area_key === '' ) {
+				$unfiltered[]  = $pattern;
+				$seen[ $name ] = true;
+				continue;
+			}
+
+			$score = self::score_template_part_pattern_candidate(
+				$pattern,
+				$area_key,
+				$area_terms
+			);
+
+			if ( $score > 0 ) {
+				$pattern['matchType']  = 'area';
+				$pattern['_sortScore'] = $score;
+				$matched[]             = $pattern;
+				$seen[ $name ]         = true;
+				continue;
+			}
+
+			$block_types   = $pattern['blockTypes'] ?? [];
+			$template_types = $pattern['templateTypes'] ?? [];
+			if (
+				( ! is_array( $block_types ) || count( $block_types ) === 0 ) &&
+				( ! is_array( $template_types ) || count( $template_types ) === 0 )
+			) {
+				$pattern['matchType'] = 'generic';
+				$generic[]            = $pattern;
+				$seen[ $name ]        = true;
+			}
+		}
+
+		$sort_candidates = static function ( array &$candidates ): void {
+			usort(
+				$candidates,
+				static function ( array $left, array $right ): int {
+					$score_compare = (int) ( $right['_sortScore'] ?? 0 ) <=> (int) ( $left['_sortScore'] ?? 0 );
+
+					if ( 0 !== $score_compare ) {
+						return $score_compare;
+					}
+
+					return (int) ( $left['_sortIndex'] ?? 0 ) <=> (int) ( $right['_sortIndex'] ?? 0 );
+				}
+			);
+		};
+
+		$strip_sort_fields = static function ( array $pattern ): array {
+			unset( $pattern['_sortIndex'], $pattern['_sortScore'] );
+			return $pattern;
+		};
+
+		if ( $area_key === '' ) {
+			return array_map(
+				$strip_sort_fields,
+				array_slice( $unfiltered, 0, $max_candidates )
+			);
+		}
+
+		$sort_candidates( $matched );
+
+		return array_map(
+			$strip_sort_fields,
+			array_slice( array_merge( $matched, $generic ), 0, $max_candidates )
+		);
+	}
+
+	/**
+	 * @return string[]
+	 */
+	private static function template_part_area_terms( string $area ): array {
+		$map = [
+			'header'             => [ 'header', 'masthead' ],
+			'footer'             => [ 'footer' ],
+			'sidebar'            => [ 'sidebar', 'aside' ],
+			'navigation-overlay' => [ 'navigation overlay', 'overlay', 'navigation' ],
+		];
+
+		if ( isset( $map[ $area ] ) ) {
+			return $map[ $area ];
+		}
+
+		if ( $area === '' ) {
+			return [];
+		}
+
+		$spaced = str_replace( '-', ' ', $area );
+
+		return array_values(
+			array_unique(
+				array_filter(
+					[ $area, $spaced ],
+					static fn( string $term ): bool => $term !== ''
+				)
+			)
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $pattern
+	 */
+	private static function score_template_part_pattern_candidate( array $pattern, string $area, array $terms ): int {
+		$score       = 0;
+		$block_types = array_map(
+			static fn( string $value ): string => strtolower( trim( $value ) ),
+			array_filter(
+				array_map(
+					'strval',
+					is_array( $pattern['blockTypes'] ?? null ) ? $pattern['blockTypes'] : []
+				)
+			)
+		);
+
+		if ( in_array( 'core/template-part/' . $area, $block_types, true ) ) {
+			$score += 8;
+		}
+
+		if ( in_array( 'core/template-part', $block_types, true ) ) {
+			$score += 2;
+		}
+
+		$categories = is_array( $pattern['categories'] ?? null )
+			? array_map( 'strval', $pattern['categories'] )
+			: [];
+		$haystack   = strtolower(
+			implode(
+				' ',
+				array_filter(
+					[
+						(string) ( $pattern['name'] ?? '' ),
+						(string) ( $pattern['title'] ?? '' ),
+						(string) ( $pattern['description'] ?? '' ),
+						implode( ' ', $categories ),
+					]
+				)
+			)
+		);
+
+		foreach ( $terms as $term ) {
+			$normalized_term = strtolower( $term );
+
+			if ( $normalized_term === '' ) {
+				continue;
+			}
+
+			$matches = str_contains( $normalized_term, ' ' )
+				? str_contains( $haystack, $normalized_term )
+				: (bool) preg_match( '/\b' . preg_quote( $normalized_term, '/' ) . '\b/u', $haystack );
+
+			if ( $matches ) {
+				$score += 4;
+			}
+		}
+
+		if (
+			$area === 'navigation-overlay' &&
+			str_contains( $haystack, 'navigation' ) &&
+			str_contains( $haystack, 'overlay' )
+		) {
+			$score += 2;
+		}
+
+		return $score;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks Parsed block array from parse_blocks().
+	 * @param array<int, int>                  $path   Path from the template-part root.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function summarize_template_part_block_tree( array $blocks, array $path = [], int $depth = 0, int $max_depth = 3 ): array {
+		$tree = [];
+
+		foreach ( $blocks as $index => $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = (string) ( $block['blockName'] ?? '' );
+
+			if ( $name === '' ) {
+				continue;
+			}
+
+			$next_path    = array_merge( $path, [ (int) $index ] );
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+			$children     = [];
+
+			if ( $depth + 1 < $max_depth && count( $inner_blocks ) > 0 ) {
+				$children = self::summarize_template_part_block_tree(
+					$inner_blocks,
+					$next_path,
+					$depth + 1,
+					$max_depth
+				);
+			}
+
+			$tree[] = [
+				'path'       => $next_path,
+				'name'       => $name,
+				'attributes' => self::summarize_template_part_block_attributes(
+					is_array( $block['attrs'] ?? null ) ? $block['attrs'] : []
+				),
+				'childCount' => count( $inner_blocks ),
+				'children'   => $children,
+			];
+		}
+
+		return $tree;
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes
+	 * @return array<string, scalar>
+	 */
+	private static function summarize_template_part_block_attributes( array $attributes ): array {
+		$summary = [];
+		$fields  = [ 'tagName', 'align', 'overlayMenu', 'maxNestingLevel', 'showSubmenuIcon', 'placeholder' ];
+
+		foreach ( $fields as $field ) {
+			$value = $attributes[ $field ] ?? null;
+
+			if ( is_string( $value ) && $value !== '' ) {
+				$summary[ $field ] = $value;
+			} elseif ( is_int( $value ) || is_float( $value ) || is_bool( $value ) ) {
+				$summary[ $field ] = $value;
+			}
+		}
+
+		$layout = is_array( $attributes['layout'] ?? null ) ? $attributes['layout'] : [];
+
+		if ( isset( $layout['type'] ) && is_string( $layout['type'] ) && $layout['type'] !== '' ) {
+			$summary['layoutType'] = $layout['type'];
+		}
+
+		if ( isset( $layout['justifyContent'] ) && is_string( $layout['justifyContent'] ) && $layout['justifyContent'] !== '' ) {
+			$summary['layoutJustifyContent'] = $layout['justifyContent'];
+		}
+
+		if ( isset( $layout['orientation'] ) && is_string( $layout['orientation'] ) && $layout['orientation'] !== '' ) {
+			$summary['layoutOrientation'] = $layout['orientation'];
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks Parsed block array from parse_blocks().
+	 * @return array{blockCount: int, maxDepth: int, blockCounts: array<string, int>}
+	 */
+	private static function collect_template_part_block_stats( array $blocks ): array {
+		$stats = [
+			'blockCount' => 0,
+			'maxDepth'   => 0,
+			'blockCounts' => [],
+		];
+
+		self::walk_template_part_blocks( $blocks, 1, $stats );
+
+		return $stats;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>>          $blocks Parsed block array from parse_blocks().
+	 * @param array{blockCount: int, maxDepth: int, blockCounts: array<string, int>} $stats
+	 */
+	private static function walk_template_part_blocks( array $blocks, int $depth, array &$stats ): void {
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = (string) ( $block['blockName'] ?? '' );
+
+			if ( $name === '' ) {
+				continue;
+			}
+
+			++$stats['blockCount'];
+			$stats['maxDepth'] = max( $stats['maxDepth'], $depth );
+			$stats['blockCounts'][ $name ] = ( $stats['blockCounts'][ $name ] ?? 0 ) + 1;
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( count( $inner_blocks ) > 0 ) {
+				self::walk_template_part_blocks( $inner_blocks, $depth + 1, $stats );
+			}
+		}
+	}
+
 	private static function flatten_supports( array $obj, string $prefix = '' ): array {
 		$entries = [];
 		foreach ( $obj as $key => $val ) {
@@ -648,6 +1100,26 @@ final class ServerCollector {
 			if ( ! empty( $pseudos ) ) {
 				$result[ $block_name ] = $pseudos;
 			}
+		}
+
+		return $result;
+	}
+
+	private static function collect_element_styles( array $styles ): array {
+		$elements = $styles['elements'] ?? [];
+		$result   = [];
+
+		foreach ( $elements as $element => $style_def ) {
+			if ( ! is_array( $style_def ) ) {
+				continue;
+			}
+
+			$result[ $element ] = [
+				'base'         => is_array( $style_def['color'] ?? null ) ? $style_def['color'] : [],
+				'hover'        => is_array( $style_def[':hover']['color'] ?? null ) ? $style_def[':hover']['color'] : [],
+				'focus'        => is_array( $style_def[':focus']['color'] ?? null ) ? $style_def[':focus']['color'] : [],
+				'focusVisible' => is_array( $style_def[':focus-visible'] ?? null ) ? $style_def[':focus-visible'] : [],
+			];
 		}
 
 		return $result;

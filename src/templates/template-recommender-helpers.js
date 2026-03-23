@@ -1,4 +1,5 @@
 import { validateTemplateOperationSequence } from '../utils/template-operation-sequence';
+import { inferTemplatePartArea } from '../utils/template-part-areas';
 
 export const ENTITY_PART = 'part';
 export const ENTITY_AREA = 'area';
@@ -58,6 +59,7 @@ export function buildTemplateFetchInput( {
 	templateRef,
 	templateType,
 	prompt,
+	editorSlots,
 } ) {
 	const input = { templateRef };
 	const trimmedPrompt = prompt.trim();
@@ -70,7 +72,68 @@ export function buildTemplateFetchInput( {
 		input.prompt = trimmedPrompt;
 	}
 
+	if ( editorSlots ) {
+		input.editorSlots = editorSlots;
+	}
+
 	return input;
+}
+
+export function buildEditorTemplateSlotSnapshot(
+	blocks = [],
+	areaLookup
+) {
+	const assignedParts = [];
+	const emptyAreas = new Set();
+	const allowedAreas = new Set();
+
+	const visitBlocks = ( branch = [] ) => {
+		for ( const block of branch ) {
+			if ( block?.name === 'core/template-part' ) {
+				const attributes =
+					block && typeof block.attributes === 'object'
+						? block.attributes
+						: {};
+				const slug =
+					typeof attributes?.slug === 'string'
+						? attributes.slug.trim()
+						: '';
+				const area = inferTemplatePartArea( attributes, areaLookup );
+
+				if ( area ) {
+					allowedAreas.add( area );
+				}
+
+				if ( slug ) {
+					assignedParts.push( {
+						slug,
+						area,
+					} );
+				} else if ( area ) {
+					emptyAreas.add( area );
+				}
+			}
+
+			if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
+				visitBlocks( block.innerBlocks );
+			}
+		}
+	};
+
+	visitBlocks( blocks );
+
+	assignedParts.sort( ( left, right ) => {
+		const leftKey = `${ left.area || '' }|${ left.slug || '' }`;
+		const rightKey = `${ right.area || '' }|${ right.slug || '' }`;
+
+		return leftKey.localeCompare( rightKey );
+	} );
+
+	return {
+		assignedParts,
+		emptyAreas: [ ...emptyAreas ].sort(),
+		allowedAreas: [ ...allowedAreas ].sort(),
+	};
 }
 
 export function buildEntityMap( recommendations = [], patternTitleMap = {} ) {

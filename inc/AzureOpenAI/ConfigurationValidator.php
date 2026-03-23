@@ -6,6 +6,8 @@ namespace FlavorAgent\AzureOpenAI;
 
 final class ConfigurationValidator {
 
+	private const REQUEST_TIMEOUT = 30;
+
 	/**
 	 * @param array<string, mixed> $body
 	 * @param array<string, string> $headers
@@ -56,14 +58,19 @@ final class ConfigurationValidator {
 		$response = wp_remote_post(
 			$url,
 			[
-				'timeout' => 20,
+				'timeout' => self::REQUEST_TIMEOUT,
 				'headers' => $headers,
 				'body'    => $encoded_body,
 			]
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return self::normalize_transport_error(
+				$response,
+				$fallback_message,
+				$url,
+				self::REQUEST_TIMEOUT
+			);
 		}
 
 		$status = wp_remote_retrieve_response_code( $response );
@@ -99,6 +106,35 @@ final class ConfigurationValidator {
 		}
 
 		return true;
+	}
+
+	public static function normalize_transport_error( \WP_Error $error, string $label, string $url, int $timeout ): \WP_Error {
+		$message = $error->get_error_message();
+		$lower   = strtolower( $message );
+
+		if (
+			str_contains( $lower, 'curl error 28' )
+			|| str_contains( $lower, 'operation timed out' )
+		) {
+			$host = (string) parse_url( $url, PHP_URL_HOST );
+			$host = '' !== $host ? $host : $url;
+
+			return new \WP_Error(
+				$error->get_error_code(),
+				sprintf(
+					'%s request timed out after %d seconds while contacting %s. Check outbound HTTPS connectivity from this server, or increase the request timeout.',
+					$label,
+					$timeout,
+					$host
+				),
+				[
+					'status'  => 504,
+					'wrapped' => $message,
+				]
+			);
+		}
+
+		return $error;
 	}
 
 	/**

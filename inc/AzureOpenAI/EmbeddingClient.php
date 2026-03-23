@@ -8,6 +8,8 @@ use FlavorAgent\OpenAI\Provider;
 
 final class EmbeddingClient {
 
+	private const REQUEST_TIMEOUT = 60;
+
 	public static function validate_configuration(
 		?string $endpoint = null,
 		?string $api_key = null,
@@ -102,14 +104,19 @@ final class EmbeddingClient {
 		$response = wp_remote_post(
 			$url,
 			[
-				'timeout' => 30,
+				'timeout' => self::REQUEST_TIMEOUT,
 				'headers' => $headers,
 				'body'    => $body,
 			]
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return ConfigurationValidator::normalize_transport_error(
+				$response,
+				$label,
+				$url,
+				self::REQUEST_TIMEOUT
+			);
 		}
 
 		$status = wp_remote_retrieve_response_code( $response );

@@ -231,7 +231,9 @@ export function summarizeTokens( tokens ) {
 		colors: tokens.color.palette.map(
 			( c ) => `${ c.slug }: ${ c.color }`
 		),
-		gradients: tokens.color.gradients.map( ( g ) => g.slug ),
+		gradients: tokens.color.gradients.map( ( g ) =>
+			g.gradient ? `${ g.slug }: ${ g.gradient }` : g.slug
+		),
 		fontSizes: tokens.typography.fontSizes.map( ( fs ) => {
 			const fluid = fs.fluidSize
 				? ` (fluid: ${ JSON.stringify( fs.fluidSize ) })`
@@ -253,9 +255,16 @@ export function summarizeTokens( tokens ) {
 				: '';
 			return colors ? `${ preset.slug }: ${ colors }` : preset.slug;
 		} ),
+		duotonePresets: tokens.color.duotone.map( ( preset ) => ( {
+			slug: preset.slug,
+			colors: Array.isArray( preset.colors ) ? preset.colors : [],
+		} ) ),
 		layout: {
 			content: tokens.layout.contentSize,
 			wide: tokens.layout.wideSize,
+			allowEditing: tokens.layout.allowEditing,
+			allowCustomContentAndWideSize:
+				tokens.layout.allowCustomContentAndWideSize,
 		},
 		enabledFeatures: {
 			lineHeight: tokens.typography.lineHeight,
@@ -265,9 +274,15 @@ export function summarizeTokens( tokens ) {
 			fluid: tokens.typography.fluidTypography,
 			margin: tokens.spacing.margin,
 			padding: tokens.spacing.padding,
+			blockGap: tokens.spacing.blockGap,
 			borderColor: tokens.border.color,
 			borderRadius: tokens.border.radius,
+			borderStyle: tokens.border.style,
+			borderWidth: tokens.border.width,
+			backgroundImage: tokens.background.backgroundImage,
+			backgroundSize: tokens.background.backgroundSize,
 		},
+		elementStyles: tokens.elements,
 		blockPseudoStyles: tokens.blockPseudoStyles,
 	};
 }

@@ -116,6 +116,35 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'editorSlots'         => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/recommend-template-part',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'handle_recommend_template_part' ],
+				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'args'                => [
+					'templatePartRef' => [
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => static fn( $value ): bool => is_string( $value ) && $value !== '',
+					],
+					'prompt'          => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_textarea_field',
+					],
 				],
 			]
 		);
@@ -125,12 +154,50 @@ final class Agent_Controller {
 		return is_array( $value );
 	}
 
+	public static function validate_structured_value( $value ): bool {
+		return is_array( $value ) || is_object( $value );
+	}
+
 	/**
 	 * @param mixed $value
 	 * @return string[]
 	 */
 	public static function sanitize_string_array( $value ): array {
 		return StringArray::sanitize( $value );
+	}
+
+	public static function sanitize_structured_value( $value ): array {
+		$sanitized = self::normalize_structured_value( $value );
+
+		return is_array( $sanitized ) ? $sanitized : [];
+	}
+
+	private static function normalize_structured_value( $value ) {
+		if ( is_object( $value ) ) {
+			$value = get_object_vars( $value );
+		}
+
+		if ( is_array( $value ) ) {
+			$normalized = [];
+
+			foreach ( $value as $key => $entry ) {
+				$normalized[ $key ] = self::normalize_structured_value( $entry );
+			}
+
+			return $normalized;
+		}
+
+		if (
+			is_string( $value )
+			|| is_int( $value )
+			|| is_float( $value )
+			|| is_bool( $value )
+			|| null === $value
+		) {
+			return $value;
+		}
+
+		return null;
 	}
 
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
@@ -218,7 +285,34 @@ final class Agent_Controller {
 			$input['prompt'] = $prompt;
 		}
 
+		$editor_slots = $request->get_param( 'editorSlots' );
+		if ( is_array( $editor_slots ) || is_object( $editor_slots ) ) {
+			$input['editorSlots'] = self::sanitize_structured_value( $editor_slots );
+		}
+
 		$result = TemplateAbilities::recommend_template( $input );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * Handle POST /recommend-template-part with a thin ability adapter.
+	 */
+	public static function handle_recommend_template_part( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$input = [
+			'templatePartRef' => $request->get_param( 'templatePartRef' ),
+		];
+
+		$prompt = $request->get_param( 'prompt' );
+		if ( is_string( $prompt ) && $prompt !== '' ) {
+			$input['prompt'] = $prompt;
+		}
+
+		$result = TemplateAbilities::recommend_template_part( $input );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;

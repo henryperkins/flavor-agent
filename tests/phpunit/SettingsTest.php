@@ -344,6 +344,68 @@ final class SettingsTest extends TestCase {
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
+	public function test_sanitize_openai_native_settings_validate_with_connector_key_when_plugin_key_is_blank(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_openai_provider'               => 'azure_openai',
+			'connectors_ai_openai_api_key'               => 'connector-key',
+			'flavor_agent_openai_native_api_key'         => '',
+			'flavor_agent_openai_native_embedding_model' => 'old-embed',
+			'flavor_agent_openai_native_chat_model'      => 'old-chat',
+		];
+		$_POST                       = [
+			'option_page'                                => 'flavor_agent_settings',
+			'flavor_agent_openai_provider'               => 'openai_native',
+			'flavor_agent_openai_native_api_key'         => '',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'data' => [
+							[
+								'embedding' => [ 0.1, 0.2 ],
+							],
+						],
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'output_text' => 'ok',
+					]
+				),
+			],
+		];
+
+		$this->assertSame( 'openai_native', Settings::sanitize_openai_provider( 'openai_native' ) );
+		$this->assertSame( '', Settings::sanitize_openai_native_api_key( '' ) );
+		$this->assertSame(
+			'text-embedding-3-large',
+			Settings::sanitize_openai_native_embedding_model( 'text-embedding-3-large' )
+		);
+		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'Bearer connector-key',
+			WordPressTestState::$remote_post_calls[0]['args']['headers']['Authorization'] ?? null
+		);
+		$this->assertSame(
+			'Bearer connector-key',
+			WordPressTestState::$remote_post_calls[1]['args']['headers']['Authorization'] ?? null
+		);
+	}
+
 	public function test_sanitize_qdrant_settings_skip_remote_validation_when_credentials_are_unchanged(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
