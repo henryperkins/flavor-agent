@@ -6,6 +6,25 @@ namespace FlavorAgent\AzureOpenAI;
 
 final class ResponsesClient {
 
+	public static function validate_configuration(
+		?string $endpoint = null,
+		?string $api_key = null,
+		?string $deployment = null
+	): true|\WP_Error {
+		return ConfigurationValidator::validate(
+			(string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
+			(string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
+			(string) ( $deployment ?? get_option( 'flavor_agent_azure_chat_deployment', '' ) ),
+			'/openai/v1/responses',
+			[
+				'input'             => 'validation',
+				'max_output_tokens' => 1,
+			],
+			'responses_validation_error',
+			'Azure OpenAI responses'
+		);
+	}
+
 	/**
 	 * Send a ranking/instruction request to the Azure OpenAI Responses API.
 	 *
