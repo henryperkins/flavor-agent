@@ -8,6 +8,7 @@ use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 
 final class Settings {
@@ -28,6 +29,13 @@ final class Settings {
 	private static ?array $azure_validation_state = null;
 
 	private static bool $azure_validation_error_reported = false;
+
+	/**
+	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
+	 */
+	private static ?array $native_openai_validation_state = null;
+
+	private static bool $native_openai_validation_error_reported = false;
 
 	/**
 	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
@@ -59,6 +67,16 @@ final class Settings {
 	}
 
 	public static function register_settings(): void {
+		register_setting(
+			self::OPTION_GROUP,
+			Provider::OPTION_NAME,
+			[
+				'type'              => 'string',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_openai_provider' ],
+				'default'           => Provider::AZURE,
+			]
+		);
+
 		// Azure OpenAI.
 		register_setting(
 			self::OPTION_GROUP,
@@ -93,6 +111,33 @@ final class Settings {
 			[
 				'type'              => 'string',
 				'sanitize_callback' => [ __CLASS__, 'sanitize_azure_chat_deployment' ],
+				'default'           => '',
+			]
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'flavor_agent_openai_native_api_key',
+			[
+				'type'              => 'string',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_openai_native_api_key' ],
+				'default'           => '',
+			]
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'flavor_agent_openai_native_embedding_model',
+			[
+				'type'              => 'string',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_openai_native_embedding_model' ],
+				'default'           => '',
+			]
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'flavor_agent_openai_native_chat_model',
+			[
+				'type'              => 'string',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_openai_native_chat_model' ],
 				'default'           => '',
 			]
 		);
@@ -158,9 +203,23 @@ final class Settings {
 		// --- Sections ---
 
 		add_settings_section(
+			'flavor_agent_openai_provider',
+			'OpenAI Provider (Pattern, Template, Navigation Recommendations)',
+			[ __CLASS__, 'render_openai_provider_section' ],
+			self::PAGE_SLUG
+		);
+
+		add_settings_section(
 			'flavor_agent_azure',
-			'Azure OpenAI (Pattern Recommendations)',
+			'Azure OpenAI',
 			[ __CLASS__, 'render_azure_section' ],
+			self::PAGE_SLUG
+		);
+
+		add_settings_section(
+			'flavor_agent_openai_native',
+			'OpenAI Native',
+			[ __CLASS__, 'render_openai_native_section' ],
 			self::PAGE_SLUG
 		);
 
@@ -176,6 +235,19 @@ final class Settings {
 			'Cloudflare AI Search (Official WordPress Docs Grounding)',
 			[ __CLASS__, 'render_cloudflare_section' ],
 			self::PAGE_SLUG
+		);
+
+		add_settings_field(
+			Provider::OPTION_NAME,
+			'Provider',
+			[ __CLASS__, 'render_select_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_openai_provider',
+			[
+				'option'      => Provider::OPTION_NAME,
+				'choices'     => Provider::choices(),
+				'description' => 'Choose which OpenAI backend Flavor Agent should use for pattern, template, and navigation recommendations. Block recommendations still use Settings > Connectors.',
+			]
 		);
 
 		// --- Azure OpenAI fields ---
@@ -228,6 +300,46 @@ final class Settings {
 				'option'      => 'flavor_agent_azure_chat_deployment',
 				'placeholder' => 'gpt-5.4',
 				'description' => 'The deployment name for your chat/responses model. Azure Portal &gt; your resource &gt; <strong>Model deployments</strong>.',
+			]
+		);
+
+		// --- OpenAI Native fields ---
+
+		add_settings_field(
+			'flavor_agent_openai_native_api_key',
+			'API Key',
+			[ __CLASS__, 'render_text_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_openai_native',
+			[
+				'option'      => 'flavor_agent_openai_native_api_key',
+				'type'        => 'password',
+				'placeholder' => 'sk-...',
+				'description' => 'Your OpenAI API key. Flavor Agent uses the official OpenAI API at <code>https://api.openai.com/v1</code> when this provider is selected.',
+			]
+		);
+		add_settings_field(
+			'flavor_agent_openai_native_embedding_model',
+			'Embedding Model',
+			[ __CLASS__, 'render_text_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_openai_native',
+			[
+				'option'      => 'flavor_agent_openai_native_embedding_model',
+				'placeholder' => 'text-embedding-3-large',
+				'description' => 'The OpenAI embeddings model ID used to vectorize patterns.',
+			]
+		);
+		add_settings_field(
+			'flavor_agent_openai_native_chat_model',
+			'Responses Model',
+			[ __CLASS__, 'render_text_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_openai_native',
+			[
+				'option'      => 'flavor_agent_openai_native_chat_model',
+				'placeholder' => 'gpt-5.4',
+				'description' => 'The OpenAI Responses model ID used for pattern ranking plus template and navigation recommendations.',
 			]
 		);
 
@@ -322,7 +434,7 @@ final class Settings {
 			<p class="description">
 				<?php
 				echo esc_html__(
-					'Block recommendations use the core Settings > Connectors screen and the WordPress AI Client. This page only manages Azure, Qdrant, Cloudflare, and pattern sync settings.',
+					'Block recommendations use the core Settings > Connectors screen and the WordPress AI Client. This page manages the OpenAI backend used for pattern, template, and navigation recommendations, plus Qdrant, Cloudflare, and pattern sync settings.',
 					'flavor-agent'
 				);
 				?>
@@ -356,7 +468,27 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Connects to Azure OpenAI for embedding patterns and ranking recommendations. Find these credentials in the Azure Portal under your OpenAI resource > Keys and Endpoint.',
+				'Used when the provider is set to Azure OpenAI. Find these credentials in the Azure Portal under your OpenAI resource > Keys and Endpoint.',
+				'flavor-agent'
+			)
+		);
+	}
+
+	public static function render_openai_provider_section(): void {
+		printf(
+			'<p class="description">%s</p>',
+			esc_html__(
+				'Flavor Agent uses the selected OpenAI provider for pattern embeddings, pattern ranking, template recommendations, and navigation recommendations.',
+				'flavor-agent'
+			)
+		);
+	}
+
+	public static function render_openai_native_section(): void {
+		printf(
+			'<p class="description">%s</p>',
+			esc_html__(
+				'Used when the provider is set to OpenAI Native. Flavor Agent sends requests directly to the official OpenAI Responses and Embeddings APIs.',
 				'flavor-agent'
 			)
 		);
@@ -392,7 +524,7 @@ final class Settings {
 		$type        = $args['type'] ?? 'text';
 		$placeholder = $args['placeholder'] ?? '';
 		$description = $args['description'] ?? '';
-		$value       = get_option( $option, '' );
+		$value       = (string) get_option( $option, '' );
 
 		printf(
 			'<input type="%s" name="%s" value="%s" class="regular-text" autocomplete="off" placeholder="%s" />',
@@ -407,8 +539,39 @@ final class Settings {
 		}
 	}
 
+	public static function render_select_field( array $args ): void {
+		$option      = (string) ( $args['option'] ?? '' );
+		$choices     = is_array( $args['choices'] ?? null ) ? $args['choices'] : [];
+		$description = (string) ( $args['description'] ?? '' );
+		$value       = (string) get_option(
+			$option,
+			$option === Provider::OPTION_NAME ? Provider::AZURE : ''
+		);
+
+		printf( '<select name="%s">', esc_attr( $option ) );
+
+		foreach ( $choices as $choice_value => $choice_label ) {
+			printf(
+				'<option value="%s" %s>%s</option>',
+				esc_attr( (string) $choice_value ),
+				selected( $value, (string) $choice_value, false ),
+				esc_html( (string) $choice_label )
+			);
+		}
+
+		echo '</select>';
+
+		if ( $description ) {
+			printf( '<p class="description">%s</p>', wp_kses_post( $description ) );
+		}
+	}
+
 	public static function sanitize_grounding_result_count( mixed $value ): int {
 		return max( 1, min( 8, (int) $value ) );
+	}
+
+	public static function sanitize_openai_provider( mixed $value ): string {
+		return Provider::normalize_provider( (string) $value );
 	}
 
 	public static function sanitize_azure_openai_endpoint( mixed $value ): string {
@@ -436,6 +599,27 @@ final class Settings {
 		return self::sanitize_azure_text_option(
 			$value,
 			'flavor_agent_azure_chat_deployment'
+		);
+	}
+
+	public static function sanitize_openai_native_api_key( mixed $value ): string {
+		return self::sanitize_openai_native_text_option(
+			$value,
+			'flavor_agent_openai_native_api_key'
+		);
+	}
+
+	public static function sanitize_openai_native_embedding_model( mixed $value ): string {
+		return self::sanitize_openai_native_text_option(
+			$value,
+			'flavor_agent_openai_native_embedding_model'
+		);
+	}
+
+	public static function sanitize_openai_native_chat_model( mixed $value ): string {
+		return self::sanitize_openai_native_text_option(
+			$value,
+			'flavor_agent_openai_native_chat_model'
 		);
 	}
 
@@ -528,6 +712,23 @@ final class Settings {
 		return $resolved_values[ $option_name ] ?? $sanitized_value;
 	}
 
+	private static function sanitize_openai_native_text_option( mixed $value, string $option_name ): string {
+		$sanitized_value = sanitize_text_field( $value );
+		$resolved_values = self::resolve_openai_native_submission_values(
+			[
+				$option_name => $sanitized_value,
+			]
+		);
+
+		if ( is_wp_error( $resolved_values ) ) {
+			self::report_openai_native_validation_error( $resolved_values );
+
+			return (string) get_option( $option_name, '' );
+		}
+
+		return $resolved_values[ $option_name ] ?? $sanitized_value;
+	}
+
 	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
 		$sanitized_value = sanitize_text_field( $value );
 		$resolved_values = self::resolve_cloudflare_submission_values(
@@ -580,6 +781,10 @@ final class Settings {
 			return $values;
 		}
 
+		if ( self::get_submitted_openai_provider() !== Provider::AZURE ) {
+			return $values;
+		}
+
 		if (
 			'' === $values['flavor_agent_azure_openai_endpoint'] ||
 			'' === $values['flavor_agent_azure_openai_key'] ||
@@ -607,18 +812,101 @@ final class Settings {
 		$validation = EmbeddingClient::validate_configuration(
 			$values['flavor_agent_azure_openai_endpoint'],
 			$values['flavor_agent_azure_openai_key'],
-			$values['flavor_agent_azure_embedding_deployment']
+			$values['flavor_agent_azure_embedding_deployment'],
+			Provider::AZURE
 		);
 
 		if ( ! is_wp_error( $validation ) ) {
 			$validation = ResponsesClient::validate_configuration(
 				$values['flavor_agent_azure_openai_endpoint'],
 				$values['flavor_agent_azure_openai_key'],
-				$values['flavor_agent_azure_chat_deployment']
+				$values['flavor_agent_azure_chat_deployment'],
+				Provider::AZURE
 			);
 		}
 
 		self::$azure_validation_state = [
+			'fingerprint' => $fingerprint,
+			'values'      => $values,
+			'error'       => is_wp_error( $validation ) ? $validation : null,
+		];
+
+		return is_wp_error( $validation ) ? $validation : $values;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array<string, string>|\WP_Error
+	 */
+	private static function resolve_openai_native_submission_values( array $overrides = [] ): array|\WP_Error {
+		$current_values = self::get_current_openai_native_values();
+		$values         = [
+			'flavor_agent_openai_native_api_key'         => self::read_posted_text_value(
+				'flavor_agent_openai_native_api_key',
+				$current_values['flavor_agent_openai_native_api_key']
+			),
+			'flavor_agent_openai_native_embedding_model' => self::read_posted_text_value(
+				'flavor_agent_openai_native_embedding_model',
+				$current_values['flavor_agent_openai_native_embedding_model']
+			),
+			'flavor_agent_openai_native_chat_model'      => self::read_posted_text_value(
+				'flavor_agent_openai_native_chat_model',
+				$current_values['flavor_agent_openai_native_chat_model']
+			),
+		];
+
+		foreach ( $overrides as $option_name => $override_value ) {
+			$values[ $option_name ] = sanitize_text_field( $override_value );
+		}
+
+		if ( ! self::should_validate_provider_submission() ) {
+			return $values;
+		}
+
+		if ( self::get_submitted_openai_provider() !== Provider::NATIVE ) {
+			return $values;
+		}
+
+		if (
+			'' === $values['flavor_agent_openai_native_api_key'] ||
+			'' === $values['flavor_agent_openai_native_embedding_model'] ||
+			'' === $values['flavor_agent_openai_native_chat_model']
+		) {
+			return $values;
+		}
+
+		if ( ! self::values_require_validation( $values, $current_values ) ) {
+			return $values;
+		}
+
+		$fingerprint = self::build_validation_fingerprint( $values );
+
+		if (
+			is_array( self::$native_openai_validation_state ) &&
+			( self::$native_openai_validation_state['fingerprint'] ?? '' ) === $fingerprint
+		) {
+			return self::$native_openai_validation_state['error'] instanceof \WP_Error
+				? self::$native_openai_validation_state['error']
+				: self::$native_openai_validation_state['values'];
+		}
+
+		$validation = EmbeddingClient::validate_configuration(
+			null,
+			$values['flavor_agent_openai_native_api_key'],
+			$values['flavor_agent_openai_native_embedding_model'],
+			Provider::NATIVE
+		);
+
+		if ( ! is_wp_error( $validation ) ) {
+			$validation = ResponsesClient::validate_configuration(
+				null,
+				$values['flavor_agent_openai_native_api_key'],
+				$values['flavor_agent_openai_native_chat_model'],
+				Provider::NATIVE
+			);
+		}
+
+		self::$native_openai_validation_state = [
 			'fingerprint' => $fingerprint,
 			'values'      => $values,
 			'error'       => is_wp_error( $validation ) ? $validation : null,
@@ -788,6 +1076,23 @@ final class Settings {
 	/**
 	 * @return array<string, string>
 	 */
+	private static function get_current_openai_native_values(): array {
+		return [
+			'flavor_agent_openai_native_api_key'         => sanitize_text_field(
+				(string) get_option( 'flavor_agent_openai_native_api_key', '' )
+			),
+			'flavor_agent_openai_native_embedding_model' => sanitize_text_field(
+				(string) get_option( 'flavor_agent_openai_native_embedding_model', '' )
+			),
+			'flavor_agent_openai_native_chat_model'      => sanitize_text_field(
+				(string) get_option( 'flavor_agent_openai_native_chat_model', '' )
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
 	private static function get_current_qdrant_values(): array {
 		return [
 			'flavor_agent_qdrant_url' => self::sanitize_url_value(
@@ -842,6 +1147,16 @@ final class Settings {
 		}
 
 		return sanitize_text_field( $option_page ) === self::OPTION_GROUP;
+	}
+
+	private static function get_submitted_openai_provider(): string {
+		$provider = $_POST[ Provider::OPTION_NAME ] ?? get_option( Provider::OPTION_NAME, Provider::AZURE );
+
+		if ( function_exists( 'wp_unslash' ) && is_string( $provider ) ) {
+			$provider = wp_unslash( $provider );
+		}
+
+		return Provider::normalize_provider( is_string( $provider ) ? $provider : Provider::AZURE );
 	}
 
 	private static function read_posted_cloudflare_value( string $option_name, string $fallback ): string {
@@ -910,6 +1225,21 @@ final class Settings {
 		);
 
 		self::$azure_validation_error_reported = true;
+	}
+
+	private static function report_openai_native_validation_error( \WP_Error $error ): void {
+		if ( self::$native_openai_validation_error_reported ) {
+			return;
+		}
+
+		add_settings_error(
+			self::OPTION_GROUP,
+			'flavor_agent_openai_native_validation',
+			$error->get_error_message(),
+			'error'
+		);
+
+		self::$native_openai_validation_error_reported = true;
 	}
 
 	private static function report_qdrant_validation_error( \WP_Error $error ): void {

@@ -7,6 +7,7 @@ namespace FlavorAgent\Patterns;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\OpenAI\Provider;
 
 final class PatternIndex {
 
@@ -26,17 +27,18 @@ final class PatternIndex {
 
 	public static function get_state(): array {
 		$defaults = [
-			'status'                => 'uninitialized',
-			'fingerprint'           => '',
-			'qdrant_url'            => '',
-			'qdrant_collection'     => '',
-			'azure_openai_endpoint' => '',
-			'embedding_deployment'  => '',
-			'last_synced_at'        => null,
-			'last_attempt_at'       => null,
-			'indexed_count'         => 0,
-			'last_error'            => null,
-			'pattern_fingerprints'  => [],
+			'status'               => 'uninitialized',
+			'fingerprint'          => '',
+			'qdrant_url'           => '',
+			'qdrant_collection'    => '',
+			'openai_provider'      => '',
+			'openai_endpoint'      => '',
+			'embedding_model'      => '',
+			'last_synced_at'       => null,
+			'last_attempt_at'      => null,
+			'indexed_count'        => 0,
+			'last_error'           => null,
+			'pattern_fingerprints' => [],
 		];
 
 		return wp_parse_args( get_option( self::STATE_OPTION, $defaults ), $defaults );
@@ -51,8 +53,9 @@ final class PatternIndex {
 
 		$is_stale = $state['qdrant_url'] !== get_option( 'flavor_agent_qdrant_url', '' )
 			|| $state['qdrant_collection'] !== QdrantClient::get_collection_name()
-			|| $state['azure_openai_endpoint'] !== get_option( 'flavor_agent_azure_openai_endpoint', '' )
-			|| $state['embedding_deployment'] !== get_option( 'flavor_agent_azure_embedding_deployment', '' );
+			|| $state['openai_provider'] !== Provider::get()
+			|| $state['openai_endpoint'] !== Provider::embedding_configuration()['endpoint']
+			|| $state['embedding_model'] !== ( Provider::active_embedding_model() ?? '' );
 
 		if ( $is_stale ) {
 			$state['status'] = 'stale';
@@ -72,9 +75,7 @@ final class PatternIndex {
 
 	public static function recommendation_backends_configured(): bool {
 		return (bool) (
-			get_option( 'flavor_agent_azure_openai_endpoint', '' )
-			&& get_option( 'flavor_agent_azure_openai_key', '' )
-			&& get_option( 'flavor_agent_azure_embedding_deployment', '' )
+			Provider::embedding_configured()
 			&& get_option( 'flavor_agent_qdrant_url', '' )
 			&& get_option( 'flavor_agent_qdrant_key', '' )
 		);
@@ -236,18 +237,21 @@ final class PatternIndex {
 		$fingerprint = self::compute_fingerprint( $patterns );
 
 		// Steps 4-6: Determine if re-index is needed.
-		$state                 = self::get_state();
-		$qdrant_url            = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_collection     = QdrantClient::get_collection_name();
-		$azure_openai_endpoint = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$embedding_deployment  = get_option( 'flavor_agent_azure_embedding_deployment', '' );
+		$state             = self::get_state();
+		$qdrant_url        = get_option( 'flavor_agent_qdrant_url', '' );
+		$qdrant_collection = QdrantClient::get_collection_name();
+		$embedding_config  = Provider::embedding_configuration();
+		$openai_provider   = Provider::get();
+		$openai_endpoint   = $embedding_config['endpoint'];
+		$embedding_model   = $embedding_config['model'];
 
 		$needs_reindex = $state['status'] !== 'ready'
 			|| $state['fingerprint'] !== $fingerprint
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
-			|| $state['azure_openai_endpoint'] !== $azure_openai_endpoint
-			|| $state['embedding_deployment'] !== $embedding_deployment;
+			|| $state['openai_provider'] !== $openai_provider
+			|| $state['openai_endpoint'] !== $openai_endpoint
+			|| $state['embedding_model'] !== $embedding_model;
 
 		if ( ! $needs_reindex ) {
 			return [
@@ -272,8 +276,9 @@ final class PatternIndex {
 		$requires_full_reindex         = ! self::has_usable_index( $state )
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
-			|| $state['azure_openai_endpoint'] !== $azure_openai_endpoint
-			|| $state['embedding_deployment'] !== $embedding_deployment
+			|| $state['openai_provider'] !== $openai_provider
+			|| $state['openai_endpoint'] !== $openai_endpoint
+			|| $state['embedding_model'] !== $embedding_model
 			|| empty( $previous_pattern_fingerprints );
 
 		// Step 7: Mark indexing before remote work starts.
@@ -365,17 +370,18 @@ final class PatternIndex {
 		// Persist ready state.
 		self::save_state(
 			[
-				'status'                => 'ready',
-				'fingerprint'           => $fingerprint,
-				'qdrant_url'            => $qdrant_url,
-				'qdrant_collection'     => $qdrant_collection,
-				'azure_openai_endpoint' => $azure_openai_endpoint,
-				'embedding_deployment'  => $embedding_deployment,
-				'last_synced_at'        => gmdate( 'c' ),
-				'last_attempt_at'       => $state['last_attempt_at'],
-				'indexed_count'         => count( $current ),
-				'last_error'            => null,
-				'pattern_fingerprints'  => $current_pattern_fingerprints,
+				'status'               => 'ready',
+				'fingerprint'          => $fingerprint,
+				'qdrant_url'           => $qdrant_url,
+				'qdrant_collection'    => $qdrant_collection,
+				'openai_provider'      => $openai_provider,
+				'openai_endpoint'      => $openai_endpoint,
+				'embedding_model'      => $embedding_model,
+				'last_synced_at'       => gmdate( 'c' ),
+				'last_attempt_at'      => $state['last_attempt_at'],
+				'indexed_count'        => count( $current ),
+				'last_error'           => null,
+				'pattern_fingerprints' => $current_pattern_fingerprints,
 			]
 		);
 

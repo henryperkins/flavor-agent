@@ -8,6 +8,7 @@ use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\StringArray;
 
@@ -268,24 +269,21 @@ final class PatternAbilities {
 	}
 
 	private static function validate_recommendation_backends(): true|\WP_Error {
-		$azure_endpoint  = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$azure_key       = get_option( 'flavor_agent_azure_openai_key', '' );
-		$azure_embedding = get_option( 'flavor_agent_azure_embedding_deployment', '' );
-		$azure_chat      = get_option( 'flavor_agent_azure_chat_deployment', '' );
-		$qdrant_url      = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_key      = get_option( 'flavor_agent_qdrant_key', '' );
+		$qdrant_url = get_option( 'flavor_agent_qdrant_url', '' );
+		$qdrant_key = get_option( 'flavor_agent_qdrant_key', '' );
 
 		if (
-			$azure_endpoint === ''
-			|| $azure_key === ''
-			|| $azure_embedding === ''
-			|| $azure_chat === ''
+			! Provider::embedding_configured()
+			|| ! Provider::chat_configured()
 			|| $qdrant_url === ''
 			|| $qdrant_key === ''
 		) {
 			return new \WP_Error(
 				'missing_credentials',
-				'Pattern recommendations require Azure OpenAI and Qdrant credentials. Go to Settings > Flavor Agent.',
+				sprintf(
+					'Pattern recommendations require %s and Qdrant credentials. Go to Settings > Flavor Agent.',
+					Provider::label()
+				),
 				[ 'status' => 400 ]
 			);
 		}

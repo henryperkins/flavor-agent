@@ -8,30 +8,41 @@ final class ConfigurationValidator {
 
 	/**
 	 * @param array<string, mixed> $body
+	 * @param array<string, string> $headers
 	 */
 	public static function validate(
-		string $endpoint,
-		string $api_key,
-		string $deployment,
-		string $path,
+		string $url,
+		array $headers,
+		string $model,
 		array $body,
 		string $error_code,
 		string $fallback_message,
 		string $expected_shape
 	): true|\WP_Error {
-		$endpoint   = trim( $endpoint );
-		$api_key    = trim( $api_key );
-		$deployment = trim( $deployment );
+		$url             = trim( $url );
+		$model           = trim( $model );
+		$has_auth_header = false;
 
-		if ( '' === $endpoint || '' === $api_key || '' === $deployment ) {
+		foreach ( $headers as $header_name => $header_value ) {
+			if ( strtolower( $header_name ) === 'content-type' ) {
+				continue;
+			}
+
+			if ( trim( (string) $header_value ) !== '' ) {
+				$has_auth_header = true;
+				break;
+			}
+		}
+
+		if ( '' === $url || '' === $model || ! $has_auth_header ) {
 			return new \WP_Error(
 				'missing_credentials',
-				'Azure OpenAI credentials are not configured. Go to Settings > Flavor Agent.',
+				'OpenAI credentials are not configured. Go to Settings > Flavor Agent.',
 				[ 'status' => 400 ]
 			);
 		}
 
-		$body['model'] = $deployment;
+		$body['model'] = $model;
 		$encoded_body  = wp_json_encode( $body );
 
 		if ( false === $encoded_body ) {
@@ -43,13 +54,10 @@ final class ConfigurationValidator {
 		}
 
 		$response = wp_remote_post(
-			rtrim( $endpoint, '/' ) . $path,
+			$url,
 			[
 				'timeout' => 20,
-				'headers' => [
-					'Content-Type' => 'application/json',
-					'api-key'      => $api_key,
-				],
+				'headers' => $headers,
 				'body'    => $encoded_body,
 			]
 		);
@@ -117,32 +125,62 @@ final class ConfigurationValidator {
 		}
 
 		if ( 'responses' === $expected_shape ) {
-			if ( isset( $data['output_text'] ) && is_string( $data['output_text'] ) && '' !== $data['output_text'] ) {
+			if ( '' !== self::extract_response_text( $data ) ) {
 				return true;
 			}
 
-			if ( ! isset( $data['output'] ) || ! is_array( $data['output'] ) ) {
-				return false;
+			return self::is_response_object( $data );
+		}
+
+		return false;
+	}
+
+	/**
+	 * @param array<string, mixed> $data
+	 */
+	public static function extract_response_text( array $data ): string {
+		if ( isset( $data['output_text'] ) && is_string( $data['output_text'] ) && '' !== trim( $data['output_text'] ) ) {
+			return trim( $data['output_text'] );
+		}
+
+		if ( ! isset( $data['output'] ) || ! is_array( $data['output'] ) ) {
+			return '';
+		}
+
+		foreach ( $data['output'] as $output_item ) {
+			if ( ! is_array( $output_item ) || ! isset( $output_item['content'] ) || ! is_array( $output_item['content'] ) ) {
+				continue;
 			}
 
-			foreach ( $data['output'] as $output_item ) {
-				if ( ! is_array( $output_item ) || ! isset( $output_item['content'] ) || ! is_array( $output_item['content'] ) ) {
-					continue;
-				}
-
-				foreach ( $output_item['content'] as $content_item ) {
-					if (
-						is_array( $content_item ) &&
-						isset( $content_item['text'] ) &&
-						is_string( $content_item['text'] ) &&
-						'' !== $content_item['text']
-					) {
-						return true;
-					}
+			foreach ( $output_item['content'] as $content_item ) {
+				if (
+					is_array( $content_item ) &&
+					isset( $content_item['text'] ) &&
+					is_string( $content_item['text'] ) &&
+					'' !== trim( $content_item['text'] )
+				) {
+					return trim( $content_item['text'] );
 				}
 			}
 		}
 
-		return false;
+		return '';
+	}
+
+	/**
+	 * Accept a Responses API object even when text is incomplete due to token limits.
+	 *
+	 * @param array<string, mixed> $data
+	 */
+	private static function is_response_object( array $data ): bool {
+		if ( ( $data['object'] ?? '' ) !== 'response' ) {
+			return false;
+		}
+
+		if ( ! isset( $data['status'] ) || ! is_string( $data['status'] ) || '' === $data['status'] ) {
+			return false;
+		}
+
+		return isset( $data['output'] ) && is_array( $data['output'] );
 	}
 }

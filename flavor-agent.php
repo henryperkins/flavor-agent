@@ -11,6 +11,8 @@
 
 declare(strict_types=1);
 
+use FlavorAgent\OpenAI\Provider;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -53,9 +55,14 @@ add_action( 'deactivated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'h
 add_action( 'upgrader_process_complete', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 
 foreach ( [
+	'flavor_agent_openai_provider',
 	'flavor_agent_azure_openai_endpoint',
 	'flavor_agent_azure_openai_key',
 	'flavor_agent_azure_embedding_deployment',
+	'flavor_agent_azure_chat_deployment',
+	'flavor_agent_openai_native_api_key',
+	'flavor_agent_openai_native_embedding_model',
+	'flavor_agent_openai_native_chat_model',
 	'flavor_agent_qdrant_url',
 	'flavor_agent_qdrant_key',
 	'home',
@@ -155,18 +162,12 @@ function flavor_agent_enqueue_editor(): void {
 			'nonce'                 => wp_create_nonce( 'wp_rest' ),
 			'canRecommendBlocks'    => FlavorAgent\LLM\WordPressAIClient::is_supported(),
 			'canRecommendPatterns'  => (bool) (
-				get_option( 'flavor_agent_azure_openai_endpoint' )
-				&& get_option( 'flavor_agent_azure_openai_key' )
-				&& get_option( 'flavor_agent_azure_embedding_deployment' )
-				&& get_option( 'flavor_agent_azure_chat_deployment' )
+				Provider::embedding_configured()
+				&& Provider::chat_configured()
 				&& get_option( 'flavor_agent_qdrant_url' )
 				&& get_option( 'flavor_agent_qdrant_key' )
 			),
-			'canRecommendTemplates' => (bool) (
-				get_option( 'flavor_agent_azure_openai_endpoint' )
-				&& get_option( 'flavor_agent_azure_openai_key' )
-				&& get_option( 'flavor_agent_azure_chat_deployment' )
-			),
+			'canRecommendTemplates' => Provider::chat_configured(),
 			'templatePartAreas'     => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
 		]
 	);

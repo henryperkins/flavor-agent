@@ -465,7 +465,7 @@ final class Registration {
 						],
 						'model'              => [
 							'type'        => [ 'string', 'null' ],
-							'description' => 'Legacy model indicator. Returns provider-managed when block recommendations are backed by the WordPress AI Client, otherwise the Azure chat deployment or null.',
+							'description' => 'Legacy model indicator. Returns provider-managed when block recommendations are backed by the WordPress AI Client, otherwise the active OpenAI provider model or null.',
 						],
 						'availableAbilities' => [
 							'type'        => 'array',
@@ -487,6 +487,14 @@ final class Registration {
 										'configured'     => [ 'type' => 'boolean' ],
 										'chatDeployment' => [ 'type' => [ 'string', 'null' ] ],
 										'embeddingDeployment' => [ 'type' => [ 'string', 'null' ] ],
+									],
+								],
+								'openai_native'        => [
+									'type'       => 'object',
+									'properties' => [
+										'configured'     => [ 'type' => 'boolean' ],
+										'chatModel'      => [ 'type' => [ 'string', 'null' ] ],
+										'embeddingModel' => [ 'type' => [ 'string', 'null' ] ],
 									],
 								],
 								'qdrant'               => [

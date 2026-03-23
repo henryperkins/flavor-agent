@@ -4,23 +4,40 @@ declare(strict_types=1);
 
 namespace FlavorAgent\AzureOpenAI;
 
+use FlavorAgent\OpenAI\Provider;
+
 final class EmbeddingClient {
 
 	public static function validate_configuration(
 		?string $endpoint = null,
 		?string $api_key = null,
-		?string $deployment = null
+		?string $deployment = null,
+		?string $provider = null
 	): true|\WP_Error {
+		$provider = Provider::normalize_provider( $provider ?? Provider::get() );
+		$config   = Provider::embedding_configuration(
+			$provider,
+			Provider::is_native( $provider )
+				? [
+					'flavor_agent_openai_native_api_key' => (string) ( $api_key ?? get_option( 'flavor_agent_openai_native_api_key', '' ) ),
+					'flavor_agent_openai_native_embedding_model' => (string) ( $deployment ?? get_option( 'flavor_agent_openai_native_embedding_model', '' ) ),
+				]
+				: [
+					'flavor_agent_azure_openai_endpoint' => (string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
+					'flavor_agent_azure_openai_key'      => (string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
+					'flavor_agent_azure_embedding_deployment' => (string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
+				]
+		);
+
 		return ConfigurationValidator::validate(
-			(string) ( $endpoint ?? get_option( 'flavor_agent_azure_openai_endpoint', '' ) ),
-			(string) ( $api_key ?? get_option( 'flavor_agent_azure_openai_key', '' ) ),
-			(string) ( $deployment ?? get_option( 'flavor_agent_azure_embedding_deployment', '' ) ),
-			'/openai/v1/embeddings',
+			$config['url'],
+			$config['headers'],
+			$config['model'],
 			[
 				'input' => [ 'validation' ],
 			],
 			'embedding_validation_error',
-			'Azure OpenAI embeddings',
+			$config['label'],
 			'embeddings'
 		);
 	}
@@ -45,27 +62,27 @@ final class EmbeddingClient {
 	 * @return float[][]|\WP_Error Array of vectors.
 	 */
 	public static function embed_batch( array $inputs ): array|\WP_Error {
-		$endpoint   = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$api_key    = get_option( 'flavor_agent_azure_openai_key', '' );
-		$deployment = get_option( 'flavor_agent_azure_embedding_deployment', '' );
+		$config = Provider::embedding_configuration();
 
-		if ( empty( $endpoint ) || empty( $api_key ) || empty( $deployment ) ) {
+		if ( ! $config['configured'] ) {
 			return new \WP_Error(
 				'missing_credentials',
-				'Azure OpenAI embedding credentials are not configured. Go to Settings > Flavor Agent.',
+				sprintf(
+					'%s embedding credentials are not configured. Go to Settings > Flavor Agent.',
+					Provider::label( $config['provider'] )
+				),
 				[ 'status' => 400 ]
 			);
 		}
 
-		$url  = rtrim( $endpoint, '/' ) . '/openai/v1/embeddings';
 		$body = wp_json_encode(
 			[
-				'model' => $deployment,
+				'model' => $config['model'],
 				'input' => $inputs,
 			]
 		);
 
-		$data = self::request( $url, $api_key, $body );
+		$data = self::request( $config['url'], $config['headers'], $body, $config['label'] );
 		if ( is_wp_error( $data ) ) {
 			return $data;
 		}
@@ -81,15 +98,12 @@ final class EmbeddingClient {
 	/**
 	 * @return array|\WP_Error Decoded response body.
 	 */
-	private static function request( string $url, string $api_key, string $body, bool $is_retry = false ): array|\WP_Error {
+	private static function request( string $url, array $headers, string $body, string $label, bool $is_retry = false ): array|\WP_Error {
 		$response = wp_remote_post(
 			$url,
 			[
 				'timeout' => 30,
-				'headers' => [
-					'Content-Type' => 'application/json',
-					'api-key'      => $api_key,
-				],
+				'headers' => $headers,
 				'body'    => $body,
 			]
 		);
@@ -104,14 +118,14 @@ final class EmbeddingClient {
 			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
 			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
 			sleep( min( $retry_after, 10 ) );
-			return self::request( $url, $api_key, $body, true );
+			return self::request( $url, $headers, $body, $label, true );
 		}
 
 		$response_body = wp_remote_retrieve_body( $response );
 		$data          = json_decode( $response_body, true );
 
 		if ( $status !== 200 ) {
-			$msg = $data['error']['message'] ?? "Azure OpenAI embeddings returned HTTP {$status}";
+			$msg = $data['error']['message'] ?? "{$label} returned HTTP {$status}";
 			return new \WP_Error( 'embedding_error', $msg, [ 'status' => 502 ] );
 		}
 
