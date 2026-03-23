@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-03-19
+> Last updated: 2026-03-23
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -212,8 +212,11 @@ Block recommendation providers are configured separately in core under `Settings
 
 Plus pattern sync status panel with manual trigger.
 
+When the Azure OpenAI endpoint, key, embedding deployment, or chat deployment changes and all four fields are present, the settings save flow validates both the embeddings and responses deployments and preserves the previous values if validation fails.
+When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
 When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the settings save flow validates the configured account, instance, and token against the instance endpoint, rejects disabled or paused instances, runs a lightweight probe search, and preserves the previous values if validation fails.
-Successful saves still use the standard Settings API notice flow, and failed Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
+Unchanged or partial credential submissions skip remote validation.
+Successful saves still use the standard Settings API notice flow, and failed Azure OpenAI, Qdrant, or Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
 
 ### Not Yet Built (From Original Vision)
 
@@ -234,12 +237,11 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 ### Known Issues and Gaps
 
 1. **Cold-start docs grounding**: First request for a block/template context returns without WordPress developer-doc guidance until cache is warmed.
-2. **No live Azure/Qdrant credential verification**: Cloudflare AI Search credentials are now validated on credential changes against the configured instance state plus trusted WordPress-doc compatibility, but Azure OpenAI and Qdrant settings are still accepted without remote verification.
-3. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
-4. **Inserter search detection is DOM-coupled**: `find-inserter-search-input.js` uses 5 container selectors x 4 input selectors. Fragile across Gutenberg versions.
-5. **Pattern inserter patching uses legacy APIs**: `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` are experimental. Could break if Gutenberg stabilizes these.
-6. **No integration/E2E tests**: Only unit tests exist (Jest for JS, PHPUnit for PHP with stub bootstrap). No Playwright or browser-level tests.
-7. **Template recommender is advisory-only**: No apply/execute path. Users must manually act on suggestions.
+2. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
+3. **Inserter search detection is DOM-coupled**: `find-inserter-search-input.js` uses 5 container selectors x 4 input selectors. Fragile across Gutenberg versions.
+4. **Pattern inserter patching uses legacy APIs**: `__experimentalBlockPatterns` and `__experimentalBlockPatternCategories` are experimental. Could break if Gutenberg stabilizes these.
+5. **No integration/E2E tests**: Only unit tests exist (Jest for JS, PHPUnit for PHP with stub bootstrap). No Playwright or browser-level tests.
+6. **Template recommender is advisory-only**: No apply/execute path. Users must manually act on suggestions.
 
 ## Data Flow Diagrams
 
@@ -336,17 +338,18 @@ External AI agent calls flavor-agent/recommend-navigation ability
 | Test File | Tests | What's Covered |
 |-----------|-------|---------------|
 | `AgentControllerTest` | 1 | REST recommend-block wraps clientId, correct API call |
-| `ServerCollectorTest` | 3 | Template parts metadata, area lookup, context normalization |
+| `ServerCollectorTest` | 5 | Template parts metadata, area lookup, content-role introspection, template candidate ordering, duotone token summaries |
 | `InfraAbilitiesTest` | 4 | check-status: Cloudflare backend, admin filtering, model fallback |
 | `RegistrationTest` | 2 | Ability schema structure, entityKey schema |
 | `DocsGroundingEntityCacheTest` | 6 | Two-tier cache: query vs entity, seeding, inference |
 | `AISearchClientTest` | 18 | Search flow, config, cache, source filtering, URL trust, entity keys, instance validation states, trusted-docs compatibility probe |
 | `PromptRulesTest` | 3 | Content-only rules, disabled blocks, container behavior |
 | `BlockAbilitiesTest` | 3 | Input normalization, XSS sanitization, disabled block short-circuit |
-| `PromptGuidanceTest` | 5 | Guidance sections in prompts, structural identity, content-only |
-| `SettingsTest` | 6 | Changed-vs-unchanged Cloudflare save validation, rollback, partial credentials, and settings notice rendering |
-| `NavigationAbilitiesTest` | 12 | Input validation, prompt assembly, response parsing, system prompt content |
-| **Total** | **63** | |
+| `PromptGuidanceTest` | 8 | Guidance sections, structural identity, content-only restrictions, filter panel coverage, duotone summaries, aspect-ratio rules |
+| `SettingsTest` | 14 | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, and settings notice rendering |
+| `AzureBackendValidationTest` | 7 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks |
+| `NavigationAbilitiesTest` | 13 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
+| **Total** | **84** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
@@ -382,7 +385,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Cloudflare AI Search credential validation on changed settings saves
 - [x] Settings page success/error feedback for credential validation
 - [x] Clean uninstall
-- [ ] Fix: live credential validation on Azure OpenAI/Qdrant settings save
+- [x] Live credential validation on Azure OpenAI/Qdrant settings save
 - [x] Navigation recommendations (replace 501 stub)
 - [ ] Integration tests (at minimum: Playwright smoke for each editor surface)
 

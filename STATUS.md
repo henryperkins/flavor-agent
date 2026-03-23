@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-03-19
+> Last updated: 2026-03-23
 
 ## Working
 
@@ -35,8 +35,10 @@
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping
 - Site Editor template recommendation panel for `wp_template` documents with advisory-only review and browse actions
 - Admin settings screen with Azure/Qdrant/Cloudflare configuration and pattern sync controls; block providers come from `Settings > Connectors`
-- Settings saves now surface the standard Settings API success notice plus plugin-scoped Cloudflare validation errors
+- Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
+- Azure OpenAI credentials are revalidated only when the endpoint, key, or deployments change and all four fields are present; both the embeddings and responses deployments must validate before new values are saved
+- Qdrant credentials are revalidated only when the URL or key changes and both fields are present; the configured `/collections` endpoint must return the expected payload before new values are saved
 - Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must target an enabled, unpaused instance that also returns trusted `developer.wordpress.org` guidance before they are saved
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
@@ -45,11 +47,15 @@
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - First-request WordPress docs grounding is still intentionally reduced: uncached `recommend-block` and `recommend-template` requests return without Cloudflare guidance until either an exact-query cache entry or the matching warmed entity cache is available.
-- Azure OpenAI and Qdrant credentials are still accepted without live remote validation on save; only Cloudflare AI Search currently validates changed credentials against instance state plus trusted WordPress developer-doc compatibility.
+- `npm ci` currently fails because `package.json` and `package-lock.json` are out of sync.
+- `npm run lint:js` currently fails on a Prettier formatting violation in `src/store/update-helpers.test.js`.
 - Live recommendation execution with valid LLM credentials and manual Site Editor smoke checks were not rerun in this pass.
 
 ## Recent Verification
 
+- 2026-03-23 remediation: `npm run test:unit -- --runInBand` passed (`13` suites, `60` tests).
+- 2026-03-23 remediation: `npm run build` passed.
+- 2026-03-23 remediation: `npm run lint:js` failed on `src/store/update-helpers.test.js:219` (`prettier/prettier`).
 - 2026-03-19 remediation: `npm run lint:js` passed.
 - 2026-03-19 remediation: `npm run test:unit -- --runInBand` passed.
 - 2026-03-19 remediation: `npm run build` passed.
