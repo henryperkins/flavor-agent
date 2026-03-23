@@ -61,6 +61,20 @@ function getContentAttributeKeys( blockContext ) {
 }
 
 /**
+ * Some contentOnly-compatible container blocks expose editable content only
+ * through their inner blocks, not through direct wrapper attributes.
+ *
+ * @param {Object} blockContext Block context.
+ * @return {boolean} Whether editable content is expressed through inner blocks only.
+ */
+function usesInnerBlocksAsContent( blockContext ) {
+	return (
+		blockContext?.supportsContentRole === true &&
+		getContentAttributeKeys( blockContext ).length === 0
+	);
+}
+
+/**
  * Derive editing restrictions from block context.
  *
  * WordPress editing modes: 'default' (unrestricted), 'contentOnly', 'disabled'.
@@ -186,6 +200,15 @@ export function sanitizeRecommendationsForContext(
 		return normalized;
 	}
 
+	if ( usesInnerBlocksAsContent( blockContext ) ) {
+		return {
+			...normalized,
+			settings: [],
+			styles: [],
+			block: [],
+		};
+	}
+
 	const contentAttributeKeys = getContentAttributeKeys( blockContext );
 
 	return {
@@ -221,6 +244,10 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 
 	if ( ! restrictions.contentOnly ) {
 		return suggestion.attributeUpdates;
+	}
+
+	if ( usesInnerBlocksAsContent( blockContext ) ) {
+		return {};
 	}
 
 	return filterAttributeUpdatesForContentOnly(

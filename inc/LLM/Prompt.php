@@ -54,12 +54,13 @@ Rules:
 - If the block already has good values, return fewer or no suggestions.
 - Return 2-6 suggestions total. Prioritize high-impact visual improvements.
 - If the block is inside a contentOnly container, only suggest changes to content attributes (role=content). Do not suggest style or settings changes — those panels are locked.
+- If a block only exposes content through supports.contentRole inner blocks and has no direct content attributes, do not suggest direct wrapper attribute changes.
 - You may suggest viewport visibility rules: { "metadata": { "blockVisibility": { "viewport": { "mobile": false } } } } to show/hide the block on specific devices.
 - If theme pseudo-class styles (:hover, :focus, :active, :focus-visible) are provided for a block, use them when suggesting interactive state styles.
 - For style objects in attributeUpdates, use the nested style format:
   { "style": { "color": { "background": "var(--wp--preset--color--accent)" } } }
   or preset attributes like { "backgroundColor": "accent" }.
-- When a block supports both aspect ratio and explicit height, never suggest setting both in the same recommendation. Choose aspectRatio or height, not both.
+- When a block supports both aspect ratio and explicit height, never suggest setting both in the same recommendation. Choose aspectRatio or height/minHeight, not both.
 - Preserve Gutenberg attribute key casing exactly in attributeUpdates (for example, backgroundColor and metadata.blockVisibility).
 - If suggesting a registered style variation, use "type": "style_variation" and include the exact attributeUpdates needed to activate it.
 SYSTEM;
@@ -149,6 +150,13 @@ SYSTEM;
 				? 'This block is inside a contentOnly container.'
 				: 'This block is in contentOnly editing mode.';
 			$parts[] = 'Only content attributes (role=content) can be edited. Do not suggest style or settings panel changes.';
+
+			if (
+				! empty( $block['supportsContentRole'] )
+				&& empty( $block['contentAttributes'] )
+			) {
+				$parts[] = 'This block exposes editable content through inner blocks via supports.contentRole and has no direct content attributes on its wrapper. Do not suggest direct wrapper attribute changes.';
+			}
 		}
 
 		if ( array_key_exists( 'blockVisibility', $block ) && null !== $block['blockVisibility'] ) {

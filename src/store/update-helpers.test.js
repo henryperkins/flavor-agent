@@ -199,6 +199,45 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'sanitizeRecommendationsForContext drops wrapper suggestions for supportsContentRole blocks without direct content attributes', () => {
+		const recommendations = {
+			settings: [
+				{ label: 'Toggle', attributeUpdates: { isToggled: true } },
+			],
+			styles: [
+				{
+					label: 'Outline',
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+			],
+			block: [
+				{
+					label: 'Change wrapper spacing',
+					attributeUpdates: {
+						style: { spacing: { padding: 'var(--wp--preset--spacing--40)' } },
+					},
+				},
+			],
+			explanation: 'Wrapper updates are locked here.',
+		};
+		const blockContext = {
+			editingMode: 'contentOnly',
+			supportsContentRole: true,
+			contentAttributes: {},
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, blockContext )
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: 'Wrapper updates are locked here.',
+		} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext returns empty for disabled blocks', () => {
 		const recommendations = {
 			settings: [
@@ -254,6 +293,25 @@ describe( 'update helpers', () => {
 				blockContext
 			)
 		).toEqual( { content: 'Hi' } );
+	} );
+
+	test( 'getSuggestionAttributeUpdates blocks wrapper updates for supportsContentRole blocks without direct content attributes', () => {
+		const blockContext = {
+			editingMode: 'contentOnly',
+			supportsContentRole: true,
+			contentAttributes: {},
+		};
+
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+				blockContext
+			)
+		).toEqual( {} );
 	} );
 
 	test( 'getSuggestionAttributeUpdates returns empty for disabled blocks', () => {

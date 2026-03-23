@@ -116,6 +116,30 @@ final class PromptGuidanceTest extends TestCase {
 		);
 	}
 
+	public function test_block_prompt_warns_when_content_only_block_uses_inner_blocks_as_content(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'       => [
+					'name'                => 'core/navigation',
+					'editingMode'         => 'contentOnly',
+					'title'               => 'Navigation',
+					'supportsContentRole' => true,
+					'contentAttributes'   => [],
+				],
+				'themeTokens' => [],
+			]
+		);
+
+		$this->assertStringContainsString(
+			'supports.contentRole',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Do not suggest direct wrapper attribute changes.',
+			$prompt
+		);
+	}
+
 	public function test_block_system_prompt_allows_filter_panel_in_appearance_guidance(): void {
 		$prompt = Prompt::build_system();
 
@@ -151,7 +175,7 @@ final class PromptGuidanceTest extends TestCase {
 		$prompt = Prompt::build_system();
 
 		$this->assertStringContainsString(
-			'Choose aspectRatio or height, not both.',
+			'Choose aspectRatio or height/minHeight, not both.',
 			$prompt
 		);
 	}
