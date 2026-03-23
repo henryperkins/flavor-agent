@@ -21,7 +21,8 @@ final class ResponsesClient {
 				'max_output_tokens' => 1,
 			],
 			'responses_validation_error',
-			'Azure OpenAI responses'
+			'Azure OpenAI responses',
+			'responses'
 		);
 	}
 

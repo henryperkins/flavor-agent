@@ -845,7 +845,7 @@ final class Settings {
 			return (string) sanitize_url( (string) $value );
 		}
 
-		return sanitize_text_field( $value );
+		return sanitize_text_field( (string) $value );
 	}
 
 	private static function report_azure_validation_error( \WP_Error $error ): void {

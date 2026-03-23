@@ -20,7 +20,8 @@ final class EmbeddingClient {
 				'input' => [ 'validation' ],
 			],
 			'embedding_validation_error',
-			'Azure OpenAI embeddings'
+			'Azure OpenAI embeddings',
+			'embeddings'
 		);
 	}
 

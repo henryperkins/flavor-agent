@@ -16,7 +16,8 @@ final class ConfigurationValidator {
 		string $path,
 		array $body,
 		string $error_code,
-		string $fallback_message
+		string $fallback_message,
+		string $expected_shape
 	): true|\WP_Error {
 		$endpoint   = trim( $endpoint );
 		$api_key    = trim( $api_key );
@@ -81,28 +82,7 @@ final class ConfigurationValidator {
 			);
 		}
 
-		$has_expected_shape = false;
-
-		// Minimal shape checks to reduce false positives when validating configuration.
-		// Accept common Azure OpenAI response formats:
-		// - Embeddings / similar: non-empty "data" array.
-		// - Chat/completions: non-empty "choices" array.
-		// - Responses that expose text directly: non-empty "output_text" or "output[0].content[0].text".
-		if ( isset( $data['data'] ) && is_array( $data['data'] ) && ! empty( $data['data'] ) ) {
-			$has_expected_shape = true;
-		} elseif ( isset( $data['choices'] ) && is_array( $data['choices'] ) && ! empty( $data['choices'] ) ) {
-			$has_expected_shape = true;
-		} elseif ( isset( $data['output_text'] ) && is_string( $data['output_text'] ) && $data['output_text'] !== '' ) {
-			$has_expected_shape = true;
-		} elseif (
-			isset( $data['output'][0]['content'][0]['text'] )
-			&& is_string( $data['output'][0]['content'][0]['text'] )
-			&& $data['output'][0]['content'][0]['text'] !== ''
-		) {
-			$has_expected_shape = true;
-		}
-
-		if ( ! $has_expected_shape ) {
+		if ( ! self::matches_expected_shape( $data, $expected_shape ) ) {
 			return new \WP_Error(
 				$error_code . '_invalid_shape',
 				"Unexpected {$fallback_message} validation response format.",
@@ -111,5 +91,58 @@ final class ConfigurationValidator {
 		}
 
 		return true;
+	}
+
+	/**
+	 * @param array<string, mixed> $data
+	 */
+	private static function matches_expected_shape( array $data, string $expected_shape ): bool {
+		if ( 'embeddings' === $expected_shape ) {
+			if ( ! isset( $data['data'] ) || ! is_array( $data['data'] ) || [] === $data['data'] ) {
+				return false;
+			}
+
+			foreach ( $data['data'] as $item ) {
+				if (
+					is_array( $item ) &&
+					isset( $item['embedding'] ) &&
+					is_array( $item['embedding'] ) &&
+					[] !== $item['embedding']
+				) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		if ( 'responses' === $expected_shape ) {
+			if ( isset( $data['output_text'] ) && is_string( $data['output_text'] ) && '' !== $data['output_text'] ) {
+				return true;
+			}
+
+			if ( ! isset( $data['output'] ) || ! is_array( $data['output'] ) ) {
+				return false;
+			}
+
+			foreach ( $data['output'] as $output_item ) {
+				if ( ! is_array( $output_item ) || ! isset( $output_item['content'] ) || ! is_array( $output_item['content'] ) ) {
+					continue;
+				}
+
+				foreach ( $output_item['content'] as $content_item ) {
+					if (
+						is_array( $content_item ) &&
+						isset( $content_item['text'] ) &&
+						is_string( $content_item['text'] ) &&
+						'' !== $content_item['text']
+					) {
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
 	}
 }

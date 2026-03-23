@@ -98,19 +98,39 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_chat_deployment'     => 'new-chat',
 		];
 
-		WordPressTestState::$remote_post_response = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'data' => [
-						[
-							'embedding' => [ 0.1, 0.2 ],
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'data' => [
+							[
+								'embedding' => [ 0.1, 0.2 ],
+							],
 						],
-					],
-				]
-			),
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'output' => [
+							[
+								'content' => [
+									[
+										'text' => 'ok',
+									],
+								],
+							],
+						],
+					]
+				),
+			],
 		];
 
 		$this->assertSame(
@@ -238,6 +258,7 @@ final class SettingsTest extends TestCase {
 			],
 			'body'     => wp_json_encode(
 				[
+					'status' => 'ok',
 					'result' => [
 						'collections' => [],
 					],
