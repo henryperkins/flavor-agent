@@ -247,6 +247,12 @@ export function summarizeTokens( tokens ) {
 		shadows: tokens.shadow.presets.map(
 			( s ) => `${ s.slug }: ${ s.shadow }`
 		),
+		duotone: tokens.color.duotone.map( ( preset ) => {
+			const colors = Array.isArray( preset.colors )
+				? preset.colors.slice( 0, 2 ).join( ' / ' )
+				: '';
+			return colors ? `${ preset.slug }: ${ colors }` : preset.slug;
+		} ),
 		layout: {
 			content: tokens.layout.contentSize,
 			wide: tokens.layout.wideSize,

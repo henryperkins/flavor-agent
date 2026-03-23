@@ -116,6 +116,37 @@ final class PromptGuidanceTest extends TestCase {
 		);
 	}
 
+	public function test_block_system_prompt_allows_filter_panel_in_appearance_guidance(): void {
+		$prompt = Prompt::build_system();
+
+		$this->assertStringContainsString(
+			'general|layout|position|advanced|color|filter|typography|dimensions|border|shadow|background',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Appearance tab (color, filter, typography, dimensions, border, shadow, background, style variations)',
+			$prompt
+		);
+	}
+
+	public function test_block_prompt_includes_duotone_token_summary_when_available(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'       => [
+					'name' => 'core/image',
+				],
+				'themeTokens' => [
+					'duotone' => [ 'midnight: #111111 / #f5f5f5' ],
+				],
+			]
+		);
+
+		$this->assertStringContainsString(
+			'Duotone presets: midnight: #111111 / #f5f5f5',
+			$prompt
+		);
+	}
+
 	public function test_block_system_prompt_mentions_aspect_ratio_and_height_exclusivity(): void {
 		$prompt = Prompt::build_system();
 

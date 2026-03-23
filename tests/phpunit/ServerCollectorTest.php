@@ -88,4 +88,29 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertSame( 'content', $manifest['contentAttributes']['legacyContent']['role'] );
 		$this->assertArrayNotHasKey( 'legacyContent', $manifest['configAttributes'] );
 	}
+
+	public function test_for_tokens_includes_duotone_presets_in_compact_summary(): void {
+		WordPressTestState::$global_settings = [
+			'color'      => [
+				'duotone' => [
+					'theme' => [
+						[
+							'slug'   => 'midnight',
+							'colors' => [ '#111111', '#f5f5f5' ],
+						],
+					],
+				],
+			],
+			'typography' => [],
+			'spacing'    => [],
+			'shadow'     => [],
+			'layout'     => [],
+			'border'     => [],
+		];
+
+		$tokens = ServerCollector::for_tokens();
+
+		$this->assertArrayHasKey( 'duotone', $tokens );
+		$this->assertSame( [ 'midnight: #111111 / #f5f5f5' ], $tokens['duotone'] );
+	}
 }
