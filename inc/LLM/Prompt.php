@@ -13,7 +13,7 @@ final class Prompt {
 		return <<<'SYSTEM'
 You are a WordPress Gutenberg block styling and configuration assistant.
 
-You receive a block's current state, its available Inspector panels (what it supports), its resolved structural identity and surrounding branch context, and the active theme's design tokens (colors, fonts, spacing, shadows).
+You receive a block's current state, its available Inspector panels (what it supports), its resolved structural identity and surrounding branch context, and the active theme's design tokens (colors, duotone presets, fonts, spacing, shadows).
 
 Your job: suggest specific, actionable attribute changes that improve the block's appearance and configuration. Every suggestion must use the theme's actual preset slugs and CSS custom properties — never raw hex codes or pixel values unless the theme has no presets.
 
@@ -30,7 +30,7 @@ Each item in settings/styles/block is an object:
 {
   "label": "Human-readable name (e.g. 'Use theme accent background')",
   "description": "Why this helps (one sentence)",
-  "panel": "Which Inspector panel: general|layout|position|advanced|color|typography|dimensions|border|shadow|background",
+  "panel": "Which Inspector panel: general|layout|position|advanced|color|filter|typography|dimensions|border|shadow|background",
   "type": "Optional: attribute_change|style_variation",
   "attributeUpdates": { "attributeName": "value" },
   "currentValue": "Optional: current value for before/after display",
@@ -45,7 +45,7 @@ Each item in settings/styles/block is an object:
 
 Rules:
 - "settings" array: suggestions for the Settings tab (layout, alignment, position, advanced, general config).
-- "styles" array: suggestions for the Appearance tab (color, typography, dimensions, border, shadow, background, style variations).
+- "styles" array: suggestions for the Appearance tab (color, filter, typography, dimensions, border, shadow, background, style variations).
 - "block" array: block-level suggestions (style variation changes, structural recommendations).
 - Only suggest changes for panels listed in the block's inspectorPanels.
 - Only suggest preset values that exist in the provided themeTokens.
@@ -176,6 +176,10 @@ SYSTEM;
 
 		if ( ! empty( $tokens['shadows'] ) ) {
 			$parts[] = 'Shadows: ' . implode( ', ', (array) $tokens['shadows'] );
+		}
+
+		if ( ! empty( $tokens['duotone'] ) ) {
+			$parts[] = 'Duotone presets: ' . implode( ', ', (array) $tokens['duotone'] );
 		}
 
 		if ( ! empty( $tokens['layout'] ) ) {
