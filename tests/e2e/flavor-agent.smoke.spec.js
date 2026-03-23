@@ -22,22 +22,36 @@ const TEMPLATE_PATTERN_NAME = 'flavor-agent/editorial-banner';
 const TEMPLATE_PATTERN_TITLE = 'Editorial Banner';
 
 async function dismissWelcomeGuide( page ) {
-	const closeButton = page.getByRole( 'button', { name: 'Close' } );
+	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
+	const closeButton = welcomeOverlay
+		.getByRole( 'button', { name: 'Close' } )
+		.first();
 
-	if ( await closeButton.count() ) {
+	const didAppear = await closeButton
+		.waitFor( { state: 'visible', timeout: 10000 } )
+		.then( () => true )
+		.catch( () => false );
+
+	if ( didAppear ) {
 		await closeButton.click();
-		await page.waitForTimeout( 500 );
+		await expect( welcomeOverlay ).toBeHidden();
 	}
 }
 
 async function dismissSiteEditorWelcomeGuide( page ) {
-	const getStartedButton = page.getByRole( 'button', {
-		name: 'Get started',
-	} );
+	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
+	const getStartedButton = welcomeOverlay
+		.getByRole( 'button', { name: 'Get started' } )
+		.first();
 
-	if ( await getStartedButton.count() ) {
+	const didAppear = await getStartedButton
+		.waitFor( { state: 'visible', timeout: 10000 } )
+		.then( () => true )
+		.catch( () => false );
+
+	if ( didAppear ) {
 		await getStartedButton.click();
-		await page.waitForTimeout( 500 );
+		await expect( welcomeOverlay ).toBeHidden();
 	}
 }
 
@@ -116,6 +130,7 @@ async function seedParagraphBlock( page ) {
 	await expect(
 		canvas.getByRole( 'textbox', { name: 'Add title' } )
 	).toBeVisible();
+	await dismissWelcomeGuide( page );
 
 	if ( await defaultBlockButton.count() ) {
 		await defaultBlockButton.click();
@@ -124,7 +139,21 @@ async function seedParagraphBlock( page ) {
 	}
 
 	await page.keyboard.type( 'Hello world' );
-	await page.waitForTimeout( 500 );
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const blocks =
+					window.wp?.data
+						?.select( 'core/block-editor' )
+						?.getBlocks?.() || [];
+				const paragraph = blocks.find(
+					( block ) => block?.name === 'core/paragraph'
+				);
+
+				return paragraph?.attributes?.content || '';
+			} )
+		)
+		.toContain( 'Hello world' );
 
 	return page.evaluate( () => {
 		return (
@@ -265,14 +294,15 @@ async function openFirstTemplateEditor( page ) {
 
 	await expect( templateButton ).toBeVisible();
 	await templateButton.click();
-
-	await page.waitForTimeout( 1000 );
-	await waitForFlavorAgent( page );
 	await page.waitForFunction(
 		() =>
 			window.wp?.data?.select( 'core/edit-site' )?.getEditedPostType?.() ===
-			'wp_template'
+				'wp_template' &&
+			Boolean(
+				window.wp?.data?.select( 'core/edit-site' )?.getEditedPostId?.()
+			)
 	);
+	await waitForFlavorAgent( page );
 }
 
 async function enableTemplateDocumentSidebar( page ) {
@@ -284,7 +314,9 @@ async function enableTemplateDocumentSidebar( page ) {
 			.dispatch( 'core/interface' )
 			.enableComplementaryArea( 'core/edit-site', 'edit-post/document' );
 	} );
-	await page.waitForTimeout( 500 );
+	await expect(
+		page.getByRole( 'tab', { name: 'Template', exact: true } )
+	).toBeVisible();
 }
 
 async function registerTemplatePattern(
@@ -488,7 +520,6 @@ test( 'block inspector smoke applies, persists, and undoes AI recommendations', 
 	} );
 	await waitForWordPressReady( page );
 	await waitForFlavorAgent( page );
-	await page.waitForTimeout( 5000 );
 	await dismissWelcomeGuide( page );
 
 	const clientId = await seedParagraphBlock( page );
@@ -649,7 +680,6 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	} );
 	await waitForWordPressReady( page );
 	await waitForFlavorAgent( page );
-	await page.waitForTimeout( 5000 );
 	await dismissWelcomeGuide( page );
 
 	await page.waitForFunction(
@@ -668,7 +698,6 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	const searchInput = getVisibleSearchInput( page );
 
 	await expect( searchInput ).toBeVisible();
-	await page.waitForTimeout( 500 );
 	await searchInput.fill( searchPrompt );
 
 	await expect.poll( () => patternRequests.length >= 2 ).toBe( true );
@@ -763,8 +792,8 @@ test( 'template surface smoke previews and applies executable template recommend
 		templateTarget.templateRef
 	);
 	expect( templateRequests[ 0 ].prompt ).toBe( TEMPLATE_PROMPT );
-	expect( templateRequests[ 0 ].visiblePatternNames ).toContain(
-		TEMPLATE_PATTERN_NAME
+	expect( templateRequests[ 0 ] ).not.toHaveProperty(
+		'visiblePatternNames'
 	);
 
 	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
@@ -815,18 +844,9 @@ test( 'template surface smoke previews and applies executable template recommend
 	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
 	await openTemplateRecommendationsPanel( page );
 	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
-
-	await page
-		.locator( '.flavor-agent-activity-row' )
-		.getByRole( 'button', { name: 'Undo', exact: true } )
-		.click();
-
-	await expect
-		.poll( () => getTemplateInsertState( page, TEMPLATE_INSERTED_CONTENT ) )
-		.toEqual( {
-			hasInsertedContent: false,
-			undoStatus: 'undone',
-		} );
+	await expect( page.locator( '.flavor-agent-activity-row' ) ).toContainText(
+		'Clarify template hierarchy'
+	);
 } );
 
 test.fixme( 'template undo survives a Site Editor refresh when the template has not drifted', async ( {

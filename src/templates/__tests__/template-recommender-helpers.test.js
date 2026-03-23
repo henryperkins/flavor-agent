@@ -14,24 +14,17 @@ import {
 } from '../template-recommender-helpers';
 
 describe( 'template recommender helpers', () => {
-	test( 'buildTemplateFetchInput trims prompt and includes visible patterns when provided', () => {
+	test( 'buildTemplateFetchInput trims prompt and keeps template requests template-global', () => {
 		expect(
 			buildTemplateFetchInput( {
 				templateRef: 'theme//single',
 				templateType: 'single',
 				prompt: '  Tighten the footer layout.  ',
-				visiblePatternNames: [
-					'theme/hero',
-					'',
-					'theme/hero',
-					'theme/footer',
-				],
 			} )
 		).toEqual( {
 			templateRef: 'theme//single',
 			templateType: 'single',
 			prompt: 'Tighten the footer layout.',
-			visiblePatternNames: [ 'theme/hero', 'theme/footer' ],
 		} );
 	} );
 
@@ -43,7 +36,6 @@ describe( 'template recommender helpers', () => {
 		} );
 
 		expect( input ).toEqual( { templateRef: 'theme//index' } );
-		expect( input ).not.toHaveProperty( 'visiblePatternNames' );
 	} );
 
 	test( 'buildTemplateOperationViewModel normalizes supported operation types', () => {

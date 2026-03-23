@@ -24,6 +24,26 @@ function normalizeScopeValue( value ) {
 	return String( value );
 }
 
+export function resolveActivityScope( postType, entityId ) {
+	const normalizedPostType = normalizeScopeValue( postType );
+	const normalizedEntityId = normalizeScopeValue( entityId );
+
+	if ( ! normalizedPostType ) {
+		return null;
+	}
+
+	return {
+		key: normalizedEntityId
+			? `${ normalizedPostType }:${ normalizedEntityId }`
+			: null,
+		hint: `${ normalizedPostType }:${
+			normalizedEntityId || '__unsaved__'
+		}`,
+		postType: normalizedPostType,
+		entityId: normalizedEntityId,
+	};
+}
+
 function getStorageKey( scopeKey ) {
 	return `${ ACTIVITY_STORAGE_PREFIX }${ scopeKey }`;
 }
@@ -145,18 +165,9 @@ export function getCurrentActivityScope( registry ) {
 		normalizeScopeValue( editSite.getEditedPostType?.() );
 	const entityId =
 		normalizeScopeValue( editor.getCurrentPostId?.() ) ||
-		normalizeScopeValue( editSite.getEditedPostId?.() ) ||
-		( postType ? 'new' : '' );
+		normalizeScopeValue( editSite.getEditedPostId?.() );
 
-	if ( ! postType || ! entityId ) {
-		return null;
-	}
-
-	return {
-		key: `${ postType }:${ entityId }`,
-		postType,
-		entityId,
-	};
+	return resolveActivityScope( postType, entityId );
 }
 
 export function readPersistedActivityLog( scopeKey ) {

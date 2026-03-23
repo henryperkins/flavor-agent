@@ -2,6 +2,7 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
+import { resolveActivityScope } from '../store/activity-history';
 
 export default function ActivitySessionBootstrap() {
 	const scopeHint = useSelect( ( select ) => {
@@ -14,7 +15,7 @@ export default function ActivitySessionBootstrap() {
 		const postId =
 			editor?.getCurrentPostId?.() || editSite?.getEditedPostId?.() || '';
 
-		return `${ postType }:${ postId || 'new' }`;
+		return resolveActivityScope( postType, postId )?.hint || '';
 	}, [] );
 	const { loadActivitySession } = useDispatch( STORE_NAME );
 

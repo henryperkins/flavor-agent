@@ -12,11 +12,16 @@ import {
 	getTemplateActivityUndoState,
 	undoTemplateSuggestionOperations,
 } from '../../utils/template-actions';
+import {
+	createActivityEntry,
+	readPersistedActivityLog,
+} from '../activity-history';
 import { actions } from '../index';
 
 describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		window.sessionStorage.clear();
 		actions._patternAbort = null;
 		actions._templateAbort = null;
 		getTemplateActivityUndoState.mockImplementation(
@@ -132,6 +137,61 @@ describe( 'store action thunks', () => {
 				5
 			)
 		);
+	} );
+
+	test( 'loadActivitySession migrates in-memory unsaved activity into the first concrete document scope', async () => {
+		const draftEntry = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			suggestion: 'Refresh content',
+			target: {
+				clientId: 'block-1',
+			},
+		} );
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [ draftEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
+					id: draftEntry.id,
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+				} ),
+			] )
+		);
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
+			expect.objectContaining( {
+				id: draftEntry.id,
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+			} ),
+		] );
 	} );
 
 	test( 'applySuggestion uses registry-backed block-editor access inside thunks', async () => {

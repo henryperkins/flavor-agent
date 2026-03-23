@@ -24,11 +24,9 @@ final class TemplateAbilities {
 	/**
 	 * Recommend template-part composition and patterns for a template.
 	 *
-	 * The shipped template panel keeps this request template-global and
-	 * can optionally pass editor-visible pattern names so executable
-	 * insert operations stay aligned with the current editor surface.
+	 * The shipped template panel keeps this request template-global.
 	 *
-	 * @param array $input { templateRef: string, templateType?: string, prompt?: string, visiblePatternNames?: string[] }
+	 * @param array $input { templateRef: string, templateType?: string, prompt?: string }
 	 * @return array|\WP_Error Suggestions payload or error.
 	 */
 	public static function recommend_template( mixed $input ): array|\WP_Error {
@@ -41,9 +39,6 @@ final class TemplateAbilities {
 			? $input['templateType']
 			: null;
 		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
-		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
-			? StringArray::sanitize( $input['visiblePatternNames'] )
-			: null;
 
 		if ( $template_ref === '' ) {
 			return new \WP_Error(
@@ -56,13 +51,6 @@ final class TemplateAbilities {
 		$context = ServerCollector::for_template( $template_ref, $template_type );
 		if ( is_wp_error( $context ) ) {
 			return $context;
-		}
-
-		if ( is_array( $visible_pattern_names ) ) {
-			$context['patterns'] = self::filter_visible_patterns(
-				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
-				$visible_pattern_names
-			);
 		}
 
 		$system = TemplatePrompt::build_system();
@@ -226,29 +214,5 @@ final class TemplateAbilities {
 		}
 
 		return $family_context;
-	}
-
-	/**
-	 * @param array<int, array<string, mixed>> $patterns
-	 * @param string[]                         $visible_pattern_names
-	 * @return array<int, array<string, mixed>>
-	 */
-	private static function filter_visible_patterns( array $patterns, array $visible_pattern_names ): array {
-		if ( empty( $visible_pattern_names ) ) {
-			return [];
-		}
-
-		$visible_lookup = array_fill_keys( $visible_pattern_names, true );
-
-		return array_values(
-			array_filter(
-				$patterns,
-				static function ( array $pattern ) use ( $visible_lookup ): bool {
-					$name = sanitize_text_field( (string) ( $pattern['name'] ?? '' ) );
-
-					return $name !== '' && isset( $visible_lookup[ $name ] );
-				}
-			)
-		);
 	}
 }

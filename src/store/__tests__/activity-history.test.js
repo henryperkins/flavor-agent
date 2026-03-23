@@ -4,6 +4,7 @@ import {
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
 	readPersistedActivityLog,
+	resolveActivityScope,
 	writePersistedActivityLog,
 } from '../activity-history';
 
@@ -25,8 +26,34 @@ describe( 'activity history helpers', () => {
 			} )
 		).toEqual( {
 			key: 'post:42',
+			hint: 'post:42',
 			postType: 'post',
 			entityId: '42',
+		} );
+	} );
+
+	test( 'resolveActivityScope keeps unsaved documents unscoped until they have a real entity id', () => {
+		expect( resolveActivityScope( 'post', '' ) ).toEqual( {
+			key: null,
+			hint: 'post:__unsaved__',
+			postType: 'post',
+			entityId: '',
+		} );
+		expect(
+			getCurrentActivityScope( {
+				select: ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => null,
+						  }
+						: {},
+			} )
+		).toEqual( {
+			key: null,
+			hint: 'post:__unsaved__',
+			postType: 'post',
+			entityId: '',
 		} );
 	} );
 

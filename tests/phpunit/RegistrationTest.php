@@ -116,5 +116,9 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$suggestion['properties']['operations']['items']['properties']['patternName']['type'] ?? null
 		);
+		$this->assertArrayNotHasKey(
+			'visiblePatternNames',
+			$ability['input_schema']['properties'] ?? []
+		);
 	}
 }

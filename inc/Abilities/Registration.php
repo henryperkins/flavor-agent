@@ -222,11 +222,6 @@ final class Registration {
 							'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.',
 						],
 						'prompt'              => [ 'type' => 'string' ],
-						'visiblePatternNames' => [
-							'type'        => 'array',
-							'description' => 'Pattern names currently available in the editor inserter for this template context.',
-							'items'       => [ 'type' => 'string' ],
-						],
 					],
 					'required'   => [ 'templateRef' ],
 				],

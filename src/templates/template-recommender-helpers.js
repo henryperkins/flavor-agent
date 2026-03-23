@@ -58,7 +58,6 @@ export function buildTemplateFetchInput( {
 	templateRef,
 	templateType,
 	prompt,
-	visiblePatternNames = [],
 } ) {
 	const input = { templateRef };
 	const trimmedPrompt = prompt.trim();
@@ -69,15 +68,6 @@ export function buildTemplateFetchInput( {
 
 	if ( trimmedPrompt ) {
 		input.prompt = trimmedPrompt;
-	}
-
-	if (
-		Array.isArray( visiblePatternNames ) &&
-		visiblePatternNames.filter( Boolean ).length > 0
-	) {
-		input.visiblePatternNames = Array.from(
-			new Set( visiblePatternNames.filter( Boolean ) )
-		);
 	}
 
 	return input;

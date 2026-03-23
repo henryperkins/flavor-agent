@@ -35,7 +35,6 @@ import AIActivitySection from '../components/AIActivitySection';
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
-import { getVisiblePatternNames } from '../utils/visible-patterns';
 import {
 	getTemplateActivityUndoState,
 	openInserterForPattern,
@@ -291,22 +290,16 @@ export default function TemplateRecommender() {
 		},
 		[ templateRef ]
 	);
-	const { patternTitleMap, visiblePatternNames } = useSelect( ( select ) => {
-		const inserterRootClientId =
-			select( blockEditorStore ).getBlockInsertionPoint?.()
-				?.rootClientId ?? null;
+	const patternTitleMap = useSelect( () => {
 		const patterns = getCompatBlockPatterns();
 
-		return {
-			patternTitleMap: patterns.reduce( ( acc, pattern ) => {
-				if ( pattern?.name ) {
-					acc[ pattern.name ] = pattern.title || pattern.name;
-				}
+		return patterns.reduce( ( acc, pattern ) => {
+			if ( pattern?.name ) {
+				acc[ pattern.name ] = pattern.title || pattern.name;
+			}
 
-				return acc;
-			}, {} ),
-			visiblePatternNames: getVisiblePatternNames( inserterRootClientId ),
-		};
+			return acc;
+		}, {} );
 	}, [] );
 	const insertionPointLabel = useSelect( ( select ) => {
 		const blockEditor = select( 'core/block-editor' );
@@ -377,16 +370,9 @@ export default function TemplateRecommender() {
 				templateRef,
 				templateType,
 				prompt,
-				visiblePatternNames,
 			} )
 		);
-	}, [
-		fetchTemplateRecommendations,
-		prompt,
-		templateRef,
-		templateType,
-		visiblePatternNames,
-	] );
+	}, [ fetchTemplateRecommendations, prompt, templateRef, templateType ] );
 
 	const handleEntityAction = useCallback( ( entity ) => {
 		switch ( entity?.actionType ) {

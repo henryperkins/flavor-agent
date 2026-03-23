@@ -100,17 +100,55 @@ function buildActivityDocument( scope ) {
 	};
 }
 
-function ensureActivitySession( localDispatch, select, scope ) {
-	const scopeKey = scope?.key || null;
+function alignActivityEntriesToScope( entries, scope ) {
+	const document = buildActivityDocument( scope );
 
-	if ( select.getActivityScopeKey?.() === scopeKey ) {
+	if ( ! document ) {
+		return limitActivityLog( entries );
+	}
+
+	return limitActivityLog( entries ).map( ( entry ) =>
+		entry
+			? {
+					...entry,
+					document,
+			  }
+			: entry
+	);
+}
+
+function syncActivitySession( localDispatch, select, scope ) {
+	const currentScopeKey = select.getActivityScopeKey?.() || null;
+	const nextScopeKey = scope?.key || null;
+
+	if ( currentScopeKey === nextScopeKey ) {
+		return;
+	}
+
+	const currentEntries = select.getActivityLog?.() || [];
+
+	if (
+		currentScopeKey === null &&
+		nextScopeKey &&
+		currentEntries.length > 0
+	) {
+		const reassignedEntries = alignActivityEntriesToScope(
+			currentEntries,
+			scope
+		);
+
+		localDispatch(
+			actions.setActivitySession( nextScopeKey, reassignedEntries )
+		);
+		writePersistedActivityLog( nextScopeKey, reassignedEntries );
+
 		return;
 	}
 
 	localDispatch(
 		actions.setActivitySession(
-			scopeKey,
-			scopeKey ? readPersistedActivityLog( scopeKey ) : []
+			nextScopeKey,
+			nextScopeKey ? readPersistedActivityLog( nextScopeKey ) : []
 		)
 	);
 }
@@ -428,18 +466,8 @@ const actions = {
 	loadActivitySession() {
 		return async ( { dispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
-			const scopeKey = scope?.key || null;
 
-			if ( select.getActivityScopeKey?.() === scopeKey ) {
-				return;
-			}
-
-			dispatch(
-				actions.setActivitySession(
-					scopeKey,
-					scopeKey ? readPersistedActivityLog( scopeKey ) : []
-				)
-			);
+			syncActivitySession( dispatch, select, scope );
 		};
 	},
 
@@ -504,7 +532,7 @@ const actions = {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
 
-			ensureActivitySession( localDispatch, select, scope );
+			syncActivitySession( localDispatch, select, scope );
 
 			const storedRecommendations =
 				select.getBlockRecommendations( clientId ) || {};
@@ -683,7 +711,7 @@ const actions = {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
 
-			ensureActivitySession( localDispatch, select, scope );
+			syncActivitySession( localDispatch, select, scope );
 
 			const latestActivity = select.getLatestAppliedActivity?.();
 
@@ -816,7 +844,7 @@ const actions = {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
 
-			ensureActivitySession( localDispatch, select, scope );
+			syncActivitySession( localDispatch, select, scope );
 
 			localDispatch( actions.setTemplateApplyState( 'applying' ) );
 
