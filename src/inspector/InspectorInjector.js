@@ -256,6 +256,13 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							suggestions={ recommendations.styles }
 							label="AI border suggestions"
 						/>
+						<SubPanelSuggestions
+							group="filter"
+							panel="filter"
+							clientId={ clientId }
+							suggestions={ recommendations.styles }
+							label="AI filter suggestions"
+						/>
 					</>
 				) }
 			</>

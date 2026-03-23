@@ -173,6 +173,21 @@ final class ServerCollector {
 			$shadows[] = ( $s['slug'] ?? '' ) . ': ' . ( $s['shadow'] ?? '' );
 		}
 
+		$duotone = [];
+		foreach ( self::merge_presets( $settings['color']['duotone'] ?? [] ) as $preset ) {
+			$slug   = (string) ( $preset['slug'] ?? '' );
+			$preset_colors = is_array( $preset['colors'] ?? null ) ? $preset['colors'] : [];
+
+			if ( $slug === '' ) {
+				continue;
+			}
+
+			$color_summary = implode( ' / ', array_map( 'strval', array_slice( $preset_colors, 0, 2 ) ) );
+			$duotone[]     = $color_summary !== ''
+				? sprintf( '%s: %s', $slug, $color_summary )
+				: $slug;
+		}
+
 		return [
 			'colors'            => $colors,
 			'gradients'         => $gradients,
@@ -180,6 +195,7 @@ final class ServerCollector {
 			'fontFamilies'      => $font_families,
 			'spacing'           => $spacing,
 			'shadows'           => $shadows,
+			'duotone'           => $duotone,
 			'layout'            => [
 				'content' => $settings['layout']['contentSize'] ?? '',
 				'wide'    => $settings['layout']['wideSize'] ?? '',
