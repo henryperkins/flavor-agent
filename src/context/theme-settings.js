@@ -10,6 +10,7 @@ const BLOCK_PSEUDO_CLASSES = [
 	':focus-visible',
 	':active',
 ];
+const DEFAULT_SPACING_UNITS = [ 'px', 'em', 'rem', 'vh', 'vw', '%' ];
 
 function isObjectLike( value ) {
 	return (
@@ -78,23 +79,65 @@ function collectBlockPseudoStylesForParity( features ) {
 }
 
 function buildThemeParitySnapshot( settings = {}, features = {} ) {
+	const color = features?.color || {};
+	const typography = features?.typography || {};
+	const spacing = features?.spacing || {};
 	const layout = features?.layout || {};
+	const shadow = features?.shadow || {};
+	const border = features?.border || {};
+	const background = features?.background || {};
 
 	return normalizeComparableValue( {
 		presets: {
-			color: normalizeOriginCollection( features?.color?.palette ),
-			gradients: normalizeOriginCollection( features?.color?.gradients ),
-			duotone: normalizeOriginCollection( features?.color?.duotone ),
-			fontSizes: normalizeOriginCollection(
-				features?.typography?.fontSizes
-			),
-			fontFamilies: normalizeOriginCollection(
-				features?.typography?.fontFamilies
-			),
-			spacingSizes: normalizeOriginCollection(
-				features?.spacing?.spacingSizes
-			),
-			shadows: normalizeOriginCollection( features?.shadow?.presets ),
+			color: normalizeOriginCollection( color.palette ),
+			gradients: normalizeOriginCollection( color.gradients ),
+			duotone: normalizeOriginCollection( color.duotone ),
+			fontSizes: normalizeOriginCollection( typography.fontSizes ),
+			fontFamilies: normalizeOriginCollection( typography.fontFamilies ),
+			spacingSizes: normalizeOriginCollection( spacing.spacingSizes ),
+			shadows: normalizeOriginCollection( shadow.presets ),
+		},
+		capabilities: {
+			color: {
+				custom: color.custom !== false,
+				customGradient: color.customGradient !== false,
+				defaultPalette: color.defaultPalette !== false,
+				background: color.background !== false,
+				text: color.text !== false,
+				link: color.link ?? false,
+			},
+			typography: {
+				customFontSize: typography.customFontSize !== false,
+				lineHeight: typography.lineHeight ?? false,
+				dropCap: typography.dropCap ?? true,
+				fontStyle: typography.fontStyle ?? false,
+				fontWeight: typography.fontWeight ?? false,
+				letterSpacing: typography.letterSpacing ?? false,
+				textDecoration: typography.textDecoration ?? false,
+				textTransform: typography.textTransform ?? false,
+				writingMode: typography.writingMode ?? false,
+				fluid: typography.fluid ?? false,
+			},
+			spacing: {
+				units: spacing.units ?? DEFAULT_SPACING_UNITS,
+				margin: spacing.margin ?? false,
+				padding: spacing.padding ?? false,
+				blockGap: spacing.blockGap ?? null,
+				customSpacingSize: spacing.customSpacingSize !== false,
+			},
+			shadow: {
+				defaultPresets: shadow.defaultPresets ?? true,
+			},
+			border: {
+				color: border.color ?? false,
+				radius: border.radius ?? false,
+				style: border.style ?? false,
+				width: border.width ?? false,
+			},
+			background: {
+				backgroundImage: background.backgroundImage ?? false,
+				backgroundSize: background.backgroundSize ?? false,
+			},
 		},
 		layout: {
 			contentSize:

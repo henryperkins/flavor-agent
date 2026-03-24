@@ -56,7 +56,7 @@ describe( 'template recommender helpers', () => {
 		expect( input ).toEqual( { templateRef: 'theme//index' } );
 	} );
 
-	test( 'buildTemplateFetchInput omits an empty visiblePatternNames array', () => {
+	test( 'buildTemplateFetchInput preserves an explicit empty visiblePatternNames array', () => {
 		expect(
 			buildTemplateFetchInput( {
 				templateRef: 'theme//page',
@@ -66,6 +66,7 @@ describe( 'template recommender helpers', () => {
 			} )
 		).toEqual( {
 			templateRef: 'theme//page',
+			visiblePatternNames: [],
 		} );
 	} );
 

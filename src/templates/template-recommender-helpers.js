@@ -103,8 +103,7 @@ export function buildTemplateFetchInput( {
 	}
 
 	if (
-		Array.isArray( normalizedVisiblePatternNames ) &&
-		normalizedVisiblePatternNames.length > 0
+		Array.isArray( normalizedVisiblePatternNames )
 	) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
 	}

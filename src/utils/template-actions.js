@@ -376,11 +376,17 @@ function resolveTemplatePartInsertionPoint(
 	blockEditorSelect = select( blockEditorStore )
 ) {
 	const blocks = blockEditorSelect?.getBlocks?.() || [];
+	let index = blocks.length;
+
+	if ( placement === TEMPLATE_PART_PLACEMENT_START ) {
+		index = 0;
+	} else if ( placement === TEMPLATE_PART_PLACEMENT_END ) {
+		index = blocks.length;
+	}
 
 	return {
 		rootClientId: null,
-		index:
-			placement === TEMPLATE_PART_PLACEMENT_START ? 0 : blocks.length,
+		index,
 	};
 }
 

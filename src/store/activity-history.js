@@ -26,11 +26,12 @@ function normalizeScopeValue( value ) {
 
 export function resolveActivityScope( postType, entityId ) {
 	const normalizedPostType = normalizeScopeValue( postType );
-	const normalizedEntityId = normalizeScopeValue( entityId );
 
 	if ( ! normalizedPostType ) {
 		return null;
 	}
+
+	const normalizedEntityId = normalizeScopeValue( entityId );
 
 	return {
 		key: normalizedEntityId

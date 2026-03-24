@@ -106,8 +106,7 @@ function buildTemplatePartFetchInput( {
 	}
 
 	if (
-		Array.isArray( normalizedVisiblePatternNames ) &&
-		normalizedVisiblePatternNames.length > 0
+		Array.isArray( normalizedVisiblePatternNames )
 	) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
 	}

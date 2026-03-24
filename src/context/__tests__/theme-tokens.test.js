@@ -311,6 +311,41 @@ describe( 'theme token source adapter', () => {
 					slug: 'display',
 				} ),
 			] )
+			);
+	} );
+
+	test( 'rejects stable parity when capability flags diverge from the experimental source', () => {
+		const settings = {
+			features: {
+				...COMPLETE_FEATURES,
+				color: {
+					...COMPLETE_FEATURES.color,
+					link: false,
+				},
+				spacing: {
+					...COMPLETE_FEATURES.spacing,
+					units: [ 'px' ],
+				},
+			},
+			__experimentalFeatures: COMPLETE_FEATURES,
+		};
+
+		expect( getThemeTokenSourceDetails( settings ) ).toEqual(
+			expect.objectContaining( {
+				source: 'experimental',
+				settingsKey: '__experimentalFeatures',
+				reason: 'stable-parity-mismatch',
+			} )
+		);
+		expect( collectThemeTokensFromSettings( settings ) ).toEqual(
+			expect.objectContaining( {
+				color: expect.objectContaining( {
+					linkEnabled: true,
+				} ),
+				spacing: expect.objectContaining( {
+					units: [ 'px', 'rem' ],
+				} ),
+			} )
 		);
 	} );
 

@@ -18,11 +18,11 @@ jest.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 jest.mock( '@wordpress/components', () => {
-	const React = require( 'react' );
+	const { Fragment, createElement } = require( '@wordpress/element' );
 
 	return {
 		Button: ( { children, className, disabled, onClick } ) =>
-			React.createElement(
+			createElement(
 				'button',
 				{
 					type: 'button',
@@ -33,7 +33,7 @@ jest.mock( '@wordpress/components', () => {
 				children
 			),
 		Notice: ( { children } ) =>
-			React.createElement( 'div', { role: 'alert' }, children ),
+			createElement( 'div', { role: 'alert' }, children ),
 		TextareaControl: ( {
 			className,
 			label,
@@ -42,11 +42,11 @@ jest.mock( '@wordpress/components', () => {
 			rows,
 			value,
 		} ) =>
-			React.createElement(
+			createElement(
 				'label',
 				null,
-				React.createElement( 'span', null, label ),
-				React.createElement( 'textarea', {
+				createElement( 'span', null, label ),
+				createElement( 'textarea', {
 					'aria-label': label,
 					className,
 					rows,
@@ -56,7 +56,7 @@ jest.mock( '@wordpress/components', () => {
 				} )
 			),
 		Tooltip: ( { children } ) =>
-			React.createElement( React.Fragment, null, children ),
+			createElement( Fragment, null, children ),
 	};
 } );
 
@@ -66,11 +66,11 @@ jest.mock( '@wordpress/data', () => ( {
 } ) );
 
 jest.mock( '@wordpress/editor', () => {
-	const React = require( 'react' );
+	const { createElement } = require( '@wordpress/element' );
 
 	return {
 		PluginDocumentSettingPanel: ( { children, title } ) =>
-			React.createElement(
+			createElement(
 				'section',
 				{ 'data-panel-title': title },
 				children
@@ -97,8 +97,9 @@ jest.mock( '../../utils/template-actions', () => ( {
 		mockSelectBlockBySlugOrArea( ...args ),
 } ) );
 
-import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { act } = require( 'react' );
+const { createRoot } = require( '@wordpress/element' );
 
 import TemplateRecommender from '../TemplateRecommender';
 import {
@@ -124,7 +125,7 @@ let currentState = null;
 let container = null;
 let root = null;
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+window.IS_REACT_ACT_ENVIRONMENT = true;
 
 function getState() {
 	return currentState;

@@ -230,7 +230,7 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
-	public function test_handle_recommend_template_treats_empty_visible_pattern_filter_as_unfiltered(): void {
+	public function test_handle_recommend_template_preserves_explicit_empty_visible_pattern_filter(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
@@ -257,14 +257,13 @@ final class AgentControllerTest extends TestCase {
 			true
 		);
 		$this->assertIsArray( $request_body );
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'theme/hero',
 			(string) ( $request_body['input'] ?? '' )
 		);
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'theme/footer-callout',
-			(string) ( $request_body['input'] ?? '' ),
-			'Empty visibility filters should fall back to the broader template candidate set.'
+			(string) ( $request_body['input'] ?? '' )
 		);
 	}
 
@@ -414,6 +413,42 @@ final class AgentControllerTest extends TestCase {
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(
+			'theme/header-utility',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'theme/hero',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_recommend_template_part_preserves_explicit_empty_visible_pattern_filter(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'ok',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
+		$request->set_param( 'templatePartRef', 'theme//header' );
+		$request->set_param( 'visiblePatternNames', [] );
+
+		Agent_Controller::handle_recommend_template_part( $request );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringNotContainsString(
 			'theme/header-utility',
 			(string) ( $request_body['input'] ?? '' )
 		);

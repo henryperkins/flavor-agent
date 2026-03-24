@@ -706,7 +706,7 @@ final class ServerCollector {
 			? $unfiltered
 			: array_merge( $typed, $generic );
 
-		if ( is_array( $visible_pattern_names ) && [] !== $visible_pattern_names ) {
+		if ( is_array( $visible_pattern_names ) ) {
 			$visible_lookup = array_fill_keys( $visible_pattern_names, true );
 			$candidates     = array_values(
 				array_filter(
@@ -812,7 +812,7 @@ final class ServerCollector {
 			$candidates = array_merge( $matched, $generic );
 		}
 
-		if ( is_array( $visible_pattern_names ) && [] !== $visible_pattern_names ) {
+		if ( is_array( $visible_pattern_names ) ) {
 			$visible_lookup = array_fill_keys( $visible_pattern_names, true );
 			$candidates     = array_values(
 				array_filter(

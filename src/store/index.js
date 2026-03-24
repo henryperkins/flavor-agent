@@ -923,14 +923,17 @@ const actions = {
 				actions.setUndoState( 'undoing', null, activityId )
 			);
 
-			const result =
-				latestActivity.surface === 'template'
-					? undoTemplateSuggestionOperations( latestActivity )
-					: latestActivity.surface === 'template-part'
-						? undoTemplatePartSuggestionOperations(
-								latestActivity
-						  )
-						: undoBlockActivity( latestActivity, registry );
+				let result;
+
+				if ( latestActivity.surface === 'template' ) {
+					result = undoTemplateSuggestionOperations( latestActivity );
+				} else if ( latestActivity.surface === 'template-part' ) {
+					result = undoTemplatePartSuggestionOperations(
+						latestActivity
+					);
+				} else {
+					result = undoBlockActivity( latestActivity, registry );
+				}
 
 			if ( ! result.ok ) {
 				localDispatch(

@@ -44,10 +44,6 @@ final class TemplateAbilities {
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
 
-		if ( is_array( $visible_pattern_names ) && [] === $visible_pattern_names ) {
-			$visible_pattern_names = null;
-		}
-
 		if ( $template_ref === '' ) {
 			return new \WP_Error(
 				'missing_template_ref',
@@ -106,10 +102,6 @@ final class TemplateAbilities {
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
-
-		if ( is_array( $visible_pattern_names ) && [] === $visible_pattern_names ) {
-			$visible_pattern_names = null;
-		}
 
 		if ( $template_part_ref === '' ) {
 			return new \WP_Error(
