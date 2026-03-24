@@ -105,6 +105,38 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertArrayNotHasKey( 'stableContent', $manifest['configAttributes'] );
 	}
 
+	public function test_introspect_block_type_maps_custom_css_support_to_advanced_panel(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/custom-css-block',
+			[
+				'title'    => 'Custom CSS Block',
+				'supports' => [
+					'customCSS' => true,
+				],
+			]
+		);
+
+		$manifest = ServerCollector::introspect_block_type( 'plugin/custom-css-block' );
+
+		$this->assertSame( [ 'customCSS' ], $manifest['inspectorPanels']['advanced'] );
+	}
+
+	public function test_introspect_block_type_maps_list_view_support_to_settings_panel(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/list-view-block',
+			[
+				'title'    => 'List View Block',
+				'supports' => [
+					'listView' => true,
+				],
+			]
+		);
+
+		$manifest = ServerCollector::introspect_block_type( 'plugin/list-view-block' );
+
+		$this->assertSame( [ 'listView' ], $manifest['inspectorPanels']['settings'] );
+	}
+
 	public function test_for_template_limits_candidate_patterns_after_typed_then_generic_ordering(): void {
 		for ( $index = 1; $index <= 20; $index++ ) {
 			$this->register_pattern(

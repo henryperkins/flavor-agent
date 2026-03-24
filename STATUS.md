@@ -10,8 +10,9 @@
 | --- | --- | --- |
 | `flavor-agent/recommend-block` | `BlockAbilities` | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client |
 | `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
-| `flavor-agent/recommend-patterns` | `PatternAbilities` | Azure OpenAI embeddings + Qdrant retrieval + LLM reranking |
-| `flavor-agent/recommend-template` | `TemplateAbilities` | Azure OpenAI template composition suggestions for Site Editor templates |
+| `flavor-agent/recommend-patterns` | `PatternAbilities` | Provider-selected embeddings + Qdrant retrieval + LLM reranking |
+| `flavor-agent/recommend-template` | `TemplateAbilities` | Provider-selected template composition suggestions for Site Editor templates |
+| `flavor-agent/recommend-template-part` | `TemplateAbilities` | Advisory template-part composition suggestions for Site Editor template parts |
 | `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
@@ -26,6 +27,7 @@
 | `POST /flavor-agent/v1/recommend-block` | `edit_posts` | Block recommendations from client-provided editor context |
 | `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | Pattern recommendations for the inserter |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | Template composition recommendations for the Site Editor |
+| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | Template-part composition recommendations for the Site Editor |
 | `POST /flavor-agent/v1/sync-patterns` | `manage_options` | Manual pattern index sync |
 
 ### Editor UI
@@ -34,9 +36,10 @@
 - Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
 - Site Editor template recommendation panel for `wp_template` documents with review-confirm-apply support for validated template-part assignment/replacement and pattern insertion operations
+- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links and pattern-browse links
 - Block and template apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal `Recent AI Actions` session history in the active panel
 - AI activity history is session-durable per post/template via `sessionStorage`; template undo now persists stable locators plus recorded post-apply snapshots, so same-session refreshes stay undoable when the live template still matches the recorded state, while legacy clientId-only template entries load as undo unavailable
-- Admin settings screen with Azure/Qdrant/Cloudflare configuration and pattern sync controls; block providers come from `Settings > Connectors`
+- Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; block providers still come from `Settings > Connectors`
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
 - Azure OpenAI credentials are revalidated only when the endpoint, key, or deployments change and all four fields are present; both the embeddings and responses deployments must validate before new values are saved
@@ -54,7 +57,7 @@
 - The Site Editor Playground harness still crashes when the browser revisits the template canvas route in the same session, so the new refresh/drift template Playwright cases are checked in as `fixme`; the underlying refresh-safe and drift-safe undo logic is covered by unit tests and manual same-session browser flow remains green.
 - AI activity history is still session-scoped only; there is no server-backed audit log or cross-session review UI yet.
 - Live recommendation execution with valid LLM credentials was not rerun in this pass.
-- Pattern surface now uses a central compatibility adapter (`src/patterns/compat.js`) that prefers stable APIs, falls back to `__experimentalAdditional*` then `__experimental*` variants, and degrades cleanly when none exist. DOM inserter selectors are also centralized there. `__experimentalFeatures` (theme-tokens) and `__experimentalRole` (block-inspector) remain in their original files since they have no stable replacement yet.
+- Pattern surface now uses a central compatibility adapter (`src/patterns/compat.js`) that prefers stable APIs, falls back to `__experimentalAdditional*` then `__experimental*` variants, and degrades cleanly when none exist. DOM inserter selectors are also centralized there. `__experimentalFeatures` (theme-tokens) remains a direct dependency because WordPress still has no stable replacement. Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and intentionally no longer preserves deprecated `__experimentalRole` compatibility.
 
 ## Recent Verification
 

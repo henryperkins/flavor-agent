@@ -17,7 +17,7 @@ Four recommendation surfaces exist today:
 3. **Template Compositor** -- Reviewable template-part and pattern composition suggestions for Site Editor templates with a narrow confirm-before-apply path.
 4. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
 
-A fifth surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents (WP 6.9+).
+A fifth surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
 
 ## Repository Layout
 
@@ -59,9 +59,9 @@ flavor-agent/
       Provider.php          Provider selection (Azure OpenAI vs OpenAI Native), credential fallback chain
     AzureOpenAI/
       ConfigurationValidator.php  Deployment and backend validation helpers
-      EmbeddingClient.php   Azure OpenAI embeddings (3072-dim vectors)
+      EmbeddingClient.php   Provider-selected embeddings client (Azure OpenAI or OpenAI Native)
       QdrantClient.php      Qdrant vector DB CRUD and search
-      ResponsesClient.php   Azure OpenAI Responses API (chat/ranking)
+      ResponsesClient.php   Provider-selected responses client (chat/ranking)
     Cloudflare/
       AISearchClient.php    Cloudflare AI Search grounding, cache, and prewarm pipeline
     Context/
@@ -197,7 +197,7 @@ The plugin works in degraded mode without any services configured. Each surface 
 
 #### Pattern Recommendations
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
-- **Pipeline:** Build query text -> Azure OpenAI embed -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via Azure Responses API -> filter scores < 0.3 -> return max 8.
+- **Pipeline:** Build query text -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores < 0.3 -> return max 8.
 - **Inserter integration:** Via `compat.js`, patches block patterns (stable `blockPatterns` key preferred, then `__experimentalAdditionalBlockPatterns`, then `__experimentalBlockPatterns` fallback) to add "Recommended" category, enriched descriptions, and extracted keywords.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
@@ -205,11 +205,19 @@ The plugin works in degraded mode without any services configured. Each surface 
 #### Template Recommendations
 - **Trigger:** User editing a `wp_template` in Site Editor, types optional prompt, clicks "Get Suggestions".
 - **Context sent:** Template ref, type, assigned template-part slots, empty areas, available (unassigned) template parts, candidate patterns (typed + generic, filtered by client-side `visiblePatternNames` when available, max 30), current inserter-root `visiblePatternNames` when available, theme tokens, WordPress docs guidance.
-- **LLM:** Azure OpenAI Responses API via `ResponsesClient::rank()`.
+- **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
 - **Response:** Max 3 suggestions, each with validated structured operations. Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`.
 - **UI:** Entity mentions in text become clickable links: template-part slugs/areas highlight blocks in canvas; pattern names open the inserter pre-filtered. Suggestions can also be previewed and explicitly confirmed before apply.
 - **Apply:** Deterministic client executor now validates template suggestions against a working-state copy before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, pattern insertion resolves the current insertion point and validates the pattern against root-scoped allowed patterns before inserting parsed pattern blocks, and applied operations persist stable undo locators plus recorded post-apply snapshots for inserted subtrees.
 - **Guardrails:** Free-form template tree rewrites are intentionally out of scope. If any operation fails validation, the entire apply is rejected before mutation.
+
+#### Template Part Recommendations
+- **Trigger:** User editing a `wp_template_part` in Site Editor, types optional prompt, clicks "Get Suggestions".
+- **Context sent:** Template-part ref, slug, inferred area, structural summaries, candidate patterns, theme tokens, and cache-backed WordPress docs guidance.
+- **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
+- **Response:** Advisory suggestions with `label`, `description`, `blockHints`, `patternSuggestions`, and `explanation`.
+- **UI:** `src/template-parts/TemplatePartRecommender.js` renders a document settings panel with local component state, block-focus links, and pattern-browse links.
+- **Scope:** Advisory-only for now. There is no preview/apply/undo executor or session activity logging for template-part suggestions yet.
 
 #### AI Activity And Undo
 - **Schema:** Block and template apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
@@ -223,7 +231,7 @@ The plugin works in degraded mode without any services configured. Each surface 
 - **Scheduling:** WP cron with 300s cooldown and transient lock.
 - **Admin UI:** Manual sync button on settings page with status display.
 
-#### WordPress Abilities API (WP 6.9+)
+#### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 All abilities registered with full JSON Schema input/output definitions:
 
 | Ability | Handler | Permission | Status |
@@ -296,7 +304,7 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 3. **JS toolchain must stay on Node 20 / npm 10**: This repo now pins that combo because Node 24 / npm 11 on this host fails `npm ci` immediately via `engine-strict` (`EBADENGINE`).
 4. **Inserter search detection is DOM-coupled (mitigated)**: `compat.js` centralizes container (5) and input (4) selectors behind `findInserterSearchInput`. Still DOM-based, but changes are now confined to one file.
 5. **Pattern inserter patching uses compat adapter**: `compat.js` prefers stable `blockPatterns`/`blockPatternCategories` keys when present, then `__experimentalAdditionalBlockPatterns`/`__experimentalAdditionalBlockPatternCategories`, then `__experimentalBlockPatterns`/`__experimentalBlockPatternCategories`, and degrades to empty arrays when none exist. Migration to fully stable APIs requires only updating the adapter.
-6. **Two experimental APIs remain outside compat scope**: `__experimentalFeatures` (theme-tokens.js) and `__experimentalRole` (block-inspector.js) have no stable replacement yet and are used directly.
+6. **One experimental API remains outside compat scope**: `__experimentalFeatures` (theme-tokens.js) has no stable replacement yet and is used directly. Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
 7. **Browser smoke coverage is still shallow**: Playwright now covers block apply/persist/undo, pattern request/badge flow, and template preview/apply/undo, but it still runs on a stable WordPress `6.9.4` Playground harness. Exact Site Editor refresh/drift cases are checked in as `fixme` because revisiting the template canvas route in the Playground harness still crashes the PHP-WASM controller.
 8. **Template apply scope is intentionally narrow**: The first executable version supports validated template-part assignment/replacement and pattern insertion only. Free-form template tree rewrites and subtree transforms remain future work.
 9. **Activity history is not a permanent audit trail**: The current adapter is intentionally session-scoped via `sessionStorage`. There is no server-backed log, cross-device history, or DataViews audit UI yet.
@@ -403,17 +411,17 @@ External AI agent calls flavor-agent/recommend-navigation ability
 User editing wp_template_part in Site Editor
   -> TemplatePartRecommender.js renders PluginDocumentSettingPanel
   -> User clicks "Get Suggestions"
-  -> store thunk: fetchTemplatePartRecommendations(input)
+  -> component issues direct apiFetch(input)
      -> POST /flavor-agent/v1/recommend-template-part
         -> Agent_Controller -> TemplateAbilities::recommend_template_part()
            -> ServerCollector::for_template_part(ref)
            -> AISearchClient::maybe_search_with_cache_fallbacks()
            -> TemplatePartPrompt::build_system() + build_user()
-           -> ResponsesClient::rank(instructions, input)
+           -> ResponsesClient::rank(instructions, input) via active provider
            -> TemplatePartPrompt::parse_response()
         <- JSON response: { suggestions, explanation }
-  -> store: SET_TEMPLATE_RECS
-  -> UI: Template part suggestion cards with operations
+  -> component local state stores result for current templatePartRef
+  -> UI: advisory suggestion cards with block-focus links + pattern browse links
 ```
 
 ## Test Coverage
@@ -534,19 +542,24 @@ npm start                            # Dev build with watch
 npm run lint:js                      # ESLint on src/
 npm run test:unit -- --runInBand     # Jest unit tests
 npm run test:e2e                     # Playwright smoke coverage
+npm run wp:start                     # Local Docker stack up
+npm run wp:stop                      # Local Docker stack down
+npm run wp:reset                     # Local Docker stack reset
 
 # PHP
 composer install                     # PSR-4 autoloader
-vendor/bin/phpunit                   # PHPUnit tests
-vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint
+composer lint:php                    # WPCS lint alias
+composer test:php                    # PHPUnit alias
+vendor/bin/phpunit                   # PHPUnit tests (direct)
+vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (direct)
 ```
 
 ## Key Technical Decisions
 
-1. **Split recommendation backends**: WordPress AI Client for block recommendations (provider-agnostic, connector-managed), Azure OpenAI for pattern/template ranking (structured scoring). Not a redundancy -- different strengths for different tasks.
+1. **Split recommendation backends**: WordPress AI Client for block recommendations (provider-agnostic, connector-managed), plus provider-selected embeddings/responses via `Provider` for pattern/template/navigation ranking. Not a redundancy -- different strengths for different tasks.
 2. **Narrow approval model**: Block suggestions still apply inline on click, but template suggestions use an explicit preview-confirm-apply step. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
 5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, or prior queries. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
-7. **Store is the contract boundary**: All UI components read from `@wordpress/data` selectors. The store thunks handle REST calls, error state, and stale-request rejection. Components never call REST directly.
+7. **Store is the contract boundary for most executable surfaces**: Block, pattern, and template UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, and stale-request rejection. `TemplatePartRecommender` is the current deliberate exception: it is advisory-only and uses direct `apiFetch` plus local component state.

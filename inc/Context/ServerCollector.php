@@ -8,6 +8,7 @@ final class ServerCollector {
 
 	public const TEMPLATE_PATTERN_CANDIDATE_CAP = 30;
 
+	// Keep this map in sync with src/context/block-inspector.js.
 	private const SUPPORT_TO_PANEL = [
 		'color.background'           => 'color',
 		'color.text'                 => 'color',
@@ -37,6 +38,8 @@ final class ServerCollector {
 		'position.fixed'             => 'position',
 		'layout'                     => 'layout',
 		'anchor'                     => 'advanced',
+		'customCSS'                  => 'advanced',
+		'listView'                   => 'settings',
 	];
 
 	private const KNOWN_TEMPLATE_TYPES = [

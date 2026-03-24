@@ -1,6 +1,8 @@
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	getTemplateActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	undoTemplateSuggestionOperations: jest.fn(),
 } ) );
 
@@ -171,6 +173,45 @@ describe( 'template apply state', () => {
 			actions.setTemplateStatus( 'loading', null, 1 )
 		);
 
+		state = reducer(
+			state,
+			actions.setTemplateRecommendations(
+				'theme//home',
+				{
+					suggestions: [ { label: 'Refresh header' } ],
+					explanation: 'Review before applying.',
+				},
+				'Prompt',
+				1
+			)
+		);
+		state = reducer(
+			state,
+			actions.setTemplateSelectedSuggestion( 'Refresh header-0' )
+		);
+		state = reducer(
+			state,
+			actions.setTemplateApplyState(
+				'success',
+				null,
+				'Refresh header-0',
+				[
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				]
+			)
+		);
+		state = reducer(
+			state,
+			actions.setTemplateApplyState(
+				'error',
+				'Pattern is missing in the editor.',
+				'Refresh header-0',
+				[]
+			)
+		);
 		state = reducer( state, { type: 'CLEAR_TEMPLATE_RECS' } );
 		state = reducer(
 			state,
@@ -188,5 +229,16 @@ describe( 'template apply state', () => {
 		expect( selectors.getTemplateRecommendations( state ) ).toEqual( [] );
 		expect( selectors.getTemplateStatus( state ) ).toBe( 'idle' );
 		expect( selectors.getTemplateRequestToken( state ) ).toBe( 2 );
+		expect(
+			selectors.getTemplateSelectedSuggestionKey( state )
+		).toBeNull();
+		expect( selectors.getTemplateApplyStatus( state ) ).toBe( 'idle' );
+		expect( selectors.getTemplateApplyError( state ) ).toBeNull();
+		expect(
+			selectors.getTemplateLastAppliedSuggestionKey( state )
+		).toBeNull();
+		expect( selectors.getTemplateLastAppliedOperations( state ) ).toEqual(
+			[]
+		);
 	} );
 } );

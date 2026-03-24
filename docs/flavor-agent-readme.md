@@ -5,9 +5,9 @@ Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directl
 It currently has four primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and core Connectors.
-- Pattern recommendations in the native inserter, powered by Azure OpenAI embeddings + responses and Qdrant.
-- Template recommendations in the Site Editor, powered by the Azure OpenAI Responses API with validated template-part and pattern operations.
-- Template-part recommendations in the Site Editor, scoped to individual template parts.
+- Pattern recommendations in the native inserter, powered by the active OpenAI provider (Azure OpenAI or OpenAI Native) plus Qdrant.
+- Template recommendations in the Site Editor, powered by the active OpenAI provider with validated template-part and pattern operations.
+- Template-part recommendations in the Site Editor, scoped to individual template parts and currently advisory-only.
 
 There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, and template suggestions use a review-confirm-apply flow inside the document settings panel. Block and template applies also write session-scoped AI activity entries with inline undo.
 
@@ -46,6 +46,7 @@ flavor-agent/
 │   ├── patterns/                 # Inserter recommendation patching, badge, and compat adapter
 │   ├── store/                    # @wordpress/data store, undo state, and persistence
 │   ├── templates/                # Site Editor template recommender + preview/apply helpers
+│   ├── template-parts/           # Site Editor template-part recommender
 │   └── utils/                    # Template execution, pattern scoping, and structural helpers
 │
 ├── tests/
@@ -76,7 +77,7 @@ Pattern recommendations are exposed through `POST /flavor-agent/v1/recommend-pat
 
 The client behavior is:
 
-- Passive fetch on editor load when Azure/Qdrant configuration is present.
+- Passive fetch on editor load when the active provider plus Qdrant are configured.
 - Search-triggered refresh when the inserter search box changes.
 - Native pattern patching through `src/patterns/compat.js`, which prefers stable `blockPatterns` / `blockPatternCategories` keys, then `__experimentalAdditional*` override keys, and falls back to `__experimental*` base variants when needed.
 - A toolbar `!` badge when any recommendation score is `>= 0.9`.
@@ -84,9 +85,9 @@ The client behavior is:
 The server behavior is:
 
 - Check persisted pattern index runtime state.
-- Embed the query with Azure OpenAI.
+- Embed the query with the active provider's embeddings configuration.
 - Retrieve candidates from Qdrant using semantic and optional structural search passes.
-- Rank candidates with the Azure OpenAI Responses API.
+- Rank candidates with the active provider's responses configuration.
 - Rehydrate registry-owned fields (`title`, `categories`, `content`) from stored payloads.
 
 `visiblePatternNames` is now derived from the active inserter root, so nested insertion contexts only receive patterns WordPress already allows in that specific surface.
@@ -106,8 +107,28 @@ The server behavior is:
 
 - Resolve the active template from the Site Editor reference.
 - Collect assigned template-part slots, available template parts, and typed plus generic pattern candidates (filtered by client-side `visiblePatternNames` when provided, before the candidate cap).
-- Rank template composition suggestions with the Azure OpenAI Responses API.
+- Rank template composition suggestions with the active provider's responses configuration.
 - Validate returned operations, template parts, and pattern names against the collected context before rendering or applying them in the panel.
+
+### Template Part Recommendations
+
+Template-part recommendations are exposed through `POST /flavor-agent/v1/recommend-template-part` and the `flavor-agent/recommend-template-part` ability.
+
+The client behavior is:
+
+- Available only while editing a `wp_template_part` entity in the Site Editor.
+- Uses a dedicated `PluginDocumentSettingPanel` implemented in `src/template-parts/TemplatePartRecommender.js`.
+- Fetches recommendations with direct `apiFetch` calls and keeps result state local to the component.
+- Renders advisory suggestion cards with block-focus links and pattern-browse links.
+
+The server behavior is:
+
+- Resolve the active template part from the Site Editor reference.
+- Collect template-part identity, inferred area, structural summaries, candidate patterns, theme tokens, and WordPress docs guidance.
+- Rank template-part suggestions with the active provider's responses configuration.
+- Return explanatory text plus advisory `blockHints` and `patternSuggestions`.
+
+This surface is intentionally advisory-first today: it does not currently share the template panel’s preview/apply/undo flow or session activity logging.
 
 ### AI Activity and Undo
 
@@ -123,10 +144,14 @@ When the Cloudflare AI Search account ID, instance ID, or token changes and all 
 
 Configured options:
 
+- `flavor_agent_openai_provider`
 - `flavor_agent_azure_openai_endpoint`
 - `flavor_agent_azure_openai_key`
 - `flavor_agent_azure_embedding_deployment`
 - `flavor_agent_azure_chat_deployment`
+- `flavor_agent_openai_native_api_key`
+- `flavor_agent_openai_native_chat_model`
+- `flavor_agent_openai_native_embedding_model`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
 - `flavor_agent_cloudflare_ai_search_account_id`
@@ -191,4 +216,5 @@ vendor/bin/phpunit
 - Plugin header now targets WordPress 7.0+ and PHP 8.0+.
 - The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
 - The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, preferring stable APIs, then `__experimentalAdditional*` override keys, and falling back to `__experimental*` base variants only when needed.
-- `__experimentalFeatures` in `src/context/theme-tokens.js` and `__experimentalRole` in `src/context/block-inspector.js` still have no stable replacements and remain direct integrations.
+- `__experimentalFeatures` in `src/context/theme-tokens.js` still has no stable replacement and remains a direct integration.
+- Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key. Compatibility with deprecated `__experimentalRole` is intentionally no longer preserved.

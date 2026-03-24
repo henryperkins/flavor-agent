@@ -69,7 +69,7 @@ describe( 'template recommender helpers', () => {
 		} );
 	} );
 
-	test( 'buildTemplateRecommendationContextSignature ignores live visible patterns', () => {
+	test( 'buildTemplateRecommendationContextSignature includes normalized visible patterns', () => {
 		expect(
 			buildTemplateRecommendationContextSignature( {
 				editorSlots: {
@@ -87,8 +87,26 @@ describe( 'template recommender helpers', () => {
 				editorSlots: {
 					assignedParts: [ { slug: 'site-header', area: 'header' } ],
 				},
+				visiblePatternNames: [ 'theme/footer', 'theme/hero' ],
 			} )
 		);
+	} );
+
+	test( 'buildTemplateRecommendationContextSignature stays stable when visible patterns only reorder', () => {
+		const firstSignature = buildTemplateRecommendationContextSignature( {
+			editorSlots: {
+				assignedParts: [ { slug: 'site-header', area: 'header' } ],
+			},
+			visiblePatternNames: [ 'theme/footer', 'theme/hero' ],
+		} );
+		const secondSignature = buildTemplateRecommendationContextSignature( {
+			editorSlots: {
+				assignedParts: [ { slug: 'site-header', area: 'header' } ],
+			},
+			visiblePatternNames: [ 'theme/hero', 'theme/footer', 'theme/hero' ],
+		} );
+
+		expect( firstSignature ).toBe( secondSignature );
 	} );
 
 	test( 'buildEditorTemplateSlotSnapshot mirrors live template-part slots from the editor tree', () => {

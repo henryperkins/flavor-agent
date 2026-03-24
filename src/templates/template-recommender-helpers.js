@@ -65,9 +65,16 @@ export function normalizeVisiblePatternNames( visiblePatternNames ) {
 
 export function buildTemplateRecommendationContextSignature( {
 	editorSlots,
+	visiblePatternNames,
 } = {} ) {
+	const normalizedVisiblePatternNames =
+		normalizeVisiblePatternNames( visiblePatternNames );
+
 	return JSON.stringify( {
 		editorSlots: editorSlots || null,
+		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
+			? [ ...normalizedVisiblePatternNames ].sort()
+			: null,
 	} );
 }
 

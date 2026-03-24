@@ -16,6 +16,7 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 
 // ── Supports → Inspector panel mapping ──────────────────────
 
+// Keep this map in sync with ServerCollector::SUPPORT_TO_PANEL.
 const SUPPORT_TO_PANEL = {
 	'color.background': 'color',
 	'color.text': 'color',

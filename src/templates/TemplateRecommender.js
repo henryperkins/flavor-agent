@@ -312,8 +312,7 @@ export default function TemplateRecommender() {
 		const selectedBlock = selectedBlockClientId
 			? blockEditor?.getBlock?.( selectedBlockClientId )
 			: null;
-		const insertionPoint =
-			blockEditor?.getBlockInsertionPoint?.() || null;
+		const insertionPoint = blockEditor?.getBlockInsertionPoint?.() || null;
 		const rootClientId = insertionPoint?.rootClientId || null;
 		const rootBlock = rootClientId
 			? blockEditor?.getBlock?.( rootClientId )
@@ -327,8 +326,7 @@ export default function TemplateRecommender() {
 	}, [] );
 	const visiblePatternNames = useSelect( ( select ) => {
 		const blockEditor = select( blockEditorStore );
-		const insertionPoint =
-			blockEditor?.getBlockInsertionPoint?.() || null;
+		const insertionPoint = blockEditor?.getBlockInsertionPoint?.() || null;
 		const rootClientId = insertionPoint?.rootClientId || null;
 
 		return getVisiblePatternNames( rootClientId, blockEditor );
@@ -354,8 +352,9 @@ export default function TemplateRecommender() {
 		() =>
 			buildTemplateRecommendationContextSignature( {
 				editorSlots,
+				visiblePatternNames,
 			} ),
-		[ editorSlots ]
+		[ editorSlots, visiblePatternNames ]
 	);
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature

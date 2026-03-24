@@ -1,8 +1,9 @@
 # wp_template_part Recommendations Plan
 
 > Created: 2026-03-23
-> Scope: detailed implementation plan for first-class `wp_template_part` recommendations in the Site Editor
-> Baseline: `wp_template` recommendations already exist and are executable; `wp_template_part` currently has no panel, no collector, and no prompt
+> Scope: historical implementation plan plus remaining follow-up ideas for first-class `wp_template_part` recommendations in the Site Editor
+> Status note (2026-03-24): the dedicated ability, REST route, collector, prompt, and `src/template-parts/TemplatePartRecommender.js` panel are now shipped. The remaining high-value future work is mostly about executable apply/undo flows.
+> Baseline when written: `wp_template` recommendations already exist and are executable; `wp_template_part` had no panel, collector, or prompt at that point
 
 ## Goal
 
@@ -23,20 +24,20 @@ The plan below favors a phased rollout:
 ### What exists now
 
 - [TemplateRecommender.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/templates/TemplateRecommender.js) mounts only when `getEditedPostType() === 'wp_template'`.
-- [flavor-agent.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/flavor-agent.php) already localizes `canRecommendTemplates` and `templatePartAreas` to the editor client.
-- [TemplateAbilities.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/Abilities/TemplateAbilities.php) exposes `recommend_template()` and `list_template_parts()`.
-- [TemplatePrompt.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/LLM/TemplatePrompt.php) is built around template-part assignment and replacement, not block-tree composition inside a single part.
-- [ServerCollector.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/Context/ServerCollector.php) has `for_template()`, `for_template_parts()`, and navigation collectors, but no `for_template_part()`.
+- [flavor-agent.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/flavor-agent.php) now localizes `canRecommendTemplates`, `canRecommendTemplateParts`, and `templatePartAreas` to the editor client.
+- [TemplateAbilities.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/Abilities/TemplateAbilities.php) now exposes `recommend_template()`, `recommend_template_part()`, and `list_template_parts()`.
+- [TemplatePartPrompt.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/LLM/TemplatePartPrompt.php) is the dedicated prompt/parser for part-level recommendations.
+- [ServerCollector.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/Context/ServerCollector.php) now includes `for_template_part()`.
+- [src/template-parts/TemplatePartRecommender.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/template-parts/TemplatePartRecommender.js) mounts for `wp_template_part` and currently provides advisory-only suggestions via direct fetch + local state.
 - [template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js) already contains deterministic block-tree helpers, pattern insertion, apply, and undo logic that can be reused.
 - [template-part-areas.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-part-areas.js) already wraps the localized `templatePartAreas` lookup for client-side area inference.
-- [src/store/index.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/index.js), [activity-history.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/activity-history.js), and [template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js) already scope activity sessions by edited document, but template apply/undo bookkeeping is still hard-coded to `surface: 'template'`.
+- [src/store/index.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/index.js), [activity-history.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/activity-history.js), and [template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js) already scope activity sessions by edited document, but executable apply/undo bookkeeping is still template-only.
 
 ### What is missing
 
-- No UI surface for `wp_template_part`.
-- No server context collector for a single template part document.
-- No prompt/output schema for part-level composition recommendations.
-- No tests for `wp_template_part` fetch, preview, or apply flows.
+- No preview/apply/undo execution flow yet for template-part recommendations.
+- No template-part activity logging or shared-store parity with template recommendations.
+- No safe part-scoped `insert_pattern` executor yet.
 
 ## Recommended Architecture
 
@@ -432,7 +433,7 @@ Likely files:
 
 - `src/utils/template-actions.js`
 - `src/store/index.js`
-- `src/templates/template-part-recommender-helpers.js`
+- `src/template-parts/template-part-recommender-helpers.js`
 
 Steps:
 
@@ -461,8 +462,8 @@ Do not widen the current `TemplateRecommender` with a large branching tree if it
 
 - `flavor-agent.php`
 - `src/index.js`
-- `src/templates/TemplatePartRecommender.js`
-- `src/templates/template-part-recommender-helpers.js`
+- `src/template-parts/TemplatePartRecommender.js`
+- `src/template-parts/template-part-recommender-helpers.js`
 - `src/utils/template-actions.js`
 - `src/store/index.js`
 - `src/editor.css`
@@ -548,7 +549,7 @@ Test cases:
 
 Add:
 
-- `src/templates/__tests__/template-part-recommender-helpers.test.js`
+- `src/template-parts/__tests__/template-part-recommender-helpers.test.js`
 - `src/utils/__tests__/template-actions.test.js`
 - store tests for fetch, preview, apply, and undo state
 
