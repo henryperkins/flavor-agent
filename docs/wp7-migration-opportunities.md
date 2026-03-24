@@ -62,7 +62,7 @@ The Connectors API (`wp_connectors_init` action, `WP_Connector_Registry` class) 
 - API key priority: env var -> PHP constant -> database (`connectors_ai_{$id}_api_key`)
 - Built-in connectors: Anthropic, Google, OpenAI
 
-The plugin's `inc/OpenAI/Provider.php` already falls back to `connectors_ai_openai_api_key`. A deeper integration could:
+The plugin already has partial Connectors integration: `inc/OpenAI/Provider.php` falls back to `connectors_ai_openai_api_key`, and block recommendations already use the core WordPress AI Client plus `Settings > Connectors` flow. A deeper integration could:
 - Register the plugin's Azure OpenAI, Qdrant, and Cloudflare services as connectors via `wp_connectors_init`
 - Migrate credential management from the custom Settings page to the Connectors screen
 - Use `wp_get_connector()` to check provider availability instead of custom option checks

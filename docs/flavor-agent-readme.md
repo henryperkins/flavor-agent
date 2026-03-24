@@ -24,7 +24,10 @@ flavor-agent/
 ├── .npmrc                        # engine-strict pin for Node 20 / npm 10
 ├── docker-compose.yml            # Local WordPress + MariaDB + phpMyAdmin stack
 ├── .devcontainer/                # VS Code devcontainer config
+├── build/                        # Built editor/admin assets loaded by WordPress
+├── dist/                         # Packaged release artifacts (plugin ZIP)
 ├── docker/                       # Local WordPress dev image
+├── output/                       # Test and automation output (for example Playwright artifacts)
 ├── scripts/                      # Local WordPress helper scripts
 │
 ├── inc/
@@ -33,6 +36,7 @@ flavor-agent/
 │   ├── Cloudflare/               # AI Search grounding + prewarm pipeline
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
 │   ├── LLM/                      # WordPress AI client wrapper + prompt/response handling
+│   ├── OpenAI/                   # Provider selection and connector-backed credential fallback
 │   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
 │   ├── REST/                     # Editor-facing REST routes
 │   ├── Support/                  # Shared sanitization helpers

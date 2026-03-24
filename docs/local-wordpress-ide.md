@@ -33,6 +33,8 @@ This repo now includes a local WordPress development stack for the `Flavor Agent
 .\scripts\local-wordpress.ps1 install
 ```
 
+If you're on Linux or macOS, run the same helper through PowerShell 7 (`pwsh`) if it's installed, or use the checked-in `docker-compose.yml` for a manual Docker Compose setup instead.
+
 That command will:
 
 - create `.env` from `.env.example` if needed

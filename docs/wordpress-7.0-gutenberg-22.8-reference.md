@@ -1,6 +1,7 @@
 # WordPress 7.0 / Gutenberg 22.8 -- Developer Reference
 
 > Compiled: 2026-03-19
+> Reviewed: 2026-03-24
 > Sources: WP 7.0-beta5 core, Gutenberg 22.8.0-rc.1, official dev notes
 > Scope: API changes, new features, and deprecations relevant to block editor plugin development
 
@@ -758,25 +759,24 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 
 | Issue | Description | Severity |
 |-------|-------------|----------|
-| `supports.contentRole` not checked | Plugin only checks `role: "content"` on attributes, misses block-level `supports.contentRole: true`. Affects 8 container blocks in content-only patterns. | Medium |
-| `__experimentalRole` fallback | Plugin only checks `role`, not `__experimentalRole`. Affects unmigrated third-party blocks. | Low |
 | Aspect ratio / height exclusivity | LLM prompt doesn't include the mutual exclusivity constraint. Could suggest conflicting dimension values. | Low |
 
 ### Should Address (v1.x)
 
 | Opportunity | Description |
 |-------------|-------------|
-| Connectors API for Anthropic credentials | Replace custom `flavor_agent_api_key` with core's `connectors_ai_anthropic_api_key`. Eliminates duplicate credential management. |
-| WP AI Client for block recommendations | Replace `LLM\Client.php` (direct Anthropic HTTP) with `WP_AI_Client_Prompt_Builder`. Makes the plugin provider-agnostic. |
 | Block bindings context for LLM | Include `metadata.bindings` in block context so LLM can reason about bound vs. free attributes. |
-| Navigation overlay support | Implement stubbed `recommend-navigation` using the now-stable `navigation-overlay` template-part area. |
 
 ### No Action Needed
 
 | Item | Why |
 |------|-----|
+| `supports.contentRole` handling | The block introspection layer already records block-level `supports.contentRole` via `supportsContentRole`, so content-only container blocks are recognized. |
 | ContentOnly as default for patterns | Plugin already reads runtime `getBlockEditingMode()` |
 | `disableContentOnlyForUnsyncedPatterns` | Plugin reads mode result, not settings flag |
+| `__experimentalRole` fallback | Intentional non-goal: Flavor Agent now targets WordPress 7.0+ and reads only the stable `role` key. |
+| WP AI Client + Connectors for block recommendations | Block recommendations already route through `WordPressAIClient` and the core `Settings > Connectors` setup flow. |
+| Navigation overlay support | `recommend-navigation` is implemented, and server-side navigation context already collects `navigation-overlay` template parts. |
 | Editor iframe changes (punted to 7.1) | Plugin uses iframe-safe patterns already |
 | New typography supports (`fitText`, `textIndent`) | Auto-detected by `resolveInspectorPanels()` |
 | All three `__experimental*` pattern APIs | Still the correct and only way to access these features |
