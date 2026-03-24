@@ -99,6 +99,7 @@ namespace WordPress\AI_Client {
 		public static function prompt_with_wp_error( string $text ): FakePromptBuilder {
 			WordPressTestState::$last_ai_client_prompt = [
 				'text' => $text,
+				'transport' => 'legacy_class',
 			];
 
 			return new FakePromptBuilder();
@@ -126,6 +127,37 @@ namespace WordPress\AI_Client {
 namespace {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
+
+	if ( ! class_exists( 'WP_AI_Client_Prompt_Builder' ) ) {
+		class WP_AI_Client_Prompt_Builder {
+
+			public function __call( string $name, array $arguments ) {
+				switch ( $name ) {
+					case 'using_system_instruction':
+						WordPressTestState::$last_ai_client_prompt['system'] = (string) ( $arguments[0] ?? '' );
+
+						return $this;
+					case 'is_supported_for_text_generation':
+						return WordPressTestState::$ai_client_supported;
+					case 'generate_text':
+						return WordPressTestState::$ai_client_generate_text_result;
+				}
+
+				throw new \BadMethodCallException( "Unknown AI client method {$name}." );
+			}
+		}
+	}
+
+	if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
+		function wp_ai_client_prompt( $prompt = null ): WP_AI_Client_Prompt_Builder {
+			WordPressTestState::$last_ai_client_prompt = [
+				'text'      => is_string( $prompt ) ? $prompt : '',
+				'transport' => 'core_function',
+			];
+
+			return new WP_AI_Client_Prompt_Builder();
+		}
+	}
 
 	if ( ! defined( 'ABSPATH' ) ) {
 		define( 'ABSPATH', __DIR__ . '/' );
@@ -368,6 +400,12 @@ namespace {
 					wp_strip_all_tags( (string) $value )
 				) ?? ''
 			);
+		}
+	}
+
+	if ( ! function_exists( 'sanitize_url' ) ) {
+		function sanitize_url( $url, array $protocols = [] ): string {
+			return filter_var( (string) $url, FILTER_SANITIZE_URL ) ?: '';
 		}
 	}
 

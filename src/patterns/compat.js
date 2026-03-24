@@ -37,11 +37,19 @@ const STABLE_PATTERNS_KEY = 'blockPatterns';
 /** Current experimental settings key for block patterns. */
 const EXPERIMENTAL_PATTERNS_KEY = '__experimentalBlockPatterns';
 
+/** Current experimental override key for merged/extended block patterns. */
+const EXPERIMENTAL_ADDITIONAL_PATTERNS_KEY =
+	'__experimentalAdditionalBlockPatterns';
+
 /** Stable settings key for pattern categories (not yet shipped). */
 const STABLE_CATEGORIES_KEY = 'blockPatternCategories';
 
 /** Current experimental settings key for pattern categories. */
 const EXPERIMENTAL_CATEGORIES_KEY = '__experimentalBlockPatternCategories';
+
+/** Current experimental override key for merged/extended pattern categories. */
+const EXPERIMENTAL_ADDITIONAL_CATEGORIES_KEY =
+	'__experimentalAdditionalBlockPatternCategories';
 
 /* ------------------------------------------------------------------
  * Selector names
@@ -126,6 +134,10 @@ function resolvePatternsKey( settings ) {
 		return STABLE_PATTERNS_KEY;
 	}
 
+	if ( Array.isArray( settings[ EXPERIMENTAL_ADDITIONAL_PATTERNS_KEY ] ) ) {
+		return EXPERIMENTAL_ADDITIONAL_PATTERNS_KEY;
+	}
+
 	return EXPERIMENTAL_PATTERNS_KEY;
 }
 
@@ -138,6 +150,10 @@ function resolvePatternsKey( settings ) {
 function resolveCategoriesKey( settings ) {
 	if ( Array.isArray( settings[ STABLE_CATEGORIES_KEY ] ) ) {
 		return STABLE_CATEGORIES_KEY;
+	}
+
+	if ( Array.isArray( settings[ EXPERIMENTAL_ADDITIONAL_CATEGORIES_KEY ] ) ) {
+		return EXPERIMENTAL_ADDITIONAL_CATEGORIES_KEY;
 	}
 
 	return EXPERIMENTAL_CATEGORIES_KEY;
@@ -192,12 +208,14 @@ export function getBlockPatternCategories() {
  * Prefers stable selector, falls back to experimental, then to the
  * full settings read as a last resort.
  *
- * @param {?string} rootClientId Inserter root client ID.
+ * @param {?string} rootClientId  Inserter root client ID.
+ * @param {Object}  [blockEditor] Optional block-editor selector object.
  * @return {Array} Allowed patterns for the context.
  */
-export function getAllowedPatterns( rootClientId = null ) {
-	const blockEditor = registrySelect( blockEditorStore );
-
+export function getAllowedPatterns(
+	rootClientId = null,
+	blockEditor = registrySelect( blockEditorStore )
+) {
 	if ( typeof blockEditor[ STABLE_ALLOWED_SELECTOR ] === 'function' ) {
 		return blockEditor[ STABLE_ALLOWED_SELECTOR ]( rootClientId ) || [];
 	}
@@ -224,7 +242,10 @@ export function getPatternAPIPath() {
 		return 'stable';
 	}
 
-	if ( Array.isArray( settings[ EXPERIMENTAL_PATTERNS_KEY ] ) ) {
+	if (
+		Array.isArray( settings[ EXPERIMENTAL_ADDITIONAL_PATTERNS_KEY ] ) ||
+		Array.isArray( settings[ EXPERIMENTAL_PATTERNS_KEY ] )
+	) {
 		return 'experimental';
 	}
 

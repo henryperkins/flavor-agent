@@ -122,7 +122,7 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
-	public function test_handle_recommend_template_keeps_template_requests_template_global(): void {
+	public function test_handle_recommend_template_limits_patterns_to_live_template_editor_visibility(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -133,19 +133,19 @@ final class AgentControllerTest extends TestCase {
 						[
 							'suggestions' => [
 								[
-									'label'              => 'Add footer callout',
-									'description'        => 'Use the footer callout pattern.',
+									'label'              => 'Add hero',
+									'description'        => 'Use the hero pattern.',
 									'operations'         => [
 										[
 											'type'        => 'insert_pattern',
-											'patternName' => 'theme/footer-callout',
+											'patternName' => 'theme/hero',
 										],
 									],
 									'templateParts'      => [],
-									'patternSuggestions' => [ 'theme/footer-callout' ],
+									'patternSuggestions' => [ 'theme/hero' ],
 								],
 							],
-							'explanation' => 'Use the broader template pattern set.',
+							'explanation' => 'Use the currently visible template pattern set.',
 						]
 					),
 				]
@@ -163,7 +163,7 @@ final class AgentControllerTest extends TestCase {
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
-			[ 'theme/footer-callout' ],
+			[ 'theme/hero' ],
 			$response->get_data()['suggestions'][0]['patternSuggestions'] ?? []
 		);
 		$request_body = json_decode(
@@ -175,9 +175,96 @@ final class AgentControllerTest extends TestCase {
 			'theme/hero',
 			(string) ( $request_body['input'] ?? '' )
 		);
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'theme/footer-callout',
 			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_recommend_template_visible_filter_applies_before_candidate_cap(): void {
+		// Register 31 typed patterns so the 31st falls outside the
+		// TEMPLATE_PATTERN_CANDIDATE_CAP of 30 when unfiltered.
+		for ( $i = 1; $i <= 31; $i++ ) {
+			$this->register_pattern(
+				"theme/typed-pattern-{$i}",
+				[
+					'title'         => "Typed Pattern {$i}",
+					'templateTypes' => [ 'home' ],
+					'content'       => "<!-- wp:paragraph --><p>Pattern {$i}</p><!-- /wp:paragraph -->",
+				]
+			);
+		}
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'ok',
+						]
+					),
+				]
+			),
+		];
+
+		// Request only the 31st pattern as visible — it would be excluded
+		// by the old flow where the cap was applied before the filter.
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//home' );
+		$request->set_param( 'templateType', 'home' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/typed-pattern-31' ] );
+
+		Agent_Controller::handle_recommend_template( $request );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'theme/typed-pattern-31',
+			(string) ( $request_body['input'] ?? '' ),
+			'Visible pattern beyond the unfiltered cap must reach the prompt.'
+		);
+	}
+
+	public function test_handle_recommend_template_treats_empty_visible_pattern_filter_as_unfiltered(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'ok',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//home' );
+		$request->set_param( 'templateType', 'home' );
+		$request->set_param( 'visiblePatternNames', [] );
+
+		Agent_Controller::handle_recommend_template( $request );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'theme/hero',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'theme/footer-callout',
+			(string) ( $request_body['input'] ?? '' ),
+			'Empty visibility filters should fall back to the broader template candidate set.'
 		);
 	}
 

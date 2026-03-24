@@ -222,6 +222,10 @@ final class Registration {
 							'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.',
 						],
 						'prompt'              => [ 'type' => 'string' ],
+						'visiblePatternNames' => [
+							'type'  => 'array',
+							'items' => [ 'type' => 'string' ],
+						],
 						'editorSlots'         => [
 							'type'       => 'object',
 							'properties' => [

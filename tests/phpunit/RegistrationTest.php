@@ -116,9 +116,13 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$suggestion['properties']['operations']['items']['properties']['patternName']['type'] ?? null
 		);
-		$this->assertArrayNotHasKey(
-			'visiblePatternNames',
-			$ability['input_schema']['properties'] ?? []
+		$this->assertSame(
+			'array',
+			$ability['input_schema']['properties']['visiblePatternNames']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['visiblePatternNames']['items']['type'] ?? null
 		);
 		$this->assertSame(
 			'object',

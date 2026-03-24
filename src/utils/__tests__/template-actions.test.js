@@ -90,6 +90,7 @@ function setupBlockEditor( {
 	patterns = [],
 	insertionPoint = { rootClientId: null, index: 0 },
 	canInsertBlockType = () => true,
+	allowedPatterns,
 } = {} ) {
 	const state = {
 		blocks: cloneValue( blocks ),
@@ -108,6 +109,12 @@ function setupBlockEditor( {
 		getBlockInsertionPoint: jest.fn( () => state.insertionPoint ),
 		canInsertBlockType: jest.fn( canInsertBlockType ),
 	};
+
+	if ( allowedPatterns !== undefined ) {
+		blockEditorSelect.getAllowedPatterns = jest.fn( () =>
+			cloneValue( allowedPatterns )
+		);
+	}
 
 	const updateBlockAttributes = jest.fn( ( clientId, attributes ) => {
 		const block = findBlockByClientId( state.blocks, clientId );
@@ -503,6 +510,46 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Pattern “theme/missing” is not available in the current editor context.',
+		} );
+	} );
+
+	test( 'prepareTemplateSuggestionOperations fails before mutation when a pattern is not allowed at the live insertion root', () => {
+		setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'group-1',
+					name: 'core/group',
+					attributes: {},
+					innerBlocks: [],
+				},
+			],
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content:
+						'<!-- wp:paragraph {"content":"Inserted"} /-->',
+				},
+			],
+			allowedPatterns: [],
+			insertionPoint: {
+				rootClientId: 'group-1',
+				index: 0,
+			},
+		} );
+
+		const result = prepareTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Pattern “theme/hero” is not available in the current editor context.',
 		} );
 	} );
 

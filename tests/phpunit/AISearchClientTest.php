@@ -85,26 +85,102 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
-	public function test_validate_configuration_queries_cloudflare_instance_endpoint_and_probe_search(): void {
+	public function test_search_derives_trusted_guidance_url_from_cloudflare_source_key(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+			'flavor_agent_cloudflare_ai_search_max_results' => 4,
 		];
-		WordPressTestState::$remote_get_response  = [
+		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
 			],
 			'body'     => wp_json_encode(
 				[
 					'result' => [
-						'id'     => 'wp-dev-docs',
-						'source' => 'website',
-						'enable' => true,
-						'paused' => false,
+						'search_query' => 'block editor',
+						'chunks'       => [
+							[
+								'id'    => 'chunk-1',
+								'score' => 0.76,
+								'item'  => [
+									'key'      => 'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
+									'metadata' => [],
+								],
+								'text'  => 'The Blocks endpoint returns data about registered block types.',
+							],
+						],
 					],
 				]
 			),
+		];
+
+		$result = AISearchClient::search( 'block editor' );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result['guidance'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/rest-api/reference/blocks/',
+			$result['guidance'][0]['url']
+		);
+		$this->assertSame(
+			'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
+			$result['guidance'][0]['sourceKey']
+		);
+	}
+
+	public function test_search_rejects_forged_or_traversing_source_keys_when_urls_are_missing(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+			'flavor_agent_cloudflare_ai_search_max_results' => 4,
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'search_query' => 'block editor',
+						'chunks'       => [
+							[
+								'id'    => 'forged-prefix',
+								'score' => 0.51,
+								'item'  => [
+									'key'      => 'internal/developer.wordpress.org/rest-api/reference/blocks/part-0001.md',
+									'metadata' => [],
+								],
+								'text'  => 'Forged source keys must never be trusted.',
+							],
+							[
+								'id'    => 'traversal',
+								'score' => 0.5,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/../rest-api/reference/blocks/part-0001.md',
+									'metadata' => [],
+								],
+								'text'  => 'Traversal segments must never normalize to docs URLs.',
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'block editor' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['guidance'] );
+	}
+
+	public function test_validate_configuration_uses_probe_search_only(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [
@@ -133,25 +209,17 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame(
 			[
 				'id'      => 'wp-dev-docs',
-				'source'  => 'website',
+				'source'  => '',
 				'enabled' => true,
 				'paused'  => false,
 			],
 			$result
 		);
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs',
-			WordPressTestState::$last_remote_get['url']
-		);
-		$this->assertSame(
-			'Bearer token-xyz',
-			WordPressTestState::$last_remote_get['args']['headers']['Authorization']
-		);
-		$this->assertSame(
 			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs/search',
 			WordPressTestState::$last_remote_post['url']
 		);
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 
 		$request_body = json_decode(
@@ -164,7 +232,7 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_validate_configuration_surfaces_cloudflare_errors(): void {
-		WordPressTestState::$remote_get_response = [
+		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 403,
 			],
@@ -190,20 +258,12 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'Authentication error', $result->get_error_message() );
 	}
 
-	public function test_validate_configuration_rejects_disabled_instances(): void {
-		WordPressTestState::$remote_get_response = [
+	public function test_validate_configuration_surfaces_parse_errors_from_probe_search(): void {
+		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
 			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'id'     => 'wp-dev-docs',
-						'enable' => false,
-						'paused' => false,
-					],
-				]
-			),
+			'body'     => '{invalid-json',
 		];
 
 		$result = AISearchClient::validate_configuration(
@@ -213,58 +273,14 @@ final class AISearchClientTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'cloudflare_ai_search_validation_disabled', $result->get_error_code() );
+		$this->assertSame( 'cloudflare_ai_search_validation_parse_error', $result->get_error_code() );
 		$this->assertSame(
-			'Cloudflare AI Search validation found a disabled instance. Enable it before saving these credentials.',
-			$result->get_error_message()
-		);
-	}
-
-	public function test_validate_configuration_rejects_paused_instances(): void {
-		WordPressTestState::$remote_get_response = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'id'     => 'wp-dev-docs',
-						'enable' => true,
-						'paused' => true,
-					],
-				]
-			),
-		];
-
-		$result = AISearchClient::validate_configuration(
-			'account-123',
-			'wp-dev-docs',
-			'token-xyz'
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'cloudflare_ai_search_validation_paused', $result->get_error_code() );
-		$this->assertSame(
-			'Cloudflare AI Search validation found a paused instance. Resume it before saving these credentials.',
+			'Failed to parse Cloudflare AI Search response.',
 			$result->get_error_message()
 		);
 	}
 
 	public function test_validate_configuration_rejects_instances_without_trusted_wordpress_docs_probe_results(): void {
-		WordPressTestState::$remote_get_response  = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'id'     => 'wp-dev-docs',
-						'enable' => true,
-						'paused' => false,
-					],
-				]
-			),
-		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -301,8 +317,41 @@ final class AISearchClientTest extends TestCase {
 			'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from this instance. Use the official WordPress developer docs index before saving these credentials.',
 			$result->get_error_message()
 		);
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_validate_configuration_rejects_probe_results_with_forged_source_keys(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'   => 'forged-probe',
+								'item' => [
+									'key'      => 'internal/developer.wordpress.org/../rest-api/reference/blocks/part-0001.md',
+									'metadata' => [],
+								],
+								'text' => 'Forged source keys must not satisfy trusted-doc validation.',
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration(
+			'account-123',
+			'wp-dev-docs',
+			'token-xyz'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_validation_untrusted_source', $result->get_error_code() );
 	}
 
 	public function test_search_requires_configuration(): void {

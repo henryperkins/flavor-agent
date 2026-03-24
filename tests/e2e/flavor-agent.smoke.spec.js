@@ -792,8 +792,11 @@ test( 'template surface smoke previews and applies executable template recommend
 		templateTarget.templateRef
 	);
 	expect( templateRequests[ 0 ].prompt ).toBe( TEMPLATE_PROMPT );
-	expect( templateRequests[ 0 ] ).not.toHaveProperty(
+	expect( templateRequests[ 0 ] ).toHaveProperty(
 		'visiblePatternNames'
+	);
+	expect( templateRequests[ 0 ].visiblePatternNames ).toContain(
+		TEMPLATE_PATTERN_NAME
 	);
 
 	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();

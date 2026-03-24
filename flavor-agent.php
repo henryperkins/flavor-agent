@@ -90,14 +90,12 @@ add_action(
 add_action(
 	'init',
 	function () {
-		if ( function_exists( 'register_block_pattern_category' ) ) {
-			register_block_pattern_category(
-				'recommended',
-				[
-					'label' => __( 'Recommended', 'flavor-agent' ),
-				]
-			);
-		}
+		register_block_pattern_category(
+			'recommended',
+			[
+				'label' => __( 'Recommended', 'flavor-agent' ),
+			]
+		);
 	}
 );
 

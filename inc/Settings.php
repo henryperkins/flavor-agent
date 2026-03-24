@@ -408,7 +408,7 @@ final class Settings {
 				'option'      => 'flavor_agent_cloudflare_ai_search_api_token',
 				'type'        => 'password',
 				'placeholder' => 'Cloudflare API token',
-				'description' => 'A Cloudflare API token with <strong>AI Search Read</strong> permission. Create one at <code>dash.cloudflare.com/profile/api-tokens</code>.',
+				'description' => 'A Cloudflare API token with <strong>AI Search Run</strong> permission. <strong>AI Search Edit</strong> also works. Do not use an AI Gateway token. Create one at <code>dash.cloudflare.com/profile/api-tokens</code>.',
 			]
 		);
 		add_settings_field(
@@ -508,7 +508,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Flavor Agent only keeps Cloudflare grounding chunks whose source resolves to developer.wordpress.org. Mixed or private content in the configured index is ignored, and the configured account, instance, and token are validated only when those credentials change. The target instance must be enabled, not paused, and must return trusted developer.wordpress.org guidance before new credentials are saved.',
+				'Flavor Agent only keeps Cloudflare grounding chunks whose source resolves to developer.wordpress.org. Mixed or private content in the configured index is ignored, and the configured account, instance, and token are validated only when those credentials change. Validation runs a lightweight probe search that must return trusted developer.wordpress.org guidance before new credentials are saved.',
 				'flavor-agent'
 			)
 		);
@@ -1151,9 +1151,7 @@ final class Settings {
 			return false;
 		}
 
-		if ( function_exists( 'wp_unslash' ) ) {
-			$option_page = wp_unslash( $option_page );
-		}
+		$option_page = wp_unslash( $option_page );
 
 		return sanitize_text_field( $option_page ) === self::OPTION_GROUP;
 	}
@@ -1161,7 +1159,7 @@ final class Settings {
 	private static function get_submitted_openai_provider(): string {
 		$provider = $_POST[ Provider::OPTION_NAME ] ?? get_option( Provider::OPTION_NAME, Provider::AZURE );
 
-		if ( function_exists( 'wp_unslash' ) && is_string( $provider ) ) {
+		if ( is_string( $provider ) ) {
 			$provider = wp_unslash( $provider );
 		}
 
@@ -1179,9 +1177,7 @@ final class Settings {
 			return sanitize_text_field( $fallback );
 		}
 
-		if ( function_exists( 'wp_unslash' ) ) {
-			$value = wp_unslash( $value );
-		}
+		$value = wp_unslash( $value );
 
 		return sanitize_text_field( $value );
 	}
@@ -1193,9 +1189,7 @@ final class Settings {
 			return self::sanitize_url_value( $fallback );
 		}
 
-		if ( function_exists( 'wp_unslash' ) ) {
-			$value = wp_unslash( $value );
-		}
+		$value = wp_unslash( $value );
 
 		return self::sanitize_url_value( $value );
 	}
@@ -1214,11 +1208,7 @@ final class Settings {
 	}
 
 	private static function sanitize_url_value( mixed $value ): string {
-		if ( function_exists( 'sanitize_url' ) ) {
-			return (string) sanitize_url( (string) $value );
-		}
-
-		return sanitize_text_field( (string) $value );
+		return (string) sanitize_url( (string) $value );
 	}
 
 	private static function report_azure_validation_error( \WP_Error $error ): void {

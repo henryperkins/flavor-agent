@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-03-23
+> Last updated: 2026-03-24
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -50,7 +50,7 @@ flavor-agent/
     REST/
       Agent_Controller.php  REST routes under flavor-agent/v1/
     LLM/
-      WordPressAIClient.php WordPress 7.0 AI client wrapper for block recommendations
+      WordPressAIClient.php WordPress 7.0 AI client wrapper for block recommendations (prefers wp_ai_client_prompt(), falls back to AI_Client class)
       Prompt.php            Block recommendation prompt assembly and response parsing
       TemplatePrompt.php    Template recommendation prompt assembly and structured operation parsing
       NavigationPrompt.php  Navigation recommendation prompt assembly and response parsing
@@ -145,6 +145,7 @@ flavor-agent/
       SettingsTest.php
       TemplatePromptTest.php
       TemplatePartPromptTest.php
+      WordPressAIClientTest.php
     (JS tests live alongside source in __tests__/ dirs and *.test.js files)
 
   docs/
@@ -197,17 +198,17 @@ The plugin works in degraded mode without any services configured. Each surface 
 #### Pattern Recommendations
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
 - **Pipeline:** Build query text -> Azure OpenAI embed -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via Azure Responses API -> filter scores < 0.3 -> return max 8.
-- **Inserter integration:** Via `compat.js`, patches block patterns (stable `blockPatterns` key preferred, `__experimentalBlockPatterns` fallback) to add "Recommended" category, enriched descriptions, and extracted keywords.
+- **Inserter integration:** Via `compat.js`, patches block patterns (stable `blockPatterns` key preferred, then `__experimentalAdditionalBlockPatterns`, then `__experimentalBlockPatterns` fallback) to add "Recommended" category, enriched descriptions, and extracted keywords.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
 
 #### Template Recommendations
 - **Trigger:** User editing a `wp_template` in Site Editor, types optional prompt, clicks "Get Suggestions".
-- **Context sent:** Template ref, type, assigned template-part slots, empty areas, available (unassigned) template parts, candidate patterns (typed + generic, max 30), current inserter-root `visiblePatternNames` when available, theme tokens, WordPress docs guidance.
+- **Context sent:** Template ref, type, assigned template-part slots, empty areas, available (unassigned) template parts, candidate patterns (typed + generic, filtered by client-side `visiblePatternNames` when available, max 30), current inserter-root `visiblePatternNames` when available, theme tokens, WordPress docs guidance.
 - **LLM:** Azure OpenAI Responses API via `ResponsesClient::rank()`.
 - **Response:** Max 3 suggestions, each with validated structured operations. Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`.
 - **UI:** Entity mentions in text become clickable links: template-part slugs/areas highlight blocks in canvas; pattern names open the inserter pre-filtered. Suggestions can also be previewed and explicitly confirmed before apply.
-- **Apply:** Deterministic client executor now validates template suggestions against a working-state copy before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, pattern insertion resolves the current insertion point and inserts parsed pattern blocks, and applied operations persist stable undo locators plus recorded post-apply snapshots for inserted subtrees.
+- **Apply:** Deterministic client executor now validates template suggestions against a working-state copy before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, pattern insertion resolves the current insertion point and validates the pattern against root-scoped allowed patterns before inserting parsed pattern blocks, and applied operations persist stable undo locators plus recorded post-apply snapshots for inserted subtrees.
 - **Guardrails:** Free-form template tree rewrites are intentionally out of scope. If any operation fails validation, the entire apply is rejected before mutation.
 
 #### AI Activity And Undo
@@ -242,7 +243,7 @@ All abilities registered with full JSON Schema input/output definitions:
 #### WordPress Docs Grounding (Cloudflare AI Search)
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
 - Recommendation-time grounding is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
-- Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks).
+- Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks). Source keys with an `ai-search/<instanceId>/` prefix are now recognized alongside the plain `developer.wordpress.org/` prefix.
 - Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation). Throttled by credential fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
 
 #### REST API
@@ -268,7 +269,7 @@ Plus pattern sync status panel with manual trigger.
 
 When the Azure OpenAI endpoint, key, embedding deployment, or chat deployment changes and all four fields are present, the settings save flow validates both the embeddings and responses deployments and preserves the previous values if validation fails.
 When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
-When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the settings save flow validates the configured account, instance, and token against the instance endpoint, rejects disabled or paused instances, runs a lightweight probe search, and preserves the previous values if validation fails.
+When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the settings save flow validates the configured account, instance, and token with a lightweight probe search and preserves the previous values if validation fails. This keeps the settings flow compatible with documented AI Search Run tokens.
 Unchanged or partial credential submissions skip remote validation.
 Successful saves still use the standard Settings API notice flow, and failed Azure OpenAI, Qdrant, or Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
 
@@ -294,7 +295,7 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 2. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
 3. **JS toolchain must stay on Node 20 / npm 10**: This repo now pins that combo because Node 24 / npm 11 on this host fails `npm ci` immediately via `engine-strict` (`EBADENGINE`).
 4. **Inserter search detection is DOM-coupled (mitigated)**: `compat.js` centralizes container (5) and input (4) selectors behind `findInserterSearchInput`. Still DOM-based, but changes are now confined to one file.
-5. **Pattern inserter patching uses compat adapter**: `compat.js` prefers stable `blockPatterns`/`blockPatternCategories` keys when present, falls back to `__experimentalBlockPatterns`/`__experimentalBlockPatternCategories`, and degrades to empty arrays when neither exists. Migration to fully stable APIs requires only updating the adapter.
+5. **Pattern inserter patching uses compat adapter**: `compat.js` prefers stable `blockPatterns`/`blockPatternCategories` keys when present, then `__experimentalAdditionalBlockPatterns`/`__experimentalAdditionalBlockPatternCategories`, then `__experimentalBlockPatterns`/`__experimentalBlockPatternCategories`, and degrades to empty arrays when none exist. Migration to fully stable APIs requires only updating the adapter.
 6. **Two experimental APIs remain outside compat scope**: `__experimentalFeatures` (theme-tokens.js) and `__experimentalRole` (block-inspector.js) have no stable replacement yet and are used directly.
 7. **Browser smoke coverage is still shallow**: Playwright now covers block apply/persist/undo, pattern request/badge flow, and template preview/apply/undo, but it still runs on a stable WordPress `6.9.4` Playground harness. Exact Site Editor refresh/drift cases are checked in as `fixme` because revisiting the template canvas route in the Playground harness still crashes the PHP-WASM controller.
 8. **Template apply scope is intentionally narrow**: The first executable version supports validated template-part assignment/replacement and pattern insertion only. Free-form template tree rewrites and subtree transforms remain future work.
@@ -354,12 +355,12 @@ Editor loads (or inserter search changes)
 User editing wp_template in Site Editor
   -> TemplateRecommender.js renders PluginDocumentSettingPanel
   -> User clicks "Get Suggestions"
-  -> store thunk: fetchTemplateRecommendations(input)
-     -> POST /flavor-agent/v1/recommend-template
-        -> Agent_Controller -> TemplateAbilities::recommend_template()
-           -> ServerCollector::for_template(ref, type)
-              -> Walks parsed blocks for template-part slots
-              -> Collects available parts, empty areas, candidate patterns
+   -> store thunk: fetchTemplateRecommendations(input)
+      -> POST /flavor-agent/v1/recommend-template
+         -> Agent_Controller -> TemplateAbilities::recommend_template()
+            -> ServerCollector::for_template(ref, type, visiblePatternNames)
+               -> Walks parsed blocks for template-part slots
+               -> Collects available parts, empty areas, candidate patterns (filtered by visiblePatternNames)
            -> AISearchClient::maybe_search_with_cache_fallbacks()
            -> TemplatePrompt::build_system() + build_user()
            -> ResponsesClient::rank(instructions, input)
@@ -420,22 +421,23 @@ User editing wp_template_part in Site Editor
 ### PHP (PHPUnit)
 | Test File | Tests | What's Covered |
 |-----------|-------|---------------|
-| `AgentControllerTest` | 1 | REST recommend-block wraps clientId, correct API call |
-| `ServerCollectorTest` | 5 | Template parts metadata, area lookup, content-role introspection, template candidate ordering, duotone token summaries |
-| `InfraAbilitiesTest` | 4 | check-status: Cloudflare backend, admin filtering, model fallback |
-| `RegistrationTest` | 2 | Ability schema structure, entityKey schema |
-| `DocsGroundingEntityCacheTest` | 6 | Two-tier cache: query vs entity, seeding, inference |
-| `AISearchClientTest` | 18 | Search flow, config, cache, source filtering, URL trust, entity keys, instance validation states, trusted-docs compatibility probe |
+| `AgentControllerTest` | 6 | REST recommend-block/template wrapping, visiblePatternNames forwarding, string array validation |
+| `ServerCollectorTest` | 6 | Template parts metadata, area lookup, content-role introspection, template candidate ordering, visible-pattern filtering, duotone token summaries |
+| `InfraAbilitiesTest` | 6 | check-status: Cloudflare backend, admin filtering, model fallback, provider inventory |
+| `RegistrationTest` | 4 | Ability schema structure, entityKey schema, visiblePatternNames schema, recommend-template-part schema |
+| `DocsGroundingEntityCacheTest` | 7 | Two-tier cache: query vs entity, seeding, inference, instance-prefixed source keys |
+| `AISearchClientTest` | 24 | Search flow, config, cache, source filtering, URL trust, entity keys, instance-prefixed source keys, probe-only validation, trusted-docs compatibility |
 | `PromptRulesTest` | 3 | Content-only rules, disabled blocks, container behavior |
 | `BlockAbilitiesTest` | 3 | Input normalization, XSS sanitization, disabled block short-circuit |
 | `PromptGuidanceTest` | 8 | Guidance sections, structural identity, content-only restrictions, filter panel coverage, duotone summaries, aspect-ratio rules |
-| `SettingsTest` | 14 | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, and settings notice rendering |
-| `AzureBackendValidationTest` | 7 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks |
+| `SettingsTest` | 19 | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, probe-only Cloudflare validation, and settings notice rendering |
+| `AzureBackendValidationTest` | 16 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks, OpenAI Native validation |
 | `NavigationAbilitiesTest` | 13 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
-| `TemplatePromptTest` | 6 | Structured template operation parsing, conflicting multi-step validation, and legacy fallback normalization |
+| `TemplatePromptTest` | 7 | Structured template operation parsing, conflicting multi-step validation, visible-pattern context, and legacy fallback normalization |
 | `TemplatePartPromptTest` | 2 | Template-part prompt assembly and response parsing |
 | `DocsPrewarmTest` | 19 | Warm set definition, cache seeding, state recording, throttling (same creds, changed creds, expired window), partial/total failure, schedule/should prewarm, diagnostics, resilience |
-| **Total** | **119** | |
+| `WordPressAIClientTest` | 3 | Function-based prompt creation, system instruction application, missing-provider error |
+| **Total** | **146** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
@@ -450,14 +452,15 @@ User editing wp_template_part in Site Editor
 | `patterns/__tests__/inserter-badge-state.test.js` | Badge view-model derivation (all 4 states) |
 | `patterns/__tests__/recommendation-utils.test.js` | Metadata patching, badge reason extraction |
 | `patterns/__tests__/find-inserter-search-input.test.js` | DOM search strategy (delegates to compat) |
-| `patterns/__tests__/compat.test.js` | Stable/experimental API negotiation, DOM selector strategies, fallback behavior |
-| `templates/__tests__/template-recommender-helpers.test.js` | Entity map, suggestion view models, format helpers |
+| `patterns/__tests__/compat.test.js` | Stable/experimental/additional API negotiation, DOM selector strategies, fallback behavior |
+| `context/__tests__/theme-tokens.test.js` | Theme token extraction and summarization |
+| `templates/__tests__/template-recommender-helpers.test.js` | Entity map, suggestion view models, context signature, format helpers |
 | `inspector/suggestion-keys.test.js` | Key generation |
 | `utils/__tests__/structural-identity.test.js` | Role annotation, location resolution, position tracking |
-| `utils/__tests__/template-actions.test.js` | Template operation preparation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
+| `utils/__tests__/template-actions.test.js` | Template operation preparation, root-scoped allowed-pattern validation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
 | `utils/__tests__/template-part-areas.test.js` | Area resolution priority chain |
 | `utils/__tests__/template-types.test.js` | Slug normalization |
-| `utils/__tests__/visible-patterns.test.js` | Inserter-scoped pattern list |
+| `utils/__tests__/visible-patterns.test.js` | Inserter-scoped pattern list, injected block-editor selector, null-root document scope |
 
 ## Definition of "Complete" (v1.0)
 

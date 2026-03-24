@@ -27,7 +27,7 @@ final class TemplateAbilities {
 	 *
 	 * The shipped template panel keeps this request template-global.
 	 *
-	 * @param array $input { templateRef: string, templateType?: string, prompt?: string }
+	 * @param array $input { templateRef: string, templateType?: string, prompt?: string, visiblePatternNames?: string[] }
 	 * @return array|\WP_Error Suggestions payload or error.
 	 */
 	public static function recommend_template( mixed $input ): array|\WP_Error {
@@ -40,6 +40,13 @@ final class TemplateAbilities {
 			? $input['templateType']
 			: null;
 		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
+		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
+			? StringArray::sanitize( $input['visiblePatternNames'] )
+			: null;
+
+		if ( is_array( $visible_pattern_names ) && [] === $visible_pattern_names ) {
+			$visible_pattern_names = null;
+		}
 
 		if ( $template_ref === '' ) {
 			return new \WP_Error(
@@ -49,7 +56,7 @@ final class TemplateAbilities {
 			);
 		}
 
-		$context = ServerCollector::for_template( $template_ref, $template_type );
+		$context = ServerCollector::for_template( $template_ref, $template_type, $visible_pattern_names );
 		if ( is_wp_error( $context ) ) {
 			return $context;
 		}

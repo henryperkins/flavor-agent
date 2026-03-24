@@ -471,13 +471,18 @@ final class ServerCollector {
 	 * Template recommendations stay template-global unless a dedicated
 	 * design update explicitly introduces inserter-root narrowing.
 	 *
-	 * @param string      $template_ref  Template identifier from the Site Editor.
-	 * @param string|null $template_type Normalized template type. Derived if null.
+	 * @param string      $template_ref          Template identifier from the Site Editor.
+	 * @param string|null $template_type          Normalized template type. Derived if null.
+	 * @param string[]|null $visible_pattern_names Optional client-side visible pattern filter.
+	 *                                             Applied before the candidate cap so that all
+	 *                                             visible patterns are considered, not just the
+	 *                                             first N unfiltered candidates.
 	 * @return array|\WP_Error Template context or error.
 	 */
 	public static function for_template(
 		string $template_ref,
-		?string $template_type = null
+		?string $template_type = null,
+		?array $visible_pattern_names = null
 	): array|\WP_Error {
 		$template = null;
 
@@ -531,7 +536,7 @@ final class ServerCollector {
 			'emptyAreas'     => $slots['emptyAreas'],
 			'allowedAreas'   => $slots['allowedAreas'],
 			'availableParts' => $available_parts,
-			'patterns'       => self::collect_template_candidate_patterns( $template_type ),
+			'patterns'       => self::collect_template_candidate_patterns( $template_type, $visible_pattern_names ),
 			'themeTokens'    => self::for_tokens(),
 		];
 	}
@@ -645,10 +650,14 @@ final class ServerCollector {
 	 * Typed matches sort first, followed by generic patterns with no template
 	 * types. Pattern content is removed to avoid prompt bloat.
 	 *
-	 * @param string|null $template_type Normalized template type.
+	 * When $visible_pattern_names is provided, the visibility filter is applied
+	 * before the candidate cap so that all visible patterns are considered.
+	 *
+	 * @param string|null   $template_type          Normalized template type.
+	 * @param string[]|null $visible_pattern_names   Optional visibility filter.
 	 * @return array Pattern candidates.
 	 */
-	private static function collect_template_candidate_patterns( ?string $template_type ): array {
+	private static function collect_template_candidate_patterns( ?string $template_type, ?array $visible_pattern_names = null ): array {
 		$max_candidates = self::TEMPLATE_PATTERN_CANDIDATE_CAP;
 		$all_patterns   = self::for_patterns();
 		$typed          = [];
@@ -690,11 +699,25 @@ final class ServerCollector {
 			}
 		}
 
-		if ( $template_type === null ) {
-			return array_slice( $unfiltered, 0, $max_candidates );
+		$candidates = $template_type === null
+			? $unfiltered
+			: array_merge( $typed, $generic );
+
+		if ( is_array( $visible_pattern_names ) && [] !== $visible_pattern_names ) {
+			$visible_lookup = array_fill_keys( $visible_pattern_names, true );
+			$candidates     = array_values(
+				array_filter(
+					$candidates,
+					static function ( array $pattern ) use ( $visible_lookup ): bool {
+						$name = (string) ( $pattern['name'] ?? '' );
+
+						return $name !== '' && isset( $visible_lookup[ $name ] );
+					}
+				)
+			);
 		}
 
-		return array_slice( array_merge( $typed, $generic ), 0, $max_candidates );
+		return array_slice( $candidates, 0, $max_candidates );
 	}
 
 	/**
@@ -1057,7 +1080,7 @@ final class ServerCollector {
 	}
 
 	private static function resolve_attribute_role( array $definition ): ?string {
-		$role = $definition['role'] ?? $definition['__experimentalRole'] ?? null;
+		$role = $definition['role'] ?? null;
 
 		return is_string( $role ) && '' !== $role ? $role : null;
 	}

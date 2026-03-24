@@ -61,6 +61,26 @@ describe( 'visible-patterns', () => {
 		);
 	} );
 
+	test( 'getVisiblePatternNames prefers an injected block editor selector', () => {
+		const injectedBlockEditor = {
+			getAllowedPatterns: jest
+				.fn()
+				.mockReturnValue( [
+					{ name: 'theme/nested-hero' },
+					{ name: 'theme/nested-hero' },
+					{ name: 'theme/nested-footer' },
+				] ),
+		};
+
+		expect(
+			getVisiblePatternNames( 'root-789', injectedBlockEditor )
+		).toEqual( [ 'theme/nested-hero', 'theme/nested-footer' ] );
+		expect( injectedBlockEditor.getAllowedPatterns ).toHaveBeenCalledWith(
+			'root-789'
+		);
+		expect( mockRegistrySelect ).not.toHaveBeenCalled();
+	} );
+
 	test( 'getVisiblePatternNames falls back to __experimentalGetAllowedPatterns', () => {
 		const blockEditor = {
 			__experimentalGetAllowedPatterns: jest
@@ -96,6 +116,38 @@ describe( 'visible-patterns', () => {
 		expect(
 			blockEditor.__experimentalGetAllowedPatterns
 		).toHaveBeenCalledWith( null );
+	} );
+
+	test( 'getVisiblePatternNames with null root returns document-root scoped patterns', () => {
+		const blockEditor = {
+			getAllowedPatterns: jest.fn( ( rootClientId ) => {
+				if ( rootClientId === null ) {
+					return [
+						{ name: 'theme/hero' },
+						{ name: 'theme/footer' },
+						{ name: 'theme/sidebar' },
+					];
+				}
+
+				return [ { name: 'theme/hero' } ];
+			} ),
+		};
+
+		// null root should return all document-level patterns
+		expect( getVisiblePatternNames( null, blockEditor ) ).toEqual( [
+			'theme/hero',
+			'theme/footer',
+			'theme/sidebar',
+		] );
+		expect( blockEditor.getAllowedPatterns ).toHaveBeenCalledWith( null );
+
+		// nested root returns a narrower set
+		expect(
+			getVisiblePatternNames( 'nested-group-123', blockEditor )
+		).toEqual( [ 'theme/hero' ] );
+		expect( blockEditor.getAllowedPatterns ).toHaveBeenCalledWith(
+			'nested-group-123'
+		);
 	} );
 
 	test( 'getVisiblePatternNames falls back to settings patterns when no selector exists', () => {

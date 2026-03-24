@@ -55,14 +55,33 @@ export function formatTemplateTypeLabel( templateType ) {
 		.join( ' ' ) } Template`;
 }
 
+export function normalizeVisiblePatternNames( visiblePatternNames ) {
+	if ( ! Array.isArray( visiblePatternNames ) ) {
+		return null;
+	}
+
+	return Array.from( new Set( visiblePatternNames.filter( Boolean ) ) );
+}
+
+export function buildTemplateRecommendationContextSignature( {
+	editorSlots,
+} = {} ) {
+	return JSON.stringify( {
+		editorSlots: editorSlots || null,
+	} );
+}
+
 export function buildTemplateFetchInput( {
 	templateRef,
 	templateType,
 	prompt,
 	editorSlots,
+	visiblePatternNames,
 } ) {
 	const input = { templateRef };
 	const trimmedPrompt = prompt.trim();
+	const normalizedVisiblePatternNames =
+		normalizeVisiblePatternNames( visiblePatternNames );
 
 	if ( templateType ) {
 		input.templateType = templateType;
@@ -76,13 +95,17 @@ export function buildTemplateFetchInput( {
 		input.editorSlots = editorSlots;
 	}
 
+	if (
+		Array.isArray( normalizedVisiblePatternNames ) &&
+		normalizedVisiblePatternNames.length > 0
+	) {
+		input.visiblePatternNames = normalizedVisiblePatternNames;
+	}
+
 	return input;
 }
 
-export function buildEditorTemplateSlotSnapshot(
-	blocks = [],
-	areaLookup
-) {
+export function buildEditorTemplateSlotSnapshot( blocks = [], areaLookup ) {
 	const assignedParts = [];
 	const emptyAreas = new Set();
 	const allowedAreas = new Set();
@@ -114,7 +137,10 @@ export function buildEditorTemplateSlotSnapshot(
 				}
 			}
 
-			if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
+			if (
+				Array.isArray( block?.innerBlocks ) &&
+				block.innerBlocks.length
+			) {
 				visitBlocks( block.innerBlocks );
 			}
 		}

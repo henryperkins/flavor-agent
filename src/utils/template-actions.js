@@ -12,7 +12,7 @@ import { rawHandler } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { dispatch, select } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { getBlockPatterns } from '../patterns/compat';
+import { getAllowedPatterns } from '../patterns/compat';
 import {
 	TEMPLATE_OPERATION_ASSIGN,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
@@ -94,8 +94,8 @@ function getBlocks() {
 	return select( blockEditorStore ).getBlocks();
 }
 
-function getPatternRegistry() {
-	return getBlockPatterns();
+function getPatternRegistry( rootClientId = null ) {
+	return getAllowedPatterns( rootClientId );
 }
 
 function normalizeSerializableValue( value ) {
@@ -368,9 +368,9 @@ function resolveInsertionPoint() {
 	};
 }
 
-function resolvePatternByName( patternName ) {
+function resolvePatternByName( patternName, rootClientId = null ) {
 	return (
-		getPatternRegistry().find(
+		getPatternRegistry( rootClientId ).find(
 			( pattern ) => pattern?.name === patternName
 		) || null
 	);
@@ -453,7 +453,11 @@ function prepareTemplatePartOperation(
 
 function prepareInsertPatternOperation( operation ) {
 	const patternName = operation?.patternName || '';
-	const pattern = resolvePatternByName( patternName );
+	const insertionPoint = resolveInsertionPoint();
+	const pattern = resolvePatternByName(
+		patternName,
+		insertionPoint.rootClientId
+	);
 
 	if (
 		! pattern ||
@@ -477,7 +481,6 @@ function prepareInsertPatternOperation( operation ) {
 		};
 	}
 
-	const insertionPoint = resolveInsertionPoint();
 	const blockEditor = select( blockEditorStore );
 	const canInsertAll = blocks.every(
 		( block ) =>

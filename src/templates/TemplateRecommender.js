@@ -34,6 +34,7 @@ import {
 import AIActivitySection from '../components/AIActivitySection';
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';
+import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import {
 	getTemplateActivityUndoState,
@@ -44,6 +45,7 @@ import {
 import {
 	buildEntityMap,
 	buildEditorTemplateSlotSnapshot,
+	buildTemplateRecommendationContextSignature,
 	buildTemplateFetchInput,
 	buildTemplateSuggestionViewModel,
 	ENTITY_ACTION_BROWSE_PATTERN,
@@ -205,8 +207,7 @@ function describeInsertionPoint( {
 export default function TemplateRecommender() {
 	const canRecommend = window.flavorAgentData?.canRecommendTemplates;
 	const templateBlocks = useSelect(
-		( select ) =>
-			select( blockEditorStore )?.getBlocks?.() || [],
+		( select ) => select( blockEditorStore )?.getBlocks?.() || [],
 		[]
 	);
 	const templateRef = useSelect( ( select ) => {
@@ -258,17 +259,14 @@ export default function TemplateRecommender() {
 				)
 				.map( ( entry ) => ( {
 					...entry,
-					undo: getTemplateActivityUndoState(
-						entry,
-						blockEditor
-					),
+					undo: getTemplateActivityUndoState( entry, blockEditor ),
 				} ) );
-			const latestTemplateActivity =
+			const latestTemplateEntry =
 				templateEntries[ templateEntries.length - 1 ] || null;
-			const latestUndoableActivityId =
-				latestTemplateActivity?.undo?.canUndo === true &&
-				latestTemplateActivity?.undo?.status === 'available'
-					? latestTemplateActivity.id
+			const latestUndoableTemplateActivityId =
+				latestTemplateEntry?.undo?.canUndo === true &&
+				latestTemplateEntry?.undo?.status === 'available'
+					? latestTemplateEntry.id
 					: null;
 
 			return {
@@ -287,8 +285,8 @@ export default function TemplateRecommender() {
 				templateActivityEntries: [ ...templateEntries ]
 					.slice( -3 )
 					.reverse(),
-				latestTemplateActivity,
-				latestUndoableActivityId,
+				latestTemplateActivity: latestTemplateEntry,
+				latestUndoableActivityId: latestUndoableTemplateActivityId,
 				undoError: store.getUndoError(),
 				undoStatus: store.getUndoStatus(),
 				lastUndoneActivityId: store.getLastUndoneActivityId(),
@@ -308,13 +306,14 @@ export default function TemplateRecommender() {
 		}, {} );
 	}, [] );
 	const insertionPointLabel = useSelect( ( select ) => {
-		const blockEditor = select( 'core/block-editor' );
+		const blockEditor = select( blockEditorStore );
 		const selectedBlockClientId =
 			blockEditor?.getSelectedBlockClientId?.() || null;
 		const selectedBlock = selectedBlockClientId
 			? blockEditor?.getBlock?.( selectedBlockClientId )
 			: null;
-		const insertionPoint = blockEditor?.getBlockInsertionPoint?.() || null;
+		const insertionPoint =
+			blockEditor?.getBlockInsertionPoint?.() || null;
 		const rootClientId = insertionPoint?.rootClientId || null;
 		const rootBlock = rootClientId
 			? blockEditor?.getBlock?.( rootClientId )
@@ -325,6 +324,14 @@ export default function TemplateRecommender() {
 			rootBlock,
 			insertionPoint,
 		} );
+	}, [] );
+	const visiblePatternNames = useSelect( ( select ) => {
+		const blockEditor = select( blockEditorStore );
+		const insertionPoint =
+			blockEditor?.getBlockInsertionPoint?.() || null;
+		const rootClientId = insertionPoint?.rootClientId || null;
+
+		return getVisiblePatternNames( rootClientId, blockEditor );
 	}, [] );
 	const {
 		applyTemplateSuggestion,
@@ -343,28 +350,37 @@ export default function TemplateRecommender() {
 				: null,
 		[ templateBlocks ]
 	);
-	const editorSlotsSignature = useMemo(
-		() => JSON.stringify( editorSlots || null ),
+	const recommendationContextSignature = useMemo(
+		() =>
+			buildTemplateRecommendationContextSignature( {
+				editorSlots,
+			} ),
 		[ editorSlots ]
 	);
-	const previousEditorSlotsSignature = useRef( editorSlotsSignature );
+	const previousRecommendationContextSignature = useRef(
+		recommendationContextSignature
+	);
 	const hasMatchingResult = resultRef === templateRef;
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
 
 	useEffect( () => {
 		const templateChanged = previousTemplateRef.current !== templateRef;
-		const slotsChanged =
-			previousEditorSlotsSignature.current !== editorSlotsSignature;
+		const recommendationContextChanged =
+			previousRecommendationContextSignature.current !==
+			recommendationContextSignature;
 
-		if ( ! templateChanged && ! slotsChanged ) {
+		if ( ! templateChanged && ! recommendationContextChanged ) {
 			return;
 		}
 
 		const shouldClearRecommendations =
-			templateChanged || ( slotsChanged && ( hasMatchingResult || isLoading ) );
+			templateChanged ||
+			( recommendationContextChanged &&
+				( hasMatchingResult || isLoading ) );
 
 		previousTemplateRef.current = templateRef;
-		previousEditorSlotsSignature.current = editorSlotsSignature;
+		previousRecommendationContextSignature.current =
+			recommendationContextSignature;
 
 		if ( ! shouldClearRecommendations ) {
 			return;
@@ -377,7 +393,7 @@ export default function TemplateRecommender() {
 		}
 	}, [
 		clearTemplateRecommendations,
-		editorSlotsSignature,
+		recommendationContextSignature,
 		hasMatchingResult,
 		isLoading,
 		templateRef,
@@ -411,6 +427,7 @@ export default function TemplateRecommender() {
 				templateType,
 				prompt,
 				editorSlots,
+				visiblePatternNames,
 			} )
 		);
 	}, [
@@ -419,6 +436,7 @@ export default function TemplateRecommender() {
 		prompt,
 		templateRef,
 		templateType,
+		visiblePatternNames,
 	] );
 
 	const handleEntityAction = useCallback( ( entity ) => {

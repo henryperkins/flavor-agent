@@ -73,6 +73,17 @@ describe( 'getBlockPatterns', () => {
 		expect( getBlockPatterns() ).toBe( experimentalPatterns );
 	} );
 
+	test( 'prefers __experimentalAdditionalBlockPatterns over legacy experimental patterns', () => {
+		const additionalPatterns = [ { name: 'theme/additional-hero' } ];
+
+		mockBlockEditorStore( {
+			__experimentalAdditionalBlockPatterns: additionalPatterns,
+			__experimentalBlockPatterns: [ { name: 'theme/stale-pattern' } ],
+		} );
+
+		expect( getBlockPatterns() ).toBe( additionalPatterns );
+	} );
+
 	test( 'returns empty array when neither key is present', () => {
 		mockBlockEditorStore( {} );
 
@@ -121,6 +132,21 @@ describe( 'setBlockPatterns', () => {
 		} );
 	} );
 
+	test( 'writes to __experimentalAdditionalBlockPatterns when that key is populated', () => {
+		mockBlockEditorStore( {
+			__experimentalAdditionalBlockPatterns: [ { name: 'theme/old' } ],
+			__experimentalBlockPatterns: [ { name: 'theme/stale' } ],
+		} );
+		const updateSettings = mockUpdateSettings();
+
+		const newPatterns = [ { name: 'theme/new' } ];
+		setBlockPatterns( newPatterns );
+
+		expect( updateSettings ).toHaveBeenCalledWith( {
+			__experimentalAdditionalBlockPatterns: newPatterns,
+		} );
+	} );
+
 	test( 'defaults to experimental key when neither key exists', () => {
 		mockBlockEditorStore( {} );
 		const updateSettings = mockUpdateSettings();
@@ -154,6 +180,19 @@ describe( 'getBlockPatternCategories', () => {
 
 		mockBlockEditorStore( {
 			__experimentalBlockPatternCategories: cats,
+		} );
+
+		expect( getBlockPatternCategories() ).toBe( cats );
+	} );
+
+	test( 'prefers __experimentalAdditionalBlockPatternCategories over legacy experimental categories', () => {
+		const cats = [ { name: 'featured', label: 'Featured' } ];
+
+		mockBlockEditorStore( {
+			__experimentalAdditionalBlockPatternCategories: cats,
+			__experimentalBlockPatternCategories: [
+				{ name: 'stale', label: 'Stale' },
+			],
 		} );
 
 		expect( getBlockPatternCategories() ).toBe( cats );
@@ -228,6 +267,14 @@ describe( 'getPatternAPIPath', () => {
 
 	test( 'returns "experimental" when only experimental key exists', () => {
 		mockBlockEditorStore( { __experimentalBlockPatterns: [] } );
+
+		expect( getPatternAPIPath() ).toBe( 'experimental' );
+	} );
+
+	test( 'returns "experimental" when additional experimental key exists', () => {
+		mockBlockEditorStore( {
+			__experimentalAdditionalBlockPatterns: [],
+		} );
 
 		expect( getPatternAPIPath() ).toBe( 'experimental' );
 	} );

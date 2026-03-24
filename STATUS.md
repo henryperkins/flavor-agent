@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-03-23
+> Last updated: 2026-03-24
 
 ## Working
 
@@ -41,7 +41,7 @@
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
 - Azure OpenAI credentials are revalidated only when the endpoint, key, or deployments change and all four fields are present; both the embeddings and responses deployments must validate before new values are saved
 - Qdrant credentials are revalidated only when the URL or key changes and both fields are present; the configured `/collections` endpoint must return the expected payload before new values are saved
-- Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must target an enabled, unpaused instance that also returns trusted `developer.wordpress.org` guidance before they are saved
+- Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must pass a lightweight probe search returning trusted `developer.wordpress.org` guidance before they are saved, which keeps the settings flow compatible with documented AI Search Run tokens
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
 - Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation) using the same trust-filtered Cloudflare search pipeline; throttled by credential fingerprint + 1-hour cooldown; admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts
@@ -54,10 +54,12 @@
 - The Site Editor Playground harness still crashes when the browser revisits the template canvas route in the same session, so the new refresh/drift template Playwright cases are checked in as `fixme`; the underlying refresh-safe and drift-safe undo logic is covered by unit tests and manual same-session browser flow remains green.
 - AI activity history is still session-scoped only; there is no server-backed audit log or cross-session review UI yet.
 - Live recommendation execution with valid LLM credentials was not rerun in this pass.
-- Pattern surface now uses a central compatibility adapter (`src/patterns/compat.js`) that prefers stable APIs, falls back to `__experimental*` variants, and degrades cleanly when neither exists. DOM inserter selectors are also centralized there. `__experimentalFeatures` (theme-tokens) and `__experimentalRole` (block-inspector) remain in their original files since they have no stable replacement yet.
+- Pattern surface now uses a central compatibility adapter (`src/patterns/compat.js`) that prefers stable APIs, falls back to `__experimentalAdditional*` then `__experimental*` variants, and degrades cleanly when none exist. DOM inserter selectors are also centralized there. `__experimentalFeatures` (theme-tokens) and `__experimentalRole` (block-inspector) remain in their original files since they have no stable replacement yet.
 
 ## Recent Verification
 
+- 2026-03-24 docs-alignment: `vendor/bin/phpunit` passed (`146` tests, `757` assertions).
+- 2026-03-24 docs-alignment: `npm run test:unit -- --runInBand` passed (`19` suites, `143` tests).
 - 2026-03-23 compat: `npm run lint:js` passed (after `--fix`).
 - 2026-03-23 compat: `npm run test:unit -- --runInBand` passed (`19` suites, `115` tests).
 - 2026-03-23 compat: `composer lint:php` passed.

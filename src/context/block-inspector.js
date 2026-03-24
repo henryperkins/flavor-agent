@@ -45,6 +45,8 @@ const SUPPORT_TO_PANEL = {
 	'position.fixed': 'position',
 	layout: 'layout',
 	anchor: 'advanced',
+	customCSS: 'advanced',
+	listView: 'settings',
 };
 
 /**
@@ -118,15 +120,7 @@ function isTruthy( val ) {
 }
 
 function getAttributeRole( definition = {} ) {
-	if ( definition?.role ) {
-		return definition.role;
-	}
-
-	if ( definition?.__experimentalRole ) {
-		return definition.__experimentalRole;
-	}
-
-	return undefined;
+	return definition?.role ?? undefined;
 }
 
 /**

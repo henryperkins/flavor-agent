@@ -528,18 +528,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
 
-		WordPressTestState::$remote_get_response  = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'id' => 'wp-dev-docs',
-					],
-				]
-			),
-		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -567,14 +555,10 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'token-xyz', Settings::sanitize_cloudflare_api_token( 'token-xyz' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertSame(
-			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs',
-			WordPressTestState::$last_remote_get['url']
-		);
-		$this->assertSame(
 			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/instances/wp-dev-docs/search',
 			WordPressTestState::$last_remote_post['url']
 		);
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
@@ -586,18 +570,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
 
-		WordPressTestState::$remote_get_response  = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'id' => 'wp-dev-docs',
-					],
-				]
-			),
-		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -640,7 +612,7 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-new',
 		];
 
-		WordPressTestState::$remote_get_response = [
+		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 403,
 			],
@@ -663,8 +635,8 @@ final class SettingsTest extends TestCase {
 			'Authentication error',
 			WordPressTestState::$settings_errors[0]['message']
 		);
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
-		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sanitize_cloudflare_settings_allows_partial_credentials_without_remote_validation(): void {
@@ -701,20 +673,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-new',
 		];
 
-		WordPressTestState::$remote_get_response  = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'result' => [
-						'id'     => 'wp-dev-docs-new',
-						'enable' => true,
-						'paused' => false,
-					],
-				]
-			),
-		];
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -747,7 +705,7 @@ final class SettingsTest extends TestCase {
 			'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from this instance. Use the official WordPress developer docs index before saving these credentials.',
 			WordPressTestState::$settings_errors[0]['message']
 		);
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 

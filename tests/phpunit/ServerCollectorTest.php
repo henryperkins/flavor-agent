@@ -78,7 +78,7 @@ final class ServerCollectorTest extends TestCase {
 		);
 	}
 
-	public function test_introspect_block_type_supports_content_role_and_experimental_role(): void {
+	public function test_introspect_block_type_supports_content_role_and_attribute_role(): void {
 		\WP_Block_Type_Registry::get_instance()->register(
 			'plugin/content-block',
 			[
@@ -87,9 +87,9 @@ final class ServerCollectorTest extends TestCase {
 					'contentRole' => true,
 				],
 				'attributes' => [
-					'legacyContent' => [
-						'type'               => 'string',
-						'__experimentalRole' => 'content',
+					'stableContent' => [
+						'type' => 'string',
+						'role' => 'content',
 					],
 					'className'     => [
 						'type' => 'string',
@@ -101,8 +101,8 @@ final class ServerCollectorTest extends TestCase {
 		$manifest = ServerCollector::introspect_block_type( 'plugin/content-block' );
 
 		$this->assertTrue( $manifest['supportsContentRole'] );
-		$this->assertSame( 'content', $manifest['contentAttributes']['legacyContent']['role'] );
-		$this->assertArrayNotHasKey( 'legacyContent', $manifest['configAttributes'] );
+		$this->assertSame( 'content', $manifest['contentAttributes']['stableContent']['role'] );
+		$this->assertArrayNotHasKey( 'stableContent', $manifest['configAttributes'] );
 	}
 
 	public function test_for_template_limits_candidate_patterns_after_typed_then_generic_ordering(): void {

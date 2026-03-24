@@ -65,7 +65,10 @@ final class AISearchClient {
 	}
 
 	/**
-	 * Validate that the configured Cloudflare AI Search instance is reachable.
+	 * Validate that the configured Cloudflare AI Search instance is queryable.
+	 *
+	 * Uses a lightweight probe search so documented AI Search Run tokens can pass
+	 * validation without requiring instance metadata read access.
 	 *
 	 * @return array{id: string, source: string, enabled: bool, paused: bool}|\WP_Error
 	 */
@@ -80,79 +83,6 @@ final class AISearchClient {
 			return $config;
 		}
 
-		$response = wp_remote_get(
-			$config['instanceUrl'],
-			[
-				'timeout' => 20,
-				'headers' => [
-					'Authorization' => 'Bearer ' . $config['apiToken'],
-				],
-			]
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$status = wp_remote_retrieve_response_code( $response );
-		$raw    = wp_remote_retrieve_body( $response );
-		$data   = json_decode( $raw, true );
-
-		if ( $status !== 200 ) {
-			$message = is_array( $data ) ? self::extract_error_message( $data, $status ) : "Cloudflare AI Search returned HTTP {$status}";
-
-			return new \WP_Error(
-				'cloudflare_ai_search_validation_error',
-				$message,
-				[ 'status' => 400 ]
-			);
-		}
-
-		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) ) {
-			return new \WP_Error(
-				'cloudflare_ai_search_validation_parse_error',
-				'Failed to parse Cloudflare AI Search validation response.',
-				[ 'status' => 400 ]
-			);
-		}
-
-		$result                = is_array( $data['result'] ?? null ) ? $data['result'] : [];
-		$validated_instance_id = sanitize_text_field( (string) ( $result['id'] ?? '' ) );
-		$enabled               = ! isset( $result['enable'] ) || ! empty( $result['enable'] );
-		$paused                = ! empty( $result['paused'] );
-
-		if ( $validated_instance_id === '' ) {
-			return new \WP_Error(
-				'cloudflare_ai_search_validation_missing_instance',
-				'Cloudflare AI Search validation response did not include an instance id.',
-				[ 'status' => 400 ]
-			);
-		}
-
-		if ( $validated_instance_id !== $config['instanceId'] ) {
-			return new \WP_Error(
-				'cloudflare_ai_search_validation_instance_mismatch',
-				'Cloudflare AI Search validation returned a different instance than requested.',
-				[ 'status' => 400 ]
-			);
-		}
-
-		if ( ! $enabled ) {
-			return new \WP_Error(
-				'cloudflare_ai_search_validation_disabled',
-				'Cloudflare AI Search validation found a disabled instance. Enable it before saving these credentials.',
-				[ 'status' => 400 ]
-			);
-		}
-
-		if ( $paused ) {
-			return new \WP_Error(
-				'cloudflare_ai_search_validation_paused',
-				'Cloudflare AI Search validation found a paused instance. Resume it before saving these credentials.',
-				[ 'status' => 400 ]
-			);
-		}
-
 		$guidance = self::validate_trusted_wordpress_docs_source( $config );
 
 		if ( is_wp_error( $guidance ) ) {
@@ -160,10 +90,10 @@ final class AISearchClient {
 		}
 
 		return [
-			'id'      => $validated_instance_id,
-			'source'  => sanitize_text_field( (string) ( $result['source'] ?? '' ) ),
-			'enabled' => $enabled,
-			'paused'  => $paused,
+			'id'      => $config['instanceId'],
+			'source'  => '',
+			'enabled' => true,
+			'paused'  => false,
 		];
 	}
 
@@ -203,7 +133,10 @@ final class AISearchClient {
 		}
 
 		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
-		$guidance = self::normalize_chunks( is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [] );
+		$guidance = self::normalize_chunks(
+			is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [],
+			$config['instanceId']
+		);
 
 		self::write_cached_guidance( $query, $result_limit, $guidance );
 
@@ -522,13 +455,11 @@ final class AISearchClient {
 			return;
 		}
 
-		if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( self::PREWARM_CRON_HOOK ) ) {
+		if ( wp_next_scheduled( self::PREWARM_CRON_HOOK ) ) {
 			return;
 		}
 
-		if ( function_exists( 'wp_schedule_single_event' ) ) {
-			wp_schedule_single_event( time() + 5, self::PREWARM_CRON_HOOK );
-		}
+		wp_schedule_single_event( time() + 5, self::PREWARM_CRON_HOOK );
 	}
 
 	/**
@@ -604,13 +535,11 @@ final class AISearchClient {
 		$queue[ self::build_context_warm_queue_key( $entry ) ] = $entry;
 		self::write_context_warm_queue( $queue );
 
-		if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( self::CONTEXT_WARM_CRON_HOOK ) ) {
+		if ( wp_next_scheduled( self::CONTEXT_WARM_CRON_HOOK ) ) {
 			return;
 		}
 
-		if ( function_exists( 'wp_schedule_single_event' ) ) {
-			wp_schedule_single_event( time() + 5, self::CONTEXT_WARM_CRON_HOOK );
-		}
+		wp_schedule_single_event( time() + 5, self::CONTEXT_WARM_CRON_HOOK );
 	}
 
 	/**
@@ -1084,8 +1013,8 @@ final class AISearchClient {
 			$config,
 			self::VALIDATION_PROBE_QUERY,
 			self::VALIDATION_PROBE_RESULTS,
-			'cloudflare_ai_search_validation_probe_error',
-			'cloudflare_ai_search_validation_probe_parse_error',
+			'cloudflare_ai_search_validation_error',
+			'cloudflare_ai_search_validation_parse_error',
 			400
 		);
 
@@ -1094,7 +1023,10 @@ final class AISearchClient {
 		}
 
 		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
-		$guidance = self::normalize_chunks( is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [] );
+		$guidance = self::normalize_chunks(
+			is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [],
+			$config['instanceId']
+		);
 
 		if ( [] === $guidance ) {
 			return new \WP_Error(
@@ -1218,9 +1150,10 @@ final class AISearchClient {
 
 	/**
 	 * @param array<int, mixed> $chunks Raw chunk list from Cloudflare AI Search.
+	 * @param string|null       $instance_id Configured Cloudflare AI Search instance ID.
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function normalize_chunks( array $chunks ): array {
+	private static function normalize_chunks( array $chunks, ?string $instance_id = null ): array {
 		$guidance = [];
 
 		foreach ( $chunks as $chunk ) {
@@ -1232,10 +1165,15 @@ final class AISearchClient {
 			$metadata     = is_array( $item['metadata'] ?? null ) ? $item['metadata'] : [];
 			$parsed_chunk = self::parse_chunk_text( (string) ( $chunk['text'] ?? '' ) );
 			$source_key   = sanitize_text_field( (string) ( $item['key'] ?? '' ) );
+			$has_url      = ( is_string( $metadata['url'] ?? null ) && trim( (string) $metadata['url'] ) !== '' ) || trim( $parsed_chunk['url'] ) !== '';
 			$url          = self::normalize_guidance_url( $metadata['url'] ?? null, $parsed_chunk['url'] );
 			$text         = self::sanitize_excerpt( $parsed_chunk['excerpt'] );
 
-			if ( $text === '' || $url === '' || ! self::is_allowed_guidance_source( $source_key, $url ) ) {
+			if ( $url === '' && ! $has_url ) {
+				$url = self::normalize_guidance_url_from_source_key( $source_key, $instance_id );
+			}
+
+			if ( $text === '' || $url === '' || ! self::is_allowed_guidance_source( $source_key, $url, $instance_id ) ) {
 				continue;
 			}
 
@@ -1328,14 +1266,18 @@ final class AISearchClient {
 
 		$normalized_path = preg_replace( '#/+#', '/', $path );
 
-		if ( ! is_string( $normalized_path ) || $normalized_path === '' ) {
+		if (
+			! is_string( $normalized_path ) ||
+			$normalized_path === '' ||
+			self::path_contains_untrusted_segments( $normalized_path )
+		) {
 			return '';
 		}
 
 		return 'https://' . self::ALLOWED_DOC_HOST . '/' . ltrim( $normalized_path, '/' );
 	}
 
-	private static function is_allowed_guidance_source( string $source_key, string $url ): bool {
+	private static function is_allowed_guidance_source( string $source_key, string $url, ?string $instance_id = null ): bool {
 		$url_identity = self::normalize_guidance_identity( $url );
 
 		if ( $url_identity === '' ) {
@@ -1346,21 +1288,137 @@ final class AISearchClient {
 			return true;
 		}
 
-		return self::normalize_source_key_identity( $source_key ) === $url_identity;
+		return self::normalize_source_key_identity( $source_key, $instance_id ) === $url_identity;
 	}
 
-	private static function normalize_source_key_identity( string $source_key ): string {
+	private static function normalize_source_key_identity( string $source_key, ?string $instance_id = null ): string {
+		$url = self::normalize_guidance_url_from_source_key( $source_key, $instance_id );
+
+		if ( $url === '' ) {
+			return '';
+		}
+
+		return self::normalize_guidance_identity( $url );
+	}
+
+	private static function normalize_guidance_url_from_source_key( string $source_key, ?string $instance_id = null ): string {
 		$normalized = strtolower( trim( $source_key ) );
 
 		if ( $normalized === '' ) {
 			return '';
 		}
 
-		if ( str_starts_with( $normalized, self::ALLOWED_SOURCE_KEY_PREFIX ) ) {
-			$normalized = 'https://' . $normalized;
+		$trusted_prefix = self::match_trusted_source_key_prefix( $normalized, $instance_id );
+
+		if ( $trusted_prefix === '' ) {
+			return '';
 		}
 
-		return self::normalize_guidance_identity( $normalized );
+		$path = trim( substr( $normalized, strlen( $trusted_prefix ) ), '/' );
+
+		if (
+			$path === '' ||
+			str_contains( $path, '?' ) ||
+			str_contains( $path, '#' ) ||
+			str_contains( $path, '\\' ) ||
+			self::path_contains_untrusted_segments( $path )
+		) {
+			return '';
+		}
+
+		$segments = array_values(
+			array_filter(
+				explode( '/', $path ),
+				static fn ( string $segment ): bool => $segment !== ''
+			)
+		);
+
+		if ( [] === $segments ) {
+			return '';
+		}
+
+		$last_segment = $segments[ count( $segments ) - 1 ];
+
+		if ( preg_match( '/^(?:part-\d+|index)\.md$/', $last_segment ) ) {
+			array_pop( $segments );
+			$last_segment = $segments[ count( $segments ) - 1 ] ?? '';
+		}
+
+		if ( is_string( $last_segment ) && preg_match( '/^[a-f0-9]{32,}$/', $last_segment ) ) {
+			array_pop( $segments );
+		}
+
+		if ( [] === $segments ) {
+			return '';
+		}
+
+		return self::normalize_trusted_guidance_url(
+			'https://' . self::ALLOWED_DOC_HOST . '/' . implode( '/', $segments ) . '/'
+		);
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function trusted_source_key_prefixes( ?string $instance_id = null ): array {
+		$prefixes             = [ self::ALLOWED_SOURCE_KEY_PREFIX ];
+		$normalized_instance  = self::normalize_source_key_instance_id( $instance_id );
+
+		if ( $normalized_instance !== '' ) {
+			$prefixes[] = 'ai-search/' . $normalized_instance . '/' . self::ALLOWED_SOURCE_KEY_PREFIX;
+		}
+
+		return $prefixes;
+	}
+
+	private static function match_trusted_source_key_prefix( string $source_key, ?string $instance_id = null ): string {
+		foreach ( self::trusted_source_key_prefixes( $instance_id ) as $prefix ) {
+			if ( str_starts_with( $source_key, $prefix ) ) {
+				return $prefix;
+			}
+		}
+
+		return '';
+	}
+
+	private static function normalize_source_key_instance_id( ?string $instance_id = null ): string {
+		$resolved = trim(
+			(string) (
+				null !== $instance_id
+					? $instance_id
+					: get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' )
+			)
+		);
+
+		if ( $resolved === '' || str_contains( $resolved, '/' ) || str_contains( $resolved, '\\' ) ) {
+			return '';
+		}
+
+		return strtolower( sanitize_text_field( $resolved ) );
+	}
+
+	private static function path_contains_untrusted_segments( string $path ): bool {
+		$segments = array_values(
+			array_filter(
+				explode( '/', trim( $path, '/' ) ),
+				static fn ( string $segment ): bool => $segment !== ''
+			)
+		);
+
+		foreach ( $segments as $segment ) {
+			$decoded = rawurldecode( $segment );
+
+			if (
+				$decoded === '.' ||
+				$decoded === '..' ||
+				str_contains( $decoded, '/' ) ||
+				str_contains( $decoded, '\\' )
+			) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static function normalize_guidance_identity( string $url ): string {

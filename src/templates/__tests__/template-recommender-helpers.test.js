@@ -2,6 +2,7 @@ import {
 	buildEntityMap,
 	buildEditorTemplateSlotSnapshot,
 	buildTemplateFetchInput,
+	buildTemplateRecommendationContextSignature,
 	buildTemplateOperationViewModel,
 	buildTemplateSuggestionViewModel,
 	ENTITY_ACTION_BROWSE_PATTERN,
@@ -26,6 +27,11 @@ describe( 'template recommender helpers', () => {
 					emptyAreas: [ 'footer' ],
 					allowedAreas: [ 'header', 'footer' ],
 				},
+				visiblePatternNames: [
+					'theme/hero',
+					'theme/footer',
+					'theme/hero',
+				],
 			} )
 		).toEqual( {
 			templateRef: 'theme//single',
@@ -36,6 +42,7 @@ describe( 'template recommender helpers', () => {
 				emptyAreas: [ 'footer' ],
 				allowedAreas: [ 'header', 'footer' ],
 			},
+			visiblePatternNames: [ 'theme/hero', 'theme/footer' ],
 		} );
 	} );
 
@@ -47,6 +54,41 @@ describe( 'template recommender helpers', () => {
 		} );
 
 		expect( input ).toEqual( { templateRef: 'theme//index' } );
+	} );
+
+	test( 'buildTemplateFetchInput omits an empty visiblePatternNames array', () => {
+		expect(
+			buildTemplateFetchInput( {
+				templateRef: 'theme//page',
+				templateType: '',
+				prompt: '   ',
+				visiblePatternNames: [],
+			} )
+		).toEqual( {
+			templateRef: 'theme//page',
+		} );
+	} );
+
+	test( 'buildTemplateRecommendationContextSignature ignores live visible patterns', () => {
+		expect(
+			buildTemplateRecommendationContextSignature( {
+				editorSlots: {
+					assignedParts: [ { slug: 'site-header', area: 'header' } ],
+				},
+				visiblePatternNames: [
+					'theme/hero',
+					'',
+					'theme/footer',
+					'theme/hero',
+				],
+			} )
+		).toBe(
+			JSON.stringify( {
+				editorSlots: {
+					assignedParts: [ { slug: 'site-header', area: 'header' } ],
+				},
+			} )
+		);
 	} );
 
 	test( 'buildEditorTemplateSlotSnapshot mirrors live template-part slots from the editor tree', () => {
@@ -210,7 +252,9 @@ describe( 'template recommender helpers', () => {
 
 		expect( model.operations ).toEqual( [] );
 		expect( model.canApply ).toBe( false );
-		expect( model.executionError ).toContain( 'targets the “header” area more than once' );
+		expect( model.executionError ).toContain(
+			'targets the “header” area more than once'
+		);
 	} );
 
 	test( 'buildEntityMap de-dupes duplicate entity text and includes current template-part aliases', () => {

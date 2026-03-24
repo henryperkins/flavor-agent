@@ -32,7 +32,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | Namespace | Purpose |
 |-----------|---------|
 | `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-template, recommend-template-part, sync-patterns) |
-| `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations |
+| `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations (prefers `wp_ai_client_prompt()`, falls back to `AI_Client` class) |
 | `LLM\Prompt` | Block recommendation prompt assembly and response parsing |
 | `LLM\TemplatePrompt` | Template recommendation prompt assembly and executable operation parsing |
 | `LLM\TemplatePartPrompt` | Template-part recommendation prompt assembly and response parsing |
@@ -75,7 +75,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `store/update-helpers.js` | Attribute update and undo snapshot helpers |
 | `patterns/PatternRecommender.js` | Pattern recommendation fetch + inserter patching |
 | `patterns/InserterBadge.js` | Inserter toggle badge for recommendation status |
-| `patterns/compat.js` | Stable/experimental pattern API and DOM selector adapter |
+| `patterns/compat.js` | Stable/experimental pattern API and DOM selector adapter (three-tier: stable, `__experimentalAdditional*`, `__experimental*`) |
 | `patterns/find-inserter-search-input.js` | Re-export wrapper for backward compatibility |
 | `patterns/recommendation-utils.js` | Pattern metadata patching and badge reason extraction |
 | `patterns/inserter-badge-state.js` | Badge state machine for recommendation status display |
@@ -128,7 +128,7 @@ Each recommendation surface disables independently when its required backend is 
 - `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
 - The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendTemplates`, `canRecommendTemplateParts`, and `templatePartAreas` to the editor script.
 - A second JS global `flavorAgentAdmin` (localized on the admin settings page) exposes `restUrl` and `nonce` to the admin script.
-- Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`; direct experimental usages remain in `src/context/theme-tokens.js` and `src/context/block-inspector.js` because WordPress has not promoted stable replacements yet.
+- Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`; the adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys. Direct experimental usages remain in `src/context/theme-tokens.js` and `src/context/block-inspector.js` because WordPress has not promoted stable replacements yet.
 
 ## Docs
 
