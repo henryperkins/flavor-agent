@@ -1,0 +1,208 @@
+const mockUseDispatch = jest.fn();
+const mockUseSelect = jest.fn();
+const mockFetchPatternRecommendations = jest.fn();
+const mockGetBlockPatterns = jest.fn();
+const mockSetBlockPatterns = jest.fn();
+const mockFindInserterSearchInput = jest.fn();
+const mockGetVisiblePatternNames = jest.fn();
+
+jest.mock( '@wordpress/block-editor', () => ( {
+	store: 'core/block-editor',
+} ) );
+
+jest.mock( '@wordpress/data', () => ( {
+	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useSelect: ( ...args ) => mockUseSelect( ...args ),
+} ) );
+
+jest.mock( '@wordpress/editor', () => ( {
+	store: 'core/editor',
+} ) );
+
+jest.mock( '../pattern-settings', () => ( {
+	getBlockPatterns: ( ...args ) => mockGetBlockPatterns( ...args ),
+	setBlockPatterns: ( ...args ) => mockSetBlockPatterns( ...args ),
+} ) );
+
+jest.mock( '../inserter-dom', () => ( {
+	findInserterSearchInput: ( ...args ) =>
+		mockFindInserterSearchInput( ...args ),
+} ) );
+
+jest.mock( '../../store', () => ( {
+	STORE_NAME: 'flavor-agent',
+} ) );
+
+jest.mock( '../../utils/visible-patterns', () => ( {
+	getVisiblePatternNames: ( ...args ) =>
+		mockGetVisiblePatternNames( ...args ),
+} ) );
+
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { act } = require( 'react' );
+const { createRoot } = require( '@wordpress/element' );
+
+import PatternRecommender from '../PatternRecommender';
+
+window.IS_REACT_ACT_ENVIRONMENT = true;
+
+let container = null;
+let root = null;
+let state = null;
+let originalMutationObserver = null;
+
+function createSelectMap() {
+	return {
+		'core/editor': {
+			getCurrentPostType: jest.fn( () => state.postType ),
+			isInserterOpened: jest.fn( () => state.isInserterOpen ),
+		},
+		'core/edit-site': {
+			getEditedPostType: jest.fn( () => state.editSite.postType ),
+			getEditedPostId: jest.fn( () => state.editSite.postId ),
+		},
+		'core/block-editor': {
+			getSelectedBlockClientId: jest.fn(
+				() => state.blockEditor.selectedBlockClientId
+			),
+			getBlockName: jest.fn( () => state.blockEditor.selectedBlockName ),
+			getBlockInsertionPoint: jest.fn(
+				() => state.blockEditor.insertionPoint
+			),
+		},
+		'flavor-agent': {
+			getPatternRecommendations: jest.fn(
+				() => state.store.patternRecommendations
+			),
+		},
+	};
+}
+
+function renderComponent() {
+	act( () => {
+		root.render( <PatternRecommender /> );
+	} );
+}
+
+describe( 'PatternRecommender', () => {
+	beforeEach( () => {
+		jest.useFakeTimers();
+		container = document.createElement( 'div' );
+		document.body.appendChild( container );
+		root = createRoot( container );
+		state = {
+			postType: 'page',
+			isInserterOpen: true,
+			editSite: {
+				postType: 'page',
+				postId: null,
+			},
+			blockEditor: {
+				selectedBlockClientId: null,
+				selectedBlockName: null,
+				insertionPoint: {
+					rootClientId: 'root-a',
+				},
+			},
+			store: {
+				patternRecommendations: [],
+			},
+		};
+		mockUseDispatch.mockReset();
+		mockUseSelect.mockReset();
+		mockFetchPatternRecommendations.mockReset();
+		mockGetBlockPatterns.mockReset();
+		mockSetBlockPatterns.mockReset();
+		mockFindInserterSearchInput.mockReset();
+		mockGetVisiblePatternNames.mockReset();
+		mockUseDispatch.mockReturnValue( {
+			fetchPatternRecommendations: mockFetchPatternRecommendations,
+		} );
+		mockUseSelect.mockImplementation( ( callback ) =>
+			callback( ( storeName ) => createSelectMap()[ storeName ] )
+		);
+		mockGetBlockPatterns.mockReturnValue( [] );
+		mockGetVisiblePatternNames.mockReturnValue( [ 'theme/hero' ] );
+		window.flavorAgentData = { canRecommendPatterns: true };
+		originalMutationObserver = window.MutationObserver;
+	} );
+
+	afterEach( () => {
+		if ( root ) {
+			act( () => {
+				root.unmount();
+			} );
+		}
+		if ( container?.parentNode ) {
+			container.parentNode.removeChild( container );
+		}
+		root = null;
+		container = null;
+		state = null;
+		delete window.flavorAgentData;
+		window.MutationObserver = originalMutationObserver;
+		jest.runOnlyPendingTimers();
+		jest.useRealTimers();
+	} );
+
+	test( 'disconnects the observer cleanly when the inserter search input never appears', () => {
+		const observerInstances = [];
+
+		mockFindInserterSearchInput.mockReturnValue( null );
+		window.MutationObserver = class MockMutationObserver {
+			constructor() {
+				this.observe = jest.fn();
+				this.disconnect = jest.fn();
+				observerInstances.push( this );
+			}
+		};
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+		} );
+		expect( observerInstances ).toHaveLength( 1 );
+		expect( observerInstances[ 0 ].observe ).toHaveBeenCalledWith(
+			document.body,
+			{
+				childList: true,
+				subtree: true,
+			}
+		);
+
+		act( () => {
+			root.unmount();
+		} );
+
+		expect( observerInstances[ 0 ].disconnect ).toHaveBeenCalled();
+		root = null;
+	} );
+
+	test( 'removes the input listener on unmount when a search field is found immediately', () => {
+		const searchInput = {
+			addEventListener: jest.fn(),
+			removeEventListener: jest.fn(),
+		};
+
+		mockFindInserterSearchInput.mockReturnValue( searchInput );
+
+		renderComponent();
+
+		expect( searchInput.addEventListener ).toHaveBeenCalledWith(
+			'input',
+			expect.any( Function )
+		);
+
+		act( () => {
+			root.unmount();
+		} );
+
+		expect( searchInput.removeEventListener ).toHaveBeenCalledWith(
+			'input',
+			searchInput.addEventListener.mock.calls[ 0 ][ 1 ]
+		);
+		root = null;
+	} );
+} );

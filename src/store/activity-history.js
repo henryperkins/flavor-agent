@@ -128,7 +128,10 @@ function normalizePersistedActivityEntry(
 	};
 
 	if (
-		normalizedEntry.surface === 'template' &&
+		(
+			normalizedEntry.surface === 'template' ||
+			normalizedEntry.surface === 'template-part'
+		) &&
 		undo.status !== 'undone' &&
 		(
 			storageVersion < ACTIVITY_STORAGE_VERSION ||

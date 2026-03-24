@@ -852,7 +852,7 @@ test( 'template surface smoke previews and applies executable template recommend
 	);
 } );
 
-test.fixme( 'template undo survives a Site Editor refresh when the template has not drifted', async ( {
+test( '@wp70-site-editor template undo survives a Site Editor refresh when the template has not drifted', async ( {
 	page,
 } ) => {
 	await page.route(
@@ -974,7 +974,7 @@ test.fixme( 'template undo survives a Site Editor refresh when the template has 
 		} );
 } );
 
-test.fixme( 'template undo is disabled after inserted pattern content changes', async ( {
+test( '@wp70-site-editor template undo is disabled after inserted pattern content changes', async ( {
 	page,
 } ) => {
 	const editedInsertedContent = 'Inserted content edited after apply';

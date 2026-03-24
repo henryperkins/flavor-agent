@@ -4,14 +4,14 @@
  * Renders the unified pattern recommendation status badge next to
  * the inserter toggle button.
  *
- * Toggle button discovery goes through the compatibility adapter
- * (./compat.js) so DOM selectors are centralized.
+ * Toggle button discovery goes through `inserter-dom.js` so caller
+ * code treats missing toolbar markup as a clean degraded path.
  */
 import { useSelect } from '@wordpress/data';
 import { useEffect, useState, createPortal } from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
 
-import { findInserterToggle } from './compat';
+import { findInserterToggle } from './inserter-dom';
 import { STORE_NAME } from '../store';
 import { getInserterBadgeState } from './inserter-badge-state';
 

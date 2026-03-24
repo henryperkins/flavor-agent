@@ -1,0 +1,65 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/theme.json",
+	"version": 3,
+	"settings": {
+		"appearanceTools": true,
+		"layout": {
+			"contentSize": "720px",
+			"wideSize": "1080px"
+		},
+		"color": {
+			"palette": [
+				{
+					"slug": "ink",
+					"name": "Ink",
+					"color": "#101418"
+				},
+				{
+					"slug": "paper",
+					"name": "Paper",
+					"color": "#f5efe6"
+				},
+				{
+					"slug": "signal",
+					"name": "Signal",
+					"color": "#d94f04"
+				}
+			]
+		},
+		"spacing": {
+			"units": [ "px", "rem", "%" ]
+		},
+		"typography": {
+			"fontSizes": [
+				{
+					"slug": "body",
+					"name": "Body",
+					"size": "1rem"
+				},
+				{
+					"slug": "display",
+					"name": "Display",
+					"size": "2.5rem"
+				}
+			]
+		}
+	},
+	"styles": {
+		"color": {
+			"background": "#f5efe6",
+			"text": "#101418"
+		}
+	},
+	"templateParts": [
+		{
+			"name": "header",
+			"title": "Header",
+			"area": "header"
+		},
+		{
+			"name": "footer",
+			"title": "Footer",
+			"area": "footer"
+		}
+	]
+}

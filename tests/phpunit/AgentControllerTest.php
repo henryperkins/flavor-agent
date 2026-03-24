@@ -355,6 +355,13 @@ final class AgentControllerTest extends TestCase {
 										],
 									],
 									'patternSuggestions' => [ 'theme/header-utility' ],
+									'operations'         => [
+										[
+											'type'        => 'insert_pattern',
+											'patternName' => 'theme/header-utility',
+											'placement'   => 'start',
+										],
+									],
 								],
 							],
 							'explanation' => 'The current wrapper is sound, so focus on the menu cluster.',
@@ -367,6 +374,7 @@ final class AgentControllerTest extends TestCase {
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
 		$request->set_param( 'templatePartRef', 'theme//header' );
 		$request->set_param( 'prompt', 'Make the header feel lighter.' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/header-utility' ] );
 
 		$response = Agent_Controller::handle_recommend_template_part( $request );
 
@@ -379,6 +387,16 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame(
 			[ 0, 1 ],
 			$response->get_data()['suggestions'][0]['blockHints'][0]['path'] ?? []
+		);
+		$this->assertSame(
+			[
+				[
+					'type'        => 'insert_pattern',
+					'patternName' => 'theme/header-utility',
+					'placement'   => 'start',
+				],
+			],
+			$response->get_data()['suggestions'][0]['operations'] ?? []
 		);
 
 		$request_body = json_decode(
@@ -397,6 +415,10 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertStringContainsString(
 			'theme/header-utility',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'theme/hero',
 			(string) ( $request_body['input'] ?? '' )
 		);
 	}

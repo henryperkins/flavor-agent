@@ -20,10 +20,14 @@ jest.mock( '@wordpress/blocks', () => ( {
 } ) );
 
 import {
+	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
 	normalizeBlockSnapshot,
+	prepareTemplatePartSuggestionOperations,
+	prepareTemplatePartUndoOperations,
 	prepareTemplateSuggestionOperations,
 	prepareTemplateUndoOperations,
+	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../template-actions';
 
@@ -553,6 +557,127 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'prepareTemplatePartSuggestionOperations validates explicit template-part placement before apply', () => {
+		setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Existing' ) ],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content:
+						'<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'start',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				patternName: 'theme/header-utility',
+				placement: 'start',
+				index: 0,
+				rootLocator: {
+					type: 'root',
+					path: [],
+				},
+			} ),
+		] );
+	} );
+
+	test( 'prepareTemplatePartSuggestionOperations rejects missing explicit placement', () => {
+		setupBlockEditor( {
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph /-->',
+				},
+			],
+		} );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Template-part pattern insertions must include both a pattern name and placement.',
+		} );
+	} );
+
+	test( 'applyTemplatePartSuggestionOperations records refresh-safe root insertion metadata', () => {
+		const { blockEditorDispatch } = setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Existing' ) ],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content:
+						'<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'end',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
+			[ createParagraphBlock( 'pattern-1', 'Utility' ) ],
+			1,
+			null,
+			true,
+			0
+		);
+		expect( result.operations ).toEqual( [
+			{
+				type: 'insert_pattern',
+				patternName: 'theme/header-utility',
+				patternTitle: 'Header Utility',
+				placement: 'end',
+				rootLocator: {
+					type: 'root',
+					path: [],
+				},
+				index: 1,
+				insertedBlocksSnapshot: [
+					normalizeBlockSnapshot(
+						createParagraphBlock( 'pattern-1', 'Utility' )
+					),
+				],
+			},
+		] );
+	} );
+
 	test( 'prepareTemplateUndoOperations resolves refresh-safe template undo targets after reload', () => {
 		setupBlockEditor( {
 			blocks: [
@@ -655,6 +780,53 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'prepareTemplatePartUndoOperations resolves refresh-safe template-part undo targets after reload', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				createParagraphBlock( 'pattern-reloaded', 'Utility' ),
+			],
+		} );
+
+		const result = prepareTemplatePartUndoOperations( {
+			after: {
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						placement: 'end',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						insertedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock(
+									'pattern-before-refresh',
+									'Utility'
+								)
+							),
+						],
+					},
+				],
+			},
+		} );
+
+		expect( result ).toEqual( {
+			ok: true,
+			operations: [
+				{
+					type: 'insert_pattern',
+					insertedClientIds: [ 'pattern-reloaded' ],
+					patternName: 'theme/header-utility',
+					patternTitle: 'Header Utility',
+				},
+			],
+		} );
+	} );
+
 	test( 'undoTemplateSuggestionOperations removes inserted blocks and restores previous template parts', () => {
 		const { blockEditorDispatch, state } = setupBlockEditor( {
 			blocks: [
@@ -731,6 +903,50 @@ describe( 'template-actions', () => {
 				},
 				innerBlocks: [],
 			},
+		] );
+		expect( result.ok ).toBe( true );
+	} );
+
+	test( 'undoTemplatePartSuggestionOperations removes inserted template-part pattern blocks', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				createParagraphBlock( 'pattern-reloaded', 'Utility' ),
+			],
+		} );
+
+		const result = undoTemplatePartSuggestionOperations( {
+			after: {
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						placement: 'end',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						insertedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock(
+									'pattern-before-refresh',
+									'Utility'
+								)
+							),
+						],
+					},
+				],
+			},
+		} );
+
+		expect( blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			[ 'pattern-reloaded' ],
+			false
+		);
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Existing' ),
 		] );
 		expect( result.ok ).toBe( true );
 	} );

@@ -30,6 +30,7 @@ flavor-agent/
   webpack.config.js         Two entry points: editor (src/index.js), admin (src/admin/sync-button.js)
   phpcs.xml.dist            WPCS config
   phpunit.xml.dist          PHPUnit config
+  playwright.wp70.config.js Docker-backed WP 7.0 Playwright config for Site Editor refresh/drift coverage
   .env.example              Local WordPress/Docker defaults
   .nvmrc                    Supported Node major (20)
   .npmrc                    engine-strict pin for Node 20 / npm 10
@@ -41,6 +42,7 @@ flavor-agent/
   docker-compose.yml        Local WordPress + MariaDB + phpMyAdmin stack
   scripts/
     local-wordpress.ps1     Start/install/reset/wp helper for local stack
+    wp70-e2e.js             Bootstrap/teardown helper for the WP 7.0 browser harness
   .github/
     copilot-instructions.md Repo guidance for GitHub Copilot
   CLAUDE.md                 Claude Code project instructions
@@ -50,7 +52,7 @@ flavor-agent/
     REST/
       Agent_Controller.php  REST routes under flavor-agent/v1/
     LLM/
-      WordPressAIClient.php WordPress 7.0 AI client wrapper for block recommendations (prefers wp_ai_client_prompt(), falls back to AI_Client class)
+      WordPressAIClient.php WordPress 7.0 AI client wrapper for block recommendations using `wp_ai_client_prompt()` and Connectors-backed availability checks
       Prompt.php            Block recommendation prompt assembly and response parsing
       TemplatePrompt.php    Template recommendation prompt assembly and structured operation parsing
       NavigationPrompt.php  Navigation recommendation prompt assembly and response parsing
@@ -99,14 +101,17 @@ flavor-agent/
     context/
       collector.js          Assembles full block context for LLM calls
       block-inspector.js    Recursive block capability manifest builder
+      theme-settings.js     Theme-token source adapter + stable-parity diagnostics
       theme-tokens.js       Design token extraction from theme.json + global styles
     patterns/
+      pattern-settings.js   Stable/experimental pattern settings + selector diagnostics
+      inserter-dom.js       Fail-closed inserter search/toggle DOM discovery
+      compat.js             Backward-compatible barrel for pattern settings + DOM helpers
       PatternRecommender.js Headless fetcher + native inserter patching
       InserterBadge.js      Badge portal on inserter toggle (count/loading/error)
       inserter-badge-state.js  Pure badge view-model derivation
       recommendation-utils.js  Pattern metadata patching + badge reason extraction
-      find-inserter-search-input.js  Re-export of compat.findInserterSearchInput for backward compat
-      compat.js             Compatibility adapter: stable/experimental API negotiation + DOM selectors
+      find-inserter-search-input.js  Re-export of inserter-dom.findInserterSearchInput for backward compat
     templates/
       TemplateRecommender.js  Site Editor review-confirm-apply panel with linked entities
       template-recommender-helpers.js  Pure helpers for template UI and executable operation view models
@@ -126,8 +131,11 @@ flavor-agent/
   tests/
     e2e/
       flavor-agent.smoke.spec.js  Playwright smoke coverage
+      auth.wp70.setup.js     Playwright login setup for the Docker-backed WP 7.0 harness
+      wp70.global-setup.js   Docker bootstrap for the WP 7.0 Site Editor harness
       playground-mu-plugin/
         flavor-agent-loader.php   Loads the plugin in WP Playground
+      wp70-theme/            Repo-local block theme fixture for deterministic Site Editor tests
     phpunit/
       bootstrap.php         WP function/class stubs
       AgentControllerTest.php
@@ -213,17 +221,18 @@ The plugin works in degraded mode without any services configured. Each surface 
 
 #### Template Part Recommendations
 - **Trigger:** User editing a `wp_template_part` in Site Editor, types optional prompt, clicks "Get Suggestions".
-- **Context sent:** Template-part ref, slug, inferred area, structural summaries, candidate patterns, theme tokens, and cache-backed WordPress docs guidance.
+- **Context sent:** Template-part ref, slug, inferred area, structural summaries, candidate patterns (filtered by request `visiblePatternNames` when available), theme tokens, and cache-backed WordPress docs guidance.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
-- **Response:** Advisory suggestions with `label`, `description`, `blockHints`, `patternSuggestions`, and `explanation`.
-- **UI:** `src/template-parts/TemplatePartRecommender.js` renders a document settings panel with local component state, block-focus links, and pattern-browse links.
-- **Scope:** Advisory-only for now. There is no preview/apply/undo executor or session activity logging for template-part suggestions yet.
+- **Response:** Max 3 suggestions, each with `label`, `description`, `blockHints`, `patternSuggestions`, optional validated `operations`, and `explanation`. The only executable operation today is `insert_pattern` with explicit `start` or `end` placement.
+- **UI:** `src/template-parts/TemplatePartRecommender.js` renders a store-backed document settings panel with advisory links, preview-confirm-apply controls for validated operations, inline success/error notices, and recent activity.
+- **Apply:** Deterministic client executor validates template-part operations before mutation, inserts parsed pattern blocks at the exact start/end location of the current template-part root, and records stable undo metadata plus post-apply snapshots for refresh-safe undo.
+- **Guardrails:** Unsupported or ambiguous suggestions stay advisory-only. There is no free-form rewrite path, selected-block placement, or subtree replacement executor yet.
 
 #### AI Activity And Undo
-- **Schema:** Block and template apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
-- **Persistence:** Activity records are stored in `sessionStorage` and keyed by the current post/template reference, so history survives a same-session refresh but not a new browser session. Template activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
-- **UI:** Both the Block Inspector and Template Compositor show inline `Undo` on the latest applied action plus a `Recent AI Actions` section with the last few records.
-- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template-part undo resolves the current block from a stable area/slug locator, and inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot.
+- **Schema:** Block, template, and template-part apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
+- **Persistence:** Activity records are stored in `sessionStorage` and keyed by the current post, template, or template-part reference, so history survives a same-session refresh but not a new browser session. Template and template-part activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
+- **UI:** The Block Inspector, Template Compositor, and Template Part panel show inline `Undo` on the latest applied action plus a `Recent AI Actions` section with the last few records.
+- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template assignment/replacement undo resolves the current block from a stable area/slug locator, and template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot.
 
 #### Pattern Index Lifecycle
 - **Sync:** Diffs current registered patterns against Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
@@ -302,10 +311,10 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 1. **Residual cold-start edge**: The prewarm warm set covers 16 high-frequency entities, but uncommon block types and template slugs outside the warm set still fall back to empty guidance on first request until cache is seeded by an explicit `search-wordpress-docs` call.
 2. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
 3. **JS toolchain must stay on Node 20 / npm 10**: This repo now pins that combo because Node 24 / npm 11 on this host fails `npm ci` immediately via `engine-strict` (`EBADENGINE`).
-4. **Inserter search detection is DOM-coupled (mitigated)**: `compat.js` centralizes container (5) and input (4) selectors behind `findInserterSearchInput`. Still DOM-based, but changes are now confined to one file.
-5. **Pattern inserter patching uses compat adapter**: `compat.js` prefers stable `blockPatterns`/`blockPatternCategories` keys when present, then `__experimentalAdditionalBlockPatterns`/`__experimentalAdditionalBlockPatternCategories`, then `__experimentalBlockPatterns`/`__experimentalBlockPatternCategories`, and degrades to empty arrays when none exist. Migration to fully stable APIs requires only updating the adapter.
-6. **One experimental API remains outside compat scope**: `__experimentalFeatures` (theme-tokens.js) has no stable replacement yet and is used directly. Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
-7. **Browser smoke coverage is still shallow**: Playwright now covers block apply/persist/undo, pattern request/badge flow, and template preview/apply/undo, but it still runs on a stable WordPress `6.9.4` Playground harness. Exact Site Editor refresh/drift cases are checked in as `fixme` because revisiting the template canvas route in the Playground harness still crashes the PHP-WASM controller.
+4. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
+5. **Pattern settings compatibility is explicit and diagnosable**: `pattern-settings.js` prefers stable `blockPatterns`/`blockPatternCategories`/`getAllowedPatterns` paths when present, then `__experimentalAdditional*` and `__experimental*` variants, and explicitly reports when scoped visibility had to fall back to `all-patterns-fallback`.
+6. **Theme-token source resolution still lands on the experimental path today**: `theme-settings.js` now isolates raw settings reads and only promotes a stable `features` source when parity with `__experimentalFeatures` is proven. On the current WordPress 7.0 runtime, no stable-parity source is verified yet. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
+7. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness now owns the refresh/drift undo cases. Because WordPress `7.0` is still beta as of 2026-03-24, that harness currently pins `wordpress:beta-7.0-beta4-php8.2-apache` instead of a final stable `7.0` image tag.
 8. **Template apply scope is intentionally narrow**: The first executable version supports validated template-part assignment/replacement and pattern insertion only. Free-form template tree rewrites and subtree transforms remain future work.
 9. **Activity history is not a permanent audit trail**: The current adapter is intentionally session-scoped via `sessionStorage`. There is no server-backed log, cross-device history, or DataViews audit UI yet.
 
@@ -411,17 +420,21 @@ External AI agent calls flavor-agent/recommend-navigation ability
 User editing wp_template_part in Site Editor
   -> TemplatePartRecommender.js renders PluginDocumentSettingPanel
   -> User clicks "Get Suggestions"
-  -> component issues direct apiFetch(input)
+  -> store thunk fetchTemplatePartRecommendations(input)
      -> POST /flavor-agent/v1/recommend-template-part
         -> Agent_Controller -> TemplateAbilities::recommend_template_part()
-           -> ServerCollector::for_template_part(ref)
+           -> ServerCollector::for_template_part(ref, visiblePatternNames)
            -> AISearchClient::maybe_search_with_cache_fallbacks()
            -> TemplatePartPrompt::build_system() + build_user()
            -> ResponsesClient::rank(instructions, input) via active provider
-           -> TemplatePartPrompt::parse_response()
+           -> TemplatePartPrompt::parse_response() (validates block hints, pattern names, placements)
         <- JSON response: { suggestions, explanation }
-  -> component local state stores result for current templatePartRef
-  -> UI: advisory suggestion cards with block-focus links + pattern browse links
+  -> store saves request/result state for current templatePartRef
+  -> UI renders advisory links plus preview-confirm-apply for validated start/end insert_pattern operations
+  -> applyTemplatePartSuggestion()
+     -> validateTemplatePartOperationSequence()
+     -> applyTemplatePartSuggestionOperations()
+     -> write session activity entry with refresh-safe undo metadata
 ```
 
 ## Test Coverage
@@ -429,7 +442,7 @@ User editing wp_template_part in Site Editor
 ### PHP (PHPUnit)
 | Test File | Tests | What's Covered |
 |-----------|-------|---------------|
-| `AgentControllerTest` | 6 | REST recommend-block/template wrapping, visiblePatternNames forwarding, string array validation |
+| `AgentControllerTest` | 6 | REST recommend-block/template wrapping, template-part visiblePatternNames forwarding, and string array validation |
 | `ServerCollectorTest` | 6 | Template parts metadata, area lookup, content-role introspection, template candidate ordering, visible-pattern filtering, duotone token summaries |
 | `InfraAbilitiesTest` | 6 | check-status: Cloudflare backend, admin filtering, model fallback, provider inventory |
 | `RegistrationTest` | 4 | Ability schema structure, entityKey schema, visiblePatternNames schema, recommend-template-part schema |
@@ -442,10 +455,10 @@ User editing wp_template_part in Site Editor
 | `AzureBackendValidationTest` | 16 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks, OpenAI Native validation |
 | `NavigationAbilitiesTest` | 13 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
 | `TemplatePromptTest` | 7 | Structured template operation parsing, conflicting multi-step validation, visible-pattern context, and legacy fallback normalization |
-| `TemplatePartPromptTest` | 2 | Template-part prompt assembly and response parsing |
+| `TemplatePartPromptTest` | 3 | Template-part prompt assembly, executable-operation parsing, and advisory fallback validation |
 | `DocsPrewarmTest` | 19 | Warm set definition, cache seeding, state recording, throttling (same creds, changed creds, expired window), partial/total failure, schedule/should prewarm, diagnostics, resilience |
 | `WordPressAIClientTest` | 3 | Function-based prompt creation, system instruction application, missing-provider error |
-| **Total** | **146** | |
+| **Total** | **149** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
@@ -454,7 +467,7 @@ User editing wp_template_part in Site Editor
 | `store/__tests__/activity-history-state.test.js` | Reducer hydration of persisted activity state, legacy non-undoable template entries, and undo side effects |
 | `store/__tests__/block-request-state.test.js` | Per-block request state, stale token rejection |
 | `store/__tests__/pattern-status.test.js` | Pattern status/error transitions, badge recalculation |
-| `store/__tests__/store-actions.test.js` | Block/template apply logging, client-side template validation failures, session persistence, and undo thunk behavior |
+| `store/__tests__/store-actions.test.js` | Block/template/template-part apply logging, client-side validation failures, session persistence, and undo thunk behavior |
 | `store/__tests__/template-apply-state.test.js` | Template preview/apply reducer state transitions |
 | `store/update-helpers.test.js` | Safe merge, content-only filtering, editing restrictions, and undo snapshot comparison |
 | `patterns/__tests__/inserter-badge-state.test.js` | Badge view-model derivation (all 4 states) |
@@ -465,7 +478,7 @@ User editing wp_template_part in Site Editor
 | `templates/__tests__/template-recommender-helpers.test.js` | Entity map, suggestion view models, context signature, format helpers |
 | `inspector/suggestion-keys.test.js` | Key generation |
 | `utils/__tests__/structural-identity.test.js` | Role annotation, location resolution, position tracking |
-| `utils/__tests__/template-actions.test.js` | Template operation preparation, root-scoped allowed-pattern validation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
+| `utils/__tests__/template-actions.test.js` | Template and template-part operation preparation, placement validation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
 | `utils/__tests__/template-part-areas.test.js` | Area resolution priority chain |
 | `utils/__tests__/template-types.test.js` | Slug normalization |
 | `utils/__tests__/visible-patterns.test.js` | Inserter-scoped pattern list, injected block-editor selector, null-root document scope |
@@ -482,7 +495,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Native inserter integration (Recommended category, badge)
 - [x] Template composition panel with review-confirm-apply for validated operations
 - [x] Template-part recommendations panel
-- [x] Undoable block/template AI actions with session-scoped activity history
+- [x] Undoable block/template/template-part AI actions with session-scoped activity history
 - [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates)
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
@@ -542,9 +555,13 @@ npm start                            # Dev build with watch
 npm run lint:js                      # ESLint on src/
 npm run test:unit -- --runInBand     # Jest unit tests
 npm run test:e2e                     # Playwright smoke coverage
+npm run test:e2e:playground          # Fast 6.9.4 Playground smoke harness
+npm run test:e2e:wp70                # Docker-backed WP 7.0 Site Editor harness
 npm run wp:start                     # Local Docker stack up
 npm run wp:stop                      # Local Docker stack down
 npm run wp:reset                     # Local Docker stack reset
+npm run wp:e2e:wp70:bootstrap        # Provision the WP 7.0 browser harness without running tests
+npm run wp:e2e:wp70:teardown         # Stop and remove the WP 7.0 browser harness
 
 # PHP
 composer install                     # PSR-4 autoloader
@@ -562,4 +579,4 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
 5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, or prior queries. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
-7. **Store is the contract boundary for most executable surfaces**: Block, pattern, and template UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, and stale-request rejection. `TemplatePartRecommender` is the current deliberate exception: it is advisory-only and uses direct `apiFetch` plus local component state.
+7. **Store is the contract boundary for executable surfaces**: Block, pattern, template, and template-part UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, stale-request rejection, and activity/undo coordination.

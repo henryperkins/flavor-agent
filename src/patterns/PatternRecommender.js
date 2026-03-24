@@ -9,20 +9,16 @@
  * - Passive: fetches on editor load using postType
  * - Active: fetches on inserter search input with prompt
  *
- * All pattern data access goes through the compatibility adapter
- * (./compat.js) so the feature degrades cleanly when Gutenberg
- * promotes experimental APIs to stable equivalents.
+ * Pattern settings reads and DOM discovery are split so selector
+ * degradation stays isolated from the settings compatibility path.
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useCallback, useEffect, useRef } from '@wordpress/element';
 
-import {
-	getBlockPatterns,
-	setBlockPatterns,
-	findInserterSearchInput,
-} from './compat';
+import { getBlockPatterns, setBlockPatterns } from './pattern-settings';
+import { findInserterSearchInput } from './inserter-dom';
 import { patchPatternMetadata } from './recommendation-utils';
 import { STORE_NAME } from '../store';
 import { normalizeTemplateType } from '../utils/template-types';

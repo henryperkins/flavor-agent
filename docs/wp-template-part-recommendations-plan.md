@@ -2,7 +2,7 @@
 
 > Created: 2026-03-23
 > Scope: historical implementation plan plus remaining follow-up ideas for first-class `wp_template_part` recommendations in the Site Editor
-> Status note (2026-03-24): the dedicated ability, REST route, collector, prompt, and `src/template-parts/TemplatePartRecommender.js` panel are now shipped. The remaining high-value future work is mostly about executable apply/undo flows.
+> Status note (2026-03-24): the dedicated ability, REST route, collector, prompt, and `src/template-parts/TemplatePartRecommender.js` panel are now shipped, and the first narrow executable flow is also shipped: validated `insert_pattern` at explicit `start` / `end` placement with preview/apply/activity/undo. The remaining high-value future work is broader placement targeting, subtree replacement, and browser smoke coverage.
 > Baseline when written: `wp_template` recommendations already exist and are executable; `wp_template_part` had no panel, collector, or prompt at that point
 
 ## Goal
@@ -28,16 +28,16 @@ The plan below favors a phased rollout:
 - [TemplateAbilities.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/Abilities/TemplateAbilities.php) now exposes `recommend_template()`, `recommend_template_part()`, and `list_template_parts()`.
 - [TemplatePartPrompt.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/LLM/TemplatePartPrompt.php) is the dedicated prompt/parser for part-level recommendations.
 - [ServerCollector.php](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/inc/Context/ServerCollector.php) now includes `for_template_part()`.
-- [src/template-parts/TemplatePartRecommender.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/template-parts/TemplatePartRecommender.js) mounts for `wp_template_part` and currently provides advisory-only suggestions via direct fetch + local state.
+- [src/template-parts/TemplatePartRecommender.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/template-parts/TemplatePartRecommender.js) mounts for `wp_template_part`, now uses the shared store, and supports preview/apply/undo for validated `insert_pattern` operations at the start or end of the current part.
 - [template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js) already contains deterministic block-tree helpers, pattern insertion, apply, and undo logic that can be reused.
 - [template-part-areas.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-part-areas.js) already wraps the localized `templatePartAreas` lookup for client-side area inference.
-- [src/store/index.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/index.js), [activity-history.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/activity-history.js), and [template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js) already scope activity sessions by edited document, but executable apply/undo bookkeeping is still template-only.
+- [src/store/index.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/index.js), [activity-history.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/store/activity-history.js), and [template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js) now scope activity sessions by edited document for both template and template-part executable flows.
 
 ### What is missing
 
-- No preview/apply/undo execution flow yet for template-part recommendations.
-- No template-part activity logging or shared-store parity with template recommendations.
-- No safe part-scoped `insert_pattern` executor yet.
+- No broader placement targeting beyond explicit `start` / `end` yet.
+- No subtree replacement executor yet.
+- No checked-in browser smoke flow yet for the new template-part apply/undo path.
 
 ## Recommended Architecture
 
@@ -105,7 +105,6 @@ Add confirmable apply support for safe pattern insertion inside the current temp
 1. Show the exact insertion target:
    - start of the part
    - end of the part
-   - after the currently selected block
 2. Require explicit confirmation before mutation.
 3. Reuse existing activity logging and undo patterns so the flow matches template recommendations.
 

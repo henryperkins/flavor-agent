@@ -147,6 +147,14 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$ability['input_schema']['properties']['templatePartRef']['type'] ?? null
 		);
+		$this->assertSame(
+			'array',
+			$ability['input_schema']['properties']['visiblePatternNames']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['visiblePatternNames']['items']['type'] ?? null
+		);
 
 		$suggestion = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
 
@@ -166,6 +174,14 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$suggestion['properties']['patternSuggestions']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['patternName']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['placement']['type'] ?? null
 		);
 	}
 }

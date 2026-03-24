@@ -151,6 +151,12 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'visiblePatternNames' => [
+						'required'          => false,
+						'type'              => 'array',
+						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
+					],
 				],
 			]
 		);
@@ -322,6 +328,12 @@ final class Agent_Controller {
 		$prompt = $request->get_param( 'prompt' );
 		if ( is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = $prompt;
+		}
+
+		if ( $request->has_param( 'visiblePatternNames' ) ) {
+			$input['visiblePatternNames'] = self::sanitize_string_array(
+				$request->get_param( 'visiblePatternNames' )
+			);
 		}
 
 		$result = TemplateAbilities::recommend_template_part( $input );

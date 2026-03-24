@@ -1,11 +1,11 @@
 import { extractPatternNames } from './pattern-names';
-import { getAllowedPatterns } from '../patterns/compat';
+import { getAllowedPatterns } from '../patterns/pattern-settings';
 
 /**
  * Return the current editor-visible pattern names.
  *
- * Uses the compatibility adapter (patterns/compat.js) which handles
- * the stable → experimental → settings fallback chain internally.
+ * Uses the pattern settings adapter which handles the stable →
+ * experimental → all-patterns fallback chain internally.
  *
  * @param {?string} rootClientId  Inserter root client ID.
  * @param {Object}  [blockEditor] Optional block-editor selector object.

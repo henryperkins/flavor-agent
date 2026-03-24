@@ -16,6 +16,7 @@ import {
 	getBlockPatternCategories,
 	getAllowedPatterns,
 	getPatternAPIPath,
+	getPatternRuntimeDiagnostics,
 	findInserterSearchInput,
 	findInserterToggle,
 	INSERTER_CONTAINER_SELECTORS,
@@ -286,6 +287,43 @@ describe( 'getPatternAPIPath', () => {
 	} );
 } );
 
+describe( 'getPatternRuntimeDiagnostics', () => {
+	beforeEach( () => mockRegistrySelect.mockReset() );
+
+	test( 'reports the broad allowed-pattern fallback explicitly when selectors are unavailable', () => {
+		mockBlockEditorStore( {
+			__experimentalBlockPatterns: [ { name: 'theme/fallback' } ],
+		} );
+
+		expect( getPatternRuntimeDiagnostics() ).toEqual( {
+			patternsPath: 'experimental',
+			categoriesPath: 'none',
+			allowedPatternsPath: 'all-patterns-fallback',
+			allowedPatternsFallbackMode: 'all-patterns',
+		} );
+	} );
+
+	test( 'reports contextual selector usage when the experimental selector is active', () => {
+		mockBlockEditorStore(
+			{
+				__experimentalBlockPatterns: [ { name: 'theme/fallback' } ],
+			},
+			{
+				__experimentalGetAllowedPatterns: jest
+					.fn()
+					.mockReturnValue( [ { name: 'theme/scoped' } ] ),
+			}
+		);
+
+		expect( getPatternRuntimeDiagnostics( 'root-1' ) ).toEqual( {
+			patternsPath: 'experimental',
+			categoriesPath: 'none',
+			allowedPatternsPath: 'experimental-selector',
+			allowedPatternsFallbackMode: 'contextual',
+		} );
+	} );
+} );
+
 /* ------------------------------------------------------------------
  * Inserter DOM helper tests
  * ---------------------------------------------------------------- */
@@ -430,6 +468,11 @@ describe( 'findInserterToggle', () => {
 		document.body.innerHTML = '<div></div>';
 
 		expect( findInserterToggle() ).toBeNull();
+	} );
+
+	test( 'returns null when the provided root cannot query the DOM', () => {
+		expect( findInserterToggle( null ) ).toBeNull();
+		expect( findInserterToggle( {} ) ).toBeNull();
 	} );
 } );
 

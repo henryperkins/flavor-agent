@@ -30,7 +30,14 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
           "reason": "Why this block is the right place to focus"
         }
       ],
-      "patternSuggestions": ["pattern/name-from-patterns-list"]
+      "patternSuggestions": ["pattern/name-from-patterns-list"],
+      "operations": [
+        {
+          "type": "insert_pattern",
+          "patternName": "pattern/name-from-patterns-list",
+          "placement": "start"
+        }
+      ]
     }
   ],
   "explanation": "Overall reasoning for these recommendations"
@@ -40,6 +47,11 @@ Rules:
 - blockHints[].path MUST be a real path from the Current Block Tree.
 - blockHints[].label should be short and human-readable.
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
+- operations[] is optional and advisory-first. Only return it when the change is fully safe and deterministic.
+- operations[] may only contain one `insert_pattern` entry.
+- operations[].patternName MUST be a pattern name from the Available Patterns list.
+- operations[].placement MUST be either `start` or `end`.
+- Keep patternSuggestions aligned with any executable operations you return.
 - Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
@@ -355,8 +367,28 @@ SYSTEM;
 				is_array( $suggestion['patternSuggestions'] ?? null ) ? $suggestion['patternSuggestions'] : [],
 				$pattern_lookup
 			);
+			$operations = self::validate_operations(
+				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
+				$pattern_lookup
+			);
 
-			if ( count( $block_hints ) === 0 && count( $pattern_suggestions ) === 0 ) {
+			if ( count( $operations ) > 0 ) {
+				foreach ( $operations as $operation ) {
+					if ( 'insert_pattern' !== ( $operation['type'] ?? '' ) ) {
+						continue;
+					}
+
+					$pattern_name = sanitize_text_field( (string) ( $operation['patternName'] ?? '' ) );
+
+					if ( $pattern_name === '' || in_array( $pattern_name, $pattern_suggestions, true ) ) {
+						continue;
+					}
+
+					$pattern_suggestions[] = $pattern_name;
+				}
+			}
+
+			if ( count( $block_hints ) === 0 && count( $pattern_suggestions ) === 0 && count( $operations ) === 0 ) {
 				continue;
 			}
 
@@ -365,10 +397,59 @@ SYSTEM;
 				'description'        => $description,
 				'blockHints'         => $block_hints,
 				'patternSuggestions' => $pattern_suggestions,
+				'operations'         => $operations,
 			];
 		}
 
 		return array_slice( $valid, 0, 3 );
+	}
+
+	/**
+	 * @param array<int, mixed>   $operations
+	 * @param array<string, true> $pattern_lookup
+	 * @return array<int, array<string, string>>
+	 */
+	private static function validate_operations( array $operations, array $pattern_lookup ): array {
+		$valid              = [];
+		$has_pattern_insert = false;
+		$allowed_placements = [
+			'start' => true,
+			'end'   => true,
+		];
+
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
+
+			if ( 'insert_pattern' !== $type || $has_pattern_insert ) {
+				continue;
+			}
+
+			$pattern_name = sanitize_text_field(
+				(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
+			);
+			$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
+
+			if (
+				'' === $pattern_name
+				|| ! isset( $pattern_lookup[ $pattern_name ] )
+				|| ! isset( $allowed_placements[ $placement ] )
+			) {
+				continue;
+			}
+
+			$valid[]            = [
+				'type'        => 'insert_pattern',
+				'patternName' => $pattern_name,
+				'placement'   => $placement,
+			];
+			$has_pattern_insert = true;
+		}
+
+		return $valid;
 	}
 
 	/**

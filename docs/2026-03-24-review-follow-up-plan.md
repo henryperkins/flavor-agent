@@ -2,11 +2,19 @@
 
 Generated from the review of commits `10e5776` and `d6ec6b1`.
 
-This document turns the review findings into concrete follow-up work. Each section includes the problem statement, implementation plan, validation plan, and the expected completion signal.
+This document captured the concrete follow-up work identified in that review. Each section preserves the original problem statement, implementation plan, validation plan, and expected completion signal.
+
+Status note as of 2026-03-24 in the current source tree:
+
+- issue 1 is complete, including dedicated panel-level coverage proving stale template recommendations clear on insertion-root drift
+- issue 2 is complete
+- issue 3 is complete
+
+Treat this file as execution history for a follow-up set that is now complete in the current source tree, not as a current-open gap list.
 
 ## Scope
 
-Review findings covered here:
+Original review findings covered here:
 
 1. Template recommendations do not invalidate when root-scoped visible patterns change.
 2. WP 7.0 support mappings are inconsistent between client and server block collectors.
@@ -14,16 +22,23 @@ Review findings covered here:
 
 ## 1. Template Recommendation Invalidation Drift
 
-### Problem
+Current status in the tree:
 
-Template recommendations are now fetched with root-scoped `visiblePatternNames`, but existing recommendations are only cleared when:
+- `visiblePatternNames` now participate in the template recommendation context signature
+- the template panel clears stale recommendations when that signature changes
+- helper coverage exists for normalization and signature stability
+- dedicated panel-level coverage now exists in `src/templates/__tests__/TemplateRecommender.test.js`
+
+### Original Problem
+
+At review time, template recommendations were fetched with root-scoped `visiblePatternNames`, but existing recommendations were only cleared when:
 
 - the template ref changes
 - the editor slot snapshot changes
 
-They are **not** cleared when the effective inserter root changes and therefore the visible pattern set changes.
+They were **not** cleared when the effective inserter root changed and therefore the visible pattern set changed.
 
-Current behavior:
+Review-time behavior:
 
 - request input includes `visiblePatternNames`
 - preview/apply messaging tells the user pattern insertion uses the current insertion point
@@ -42,6 +57,7 @@ This creates a stale-result window:
 - [src/templates/template-recommender-helpers.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/templates/template-recommender-helpers.js)
 - [src/utils/template-actions.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/utils/template-actions.js)
 - [src/templates/__tests__/template-recommender-helpers.test.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/templates/__tests__/template-recommender-helpers.test.js)
+- [src/templates/__tests__/TemplateRecommender.test.js](/home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent/src/templates/__tests__/TemplateRecommender.test.js)
 - Potentially store tests if state reset behavior changes
 
 ### Implementation Plan
@@ -156,16 +172,22 @@ Add a future Playwright scenario once a WP 7.0-capable harness is available:
 
 ## 2. Client/Server WP 7.0 Support Mapping Drift
 
-### Problem
+Current status in the tree:
 
-WP 7.0 support mappings were updated in the client collector, but the server collector still uses the older support-to-panel table.
+- `customCSS -> advanced` and `listView -> settings` now exist in both the client and server collectors
+- the server-side tests for those mappings are present
+- this section is now historical context rather than open work
 
-New client-only mappings:
+### Original Problem
+
+At review time, WP 7.0 support mappings had been updated in the client collector, but the server collector still used the older support-to-panel table.
+
+Review-time client-only mappings:
 
 - `customCSS -> advanced`
 - `listView -> settings`
 
-Current risk:
+Review-time risk:
 
 - editor-collected block context can expose these capabilities
 - server-built manifests for the same block type cannot
@@ -255,13 +277,19 @@ If no test currently covers these support keys in the client path, add a focused
 
 ## 3. Documentation Drift After Migration Notes Update
 
-### Problem
+Current status in the tree:
 
-The docs-only commit added a new migration note saying `__experimentalRole` fallback was removed, but two existing top-level docs still state that it remains in active use.
+- top-level docs now reflect that Flavor Agent reads only the stable `role` key
+- `__experimentalFeatures` remains the one direct experimental runtime dependency called out in top-level docs
+- this section is historical context rather than current doc drift
+
+### Original Problem
+
+At review time, a docs-only commit had added a migration note saying `__experimentalRole` fallback was removed, but two existing top-level docs still stated that it remained in active use.
 
 This leaves the repository with conflicting guidance about the same compatibility boundary.
 
-Current mismatch:
+Review-time mismatch:
 
 - new migration doc says fallback removed
 - `flavor-agent-readme.md` still says `__experimentalRole` remains a direct integration
@@ -345,6 +373,8 @@ rg -n "__experimentalRole|Two experimental APIs remain|direct integrations" docs
 
 ## Suggested Execution Order
 
+Historical note: this was the recommended order for the original follow-up work. Issues 1-3 are now complete in the current source tree.
+
 1. Fix issue 2 first.
    Reason: low risk, fast parity win, immediate runtime consistency improvement.
 2. Fix issue 1 next.
@@ -360,9 +390,11 @@ rg -n "__experimentalRole|Two experimental APIs remain|direct integrations" docs
 
 ## Acceptance Checklist
 
-- [ ] Template recommendation invalidation includes visible pattern scope changes.
-- [ ] Template tests cover context drift caused by visible pattern changes.
-- [ ] Server support mapping includes `customCSS` and `listView`.
-- [ ] Server tests cover the new WP 7.0 support mappings.
-- [ ] Top-level docs no longer claim `__experimentalRole` remains in use.
-- [ ] Repo-wide search confirms no stale high-level docs remain for these findings.
+- [x] Template recommendation invalidation includes visible pattern scope changes.
+- [x] Template tests cover context drift caused by visible pattern changes.
+- [x] Server support mapping includes `customCSS` and `listView`.
+- [x] Server tests cover the new WP 7.0 support mappings.
+- [x] Top-level docs no longer claim `__experimentalRole` remains in use.
+- [x] Repo-wide search confirms no stale high-level docs remain for these findings.
+
+This follow-up set is now complete in the current source tree.

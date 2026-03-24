@@ -7,19 +7,23 @@
  * values — actual color hex codes, font family stacks, spacing
  * scale values, shadow presets, and layout constraints.
  *
- * Uses `getSettings().__experimentalFeatures` for origin-separated
- * presets (default / theme / custom) so the LLM knows what the theme
- * provides vs. what the user has overridden.
+ * Raw settings access lives in `theme-settings.js` so runtime code can
+ * report which source is active without changing the manifest contract.
  */
-import { select } from '@wordpress/data';
-import { store as blockEditorStore } from '@wordpress/block-editor';
+import {
+	getThemeEditorSettings,
+	getThemeTokenFeatures,
+} from './theme-settings';
 
 /**
  * Collect the full design token manifest.
  */
 export function collectThemeTokens() {
-	const settings = select( blockEditorStore ).getSettings();
-	const features = settings.__experimentalFeatures || {};
+	return collectThemeTokensFromSettings( getThemeEditorSettings() );
+}
+
+export function collectThemeTokensFromSettings( settings = {} ) {
+	const features = getThemeTokenFeatures( settings );
 
 	return {
 		color: collectColorTokens( settings, features ),

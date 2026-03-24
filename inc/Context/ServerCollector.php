@@ -335,7 +335,7 @@ final class ServerCollector {
 	 * @param string $template_part_ref Template-part identifier from the Site Editor.
 	 * @return array|\WP_Error Template-part context or error.
 	 */
-	public static function for_template_part( string $template_part_ref ): array|\WP_Error {
+	public static function for_template_part( string $template_part_ref, ?array $visible_pattern_names = null ): array|\WP_Error {
 		$template_part = self::resolve_template_part( $template_part_ref );
 
 		if ( ! $template_part ) {
@@ -395,7 +395,7 @@ final class ServerCollector {
 				'hasSingleWrapperGroup' => count( $top_level_blocks ) === 1 && $top_level_blocks[0] === 'core/group',
 				'isNearlyEmpty'        => $summary_stats['blockCount'] <= 1,
 			],
-			'patterns'        => self::collect_template_part_candidate_patterns( $area ),
+			'patterns'        => self::collect_template_part_candidate_patterns( $area, $visible_pattern_names ),
 			'themeTokens'     => self::for_tokens(),
 		];
 	}
@@ -732,7 +732,7 @@ final class ServerCollector {
 	 * @param string|null $area Template-part area slug.
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function collect_template_part_candidate_patterns( ?string $area ): array {
+	private static function collect_template_part_candidate_patterns( ?string $area, ?array $visible_pattern_names = null ): array {
 		$max_candidates = self::TEMPLATE_PATTERN_CANDIDATE_CAP;
 		$all_patterns   = self::for_patterns();
 		$area_key       = sanitize_key( (string) $area );
@@ -806,17 +806,29 @@ final class ServerCollector {
 		};
 
 		if ( $area_key === '' ) {
-			return array_map(
-				$strip_sort_fields,
-				array_slice( $unfiltered, 0, $max_candidates )
+			$candidates = $unfiltered;
+		} else {
+			$sort_candidates( $matched );
+			$candidates = array_merge( $matched, $generic );
+		}
+
+		if ( is_array( $visible_pattern_names ) && [] !== $visible_pattern_names ) {
+			$visible_lookup = array_fill_keys( $visible_pattern_names, true );
+			$candidates     = array_values(
+				array_filter(
+					$candidates,
+					static function ( array $pattern ) use ( $visible_lookup ): bool {
+						$name = (string) ( $pattern['name'] ?? '' );
+
+						return $name !== '' && isset( $visible_lookup[ $name ] );
+					}
+				)
 			);
 		}
 
-		$sort_candidates( $matched );
-
 		return array_map(
 			$strip_sort_fields,
-			array_slice( array_merge( $matched, $generic ), 0, $max_candidates )
+			array_slice( $candidates, 0, $max_candidates )
 		);
 	}
 

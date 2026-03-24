@@ -10,8 +10,11 @@ import { createReduxStore, register } from '@wordpress/data';
 
 import { getPatternBadgeReason } from '../patterns/recommendation-utils';
 import {
+	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
 	getTemplateActivityUndoState,
+	getTemplatePartActivityUndoState,
+	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../utils/template-actions';
 import {
@@ -63,6 +66,19 @@ const DEFAULT_STATE = {
 	templateApplyError: null,
 	templateLastAppliedSuggestionKey: null,
 	templateLastAppliedOperations: [],
+	templatePartRecommendations: [],
+	templatePartExplanation: '',
+	templatePartStatus: 'idle',
+	templatePartError: null,
+	templatePartRequestPrompt: '',
+	templatePartRef: null,
+	templatePartRequestToken: 0,
+	templatePartResultToken: 0,
+	templatePartSelectedSuggestionKey: null,
+	templatePartApplyStatus: 'idle',
+	templatePartApplyError: null,
+	templatePartLastAppliedSuggestionKey: null,
+	templatePartLastAppliedOperations: [],
 };
 
 function getStoredBlockRequestState( state, clientId ) {
@@ -86,6 +102,14 @@ function isStaleTemplateRequest( state, requestToken ) {
 	}
 
 	return requestToken < ( state.templateRequestToken || 0 );
+}
+
+function isStaleTemplatePartRequest( state, requestToken ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	return requestToken < ( state.templatePartRequestToken || 0 );
 }
 
 function buildActivityDocument( scope ) {
@@ -259,6 +283,46 @@ function buildBlockActivityEntry( {
 	} );
 }
 
+function buildDocumentOperationBeforeState( operations = [] ) {
+	return operations.map( ( operation ) => {
+		switch ( operation?.type ) {
+			case 'assign_template_part':
+			case 'replace_template_part':
+				return {
+					type: operation.type,
+					area:
+						operation?.undoLocator?.area ||
+						operation?.area ||
+						'',
+					expectedSlug:
+						operation?.undoLocator?.expectedSlug ||
+						operation?.nextAttributes?.slug ||
+						operation?.slug ||
+						'',
+					previousAttributes: operation.previousAttributes || null,
+				};
+
+			case 'insert_pattern':
+				return {
+					type: operation.type,
+					patternName: operation.patternName || '',
+					patternTitle: operation.patternTitle || '',
+					placement: operation.placement || '',
+					rootLocator: operation.rootLocator || null,
+					index:
+						Number.isInteger( operation.index )
+							? operation.index
+							: null,
+				};
+
+			default:
+				return {
+					type: operation?.type || 'unknown',
+				};
+		}
+	} );
+}
+
 function buildTemplateActivityEntry( {
 	operations,
 	requestPrompt = '',
@@ -276,47 +340,37 @@ function buildTemplateActivityEntry( {
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
 		before: {
-			operations: operations.map( ( operation ) => {
-				switch ( operation?.type ) {
-					case 'assign_template_part':
-					case 'replace_template_part':
-						return {
-							type: operation.type,
-							area:
-								operation?.undoLocator?.area ||
-								operation?.area ||
-								'',
-							expectedSlug:
-								operation?.undoLocator?.expectedSlug ||
-								operation?.nextAttributes?.slug ||
-								operation?.slug ||
-								'',
-							previousAttributes:
-								operation.previousAttributes || null,
-						};
-
-					case 'insert_pattern':
-						return {
-							type: operation.type,
-							patternName: operation.patternName || '',
-							patternTitle: operation.patternTitle || '',
-							rootLocator: operation.rootLocator || null,
-							index:
-								Number.isInteger( operation.index )
-									? operation.index
-									: null,
-						};
-
-					default:
-						return {
-							type: operation?.type || 'unknown',
-						};
-				}
-			} ),
+			operations: buildDocumentOperationBeforeState( operations ),
 		},
 		after: { operations },
 		prompt: requestPrompt,
 		requestRef: `template:${ templateRef || 'unknown' }:${ requestToken }`,
+		document: buildActivityDocument( scope ),
+	} );
+}
+
+function buildTemplatePartActivityEntry( {
+	operations,
+	requestPrompt = '',
+	requestToken = 0,
+	scope = null,
+	suggestion,
+	templatePartRef,
+} ) {
+	return createActivityEntry( {
+		type: 'apply_template_part_suggestion',
+		surface: 'template-part',
+		target: {
+			templatePartRef,
+		},
+		suggestion: suggestion?.label || '',
+		suggestionKey: suggestion?.suggestionKey || null,
+		before: {
+			operations: buildDocumentOperationBeforeState( operations ),
+		},
+		after: { operations },
+		prompt: requestPrompt,
+		requestRef: `template-part:${ templatePartRef || 'unknown' }:${ requestToken }`,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -696,6 +750,52 @@ const actions = {
 		};
 	},
 
+	setTemplatePartStatus( status, error = null, requestToken = null ) {
+		return {
+			type: 'SET_TEMPLATE_PART_STATUS',
+			status,
+			error,
+			requestToken,
+		};
+	},
+
+	setTemplatePartRecommendations(
+		templatePartRef,
+		payload,
+		prompt = '',
+		requestToken = null
+	) {
+		return {
+			type: 'SET_TEMPLATE_PART_RECS',
+			templatePartRef,
+			payload,
+			prompt,
+			requestToken,
+		};
+	},
+
+	setTemplatePartSelectedSuggestion( suggestionKey = null ) {
+		return {
+			type: 'SET_TEMPLATE_PART_SELECTED_SUGGESTION',
+			suggestionKey,
+		};
+	},
+
+	setTemplatePartApplyState(
+		status,
+		error = null,
+		suggestionKey = null,
+		operations = []
+	) {
+		return {
+			type: 'SET_TEMPLATE_PART_APPLY_STATE',
+			status,
+			error,
+			suggestionKey,
+			operations,
+		};
+	},
+
 	clearTemplateRecommendations() {
 		return ( { dispatch } ) => {
 			if ( actions._templateAbort ) {
@@ -704,6 +804,17 @@ const actions = {
 			}
 
 			dispatch( { type: 'CLEAR_TEMPLATE_RECS' } );
+		};
+	},
+
+	clearTemplatePartRecommendations() {
+		return ( { dispatch } ) => {
+			if ( actions._templatePartAbort ) {
+				actions._templatePartAbort.abort();
+				actions._templatePartAbort = null;
+			}
+
+			dispatch( { type: 'CLEAR_TEMPLATE_PART_RECS' } );
 		};
 	},
 
@@ -762,11 +873,20 @@ const actions = {
 				};
 			}
 
-			if ( latestActivity.surface === 'template' ) {
-				const resolvedUndo = getTemplateActivityUndoState(
-					latestActivity,
-					registry?.select?.( 'core/block-editor' )
-				);
+			if (
+				latestActivity.surface === 'template' ||
+				latestActivity.surface === 'template-part'
+			) {
+				const resolvedUndo =
+					latestActivity.surface === 'template'
+						? getTemplateActivityUndoState(
+								latestActivity,
+								registry?.select?.( 'core/block-editor' )
+						  )
+						: getTemplatePartActivityUndoState(
+								latestActivity,
+								registry?.select?.( 'core/block-editor' )
+						  );
 
 				if (
 					resolvedUndo?.canUndo !== true ||
@@ -806,7 +926,11 @@ const actions = {
 			const result =
 				latestActivity.surface === 'template'
 					? undoTemplateSuggestionOperations( latestActivity )
-					: undoBlockActivity( latestActivity, registry );
+					: latestActivity.surface === 'template-part'
+						? undoTemplatePartSuggestionOperations(
+								latestActivity
+						  )
+						: undoBlockActivity( latestActivity, registry );
 
 			if ( ! result.ok ) {
 				localDispatch(
@@ -906,6 +1030,73 @@ const actions = {
 		};
 	},
 
+	applyTemplatePartSuggestion( suggestion ) {
+		return async ( { dispatch: localDispatch, registry, select } ) => {
+			const scope = getCurrentActivityScope( registry );
+
+			syncActivitySession( localDispatch, select, scope );
+
+			localDispatch( actions.setTemplatePartApplyState( 'applying' ) );
+
+			let result;
+
+			try {
+				result = applyTemplatePartSuggestionOperations( suggestion );
+			} catch ( err ) {
+				const message =
+					err?.message || 'Template-part apply failed unexpectedly.';
+
+				localDispatch(
+					actions.setTemplatePartApplyState( 'error', message )
+				);
+
+				return {
+					ok: false,
+					error: message,
+				};
+			}
+
+			if ( ! result.ok ) {
+				localDispatch(
+					actions.setTemplatePartApplyState(
+						'error',
+						result.error || 'Template-part apply failed.'
+					)
+				);
+
+				return result;
+			}
+
+			const templatePartRef = select.getTemplatePartResultRef();
+
+			localDispatch(
+				actions.logActivity(
+					buildTemplatePartActivityEntry( {
+						operations: result.operations,
+						requestPrompt:
+							select.getTemplatePartRequestPrompt?.() || '',
+						requestToken:
+							select.getTemplatePartResultToken?.() || 0,
+						scope,
+						suggestion,
+						templatePartRef,
+					} )
+				)
+			);
+			localDispatch(
+				actions.setTemplatePartApplyState(
+					'success',
+					null,
+					suggestion?.suggestionKey || null,
+					result.operations
+				)
+			);
+			persistActivitySession( select );
+
+			return result;
+		};
+	},
+
 	fetchTemplateRecommendations( input ) {
 		return async ( { dispatch, select } ) => {
 			if ( actions._templateAbort ) {
@@ -964,6 +1155,69 @@ const actions = {
 			} finally {
 				if ( actions._templateAbort === controller ) {
 					actions._templateAbort = null;
+				}
+			}
+		};
+	},
+
+	fetchTemplatePartRecommendations( input ) {
+		return async ( { dispatch, select } ) => {
+			if ( actions._templatePartAbort ) {
+				actions._templatePartAbort.abort();
+			}
+
+			const controller = new AbortController();
+			actions._templatePartAbort = controller;
+			const requestToken =
+				( select.getTemplatePartRequestToken?.() || 0 ) + 1;
+
+			dispatch(
+				actions.setTemplatePartStatus( 'loading', null, requestToken )
+			);
+
+			try {
+				const result = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-template-part',
+					method: 'POST',
+					data: input,
+					signal: controller.signal,
+				} );
+
+				dispatch(
+					actions.setTemplatePartRecommendations(
+						input.templatePartRef,
+						result,
+						input.prompt || '',
+						requestToken
+					)
+				);
+			} catch ( err ) {
+				if ( err.name === 'AbortError' ) {
+					return;
+				}
+
+				dispatch(
+					actions.setTemplatePartRecommendations(
+						input.templatePartRef,
+						{
+							suggestions: [],
+							explanation: '',
+						},
+						input.prompt || '',
+						requestToken
+					)
+				);
+				dispatch(
+					actions.setTemplatePartStatus(
+						'error',
+						err?.message ||
+							'Template-part recommendation request failed.',
+						requestToken
+					)
+				);
+			} finally {
+				if ( actions._templatePartAbort === controller ) {
+					actions._templatePartAbort = null;
 				}
 			}
 		};
@@ -1100,6 +1354,12 @@ function reducer( state = DEFAULT_STATE, action ) {
 				state.activityLog.find(
 					( entry ) => entry?.id === action.activityId
 				) || null;
+			const isTemplateUndone =
+				action.status === 'undone' &&
+				matchedEntry?.surface === 'template';
+			const isTemplatePartUndone =
+				action.status === 'undone' &&
+				matchedEntry?.surface === 'template-part';
 
 			return {
 				...state,
@@ -1123,25 +1383,37 @@ function reducer( state = DEFAULT_STATE, action ) {
 					};
 				} ),
 				templateApplyStatus:
-					action.status === 'undone' &&
-					matchedEntry?.surface === 'template'
+					isTemplateUndone
 						? 'idle'
 						: state.templateApplyStatus,
 				templateApplyError:
-					action.status === 'undone' &&
-					matchedEntry?.surface === 'template'
+					isTemplateUndone
 						? null
 						: state.templateApplyError,
 				templateLastAppliedSuggestionKey:
-					action.status === 'undone' &&
-					matchedEntry?.surface === 'template'
+					isTemplateUndone
 						? null
 						: state.templateLastAppliedSuggestionKey,
 				templateLastAppliedOperations:
-					action.status === 'undone' &&
-					matchedEntry?.surface === 'template'
+					isTemplateUndone
 						? []
 						: state.templateLastAppliedOperations,
+				templatePartApplyStatus:
+					isTemplatePartUndone
+						? 'idle'
+						: state.templatePartApplyStatus,
+				templatePartApplyError:
+					isTemplatePartUndone
+						? null
+						: state.templatePartApplyError,
+				templatePartLastAppliedSuggestionKey:
+					isTemplatePartUndone
+						? null
+						: state.templatePartLastAppliedSuggestionKey,
+				templatePartLastAppliedOperations:
+					isTemplatePartUndone
+						? []
+						: state.templatePartLastAppliedOperations,
 			};
 		}
 		case 'SET_PATTERN_STATUS':
@@ -1255,6 +1527,112 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateLastAppliedSuggestionKey: null,
 				templateLastAppliedOperations: [],
 			};
+		case 'SET_TEMPLATE_PART_STATUS':
+			if ( isStaleTemplatePartRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				templatePartStatus: action.status,
+				templatePartError: action.error ?? null,
+				templatePartRequestToken:
+					action.requestToken ?? state.templatePartRequestToken,
+				templatePartSelectedSuggestionKey:
+					action.status === 'loading'
+						? null
+						: state.templatePartSelectedSuggestionKey,
+				templatePartApplyStatus:
+					action.status === 'loading'
+						? 'idle'
+						: state.templatePartApplyStatus,
+				templatePartApplyError:
+					action.status === 'loading'
+						? null
+						: state.templatePartApplyError,
+				templatePartLastAppliedSuggestionKey:
+					action.status === 'loading'
+						? null
+						: state.templatePartLastAppliedSuggestionKey,
+				templatePartLastAppliedOperations:
+					action.status === 'loading'
+						? []
+						: state.templatePartLastAppliedOperations,
+			};
+		case 'SET_TEMPLATE_PART_RECS':
+			if (
+				isStaleTemplatePartRequest( state, action.requestToken )
+			) {
+				return state;
+			}
+
+			return {
+				...state,
+				templatePartRecommendations:
+					action.payload?.suggestions ?? [],
+				templatePartExplanation:
+					action.payload?.explanation ?? '',
+				templatePartRequestPrompt: action.prompt ?? '',
+				templatePartRef: action.templatePartRef,
+				templatePartRequestToken:
+					action.requestToken ?? state.templatePartRequestToken,
+				templatePartResultToken:
+					state.templatePartResultToken + 1,
+				templatePartStatus: 'ready',
+				templatePartError: null,
+				templatePartSelectedSuggestionKey: null,
+				templatePartApplyStatus: 'idle',
+				templatePartApplyError: null,
+				templatePartLastAppliedSuggestionKey: null,
+				templatePartLastAppliedOperations: [],
+			};
+		case 'SET_TEMPLATE_PART_SELECTED_SUGGESTION':
+			return {
+				...state,
+				templatePartSelectedSuggestionKey:
+					action.suggestionKey ?? null,
+				templatePartApplyStatus:
+					state.templatePartApplyStatus === 'error'
+						? 'idle'
+						: state.templatePartApplyStatus,
+				templatePartApplyError:
+					state.templatePartApplyStatus === 'error'
+						? null
+						: state.templatePartApplyError,
+			};
+		case 'SET_TEMPLATE_PART_APPLY_STATE':
+			return {
+				...state,
+				templatePartApplyStatus: action.status,
+				templatePartApplyError: action.error ?? null,
+				templatePartLastAppliedSuggestionKey:
+					action.status === 'success'
+						? action.suggestionKey ?? null
+						: state.templatePartLastAppliedSuggestionKey,
+				templatePartLastAppliedOperations:
+					action.status === 'success'
+						? action.operations ?? []
+						: state.templatePartLastAppliedOperations,
+			};
+		case 'CLEAR_TEMPLATE_PART_RECS':
+			return {
+				...state,
+				templatePartRecommendations: [],
+				templatePartExplanation: '',
+				templatePartStatus: 'idle',
+				templatePartError: null,
+				templatePartRequestPrompt: '',
+				templatePartRef: null,
+				templatePartRequestToken:
+					state.templatePartRequestToken + 1,
+				templatePartResultToken:
+					state.templatePartResultToken + 1,
+				templatePartSelectedSuggestionKey: null,
+				templatePartApplyStatus: 'idle',
+				templatePartApplyError: null,
+				templatePartLastAppliedSuggestionKey: null,
+				templatePartLastAppliedOperations: [],
+			};
 		default:
 			return state;
 	}
@@ -1318,6 +1696,31 @@ const selectors = {
 		state.templateLastAppliedSuggestionKey,
 	getTemplateLastAppliedOperations: ( state ) =>
 		state.templateLastAppliedOperations,
+	getTemplatePartRecommendations: ( state ) =>
+		state.templatePartRecommendations,
+	getTemplatePartExplanation: ( state ) => state.templatePartExplanation,
+	getTemplatePartError: ( state ) => state.templatePartError,
+	getTemplatePartRequestPrompt: ( state ) =>
+		state.templatePartRequestPrompt,
+	getTemplatePartResultRef: ( state ) => state.templatePartRef,
+	getTemplatePartRequestToken: ( state ) =>
+		state.templatePartRequestToken,
+	getTemplatePartResultToken: ( state ) =>
+		state.templatePartResultToken,
+	isTemplatePartLoading: ( state ) =>
+		state.templatePartStatus === 'loading',
+	getTemplatePartStatus: ( state ) => state.templatePartStatus,
+	getTemplatePartSelectedSuggestionKey: ( state ) =>
+		state.templatePartSelectedSuggestionKey,
+	getTemplatePartApplyStatus: ( state ) =>
+		state.templatePartApplyStatus,
+	getTemplatePartApplyError: ( state ) => state.templatePartApplyError,
+	isTemplatePartApplying: ( state ) =>
+		state.templatePartApplyStatus === 'applying',
+	getTemplatePartLastAppliedSuggestionKey: ( state ) =>
+		state.templatePartLastAppliedSuggestionKey,
+	getTemplatePartLastAppliedOperations: ( state ) =>
+		state.templatePartLastAppliedOperations,
 };
 
 const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );

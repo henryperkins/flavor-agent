@@ -12,10 +12,14 @@
     "start": "wp-scripts start",
     "lint:js": "wp-scripts lint-js src/",
     "test:unit": "wp-scripts test-unit-js",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run test:e2e:playground",
+    "test:e2e:playground": "playwright test",
+    "test:e2e:wp70": "playwright test -c playwright.wp70.config.js",
     "wp:start": "docker compose up -d --build",
     "wp:stop": "docker compose down",
-    "wp:reset": "docker compose down -v"
+    "wp:reset": "docker compose down -v",
+    "wp:e2e:wp70:bootstrap": "node scripts/wp70-e2e.js bootstrap",
+    "wp:e2e:wp70:teardown": "node scripts/wp70-e2e.js teardown"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

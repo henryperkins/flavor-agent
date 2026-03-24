@@ -343,6 +343,50 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'wp_parse_args' ) ) {
+		function wp_parse_args( $args, array $defaults = [] ): array {
+			if ( is_object( $args ) ) {
+				$args = get_object_vars( $args );
+			}
+
+			if ( ! is_array( $args ) ) {
+				$args = [];
+			}
+
+			return array_merge( $defaults, $args );
+		}
+	}
+
+	if ( ! function_exists( 'home_url' ) ) {
+		function home_url( string $path = '', ?string $scheme = null ): string {
+			$base = 'https://example.test';
+
+			if ( $path === '' ) {
+				return $base;
+			}
+
+			return rtrim( $base, '/' ) . '/' . ltrim( $path, '/' );
+		}
+	}
+
+	if ( ! function_exists( 'untrailingslashit' ) ) {
+		function untrailingslashit( string $value ): string {
+			return rtrim( $value, '/' );
+		}
+	}
+
+	if ( ! function_exists( 'get_current_blog_id' ) ) {
+		function get_current_blog_id(): int {
+			return 1;
+		}
+	}
+
+	if ( ! function_exists( 'wp_get_environment_type' ) ) {
+		function wp_get_environment_type(): string {
+			return 'tests';
+		}
+	}
+
 	if ( ! function_exists( 'get_transient' ) ) {
 		function get_transient( string $name ) {
 			return array_key_exists( $name, WordPressTestState::$transients )
@@ -533,6 +577,18 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'wp_remote_request' ) ) {
+		function wp_remote_request( string $url, array $args = [] ) {
+			$method = strtoupper( (string) ( $args['method'] ?? 'GET' ) );
+
+			if ( 'GET' === $method ) {
+				return wp_remote_get( $url, $args );
+			}
+
+			return wp_remote_post( $url, $args );
+		}
+	}
+
 	if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
 		function wp_remote_retrieve_body( $response ): string {
 			return is_array( $response ) ? (string) ( $response['body'] ?? '' ) : '';
@@ -546,6 +602,24 @@ namespace {
 			}
 
 			return (int) ( $response['response']['code'] ?? 0 );
+		}
+	}
+
+	if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
+		function wp_remote_retrieve_header( $response, string $header ) {
+			if ( ! is_array( $response ) || ! is_array( $response['headers'] ?? null ) ) {
+				return false;
+			}
+
+			$normalized_header = strtolower( $header );
+
+			foreach ( $response['headers'] as $key => $value ) {
+				if ( strtolower( (string) $key ) === $normalized_header ) {
+					return $value;
+				}
+			}
+
+			return false;
 		}
 	}
 

@@ -11,9 +11,11 @@ const muPluginDir = path.join(
 
 module.exports = defineConfig( {
 	testDir: path.join( rootDir, 'tests/e2e' ),
+	testIgnore: /.*\.wp70\.setup\.js/,
 	timeout: 60_000,
 	workers: 1,
 	retries: 0,
+	grepInvert: /@wp70-site-editor/,
 	outputDir: path.join( rootDir, 'output/playwright' ),
 	use: {
 		baseURL: `http://127.0.0.1:${ port }`,

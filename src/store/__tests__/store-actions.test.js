@@ -1,15 +1,23 @@
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../utils/template-actions', () => ( {
+	applyTemplatePartSuggestionOperations: jest.fn(),
 	applyTemplateSuggestionOperations: jest.fn(),
 	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	getTemplatePartActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
+	undoTemplatePartSuggestionOperations: jest.fn(),
 	undoTemplateSuggestionOperations: jest.fn(),
 } ) );
 
 import apiFetch from '@wordpress/api-fetch';
 
 import {
+	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
 	getTemplateActivityUndoState,
+	getTemplatePartActivityUndoState,
+	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../../utils/template-actions';
 import {
@@ -24,7 +32,11 @@ describe( 'store action thunks', () => {
 		window.sessionStorage.clear();
 		actions._patternAbort = null;
 		actions._templateAbort = null;
+		actions._templatePartAbort = null;
 		getTemplateActivityUndoState.mockImplementation(
+			( activity ) => activity?.undo || {}
+		);
+		getTemplatePartActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
 		);
 	} );
@@ -392,6 +404,141 @@ describe( 'store action thunks', () => {
 		} );
 	} );
 
+	test( 'fetchTemplatePartRecommendations reads request token from thunk selectors', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Add utility row' } ],
+			explanation: 'Mocked template-part response',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getTemplatePartRequestToken: jest.fn().mockReturnValue( 2 ),
+		};
+		const input = {
+			templatePartRef: 'theme//header',
+			prompt: 'Add a compact utility row.',
+			visiblePatternNames: [ 'theme/header-utility' ],
+		};
+
+		await actions.fetchTemplatePartRecommendations( input )( {
+			dispatch,
+			select,
+		} );
+
+		expect( select.getTemplatePartRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-template-part',
+				method: 'POST',
+				data: input,
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setTemplatePartStatus( 'loading', null, 3 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setTemplatePartRecommendations(
+				'theme//header',
+				{
+					suggestions: [ { label: 'Add utility row' } ],
+					explanation: 'Mocked template-part response',
+				},
+				'Add a compact utility row.',
+				3
+			)
+		);
+	} );
+
+	test( 'applyTemplatePartSuggestion records success with thunk selector methods', async () => {
+		applyTemplatePartSuggestionOperations.mockReturnValue( {
+			ok: true,
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'start',
+				},
+			],
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplatePartRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Add a utility row.' ),
+			getTemplatePartResultRef: jest
+				.fn()
+				.mockReturnValue( 'theme//header' ),
+			getTemplatePartResultToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const suggestion = {
+			label: 'Add utility row',
+			suggestionKey: 'Add utility row-0',
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'start',
+				},
+			],
+		};
+
+		const result = await actions.applyTemplatePartSuggestion(
+			suggestion
+		)( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( select.getTemplatePartResultRef ).toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'LOG_ACTIVITY',
+				entry: expect.objectContaining( {
+					type: 'apply_template_part_suggestion',
+					surface: 'template-part',
+					target: expect.objectContaining( {
+						templatePartRef: 'theme//header',
+					} ),
+					request: expect.objectContaining( {
+						prompt: 'Add a utility row.',
+						reference: 'template-part:theme//header:4',
+					} ),
+					suggestion: 'Add utility row',
+					suggestionKey: 'Add utility row-0',
+				} ),
+			} )
+		);
+		expect( dispatch ).toHaveBeenLastCalledWith(
+			actions.setTemplatePartApplyState(
+				'success',
+				null,
+				'Add utility row-0',
+				[
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						placement: 'start',
+					},
+				]
+			)
+		);
+		expect( result ).toEqual( {
+			ok: true,
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'start',
+				},
+			],
+		} );
+	} );
+
 	test( 'undoActivity restores the latest block suggestion and marks it undone', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
@@ -539,6 +686,68 @@ describe( 'store action thunks', () => {
 			expect.objectContaining( {
 				id: 'activity-1',
 				surface: 'template',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'SET_UNDO_STATE',
+				status: 'success',
+				activityId: 'activity-1',
+			} )
+		);
+	} );
+
+	test( 'undoActivity delegates template-part rollback to template-actions helpers', async () => {
+		undoTemplatePartSuggestionOperations.mockReturnValue( {
+			ok: true,
+			operations: [],
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest
+				.fn()
+				.mockReturnValue( 'wp_template_part:header' ),
+			getActivityLog: jest.fn().mockReturnValue( [
+				{
+					id: 'activity-1',
+					type: 'apply_template_part_suggestion',
+					surface: 'template-part',
+					target: {
+						templatePartRef: 'theme//header',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+					},
+				},
+			] ),
+			getLatestAppliedActivity: jest.fn().mockReturnValue( {
+				id: 'activity-1',
+				type: 'apply_template_part_suggestion',
+				surface: 'template-part',
+				target: {
+					templatePartRef: 'theme//header',
+				},
+				undo: {
+					canUndo: true,
+					status: 'available',
+				},
+			} ),
+		};
+
+		await actions.undoActivity( 'activity-1' )( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect(
+			undoTemplatePartSuggestionOperations
+		).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				id: 'activity-1',
+				surface: 'template-part',
 			} )
 		);
 		expect( dispatch ).toHaveBeenCalledWith(

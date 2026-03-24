@@ -63,6 +63,28 @@ Change these in `.env` if needed.
 .\scripts\local-wordpress.ps1 wp option get home
 ```
 
+## Browser harnesses
+
+The repo now keeps two separate Playwright entry points:
+
+- `npm run test:e2e:playground` keeps the fast WordPress `6.9.4` Playground smoke flow for lightweight editor checks.
+- `npm run test:e2e:wp70` boots a Docker-backed WordPress `7.0` Site Editor stack, logs in through a Playwright setup project, activates the repo-local `flavor-agent-e2e` block theme fixture, and runs the tagged refresh/drift Site Editor coverage.
+
+You can provision or tear down the Docker-backed Site Editor harness directly without running Playwright:
+
+```bash
+npm run wp:e2e:wp70:bootstrap
+npm run wp:e2e:wp70:teardown
+```
+
+Optional overrides for the WP 7.0 harness can be exported before running those commands:
+
+```bash
+export FLAVOR_AGENT_WP70_BASE_IMAGE=wordpress:beta-7.0-beta4-php8.2-apache
+export FLAVOR_AGENT_WP70_PORT=9404
+export FLAVOR_AGENT_WP70_PHPMYADMIN_PORT=9405
+```
+
 ## VS Code devcontainer
 
 Once Docker is running:

@@ -7,9 +7,9 @@ It currently has four primary editor experiences:
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and core Connectors.
 - Pattern recommendations in the native inserter, powered by the active OpenAI provider (Azure OpenAI or OpenAI Native) plus Qdrant.
 - Template recommendations in the Site Editor, powered by the active OpenAI provider with validated template-part and pattern operations.
-- Template-part recommendations in the Site Editor, scoped to individual template parts and currently advisory-only.
+- Template-part recommendations in the Site Editor, scoped to individual template parts with a narrow review-confirm-apply path for validated pattern insertion at the start or end of the current part.
 
-There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, and template suggestions use a review-confirm-apply flow inside the document settings panel. Block and template applies also write session-scoped AI activity entries with inline undo.
+There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write session-scoped AI activity entries with inline undo.
 
 ## Current Architecture
 
@@ -122,21 +122,22 @@ The client behavior is:
 
 - Available only while editing a `wp_template_part` entity in the Site Editor.
 - Uses a dedicated `PluginDocumentSettingPanel` implemented in `src/template-parts/TemplatePartRecommender.js`.
-- Fetches recommendations with direct `apiFetch` calls and keeps result state local to the component.
-- Renders advisory suggestion cards with block-focus links and pattern-browse links.
+- Uses the shared `flavor-agent` data store for request state, preview state, apply state, session activity, and undo.
+- Renders advisory suggestion cards with block-focus links and pattern-browse links, and surfaces preview/apply controls only for validated executable suggestions.
+- Supports one narrow executable operation today: `insert_pattern` at the explicit `start` or `end` of the current template part.
 
 The server behavior is:
 
 - Resolve the active template part from the Site Editor reference.
-- Collect template-part identity, inferred area, structural summaries, candidate patterns, theme tokens, and WordPress docs guidance.
+- Collect template-part identity, inferred area, structural summaries, candidate patterns filtered by request `visiblePatternNames` when available, theme tokens, and WordPress docs guidance.
 - Rank template-part suggestions with the active provider's responses configuration.
-- Return explanatory text plus advisory `blockHints` and `patternSuggestions`.
+- Return explanatory text plus advisory `blockHints`, `patternSuggestions`, and optional validated `operations`.
 
-This surface is intentionally advisory-first today: it does not currently share the template panel’s preview/apply/undo flow or session activity logging.
+This surface remains advisory-first overall: unsupported or ambiguous recommendations stay browse-only, and only deterministic start/end pattern insertion participates in preview/apply/undo.
 
 ### AI Activity and Undo
 
-Applied block and template suggestions write structured activity records into `sessionStorage`, keyed to the current post or template. The latest compatible action can be undone from the inline success notice or the shared `Recent AI Actions` list when the live editor state still matches the recorded post-apply snapshot.
+Applied block, template, and template-part suggestions write structured activity records into `sessionStorage`, keyed to the current post, template, or template part. The latest compatible action can be undone from the inline success notice or the shared `Recent AI Actions` list when the live editor state still matches the recorded post-apply snapshot.
 
 ## Settings
 

@@ -12,7 +12,7 @@
 | `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | Provider-selected embeddings + Qdrant retrieval + LLM reranking |
 | `flavor-agent/recommend-template` | `TemplateAbilities` | Provider-selected template composition suggestions for Site Editor templates |
-| `flavor-agent/recommend-template-part` | `TemplateAbilities` | Advisory template-part composition suggestions for Site Editor template parts |
+| `flavor-agent/recommend-template-part` | `TemplateAbilities` | Template-part composition suggestions with validated start/end pattern insertion for Site Editor template parts |
 | `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
@@ -35,10 +35,11 @@
 - Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
 - Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
+- Pattern recommendation and indexing backends now have direct PHPUnit coverage for backend gating, runtime-state handling, Qdrant retrieval/reranking, fingerprinting, scheduling, full/incremental sync, deletion, lock contention, and remote failure persistence
 - Site Editor template recommendation panel for `wp_template` documents with review-confirm-apply support for validated template-part assignment/replacement and pattern insertion operations
-- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links and pattern-browse links
-- Block and template apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal `Recent AI Actions` session history in the active panel
-- AI activity history is session-durable per post/template via `sessionStorage`; template undo now persists stable locators plus recorded post-apply snapshots, so same-session refreshes stay undoable when the live template still matches the recorded state, while legacy clientId-only template entries load as undo unavailable
+- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, and review-confirm-apply support for validated `insert_pattern` operations at the start or end of the current template part
+- Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal `Recent AI Actions` session history in the active panel
+- AI activity history is session-durable per post/template/template-part via `sessionStorage`; template and template-part undo now persist stable locators plus recorded post-apply snapshots, so same-session refreshes stay undoable when the live document still matches the recorded state, while legacy clientId-only template entries load as undo unavailable
 - Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; block providers still come from `Settings > Connectors`
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
@@ -53,14 +54,21 @@
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - JS tooling now expects Node `20.x` with npm `10.x`; on this host, the global Node `24.14.0` / npm `11.9.0` pair fails `npm ci` immediately via `engine-strict` (`EBADENGINE`), so the repo now pins the supported toolchain instead of assuming the global default.
-- Browser smoke coverage now runs on a stable WordPress `6.9.4` Playground harness and covers block apply-plus-undo with same-session refresh persistence, the pattern inserter search/request badge flow, and the Site Editor template preview-apply-undo flow. A WordPress `7.0` Playground run does boot the post editor, but the Site Editor path currently crashes the Playground runtime with `Invalid state: Controller is already closed`, so the checked-in harness remains on `6.9.4`.
-- The Site Editor Playground harness still crashes when the browser revisits the template canvas route in the same session, so the new refresh/drift template Playwright cases are checked in as `fixme`; the underlying refresh-safe and drift-safe undo logic is covered by unit tests and manual same-session browser flow remains green.
+- Browser coverage is now split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor and template preview/apply coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for the refresh/drift undo cases that Playground cannot hold open reliably.
+- WordPress `7.0` is still in beta as of 2026-03-24, so the Docker-backed Site Editor harness pins `wordpress:beta-7.0-beta4-php8.2-apache` rather than a final `7.0` release tag. Swap that override once the official stable image exists.
 - AI activity history is still session-scoped only; there is no server-backed audit log or cross-session review UI yet.
 - Live recommendation execution with valid LLM credentials was not rerun in this pass.
-- Pattern surface now uses a central compatibility adapter (`src/patterns/compat.js`) that prefers stable APIs, falls back to `__experimentalAdditional*` then `__experimental*` variants, and degrades cleanly when none exist. DOM inserter selectors are also centralized there. `__experimentalFeatures` (theme-tokens) remains a direct dependency because WordPress still has no stable replacement. Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and intentionally no longer preserves deprecated `__experimentalRole` compatibility.
+- Pattern/runtime compatibility is now split into focused adapters: `src/patterns/pattern-settings.js` owns stable-vs-experimental settings and selector negotiation plus explicit diagnostics for contextual vs `all-patterns-fallback` behavior, while `src/patterns/inserter-dom.js` owns fail-closed search/toggle discovery so callers degrade cleanly when editor markup is absent. Theme-token reads now pass through `src/context/theme-settings.js`, which only promotes a stable `features` source when parity with `__experimentalFeatures` is proven; on the current WordPress 7.0 path the active source still resolves to `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and intentionally no longer preserves deprecated `__experimentalRole` compatibility.
 
 ## Recent Verification
 
+- 2026-03-24 plan-5: `npx wp-scripts lint-js src/context/theme-settings.js src/context/theme-tokens.js src/patterns/pattern-settings.js src/patterns/inserter-dom.js src/patterns/compat.js src/patterns/PatternRecommender.js src/patterns/InserterBadge.js src/context/__tests__/theme-tokens.test.js src/patterns/__tests__/compat.test.js src/patterns/__tests__/PatternRecommender.test.js src/patterns/__tests__/InserterBadge.test.js` passed.
+- 2026-03-24 plan-5: `npm run test:unit -- --runInBand src/context/__tests__/theme-tokens.test.js src/patterns/__tests__/compat.test.js src/patterns/__tests__/PatternRecommender.test.js src/patterns/__tests__/InserterBadge.test.js` passed (`4` suites, `49` tests).
+- 2026-03-24 plan-5: `npm run test:unit -- --runInBand` passed (`23` suites, `169` tests).
+- 2026-03-24 template-part-executor: `vendor/bin/phpunit` passed (`149` tests, `767` assertions).
+- 2026-03-24 template-part-executor: `npm run test:unit -- --runInBand` passed (`20` suites, `153` tests).
+- 2026-03-24 plan-2: `vendor/bin/phpunit --filter Pattern` passed (`28` tests, `170` assertions).
+- 2026-03-24 plan-2: `vendor/bin/phpunit` passed (`171` tests, `872` assertions).
 - 2026-03-24 docs-alignment: `vendor/bin/phpunit` passed (`146` tests, `757` assertions).
 - 2026-03-24 docs-alignment: `npm run test:unit -- --runInBand` passed (`19` suites, `143` tests).
 - 2026-03-23 compat: `npm run lint:js` passed (after `--fix`).

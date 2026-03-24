@@ -93,7 +93,7 @@ final class TemplateAbilities {
 	/**
 	 * Recommend composition improvements for a single template part.
 	 *
-	 * @param array $input { templatePartRef: string, prompt?: string }
+	 * @param array $input { templatePartRef: string, prompt?: string, visiblePatternNames?: string[] }
 	 * @return array|\WP_Error Suggestions payload or error.
 	 */
 	public static function recommend_template_part( mixed $input ): array|\WP_Error {
@@ -103,6 +103,13 @@ final class TemplateAbilities {
 			? trim( (string) $input['templatePartRef'] )
 			: '';
 		$prompt            = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
+		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
+			? StringArray::sanitize( $input['visiblePatternNames'] )
+			: null;
+
+		if ( is_array( $visible_pattern_names ) && [] === $visible_pattern_names ) {
+			$visible_pattern_names = null;
+		}
 
 		if ( $template_part_ref === '' ) {
 			return new \WP_Error(
@@ -112,7 +119,7 @@ final class TemplateAbilities {
 			);
 		}
 
-		$context = ServerCollector::for_template_part( $template_part_ref );
+		$context = ServerCollector::for_template_part( $template_part_ref, $visible_pattern_names );
 		if ( is_wp_error( $context ) ) {
 			return $context;
 		}

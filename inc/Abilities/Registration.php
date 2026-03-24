@@ -316,6 +316,10 @@ final class Registration {
 							'description' => 'Template-part identifier from the Site Editor.',
 						],
 						'prompt'          => [ 'type' => 'string' ],
+						'visiblePatternNames' => [
+							'type'  => 'array',
+							'items' => [ 'type' => 'string' ],
+						],
 					],
 					'required'   => [ 'templatePartRef' ],
 				],
@@ -347,6 +351,17 @@ final class Registration {
 									'patternSuggestions' => [
 										'type'  => 'array',
 										'items' => [ 'type' => 'string' ],
+									],
+									'operations'         => [
+										'type'  => 'array',
+										'items' => [
+											'type'       => 'object',
+											'properties' => [
+												'type'        => [ 'type' => 'string' ],
+												'patternName' => [ 'type' => 'string' ],
+												'placement'   => [ 'type' => 'string' ],
+											],
+										],
 									],
 								],
 							],

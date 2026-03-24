@@ -21,6 +21,10 @@ function describeActivity( entry ) {
 		return 'Template action';
 	}
 
+	if ( entry?.surface === 'template-part' ) {
+		return 'Template part action';
+	}
+
 	if ( entry?.target?.blockName ) {
 		return entry.target.blockName.replace( 'core/', '' );
 	}

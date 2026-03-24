@@ -42,6 +42,7 @@ services:
     volumes:
       - wordpress_data:/var/www/html
       - ./:/var/www/html/wp-content/plugins/flavor-agent
+      - ./tests/e2e/wp70-theme:/var/www/html/wp-content/themes/flavor-agent-e2e
     working_dir: /var/www/html
 
   phpmyadmin:

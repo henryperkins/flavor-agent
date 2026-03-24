@@ -12,11 +12,14 @@ import { rawHandler } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { dispatch, select } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
-import { getAllowedPatterns } from '../patterns/compat';
+import { getAllowedPatterns } from '../patterns/pattern-settings';
 import {
 	TEMPLATE_OPERATION_ASSIGN,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
+	TEMPLATE_PART_PLACEMENT_END,
+	TEMPLATE_PART_PLACEMENT_START,
 	TEMPLATE_OPERATION_REPLACE,
+	validateTemplatePartOperationSequence,
 	validateTemplateOperationSequence,
 } from './template-operation-sequence';
 import {
@@ -368,6 +371,19 @@ function resolveInsertionPoint() {
 	};
 }
 
+function resolveTemplatePartInsertionPoint(
+	placement,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const blocks = blockEditorSelect?.getBlocks?.() || [];
+
+	return {
+		rootClientId: null,
+		index:
+			placement === TEMPLATE_PART_PLACEMENT_START ? 0 : blocks.length,
+	};
+}
+
 function resolvePatternByName( patternName, rootClientId = null ) {
 	return (
 		getPatternRegistry( rootClientId ).find(
@@ -518,6 +534,72 @@ function prepareInsertPatternOperation( operation ) {
 	};
 }
 
+function prepareTemplatePartInsertPatternOperation(
+	operation,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const patternName = operation?.patternName || '';
+	const placement = operation?.placement || '';
+	const insertionPoint = resolveTemplatePartInsertionPoint(
+		placement,
+		blockEditorSelect
+	);
+	const pattern = resolvePatternByName( patternName, insertionPoint.rootClientId );
+
+	if (
+		! pattern ||
+		typeof pattern.content !== 'string' ||
+		pattern.content.trim() === ''
+	) {
+		return {
+			error: `Pattern “${
+				patternName || 'unknown'
+			}” is not available in the current template-part context.`,
+		};
+	}
+
+	const blocks = rawHandler( { HTML: pattern.content } ).filter( Boolean );
+
+	if ( blocks.length === 0 ) {
+		return {
+			error: `Pattern “${
+				pattern.title || patternName
+			}” could not be converted into blocks.`,
+		};
+	}
+
+	const canInsertAll = blocks.every(
+		( block ) =>
+			! block?.name ||
+			blockEditorSelect?.canInsertBlockType?.(
+				block.name,
+				insertionPoint.rootClientId
+			) !== false
+	);
+
+	if ( ! canInsertAll ) {
+		return {
+			error: `Pattern “${
+				pattern.title || patternName
+			}” cannot be inserted at the ${ placement } of this template part.`,
+		};
+	}
+
+	return {
+		type: TEMPLATE_OPERATION_INSERT_PATTERN,
+		patternName,
+		patternTitle: pattern.title || patternName,
+		placement,
+		blocks,
+		rootClientId: insertionPoint.rootClientId,
+		rootLocator: {
+			type: 'root',
+			path: [],
+		},
+		index: insertionPoint.index,
+	};
+}
+
 export function prepareTemplateSuggestionOperations( suggestion ) {
 	const sequence = validateTemplateOperationSequence( suggestion?.operations );
 
@@ -562,6 +644,47 @@ export function prepareTemplateSuggestionOperations( suggestion ) {
 				return {
 					ok: false,
 					error: `Unsupported template operation “${
+						operation?.type || 'unknown'
+					}”.`,
+				};
+		}
+	}
+
+	return { ok: true, operations: preparedOperations };
+}
+
+export function prepareTemplatePartSuggestionOperations( suggestion ) {
+	const sequence = validateTemplatePartOperationSequence(
+		suggestion?.operations
+	);
+
+	if ( ! sequence.ok ) {
+		return sequence;
+	}
+
+	const preparedOperations = [];
+	const blockEditorSelect = select( blockEditorStore );
+
+	for ( const operation of sequence.operations ) {
+		switch ( operation?.type ) {
+			case TEMPLATE_OPERATION_INSERT_PATTERN: {
+				const prepared = prepareTemplatePartInsertPatternOperation(
+					operation,
+					blockEditorSelect
+				);
+
+				if ( prepared?.error ) {
+					return { ok: false, error: prepared.error };
+				}
+
+				preparedOperations.push( prepared );
+				break;
+			}
+
+			default:
+				return {
+					ok: false,
+					error: `Unsupported template-part operation “${
 						operation?.type || 'unknown'
 					}”.`,
 				};
@@ -626,6 +749,57 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 					type: operation.type,
 					patternName: operation.patternName,
 					patternTitle: operation.patternTitle,
+					rootLocator: operation.rootLocator,
+					index: operation.index,
+					insertedBlocksSnapshot: normalizeBlockSnapshots(
+						insertedSlice?.blocks || operation.blocks
+					),
+				} );
+				break;
+		}
+	}
+
+	return {
+		ok: true,
+		operations: appliedOperations,
+	};
+}
+
+export function applyTemplatePartSuggestionOperations( suggestion ) {
+	const prepared = prepareTemplatePartSuggestionOperations( suggestion );
+
+	if ( ! prepared.ok ) {
+		return prepared;
+	}
+
+	const blockEditorDispatch = dispatch( blockEditorStore );
+	const blockEditorSelect = select( blockEditorStore );
+	const appliedOperations = [];
+
+	for ( const operation of prepared.operations ) {
+		switch ( operation.type ) {
+			case TEMPLATE_OPERATION_INSERT_PATTERN:
+				blockEditorDispatch.insertBlocks(
+					operation.blocks,
+					operation.index,
+					operation.rootClientId,
+					true,
+					0
+				);
+				const insertedSlice =
+					getCurrentBlockSlice(
+						{
+							rootLocator: operation.rootLocator,
+							index: operation.index,
+							count: operation.blocks.length,
+						},
+						blockEditorSelect
+					) || null;
+				appliedOperations.push( {
+					type: operation.type,
+					patternName: operation.patternName,
+					patternTitle: operation.patternTitle,
+					placement: operation.placement,
 					rootLocator: operation.rootLocator,
 					index: operation.index,
 					insertedBlocksSnapshot: normalizeBlockSnapshots(
@@ -902,6 +1076,53 @@ export function prepareTemplateUndoOperations(
 	};
 }
 
+export function prepareTemplatePartUndoOperations(
+	activity,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const operations = getUndoSourceOperations( activity );
+
+	if ( operations.length === 0 ) {
+		return {
+			ok: false,
+			error: 'This AI template-part action does not include undoable operations.',
+		};
+	}
+
+	const preparedOperations = [];
+
+	for ( const operation of [ ...operations ].reverse() ) {
+		switch ( operation?.type ) {
+			case TEMPLATE_OPERATION_INSERT_PATTERN: {
+				const prepared = prepareUndoInsertPatternOperation(
+					operation,
+					blockEditorSelect
+				);
+
+				if ( prepared?.error ) {
+					return { ok: false, error: prepared.error };
+				}
+
+				preparedOperations.push( prepared );
+				break;
+			}
+
+			default:
+				return {
+					ok: false,
+					error: `Unsupported template-part undo operation “${
+						operation?.type || 'unknown'
+					}”.`,
+				};
+		}
+	}
+
+	return {
+		ok: true,
+		operations: preparedOperations,
+	};
+}
+
 export function getTemplateActivityUndoState(
 	activity,
 	blockEditorSelect = select( blockEditorStore )
@@ -945,6 +1166,49 @@ export function getTemplateActivityUndoState(
 	};
 }
 
+export function getTemplatePartActivityUndoState(
+	activity,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const existingUndo = activity?.undo || {};
+
+	if ( activity?.surface !== 'template-part' ) {
+		return existingUndo;
+	}
+
+	if ( existingUndo.status === 'undone' ) {
+		return existingUndo;
+	}
+
+	if ( existingUndo.status === 'failed' && existingUndo.canUndo === false ) {
+		return existingUndo;
+	}
+
+	const prepared = prepareTemplatePartUndoOperations(
+		activity,
+		blockEditorSelect
+	);
+
+	if ( prepared.ok ) {
+		return {
+			...existingUndo,
+			canUndo: true,
+			status: 'available',
+			error: null,
+		};
+	}
+
+	return {
+		...existingUndo,
+		canUndo: false,
+		status: 'failed',
+		error:
+			prepared.error ||
+			existingUndo.error ||
+			'This AI template-part action can no longer be undone automatically.',
+	};
+}
+
 export function undoTemplateSuggestionOperations( activity ) {
 	const prepared = prepareTemplateUndoOperations( activity );
 
@@ -969,6 +1233,37 @@ export function undoTemplateSuggestionOperations( activity ) {
 				} );
 				break;
 
+			case TEMPLATE_OPERATION_INSERT_PATTERN:
+				blockEditorDispatch.removeBlocks(
+					operation.insertedClientIds,
+					false
+				);
+				undoneOperations.push( {
+					type: operation.type,
+					insertedClientIds: operation.insertedClientIds,
+				} );
+				break;
+		}
+	}
+
+	return {
+		ok: true,
+		operations: undoneOperations,
+	};
+}
+
+export function undoTemplatePartSuggestionOperations( activity ) {
+	const prepared = prepareTemplatePartUndoOperations( activity );
+
+	if ( ! prepared.ok ) {
+		return prepared;
+	}
+
+	const blockEditorDispatch = dispatch( blockEditorStore );
+	const undoneOperations = [];
+
+	for ( const operation of prepared.operations ) {
+		switch ( operation.type ) {
 			case TEMPLATE_OPERATION_INSERT_PATTERN:
 				blockEditorDispatch.removeBlocks(
 					operation.insertedClientIds,

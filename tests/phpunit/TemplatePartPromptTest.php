@@ -99,6 +99,76 @@ final class TemplatePartPromptTest extends TestCase {
 						],
 					],
 					'patternSuggestions' => [ 'theme/header-utility' ],
+					'operations'         => [],
+				],
+			],
+			$result['suggestions']
+		);
+	}
+
+	public function test_parse_response_keeps_only_valid_template_part_operations(): void {
+		$context = [
+			'blockTree' => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'attributes' => [],
+					'childCount' => 0,
+					'children'   => [],
+				],
+			],
+			'patterns'  => [
+				[
+					'name' => 'theme/header-utility',
+				],
+				[
+					'name' => 'theme/header-minimal',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Add a utility row',
+						'description'        => 'Insert a compact row at the top of the header.',
+						'blockHints'         => [],
+						'patternSuggestions' => [],
+						'operations'         => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-utility',
+								'placement'   => 'start',
+							],
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-minimal',
+								'placement'   => 'middle',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Add a utility row',
+					'description'        => 'Insert a compact row at the top of the header.',
+					'blockHints'         => [],
+					'patternSuggestions' => [ 'theme/header-utility' ],
+					'operations'         => [
+						[
+							'type'        => 'insert_pattern',
+							'patternName' => 'theme/header-utility',
+							'placement'   => 'start',
+						],
+					],
 				],
 			],
 			$result['suggestions']
