@@ -1,6 +1,6 @@
 # WordPress 7.0 Developer Docs Index
 
-Generated: 2026-03-24 UTC
+Generated: 2026-03-25 UTC
 
 ## Scope
 
@@ -17,7 +17,7 @@ Excluded on purpose:
 - recurring agendas, chat summaries, volunteer calls, and similar coordination posts
 - generic handbook or reference pages that only mention 7.0 in passing
 
-Note: as of 2026-03-24, a `WordPress 7.0 Field Guide` post was not discoverable on Make/Core's `field guide` tag or in Make/Core `WordPress 7.0` search results. Release timing also shifted; see the RC1 delay post below.
+Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable on Make/Core's `field guide` tag or in Make/Core `WordPress 7.0` search results. Release timing also shifted; see the RC1 delay post below.
 
 ## Discovery Sources
 
@@ -36,6 +36,8 @@ Note: as of 2026-03-24, a `WordPress 7.0 Field Guide` post was not discoverable 
 
 ### APIs and platform
 
+- 2026-03-24: [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/)
+- 2026-03-24: [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/)
 - 2026-03-18: [Introducing the Connectors API in WordPress 7.0](https://make.wordpress.org/core/2026/03/18/introducing-the-connectors-api-in-wordpress-7-0/)
 - 2026-03-04: [DataViews, DataForm, et al. in WordPress 7.0](https://make.wordpress.org/core/2026/03/04/dataviews-dataform-et-al-in-wordpress-7-0/)
 - 2026-03-04: [Breadcrumb block filters](https://make.wordpress.org/core/2026/03/04/breadcrumb-block-filters/)
@@ -79,6 +81,6 @@ These are not dedicated release docs, but they surfaced in Developer Blog search
 ## Counts
 
 - 3 release hub and schedule docs
-- 16 Make/Core dev notes
+- 18 Make/Core dev notes
 - 5 testing docs
 - 4 supplemental Developer Blog roundup posts

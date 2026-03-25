@@ -1,6 +1,6 @@
 # WP 7.0 Migration Opportunities
 
-Generated: 2026-03-24
+Generated: 2026-03-25
 
 ## Applied Changes
 
@@ -66,6 +66,12 @@ The plugin already has partial Connectors integration: `inc/OpenAI/Provider.php`
 - Register the plugin's Azure OpenAI, Qdrant, and Cloudflare services as connectors via `wp_connectors_init`
 - Migrate credential management from the custom Settings page to the Connectors screen
 - Use `wp_get_connector()` to check provider availability instead of custom option checks
+
+### Client-Side Abilities API (no immediate code change)
+
+WordPress 7.0 now ships `@wordpress/abilities` plus `@wordpress/core-abilities` for client-side ability registration, querying, and execution. Because Flavor Agent already registers its abilities in PHP with `meta.show_in_rest`, those abilities are now automatically hydrated into the admin-side `core/abilities` store when core loads `@wordpress/core-abilities`.
+
+No code change is required for the current first-party UI. The plugin can keep using feature-specific REST endpoints and its own `@wordpress/data` store for scoped permission checks, preview/apply flow, and undo. The new client-side store is mainly an additional integration surface for future admin-only tooling or browser-agent workflows.
 
 ### Pattern Overrides for Custom Blocks (feature)
 

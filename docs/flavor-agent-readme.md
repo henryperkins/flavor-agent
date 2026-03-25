@@ -2,14 +2,17 @@
 
 Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the block editor.
 
-It currently has four primary editor experiences:
+This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`.
+
+It currently has five primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and core Connectors.
 - Pattern recommendations in the native inserter, powered by the active OpenAI provider (Azure OpenAI or OpenAI Native) plus Qdrant.
+- Navigation recommendations in the native Inspector for selected `core/navigation` blocks, powered by the active OpenAI provider and scoped as advisory guidance today.
 - Template recommendations in the Site Editor, powered by the active OpenAI provider with validated template-part and pattern operations.
 - Template-part recommendations in the Site Editor, scoped to individual template parts with a narrow review-confirm-apply path for validated pattern insertion at the start or end of the current part.
 
-There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write session-scoped AI activity entries with inline undo.
+There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now uses the shared activity backend when available.
 
 ## Current Architecture
 
@@ -182,7 +185,7 @@ Implemented abilities:
 - `flavor-agent/recommend-navigation`
 - `flavor-agent/check-status`
 
-All currently registered abilities in the tree are implemented. The Abilities API path is additive for WordPress versions that expose those hooks; the editor-side REST and injected UI path remains the primary runtime path.
+All currently registered abilities in the tree are implemented. On WordPress 7.0 admin screens, core now enqueues `@wordpress/core-abilities`, so these server-registered abilities are also hydrated into the client-side `core/abilities` store automatically. Flavor Agent's first-party editor UI still uses its own REST endpoints and `flavor-agent` data store so prompt scoping, preview/apply, and undo stay tightly bounded.
 
 ## Pattern Index Lifecycle
 

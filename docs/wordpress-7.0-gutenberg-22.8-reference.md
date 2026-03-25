@@ -1,8 +1,8 @@
 # WordPress 7.0 / Gutenberg 22.8 -- Developer Reference
 
 > Compiled: 2026-03-19
-> Reviewed: 2026-03-24
-> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0-rc.1, official dev notes
+> Reviewed: 2026-03-25
+> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0-rc.1, official dev notes through 2026-03-24
 > Scope: API changes, new features, and deprecations relevant to block editor plugin development
 
 ### Official References
@@ -12,6 +12,8 @@
 - [WordPress 7.0 Release Page](https://make.wordpress.org/core/7-0/) -- Schedule, leads, milestones
 - [Planning for 7.0](https://make.wordpress.org/core/2025/12/11/planning-for-7-0/) -- Feature targets and roadmap
 - [AI as a WordPress Fundamental](https://make.wordpress.org/core/2025/12/04/ai-as-a-wordpress-fundamental/) -- Vision for AI in core
+- [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/) -- Final WordPress 7.0 AI client dev note
+- [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/) -- Final JavaScript Abilities API dev note
 
 ---
 
@@ -19,16 +21,17 @@
 
 1. [Connectors API](#connectors-api)
 2. [WP AI Client](#wp-ai-client)
-3. [Pattern Editing](#pattern-editing)
-4. [Pattern Overrides for Custom Blocks](#pattern-overrides-for-custom-blocks)
-5. [Dimensions Support Enhancements](#dimensions-support-enhancements)
-6. [Block Bindings API](#block-bindings-api)
-7. [Navigation Overlays](#navigation-overlays)
-8. [Interactivity API Changes](#interactivity-api-changes)
-9. [Block API and Editor Changes](#block-api-and-editor-changes)
-10. [Experimental API Status](#experimental-api-status)
-11. [New WP-CLI Commands](#new-wp-cli-commands)
-12. [Impact on Flavor Agent](#impact-on-flavor-agent)
+3. [Client-Side Abilities API](#client-side-abilities-api)
+4. [Pattern Editing](#pattern-editing)
+5. [Pattern Overrides for Custom Blocks](#pattern-overrides-for-custom-blocks)
+6. [Dimensions Support Enhancements](#dimensions-support-enhancements)
+7. [Block Bindings API](#block-bindings-api)
+8. [Navigation Overlays](#navigation-overlays)
+9. [Interactivity API Changes](#interactivity-api-changes)
+10. [Block API and Editor Changes](#block-api-and-editor-changes)
+11. [Experimental API Status](#experimental-api-status)
+12. [New WP-CLI Commands](#new-wp-cli-commands)
+13. [Impact on Flavor Agent](#impact-on-flavor-agent)
 
 ---
 
@@ -127,72 +130,100 @@ During `init`:
 
 **Since:** WordPress 7.0.0
 **Trac:** [#64591 -- Add WP AI Client and corresponding connectors screen](https://core.trac.wordpress.org/ticket/64591) (closed/fixed, milestone 7.0)
+**Dev note:** [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/)
 **Proposal:** [Proposal for Merging WP AI Client into WordPress 7.0](https://make.wordpress.org/core/2026/02/03/proposal-for-merging-wp-ai-client-into-wordpress-7-0/)
-**Dev repo (deprecated):** [WordPress/wp-ai-client](https://github.com/WordPress/wp-ai-client) -- deprecated in favor of the built-in AI client in WordPress 7.0+
+**Upgrade guide:** [WP AI Client upgrade guide](https://github.com/WordPress/wp-ai-client)
+**Legacy package:** [WordPress/wp-ai-client](https://github.com/WordPress/wp-ai-client) -- the PHP SDK layer is superseded by core on WordPress 7.0+, while the package's REST endpoints and JavaScript API remain separate for now
 
-### Architecture
+### Entry Point
 
-Two layers are bundled in core:
+Every interaction starts with `wp_ai_client_prompt()`, which returns a `WP_AI_Client_Prompt_Builder`:
+
+```php
+$text = wp_ai_client_prompt( 'Summarize the benefits of caching in WordPress.' )
+	->using_temperature( 0.7 )
+	->generate_text();
+
+if ( is_wp_error( $text ) ) {
+	// Handle error.
+}
+```
+
+You can pass prompt text inline for convenience or build the prompt incrementally with `with_text()`.
+
+### Core Generation Methods
+
+| Method | Returns | Notes |
+|--------|---------|-------|
+| `generate_text()` | `string\|WP_Error` | Primary text-generation path used by Flavor Agent |
+| `generate_texts( int $count )` | `string[]\|WP_Error` | Multiple text variations |
+| `generate_image()` / `generate_images( int $count )` | `File\|File[]\|WP_Error` | Image output as DTOs |
+| `generate_text_result()` / `generate_image_result()` / `convert_text_to_speech_result()` / `generate_speech_result()` / `generate_video_result()` | `GenerativeAiResult\|WP_Error` | Rich metadata wrapper for a specific modality |
+| `generate_result()` | `GenerativeAiResult\|WP_Error` | Multimodal output when using `as_output_modalities()` |
+
+### Result Metadata
+
+When you need provider/model provenance or token accounting, use a `generate_*_result()` method and inspect the returned `GenerativeAiResult`:
+
+- `getTokenUsage()`
+- `getProviderMetadata()`
+- `getModelMetadata()`
+
+The result object is serializable, so a REST callback can return it directly through `rest_ensure_response()`.
+
+### Model Selection And Feature Detection
+
+WordPress site owners choose and configure providers in `Settings > Connectors`. Plugins should describe preferences rather than assume a specific provider exists:
+
+```php
+$result = wp_ai_client_prompt( 'Summarize the history of the printing press.' )
+	->using_temperature( 0.1 )
+	->using_model_preference(
+		'claude-sonnet-4-6',
+		'gemini-3.1-pro-preview',
+		'gpt-5.4'
+	)
+	->generate_text_result();
+```
+
+Before surfacing AI UI, use the builder's deterministic support checks:
+
+- `is_supported_for_text_generation()`
+- `is_supported_for_image_generation()`
+- `is_supported_for_text_to_speech_conversion()`
+- `is_supported_for_speech_generation()`
+- `is_supported_for_video_generation()`
+
+These checks do not make API calls. They also respect the `wp_ai_client_prevent_prompt` filter, which means a prevented prompt will report unsupported and the related `generate_*()` call will return `WP_Error`.
+
+### Bundled Layers
 
 | Layer | Files | Packagist | Purpose |
 |-------|-------|-----------|---------|
 | PHP AI Client SDK | `wp-includes/php-ai-client/` | [`wordpress/php-ai-client`](https://packagist.org/packages/wordpress/php-ai-client) | Low-level, provider-agnostic SDK (similar to how `Requests` is bundled) |
 | WordPress AI Client | `wp-includes/ai-client/`, `wp-includes/ai-client.php` | N/A (part of core) | WordPress wrapper: `WP_AI_Client_Prompt_Builder`, adapters, `wp_ai_client_prompt()` entry point |
 
-The public API entry point is `wp_ai_client_prompt()`:
-
-```php
-// The recommended entry point -- uses the default provider registry.
-$result = wp_ai_client_prompt( 'Recommend a block layout for a services page.' )
-    ->using_system_instruction( 'You are a helpful assistant.' )
-    ->using_provider( 'anthropic' )
-    ->using_max_tokens( 4096 )
-    ->using_temperature( 0.7 )
-    ->generate_text();
-
-if ( is_wp_error( $result ) ) {
-    // Handle error.
-}
-```
-
-### WP_AI_Client_Prompt_Builder
-
-Fluent builder wrapping the PHP AI Client SDK with WordPress-specific behavior (WP_Error instead of exceptions, snake_case methods, Abilities API integration).
-
-### Key Methods
+### Common Builder Methods
 
 | Method | Purpose |
 |--------|---------|
 | `with_text( string $text )` | Add text to current message |
 | `with_file( $file, ?string $mimeType )` | Add a file (image, etc.) |
-| `with_function_response( FunctionResponse $resp )` | Add tool call response |
 | `with_history( Message ...$messages )` | Add conversation history |
-| `using_provider( string $id )` | Set provider (e.g., `'anthropic'`) |
-| `using_model( ModelInterface $model )` | Set specific model |
-| `using_model_preference( ...$models )` | Set preferred models in order |
 | `using_system_instruction( string $text )` | Set system prompt |
 | `using_max_tokens( int $n )` | Set max output tokens |
 | `using_temperature( float $t )` | Set temperature |
-| `using_function_declarations( FunctionDeclaration ...$fns )` | Register tool functions |
-| `using_abilities( WP_Ability\|string ...$abilities )` | Register WP abilities as tool functions |
+| `using_top_p()` / `using_top_k()` | Sampling controls |
+| `using_stop_sequences()` | Stop tokens |
+| `using_model_preference( ...$models )` | Preferred models in order |
+| `as_output_modalities()` | Multimodal output |
+| `as_output_file_type()` | Image output format |
 | `as_json_response( ?array $schema )` | Request JSON output |
-| `generate_text()` | Generate text (returns `string\|WP_Error`) |
-| `generate_image()` | Generate image (returns `File\|WP_Error`) |
-
-### Abilities Integration
-
-The `using_abilities()` method converts `WP_Ability` objects to `FunctionDeclaration` instances using the `wpab__` prefix naming convention:
-
-```php
-$builder = ( new WP_AI_Client_Prompt_Builder( AiClient::defaultRegistry() ) )
-    ->using_abilities( 'flavor-agent/recommend-block', 'flavor-agent/get-theme-tokens' )
-    ->with_text( 'Help me improve this page layout.' )
-    ->generate_text();
-```
+| `generate_result()` | Multimodal result wrapper |
 
 ### Error Handling
 
-Only generating methods (`generate_text()`, `generate_image()`, etc.) return `WP_Error`. All other methods return `$this` for chaining. If an error occurs mid-chain, subsequent calls are no-ops until a generating method is called.
+The WordPress wrapper converts lower-level exceptions into `WP_Error`, so the public API follows standard WordPress error handling. When used in REST callbacks, both `GenerativeAiResult` and `WP_Error` can be returned via `rest_ensure_response()`.
 
 Error codes:
 - `prompt_network_error` (503)
@@ -202,6 +233,16 @@ Error codes:
 - `prompt_invalid_argument` (400)
 - `prompt_prevented` (503) -- blocked by `wp_ai_client_prevent_prompt` filter
 - `prompt_builder_error` (500)
+
+### Credential Management And Provider Plugins
+
+Credentials are managed through the Connectors API. Provider plugins that register with the PHP AI Client's provider registry get automatic `Settings > Connectors` integration, so plugin authors using the AI client do not need to manage provider credentials themselves.
+
+The three initial official provider plugins are:
+
+- AI Provider for Anthropic
+- AI Provider for Google
+- AI Provider for OpenAI
 
 ### Filters
 
@@ -216,6 +257,86 @@ add_filter( 'wp_ai_client_prevent_prompt', function ( $prevent, $builder ) {
     return $prevent;
 }, 10, 2 );
 ```
+
+### JavaScript API Status
+
+The `wordpress/wp-ai-client` package still exposes REST endpoints and a JavaScript prompt builder, but that JavaScript API is not part of WordPress core. The March 24 dev note explicitly recommends feature-specific REST endpoints for distributed plugins instead of exposing arbitrary client-side prompt execution, because the generic JavaScript API requires a high-privilege capability and is too open-ended for most plugin UIs.
+
+### Migration Notes
+
+- If you require WordPress 7.0+, replace `AI_Client::prompt()` calls with `wp_ai_client_prompt()` and remove the Composer dependency on `wordpress/php-ai-client` when possible.
+- If you must support WordPress versions earlier than 7.0, conditionally load the `wordpress/php-ai-client` dependency only on those older installs to avoid duplicate class definitions.
+- The `wordpress/wp-ai-client` package still handles the 7.0 transition for plugins that rely on its REST or JavaScript layers, but that package is now mostly a compatibility shim on 7.0+.
+
+---
+
+## Client-Side Abilities API
+
+**Since:** WordPress 7.0.0
+**Dev note:** [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/)
+
+### Two Packages
+
+| Package | Purpose | When To Use It |
+|---------|---------|----------------|
+| `@wordpress/abilities` | Pure state-management package with registration, querying, and execution | Client-only abilities or direct access to the abilities store |
+| `@wordpress/core-abilities` | WordPress integration layer over the REST API | Any admin-side code that needs server-registered abilities |
+
+When `@wordpress/core-abilities` loads, it fetches categories and abilities from `/wp-abilities/v1/` and registers them into the `@wordpress/abilities` store automatically.
+
+### Enqueue Guidance
+
+- Enqueue `@wordpress/core-abilities` when your UI needs abilities registered in PHP via `wp_register_ability()` / `wp_register_ability_category()`.
+- Enqueue only `@wordpress/abilities` when you are building a narrowly scoped client-only ability surface and do not need server abilities.
+- On WordPress 7.0 admin pages, core already enqueues `@wordpress/core-abilities`, so server-registered abilities are available in admin by default.
+
+### JavaScript Surface
+
+Import dynamically or as a normal script-module dependency:
+
+```js
+const {
+	registerAbility,
+	registerAbilityCategory,
+	getAbilities,
+	executeAbility,
+} = await import( '@wordpress/abilities' );
+```
+
+Key client APIs:
+
+- `registerAbilityCategory()`
+- `registerAbility()`
+- `getAbilities()` / `getAbility()`
+- `getAbilityCategories()` / `getAbilityCategory()`
+- `executeAbility()`
+- `unregisterAbility()` / `unregisterAbilityCategory()`
+
+The store key is `core/abilities`, so React components can query it through `@wordpress/data`:
+
+```js
+import { useSelect } from '@wordpress/data';
+import { store as abilitiesStore } from '@wordpress/abilities';
+
+const abilities = useSelect(
+	( select ) => select( abilitiesStore ).getAbilities(),
+	[]
+);
+```
+
+### Validation, Permissions, And Transport
+
+- Client-registered abilities should define draft-04 JSON Schemas via `input_schema` and `output_schema`.
+- `executeAbility()` throws `ability_invalid_input` or `ability_invalid_output` when schema validation fails.
+- `permissionCallback` can deny execution with `ability_permission_denied`.
+- For server-side abilities bridged through REST, transport depends on annotations:
+  - `readonly: true` -> `GET`
+  - `destructive: true` and `idempotent: true` -> `DELETE`
+  - everything else -> `POST`
+
+### Relevance To Flavor Agent
+
+Flavor Agent already registers its abilities server-side and sets `meta.show_in_rest` for them, so WordPress 7.0 now makes those abilities available in the admin-side client store automatically. The plugin's first-party UI can still keep using feature-specific REST endpoints and its own `flavor-agent` data store for prompt scoping, preview/apply flow, and undo.
 
 ---
 
@@ -714,7 +835,8 @@ These APIs remain experimental in both WP 7.0 and Gutenberg 22.8. They are the c
 | `setIsInserterOpened` | `core/editor` action |
 | `PluginDocumentSettingPanel` | `@wordpress/editor` component |
 | `updateSettings` | `core/block-editor` action |
-| `wp_register_ability` / `wp_register_ability_category` | `wp-includes/abilities-api.php` ([Abilities API dev note](https://make.wordpress.org/core/2025/11/10/abilities-api-in-wordpress-6-9/)) |
+| `wp_register_ability` / `wp_register_ability_category` | `wp-includes/abilities-api.php` ([server-side dev note](https://make.wordpress.org/core/2025/11/10/abilities-api-in-wordpress-6-9/)) |
+| `@wordpress/abilities` / `@wordpress/core-abilities` | Script modules ([client-side dev note](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/)) |
 | `register_block_bindings_source` | `wp-includes/block-bindings.php` |
 | `block_bindings_supported_attributes` filter | `wp-includes/block-bindings.php` |
 
@@ -744,6 +866,8 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 
 | Topic | Link |
 |-------|------|
+| AI Client | [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/) |
+| Client-Side Abilities API | [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/) |
 | Real-Time Collaboration | [Real-Time Collaboration in the Block Editor](https://make.wordpress.org/core/2026/03/10/real-time-collaboration-in-the-block-editor/) |
 | DataViews / DataForm | [DataViews, DataForm, et al. in WordPress 7.0](https://make.wordpress.org/core/2026/03/04/dataviews-dataform-et-al-in-wordpress-7-0/) |
 | Breadcrumb Block Filters | [Breadcrumb block filters](https://make.wordpress.org/core/2026/03/04/breadcrumb-block-filters/) |
@@ -776,6 +900,7 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | `disableContentOnlyForUnsyncedPatterns` | Plugin reads mode result, not settings flag |
 | `__experimentalRole` fallback | Intentional non-goal: Flavor Agent now targets WordPress 7.0+ and reads only the stable `role` key. |
 | WP AI Client + Connectors for block recommendations | Block recommendations already route through `WordPressAIClient` and the core `Settings > Connectors` setup flow. |
+| Client-side Abilities auto-registration | Flavor Agent already registers its abilities server-side with `show_in_rest`, so WordPress 7.0 now exposes them in the admin-side `core/abilities` store without extra plugin setup. The current UI can continue using scoped REST endpoints. |
 | Navigation overlay support | `recommend-navigation` is implemented, and server-side navigation context already collects `navigation-overlay` template parts. |
 | Editor iframe changes (punted to 7.1) | Plugin uses iframe-safe patterns already |
 | New typography supports (`fitText`, `textIndent`) | Auto-detected by `resolveInspectorPanels()` |
