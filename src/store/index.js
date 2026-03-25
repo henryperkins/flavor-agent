@@ -19,9 +19,13 @@ import {
 } from '../utils/template-actions';
 import {
 	createActivityEntry,
+	getActivityEntityKey,
 	getCurrentActivityScope,
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
+	getPendingActivitySyncType,
+	getResolvedActivityUndoState,
+	isLocalActivityEntry,
 	limitActivityLog,
 	readPersistedActivityLog,
 	writePersistedActivityLog,
@@ -44,6 +48,14 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 const DEFAULT_STATE = {
 	blockRecommendations: {},
 	blockRequestState: {},
+	navigationRecommendations: [],
+	navigationExplanation: '',
+	navigationStatus: 'idle',
+	navigationError: null,
+	navigationRequestPrompt: '',
+	navigationBlockClientId: null,
+	navigationRequestToken: 0,
+	navigationResultToken: 0,
 	activityScopeKey: null,
 	activityLog: [],
 	undoStatus: 'idle',
@@ -112,6 +124,14 @@ function isStaleTemplatePartRequest( state, requestToken ) {
 	return requestToken < ( state.templatePartRequestToken || 0 );
 }
 
+function isStaleNavigationRequest( state, requestToken ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	return requestToken < ( state.navigationRequestToken || 0 );
+}
+
 function buildActivityDocument( scope ) {
 	if ( ! scope?.key ) {
 		return null;
@@ -141,12 +161,17 @@ function alignActivityEntriesToScope( entries, scope ) {
 	);
 }
 
-function syncActivitySession( localDispatch, select, scope ) {
+function syncActivitySession(
+	localDispatch,
+	select,
+	scope,
+	{ allowUnsavedMigration = false } = {}
+) {
 	const currentScopeKey = select.getActivityScopeKey?.() || null;
 	const nextScopeKey = scope?.key || null;
 
 	if ( currentScopeKey === nextScopeKey ) {
-		return;
+		return select.getActivityLog?.() || [];
 	}
 
 	const currentEntries = select.getActivityLog?.() || [];
@@ -154,7 +179,8 @@ function syncActivitySession( localDispatch, select, scope ) {
 	if (
 		currentScopeKey === null &&
 		nextScopeKey &&
-		currentEntries.length > 0
+		currentEntries.length > 0 &&
+		allowUnsavedMigration
 	) {
 		const reassignedEntries = alignActivityEntriesToScope(
 			currentEntries,
@@ -166,15 +192,16 @@ function syncActivitySession( localDispatch, select, scope ) {
 		);
 		writePersistedActivityLog( nextScopeKey, reassignedEntries );
 
-		return;
+		return reassignedEntries;
 	}
 
-	localDispatch(
-		actions.setActivitySession(
-			nextScopeKey,
-			nextScopeKey ? readPersistedActivityLog( nextScopeKey ) : []
-		)
-	);
+	const cachedEntries = nextScopeKey
+		? readPersistedActivityLog( nextScopeKey )
+		: [];
+
+	localDispatch( actions.setActivitySession( nextScopeKey, cachedEntries ) );
+
+	return cachedEntries;
 }
 
 function persistActivitySession( select ) {
@@ -185,6 +212,281 @@ function persistActivitySession( select ) {
 	}
 
 	writePersistedActivityLog( scopeKey, select.getActivityLog?.() || [] );
+}
+
+function getApiErrorStatus( error ) {
+	const dataStatus = Number( error?.data?.status );
+
+	if ( Number.isInteger( dataStatus ) && dataStatus > 0 ) {
+		return dataStatus;
+	}
+
+	const errorStatus = Number( error?.status );
+
+	if ( Number.isInteger( errorStatus ) && errorStatus > 0 ) {
+		return errorStatus;
+	}
+
+	const responseStatus = Number( error?.response?.status );
+
+	return Number.isInteger( responseStatus ) && responseStatus > 0
+		? responseStatus
+		: 0;
+}
+
+function getApiErrorMessage( error, fallback = 'Request failed.' ) {
+	return typeof error?.message === 'string' && error.message
+		? error.message
+		: fallback;
+}
+
+function buildActivityQueryPath( {
+	scopeKey,
+	surface = '',
+	entityType = '',
+	entityRef = '',
+	limit = null,
+} ) {
+	const params = new URLSearchParams();
+
+	if ( scopeKey ) {
+		params.set( 'scopeKey', scopeKey );
+	}
+
+	if ( surface ) {
+		params.set( 'surface', surface );
+	}
+
+	if ( entityType ) {
+		params.set( 'entityType', entityType );
+	}
+
+	if ( entityRef ) {
+		params.set( 'entityRef', entityRef );
+	}
+
+	if ( Number.isInteger( limit ) && limit > 0 ) {
+		params.set( 'limit', String( limit ) );
+	}
+
+	const query = params.toString();
+
+	return query
+		? `/flavor-agent/v1/activity?${ query }`
+		: '/flavor-agent/v1/activity';
+}
+
+function mergeActivityEntries( ...entrySets ) {
+	const mergedEntries = new Map();
+
+	entrySets
+		.flat()
+		.filter( Boolean )
+		.forEach( ( entry ) => {
+			if ( entry?.id ) {
+				mergedEntries.set( entry.id, entry );
+			}
+		} );
+
+	return limitActivityLog( [ ...mergedEntries.values() ] );
+}
+
+function refreshActivitySession( localDispatch, scopeKey, entries ) {
+	localDispatch( actions.setActivitySession( scopeKey, entries ) );
+	writePersistedActivityLog( scopeKey, entries );
+}
+
+async function fetchServerActivityEntries( scopeKey ) {
+	const response = await apiFetch( {
+		path: buildActivityQueryPath( {
+			scopeKey,
+		} ),
+		method: 'GET',
+	} );
+
+	return limitActivityLog( response?.entries || [] );
+}
+
+async function persistServerActivityEntry( entry ) {
+	const response = await apiFetch( {
+		path: '/flavor-agent/v1/activity',
+		method: 'POST',
+		data: {
+			entry,
+		},
+	} );
+
+	return response?.entry || entry;
+}
+
+async function persistActivityUndoTransition( entry ) {
+	const response = await apiFetch( {
+		path: `/flavor-agent/v1/activity/${ encodeURIComponent(
+			entry.id
+		) }/undo`,
+		method: 'POST',
+		data: entry?.undo?.error
+			? {
+					status: entry?.undo?.status,
+					error: entry.undo.error,
+			  }
+			: {
+					status: entry?.undo?.status,
+			  },
+	} );
+
+	return response?.entry || entry;
+}
+
+function shouldSyncUndoTransition( entry ) {
+	const pendingSyncType = getPendingActivitySyncType( entry );
+
+	if ( pendingSyncType === 'undo' ) {
+		return true;
+	}
+
+	return entry?.persistence?.status === 'server';
+}
+
+function buildActivityPersistenceUpdate(
+	status,
+	syncType = null,
+	updatedAt = new Date().toISOString()
+) {
+	return {
+		status,
+		syncType: status === 'server' ? null : syncType || 'create',
+		updatedAt,
+	};
+}
+
+function buildUndoAuditSyncError( message ) {
+	return `${ message } Flavor Agent could not persist the activity audit update and will retry on the next activity sync.`;
+}
+
+function isServerBackedActivityEntry( entry ) {
+	return entry?.persistence?.status === 'server';
+}
+
+function isRetryableActivitySyncError( error ) {
+	const status = getApiErrorStatus( error );
+
+	if ( status === 0 || status === 408 || status === 425 || status === 429 ) {
+		return true;
+	}
+
+	return status >= 500;
+}
+
+function isNonRetryableUndoSyncError( entry, error ) {
+	if (
+		! isServerBackedActivityEntry( entry ) &&
+		getPendingActivitySyncType( entry ) !== 'undo'
+	) {
+		return false;
+	}
+
+	const status = getApiErrorStatus( error );
+
+	if ( status < 400 || status >= 500 ) {
+		return false;
+	}
+
+	return ! isRetryableActivitySyncError( error );
+}
+
+function buildNonRetryableUndoSyncEntry(
+	entry,
+	error,
+	timestamp = new Date().toISOString()
+) {
+	const message = getApiErrorMessage(
+		error,
+		'This AI action can no longer be undone automatically.'
+	);
+
+	return {
+		...entry,
+		undo: {
+			...( entry?.undo || {} ),
+			canUndo: false,
+			status: 'failed',
+			error: message,
+			updatedAt: timestamp,
+			undoneAt: null,
+		},
+		persistence: buildActivityPersistenceUpdate(
+			'server',
+			null,
+			timestamp
+		),
+	};
+}
+
+async function persistPendingActivityEntry( entry ) {
+	switch ( getPendingActivitySyncType( entry ) ) {
+		case 'undo':
+			return persistActivityUndoTransition( entry );
+		case 'create':
+		default:
+			return persistServerActivityEntry( entry );
+	}
+}
+
+async function persistPendingActivityEntries( entries = [] ) {
+	const persistedEntries = [];
+	const failedEntries = [];
+	const terminalEntries = [];
+
+	for ( const entry of entries ) {
+		try {
+			persistedEntries.push( await persistPendingActivityEntry( entry ) );
+		} catch ( error ) {
+			if ( isNonRetryableUndoSyncError( entry, error ) ) {
+				terminalEntries.push(
+					buildNonRetryableUndoSyncEntry( entry, error )
+				);
+				continue;
+			}
+
+			failedEntries.push( entry );
+		}
+	}
+
+	return {
+		persistedEntries,
+		failedEntries,
+		terminalEntries,
+	};
+}
+
+async function recordActivityEntry( localDispatch, select, entry ) {
+	let nextEntry = entry;
+
+	if ( entry?.document?.scopeKey ) {
+		try {
+			nextEntry = await persistServerActivityEntry( entry );
+		} catch {
+			nextEntry = entry;
+		}
+	}
+
+	localDispatch( actions.logActivity( nextEntry ) );
+	persistActivitySession( select );
+
+	return nextEntry;
+}
+
+function getEntityActivityEntries( activityLog, activity ) {
+	const entityKey = getActivityEntityKey( activity );
+
+	if ( ! entityKey ) {
+		return [];
+	}
+
+	return activityLog.filter(
+		( entry ) => getActivityEntityKey( entry ) === entityKey
+	);
 }
 
 function findBlockPath( blocks, clientId, path = [] ) {
@@ -290,10 +592,7 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 			case 'replace_template_part':
 				return {
 					type: operation.type,
-					area:
-						operation?.undoLocator?.area ||
-						operation?.area ||
-						'',
+					area: operation?.undoLocator?.area || operation?.area || '',
 					expectedSlug:
 						operation?.undoLocator?.expectedSlug ||
 						operation?.nextAttributes?.slug ||
@@ -309,10 +608,9 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 					patternTitle: operation.patternTitle || '',
 					placement: operation.placement || '',
 					rootLocator: operation.rootLocator || null,
-					index:
-						Number.isInteger( operation.index )
-							? operation.index
-							: null,
+					index: Number.isInteger( operation.index )
+						? operation.index
+						: null,
 				};
 
 			default:
@@ -370,7 +668,9 @@ function buildTemplatePartActivityEntry( {
 		},
 		after: { operations },
 		prompt: requestPrompt,
-		requestRef: `template-part:${ templatePartRef || 'unknown' }:${ requestToken }`,
+		requestRef: `template-part:${
+			templatePartRef || 'unknown'
+		}:${ requestToken }`,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -502,7 +802,8 @@ const actions = {
 		activityId,
 		status,
 		error = null,
-		timestamp = new Date().toISOString()
+		timestamp = new Date().toISOString(),
+		persistence = null
 	) {
 		return {
 			type: 'UPDATE_ACTIVITY_UNDO_STATE',
@@ -510,6 +811,7 @@ const actions = {
 			status,
 			error,
 			timestamp,
+			persistence,
 		};
 	},
 
@@ -517,11 +819,73 @@ const actions = {
 		return { type: 'CLEAR_UNDO_ERROR' };
 	},
 
-	loadActivitySession() {
+	loadActivitySession( options = {} ) {
 		return async ( { dispatch, registry, select } ) => {
+			const requestToken = ( actions._activitySessionLoadToken || 0 ) + 1;
+			actions._activitySessionLoadToken = requestToken;
 			const scope = getCurrentActivityScope( registry );
+			const nextScopeKey = scope?.key || null;
 
-			syncActivitySession( dispatch, select, scope );
+			if ( ! nextScopeKey ) {
+				syncActivitySession( dispatch, select, scope, {
+					allowUnsavedMigration:
+						options?.allowUnsavedMigration === true,
+				} );
+
+				return;
+			}
+
+			const workingEntries = syncActivitySession(
+				dispatch,
+				select,
+				scope,
+				{
+					allowUnsavedMigration:
+						options?.allowUnsavedMigration === true,
+				}
+			);
+			const pendingEntries =
+				workingEntries.filter( isLocalActivityEntry );
+			const { persistedEntries, failedEntries, terminalEntries } =
+				await persistPendingActivityEntries( pendingEntries );
+			const terminalEntryIds = new Set(
+				terminalEntries.map( ( entry ) => entry?.id ).filter( Boolean )
+			);
+
+			try {
+				const serverEntries =
+					await fetchServerActivityEntries( nextScopeKey );
+				const mergedEntries = mergeActivityEntries(
+					serverEntries,
+					persistedEntries,
+					failedEntries
+				);
+
+				if ( actions._activitySessionLoadToken !== requestToken ) {
+					return;
+				}
+
+				refreshActivitySession( dispatch, nextScopeKey, mergedEntries );
+			} catch {
+				const fallbackEntries = mergeActivityEntries(
+					workingEntries.filter(
+						( entry ) => ! terminalEntryIds.has( entry?.id )
+					),
+					persistedEntries,
+					failedEntries,
+					terminalEntries
+				);
+
+				if ( actions._activitySessionLoadToken !== requestToken ) {
+					return;
+				}
+
+				refreshActivitySession(
+					dispatch,
+					nextScopeKey,
+					fallbackEntries
+				);
+			}
 		};
 	},
 
@@ -631,26 +995,24 @@ const actions = {
 				return false;
 			}
 
-			localDispatch(
-				actions.logActivity(
-					buildBlockActivityEntry( {
-						afterAttributes: nextAttributes || currentAttributes,
-						beforeAttributes: currentAttributes,
-						blockContext,
-						blockPath: findBlockPath(
-							blockEditorSelect.getBlocks?.() || [],
-							clientId
-						),
-						clientId,
-						requestPrompt: storedRecommendations.prompt || '',
-						requestToken:
-							select.getBlockRequestToken( clientId ) || 0,
-						scope,
-						suggestion,
-					} )
-				)
+			await recordActivityEntry(
+				localDispatch,
+				select,
+				buildBlockActivityEntry( {
+					afterAttributes: nextAttributes || currentAttributes,
+					beforeAttributes: currentAttributes,
+					blockContext,
+					blockPath: findBlockPath(
+						blockEditorSelect.getBlocks?.() || [],
+						clientId
+					),
+					clientId,
+					requestPrompt: storedRecommendations.prompt || '',
+					requestToken: select.getBlockRequestToken( clientId ) || 0,
+					scope,
+					suggestion,
+				} )
 			);
-			persistActivitySession( select );
 
 			return true;
 		};
@@ -662,6 +1024,51 @@ const actions = {
 
 	setPatternRecommendations( recommendations ) {
 		return { type: 'SET_PATTERN_RECS', recommendations };
+	},
+
+	setNavigationStatus(
+		status,
+		error = null,
+		requestToken = null,
+		blockClientId = null
+	) {
+		return {
+			type: 'SET_NAVIGATION_STATUS',
+			status,
+			error,
+			requestToken,
+			blockClientId,
+		};
+	},
+
+	setNavigationRecommendations(
+		blockClientId,
+		payload,
+		prompt = '',
+		requestToken = null
+	) {
+		return {
+			type: 'SET_NAVIGATION_RECS',
+			blockClientId,
+			payload,
+			prompt,
+			requestToken,
+		};
+	},
+
+	clearNavigationError() {
+		return { type: 'CLEAR_NAVIGATION_ERROR' };
+	},
+
+	clearNavigationRecommendations() {
+		return ( { dispatch } ) => {
+			if ( actions._navigationAbort ) {
+				actions._navigationAbort.abort();
+				actions._navigationAbort = null;
+			}
+
+			dispatch( { type: 'CLEAR_NAVIGATION_RECS' } );
+		};
 	},
 
 	fetchPatternRecommendations( input ) {
@@ -704,6 +1111,76 @@ const actions = {
 			} finally {
 				if ( actions._patternAbort === controller ) {
 					actions._patternAbort = null;
+				}
+			}
+		};
+	},
+
+	fetchNavigationRecommendations( input ) {
+		return async ( { dispatch, select } ) => {
+			if ( actions._navigationAbort ) {
+				actions._navigationAbort.abort();
+			}
+
+			const controller = new AbortController();
+			actions._navigationAbort = controller;
+			const requestToken =
+				( select.getNavigationRequestToken?.() || 0 ) + 1;
+			const { blockClientId = null, ...requestData } = input || {};
+
+			dispatch(
+				actions.setNavigationStatus(
+					'loading',
+					null,
+					requestToken,
+					blockClientId
+				)
+			);
+
+			try {
+				const result = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-navigation',
+					method: 'POST',
+					data: requestData,
+					signal: controller.signal,
+				} );
+
+				dispatch(
+					actions.setNavigationRecommendations(
+						blockClientId,
+						result,
+						requestData.prompt || '',
+						requestToken
+					)
+				);
+			} catch ( err ) {
+				if ( err.name === 'AbortError' ) {
+					return;
+				}
+
+				dispatch(
+					actions.setNavigationRecommendations(
+						blockClientId,
+						{
+							suggestions: [],
+							explanation: '',
+						},
+						requestData.prompt || '',
+						requestToken
+					)
+				);
+				dispatch(
+					actions.setNavigationStatus(
+						'error',
+						err?.message ||
+							'Navigation recommendation request failed.',
+						requestToken,
+						blockClientId
+					)
+				);
+			} finally {
+				if ( actions._navigationAbort === controller ) {
+					actions._navigationAbort = null;
 				}
 			}
 		};
@@ -823,10 +1300,12 @@ const actions = {
 			const scope = getCurrentActivityScope( registry );
 
 			syncActivitySession( localDispatch, select, scope );
+			let activityLog = select.getActivityLog?.() || [];
+			let activity =
+				activityLog.find( ( entry ) => entry?.id === activityId ) ||
+				null;
 
-			const latestActivity = select.getLatestAppliedActivity?.();
-
-			if ( ! latestActivity ) {
+			if ( ! activity ) {
 				localDispatch(
 					actions.setUndoState(
 						'error',
@@ -840,26 +1319,177 @@ const actions = {
 				};
 			}
 
-			if ( latestActivity.id !== activityId ) {
+			const scopeKey =
+				activity?.document?.scopeKey ||
+				scope?.key ||
+				select.getActivityScopeKey?.() ||
+				null;
+
+			if ( scopeKey && isServerBackedActivityEntry( activity ) ) {
+				try {
+					const serverEntries =
+						await fetchServerActivityEntries( scopeKey );
+					const refreshedEntries = mergeActivityEntries(
+						serverEntries,
+						activityLog.filter( isLocalActivityEntry )
+					);
+
+					refreshActivitySession(
+						localDispatch,
+						scopeKey,
+						refreshedEntries
+					);
+					activityLog = refreshedEntries;
+					activity =
+						activityLog.find(
+							( entry ) => entry?.id === activityId
+						) || null;
+
+					if ( ! activity ) {
+						localDispatch(
+							actions.setUndoState(
+								'error',
+								'There is no AI action available to undo.'
+							)
+						);
+
+						return {
+							ok: false,
+							error: 'There is no AI action available to undo.',
+						};
+					}
+				} catch {
+					// Fall back to the local activity cache when the server is unavailable.
+				}
+			}
+
+			const entityEntries = getEntityActivityEntries(
+				activityLog,
+				activity
+			);
+			const currentPendingSyncType =
+				getPendingActivitySyncType( activity );
+			const buildUndoTransitionEntry = (
+				status,
+				error = null,
+				timestamp = new Date().toISOString()
+			) => ( {
+				...activity,
+				undo: {
+					...( activity.undo || {} ),
+					canUndo: false,
+					status,
+					error,
+					updatedAt: timestamp,
+					undoneAt:
+						status === 'undone'
+							? timestamp
+							: activity?.undo?.undoneAt || null,
+				},
+			} );
+			const syncUndoStateChange = async ( status, error = null ) => {
+				const timestamp = new Date().toISOString();
+				const persistence = shouldSyncUndoTransition( activity )
+					? buildActivityPersistenceUpdate(
+							'server',
+							null,
+							timestamp
+					  )
+					: buildActivityPersistenceUpdate(
+							'local',
+							currentPendingSyncType || 'create',
+							timestamp
+					  );
+
 				localDispatch(
-					actions.setUndoState(
-						'error',
-						'Only the most recent AI action can be undone automatically.',
-						activityId
+					actions.updateActivityUndoState(
+						activityId,
+						status,
+						error,
+						timestamp,
+						persistence
 					)
 				);
 
-				return {
-					ok: false,
-					error: 'Only the most recent AI action can be undone automatically.',
-				};
-			}
+				if ( ! shouldSyncUndoTransition( activity ) ) {
+					persistActivitySession( select );
 
-			if ( latestActivity?.undo?.status !== 'available' ) {
+					return {
+						ok: true,
+						timestamp,
+					};
+				}
+
+				try {
+					await persistActivityUndoTransition(
+						buildUndoTransitionEntry( status, error, timestamp )
+					);
+					persistActivitySession( select );
+
+					return {
+						ok: true,
+						timestamp,
+					};
+				} catch ( syncError ) {
+					if ( isNonRetryableUndoSyncError( activity, syncError ) ) {
+						const terminalEntry = buildNonRetryableUndoSyncEntry(
+							activity,
+							syncError,
+							timestamp
+						);
+
+						localDispatch(
+							actions.updateActivityUndoState(
+								activityId,
+								terminalEntry.undo.status,
+								terminalEntry.undo.error,
+								terminalEntry.undo.updatedAt,
+								terminalEntry.persistence
+							)
+						);
+						persistActivitySession( select );
+
+						return {
+							ok: false,
+							timestamp,
+							error: terminalEntry.undo.error,
+						};
+					}
+
+					localDispatch(
+						actions.updateActivityUndoState(
+							activityId,
+							status,
+							error,
+							timestamp,
+							buildActivityPersistenceUpdate(
+								'local',
+								'undo',
+								timestamp
+							)
+						)
+					);
+					persistActivitySession( select );
+
+					return {
+						ok: false,
+						timestamp,
+					};
+				}
+			};
+			let resolvedUndo = getResolvedActivityUndoState(
+				activity,
+				entityEntries
+			);
+
+			if (
+				resolvedUndo?.canUndo !== true ||
+				resolvedUndo?.status !== 'available'
+			) {
 				localDispatch(
 					actions.setUndoState(
 						'error',
-						latestActivity?.undo?.error ||
+						resolvedUndo?.error ||
 							'This AI action can no longer be undone automatically.',
 						activityId
 					)
@@ -868,53 +1498,58 @@ const actions = {
 				return {
 					ok: false,
 					error:
-						latestActivity?.undo?.error ||
+						resolvedUndo?.error ||
 						'This AI action can no longer be undone automatically.',
 				};
 			}
 
 			if (
-				latestActivity.surface === 'template' ||
-				latestActivity.surface === 'template-part'
+				activity.surface === 'template' ||
+				activity.surface === 'template-part'
 			) {
-				const resolvedUndo =
-					latestActivity.surface === 'template'
+				const runtimeUndo =
+					activity.surface === 'template'
 						? getTemplateActivityUndoState(
-								latestActivity,
+								activity,
 								registry?.select?.( 'core/block-editor' )
 						  )
 						: getTemplatePartActivityUndoState(
-								latestActivity,
+								activity,
 								registry?.select?.( 'core/block-editor' )
 						  );
+				resolvedUndo = getResolvedActivityUndoState(
+					activity,
+					entityEntries,
+					runtimeUndo
+				);
 
 				if (
 					resolvedUndo?.canUndo !== true ||
 					resolvedUndo?.status !== 'available'
 				) {
-					localDispatch(
-						actions.updateActivityUndoState(
-							activityId,
-							'failed',
-							resolvedUndo?.error ||
-								'This AI action can no longer be undone automatically.'
-						)
+					const failureMessage =
+						resolvedUndo?.error ||
+						'This AI action can no longer be undone automatically.';
+					const syncResult = await syncUndoStateChange(
+						'failed',
+						failureMessage
 					);
+					const surfacedError = syncResult.ok
+						? failureMessage
+						: syncResult.error ||
+						  buildUndoAuditSyncError( failureMessage );
+
 					localDispatch(
 						actions.setUndoState(
 							'error',
-							resolvedUndo?.error ||
-								'This AI action can no longer be undone automatically.',
+							surfacedError,
 							activityId
 						)
 					);
-					persistActivitySession( select );
 
 					return {
 						ok: false,
-						error:
-							resolvedUndo?.error ||
-							'This AI action can no longer be undone automatically.',
+						error: surfacedError,
 					};
 				}
 			}
@@ -923,45 +1558,58 @@ const actions = {
 				actions.setUndoState( 'undoing', null, activityId )
 			);
 
-				let result;
+			let result;
 
-				if ( latestActivity.surface === 'template' ) {
-					result = undoTemplateSuggestionOperations( latestActivity );
-				} else if ( latestActivity.surface === 'template-part' ) {
-					result = undoTemplatePartSuggestionOperations(
-						latestActivity
-					);
-				} else {
-					result = undoBlockActivity( latestActivity, registry );
-				}
+			if ( activity.surface === 'template' ) {
+				result = undoTemplateSuggestionOperations( activity );
+			} else if ( activity.surface === 'template-part' ) {
+				result = undoTemplatePartSuggestionOperations( activity );
+			} else {
+				result = undoBlockActivity( activity, registry );
+			}
 
 			if ( ! result.ok ) {
-				localDispatch(
-					actions.updateActivityUndoState(
-						activityId,
-						'failed',
-						result.error || 'Undo failed.'
-					)
+				const failureMessage = result.error || 'Undo failed.';
+				const syncResult = await syncUndoStateChange(
+					'failed',
+					failureMessage
 				);
-				localDispatch(
-					actions.setUndoState(
-						'error',
-						result.error || 'Undo failed.',
-						activityId
-					)
-				);
-				persistActivitySession( select );
+				const surfacedError = syncResult.ok
+					? failureMessage
+					: syncResult.error ||
+					  buildUndoAuditSyncError( failureMessage );
 
-				return result;
+				localDispatch(
+					actions.setUndoState( 'error', surfacedError, activityId )
+				);
+
+				return {
+					...result,
+					error: surfacedError,
+				};
+			}
+
+			const syncResult = await syncUndoStateChange( 'undone' );
+
+			if ( ! syncResult.ok ) {
+				const surfacedError =
+					syncResult.error ||
+					buildUndoAuditSyncError( 'Undo applied locally.' );
+
+				localDispatch(
+					actions.setUndoState( 'error', surfacedError, activityId )
+				);
+
+				return {
+					...result,
+					ok: false,
+					error: surfacedError,
+				};
 			}
 
 			localDispatch(
-				actions.updateActivityUndoState( activityId, 'undone' )
-			);
-			localDispatch(
 				actions.setUndoState( 'success', null, activityId )
 			);
-			persistActivitySession( select );
 
 			return result;
 		};
@@ -1006,18 +1654,17 @@ const actions = {
 
 			const templateRef = select.getTemplateResultRef();
 
-			localDispatch(
-				actions.logActivity(
-					buildTemplateActivityEntry( {
-						operations: result.operations,
-						requestPrompt:
-							select.getTemplateRequestPrompt?.() || '',
-						requestToken: select.getTemplateResultToken?.() || 0,
-						scope,
-						suggestion,
-						templateRef,
-					} )
-				)
+			await recordActivityEntry(
+				localDispatch,
+				select,
+				buildTemplateActivityEntry( {
+					operations: result.operations,
+					requestPrompt: select.getTemplateRequestPrompt?.() || '',
+					requestToken: select.getTemplateResultToken?.() || 0,
+					scope,
+					suggestion,
+					templateRef,
+				} )
 			);
 			localDispatch(
 				actions.setTemplateApplyState(
@@ -1027,8 +1674,6 @@ const actions = {
 					result.operations
 				)
 			);
-			persistActivitySession( select );
-
 			return result;
 		};
 	},
@@ -1072,19 +1717,18 @@ const actions = {
 
 			const templatePartRef = select.getTemplatePartResultRef();
 
-			localDispatch(
-				actions.logActivity(
-					buildTemplatePartActivityEntry( {
-						operations: result.operations,
-						requestPrompt:
-							select.getTemplatePartRequestPrompt?.() || '',
-						requestToken:
-							select.getTemplatePartResultToken?.() || 0,
-						scope,
-						suggestion,
-						templatePartRef,
-					} )
-				)
+			await recordActivityEntry(
+				localDispatch,
+				select,
+				buildTemplatePartActivityEntry( {
+					operations: result.operations,
+					requestPrompt:
+						select.getTemplatePartRequestPrompt?.() || '',
+					requestToken: select.getTemplatePartResultToken?.() || 0,
+					scope,
+					suggestion,
+					templatePartRef,
+				} )
 			);
 			localDispatch(
 				actions.setTemplatePartApplyState(
@@ -1094,8 +1738,6 @@ const actions = {
 					result.operations
 				)
 			);
-			persistActivitySession( select );
-
 			return result;
 		};
 	},
@@ -1371,6 +2013,22 @@ function reducer( state = DEFAULT_STATE, action ) {
 						return entry;
 					}
 
+					const nextPersistence = action.persistence
+						? {
+								...( entry.persistence || {} ),
+								...action.persistence,
+								syncType:
+									action.persistence.status === 'server'
+										? null
+										: action.persistence.syncType ||
+										  entry?.persistence?.syncType ||
+										  'undo',
+								updatedAt:
+									action.persistence.updatedAt ||
+									action.timestamp,
+						  }
+						: entry.persistence;
+
 					return {
 						...entry,
 						undo: {
@@ -1383,40 +2041,33 @@ function reducer( state = DEFAULT_STATE, action ) {
 									? action.timestamp
 									: entry.undo?.undoneAt || null,
 						},
+						persistence: nextPersistence,
 					};
 				} ),
-				templateApplyStatus:
-					isTemplateUndone
-						? 'idle'
-						: state.templateApplyStatus,
-				templateApplyError:
-					isTemplateUndone
-						? null
-						: state.templateApplyError,
-				templateLastAppliedSuggestionKey:
-					isTemplateUndone
-						? null
-						: state.templateLastAppliedSuggestionKey,
-				templateLastAppliedOperations:
-					isTemplateUndone
-						? []
-						: state.templateLastAppliedOperations,
-				templatePartApplyStatus:
-					isTemplatePartUndone
-						? 'idle'
-						: state.templatePartApplyStatus,
-				templatePartApplyError:
-					isTemplatePartUndone
-						? null
-						: state.templatePartApplyError,
-				templatePartLastAppliedSuggestionKey:
-					isTemplatePartUndone
-						? null
-						: state.templatePartLastAppliedSuggestionKey,
-				templatePartLastAppliedOperations:
-					isTemplatePartUndone
-						? []
-						: state.templatePartLastAppliedOperations,
+				templateApplyStatus: isTemplateUndone
+					? 'idle'
+					: state.templateApplyStatus,
+				templateApplyError: isTemplateUndone
+					? null
+					: state.templateApplyError,
+				templateLastAppliedSuggestionKey: isTemplateUndone
+					? null
+					: state.templateLastAppliedSuggestionKey,
+				templateLastAppliedOperations: isTemplateUndone
+					? []
+					: state.templateLastAppliedOperations,
+				templatePartApplyStatus: isTemplatePartUndone
+					? 'idle'
+					: state.templatePartApplyStatus,
+				templatePartApplyError: isTemplatePartUndone
+					? null
+					: state.templatePartApplyError,
+				templatePartLastAppliedSuggestionKey: isTemplatePartUndone
+					? null
+					: state.templatePartLastAppliedSuggestionKey,
+				templatePartLastAppliedOperations: isTemplatePartUndone
+					? []
+					: state.templatePartLastAppliedOperations,
 			};
 		}
 		case 'SET_PATTERN_STATUS':
@@ -1431,6 +2082,58 @@ function reducer( state = DEFAULT_STATE, action ) {
 				patternRecommendations: action.recommendations,
 				patternBadge: getPatternBadgeReason( action.recommendations ),
 				patternError: null,
+			};
+		case 'SET_NAVIGATION_STATUS':
+			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				navigationStatus: action.status,
+				navigationError: action.error ?? null,
+				navigationRequestToken:
+					action.requestToken ?? state.navigationRequestToken,
+				navigationBlockClientId:
+					action.blockClientId ?? state.navigationBlockClientId,
+			};
+		case 'SET_NAVIGATION_RECS':
+			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				navigationRecommendations: action.payload?.suggestions ?? [],
+				navigationExplanation: action.payload?.explanation ?? '',
+				navigationRequestPrompt: action.prompt ?? '',
+				navigationBlockClientId: action.blockClientId ?? null,
+				navigationRequestToken:
+					action.requestToken ?? state.navigationRequestToken,
+				navigationResultToken: state.navigationResultToken + 1,
+				navigationStatus: 'ready',
+				navigationError: null,
+			};
+		case 'CLEAR_NAVIGATION_ERROR':
+			return {
+				...state,
+				navigationStatus:
+					state.navigationStatus === 'error'
+						? 'idle'
+						: state.navigationStatus,
+				navigationError: null,
+			};
+		case 'CLEAR_NAVIGATION_RECS':
+			return {
+				...state,
+				navigationRecommendations: [],
+				navigationExplanation: '',
+				navigationStatus: 'idle',
+				navigationError: null,
+				navigationRequestPrompt: '',
+				navigationBlockClientId: null,
+				navigationRequestToken: state.navigationRequestToken + 1,
+				navigationResultToken: state.navigationResultToken + 1,
 			};
 		case 'SET_TEMPLATE_STATUS':
 			if ( isStaleTemplateRequest( state, action.requestToken ) ) {
@@ -1563,24 +2266,19 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.templatePartLastAppliedOperations,
 			};
 		case 'SET_TEMPLATE_PART_RECS':
-			if (
-				isStaleTemplatePartRequest( state, action.requestToken )
-			) {
+			if ( isStaleTemplatePartRequest( state, action.requestToken ) ) {
 				return state;
 			}
 
 			return {
 				...state,
-				templatePartRecommendations:
-					action.payload?.suggestions ?? [],
-				templatePartExplanation:
-					action.payload?.explanation ?? '',
+				templatePartRecommendations: action.payload?.suggestions ?? [],
+				templatePartExplanation: action.payload?.explanation ?? '',
 				templatePartRequestPrompt: action.prompt ?? '',
 				templatePartRef: action.templatePartRef,
 				templatePartRequestToken:
 					action.requestToken ?? state.templatePartRequestToken,
-				templatePartResultToken:
-					state.templatePartResultToken + 1,
+				templatePartResultToken: state.templatePartResultToken + 1,
 				templatePartStatus: 'ready',
 				templatePartError: null,
 				templatePartSelectedSuggestionKey: null,
@@ -1592,8 +2290,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 		case 'SET_TEMPLATE_PART_SELECTED_SUGGESTION':
 			return {
 				...state,
-				templatePartSelectedSuggestionKey:
-					action.suggestionKey ?? null,
+				templatePartSelectedSuggestionKey: action.suggestionKey ?? null,
 				templatePartApplyStatus:
 					state.templatePartApplyStatus === 'error'
 						? 'idle'
@@ -1626,10 +2323,8 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templatePartError: null,
 				templatePartRequestPrompt: '',
 				templatePartRef: null,
-				templatePartRequestToken:
-					state.templatePartRequestToken + 1,
-				templatePartResultToken:
-					state.templatePartResultToken + 1,
+				templatePartRequestToken: state.templatePartRequestToken + 1,
+				templatePartResultToken: state.templatePartResultToken + 1,
 				templatePartSelectedSuggestionKey: null,
 				templatePartApplyStatus: 'idle',
 				templatePartApplyError: null,
@@ -1681,6 +2376,36 @@ const selectors = {
 	getPatternBadge: ( state ) => state.patternBadge,
 	getPatternError: ( state ) => state.patternError,
 	isPatternLoading: ( state ) => state.patternStatus === 'loading',
+	getNavigationRecommendations: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? []
+			: state.navigationRecommendations,
+	getNavigationExplanation: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? ''
+			: state.navigationExplanation,
+	getNavigationError: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? null
+			: state.navigationError,
+	getNavigationStatus: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? 'idle'
+			: state.navigationStatus,
+	getNavigationRequestPrompt: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? ''
+			: state.navigationRequestPrompt,
+	getNavigationBlockClientId: ( state ) => state.navigationBlockClientId,
+	getNavigationRequestToken: ( state ) => state.navigationRequestToken,
+	getNavigationResultToken: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? 0
+			: state.navigationResultToken,
+	isNavigationLoading: ( state, blockClientId = null ) =>
+		( ! blockClientId ||
+			state.navigationBlockClientId === blockClientId ) &&
+		state.navigationStatus === 'loading',
 	getTemplateRecommendations: ( state ) => state.templateRecommendations,
 	getTemplateExplanation: ( state ) => state.templateExplanation,
 	getTemplateError: ( state ) => state.templateError,
@@ -1703,20 +2428,15 @@ const selectors = {
 		state.templatePartRecommendations,
 	getTemplatePartExplanation: ( state ) => state.templatePartExplanation,
 	getTemplatePartError: ( state ) => state.templatePartError,
-	getTemplatePartRequestPrompt: ( state ) =>
-		state.templatePartRequestPrompt,
+	getTemplatePartRequestPrompt: ( state ) => state.templatePartRequestPrompt,
 	getTemplatePartResultRef: ( state ) => state.templatePartRef,
-	getTemplatePartRequestToken: ( state ) =>
-		state.templatePartRequestToken,
-	getTemplatePartResultToken: ( state ) =>
-		state.templatePartResultToken,
-	isTemplatePartLoading: ( state ) =>
-		state.templatePartStatus === 'loading',
+	getTemplatePartRequestToken: ( state ) => state.templatePartRequestToken,
+	getTemplatePartResultToken: ( state ) => state.templatePartResultToken,
+	isTemplatePartLoading: ( state ) => state.templatePartStatus === 'loading',
 	getTemplatePartStatus: ( state ) => state.templatePartStatus,
 	getTemplatePartSelectedSuggestionKey: ( state ) =>
 		state.templatePartSelectedSuggestionKey,
-	getTemplatePartApplyStatus: ( state ) =>
-		state.templatePartApplyStatus,
+	getTemplatePartApplyStatus: ( state ) => state.templatePartApplyStatus,
 	getTemplatePartApplyError: ( state ) => state.templatePartApplyError,
 	isTemplatePartApplying: ( state ) =>
 		state.templatePartApplyStatus === 'applying',

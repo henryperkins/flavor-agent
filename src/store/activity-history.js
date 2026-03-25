@@ -1,8 +1,11 @@
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
-const ACTIVITY_STORAGE_VERSION = 2;
+const ACTIVITY_STORAGE_VERSION = 3;
 const MAX_ACTIVITY_HISTORY = 20;
 const LEGACY_TEMPLATE_UNDO_ERROR =
 	'This template action was recorded before refresh-safe undo support and cannot be undone automatically.';
+
+export const ORDERED_UNDO_BLOCKED_ERROR =
+	'Undo blocked by newer AI actions.';
 
 let activitySequence = 0;
 
@@ -24,38 +27,78 @@ function normalizeScopeValue( value ) {
 	return String( value );
 }
 
-export function resolveActivityScope( postType, entityId ) {
-	const normalizedPostType = normalizeScopeValue( postType );
-
-	if ( ! normalizedPostType ) {
-		return null;
+function normalizeActivityTimestamp( value ) {
+	if ( typeof value !== 'string' || ! value ) {
+		return new Date().toISOString();
 	}
 
-	const normalizedEntityId = normalizeScopeValue( entityId );
+	const parsed = new Date( value );
 
-	return {
-		key: normalizedEntityId
-			? `${ normalizedPostType }:${ normalizedEntityId }`
-			: null,
-		hint: `${ normalizedPostType }:${
-			normalizedEntityId || '__unsaved__'
-		}`,
-		postType: normalizedPostType,
-		entityId: normalizedEntityId,
-	};
+	if ( Number.isNaN( parsed.getTime() ) ) {
+		return new Date().toISOString();
+	}
+
+	return parsed.toISOString();
 }
 
 function getStorageKey( scopeKey ) {
 	return `${ ACTIVITY_STORAGE_PREFIX }${ scopeKey }`;
 }
 
+function normalizeUndoStatus( status ) {
+	switch ( status ) {
+		case 'available':
+		case 'blocked':
+		case 'failed':
+		case 'undone':
+			return status;
+		default:
+			return 'available';
+	}
+}
+
 function buildUndoState( timestamp, undo = {} ) {
+	const status = normalizeUndoStatus( undo?.status );
+	const updatedAt = normalizeActivityTimestamp(
+		undo?.updatedAt || timestamp
+	);
+
 	return {
-		canUndo: undo?.canUndo ?? true,
-		status: undo?.status || 'available',
-		error: undo?.error ?? null,
-		updatedAt: undo?.updatedAt || timestamp,
-		undoneAt: undo?.undoneAt || null,
+		canUndo:
+			status === 'available'
+				? undo?.canUndo ?? true
+				: false,
+		status,
+		error:
+			status === 'blocked'
+				? undo?.error || ORDERED_UNDO_BLOCKED_ERROR
+				: undo?.error ?? null,
+		updatedAt,
+		undoneAt:
+			status === 'undone'
+				? normalizeActivityTimestamp(
+						undo?.undoneAt || undo?.updatedAt || timestamp
+				  )
+				: undo?.undoneAt
+					? normalizeActivityTimestamp( undo.undoneAt )
+					: null,
+	};
+}
+
+function buildPersistenceState( timestamp, persistence = {} ) {
+	const status = persistence?.status === 'server' ? 'server' : 'local';
+
+	return {
+		status,
+		syncType:
+			status === 'server'
+				? null
+				: persistence?.syncType === 'undo'
+					? 'undo'
+					: 'create',
+		updatedAt: normalizeActivityTimestamp(
+			persistence?.updatedAt || timestamp
+		),
 	};
 }
 
@@ -106,6 +149,25 @@ function hasRefreshSafeTemplateUndoMetadata( entry ) {
 	} );
 }
 
+function compareActivityEntries( left, right ) {
+	const leftTimestamp = Date.parse(
+		typeof left?.timestamp === 'string' ? left.timestamp : ''
+	);
+	const rightTimestamp = Date.parse(
+		typeof right?.timestamp === 'string' ? right.timestamp : ''
+	);
+
+	if (
+		! Number.isNaN( leftTimestamp ) &&
+		! Number.isNaN( rightTimestamp ) &&
+		leftTimestamp !== rightTimestamp
+	) {
+		return leftTimestamp - rightTimestamp;
+	}
+
+	return String( left?.id || '' ).localeCompare( String( right?.id || '' ) );
+}
+
 function normalizePersistedActivityEntry(
 	entry,
 	storageVersion = ACTIVITY_STORAGE_VERSION
@@ -114,18 +176,16 @@ function normalizePersistedActivityEntry(
 		return null;
 	}
 
-	const timestamp =
-		typeof entry.timestamp === 'string' && entry.timestamp
-			? entry.timestamp
-			: new Date().toISOString();
-	const undo = buildUndoState( timestamp, entry.undo );
+	const timestamp = normalizeActivityTimestamp( entry.timestamp );
 	const normalizedEntry = {
 		...entry,
 		schemaVersion:
 			Number.isInteger( entry.schemaVersion ) && entry.schemaVersion > 0
 				? entry.schemaVersion
 				: storageVersion,
-		undo,
+		timestamp,
+		undo: buildUndoState( timestamp, entry.undo ),
+		persistence: buildPersistenceState( timestamp, entry.persistence ),
 	};
 
 	if (
@@ -133,7 +193,7 @@ function normalizePersistedActivityEntry(
 			normalizedEntry.surface === 'template' ||
 			normalizedEntry.surface === 'template-part'
 		) &&
-		undo.status !== 'undone' &&
+		normalizedEntry.undo.status !== 'undone' &&
 		(
 			storageVersion < ACTIVITY_STORAGE_VERSION ||
 			normalizedEntry.schemaVersion < ACTIVITY_STORAGE_VERSION ||
@@ -143,11 +203,10 @@ function normalizePersistedActivityEntry(
 		return {
 			...normalizedEntry,
 			undo: {
-				...undo,
+				...normalizedEntry.undo,
 				canUndo: false,
 				status: 'failed',
 				error: LEGACY_TEMPLATE_UNDO_ERROR,
-				updatedAt: undo.updatedAt || timestamp,
 			},
 		};
 	}
@@ -155,10 +214,77 @@ function normalizePersistedActivityEntry(
 	return normalizedEntry;
 }
 
-export function limitActivityLog( entries = [] ) {
+function getBaseUndoState( entry ) {
+	const timestamp = normalizeActivityTimestamp( entry?.timestamp );
+	const undo = buildUndoState( timestamp, entry?.undo );
+
+	if ( undo.status === 'blocked' ) {
+		return {
+			...undo,
+			canUndo: true,
+			status: 'available',
+			error: null,
+		};
+	}
+
+	return undo;
+}
+
+function isOrderedUndoEligible( entry, entries = [] ) {
+	const entityKey = getActivityEntityKey( entry );
+
+	if ( ! entityKey ) {
+		return getBaseUndoState( entry ).status === 'available';
+	}
+
+	const orderedEntries = sortActivityEntries( entries ).filter(
+		( currentEntry ) => getActivityEntityKey( currentEntry ) === entityKey
+	);
+
+	for ( let index = orderedEntries.length - 1; index >= 0; index-- ) {
+		const currentEntry = orderedEntries[ index ];
+
+		if ( currentEntry?.id === entry?.id ) {
+			return true;
+		}
+
+		if ( getBaseUndoState( currentEntry ).status !== 'undone' ) {
+			return false;
+		}
+	}
+
+	return false;
+}
+
+export function resolveActivityScope( postType, entityId ) {
+	const normalizedPostType = normalizeScopeValue( postType );
+
+	if ( ! normalizedPostType ) {
+		return null;
+	}
+
+	const normalizedEntityId = normalizeScopeValue( entityId );
+
+	return {
+		key: normalizedEntityId
+			? `${ normalizedPostType }:${ normalizedEntityId }`
+			: null,
+		hint: `${ normalizedPostType }:${
+			normalizedEntityId || '__unsaved__'
+		}`,
+		postType: normalizedPostType,
+		entityId: normalizedEntityId,
+	};
+}
+
+export function sortActivityEntries( entries = [] ) {
 	return Array.isArray( entries )
-		? entries.filter( Boolean ).slice( -MAX_ACTIVITY_HISTORY )
+		? [ ...entries ].filter( Boolean ).sort( compareActivityEntries )
 		: [];
+}
+
+export function limitActivityLog( entries = [] ) {
+	return sortActivityEntries( entries ).slice( -MAX_ACTIVITY_HISTORY );
 }
 
 export function getCurrentActivityScope( registry ) {
@@ -226,7 +352,7 @@ export function writePersistedActivityLog( scopeKey, entries ) {
 			} )
 		);
 	} catch {
-		// Session history is best-effort until a server-backed audit log exists.
+		// Session history is only a cache now that the audit log is server-backed.
 	}
 }
 
@@ -245,6 +371,8 @@ export function createActivityEntry( {
 } ) {
 	activitySequence += 1;
 
+	const normalizedTimestamp = normalizeActivityTimestamp( timestamp );
+
 	return {
 		id: `activity-${ Date.now() }-${ activitySequence }`,
 		schemaVersion: ACTIVITY_STORAGE_VERSION,
@@ -260,29 +388,159 @@ export function createActivityEntry( {
 			reference: requestRef,
 		},
 		document,
-		timestamp,
+		timestamp: normalizedTimestamp,
 		executionResult: 'applied',
-		undo: buildUndoState( timestamp ),
+		undo: buildUndoState( normalizedTimestamp ),
+		persistence: buildPersistenceState( normalizedTimestamp, {
+			status: 'local',
+			syncType: 'create',
+		} ),
 	};
+}
+
+export function isLocalActivityEntry( entry ) {
+	return entry?.persistence?.status !== 'server';
+}
+
+export function getPendingActivitySyncType( entry ) {
+	if ( entry?.persistence?.status === 'server' ) {
+		return null;
+	}
+
+	return entry?.persistence?.syncType === 'undo' ? 'undo' : 'create';
+}
+
+export function getActivityEntityKey( entry ) {
+	if ( ! entry ) {
+		return '';
+	}
+
+	const surface = String( entry?.surface || '' );
+	const documentScopeKey = String( entry?.document?.scopeKey || '' );
+
+	if ( surface === 'template' ) {
+		return `template:${ String( entry?.target?.templateRef || '' ) }`;
+	}
+
+	if ( surface === 'template-part' ) {
+		return `template-part:${ String(
+			entry?.target?.templatePartRef || ''
+		) }`;
+	}
+
+	const blockPath = Array.isArray( entry?.target?.blockPath )
+		? entry.target.blockPath.join( '.' )
+		: '';
+	const blockIdentity =
+		blockPath ||
+		String( entry?.target?.clientId || '' ) ||
+		'unknown';
+	const blockName = String( entry?.target?.blockName || '' );
+
+	return `block:${ documentScopeKey }:${ blockIdentity }:${ blockName }`;
+}
+
+export function getResolvedActivityUndoState(
+	entry,
+	entries = [],
+	runtimeUndoState = null
+) {
+	if ( ! entry ) {
+		return buildUndoState( new Date().toISOString(), {
+			status: 'failed',
+			error: 'The activity entry is unavailable.',
+		} );
+	}
+
+	const timestamp = normalizeActivityTimestamp( entry.timestamp );
+	const baseUndo = getBaseUndoState( entry );
+
+	if ( baseUndo.status === 'undone' ) {
+		return {
+			...baseUndo,
+			canUndo: false,
+		};
+	}
+
+	if ( ! isOrderedUndoEligible( entry, entries ) ) {
+		return {
+			...baseUndo,
+			canUndo: false,
+			status: 'blocked',
+			error: ORDERED_UNDO_BLOCKED_ERROR,
+		};
+	}
+
+	if ( runtimeUndoState ) {
+		const resolvedUndo = buildUndoState( timestamp, {
+			...baseUndo,
+			...runtimeUndoState,
+		} );
+
+		if ( resolvedUndo.status !== 'available' ) {
+			return {
+				...resolvedUndo,
+				canUndo: false,
+			};
+		}
+
+		return {
+			...resolvedUndo,
+			canUndo: resolvedUndo.canUndo !== false,
+		};
+	}
+
+	if ( baseUndo.status !== 'available' ) {
+		return {
+			...baseUndo,
+			canUndo: false,
+		};
+	}
+
+	return {
+		...baseUndo,
+		canUndo: baseUndo.canUndo !== false,
+	};
+}
+
+export function getResolvedActivityEntries(
+	entries = [],
+	runtimeUndoResolver = null
+) {
+	const orderedEntries = sortActivityEntries( entries );
+
+	return orderedEntries.map( ( entry ) => ( {
+		...entry,
+		undo: getResolvedActivityUndoState(
+			entry,
+			orderedEntries,
+			typeof runtimeUndoResolver === 'function'
+				? runtimeUndoResolver( entry )
+				: null
+		),
+	} ) );
 }
 
 export function getLatestAppliedActivity( entries = [] ) {
 	return (
-		[ ...entries ]
+		[ ...sortActivityEntries( entries ) ]
 			.reverse()
-			.find( ( entry ) => entry?.undo?.status !== 'undone' ) || null
+			.find( ( entry ) => getBaseUndoState( entry ).status !== 'undone' ) ||
+		null
 	);
 }
 
-export function getLatestUndoableActivity( entries = [] ) {
-	const latestActivity = getLatestAppliedActivity( entries );
-
-	if (
-		latestActivity?.undo?.canUndo === true &&
-		latestActivity?.undo?.status === 'available'
-	) {
-		return latestActivity;
-	}
-
-	return null;
+export function getLatestUndoableActivity(
+	entries = [],
+	runtimeUndoResolver = null
+) {
+	return (
+		[ ...getResolvedActivityEntries( entries, runtimeUndoResolver ) ]
+			.reverse()
+			.find(
+				( entry ) =>
+					entry?.undo?.canUndo === true &&
+					entry?.undo?.status === 'available'
+			) || null
+	);
 }

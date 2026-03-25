@@ -509,6 +509,32 @@
   border-radius: 8px;
 }
 
+.flavor-agent-navigation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flavor-agent-navigation-change {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--flavor-agent-border);
+  background: var(--flavor-agent-surface);
+}
+
+.flavor-agent-navigation-change__target {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--flavor-agent-text);
+}
+
+.flavor-agent-navigation-change__detail {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--flavor-agent-muted);
+}
+
 /* ---------------------------------------------------------------
  * Template parts / patterns lists in template cards
  * --------------------------------------------------------------- */

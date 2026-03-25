@@ -55,8 +55,7 @@ jest.mock( '@wordpress/components', () => {
 					onChange: ( event ) => onChange( event.target.value ),
 				} )
 			),
-		Tooltip: ( { children } ) =>
-			createElement( Fragment, null, children ),
+		Tooltip: ( { children } ) => createElement( Fragment, null, children ),
 	};
 } );
 
@@ -70,11 +69,7 @@ jest.mock( '@wordpress/editor', () => {
 
 	return {
 		PluginDocumentSettingPanel: ( { children, title } ) =>
-			createElement(
-				'section',
-				{ 'data-panel-title': title },
-				children
-			),
+			createElement( 'section', { 'data-panel-title': title }, children ),
 	};
 } );
 
@@ -153,7 +148,8 @@ function createSelectors() {
 		blockEditor: {
 			getAllowedPatterns: jest.fn( ( rootClientId ) => {
 				const state = getState();
-				const key = rootClientId === null ? 'null' : String( rootClientId );
+				const key =
+					rootClientId === null ? 'null' : String( rootClientId );
 
 				return state.blockEditor.allowedPatternsByRoot[ key ] || [];
 			} ),
@@ -236,10 +232,7 @@ function createState( overrides = {} ) {
 		},
 		blockEditor: {
 			allowedPatternsByRoot: {
-				'root-a': [
-					{ name: 'theme/hero' },
-					{ name: 'theme/footer' },
-				],
+				'root-a': [ { name: 'theme/hero' }, { name: 'theme/footer' } ],
 				'root-b': [ { name: 'theme/footer' } ],
 			},
 			blockLookup: {
@@ -295,7 +288,8 @@ function createState( overrides = {} ) {
 			templateApplyError: 'The previous apply state should be cleared.',
 			templateApplyStatus: 'error',
 			templateError: null,
-			templateExplanation: 'A focused hero pattern would strengthen the intro.',
+			templateExplanation:
+				'A focused hero pattern would strengthen the intro.',
 			templateLastAppliedOperations: [],
 			templateLastAppliedSuggestionKey: null,
 			templateRecommendations: [ SUGGESTION ],
@@ -344,7 +338,9 @@ async function setPromptValue( value ) {
 		);
 
 		descriptor.set.call( textarea, value );
-		textarea.dispatchEvent( new window.Event( 'input', { bubbles: true } ) );
+		textarea.dispatchEvent(
+			new window.Event( 'input', { bubbles: true } )
+		);
 	} );
 }
 
@@ -357,6 +353,9 @@ async function renderPanel() {
 beforeEach( async () => {
 	jest.clearAllMocks();
 	currentState = createState();
+	mockGetTemplateActivityUndoState.mockImplementation(
+		( activity ) => activity?.undo || {}
+	);
 	window.flavorAgentData = {
 		canRecommendTemplates: true,
 	};
@@ -370,8 +369,9 @@ beforeEach( async () => {
 			title: 'Footer',
 		},
 	] );
-	mockGetAllowedPatterns.mockImplementation( ( rootClientId, blockEditor ) =>
-		blockEditor?.getAllowedPatterns?.( rootClientId ) || []
+	mockGetAllowedPatterns.mockImplementation(
+		( rootClientId, blockEditor ) =>
+			blockEditor?.getAllowedPatterns?.( rootClientId ) || []
 	);
 	mockUseDispatch.mockImplementation( () => dispatchers );
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
@@ -396,8 +396,7 @@ beforeEach( async () => {
 				templateError: null,
 				templateStatus: 'idle',
 				templateResultRef: null,
-				templateResultToken:
-					getState().store.templateResultToken + 1,
+				templateResultToken: getState().store.templateResultToken + 1,
 				templateSelectedSuggestionKey: null,
 				templateApplyStatus: 'idle',
 				templateApplyError: null,
@@ -434,9 +433,9 @@ describe( 'TemplateRecommender', () => {
 	test( 'clears stale recommendations on insertion-root drift without resetting the prompt', async () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 		expect( hasText( 'Confirm Apply' ) ).toBe( true );
-		expect(
-			hasText( 'The previous apply state should be cleared.' )
-		).toBe( true );
+		expect( hasText( 'The previous apply state should be cleared.' ) ).toBe(
+			true
+		);
 
 		await setPromptValue( 'Keep this prompt.' );
 		expect( getTextarea().value ).toBe( 'Keep this prompt.' );
@@ -458,9 +457,9 @@ describe( 'TemplateRecommender', () => {
 		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
 		expect( hasText( 'Add hero intro' ) ).toBe( false );
 		expect( hasText( 'Confirm Apply' ) ).toBe( false );
-		expect(
-			hasText( 'The previous apply state should be cleared.' )
-		).toBe( false );
+		expect( hasText( 'The previous apply state should be cleared.' ) ).toBe(
+			false
+		);
 		expect( getTextarea().value ).toBe( 'Keep this prompt.' );
 	} );
 
@@ -544,5 +543,92 @@ describe( 'TemplateRecommender', () => {
 
 		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
 		expect( hasText( 'Analyzing template structure…' ) ).toBe( false );
+	} );
+
+	test( 'shows the undo success notice even when the last template activity is now undone', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_suggestion',
+						surface: 'template',
+						suggestion: 'Clarify hierarchy',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						undo: {
+							canUndo: false,
+							status: 'undone',
+							error: null,
+						},
+					},
+				],
+				lastUndoneActivityId: 'activity-1',
+				undoStatus: 'success',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Undid Clarify hierarchy.' ) ).toBe( true );
+	} );
+
+	test( 'recomputes template undo availability when the block tree changes', async () => {
+		mockGetTemplateActivityUndoState.mockImplementation(
+			( activity, blockEditorSelect ) =>
+				( blockEditorSelect?.getBlocks?.() || [] ).length > 0
+					? {
+							canUndo: true,
+							status: 'available',
+							error: null,
+					  }
+					: {
+							canUndo: false,
+							status: 'failed',
+							error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+					  }
+		);
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_suggestion',
+						surface: 'template',
+						suggestion: 'Clarify hierarchy',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Undo available' ) ).toBe( true );
+
+		currentState = {
+			...getState(),
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [],
+			},
+		};
+
+		await renderPanel();
+
+		expect( hasText( 'Undo unavailable' ) ).toBe( true );
+		expect(
+			hasText(
+				'Inserted pattern content changed after apply and cannot be undone automatically.'
+			)
+		).toBe( true );
 	} );
 } );

@@ -33,6 +33,11 @@ import {
 
 import AIActivitySection from '../components/AIActivitySection';
 import { STORE_NAME } from '../store';
+import {
+	getLatestAppliedActivity,
+	getLatestUndoableActivity,
+	getResolvedActivityEntries,
+} from '../store/activity-history';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
@@ -240,59 +245,74 @@ export default function TemplateRecommender() {
 		applyError,
 		lastAppliedSuggestionKey,
 		lastAppliedOperations,
-		templateActivityEntries,
-		latestTemplateActivity,
-		latestUndoableActivityId,
+		activityLog,
 		undoError,
 		undoStatus,
 		lastUndoneActivityId,
-	} = useSelect(
-		( select ) => {
-			const store = select( STORE_NAME );
-			const blockEditor = select( blockEditorStore );
-			const activityLog = store.getActivityLog() || [];
-			const templateEntries = activityLog
-				.filter(
+	} = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
+
+		return {
+			recommendations: store.getTemplateRecommendations(),
+			explanation: store.getTemplateExplanation(),
+			error: store.getTemplateError(),
+			resultRef: store.getTemplateResultRef(),
+			resultToken: store.getTemplateResultToken(),
+			isLoading: store.isTemplateLoading(),
+			selectedSuggestionKey: store.getTemplateSelectedSuggestionKey(),
+			applyStatus: store.getTemplateApplyStatus(),
+			applyError: store.getTemplateApplyError(),
+			lastAppliedSuggestionKey:
+				store.getTemplateLastAppliedSuggestionKey(),
+			lastAppliedOperations: store.getTemplateLastAppliedOperations(),
+			activityLog: store.getActivityLog() || [],
+			undoError: store.getUndoError(),
+			undoStatus: store.getUndoStatus(),
+			lastUndoneActivityId: store.getLastUndoneActivityId(),
+		};
+	}, [] );
+	const editorBlocks = useSelect(
+		( select ) => select( blockEditorStore ).getBlocks?.() || [],
+		[]
+	);
+	const blockEditorSelection = useMemo(
+		() => ( {
+			getBlocks: () => editorBlocks,
+		} ),
+		[ editorBlocks ]
+	);
+	const resolvedTemplateActivities = useMemo(
+		() =>
+			getResolvedActivityEntries(
+				activityLog.filter(
 					( entry ) =>
 						entry?.surface === 'template' &&
 						entry?.target?.templateRef === templateRef
-				)
-				.map( ( entry ) => ( {
-					...entry,
-					undo: getTemplateActivityUndoState( entry, blockEditor ),
-				} ) );
-			const latestTemplateEntry =
-				templateEntries[ templateEntries.length - 1 ] || null;
-			const latestUndoableTemplateActivityId =
-				latestTemplateEntry?.undo?.canUndo === true &&
-				latestTemplateEntry?.undo?.status === 'available'
-					? latestTemplateEntry.id
-					: null;
-
-			return {
-				recommendations: store.getTemplateRecommendations(),
-				explanation: store.getTemplateExplanation(),
-				error: store.getTemplateError(),
-				resultRef: store.getTemplateResultRef(),
-				resultToken: store.getTemplateResultToken(),
-				isLoading: store.isTemplateLoading(),
-				selectedSuggestionKey: store.getTemplateSelectedSuggestionKey(),
-				applyStatus: store.getTemplateApplyStatus(),
-				applyError: store.getTemplateApplyError(),
-				lastAppliedSuggestionKey:
-					store.getTemplateLastAppliedSuggestionKey(),
-				lastAppliedOperations: store.getTemplateLastAppliedOperations(),
-				templateActivityEntries: [ ...templateEntries ]
-					.slice( -3 )
-					.reverse(),
-				latestTemplateActivity: latestTemplateEntry,
-				latestUndoableActivityId: latestUndoableTemplateActivityId,
-				undoError: store.getUndoError(),
-				undoStatus: store.getUndoStatus(),
-				lastUndoneActivityId: store.getLastUndoneActivityId(),
-			};
-		},
-		[ templateRef ]
+				),
+				( entry ) =>
+					getTemplateActivityUndoState( entry, blockEditorSelection )
+			),
+		[ activityLog, blockEditorSelection, templateRef ]
+	);
+	const templateActivityEntries = useMemo(
+		() => [ ...resolvedTemplateActivities ].slice( -3 ).reverse(),
+		[ resolvedTemplateActivities ]
+	);
+	const latestTemplateActivity = useMemo(
+		() => getLatestAppliedActivity( resolvedTemplateActivities ),
+		[ resolvedTemplateActivities ]
+	);
+	const latestUndoableActivityId = useMemo(
+		() =>
+			getLatestUndoableActivity( resolvedTemplateActivities )?.id || null,
+		[ resolvedTemplateActivities ]
+	);
+	const lastUndoneTemplateActivity = useMemo(
+		() =>
+			resolvedTemplateActivities.find(
+				( entry ) => entry?.id === lastUndoneActivityId
+			) || null,
+		[ resolvedTemplateActivities, lastUndoneActivityId ]
 	);
 	const patternTitleMap = useSelect( () => {
 		const patterns = getCompatBlockPatterns();
@@ -306,16 +326,17 @@ export default function TemplateRecommender() {
 		}, {} );
 	}, [] );
 	const insertionPointLabel = useSelect( ( select ) => {
-		const blockEditor = select( blockEditorStore );
+		const blockEditorStoreSelect = select( blockEditorStore );
 		const selectedBlockClientId =
-			blockEditor?.getSelectedBlockClientId?.() || null;
+			blockEditorStoreSelect?.getSelectedBlockClientId?.() || null;
 		const selectedBlock = selectedBlockClientId
-			? blockEditor?.getBlock?.( selectedBlockClientId )
+			? blockEditorStoreSelect?.getBlock?.( selectedBlockClientId )
 			: null;
-		const insertionPoint = blockEditor?.getBlockInsertionPoint?.() || null;
+		const insertionPoint =
+			blockEditorStoreSelect?.getBlockInsertionPoint?.() || null;
 		const rootClientId = insertionPoint?.rootClientId || null;
 		const rootBlock = rootClientId
-			? blockEditor?.getBlock?.( rootClientId )
+			? blockEditorStoreSelect?.getBlock?.( rootClientId )
 			: null;
 
 		return describeInsertionPoint( {
@@ -325,11 +346,12 @@ export default function TemplateRecommender() {
 		} );
 	}, [] );
 	const visiblePatternNames = useSelect( ( select ) => {
-		const blockEditor = select( blockEditorStore );
-		const insertionPoint = blockEditor?.getBlockInsertionPoint?.() || null;
+		const blockEditorStoreSelect = select( blockEditorStore );
+		const insertionPoint =
+			blockEditorStoreSelect?.getBlockInsertionPoint?.() || null;
 		const rootClientId = insertionPoint?.rootClientId || null;
 
-		return getVisiblePatternNames( rootClientId, blockEditor );
+		return getVisiblePatternNames( rootClientId, blockEditorStoreSelect );
 	}, [] );
 	const {
 		applyTemplateSuggestion,
@@ -572,17 +594,15 @@ export default function TemplateRecommender() {
 						</Notice>
 					) }
 
-				{ latestTemplateActivity &&
-					undoStatus === 'success' &&
-					lastUndoneActivityId === latestTemplateActivity.id && (
-						<Notice status="success" isDismissible={ false }>
-							Undid{ ' ' }
-							<strong>
-								{ latestTemplateActivity.suggestion }
-							</strong>
-							.
-						</Notice>
-					) }
+				{ undoStatus === 'success' && lastUndoneTemplateActivity && (
+					<Notice status="success" isDismissible={ false }>
+						Undid{ ' ' }
+						<strong>
+							{ lastUndoneTemplateActivity.suggestion }
+						</strong>
+						.
+					</Notice>
+				) }
 
 				{ hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
@@ -596,7 +616,6 @@ export default function TemplateRecommender() {
 
 				<AIActivitySection
 					entries={ templateActivityEntries }
-					latestUndoableActivityId={ latestUndoableActivityId }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
 				/>

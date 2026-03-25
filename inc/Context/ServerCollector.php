@@ -1189,8 +1189,8 @@ final class ServerCollector {
 	 * @return array|\WP_Error Navigation context or error.
 	 */
 	public static function for_navigation( int $menu_id = 0, string $markup = '' ): array|\WP_Error {
-		$nav_content = '';
-		$nav_attrs   = [];
+		$saved_source  = self::parse_navigation_source( '' );
+		$markup_source = self::parse_navigation_source( '' );
 
 		// Resolve content from wp_navigation post if menu ID is provided.
 		if ( $menu_id > 0 ) {
@@ -1204,28 +1204,24 @@ final class ServerCollector {
 				);
 			}
 
-			$nav_content = $post->post_content ?? '';
+			$saved_source = self::parse_navigation_source(
+				(string) ( $post->post_content ?? '' )
+			);
 		}
 
-		// If raw markup is provided, use it (overrides or supplements menu ID).
+		// If raw markup is provided, use its live block attributes and any
+		// unsaved inner structure, while falling back to the saved menu items
+		// when the editor only stores a `ref` to the wp_navigation post.
 		if ( $markup !== '' ) {
-			$nav_content = $markup;
+			$markup_source = self::parse_navigation_source( $markup );
 		}
 
-		// Parse the navigation block(s) to extract structure.
-		$blocks = parse_blocks( $nav_content );
-
-		// Find the core/navigation block (may be top-level or the markup may
-		// be just the inner blocks of a navigation).
-		$nav_block = self::find_navigation_block( $blocks );
-
-		if ( $nav_block !== null ) {
-			$nav_attrs = $nav_block['attrs'] ?? [];
-			$inner     = $nav_block['innerBlocks'] ?? [];
-		} else {
-			// Treat all parsed blocks as inner blocks of an implicit navigation.
-			$inner = $blocks;
-		}
+		$nav_attrs = $markup_source['hasNavigationBlock']
+			? $markup_source['attrs']
+			: $saved_source['attrs'];
+		$inner     = $markup_source['hasStructure']
+			? $markup_source['inner']
+			: $saved_source['inner'];
 
 		$menu_items = self::extract_menu_items( $inner );
 
@@ -1275,6 +1271,47 @@ final class ServerCollector {
 		}
 
 		return null;
+	}
+
+	/**
+	 * @return array{attrs: array<string, mixed>, inner: array<int, mixed>, hasNavigationBlock: bool, hasStructure: bool}
+	 */
+	private static function parse_navigation_source( string $content ): array {
+		if ( '' === $content ) {
+			return [
+				'attrs'              => [],
+				'inner'              => [],
+				'hasNavigationBlock' => false,
+				'hasStructure'       => false,
+			];
+		}
+
+		$blocks    = parse_blocks( $content );
+		$nav_block = self::find_navigation_block( $blocks );
+
+		if ( null !== $nav_block ) {
+			$inner = is_array( $nav_block['innerBlocks'] ?? null )
+				? $nav_block['innerBlocks']
+				: [];
+			$has_explicit_wrapper = str_contains(
+				$content,
+				'<!-- /wp:navigation -->'
+			);
+
+			return [
+				'attrs'              => is_array( $nav_block['attrs'] ?? null ) ? $nav_block['attrs'] : [],
+				'inner'              => $inner,
+				'hasNavigationBlock' => true,
+				'hasStructure'       => $has_explicit_wrapper || [] !== $inner,
+			];
+		}
+
+		return [
+			'attrs'              => [],
+			'inner'              => $blocks,
+			'hasNavigationBlock' => false,
+			'hasStructure'       => [] !== $blocks,
+		];
 	}
 
 	/**

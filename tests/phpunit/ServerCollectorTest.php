@@ -286,6 +286,58 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertNotContains( 'theme/home-hero', $pattern_names );
 	}
 
+	public function test_for_navigation_uses_live_block_attributes_with_saved_menu_structure(): void {
+		WordPressTestState::$posts[42] = (object) [
+			'ID'           => 42,
+			'post_type'    => 'wp_navigation',
+			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->'
+				. '<!-- wp:navigation-link {"label":"Contact","url":"/contact"} /-->',
+		];
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:navigation {"ref":42} /-->';
+
+		$result = ServerCollector::for_navigation(
+			42,
+			'<!-- wp:navigation {"ref":42,"overlayMenu":"always","openSubmenusOnClick":true} /-->'
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'header', $result['location'] ?? null );
+		$this->assertSame(
+			'always',
+			$result['attributes']['overlayMenu'] ?? null
+		);
+		$this->assertTrue(
+			(bool) ( $result['attributes']['openSubmenusOnClick'] ?? false )
+		);
+		$this->assertSame( 2, $result['menuItemCount'] ?? null );
+		$this->assertSame(
+			[ 'Home', 'Contact' ],
+			array_column( $result['menuItems'] ?? [], 'label' )
+		);
+	}
+
+	public function test_for_navigation_preserves_an_explicitly_empty_live_navigation_structure(): void {
+		WordPressTestState::$posts[42] = (object) [
+			'ID'           => 42,
+			'post_type'    => 'wp_navigation',
+			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->'
+				. '<!-- wp:navigation-link {"label":"Contact","url":"/contact"} /-->',
+		];
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:navigation {"ref":42} /-->';
+
+		$result = ServerCollector::for_navigation(
+			42,
+			'<!-- wp:navigation {"ref":42,"overlayMenu":"always"} --><!-- /wp:navigation -->'
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'always', $result['attributes']['overlayMenu'] ?? null );
+		$this->assertSame( 0, $result['menuItemCount'] ?? null );
+		$this->assertSame( [], $result['menuItems'] ?? [] );
+	}
+
 	public function test_for_tokens_includes_duotone_presets_in_compact_summary(): void {
 		WordPressTestState::$global_settings = [
 			'color'      => [

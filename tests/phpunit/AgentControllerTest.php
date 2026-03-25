@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\REST\Agent_Controller;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -76,6 +77,7 @@ final class AgentControllerTest extends TestCase {
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
 		];
+		WordPressTestState::$current_user_id    = 7;
 		WordPressTestState::$ai_client_supported = true;
 	}
 
@@ -458,6 +460,163 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_recommend_navigation_forwards_selected_navigation_context(): void {
+		WordPressTestState::$posts[42] = (object) [
+			'ID'           => 42,
+			'post_type'    => 'wp_navigation',
+			'post_content' => '<!-- wp:navigation-link {"label":"Saved Home","url":"/"} /-->',
+		];
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:navigation {"ref":42} /-->';
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [
+								[
+									'label'       => 'Group utility links',
+									'description' => 'Keep account and contact actions together.',
+									'category'    => 'structure',
+									'changes'     => [
+										[
+											'type'   => 'group',
+											'target' => 'Contact and Account',
+											'detail' => 'Move them into a single submenu to simplify the top level.',
+										],
+									],
+								],
+							],
+							'explanation' => 'The top-level navigation is crowded.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-navigation' );
+		$request->set_param( 'menuId', 42 );
+		$request->set_param(
+			'navigationMarkup',
+			'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- wp:navigation-link {"label":"Contact","url":"/contact"} /--><!-- /wp:navigation -->'
+		);
+		$request->set_param( 'prompt', 'Simplify the header navigation.' );
+
+		$response = Agent_Controller::handle_recommend_navigation( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Group utility links',
+			$response->get_data()['suggestions'][0]['label'] ?? ''
+		);
+		$this->assertSame(
+			'The top-level navigation is crowded.',
+			$response->get_data()['explanation'] ?? ''
+		);
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'Location: header',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'"Home"',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'"Contact"',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Simplify the header navigation.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_create_activity_persists_structured_entries(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity' );
+		$request->set_param( 'entry', $this->build_activity_entry( 'activity-1' ) );
+
+		$response = Agent_Controller::handle_create_activity( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'activity-1', $response->get_data()['entry']['id'] ?? null );
+		$this->assertSame(
+			'theme//home',
+			$response->get_data()['entry']['target']['templateRef'] ?? null
+		);
+		$this->assertSame(
+			'server',
+			$response->get_data()['entry']['persistence']['status'] ?? null
+		);
+	}
+
+	public function test_handle_get_activity_filters_by_scope_key(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-1' ) );
+		ActivityRepository::create(
+			array_merge(
+				$this->build_activity_entry( 'activity-2' ),
+				[
+					'document' => [
+						'scopeKey' => 'wp_template:theme//single',
+						'postType' => 'wp_template',
+						'entityId' => 'theme//single',
+					],
+					'target'   => [
+						'templateRef' => 'theme//single',
+					],
+				]
+			)
+		);
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'scopeKey', 'wp_template:theme//home' );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertCount( 1, $response->get_data()['entries'] ?? [] );
+		$this->assertSame(
+			'activity-1',
+			$response->get_data()['entries'][0]['id'] ?? null
+		);
+	}
+
+	public function test_handle_update_activity_undo_persists_status_changes(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-1' ) );
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/activity/activity-1/undo' );
+		$request->set_param( 'id', 'activity-1' );
+		$request->set_param( 'status', 'undone' );
+
+		$response = Agent_Controller::handle_update_activity_undo( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'undone',
+			$response->get_data()['entry']['undo']['status'] ?? null
+		);
+	}
+
 	private function register_paragraph_block(): void {
 		\WP_Block_Type_Registry::get_instance()->register(
 			'core/paragraph',
@@ -499,5 +658,41 @@ final class AgentControllerTest extends TestCase {
 				'explanation' => 'Use the accent color.',
 			]
 		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_activity_entry( string $id ): array {
+		return [
+			'id'        => $id,
+			'type'      => 'apply_template_suggestion',
+			'surface'   => 'template',
+			'target'    => [
+				'templateRef' => 'theme//home',
+			],
+			'suggestion' => 'Clarify hierarchy',
+			'before'    => [
+				'operations' => [],
+			],
+			'after'     => [
+				'operations' => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'theme/hero',
+					],
+				],
+			],
+			'request'   => [
+				'prompt'    => 'Make the home template feel more editorial.',
+				'reference' => 'template:theme//home:3',
+			],
+			'document'  => [
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			],
+			'timestamp' => '2026-03-24T10:00:00Z',
+		];
 	}
 }

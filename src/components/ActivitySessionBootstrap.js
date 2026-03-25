@@ -1,11 +1,11 @@
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useEffect } from '@wordpress/element';
+import { useEffect, useRef } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
 import { resolveActivityScope } from '../store/activity-history';
 
 export default function ActivitySessionBootstrap() {
-	const scopeHint = useSelect( ( select ) => {
+	const scope = useSelect( ( select ) => {
 		const editor = select( 'core/editor' );
 		const editSite = select( 'core/edit-site' );
 		const postType =
@@ -15,13 +15,40 @@ export default function ActivitySessionBootstrap() {
 		const postId =
 			editor?.getCurrentPostId?.() || editSite?.getEditedPostId?.() || '';
 
-		return resolveActivityScope( postType, postId )?.hint || '';
+		return (
+			resolveActivityScope( postType, postId ) || {
+				key: null,
+				hint: '',
+				postType: '',
+				entityId: '',
+			}
+		);
 	}, [] );
 	const { loadActivitySession } = useDispatch( STORE_NAME );
+	const previousScope = useRef( scope );
+	const scopeKey = scope?.key ?? null;
+	const scopeHint = scope?.hint ?? '';
+	const scopePostType = scope?.postType ?? '';
+	const scopeEntityId = scope?.entityId ?? '';
 
 	useEffect( () => {
-		loadActivitySession();
-	}, [ loadActivitySession, scopeHint ] );
+		const allowUnsavedMigration =
+			previousScope.current?.key === null &&
+			previousScope.current?.hint?.endsWith?.( ':__unsaved__' ) &&
+			scopeKey !== null &&
+			scopePostType !== '' &&
+			scopePostType === previousScope.current?.postType;
+
+		previousScope.current = {
+			key: scopeKey,
+			hint: scopeHint,
+			postType: scopePostType,
+			entityId: scopeEntityId,
+		};
+		loadActivitySession( {
+			allowUnsavedMigration,
+		} );
+	}, [ loadActivitySession, scopeEntityId, scopeHint, scopeKey, scopePostType ] );
 
 	return null;
 }

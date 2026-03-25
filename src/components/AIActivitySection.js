@@ -1,15 +1,28 @@
 import { Button } from '@wordpress/components';
 
-function getStatusLabel( entry, latestUndoableActivityId ) {
+function getStatusLabel( entry ) {
+	if (
+		entry?.persistence?.status !== 'server' &&
+		entry?.persistence?.syncType === 'undo'
+	) {
+		return entry?.undo?.status === 'undone'
+			? 'Undo pending sync'
+			: 'Audit sync pending';
+	}
+
 	if ( entry?.undo?.status === 'undone' ) {
 		return 'Undone';
+	}
+
+	if ( entry?.undo?.status === 'blocked' ) {
+		return 'Undo blocked';
 	}
 
 	if ( entry?.undo?.status === 'failed' ) {
 		return 'Undo unavailable';
 	}
 
-	if ( entry?.id === latestUndoableActivityId ) {
+	if ( entry?.undo?.status === 'available' ) {
 		return 'Undo available';
 	}
 
@@ -35,7 +48,6 @@ function describeActivity( entry ) {
 export default function AIActivitySection( {
 	entries = [],
 	isUndoing = false,
-	latestUndoableActivityId = null,
 	onUndo,
 	title = 'Recent AI Actions',
 } ) {
@@ -56,8 +68,11 @@ export default function AIActivitySection( {
 			<div className="flavor-agent-panel__group-body">
 				{ entries.map( ( entry ) => {
 					const canUndo =
-						entry?.id === latestUndoableActivityId &&
-						entry?.undo?.status === 'available';
+						entry?.undo?.status === 'available' &&
+						entry?.undo?.canUndo === true;
+					const hasPendingUndoSync =
+						entry?.persistence?.status !== 'server' &&
+						entry?.persistence?.syncType === 'undo';
 
 					return (
 						<div
@@ -71,7 +86,15 @@ export default function AIActivitySection( {
 								<div className="flavor-agent-activity-row__meta">
 									{ describeActivity( entry ) }
 								</div>
-								{ entry?.undo?.status === 'failed' &&
+								{ hasPendingUndoSync && (
+									<div className="flavor-agent-activity-row__meta">
+										Activity audit sync pending.
+									</div>
+								) }
+								{ (
+									entry?.undo?.status === 'failed' ||
+									entry?.undo?.status === 'blocked'
+								) &&
 									entry?.undo?.error && (
 										<div className="flavor-agent-activity-row__meta">
 											{ entry.undo.error }
@@ -80,10 +103,7 @@ export default function AIActivitySection( {
 							</div>
 
 							<span className="flavor-agent-pill">
-								{ getStatusLabel(
-									entry,
-									latestUndoableActivityId
-								) }
+								{ getStatusLabel( entry ) }
 							</span>
 
 							{ canUndo && (

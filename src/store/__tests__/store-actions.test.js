@@ -2,7 +2,9 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplatePartSuggestionOperations: jest.fn(),
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	getTemplateActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	getTemplatePartActivityUndoState: jest.fn(
 		( activity ) => activity?.undo || {}
 	),
@@ -30,6 +32,8 @@ describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		window.sessionStorage.clear();
+		actions._activitySessionLoadToken = 0;
+		actions._navigationAbort = null;
 		actions._patternAbort = null;
 		actions._templateAbort = null;
 		actions._templatePartAbort = null;
@@ -104,6 +108,60 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'fetchNavigationRecommendations reads request token from thunk selectors', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Group utility links' } ],
+			explanation: 'Mocked navigation response',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getNavigationRequestToken: jest.fn().mockReturnValue( 1 ),
+		};
+		const input = {
+			blockClientId: 'nav-1',
+			menuId: 42,
+			navigationMarkup:
+				'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
+			prompt: 'Simplify the header menu.',
+		};
+
+		await actions.fetchNavigationRecommendations( input )( {
+			dispatch,
+			select,
+		} );
+
+		expect( select.getNavigationRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-navigation',
+				method: 'POST',
+				data: {
+					menuId: 42,
+					navigationMarkup:
+						'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
+					prompt: 'Simplify the header menu.',
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setNavigationStatus( 'loading', null, 2, 'nav-1' )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setNavigationRecommendations(
+				'nav-1',
+				{
+					suggestions: [ { label: 'Group utility links' } ],
+					explanation: 'Mocked navigation response',
+				},
+				'Simplify the header menu.',
+				2
+			)
+		);
+	} );
+
 	test( 'fetchTemplateRecommendations reads request token from thunk selectors', async () => {
 		apiFetch.mockResolvedValue( {
 			suggestions: [ { label: 'Refresh template hierarchy' } ],
@@ -151,7 +209,118 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
-	test( 'loadActivitySession migrates in-memory unsaved activity into the first concrete document scope', async () => {
+	test( 'loadActivitySession migrates in-memory unsaved activity into the first concrete document scope when explicitly allowed', async () => {
+		const draftEntry = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			suggestion: 'Refresh content',
+			target: {
+				clientId: 'block-1',
+			},
+		} );
+		const persistedEntry = {
+			...draftEntry,
+			document: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			persistence: {
+				status: 'server',
+				updatedAt: draftEntry.timestamp,
+			},
+		};
+		apiFetch.mockImplementation( ( { path, method, data } ) => {
+			if ( path === '/flavor-agent/v1/activity' && method === 'POST' ) {
+				return Promise.resolve( {
+					entry: {
+						...data.entry,
+						persistence: {
+							status: 'server',
+							updatedAt: draftEntry.timestamp,
+						},
+					},
+				} );
+			}
+
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [ persistedEntry ],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [ draftEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		await actions.loadActivitySession( {
+			allowUnsavedMigration: true,
+		} )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity',
+				method: 'POST',
+			} )
+		);
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				method: 'GET',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
+					id: draftEntry.id,
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+				} ),
+			] )
+		);
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
+			expect.objectContaining( {
+				id: persistedEntry.id,
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+				persistence: expect.objectContaining( {
+					status: 'server',
+					updatedAt: draftEntry.timestamp,
+				} ),
+			} ),
+		] );
+	} );
+
+	test( 'loadActivitySession does not reassign unsaved activity without an explicit save migration signal', async () => {
 		const draftEntry = createActivityEntry( {
 			type: 'apply_suggestion',
 			surface: 'block',
@@ -176,6 +345,297 @@ describe( 'store action thunks', () => {
 			),
 		};
 
+		apiFetch.mockResolvedValue( {
+			entries: [],
+		} );
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				method: 'GET',
+			} )
+		);
+		expect( apiFetch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity',
+				method: 'POST',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [] )
+		);
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [] );
+	} );
+
+	test( 'loadActivitySession ignores stale async completions from a previous scope', async () => {
+		let resolveFirstRequest;
+		const firstRequest = new Promise( ( resolve ) => {
+			resolveFirstRequest = resolve;
+		} );
+		const dispatch = jest.fn();
+		const firstSelect = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+		const secondSelect = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+		const firstRegistry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+		const secondRegistry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 99,
+					  }
+					: {}
+			),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return firstRequest;
+			}
+
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A99' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [
+						{
+							id: 'activity-fresh',
+							timestamp: '2026-03-24T10:00:00Z',
+						},
+					],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		const firstLoad = actions.loadActivitySession()( {
+			dispatch,
+			registry: firstRegistry,
+			select: firstSelect,
+		} );
+		const secondLoad = actions.loadActivitySession()( {
+			dispatch,
+			registry: secondRegistry,
+			select: secondSelect,
+		} );
+
+		await secondLoad;
+		resolveFirstRequest( {
+			entries: [
+				{
+					id: 'activity-stale',
+					timestamp: '2026-03-24T09:00:00Z',
+				},
+			],
+		} );
+		await firstLoad;
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:99', [
+				{
+					id: 'activity-fresh',
+					timestamp: '2026-03-24T10:00:00Z',
+				},
+			] )
+		);
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				{
+					id: 'activity-stale',
+					timestamp: '2026-03-24T09:00:00Z',
+				},
+			] )
+		);
+	} );
+
+	test( 'loadActivitySession retries pending undo sync before refreshing server history', async () => {
+		const pendingEntry = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				error: null,
+				updatedAt: '2026-03-24T10:01:00Z',
+				undoneAt: '2026-03-24T10:01:00Z',
+			},
+			persistence: {
+				status: 'local',
+				syncType: 'undo',
+				updatedAt: '2026-03-24T10:01:00Z',
+			},
+		};
+		const syncedEntry = {
+			...pendingEntry,
+			persistence: {
+				status: 'server',
+				syncType: null,
+				updatedAt: '2026-03-24T10:01:00Z',
+			},
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/activity/activity-1/undo' &&
+				method === 'POST'
+			) {
+				return Promise.resolve( {
+					entry: syncedEntry,
+				} );
+			}
+
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [ syncedEntry ],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity/activity-1/undo',
+				method: 'POST',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [ syncedEntry ] )
+		);
+	} );
+
+	test( 'loadActivitySession preserves local retry state when the server copy is stale', async () => {
+		const pendingEntry = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				error: null,
+				updatedAt: '2026-03-24T10:01:00Z',
+				undoneAt: '2026-03-24T10:01:00Z',
+			},
+			persistence: {
+				status: 'local',
+				syncType: 'undo',
+				updatedAt: '2026-03-24T10:01:00Z',
+			},
+		};
+		const staleServerEntry = {
+			...pendingEntry,
+			undo: {
+				canUndo: true,
+				status: 'available',
+				error: null,
+				updatedAt: '2026-03-24T10:00:00Z',
+				undoneAt: null,
+			},
+			persistence: {
+				status: 'server',
+				syncType: null,
+				updatedAt: '2026-03-24T10:00:00Z',
+			},
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/activity/activity-1/undo' &&
+				method === 'POST'
+			) {
+				return Promise.reject( new Error( 'Network unavailable.' ) );
+			}
+
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [ staleServerEntry ],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
 		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
@@ -183,25 +643,114 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( dispatch ).toHaveBeenCalledWith(
-			actions.setActivitySession( 'post:42', [
-				expect.objectContaining( {
-					id: draftEntry.id,
-					document: {
-						scopeKey: 'post:42',
-						postType: 'post',
-						entityId: '42',
+			actions.setActivitySession( 'post:42', [ pendingEntry ] )
+		);
+	} );
+
+	test( 'loadActivitySession drops a local undo retry after an authoritative server rejection', async () => {
+		const pendingEntry = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			document: {
+				scopeKey: 'post:42',
+			},
+			target: {
+				clientId: 'block-1',
+				blockPath: [ 0 ],
+			},
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				error: null,
+				updatedAt: '2026-03-24T10:01:00Z',
+				undoneAt: '2026-03-24T10:01:00Z',
+			},
+			persistence: {
+				status: 'local',
+				syncType: 'undo',
+				updatedAt: '2026-03-24T10:01:00Z',
+			},
+		};
+		const serverEntry = {
+			...pendingEntry,
+			undo: {
+				canUndo: true,
+				status: 'available',
+				error: null,
+				updatedAt: '2026-03-24T10:00:00Z',
+				undoneAt: null,
+			},
+			persistence: {
+				status: 'server',
+				syncType: null,
+				updatedAt: '2026-03-24T10:00:00Z',
+			},
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/activity/activity-1/undo' &&
+				method === 'POST'
+			) {
+				return Promise.reject( {
+					code: 'flavor_agent_activity_undo_blocked',
+					message: 'Undo blocked by newer AI actions.',
+					data: {
+						status: 409,
 					},
-				} ),
-			] )
+				} );
+			}
+
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [ serverEntry ],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [ serverEntry ] )
 		);
 		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
 			expect.objectContaining( {
-				id: draftEntry.id,
-				document: {
-					scopeKey: 'post:42',
-					postType: 'post',
-					entityId: '42',
-				},
+				id: 'activity-1',
+				persistence: expect.objectContaining( {
+					status: 'server',
+					syncType: null,
+				} ),
+				undo: expect.objectContaining( {
+					status: 'available',
+					canUndo: true,
+				} ),
 			} ),
 		] );
 	} );
@@ -486,13 +1035,13 @@ describe( 'store action thunks', () => {
 			],
 		};
 
-		const result = await actions.applyTemplatePartSuggestion(
-			suggestion
-		)( {
-			dispatch,
-			registry: null,
-			select,
-		} );
+		const result = await actions.applyTemplatePartSuggestion( suggestion )(
+			{
+				dispatch,
+				registry: null,
+				select,
+			}
+		);
 
 		expect( select.getTemplatePartResultRef ).toHaveBeenCalled();
 		expect( dispatch ).toHaveBeenCalledWith(
@@ -637,6 +1186,108 @@ describe( 'store action thunks', () => {
 		expect( result ).toEqual( { ok: true } );
 	} );
 
+	test( 'undoActivity marks applied undos as pending when the audit write fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network unavailable.' ) );
+
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [
+				{
+					id: 'activity-1',
+					type: 'apply_suggestion',
+					surface: 'block',
+					target: {
+						clientId: 'block-1',
+					},
+					before: {
+						attributes: {
+							content: 'Old copy',
+						},
+					},
+					after: {
+						attributes: {
+							content: 'New copy',
+						},
+					},
+					document: {
+						scopeKey: 'post:42',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+					},
+					persistence: {
+						status: 'server',
+						syncType: null,
+						updatedAt: '2026-03-24T10:00:00Z',
+					},
+				},
+			] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( {
+								clientId: 'block-1',
+								name: 'core/paragraph',
+								attributes: {
+									content: 'New copy',
+								},
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'New copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-1' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
+			content: 'Old copy',
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'UPDATE_ACTIVITY_UNDO_STATE',
+				activityId: 'activity-1',
+				status: 'undone',
+				persistence: expect.objectContaining( {
+					status: 'local',
+					syncType: 'undo',
+				} ),
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'SET_UNDO_STATE',
+				status: 'error',
+				activityId: 'activity-1',
+				error: expect.stringContaining(
+					'will retry on the next activity sync'
+				),
+			} )
+		);
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining(
+					'will retry on the next activity sync'
+				),
+			} )
+		);
+	} );
+
 	test( 'undoActivity delegates template rollback to template-actions helpers', async () => {
 		undoTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,
@@ -697,6 +1348,146 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'undoActivity blocks historical undo until newer entity actions are already undone', async () => {
+		const dispatch = jest.fn();
+		const olderActivity = {
+			id: 'activity-older',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:00Z',
+			target: {
+				clientId: 'block-1',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+		};
+		const newerActivity = {
+			id: 'activity-newer',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:01Z',
+			target: {
+				clientId: 'block-1',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+		};
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest
+				.fn()
+				.mockReturnValue( [ olderActivity, newerActivity ] ),
+		};
+
+		const result = await actions.undoActivity( 'activity-older' )( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'SET_UNDO_STATE',
+				status: 'error',
+				activityId: 'activity-older',
+				error: 'Undo blocked by newer AI actions.',
+			} )
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Undo blocked by newer AI actions.',
+		} );
+	} );
+
+	test( 'undoActivity refreshes server-backed activity before allowing a historical undo', async () => {
+		const dispatch = jest.fn();
+		const olderActivity = {
+			id: 'activity-older',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:00Z',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'server',
+			},
+		};
+		const newerActivity = {
+			id: 'activity-newer',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:01Z',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'server',
+			},
+		};
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ olderActivity ] ),
+		};
+
+		apiFetch.mockResolvedValue( {
+			entries: [ olderActivity, newerActivity ],
+		} );
+
+		const result = await actions.undoActivity( 'activity-older' )( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				method: 'GET',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				olderActivity,
+				newerActivity,
+			] )
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Undo blocked by newer AI actions.',
+		} );
+	} );
+
 	test( 'undoActivity delegates template-part rollback to template-actions helpers', async () => {
 		undoTemplatePartSuggestionOperations.mockReturnValue( {
 			ok: true,
@@ -742,9 +1533,7 @@ describe( 'store action thunks', () => {
 			select,
 		} );
 
-		expect(
-			undoTemplatePartSuggestionOperations
-		).toHaveBeenCalledWith(
+		expect( undoTemplatePartSuggestionOperations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				id: 'activity-1',
 				surface: 'template-part',

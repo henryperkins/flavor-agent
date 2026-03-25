@@ -32,7 +32,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | Namespace | Purpose |
 |-----------|---------|
 | `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-template, recommend-template-part, sync-patterns) |
-| `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations (prefers `wp_ai_client_prompt()`, falls back to `AI_Client` class) |
+| `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations via `wp_ai_client_prompt()` and `is_supported_for_text_generation()` |
 | `LLM\Prompt` | Block recommendation prompt assembly and response parsing |
 | `LLM\TemplatePrompt` | Template recommendation prompt assembly and executable operation parsing |
 | `LLM\TemplatePartPrompt` | Template-part recommendation prompt assembly and response parsing |
@@ -100,7 +100,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 - **Pattern index lifecycle**: Auto-reindexes on theme switch, plugin activation/deactivation, upgrades, and relevant option changes. Uses WP cron event `flavor_agent_reindex_patterns`.
 - **Docs grounding lifecycle**: Prewarm and context-warm cron events (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) scheduled on activation.
 - **Activity history**: Block and template applies write structured session-scoped activity records keyed by the current post/template reference and validated again before undo.
-- **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 11 abilities across block, pattern, template, navigation, docs, and infra categories.
+- **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 11 abilities across block, pattern, template, navigation, docs, and infra categories. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
 
 ## External Services
 

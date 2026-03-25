@@ -27,6 +27,7 @@ require_once FLAVOR_AGENT_DIR . 'vendor/autoload.php';
 register_activation_hook(
 	FLAVOR_AGENT_FILE,
 	function () {
+		FlavorAgent\Activity\Repository::install();
 		FlavorAgent\Patterns\PatternIndex::activate();
 		FlavorAgent\Cloudflare\AISearchClient::schedule_prewarm();
 	}
@@ -41,6 +42,7 @@ register_deactivation_hook(
 );
 
 add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
+add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
 add_action( 'admin_init', [ FlavorAgent\Settings::class, 'register_settings' ] );
@@ -157,18 +159,19 @@ function flavor_agent_enqueue_editor(): void {
 		'flavor-agent-editor',
 		'flavorAgentData',
 		[
-			'restUrl'               => rest_url( 'flavor-agent/v1/' ),
-			'nonce'                 => wp_create_nonce( 'wp_rest' ),
-			'canRecommendBlocks'    => FlavorAgent\LLM\WordPressAIClient::is_supported(),
-			'canRecommendPatterns'  => (bool) (
+			'restUrl'                  => rest_url( 'flavor-agent/v1/' ),
+			'nonce'                    => wp_create_nonce( 'wp_rest' ),
+			'canRecommendBlocks'       => FlavorAgent\LLM\WordPressAIClient::is_supported(),
+			'canRecommendPatterns'     => (bool) (
 				Provider::embedding_configured()
 				&& Provider::chat_configured()
 				&& get_option( 'flavor_agent_qdrant_url' )
 				&& get_option( 'flavor_agent_qdrant_key' )
 			),
-			'canRecommendTemplates' => Provider::chat_configured(),
+			'canRecommendTemplates'    => Provider::chat_configured(),
 			'canRecommendTemplateParts' => Provider::chat_configured(),
-			'templatePartAreas'     => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
+			'canRecommendNavigation'    => Provider::chat_configured() && current_user_can( 'edit_theme_options' ),
+			'templatePartAreas'         => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
 		]
 	);
 }

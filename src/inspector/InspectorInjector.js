@@ -17,13 +17,19 @@ import {
 	TextareaControl,
 } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useState, useCallback } from '@wordpress/element';
+import { useState, useCallback, useMemo } from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
+import {
+	getLatestAppliedActivity,
+	getLatestUndoableActivity,
+	getResolvedActivityEntries,
+} from '../store/activity-history';
 import { collectBlockContext } from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
 import SettingsRecommendations from './SettingsRecommendations';
+import NavigationRecommendations from './NavigationRecommendations';
 import StylesRecommendations from './StylesRecommendations';
 import SuggestionChips from './SuggestionChips';
 
@@ -68,9 +74,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			recommendations,
 			isLoading,
 			error,
-			blockActivityEntries,
-			latestBlockActivity,
-			latestUndoableActivityId,
+			blockActivityLog,
 			undoError,
 			undoStatus,
 			lastUndoneActivityId,
@@ -97,19 +101,41 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 					recommendations: s.getBlockRecommendations( clientId ),
 					isLoading: s.isBlockLoading( clientId ),
 					error: s.getBlockError( clientId ),
-					blockActivityEntries: [ ...blockEntries ]
-						.slice( -3 )
-						.reverse(),
-					latestBlockActivity:
-						blockEntries[ blockEntries.length - 1 ] || null,
-					latestUndoableActivityId:
-						s.getLatestUndoableActivity()?.id || null,
+					blockActivityLog: blockEntries,
 					undoError: s.getUndoError(),
 					undoStatus: s.getUndoStatus(),
 					lastUndoneActivityId: s.getLastUndoneActivityId(),
 				};
 			},
 			[ clientId ]
+		);
+		const resolvedBlockActivities = useMemo(
+			() => getResolvedActivityEntries( blockActivityLog ),
+			[ blockActivityLog ]
+		);
+		const blockActivityEntries = useMemo(
+			() =>
+				[ ...resolvedBlockActivities ]
+					.slice( -3 )
+					.reverse(),
+			[ resolvedBlockActivities ]
+		);
+		const latestBlockActivity = useMemo(
+			() => getLatestAppliedActivity( resolvedBlockActivities ),
+			[ resolvedBlockActivities ]
+		);
+		const latestUndoableActivityId = useMemo(
+			() =>
+				getLatestUndoableActivity( resolvedBlockActivities )?.id ||
+				null,
+			[ resolvedBlockActivities ]
+		);
+		const lastUndoneBlockActivity = useMemo(
+			() =>
+				resolvedBlockActivities.find(
+					( entry ) => entry?.id === lastUndoneActivityId
+				) || null,
+			[ resolvedBlockActivities, lastUndoneActivityId ]
 		);
 		const { editingMode, isInsideContentOnly } = useSelect(
 			( sel ) => {
@@ -296,17 +322,17 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 									</Notice>
 								) }
 
-							{ latestBlockActivity &&
-								undoStatus === 'success' &&
-								lastUndoneActivityId ===
-									latestBlockActivity.id && (
+							{ undoStatus === 'success' &&
+								lastUndoneBlockActivity && (
 									<Notice
 										status="success"
 										isDismissible={ false }
 									>
 										Undid{ ' ' }
 										<strong>
-											{ latestBlockActivity.suggestion }
+											{
+												lastUndoneBlockActivity.suggestion
+											}
 										</strong>
 										.
 									</Notice>
@@ -320,12 +346,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 
 							<AIActivitySection
 								entries={ blockActivityEntries }
-								latestUndoableActivityId={
-									latestUndoableActivityId
-								}
 								isUndoing={ undoStatus === 'undoing' }
 								onUndo={ handleUndo }
 							/>
+
+							<NavigationRecommendations clientId={ clientId } />
 
 							{ recommendations?.block?.length > 0 && (
 								<div className="flavor-agent-panel__group">

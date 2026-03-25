@@ -50,6 +50,16 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, object> */
 		public static array $posts = [];
 
+		/** @var array<string, array<int, array<string, mixed>>> */
+		public static array $db_tables = [];
+
+		/** @var array<int, string> */
+		public static array $db_queries = [];
+
+		public static int $db_insert_id = 0;
+
+		public static int $current_user_id = 0;
+
 		public static mixed $remote_post_response = [];
 
 		public static mixed $remote_get_response = [];
@@ -79,6 +89,10 @@ namespace FlavorAgent\Tests\Support {
 			self::$updated_options              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$db_tables                   = [];
+			self::$db_queries                  = [];
+			self::$db_insert_id                = 0;
+			self::$current_user_id             = 0;
 			self::$remote_post_response        = [];
 			self::$remote_get_response         = [];
 			self::$ai_client_supported         = false;
@@ -258,6 +272,241 @@ namespace {
 		}
 	}
 
+	if ( ! defined( 'OBJECT' ) ) {
+		define( 'OBJECT', 'OBJECT' );
+	}
+
+	if ( ! defined( 'ARRAY_A' ) ) {
+		define( 'ARRAY_A', 'ARRAY_A' );
+	}
+
+	if ( ! class_exists( 'wpdb' ) ) {
+		class wpdb {
+
+			public string $prefix = 'wp_';
+
+			public int $insert_id = 0;
+
+			public function get_charset_collate(): string {
+				return 'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
+			}
+
+			public function esc_like( string $text ): string {
+				return addcslashes( $text, '_%\\' );
+			}
+
+			public function prepare( string $query, ...$args ): string {
+				$flat_args = [];
+
+				foreach ( $args as $arg ) {
+					if ( is_array( $arg ) ) {
+						$flat_args = array_merge( $flat_args, $arg );
+					} else {
+						$flat_args[] = $arg;
+					}
+				}
+
+				foreach ( $flat_args as $arg ) {
+					if ( ! preg_match( '/%[sd]/', $query, $matches ) ) {
+						break;
+					}
+
+					$placeholder = (string) ( $matches[0] ?? '%s' );
+					$replacement = '%d' === $placeholder
+						? (string) (int) $arg
+						: "'" . str_replace( "'", "\\'", (string) $arg ) . "'";
+
+					$query = preg_replace(
+						'/' . preg_quote( $placeholder, '/' ) . '/',
+						$replacement,
+						$query,
+						1
+					) ?? $query;
+				}
+
+				return $query;
+			}
+
+			public function query( string $query ) {
+				WordPressTestState::$db_queries[] = $query;
+
+				if ( preg_match( '/CREATE TABLE\s+([^\s(]+)/i', $query, $matches ) ) {
+					$table = (string) ( $matches[1] ?? '' );
+
+					if ( '' !== $table && ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
+						WordPressTestState::$db_tables[ $table ] = [];
+					}
+				}
+
+				return 1;
+			}
+
+			public function insert( string $table, array $data, array $format = [] ) {
+				WordPressTestState::$db_insert_id += 1;
+				$row = array_merge(
+					[
+						'id' => WordPressTestState::$db_insert_id,
+					],
+					$data
+				);
+
+				if ( ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
+					WordPressTestState::$db_tables[ $table ] = [];
+				}
+
+				WordPressTestState::$db_tables[ $table ][] = $row;
+				$this->insert_id = WordPressTestState::$db_insert_id;
+
+				return 1;
+			}
+
+			public function update(
+				string $table,
+				array $data,
+				array $where,
+				array $format = [],
+				array $where_format = []
+			) {
+				if ( ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
+					return 0;
+				}
+
+				$updated = 0;
+
+				foreach ( WordPressTestState::$db_tables[ $table ] as $index => $row ) {
+					if ( ! $this->row_matches( $row, $where ) ) {
+						continue;
+					}
+
+					WordPressTestState::$db_tables[ $table ][ $index ] = array_merge( $row, $data );
+					++$updated;
+				}
+
+				return $updated;
+			}
+
+			public function get_row( string $query, string $output = OBJECT ) {
+				$results = $this->get_results( $query, $output );
+
+				return $results[0] ?? null;
+			}
+
+			public function get_var( string $query ) {
+				WordPressTestState::$db_queries[] = $query;
+
+				if ( preg_match( "/SHOW TABLES LIKE '([^']+)'/i", $query, $matches ) ) {
+					$table = stripslashes( (string) ( $matches[1] ?? '' ) );
+
+					return array_key_exists( $table, WordPressTestState::$db_tables )
+						? $table
+						: null;
+				}
+
+				return null;
+			}
+
+			public function get_results( string $query, string $output = OBJECT ): array {
+				if ( ! preg_match( '/FROM\s+([^\s]+)/i', $query, $matches ) ) {
+					return [];
+				}
+
+				$table = (string) ( $matches[1] ?? '' );
+				$rows  = array_values( WordPressTestState::$db_tables[ $table ] ?? [] );
+
+				if ( preg_match( "/document_scope_key\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+					$scope_key = stripslashes( (string) ( $matches[1] ?? '' ) );
+					$rows      = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => (string) ( $row['document_scope_key'] ?? '' ) === $scope_key
+						)
+					);
+				}
+
+				if ( preg_match( "/surface\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+					$surface = stripslashes( (string) ( $matches[1] ?? '' ) );
+					$rows    = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => (string) ( $row['surface'] ?? '' ) === $surface
+						)
+					);
+				}
+
+				if ( preg_match( "/entity_type\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+					$entity_type = stripslashes( (string) ( $matches[1] ?? '' ) );
+					$rows        = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => (string) ( $row['entity_type'] ?? '' ) === $entity_type
+						)
+					);
+				}
+
+				if ( preg_match( "/entity_ref\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+					$entity_ref = stripslashes( (string) ( $matches[1] ?? '' ) );
+					$rows       = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => (string) ( $row['entity_ref'] ?? '' ) === $entity_ref
+						)
+					);
+				}
+
+				if ( preg_match( "/activity_id\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+					$activity_id = stripslashes( (string) ( $matches[1] ?? '' ) );
+					$rows        = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => (string) ( $row['activity_id'] ?? '' ) === $activity_id
+						)
+					);
+				}
+
+				usort(
+					$rows,
+					static function ( array $left, array $right ): int {
+						$left_created  = (string) ( $left['created_at'] ?? '' );
+						$right_created = (string) ( $right['created_at'] ?? '' );
+
+						if ( $left_created === $right_created ) {
+							return (int) ( $left['id'] ?? 0 ) <=> (int) ( $right['id'] ?? 0 );
+						}
+
+						return $left_created <=> $right_created;
+					}
+				);
+
+				if ( preg_match( '/ORDER BY\s+created_at\s+DESC/i', $query ) ) {
+					$rows = array_reverse( $rows );
+				}
+
+				if ( preg_match( '/LIMIT\s+(\d+)/i', $query, $matches ) ) {
+					$rows = array_slice( $rows, 0, (int) ( $matches[1] ?? 0 ) );
+				}
+
+				if ( ARRAY_A === $output ) {
+					return $rows;
+				}
+
+				return array_map(
+					static fn ( array $row ): object => (object) $row,
+					$rows
+				);
+			}
+
+			private function row_matches( array $row, array $where ): bool {
+				foreach ( $where as $column => $value ) {
+					if ( (string) ( $row[ $column ] ?? '' ) !== (string) $value ) {
+						return false;
+					}
+				}
+
+				return true;
+			}
+		}
+	}
+
 	if ( ! class_exists( 'WP_Block_Type_Registry' ) ) {
 		class WP_Block_Type_Registry {
 
@@ -413,7 +662,36 @@ namespace {
 
 	if ( ! function_exists( 'current_user_can' ) ) {
 		function current_user_can( string $capability, ...$args ): bool {
+			if ( [] !== $args ) {
+				$specific_key = $capability . ':' . implode(
+					':',
+					array_map(
+						static fn ( $arg ): string => is_scalar( $arg ) || null === $arg
+							? (string) $arg
+							: wp_json_encode( $arg ),
+						$args
+					)
+				);
+
+				if ( array_key_exists( $specific_key, WordPressTestState::$capabilities ) ) {
+					return (bool) WordPressTestState::$capabilities[ $specific_key ];
+				}
+			}
+
+			if ( is_callable( WordPressTestState::$capabilities[ $capability ] ?? null ) ) {
+				return (bool) call_user_func(
+					WordPressTestState::$capabilities[ $capability ],
+					...$args
+				);
+			}
+
 			return (bool) ( WordPressTestState::$capabilities[ $capability ] ?? false );
+		}
+	}
+
+	if ( ! function_exists( 'get_current_user_id' ) ) {
+		function get_current_user_id(): int {
+			return WordPressTestState::$current_user_id;
 		}
 	}
 
@@ -829,6 +1107,10 @@ namespace {
 	}
 
 	require dirname( __DIR__, 2 ) . '/vendor/autoload.php';
+
+	if ( ! isset( $GLOBALS['wpdb'] ) || ! $GLOBALS['wpdb'] instanceof wpdb ) {
+		$GLOBALS['wpdb'] = new wpdb();
+	}
 
 	WordPressTestState::reset();
 }

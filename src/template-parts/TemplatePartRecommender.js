@@ -1,12 +1,28 @@
-import { Button, Notice, TextareaControl, Tooltip } from '@wordpress/components';
+import {
+	Button,
+	Notice,
+	TextareaControl,
+	Tooltip,
+} from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
+import {
+	getLatestAppliedActivity,
+	getLatestUndoableActivity,
+	getResolvedActivityEntries,
+} from '../store/activity-history';
 import {
 	getTemplatePartActivityUndoState,
 	openInserterForPattern,
@@ -53,7 +69,10 @@ function formatBlockPath( path = [] ) {
 	return `Path ${ path.join( ' > ' ) }`;
 }
 
-function deriveTemplatePartArea( slug, areaLookup = getTemplatePartAreaLookup() ) {
+function deriveTemplatePartArea(
+	slug,
+	areaLookup = getTemplatePartAreaLookup()
+) {
 	if ( typeof areaLookup?.[ slug ] === 'string' && areaLookup[ slug ] ) {
 		return areaLookup[ slug ];
 	}
@@ -105,9 +124,7 @@ function buildTemplatePartFetchInput( {
 		input.prompt = trimmedPrompt;
 	}
 
-	if (
-		Array.isArray( normalizedVisiblePatternNames )
-	) {
+	if ( Array.isArray( normalizedVisiblePatternNames ) ) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
 	}
 
@@ -152,7 +169,9 @@ function buildTemplatePartSuggestionViewModel(
 	const operations = executableOperations.ok
 		? executableOperations.operations
 				.map( ( operation ) => {
-					if ( operation?.type !== TEMPLATE_OPERATION_INSERT_PATTERN ) {
+					if (
+						operation?.type !== TEMPLATE_OPERATION_INSERT_PATTERN
+					) {
 						return null;
 					}
 
@@ -170,10 +189,12 @@ function buildTemplatePartSuggestionViewModel(
 				.filter( Boolean )
 		: [];
 	const mergedPatternSuggestions = Array.from(
-		new Set( [
-			...rawPatternSuggestions,
-			...operations.map( ( operation ) => operation.patternName ),
-		].filter( Boolean ) )
+		new Set(
+			[
+				...rawPatternSuggestions,
+				...operations.map( ( operation ) => operation.patternName ),
+			].filter( Boolean )
+		)
 	).map( ( patternName ) => ( {
 		name: patternName,
 		title: patternTitleMap[ patternName ] || patternName,
@@ -229,65 +250,78 @@ export default function TemplatePartRecommender() {
 		applyError,
 		lastAppliedSuggestionKey,
 		lastAppliedOperations,
-		templatePartActivityEntries,
-		latestTemplatePartActivity,
-		latestUndoableActivityId,
+		activityLog,
 		undoError,
 		undoStatus,
 		lastUndoneActivityId,
-	} = useSelect(
-		( select ) => {
-			const store = select( STORE_NAME );
-			const blockEditor = select( blockEditorStore );
-			const activityLog = store.getActivityLog() || [];
-			const templatePartEntries = activityLog
-				.filter(
+	} = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
+
+		return {
+			recommendations: store.getTemplatePartRecommendations(),
+			explanation: store.getTemplatePartExplanation(),
+			error: store.getTemplatePartError(),
+			resultRef: store.getTemplatePartResultRef(),
+			resultToken: store.getTemplatePartResultToken(),
+			isLoading: store.isTemplatePartLoading(),
+			selectedSuggestionKey: store.getTemplatePartSelectedSuggestionKey(),
+			applyStatus: store.getTemplatePartApplyStatus(),
+			applyError: store.getTemplatePartApplyError(),
+			lastAppliedSuggestionKey:
+				store.getTemplatePartLastAppliedSuggestionKey(),
+			lastAppliedOperations: store.getTemplatePartLastAppliedOperations(),
+			activityLog: store.getActivityLog() || [],
+			undoError: store.getUndoError(),
+			undoStatus: store.getUndoStatus(),
+			lastUndoneActivityId: store.getLastUndoneActivityId(),
+		};
+	}, [] );
+	const editorBlocks = useSelect(
+		( select ) => select( blockEditorStore ).getBlocks?.() || [],
+		[]
+	);
+	const blockEditorSelection = useMemo(
+		() => ( {
+			getBlocks: () => editorBlocks,
+		} ),
+		[ editorBlocks ]
+	);
+	const resolvedTemplatePartActivities = useMemo(
+		() =>
+			getResolvedActivityEntries(
+				activityLog.filter(
 					( entry ) =>
 						entry?.surface === 'template-part' &&
 						entry?.target?.templatePartRef === templatePartRef
-				)
-				.map( ( entry ) => ( {
-					...entry,
-					undo: getTemplatePartActivityUndoState(
+				),
+				( entry ) =>
+					getTemplatePartActivityUndoState(
 						entry,
-						blockEditor
-					),
-				} ) );
-			const latestTemplatePartEntry =
-				templatePartEntries[ templatePartEntries.length - 1 ] || null;
-			const latestUndoableTemplatePartActivityId =
-				latestTemplatePartEntry?.undo?.canUndo === true &&
-				latestTemplatePartEntry?.undo?.status === 'available'
-					? latestTemplatePartEntry.id
-					: null;
-
-			return {
-				recommendations: store.getTemplatePartRecommendations(),
-				explanation: store.getTemplatePartExplanation(),
-				error: store.getTemplatePartError(),
-				resultRef: store.getTemplatePartResultRef(),
-				resultToken: store.getTemplatePartResultToken(),
-				isLoading: store.isTemplatePartLoading(),
-				selectedSuggestionKey:
-					store.getTemplatePartSelectedSuggestionKey(),
-				applyStatus: store.getTemplatePartApplyStatus(),
-				applyError: store.getTemplatePartApplyError(),
-				lastAppliedSuggestionKey:
-					store.getTemplatePartLastAppliedSuggestionKey(),
-				lastAppliedOperations:
-					store.getTemplatePartLastAppliedOperations(),
-				templatePartActivityEntries: [ ...templatePartEntries ]
-					.slice( -3 )
-					.reverse(),
-				latestTemplatePartActivity: latestTemplatePartEntry,
-				latestUndoableActivityId:
-					latestUndoableTemplatePartActivityId,
-				undoError: store.getUndoError(),
-				undoStatus: store.getUndoStatus(),
-				lastUndoneActivityId: store.getLastUndoneActivityId(),
-			};
-		},
-		[ templatePartRef ]
+						blockEditorSelection
+					)
+			),
+		[ activityLog, blockEditorSelection, templatePartRef ]
+	);
+	const templatePartActivityEntries = useMemo(
+		() => [ ...resolvedTemplatePartActivities ].slice( -3 ).reverse(),
+		[ resolvedTemplatePartActivities ]
+	);
+	const latestTemplatePartActivity = useMemo(
+		() => getLatestAppliedActivity( resolvedTemplatePartActivities ),
+		[ resolvedTemplatePartActivities ]
+	);
+	const latestUndoableActivityId = useMemo(
+		() =>
+			getLatestUndoableActivity( resolvedTemplatePartActivities )?.id ||
+			null,
+		[ resolvedTemplatePartActivities ]
+	);
+	const lastUndoneTemplatePartActivity = useMemo(
+		() =>
+			resolvedTemplatePartActivities.find(
+				( entry ) => entry?.id === lastUndoneActivityId
+			) || null,
+		[ resolvedTemplatePartActivities, lastUndoneActivityId ]
 	);
 	const patternTitleMap = useSelect( () => {
 		const patterns = getCompatBlockPatterns();
@@ -301,9 +335,9 @@ export default function TemplatePartRecommender() {
 		}, {} );
 	}, [] );
 	const visiblePatternNames = useSelect( ( select ) => {
-		const blockEditor = select( blockEditorStore );
+		const blockEditorStoreSelect = select( blockEditorStore );
 
-		return getVisiblePatternNames( null, blockEditor );
+		return getVisiblePatternNames( null, blockEditorStoreSelect );
 	}, [] );
 	const {
 		applyTemplatePartSuggestion,
@@ -330,10 +364,7 @@ export default function TemplatePartRecommender() {
 		() => normalizeTemplatePartSlug( templatePartRef ),
 		[ templatePartRef ]
 	);
-	const area = useMemo(
-		() => deriveTemplatePartArea( slug ),
-		[ slug ]
-	);
+	const area = useMemo( () => deriveTemplatePartArea( slug ), [ slug ] );
 	const hasMatchingResult = resultRef === templatePartRef;
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
 
@@ -517,7 +548,8 @@ export default function TemplatePartRecommender() {
 					lastAppliedSuggestionKey &&
 					lastAppliedOperations.length > 0 &&
 					latestTemplatePartActivity &&
-					latestTemplatePartActivity.id === latestUndoableActivityId && (
+					latestTemplatePartActivity.id ===
+						latestUndoableActivityId && (
 						<Notice status="success" isDismissible={ false }>
 							Applied{ ' ' }
 							{ formatCount(
@@ -528,9 +560,7 @@ export default function TemplatePartRecommender() {
 							<Button
 								variant="link"
 								onClick={ () =>
-									handleUndo(
-										latestTemplatePartActivity.id
-									)
+									handleUndo( latestTemplatePartActivity.id )
 								}
 								disabled={ undoStatus === 'undoing' }
 							>
@@ -541,14 +571,12 @@ export default function TemplatePartRecommender() {
 						</Notice>
 					) }
 
-				{ latestTemplatePartActivity &&
-					undoStatus === 'success' &&
-					lastUndoneActivityId ===
-						latestTemplatePartActivity.id && (
+				{ undoStatus === 'success' &&
+					lastUndoneTemplatePartActivity && (
 						<Notice status="success" isDismissible={ false }>
 							Undid{ ' ' }
 							<strong>
-								{ latestTemplatePartActivity.suggestion }
+								{ lastUndoneTemplatePartActivity.suggestion }
 							</strong>
 							.
 						</Notice>
@@ -562,7 +590,6 @@ export default function TemplatePartRecommender() {
 
 				<AIActivitySection
 					entries={ templatePartActivityEntries }
-					latestUndoableActivityId={ latestUndoableActivityId }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
 				/>
@@ -572,8 +599,8 @@ export default function TemplatePartRecommender() {
 					! error &&
 					! hasSuggestions && (
 						<Notice status="warning" isDismissible={ false }>
-							No template-part suggestions were returned for
-							this request.
+							No template-part suggestions were returned for this
+							request.
 						</Notice>
 					) }
 
@@ -634,9 +661,7 @@ function TemplatePartSuggestionCard( {
 	const blockHints = Array.isArray( suggestion?.blockHints )
 		? suggestion.blockHints
 		: [];
-	const patternSuggestions = Array.isArray(
-		suggestion?.patternSuggestions
-	)
+	const patternSuggestions = Array.isArray( suggestion?.patternSuggestions )
 		? suggestion.patternSuggestions
 		: [];
 	const summaryParts = [];
@@ -778,9 +803,7 @@ function TemplatePartSuggestionCard( {
 									size="small"
 									variant="link"
 									onClick={ () =>
-										openInserterForPattern(
-											pattern.title
-										)
+										openInserterForPattern( pattern.title )
 									}
 									className="flavor-agent-action-link flavor-agent-action-link--pattern"
 								>
@@ -826,8 +849,7 @@ function TemplatePartSuggestionCard( {
 					</div>
 					<p className="flavor-agent-subpanel-hint">
 						Flavor Agent will insert this pattern at the exact
-						placement shown below inside the current template
-						part.
+						placement shown below inside the current template part.
 					</p>
 					<div className="flavor-agent-template-preview__actions">
 						<Button

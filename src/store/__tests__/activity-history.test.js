@@ -1,8 +1,8 @@
 import {
 	createActivityEntry,
 	getCurrentActivityScope,
-	getLatestAppliedActivity,
 	getLatestUndoableActivity,
+	getResolvedActivityEntries,
 	readPersistedActivityLog,
 	resolveActivityScope,
 	writePersistedActivityLog,
@@ -120,38 +120,63 @@ describe( 'activity history helpers', () => {
 		] );
 	} );
 
-	test( 'latest activity selectors keep strict stack order for undo', () => {
-		const applied = createActivityEntry( {
+	test( 'ordered undo eligibility only unlocks older entries after newer ones are undone', () => {
+		const older = createActivityEntry( {
 			type: 'apply_suggestion',
 			surface: 'block',
 			suggestion: 'Refresh content',
 			target: {
 				clientId: 'block-1',
+				blockPath: [ 0 ],
 			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			timestamp: '2026-03-24T10:00:00Z',
 		} );
-		const undone = {
-			...createActivityEntry( {
-				type: 'apply_template_suggestion',
-				surface: 'template',
-				suggestion: 'Clarify hierarchy',
-				target: {
-					templateRef: 'theme//home',
-				},
-			} ),
+		const newer = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			suggestion: 'Tighten spacing',
+			target: {
+				clientId: 'block-1',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			timestamp: '2026-03-24T10:00:01Z',
+		} );
+		const undoneNewer = {
+			...newer,
 			undo: {
-				canUndo: true,
+				canUndo: false,
 				status: 'undone',
 				error: null,
-				updatedAt: '2026-03-23T00:00:00Z',
-				undoneAt: '2026-03-23T00:00:00Z',
+				updatedAt: '2026-03-24T10:01:00Z',
+				undoneAt: '2026-03-24T10:01:00Z',
 			},
 		};
 
-		expect( getLatestAppliedActivity( [ applied, undone ] ) ).toEqual(
-			applied
+		expect(
+			getResolvedActivityEntries( [ older, newer ] )[ 0 ].undo
+		).toEqual(
+			expect.objectContaining( {
+				canUndo: false,
+				status: 'blocked',
+			} )
 		);
-		expect( getLatestUndoableActivity( [ applied, undone ] ) ).toEqual(
-			applied
+		expect( getLatestUndoableActivity( [ older, newer ] ) ).toEqual(
+			expect.objectContaining( {
+				id: newer.id,
+			} )
+		);
+		expect(
+			getLatestUndoableActivity( [ older, undoneNewer ] )
+		).toEqual(
+			expect.objectContaining( {
+				id: older.id,
+			} )
 		);
 	} );
 } );
