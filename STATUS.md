@@ -18,7 +18,7 @@
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | Theme preset and global style token extraction |
 | `flavor-agent/recommend-navigation` | `NavigationAbilities` | Navigation structure, overlay behavior, and organization recommendations |
-| `flavor-agent/check-status` | `InfraAbilities` | Backend inventory plus current-user ability availability status |
+| `flavor-agent/check-status` | `InfraAbilities` | Backend inventory, OpenAI Native credential metadata, and current-user ability availability status |
 
 ### REST API
 
@@ -44,7 +44,7 @@
 - Inspector-panel navigation recommendations for selected `core/navigation` blocks with advisory structure, overlay, and accessibility guidance
 - Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal `Recent AI Actions` session history in the active panel
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template and template-part undo still rely on stable locators plus recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable
-- Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; block providers still come from `Settings > Connectors`
+- Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; block providers still come from `Settings > Connectors`, and the OpenAI Native section now reports the effective credential source plus core OpenAI connector registration/configuration state
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
 - Azure OpenAI credentials are revalidated only when the endpoint, key, or deployments change and all four fields are present; both the embeddings and responses deployments must validate before new values are saved
@@ -77,6 +77,8 @@
 
 ## Recent Verification
 
+- 2026-03-25 connectors-alignment: `vendor/bin/phpcs inc/OpenAI/Provider.php inc/Abilities/InfraAbilities.php inc/Settings.php tests/phpunit/bootstrap.php tests/phpunit/InfraAbilitiesTest.php tests/phpunit/SettingsTest.php` passed.
+- 2026-03-25 connectors-alignment: `vendor/bin/phpunit --filter "(SettingsTest|InfraAbilitiesTest)"` passed (`26` tests, `160` assertions).
 - 2026-03-24 docs-freshness: `vendor/bin/phpunit` passed (`179` tests, `910` assertions).
 - 2026-03-24 docs-freshness: `npm run test:unit -- --runInBand` passed (`26` suites, `179` tests).
 - 2026-03-24 plan-5: `npx wp-scripts lint-js src/context/theme-settings.js src/context/theme-tokens.js src/patterns/pattern-settings.js src/patterns/inserter-dom.js src/patterns/compat.js src/patterns/PatternRecommender.js src/patterns/InserterBadge.js src/context/__tests__/theme-tokens.test.js src/patterns/__tests__/compat.test.js src/patterns/__tests__/PatternRecommender.test.js src/patterns/__tests__/InserterBadge.test.js` passed.

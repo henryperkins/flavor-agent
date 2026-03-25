@@ -69,7 +69,7 @@ flavor-agent/
       NavigationPrompt.php  Navigation recommendation prompt assembly and response parsing
       TemplatePartPrompt.php  Template-part recommendation prompt assembly and response parsing
     OpenAI/
-      Provider.php          Provider selection (Azure OpenAI vs OpenAI Native), credential fallback chain
+      Provider.php          Provider selection (Azure OpenAI vs OpenAI Native), connector-aware credential precedence, status metadata
     AzureOpenAI/
       ConfigurationValidator.php  Deployment and backend validation helpers
       EmbeddingClient.php   Provider-selected embeddings client (Azure OpenAI or OpenAI Native)
@@ -87,7 +87,7 @@ flavor-agent/
       PatternAbilities.php  recommend-patterns, list-patterns
       TemplateAbilities.php recommend-template, recommend-template-part, list-template-parts
       NavigationAbilities.php recommend-navigation
-      InfraAbilities.php    get-theme-tokens, check-status
+      InfraAbilities.php    get-theme-tokens, check-status, backend/connector inventory
       WordPressDocsAbilities.php  search-wordpress-docs
     Support/
       StringArray.php       Array sanitization utility
@@ -195,12 +195,14 @@ flavor-agent/
 | Provider selection | Chooses between Azure OpenAI and OpenAI Native | Pattern/template/navigation recommendations | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`) |
 | Azure OpenAI Embeddings | Pattern embedding (3072-dim) | Pattern index + pattern recommendations (Azure provider) | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment` |
 | Azure OpenAI Responses | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Azure provider) | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment` |
-| OpenAI Native Embeddings | Pattern embedding | Pattern index + pattern recommendations (Native provider) | `flavor_agent_openai_native_api_key`, `_embedding_model` |
-| OpenAI Native Chat | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Native provider) | `flavor_agent_openai_native_api_key`, `_chat_model` |
+| OpenAI Native Embeddings | Pattern embedding | Pattern index + pattern recommendations (Native provider) | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
+| OpenAI Native Chat | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Native provider) | Optional `flavor_agent_openai_native_api_key` override, `_chat_model`; otherwise inherits core OpenAI connector credentials |
 | Qdrant | Vector similarity search | Pattern recommendations | `flavor_agent_qdrant_url`, `_key` |
 | Cloudflare AI Search | WordPress dev-doc grounding | Supplemental doc context for block/template recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results` |
 
 The plugin works in degraded mode without any services configured. Each surface gracefully disables when its required backends are absent.
+
+When OpenAI Native is selected, credential precedence is: plugin override -> `OPENAI_API_KEY` environment variable -> `OPENAI_API_KEY` PHP constant -> core OpenAI connector database setting. The settings UI and `flavor-agent/check-status` expose the effective source and connector registration state so the ownership boundary stays visible.
 
 ## Feature Inventory
 
@@ -290,11 +292,12 @@ All abilities registered with full JSON Schema input/output definitions:
 Settings page at Settings > Flavor Agent with five sections:
 - OpenAI Provider (select Azure OpenAI or OpenAI Native for pattern/template/navigation recommendations)
 - Azure OpenAI (endpoint, key, embedding deployment, chat deployment)
-- OpenAI Native (API key, chat model, embedding model)
+- OpenAI Native (optional API key override, chat model, embedding model, effective key source, connector status)
 - Qdrant (URL, key)
 - Cloudflare AI Search (account ID, instance ID, API token, max results)
 
 Block recommendation providers are configured separately in core under `Settings > Connectors`.
+When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
 
 Plus pattern sync status panel with manual trigger.
 

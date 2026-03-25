@@ -39,7 +39,7 @@ flavor-agent/
 │   ├── Cloudflare/               # AI Search grounding + prewarm pipeline
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
 │   ├── LLM/                      # WordPress AI client wrapper + prompt/response handling
-│   ├── OpenAI/                   # Provider selection and connector-backed credential fallback
+│   ├── OpenAI/                   # Provider selection and connector-aware credential resolution
 │   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
 │   ├── REST/                     # Editor-facing REST routes
 │   ├── Support/                  # Shared sanitization helpers
@@ -147,6 +147,7 @@ Applied block, template, and template-part suggestions write structured activity
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
 Block recommendation providers are configured separately in the core `Settings > Connectors` screen.
+When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
 
 When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the plugin validates the configured account, instance, and token by running a lightweight probe search that must return trusted `developer.wordpress.org` guidance, and keeps the previous values if validation fails. This allows documented AI Search Run tokens to pass validation without requiring instance metadata read access. Successful saves still use the standard Settings API notice flow, and failed validation surfaces the Cloudflare error on the same screen.
 
@@ -166,6 +167,8 @@ Configured options:
 - `flavor_agent_cloudflare_ai_search_instance_id`
 - `flavor_agent_cloudflare_ai_search_api_token`
 - `flavor_agent_cloudflare_ai_search_max_results`
+
+`flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native chat and embedding model IDs in its own settings either way.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and reports the current pattern index status.
 

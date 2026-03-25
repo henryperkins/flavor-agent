@@ -115,12 +115,27 @@ final class InfraAbilitiesTest extends TestCase {
 			'text-embedding-3-large',
 			$status['backends']['openai_native']['embeddingModel']
 		);
+		$this->assertSame( 'plugin_override', $status['backends']['openai_native']['credentialSource'] );
+		$this->assertFalse( $status['backends']['openai_native']['connectorRegistered'] );
+		$this->assertFalse( $status['backends']['openai_native']['connectorConfigured'] );
+		$this->assertNull( $status['backends']['openai_native']['connectorKeySource'] );
 	}
 
 	public function test_check_status_uses_connector_key_for_openai_native_backend(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
+		];
+		WordPressTestState::$connectors   = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
 		];
 		WordPressTestState::$options      = [
 			'flavor_agent_openai_provider'               => 'openai_native',
@@ -144,5 +159,9 @@ final class InfraAbilitiesTest extends TestCase {
 			'text-embedding-3-large',
 			$status['backends']['openai_native']['embeddingModel']
 		);
+		$this->assertSame( 'connector_database', $status['backends']['openai_native']['credentialSource'] );
+		$this->assertTrue( $status['backends']['openai_native']['connectorRegistered'] );
+		$this->assertTrue( $status['backends']['openai_native']['connectorConfigured'] );
+		$this->assertSame( 'database', $status['backends']['openai_native']['connectorKeySource'] );
 	}
 }

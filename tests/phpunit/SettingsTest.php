@@ -740,6 +740,36 @@ final class SettingsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'settings_errors', WordPressTestState::$transients );
 	}
 
+	public function test_render_openai_native_section_reports_effective_connector_key_source(): void {
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$options    = [
+			'connectors_ai_openai_api_key' => 'connector-key',
+		];
+
+		ob_start();
+		Settings::render_openai_native_section();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'Current effective API key source: Settings &gt; Connectors.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'OpenAI connector: registered (key source: Settings &gt; Connectors).',
+			$output
+		);
+	}
+
 	private function reset_validation_state(): void {
 		$azure_state = new ReflectionProperty( Settings::class, 'azure_validation_state' );
 		$azure_state->setAccessible( true );

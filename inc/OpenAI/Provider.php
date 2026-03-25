@@ -10,6 +10,7 @@ final class Provider {
 	public const AZURE       = 'azure_openai';
 	public const NATIVE      = 'openai_native';
 
+	private const OPENAI_CONNECTOR_ID     = 'openai';
 	private const CONNECTOR_OPENAI_OPTION = 'connectors_ai_openai_api_key';
 	private const NATIVE_API_KEY_ENV_VAR  = 'OPENAI_API_KEY';
 	private const NATIVE_BASE_URL         = 'https://api.openai.com';
@@ -54,6 +55,49 @@ final class Provider {
 	}
 
 	/**
+	 * @return array{
+	 *   registered: bool,
+	 *   configured: bool,
+	 *   label: string,
+	 *   settingName: string,
+	 *   keySource: 'env'|'constant'|'database'|'none',
+	 *   credentialsUrl: ?string,
+	 *   pluginSlug: ?string
+	 * }
+	 */
+	public static function openai_connector_status(): array {
+		$connector       = self::openai_connector();
+		$authentication  = is_array( $connector['authentication'] ?? null ) ? $connector['authentication'] : [];
+		$plugin          = is_array( $connector['plugin'] ?? null ) ? $connector['plugin'] : [];
+		$setting_name    = is_string( $authentication['setting_name'] ?? null ) && '' !== $authentication['setting_name']
+			? $authentication['setting_name']
+			: self::CONNECTOR_OPENAI_OPTION;
+		$key_source      = self::connector_api_key_source( self::OPENAI_CONNECTOR_ID, $setting_name );
+		$is_registered   = function_exists( 'wp_is_connector_registered' )
+			? wp_is_connector_registered( self::OPENAI_CONNECTOR_ID )
+			: null !== $connector;
+		$credentials_url = is_string( $authentication['credentials_url'] ?? null ) && '' !== $authentication['credentials_url']
+			? $authentication['credentials_url']
+			: null;
+		$plugin_slug     = is_string( $plugin['slug'] ?? null ) && '' !== $plugin['slug']
+			? $plugin['slug']
+			: null;
+		$label           = is_string( $connector['name'] ?? null ) && '' !== $connector['name']
+			? $connector['name']
+			: 'OpenAI';
+
+		return [
+			'registered'     => $is_registered,
+			'configured'     => 'none' !== $key_source,
+			'label'          => $label,
+			'settingName'    => $setting_name,
+			'keySource'      => $key_source,
+			'credentialsUrl' => $credentials_url,
+			'pluginSlug'     => $plugin_slug,
+		];
+	}
+
+	/**
 	 * Resolve the effective OpenAI native API key.
 	 *
 	 * Flavor Agent prefers its own saved key for backward compatibility, but will
@@ -63,29 +107,68 @@ final class Provider {
 	 * @param array<string, string> $overrides
 	 */
 	public static function native_effective_api_key( array $overrides = [] ): string {
+		return self::native_effective_api_key_metadata( $overrides )['api_key'];
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array{
+	 *   api_key: string,
+	 *   source: 'plugin_override'|'env'|'constant'|'connector_database'|'none',
+	 *   connector: array{
+	 *     registered: bool,
+	 *     configured: bool,
+	 *     label: string,
+	 *     settingName: string,
+	 *     keySource: 'env'|'constant'|'database'|'none',
+	 *     credentialsUrl: ?string,
+	 *     pluginSlug: ?string
+	 *   }
+	 * }
+	 */
+	public static function native_effective_api_key_metadata( array $overrides = [] ): array {
 		if ( array_key_exists( 'flavor_agent_openai_native_api_key', $overrides ) ) {
 			$api_key = (string) $overrides['flavor_agent_openai_native_api_key'];
 		} else {
 			$api_key = (string) get_option( 'flavor_agent_openai_native_api_key', '' );
 		}
 
+		$connector_status = self::openai_connector_status();
+
 		if ( '' !== $api_key ) {
-			return $api_key;
+			return [
+				'api_key'   => $api_key,
+				'source'    => 'plugin_override',
+				'connector' => $connector_status,
+			];
 		}
 
-		$api_key = getenv( self::NATIVE_API_KEY_ENV_VAR );
-		if ( false !== $api_key && '' !== $api_key ) {
-			return (string) $api_key;
+		$connector_source = $connector_status['keySource'];
+		if ( 'none' !== $connector_source ) {
+			return [
+				'api_key'   => self::connector_api_key_value(
+					self::OPENAI_CONNECTOR_ID,
+					$connector_status['settingName'],
+					$overrides
+				),
+				'source'    => 'database' === $connector_source ? 'connector_database' : $connector_source,
+				'connector' => $connector_status,
+			];
 		}
 
-		if ( defined( self::NATIVE_API_KEY_ENV_VAR ) ) {
-			$constant_value = constant( self::NATIVE_API_KEY_ENV_VAR );
-			if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
-				return (string) $constant_value;
-			}
-		}
+		return [
+			'api_key'   => '',
+			'source'    => 'none',
+			'connector' => $connector_status,
+		];
+	}
 
-		return (string) get_option( self::CONNECTOR_OPENAI_OPTION, '' );
+	/**
+	 * @param array<string, string> $overrides
+	 * @return 'plugin_override'|'env'|'constant'|'connector_database'|'none'
+	 */
+	public static function native_effective_api_key_source( array $overrides = [] ): string {
+		return self::native_effective_api_key_metadata( $overrides )['source'];
 	}
 
 	/**
@@ -214,6 +297,86 @@ final class Provider {
 			'Content-Type'  => 'application/json',
 			'Authorization' => $api_key !== '' ? 'Bearer ' . $api_key : '',
 		];
+	}
+
+	/**
+	 * @return array{
+	 *   name: string,
+	 *   description?: string,
+	 *   logo_url?: string,
+	 *   type: string,
+	 *   authentication: array<string, string>,
+	 *   plugin?: array<string, string>
+	 * }|null
+	 */
+	private static function openai_connector(): ?array {
+		if ( ! function_exists( 'wp_get_connector' ) ) {
+			return null;
+		}
+
+		$connector = wp_get_connector( self::OPENAI_CONNECTOR_ID );
+
+		return is_array( $connector ) ? $connector : null;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return 'env'|'constant'|'database'|'none'
+	 */
+	private static function connector_api_key_source( string $connector_id, string $setting_name, array $overrides = [] ): string {
+		$env_var_name = self::connector_env_var_name( $connector_id );
+		$env_value    = getenv( $env_var_name );
+		if ( false !== $env_value && '' !== $env_value ) {
+			return 'env';
+		}
+
+		if ( defined( $env_var_name ) ) {
+			$constant_value = constant( $env_var_name );
+			if ( is_scalar( $constant_value ) && '' !== (string) $constant_value ) {
+				return 'constant';
+			}
+		}
+
+		$db_value = self::option_value( $overrides, $setting_name );
+		if ( '' !== $db_value ) {
+			return 'database';
+		}
+
+		return 'none';
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 */
+	private static function connector_api_key_value( string $connector_id, string $setting_name, array $overrides = [] ): string {
+		$source       = self::connector_api_key_source( $connector_id, $setting_name, $overrides );
+		$env_var_name = self::connector_env_var_name( $connector_id );
+
+		if ( 'env' === $source ) {
+			$env_value = getenv( $env_var_name );
+
+			return false !== $env_value ? (string) $env_value : '';
+		}
+
+		if ( 'constant' === $source ) {
+			$constant_value = constant( $env_var_name );
+
+			return is_scalar( $constant_value ) ? (string) $constant_value : '';
+		}
+
+		if ( 'database' === $source ) {
+			return self::option_value( $overrides, $setting_name );
+		}
+
+		return '';
+	}
+
+	private static function connector_env_var_name( string $connector_id ): string {
+		$constant_case_id = strtoupper(
+			preg_replace( '/([a-z])([A-Z])/', '$1_$2', str_replace( '-', '_', $connector_id ) )
+		);
+
+		return "{$constant_case_id}_API_KEY";
 	}
 
 	/**

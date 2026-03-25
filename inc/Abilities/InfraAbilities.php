@@ -17,6 +17,8 @@ final class InfraAbilities {
 
 	public static function check_status( mixed $input ): array {
 		$block_recommendations_configured = WordPressAIClient::is_supported();
+		$openai_connector_status          = Provider::openai_connector_status();
+		$native_api_key_source            = Provider::native_effective_api_key_source();
 		$native_embedding_config          = Provider::embedding_configuration( Provider::NATIVE );
 		$native_chat_config               = Provider::chat_configuration( Provider::NATIVE );
 		$azure_endpoint                   = get_option( 'flavor_agent_azure_openai_endpoint', '' );
@@ -56,9 +58,15 @@ final class InfraAbilities {
 					'embeddingDeployment' => ! empty( $azure_embedding ) ? $azure_embedding : null,
 				],
 				'openai_native'        => [
-					'configured'     => $openai_native_chat_configured,
-					'chatModel'      => $openai_native_chat_configured ? $native_chat_config['model'] : null,
-					'embeddingModel' => ! empty( $native_embedding_config['model'] ) ? $native_embedding_config['model'] : null,
+					'configured'          => $openai_native_chat_configured,
+					'chatModel'           => $openai_native_chat_configured ? $native_chat_config['model'] : null,
+					'embeddingModel'      => ! empty( $native_embedding_config['model'] ) ? $native_embedding_config['model'] : null,
+					'credentialSource'    => 'none' !== $native_api_key_source ? $native_api_key_source : null,
+					'connectorRegistered' => $openai_connector_status['registered'],
+					'connectorConfigured' => $openai_connector_status['configured'],
+					'connectorKeySource'  => 'none' !== $openai_connector_status['keySource']
+						? $openai_connector_status['keySource']
+						: null,
 				],
 				'qdrant'               => [
 					'configured' => $qdrant_configured,

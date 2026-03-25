@@ -464,6 +464,31 @@ final class Settings {
 		settings_errors();
 	}
 
+	/**
+	 * @param 'plugin_override'|'env'|'constant'|'connector_database'|'none' $source
+	 */
+	private static function format_openai_native_key_source_label( string $source ): string {
+		return match ( $source ) {
+			'plugin_override'    => 'Flavor Agent plugin setting',
+			'env'                => 'OPENAI_API_KEY environment variable',
+			'constant'           => 'OPENAI_API_KEY PHP constant',
+			'connector_database' => 'Settings > Connectors',
+			default              => 'none',
+		};
+	}
+
+	/**
+	 * @param 'env'|'constant'|'database'|'none' $source
+	 */
+	private static function format_openai_connector_key_source_label( string $source ): string {
+		return match ( $source ) {
+			'env'      => 'OPENAI_API_KEY environment variable',
+			'constant' => 'OPENAI_API_KEY PHP constant',
+			'database' => 'Settings > Connectors',
+			default    => 'none',
+		};
+	}
+
 	public static function render_azure_section(): void {
 		printf(
 			'<p class="description">%s</p>',
@@ -485,11 +510,29 @@ final class Settings {
 	}
 
 	public static function render_openai_native_section(): void {
+		$connector_status = Provider::openai_connector_status();
+		$connector_note   = $connector_status['registered']
+			? sprintf(
+				'OpenAI connector: registered (key source: %s).',
+				self::format_openai_connector_key_source_label( $connector_status['keySource'] )
+			)
+			: 'OpenAI connector: not registered.';
+
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
 				'Used when the provider is set to OpenAI Native. Flavor Agent sends requests directly to the official OpenAI Responses and Embeddings APIs. The API key can be stored here as a plugin-specific override or inherited from Settings > Connectors while model IDs remain plugin-managed.',
 				'flavor-agent'
+			)
+		);
+		printf(
+			'<p class="description">%s</p>',
+			esc_html(
+				sprintf(
+					'Current effective API key source: %1$s. %2$s',
+					self::format_openai_native_key_source_label( Provider::native_effective_api_key_source() ),
+					$connector_note
+				)
 			)
 		);
 	}

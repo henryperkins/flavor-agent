@@ -105,6 +105,15 @@ This repo already mixes:
 
 That split is sensible today, but the UX and settings boundaries need to be made more explicit and more stable before adding new features.
 
+### Progress In Tree
+
+Some of Epic 1's settings-boundary work is now already in the tree:
+
+1. `Provider.php` now models OpenAI Native credential precedence, connector registration, and connector key-source metadata instead of treating the core connector as only a raw option fallback.
+2. `InfraAbilities::check_status()` now reports `credentialSource`, `connectorRegistered`, `connectorConfigured`, and `connectorKeySource` for the `openai_native` backend.
+3. `Settings.php` now tells the user which OpenAI Native credential source is currently effective and whether the core OpenAI connector is registered/configured.
+4. Shared capability notices and per-surface disabled-state vocabulary across the JS panels are still pending.
+
 ### In Scope
 
 1. Normalize capability gating and empty-state UX across all first-party surfaces.

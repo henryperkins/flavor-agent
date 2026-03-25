@@ -26,6 +26,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $options = [];
 
+		/** @var array<string, array<string, mixed>> */
+		public static array $connectors = [];
+
 		public static array $capabilities = [];
 
 		public static array $block_templates = [];
@@ -79,6 +82,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_get_responses        = [];
 			self::$last_ai_client_prompt       = [];
 			self::$options                     = [];
+			self::$connectors                  = [];
 			self::$capabilities                = [];
 			self::$block_templates             = [];
 			self::$transients                  = [];
@@ -592,6 +596,26 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'wp_is_connector_registered' ) ) {
+		function wp_is_connector_registered( string $id ): bool {
+			return array_key_exists( $id, WordPressTestState::$connectors );
+		}
+	}
+
+	if ( ! function_exists( 'wp_get_connector' ) ) {
+		function wp_get_connector( string $id ): ?array {
+			$connector = WordPressTestState::$connectors[ $id ] ?? null;
+
+			return is_array( $connector ) ? $connector : null;
+		}
+	}
+
+	if ( ! function_exists( 'wp_get_connectors' ) ) {
+		function wp_get_connectors(): array {
+			return WordPressTestState::$connectors;
+		}
+	}
+
 	if ( ! function_exists( 'wp_parse_args' ) ) {
 		function wp_parse_args( $args, array $defaults = [] ): array {
 			if ( is_object( $args ) ) {
@@ -698,6 +722,18 @@ namespace {
 	if ( ! function_exists( '__' ) ) {
 		function __( string $text, string $domain = 'default' ): string {
 			return $text;
+		}
+	}
+
+	if ( ! function_exists( 'esc_html' ) ) {
+		function esc_html( string $text ): string {
+			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+		}
+	}
+
+	if ( ! function_exists( 'esc_html__' ) ) {
+		function esc_html__( string $text, string $domain = 'default' ): string {
+			return esc_html( __( $text, $domain ) );
 		}
 	}
 
