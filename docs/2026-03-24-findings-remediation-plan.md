@@ -1,10 +1,14 @@
 # Flavor Agent Findings Remediation Plan
 
 > Created: 2026-03-24
-> Scope: step-by-step remediation plan for the still-open code findings confirmed against the current repository
+> Scope: step-by-step remediation plan captured on 2026-03-24 for the then-open code findings confirmed against the repository
 > Inputs: `docs/2026-03-24-repository-progress-assessment.md`, direct code inspection in `flavor-agent.php`, `inc/`, `src/`, `tests/`, `STATUS.md`, and the checked-in Playwright configs
 >
-> Status note as of the latest docs refresh: Workstream 0 is complete. The assessment/status docs now reflect the active WP 7.0 browser story, and runtime Interactivity API usage is explicitly de-scoped for the current editor/admin-only plugin. Treat Workstream 0 below as completed execution history; the remaining open backlog starts with Workstream 1.
+> Historical snapshot: this document records the 2026-03-24 remediation pass. Use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for the current verified backlog.
+>
+> Status note as of 2026-03-25: Workstreams 0-2 now mix landed execution history with the narrower follow-up scope that still remains open. Keep this file for lineage and delivery context, not as the single source of live backlog truth.
+>
+> Current-truth note: several items below are preserved verbatim even where later docs passes landed or narrowed them. If this file conflicts with the newer docs, the newer docs win.
 
 ## Goal
 
@@ -15,10 +19,10 @@ This plan is repository-backed in two senses:
 1. every action is grounded in the current source tree rather than generic product advice
 2. every workstream names the primary files, test targets, and delivery sequence needed to land the change safely
 
-## Confirmed Open Findings
+## Confirmed Open Findings (As Of 2026-03-24)
 
-1. `recommend-navigation` is registered, tested, and server-backed, but it is still not exposed through a first-party plugin UI or plugin REST adapter.
-2. AI activity history is still `sessionStorage`-backed, latest-action oriented, and not durable across sessions or users.
+1. `recommend-navigation` is now registered, tested, exposed through the plugin REST controller, and mounted in the Inspector for selected `core/navigation` blocks, but the surface remains advisory-only and still lacks a validated apply contract plus browser smoke.
+2. AI activity history is now server-backed and hydrated back into editor-scoped history, with `sessionStorage` retained only as a cache/fallback. The remaining gap is a mature admin/audit/observability surface outside the inline editor UX.
 3. Template-part execution is still restricted to one `insert_pattern` operation at `start` or `end`.
 4. WordPress 7.0 compatibility still depends on experimental pattern/theme-token fallbacks and DOM-based inserter discovery.
 5. Browser verification is split between a default 6.9.4 Playground smoke path and a separate WP 7.0 harness; the default `npm run test:e2e` path does not exercise the WP 7.0 cases, and there is still no `wp_template_part` browser smoke.
@@ -33,13 +37,13 @@ This plan is repository-backed in two senses:
 
 ## Recommended Delivery Order
 
-1. Ship the missing navigation surface so registered capability matches product reality.
-2. Move activity history from session-only to server-backed audit storage and broaden undo eligibility safely.
+1. Tighten the shipped navigation surface by adding browser verification and deciding whether it should remain advisory-only or grow a bounded apply contract.
+2. Promote the server-backed activity layer into an admin-visible audit and observability surface.
 3. Expand the template-part executor from one start/end insertion into a bounded, explicit composition DSL.
 4. Harden the remaining WP 7.0 compatibility adapters.
 5. Make default browser verification include the real WP 7.0 flows and add template-part smoke coverage.
 
-The order matters. The documentation/scope lock is already complete. Durable activity and template-part execution change core product behavior and should stabilize before the final browser-verification pass.
+The order matters less now than it did on 2026-03-24 because the navigation surface and server-backed activity layer have already landed. The remaining work is follow-through: audit/admin UX and broader executable contracts should stabilize before the final browser-verification pass.
 
 ## Workstream 0: Documentation And Scope Lock (Completed)
 
@@ -70,8 +74,8 @@ Status: complete in the current source tree. Keep the steps below as execution h
    - Recommended repository decision: de-scope it from the open-gap list because the plugin is editor/admin only and has no front-end runtime that benefits from `@wordpress/interactivity` today.
    - Keep Interactivity references only in future-facing docs or research docs, not in the current-gap summary.
 4. Add a short “open backlog” section in `STATUS.md` pointing to the real remaining workstreams:
-   - navigation UI/REST exposure
-   - durable activity history
+   - navigation apply contract and browser smoke
+   - admin/audit activity UX on top of server-backed persistence
    - expanded template-part executor
    - WP 7.0 adapter hardening
    - unified browser verification
@@ -85,178 +89,113 @@ Status: complete in the current source tree. Keep the steps below as execution h
 1. No top-level doc still claims the WP 7.0 tests are unskipped or missing when they are already checked in.
 2. Interactivity is either an explicit future idea or an explicit de-scope, not a dangling pseudo-gap.
 
-## Workstream 1: Ship A First-Party Navigation Surface
+## Workstream 1: Extend The Shipped Navigation Surface
 
 ### Objective
 
-Make `recommend-navigation` a real product surface instead of an ability-only orphan.
+Keep the landed navigation Inspector experience accurate in docs, add browser verification, and only expand beyond advisory guidance if the plugin can support a bounded apply contract.
+
+Status: the original "ship a first-party navigation surface" goal is complete in the current tree. `recommend-navigation` now has both a thin plugin REST adapter and a first-party Inspector UI for selected `core/navigation` blocks. The remaining gap is narrower: the surface is still advisory-only and there is still no checked-in browser smoke.
 
 ### Repository-Backed Starting Point
 
-- The ability exists in `inc/Abilities/Registration.php`.
-- The prompt and handler exist in `inc/Abilities/NavigationAbilities.php` and `inc/LLM/NavigationPrompt.php`.
-- There is no corresponding plugin route in `inc/REST/Agent_Controller.php`.
-- There is no mounted UI in `src/index.js`.
-- The current editor integration pattern is already established in `src/inspector/InspectorInjector.js`, `src/store/index.js`, and the template/pattern panels.
+- `POST /flavor-agent/v1/recommend-navigation` already exists in `inc/REST/Agent_Controller.php`.
+- `flavor-agent.php` already localizes `canRecommendNavigation`.
+- `src/inspector/InspectorInjector.js` already mounts `src/inspector/NavigationRecommendations.js` for selected `core/navigation` blocks.
+- The current UI is explicitly labeled advisory-only and there is still no navigation browser smoke in `tests/e2e/flavor-agent.smoke.spec.js`.
 
 ### Recommended Product Contract
 
-Ship navigation recommendations as a dedicated inspector experience for selected `core/navigation` blocks instead of leaving them ability-only.
+Keep navigation recommendations as a dedicated Inspector experience for selected `core/navigation` blocks.
 
-Recommended UX:
+Recommended follow-up contract:
 
-1. show a `Navigation Recommendations` section only when the selected block is `core/navigation`
-2. reuse the current “prompt + suggestions + explanation” interaction pattern
-3. keep the first shipped navigation surface advisory-only
-4. do not mix navigation suggestions into the existing block-recommendation payload because they use a different provider path and different permissions
+1. preserve the current advisory fetch/render flow as the default behavior
+2. add browser smoke for the shipped advisory experience before broadening the scope
+3. only add apply/undo later if the navigation operation model can stay explicit, deterministic, and recoverable
+4. keep navigation separate from the existing block/template execution contracts because it uses different permissions and a different mutation surface
 
 ### Primary Files
 
 - `flavor-agent.php`
 - `inc/REST/Agent_Controller.php`
-- `inc/Abilities/NavigationAbilities.php`
-- `src/index.js`
 - `src/inspector/InspectorInjector.js`
+- `src/inspector/NavigationRecommendations.js`
 - `src/store/index.js`
 - `tests/phpunit/AgentControllerTest.php`
-- new JS tests under `src/inspector/__tests__/` or `src/store/__tests__/`
+- `src/inspector/__tests__/NavigationRecommendations.test.js`
+- `tests/e2e/flavor-agent.smoke.spec.js`
 
 ### Steps
 
-1. Add a thin REST adapter for navigation recommendations.
-   - Add `POST /flavor-agent/v1/recommend-navigation` to `inc/REST/Agent_Controller.php`.
-   - Sanitize and validate:
-     - `menuId`
-     - `navigationMarkup`
-     - optional `prompt`
-   - Delegate directly to `NavigationAbilities::recommend_navigation()`.
-2. Localize a first-party capability flag in `flavor-agent.php`.
-   - Add `canRecommendNavigation` using the same provider-configuration checks that already gate template and template-part recommendation availability.
-   - Also fold in the current-user `edit_theme_options` capability so the UI does not surface a dead action to users who can edit blocks but cannot call the navigation endpoint.
-3. Add a navigation slice to the shared store.
-   - request state
-   - loading state
-   - result payload
-   - error state
-   - selected suggestion state if the UI needs drill-in behavior
-4. Extend the inspector integration.
-   - In `src/inspector/InspectorInjector.js`, detect when the selected block is `core/navigation`.
-   - Render a navigation-specific panel section using the current inspector shell instead of introducing a new editor side rail.
-5. Serialize the selected navigation block for request context.
-   - Reuse existing block-editor selectors and block serialization utilities already available in the editor runtime.
-   - Send either `navigationMarkup`, `menuId`, or both, depending on what is actually available for the selected block.
-6. Keep the first shipped surface advisory-only.
-   - show grouped suggestions
-   - show explanation
-   - optionally add affordances that focus the current navigation block or open related settings
-   - do not add apply/undo until the navigation operation model exists
-7. Add controller and inspector/store tests.
-   - REST validation and forwarding in PHPUnit
-   - selected-`core/navigation` visibility and fetch behavior in JS tests
+1. Keep the shipped REST adapter and Inspector panel documented as implemented behavior, not future work.
+2. Add Playwright coverage for selecting a `core/navigation` block, requesting suggestions, and asserting the advisory results render.
+3. Decide whether the next increment should remain advisory-only or add a bounded apply contract.
+4. If an apply path is added later, define a narrow operation model and ship validation, undo, and browser coverage together.
+5. Keep the permission model at `edit_theme_options` and continue isolating navigation requests from the generic block-suggestion pipeline.
+6. Extend PHPUnit and JS unit coverage only as the contract broadens.
 
 ### Verification
 
 - `vendor/bin/phpunit --filter Navigation`
 - `vendor/bin/phpunit --filter AgentController`
-- `npm run test:unit -- --runInBand src/store/__tests__ src/inspector`
+- `npm run test:unit -- --runInBand src/inspector/__tests__/NavigationRecommendations.test.js src/store/__tests__`
+- `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line`
 
 ### Exit Criteria
 
-1. Selecting a `core/navigation` block exposes a first-party navigation recommendation UI.
-2. The plugin REST layer exposes navigation in the same thin-adapter pattern used by the other plugin surfaces.
-3. There is no longer a registered ability that is invisible from the shipped plugin UI.
+1. No doc still describes navigation as missing plugin UI or REST wiring.
+2. The shipped advisory surface has checked-in browser smoke, or a later apply path ships with equally bounded validation and coverage.
+3. Navigation remains explicit about advisory-only versus executable behavior.
 
-## Workstream 2: Replace Session-Only Activity With A Durable Audit Log
+## Workstream 2: Broaden The Server-Backed Activity Layer Into An Audit Surface
 
 ### Objective
 
-Make AI activity durable, queryable, and safer to undo across refreshes, sessions, and users with the correct permissions.
+Promote the existing server-backed activity log into a clearer audit, review, and observability surface outside the inline editor panels.
+
+Status: the original durability work is complete in the current tree. Activity entries now persist through `inc/Activity/Repository.php`, the plugin REST activity routes, and editor hydration in `src/store/index.js`. `sessionStorage` remains only as a cache/fallback, and ordered undo already blocks older AI actions when newer ones still apply.
 
 ### Repository-Backed Starting Point
 
-- Activity history currently lives in `src/store/activity-history.js`.
-- Persistence is `sessionStorage` only.
-- The UI only marks the latest activity entry as undoable in `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, and `src/components/AIActivitySection.js`.
-- The current system already records structured before/after snapshots that can seed a durable audit layer.
+- Activity services already exist under `inc/Activity/`.
+- `inc/REST/Agent_Controller.php` already exposes `GET/POST /activity` plus `POST /activity/{id}/undo`.
+- `src/store/index.js` persists server-backed entries, hydrates them on load, and syncs undo transitions.
+- `src/store/activity-history.js` keeps `sessionStorage` only as a best-effort cache/fallback and resolves ordered undo eligibility.
+- The shipped UX is still inline/editor-scoped in `src/components/AIActivitySection.js`, and `src/admin/` still lacks a dedicated audit/history screen.
 
 ### Recommended Architecture
 
-Make the server-backed audit log the source of truth and keep `sessionStorage` only as an optional last-known-state cache for fast reloads.
+Keep the server-backed activity repository as the source of truth and layer better admin visibility, filtering, and observability on top of it.
 
-Recommended storage shape:
+Recommended follow-up scope:
 
-- custom table: `${wpdb->prefix}flavor_agent_activity`
-- one row per AI action
-- JSON columns or longtext-encoded JSON for:
-  - `target`
-  - `before_state`
-  - `after_state`
-  - `undo`
-  - `request`
-  - `document`
-- indexed columns for:
-  - `surface`
-  - `entity_type`
-  - `entity_ref`
-  - `user_id`
-  - `created_at`
+- read-oriented admin UI for recent AI actions
+- filters by surface, entity, user, status, and time
+- clearer labeling for blocked, drifted, failed, undone, and synced states
+- continued use of `sessionStorage` only as a last-known-state cache for fast reloads or temporary server unavailability
 
 ### Primary Files
 
 - `flavor-agent.php`
-- new PHP files under `inc/Activity/`
+- `inc/Activity/`
 - `inc/REST/Agent_Controller.php`
 - `src/store/activity-history.js`
 - `src/store/index.js`
 - `src/components/ActivitySessionBootstrap.js`
 - `src/components/AIActivitySection.js`
+- `src/admin/`
 - `tests/phpunit/*Activity*`
 - `src/store/__tests__/activity-history*.test.js`
 
 ### Steps
 
-1. Add a dedicated PHP activity service.
-   - `inc/Activity/Repository.php` for schema and CRUD
-   - `inc/Activity/Serializer.php` for stable JSON payload formatting
-   - optional `inc/Activity/Permissions.php` if read permissions diverge by surface
-2. Create and maintain the activity table on activation.
-   - call a schema-install routine from `flavor-agent.php`
-   - version the schema so upgrades are explicit
-3. Add REST endpoints for activity lifecycle.
-   - `GET /flavor-agent/v1/activity`
-     - filters by current entity ref / surface
-   - `POST /flavor-agent/v1/activity`
-     - records a new action
-   - `POST /flavor-agent/v1/activity/{id}/undo`
-     - updates status after a successful undo
-   - keep permissions aligned with the existing edit capabilities per surface
-4. Refactor `ActivitySessionBootstrap` to hydrate from the server.
-   - load recent actions for the current scope on editor bootstrap
-   - keep `sessionStorage` only as a best-effort cache layer or remove it entirely once the server path is stable
-5. Broaden undo eligibility safely.
-   - Replace the current “latest only” rule with “latest valid tail of AI actions”.
-   - A historical entry is undoable only when:
-     - all newer AI actions for the same entity are already undone, or
-     - there are no newer AI actions
-   - This preserves deterministic rollback order without pretending arbitrary historical undo is safe.
-6. Update the client activity UI.
-   - Show durable activity entries from the server
-   - Surface “Undo blocked by newer AI actions” distinctly from “Undo unavailable because content drifted”
-   - Keep inline error text for failed undo states
-7. Keep the current before/after snapshot model, but persist it server-side.
-   - block attribute snapshots
-   - template and template-part operation lists
-   - inserted block snapshots and locators
-8. Add PHPUnit coverage for:
-   - table writes and reads
-   - permission checks
-   - status transitions
-   - ordered undo eligibility
-9. Add JS tests for:
-   - hydration
-   - client-server state sync
-   - blocked undo labeling
-   - successful undo status updates
+1. Keep the current repository-backed write path and editor hydration flow as the source of truth.
+2. Add an admin-visible audit surface that can query recent AI actions by surface, entity, user, and status.
+3. Reuse the current ordered-undo model in the UI so `Undo blocked by newer AI actions.` stays distinct from content drift and sync failures.
+4. Surface persistence state more clearly so users can tell whether an entry is local, server-backed, blocked, undone, or failed.
+5. Preserve `sessionStorage` only as a cache/fallback and document it that way everywhere.
+6. Add PHPUnit coverage for new query/filter or permission behavior and JS coverage for hydration plus state labeling.
 
 ### Verification
 
@@ -266,9 +205,9 @@ Recommended storage shape:
 
 ### Exit Criteria
 
-1. Activity history survives browser refresh and new sessions.
-2. Activity is queryable per document/template/template-part.
-3. Undo eligibility is no longer hardcoded to one latest entry; it is computed from the newest valid AI action tail.
+1. Activity can be reviewed outside the active editor panel.
+2. Server-backed entries remain the source of truth, with `sessionStorage` clearly treated as cache/fallback only.
+3. The audit/admin UX makes blocked, drifted, undone, and synced states understandable without digging into raw storage or network logs.
 
 ## Workstream 3: Expand The Template-Part Executor Into A Bounded Composition DSL
 
@@ -497,13 +436,12 @@ Make `npm run test:e2e` the real aggregate entry point and keep the harness-spec
 
 ## Suggested PR Sequence
 
-1. PR 1: docs cleanup and scope lock
-2. PR 2: navigation REST exposure plus first-party inspector surface
-3. PR 3: server-backed activity repository and hydration path
-4. PR 4: undo-tail eligibility and audit UI refinements
-5. PR 5: expanded template-part operation contract and executor
-6. PR 6: WP 7.0 adapter hardening
-7. PR 7: aggregate e2e command plus template-part browser smoke and doc cleanup
+1. PR 1: docs cleanup and historical-snapshot framing
+2. PR 2: navigation browser smoke and apply-contract follow-through
+3. PR 3: admin-visible activity/audit surface
+4. PR 4: expanded template-part operation contract and executor
+5. PR 5: WP 7.0 adapter hardening
+6. PR 6: aggregate e2e command plus template-part browser smoke and doc cleanup
 
 ## Validation Matrix
 
@@ -520,8 +458,8 @@ Run this matrix cumulatively as the work lands:
 
 This remediation is complete when all of the following are true:
 
-1. Navigation recommendations are available through a first-party plugin surface and REST adapter.
-2. AI activity history is durable, queryable, and safely undoable beyond the current latest-only rule.
+1. Navigation recommendations have a clear bounded contract: either advisory-only with browser smoke or executable with validated apply/undo coverage.
+2. AI activity history is server-backed, reviewable outside the active editor panel, and surfaced through a clearer audit/observability UX.
 3. Template-part execution supports a bounded multi-operation DSL rather than one start/end insertion.
 4. Pattern and theme-token compatibility paths fail closed and minimize experimental dependence.
 5. The default browser verification command exercises both the Playground and WP 7.0 paths, including `wp_template_part`.

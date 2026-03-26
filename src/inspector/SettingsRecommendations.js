@@ -9,6 +9,7 @@ import { Icon, check, arrowRight } from '@wordpress/icons';
 import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
+import { DELEGATED_SETTINGS_PANELS } from './panel-delegation';
 import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
 
 const FEEDBACK_MS = 1200;
@@ -66,10 +67,17 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 	const grouped = {};
 	for ( const s of suggestions ) {
 		const key = getSuggestionPanel( s );
+		if ( DELEGATED_SETTINGS_PANELS.has( key ) ) {
+			continue;
+		}
 		if ( ! grouped[ key ] ) {
 			grouped[ key ] = [];
 		}
 		grouped[ key ].push( s );
+	}
+
+	if ( ! Object.keys( grouped ).length ) {
+		return null;
 	}
 
 	return (

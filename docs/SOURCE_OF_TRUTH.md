@@ -18,7 +18,7 @@ Use these documents together:
 
 Flavor Agent is a WordPress plugin that adds AI-powered recommendations directly into the native Gutenberg editor. It should feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
 
-Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage when available, while still keeping session-scoped editor hydration and fallback behavior for the current editing surface.
+Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage, with editor-scoped hydration and `sessionStorage` retained only as a cache/fallback for the current editing surface.
 
 Five first-party recommendation surfaces exist today:
 
@@ -325,19 +325,18 @@ The early design documents (`docs/historical/`) described a broader 5-phase road
 
 ### Known Issues and Gaps
 
-1. **Residual cold-start edge**: The prewarm warm set covers 16 high-frequency entities, but uncommon block types and template slugs outside the warm set still fall back to empty guidance on first request until cache is seeded by an explicit `search-wordpress-docs` call.
+1. **Residual cold-start edge**: The prewarm warm set covers 16 high-frequency entities, but uncommon block types and template slugs outside that warm set can still return empty guidance on the first recommendation request. Those misses now queue async cache warming rather than waiting for an explicit `search-wordpress-docs` call, but the cold first request is still a live edge.
 2. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
 3. **JS toolchain must stay on Node 20 / npm 10**: This repo now pins that combo because Node 24 / npm 11 on this host fails `npm ci` immediately via `engine-strict` (`EBADENGINE`).
 4. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
 5. **Pattern settings compatibility is explicit and diagnosable**: `pattern-settings.js` prefers stable `blockPatterns`/`blockPatternCategories`/`getAllowedPatterns` paths when present, then `__experimentalAdditional*` and `__experimental*` variants, and explicitly reports when scoped visibility had to fall back to `all-patterns-fallback`.
 6. **Theme-token source resolution still lands on the experimental path today**: `theme-settings.js` now isolates raw settings reads and only promotes a stable `features` source when parity with `__experimentalFeatures` is proven. On the current WordPress 7.0 runtime, no stable-parity source is verified yet. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
 7. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness now owns the active refresh/drift undo cases. Because `package.json` still points `npm run test:e2e` at Playground only, the default e2e entry point does not cover the WP 7.0 harness yet. There is also still no checked-in `wp_template_part` browser smoke. Because WordPress `7.0` is still beta as of 2026-03-24, that harness currently pins `wordpress:beta-7.0-beta4-php8.2-apache` instead of a final stable `7.0` image tag.
-8. **Template apply scope is intentionally narrow**: The first executable version supports validated template-part assignment/replacement and pattern insertion only. Free-form template tree rewrites and subtree transforms remain future work.
-9. **Activity history is not yet a full audit product**: Activity now persists through the server-backed repository and editor hydration flow, but there is still no dedicated admin audit surface, cross-device review workflow, or DataViews-style history UI yet.
+8. **Activity history is not yet a full audit product**: Activity now persists through the server-backed repository and editor hydration flow, but there is still no dedicated admin audit surface, cross-device review workflow, or DataViews-style history UI yet.
 
 ### Current Open Backlog
 
-- Expand the current navigation surface beyond advisory guidance only, while keeping the UX native to the Inspector and Site Editor.
+- Close the current navigation follow-through by adding browser smoke and deciding whether the surface should remain advisory-only or grow a bounded apply contract, while keeping the UX native to the Inspector and Site Editor.
 - Promote the current activity foundation into a durable audit and observability surface with ordered undo review, admin visibility, and clearer cross-session behavior.
 - Expand template-part execution beyond one start/end `insert_pattern` operation while keeping the contract explicit and undoable.
 - Harden the remaining WordPress 7.0 compatibility adapters around contextual pattern scoping and theme-token source selection.
@@ -465,7 +464,7 @@ User editing wp_template_part in Site Editor
   -> applyTemplatePartSuggestion()
      -> validateTemplatePartOperationSequence()
      -> applyTemplatePartSuggestionOperations()
-     -> write session activity entry with refresh-safe undo metadata
+     -> write an editor-scoped activity entry, persist it through the activity repository, and keep refresh-safe undo metadata
 ```
 
 ## Test Coverage
@@ -526,7 +525,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Native inserter integration (Recommended category, badge)
 - [x] Template composition panel with review-confirm-apply for validated operations
 - [x] Template-part recommendations panel
-- [x] Undoable block/template/template-part AI actions with session-scoped activity history
+- [x] Undoable block/template/template-part AI actions with server-backed activity persistence plus editor-scoped hydration/cache fallback
 - [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates)
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
@@ -536,7 +535,8 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Clean uninstall
 - [x] Live credential validation on Azure OpenAI/Qdrant settings save
 - [x] Navigation recommendations (replace 501 stub)
-- [x] Integration tests (at minimum: Playwright smoke for each editor surface)
+- [x] Integration tests for block, pattern, template, and WP 7.0 refresh/drift coverage
+- [ ] Playwright smoke for navigation and `wp_template_part`, plus a default `npm run test:e2e` path that covers both harnesses
 
 ### Should Have (v1.x)
 
@@ -565,7 +565,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/SOURCE_OF_TRUTH.md` | Definitive project reference: scope, architecture, inventory, roadmap | **Current** |
 | `docs/flavor-agent-readme.md` | Architecture details: editor flows, settings, pattern lifecycle | **Current** |
 | `docs/local-wordpress-ide.md` | Local Docker/devcontainer workflow and host setup | **Current** |
-| `docs/NEXT_STEPS_PLAN.md` | Execution-plan snapshot from the 2026-03-23 repo review; useful as backlog history, but several early phases are now implemented | **Current with historical context** |
+| `docs/NEXT_STEPS_PLAN.md` | Execution-plan snapshot from the 2026-03-23 repo review; useful as backlog history, but several early phases are now implemented | **Historical snapshot** |
 | `docs/wordpress-7.0-gutenberg-22.8-reference.md` | WP 7.0 and Gutenberg 22.8 API changes, new features, deprecations, and plugin impact | **Current** |
 | `docs/2026-03-18-cloudflare-ai-search-grounding-assessment.md` | Cloudflare AI Search integration assessment and cache behavior | **Current** |
 | `docs/superpowers/specs/2026-03-17-pattern-badge-status-design.md` | Implemented design spec for pattern badge status surface | **Current** (implemented) |
@@ -608,6 +608,6 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 2. **Narrow approval model**: Block suggestions still apply inline on click, but template suggestions use an explicit preview-confirm-apply step. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
-5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, or prior queries. This avoids latency on the critical path.
+5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, prior queries, or first-request misses that queue follow-up warming. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
 7. **Store is the contract boundary for executable surfaces**: Block, pattern, template, and template-part UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, stale-request rejection, and activity/undo coordination.

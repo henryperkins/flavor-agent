@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
+import { DELEGATED_STYLE_PANELS } from './panel-delegation';
 import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
 
 const FEEDBACK_MS = 1200;
@@ -70,11 +71,7 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 
 	const byPanel = {};
 	for ( const s of attributeSuggestions ) {
-		if (
-			[ 'color', 'typography', 'dimensions', 'border' ].includes(
-				s.panel
-			)
-		) {
+		if ( DELEGATED_STYLE_PANELS.has( s.panel ) ) {
 			continue;
 		}
 		const key = getSuggestionPanel( s );
@@ -166,13 +163,11 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 				) ) }
 
 				{ attributeSuggestions.some( ( s ) =>
-					[ 'color', 'typography', 'dimensions', 'border' ].includes(
-						s.panel
-					)
+					DELEGATED_STYLE_PANELS.has( s.panel )
 				) && (
 					<p className="flavor-agent-subpanel-hint flavor-agent-panel__note">
 						More suggestions appear in the Color, Typography,
-						Dimensions, and Border panels above.
+						Dimensions, Border, Filter, and Background panels above.
 					</p>
 				) }
 			</div>
@@ -230,7 +225,7 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 }
 
 function isColor( str ) {
-	return /^(#|rgb|hsl|var\()/.test( str );
+	return /^(#|rgb|hsl|oklch|lab|lch|var\()/.test( str );
 }
 
 function formatCount( count, noun ) {
@@ -244,6 +239,7 @@ function panelLabel( panel ) {
 		position: 'Position',
 		advanced: 'Advanced',
 		effects: 'Effects',
+		shadow: 'Shadow',
 	};
 
 	return labels[ panel ] || panel;

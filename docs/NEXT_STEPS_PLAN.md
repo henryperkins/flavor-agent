@@ -1,9 +1,10 @@
 # Flavor Agent Next Steps Plan
 
 > Created: 2026-03-23
-> Scope: detailed execution plan for the next-step backlog identified during the repository and Source of Truth review
+> Scope: detailed execution plan captured on 2026-03-23 for the then-current next-step backlog identified during the repository and Source of Truth review
 > Baseline: current PHP and JS unit/lint checks are green
 > Status note: the current source tree now includes the planned template apply flow, AI activity + undo, pattern compatibility adapter, docs prewarm, and deeper Playwright smoke coverage. Treat phases 0-5 below as execution history plus validation context; the remaining open backlog starts with Phase 6 and later generative/editor-transform work.
+> Current-truth note: do not use phases 0-5 or their detailed prose below as the live backlog. If this file conflicts with `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, or `docs/2026-03-25-roadmap-aligned-execution-plan.md`, the newer docs win.
 
 ## Goal
 

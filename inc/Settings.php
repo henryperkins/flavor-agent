@@ -246,7 +246,7 @@ final class Settings {
 			[
 				'option'      => Provider::OPTION_NAME,
 				'choices'     => Provider::choices(),
-				'description' => 'Choose which OpenAI backend Flavor Agent should use for pattern, template, and navigation recommendations. Block recommendations still use Settings > Connectors.',
+				'description' => 'Choose which OpenAI backend Flavor Agent should use for block, pattern, template, and navigation recommendations whenever chat credentials are configured here. If not, block recommendations fall back to Settings > Connectors.',
 			]
 		);
 
@@ -434,7 +434,7 @@ final class Settings {
 			<p class="description">
 				<?php
 				echo esc_html__(
-					'Block recommendations use the core Settings > Connectors screen and the WordPress AI Client. This page manages the OpenAI backend used for pattern, template, and navigation recommendations, plus Qdrant, Cloudflare, and pattern sync settings.',
+					'Flavor Agent uses the selected OpenAI provider for block, pattern, template, and navigation recommendations whenever chat credentials are configured here. If not, block recommendations fall back to the core Settings > Connectors screen through the WordPress AI Client. This page also manages Qdrant, Cloudflare, and pattern sync settings.',
 					'flavor-agent'
 				);
 				?>
@@ -503,7 +503,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Flavor Agent uses the selected OpenAI provider for pattern embeddings, pattern ranking, template recommendations, and navigation recommendations.',
+				'Flavor Agent uses the selected OpenAI provider for block recommendations, pattern embeddings, pattern ranking, template recommendations, and navigation recommendations. If chat credentials are not configured here, block recommendations fall back to Settings > Connectors.',
 				'flavor-agent'
 			)
 		);

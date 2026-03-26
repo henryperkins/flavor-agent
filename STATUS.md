@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-03-25
+> Last updated: 2026-03-26
 
 ## Working
 
@@ -42,7 +42,7 @@
 - Site Editor template recommendation panel for `wp_template` documents with review-confirm-apply support for validated template-part assignment/replacement and pattern insertion operations
 - Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, and review-confirm-apply support for validated `insert_pattern` operations at the start or end of the current template part
 - Inspector-panel navigation recommendations for selected `core/navigation` blocks with advisory structure, overlay, and accessibility guidance
-- Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal `Recent AI Actions` session history in the active panel
+- Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template and template-part undo still rely on stable locators plus recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable
 - Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; block providers still come from `Settings > Connectors`, and the OpenAI Native section now reports the effective credential source plus core OpenAI connector registration/configuration state
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
@@ -68,7 +68,7 @@
 
 ## Open Backlog
 
-- Expand the current navigation surface beyond advisory guidance only while keeping it native to the Inspector and Site Editor.
+- Close the current navigation follow-through by adding browser smoke and deciding whether the surface should remain advisory-only or grow a bounded apply contract, while keeping it native to the Inspector and Site Editor.
 - Promote the current activity foundation into a durable audit and observability surface with ordered undo review and admin visibility.
 - Expand the template-part executor into a bounded composition contract beyond one start/end pattern insertion.
 - Harden the remaining WordPress 7.0 compatibility adapters so contextual pattern scoping fails closed and theme-token reads stop over-promoting experimental sources.
@@ -118,9 +118,10 @@
 - **`docs/SOURCE_OF_TRUTH.md`** -- Definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - **`docs/2026-03-25-roadmap-aligned-execution-plan.md`** -- Active forward plan aligned to WordPress 7.0, Gutenberg, and official AI plugin roadmaps
 - **`docs/flavor-agent-readme.md`** -- Architecture details and editor flow reference
-- **`docs/2026-03-24-findings-remediation-plan.md`** -- Repository-backed remediation plan for the remaining navigation, activity-history, template-part, compatibility, and browser-verification gaps
+- **`docs/2026-03-24-repository-progress-assessment.md`** -- Historical assessment snapshot from the 2026-03-24 docs pass; use `STATUS.md` and `docs/SOURCE_OF_TRUTH.md` for the current verified backlog
+- **`docs/2026-03-24-findings-remediation-plan.md`** -- Historical remediation snapshot from the 2026-03-24 pass; keep for lineage, not as the live backlog source
 - **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
-- **`docs/NEXT_STEPS_PLAN.md`** -- Execution-plan snapshot from the 2026-03-23 repo review; several early phases are now implemented in the tree
+- **`docs/NEXT_STEPS_PLAN.md`** -- Historical execution-plan snapshot from the 2026-03-23 repo review; phases 0-5 are lineage, not the live backlog
 - **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 compatibility reference
 - **`docs/2026-03-18-cloudflare-ai-search-grounding-assessment.md`** -- Cloudflare AI Search integration assessment
 

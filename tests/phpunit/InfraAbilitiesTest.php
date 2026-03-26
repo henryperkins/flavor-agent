@@ -81,6 +81,7 @@ final class InfraAbilitiesTest extends TestCase {
 
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['model'] );
+		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['azure_openai']['configured'] );
@@ -106,6 +107,7 @@ final class InfraAbilitiesTest extends TestCase {
 
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['model'] );
+		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
@@ -150,6 +152,7 @@ final class InfraAbilitiesTest extends TestCase {
 
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['model'] );
+		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );

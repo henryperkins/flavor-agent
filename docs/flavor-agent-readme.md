@@ -12,7 +12,7 @@ It currently has five primary editor experiences:
 - Template recommendations in the Site Editor, powered by the active OpenAI provider with validated template-part and pattern operations.
 - Template-part recommendations in the Site Editor, scoped to individual template parts with a narrow review-confirm-apply path for validated pattern insertion at the start or end of the current part.
 
-There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now uses the shared activity backend when available.
+There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback.
 
 ## Current Architecture
 
@@ -35,6 +35,7 @@ flavor-agent/
 │
 ├── inc/
 │   ├── Abilities/                # Block, pattern, template, navigation, docs, and infra ability handlers
+│   ├── Activity/                 # Server-backed AI activity repository, permissions, and serialization
 │   ├── AzureOpenAI/              # Deployment validation, embeddings, Responses API, and Qdrant clients
 │   ├── Cloudflare/               # AI Search grounding + prewarm pipeline
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
@@ -125,7 +126,7 @@ The client behavior is:
 
 - Available only while editing a `wp_template_part` entity in the Site Editor.
 - Uses a dedicated `PluginDocumentSettingPanel` implemented in `src/template-parts/TemplatePartRecommender.js`.
-- Uses the shared `flavor-agent` data store for request state, preview state, apply state, session activity, and undo.
+- Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
 - Renders advisory suggestion cards with block-focus links and pattern-browse links, and surfaces preview/apply controls only for validated executable suggestions.
 - Supports one narrow executable operation today: `insert_pattern` at the explicit `start` or `end` of the current template part.
 
@@ -140,7 +141,7 @@ This surface remains advisory-first overall: unsupported or ambiguous recommenda
 
 ### AI Activity and Undo
 
-Applied block, template, and template-part suggestions write structured activity records into `sessionStorage`, keyed to the current post, template, or template part. The latest compatible action can be undone from the inline success notice or the shared `Recent AI Actions` list when the live editor state still matches the recorded post-apply snapshot.
+Applied block, template, and template-part suggestions write structured activity records through the server-backed activity repository, keyed to the current post, template, or template-part scope. The editor hydrates that log on load and keeps `sessionStorage` only as a fast cache/fallback. Undo remains inline and editor-scoped: the newest valid tail of AI actions can be undone when the live state still matches the recorded post-apply snapshot, while older entries are blocked until newer AI actions are undone.
 
 ## Settings
 
@@ -227,5 +228,5 @@ vendor/bin/phpunit
 - Plugin header now targets WordPress 7.0+ and PHP 8.0+.
 - The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
 - The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, preferring stable APIs, then `__experimentalAdditional*` override keys, and falling back to `__experimental*` base variants only when needed.
-- `__experimentalFeatures` in `src/context/theme-tokens.js` still has no stable replacement and remains a direct integration.
+- Theme-token source selection now lives in `src/context/theme-settings.js`, which promotes the stable `features` path only when parity with `__experimentalFeatures` is proven and otherwise passes the experimental source through to `src/context/theme-tokens.js`.
 - Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key. Compatibility with deprecated `__experimentalRole` is intentionally no longer preserved.

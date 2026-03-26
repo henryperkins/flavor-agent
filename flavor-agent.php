@@ -159,16 +159,16 @@ function flavor_agent_enqueue_editor(): void {
 		'flavor-agent-editor',
 		'flavorAgentData',
 		[
-			'restUrl'                  => rest_url( 'flavor-agent/v1/' ),
-			'nonce'                    => wp_create_nonce( 'wp_rest' ),
-			'canRecommendBlocks'       => FlavorAgent\LLM\WordPressAIClient::is_supported(),
-			'canRecommendPatterns'     => (bool) (
+			'restUrl'                   => rest_url( 'flavor-agent/v1/' ),
+			'nonce'                     => wp_create_nonce( 'wp_rest' ),
+			'canRecommendBlocks'        => FlavorAgent\LLM\ChatClient::is_supported(),
+			'canRecommendPatterns'      => (bool) (
 				Provider::embedding_configured()
 				&& Provider::chat_configured()
 				&& get_option( 'flavor_agent_qdrant_url' )
 				&& get_option( 'flavor_agent_qdrant_key' )
 			),
-			'canRecommendTemplates'    => Provider::chat_configured(),
+			'canRecommendTemplates'     => Provider::chat_configured(),
 			'canRecommendTemplateParts' => Provider::chat_configured(),
 			'canRecommendNavigation'    => Provider::chat_configured() && current_user_can( 'edit_theme_options' ),
 			'templatePartAreas'         => FlavorAgent\Context\ServerCollector::for_template_part_areas(),

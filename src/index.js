@@ -17,6 +17,7 @@ import './store';
 // Inspector injection — adds AI controls to native Inspector tabs
 // via the editor.BlockEdit filter. This import registers the filter.
 import './inspector/InspectorInjector';
+import { BlockRecommendationsDocumentPanel } from './inspector/BlockRecommendationsPanel';
 
 // Plugin components.
 import ActivitySessionBootstrap from './components/ActivitySessionBootstrap';
@@ -25,14 +26,15 @@ import InserterBadge from './patterns/InserterBadge';
 import TemplateRecommender from './templates/TemplateRecommender';
 import TemplatePartRecommender from './template-parts/TemplatePartRecommender';
 
-registerPlugin( 'flavor-agent', {
-	render: () => (
-		<>
-			<ActivitySessionBootstrap />
-			<PatternRecommender />
-			<InserterBadge />
-			<TemplateRecommender />
-			<TemplatePartRecommender />
-		</>
-	),
-} );
+registerPlugin('flavor-agent', {
+    render: () => (
+        <>
+            <ActivitySessionBootstrap />
+            <BlockRecommendationsDocumentPanel />
+            <PatternRecommender />
+            <InserterBadge />
+            <TemplateRecommender />
+            <TemplatePartRecommender />
+        </>
+    ),
+});

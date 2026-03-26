@@ -6,8 +6,8 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
-use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
@@ -35,7 +35,7 @@ final class BlockAbilities {
 			self::collect_wordpress_docs_guidance( $context, $prompt )
 		);
 
-		$result = WordPressAIClient::chat( $system_prompt, $user_prompt );
+		$result = ChatClient::chat( $system_prompt, $user_prompt );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;

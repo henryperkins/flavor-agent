@@ -6,6 +6,7 @@ namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\OpenAI\Provider;
 
@@ -16,7 +17,8 @@ final class InfraAbilities {
 	}
 
 	public static function check_status( mixed $input ): array {
-		$block_recommendations_configured = WordPressAIClient::is_supported();
+		$block_recommendations_configured = ChatClient::is_supported();
+		$wordpress_ai_client_configured   = WordPressAIClient::is_supported();
 		$openai_connector_status          = Provider::openai_connector_status();
 		$native_api_key_source            = Provider::native_effective_api_key_source();
 		$native_embedding_config          = Provider::embedding_configuration( Provider::NATIVE );
@@ -50,7 +52,7 @@ final class InfraAbilities {
 			'availableAbilities' => $abilities,
 			'backends'           => [
 				'wordpress_ai_client'  => [
-					'configured' => $block_recommendations_configured,
+					'configured' => $wordpress_ai_client_configured,
 				],
 				'azure_openai'         => [
 					'configured'          => $azure_chat_configured,
@@ -83,12 +85,12 @@ final class InfraAbilities {
 		bool $block_recommendations_configured,
 		bool $active_chat_configured
 	): ?string {
-		if ( $block_recommendations_configured ) {
-			return 'provider-managed';
-		}
-
 		if ( $active_chat_configured ) {
 			return Provider::active_chat_model();
+		}
+
+		if ( $block_recommendations_configured ) {
+			return 'provider-managed';
 		}
 
 		return null;
