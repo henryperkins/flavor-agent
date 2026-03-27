@@ -18,6 +18,7 @@ import {
 } from '../store/activity-history';
 import { collectBlockContext } from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
+import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
@@ -177,6 +178,58 @@ export function BlockRecommendationsContent( {
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
+	const hasApplySuccess =
+		Boolean( latestBlockActivity ) &&
+		latestBlockActivity?.id === latestUndoableActivityId;
+	const hasUndoSuccess =
+		undoStatus === 'success' && Boolean( lastUndoneBlockActivity );
+	const { interactionState, statusNotice } = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+			const blockSuggestions = recommendations?.block || [];
+
+			return {
+				interactionState: store.getBlockInteractionState( clientId, {
+					undoError,
+					hasSuccess: hasApplySuccess,
+					hasUndoSuccess,
+				} ),
+				statusNotice: store.getSurfaceStatusNotice( 'block', {
+					requestError: error,
+					undoError,
+					undoStatus,
+					hasResult: blockSuggestions.length > 0,
+					hasSuggestions: blockSuggestions.length > 0,
+					hasSuccess: hasApplySuccess,
+					hasUndoSuccess,
+					applySuccessMessage: hasApplySuccess
+						? `Applied ${
+								latestBlockActivity?.suggestion || 'suggestion'
+						  }.`
+						: '',
+					undoSuccessMessage: hasUndoSuccess
+						? `Undid ${
+								lastUndoneBlockActivity?.suggestion ||
+								'suggestion'
+						  }.`
+						: '',
+					onDismissAction: Boolean( error ),
+					onUndoDismissAction: Boolean( undoError ),
+				} ),
+			};
+		},
+		[
+			clientId,
+			error,
+			hasApplySuccess,
+			hasUndoSuccess,
+			lastUndoneBlockActivity,
+			latestBlockActivity,
+			recommendations,
+			undoError,
+			undoStatus,
+		]
+	);
 
 	useEffect( () => {
 		setPrompt( '' );
@@ -199,6 +252,13 @@ export function BlockRecommendationsContent( {
 		},
 		[ undoActivity ]
 	);
+	let dismissStatusNotice;
+
+	if ( statusNotice?.source === 'request' ) {
+		dismissStatusNotice = () => clearBlockError( clientId );
+	} else if ( statusNotice?.source === 'undo' ) {
+		dismissStatusNotice = clearUndoError;
+	}
 
 	if ( ! clientId || ! block || isDisabled ) {
 		return null;
@@ -248,49 +308,15 @@ export function BlockRecommendationsContent( {
 				</Button>
 			</div>
 
-			{ error && (
-				<Notice
-					status="error"
-					isDismissible
-					onDismiss={ () => clearBlockError( clientId ) }
-				>
-					{ error }
-				</Notice>
-			) }
-
-			{ undoStatus === 'error' && undoError && (
-				<Notice
-					status="error"
-					isDismissible
-					onDismiss={ clearUndoError }
-				>
-					{ undoError }
-				</Notice>
-			) }
-
-			{ latestBlockActivity &&
-				latestBlockActivity.id === latestUndoableActivityId && (
-					<Notice status="success" isDismissible={ false }>
-						Applied{ ' ' }
-						<strong>{ latestBlockActivity.suggestion }</strong>.{ ' ' }
-						<Button
-							variant="link"
-							onClick={ () =>
-								handleUndo( latestBlockActivity.id )
-							}
-							disabled={ undoStatus === 'undoing' }
-						>
-							{ undoStatus === 'undoing' ? 'Undoing…' : 'Undo' }
-						</Button>
-					</Notice>
-				) }
-
-			{ undoStatus === 'success' && lastUndoneBlockActivity && (
-				<Notice status="success" isDismissible={ false }>
-					Undid{ ' ' }
-					<strong>{ lastUndoneBlockActivity.suggestion }</strong>.
-				</Notice>
-			) }
+			<AIStatusNotice
+				notice={ statusNotice }
+				onAction={
+					statusNotice?.actionType === 'undo' && latestBlockActivity
+						? () => handleUndo( latestBlockActivity.id )
+						: undefined
+				}
+				onDismiss={ dismissStatusNotice }
+			/>
 
 			{ recommendations?.explanation && (
 				<p className="flavor-agent-explanation flavor-agent-panel__note">
@@ -299,6 +325,12 @@ export function BlockRecommendationsContent( {
 			) }
 
 			<AIActivitySection
+				description={
+					interactionState === 'success' ||
+					blockActivityEntries.length > 0
+						? 'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.'
+						: ''
+				}
 				entries={ blockActivityEntries }
 				isUndoing={ undoStatus === 'undoing' }
 				onUndo={ handleUndo }
@@ -319,6 +351,12 @@ export function BlockRecommendationsContent( {
 								: 'ideas' }
 						</span>
 					</div>
+					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+						Block suggestions can apply inline when Flavor Agent is
+						only updating local attributes on this block. Structural
+						surfaces keep the same status and history model, but
+						require preview before mutation.
+					</p>
 					<SuggestionChips
 						clientId={ clientId }
 						suggestions={ recommendations.block }

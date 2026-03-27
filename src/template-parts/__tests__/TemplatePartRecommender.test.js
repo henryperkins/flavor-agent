@@ -5,6 +5,7 @@ const mockGetTemplatePartActivityUndoState = jest.fn(
 	( activity ) => activity?.undo || {}
 );
 const mockGetTemplatePartAreaLookup = jest.fn( () => ( {} ) );
+const mockUndoActivity = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -93,8 +94,7 @@ jest.mock( '../../utils/template-part-areas', () => ( {
 jest.mock( '../../utils/template-operation-sequence', () => ( {
 	TEMPLATE_OPERATION_INSERT_PATTERN: 'insert_pattern',
 	TEMPLATE_OPERATION_REMOVE_BLOCK: 'remove_block',
-	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN:
-		'replace_block_with_pattern',
+	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: 'replace_block_with_pattern',
 	TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH: 'after_block_path',
 	TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH: 'before_block_path',
 	validateTemplatePartOperationSequence: jest.fn( ( operations ) => ( {
@@ -171,9 +171,69 @@ function selectStore( storeName ) {
 			getLastUndoneActivityId: jest.fn(
 				() => getState().store.lastUndoneActivityId
 			),
+			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
+				void surface;
+
+				if ( options.requestError ) {
+					return {
+						source: 'request',
+						tone: 'error',
+						message: options.requestError,
+					};
+				}
+
+				if ( options.undoError ) {
+					return {
+						source: 'undo',
+						tone: 'error',
+						message: options.undoError,
+						isDismissible: true,
+					};
+				}
+
+				if ( options.undoSuccessMessage ) {
+					return {
+						source: 'undo',
+						tone: 'success',
+						message: options.undoSuccessMessage,
+					};
+				}
+
+				if ( options.applyError ) {
+					return {
+						source: 'apply',
+						tone: 'error',
+						message: options.applyError,
+					};
+				}
+
+				if ( options.applySuccessMessage ) {
+					return {
+						source: 'apply',
+						tone: 'success',
+						message: options.applySuccessMessage,
+						actionType: 'undo',
+						actionLabel: 'Undo',
+					};
+				}
+
+				if ( options.emptyMessage ) {
+					return {
+						source: 'empty',
+						tone: 'info',
+						message:
+							options.requestStatus === 'loading'
+								? ''
+								: options.emptyMessage,
+					};
+				}
+
+				return null;
+			} ),
 			getTemplatePartApplyError: jest.fn(
 				() => getState().store.templatePartApplyError
 			),
+			getTemplatePartInteractionState: jest.fn( () => 'idle' ),
 			getTemplatePartApplyStatus: jest.fn(
 				() => getState().store.templatePartApplyStatus
 			),
@@ -239,7 +299,7 @@ beforeEach( async () => {
 		clearUndoError: jest.fn(),
 		fetchTemplatePartRecommendations: jest.fn(),
 		setTemplatePartSelectedSuggestion: jest.fn(),
-		undoActivity: jest.fn(),
+		undoActivity: mockUndoActivity,
 	} ) );
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( selectStore )
@@ -269,6 +329,75 @@ afterEach( async () => {
 } );
 
 describe( 'TemplatePartRecommender', () => {
+	test( 'shows an undo action on apply success notices and dispatches undo for the latest template-part activity', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_part_suggestion',
+						surface: 'template-part',
+						suggestion: 'Add utility links',
+						target: {
+							templatePartRef: 'theme//header',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+				templatePartApplyError: null,
+				templatePartApplyStatus: 'success',
+				templatePartLastAppliedSuggestionKey: 'utility-links-0',
+				templatePartLastAppliedOperations: [
+					{
+						type: 'replace_block_with_pattern',
+						patternName: 'theme/utility-links',
+					},
+				],
+				templatePartSelectedSuggestionKey: null,
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Applied 1 template-part operation.' ) ).toBe( true );
+
+		const undoButton = Array.from(
+			container.querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Undo' );
+
+		expect( undoButton ).toBeDefined();
+
+		await act( async () => {
+			undoButton.click();
+		} );
+
+		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'does not show an empty-state notice while reloading the same template part', async () => {
+		currentState = createState( {
+			store: {
+				templatePartExplanation: '',
+				templatePartRecommendations: [],
+				templatePartResultRef: 'theme//header',
+				templatePartStatus: 'loading',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Analyzing template-part structure…' ) ).toBe( true );
+		expect(
+			hasText(
+				'No template-part suggestions were returned for this request.'
+			)
+		).toBe( false );
+	} );
+
 	test( 'keeps undo history visible when template-part recommendations are unavailable', async () => {
 		currentState = createState( {
 			store: {

@@ -124,10 +124,9 @@ export function getSurfaceCapability( surface, input = null ) {
 			data.capabilities.surfaces,
 			structuredKey
 		);
-	const structuredCapability =
-		hasStructuredCapability
-			? data.capabilities.surfaces[ structuredKey ]
-			: null;
+	const structuredCapability = hasStructuredCapability
+		? data.capabilities.surfaces[ structuredKey ]
+		: null;
 	const legacyFlagKey = LEGACY_FLAG_KEYS[ surface ];
 	const legacyAvailable =
 		typeof data?.[ legacyFlagKey ] === 'boolean'

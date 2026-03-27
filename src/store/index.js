@@ -93,6 +93,292 @@ const DEFAULT_STATE = {
 	templatePartLastAppliedOperations: [],
 };
 
+const SHARED_PANEL_SEQUENCE = Object.freeze( [
+	'prompt',
+	'suggestions',
+	'explanation',
+	'review',
+	'apply',
+	'undo-history',
+] );
+
+const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
+	block: Object.freeze( {
+		surface: 'block',
+		advisoryOnly: false,
+		allowsInlineApply: true,
+		previewRequired: false,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+	navigation: Object.freeze( {
+		surface: 'navigation',
+		advisoryOnly: true,
+		allowsInlineApply: false,
+		previewRequired: false,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+	template: Object.freeze( {
+		surface: 'template',
+		advisoryOnly: false,
+		allowsInlineApply: false,
+		previewRequired: true,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+	'template-part': Object.freeze( {
+		surface: 'template-part',
+		advisoryOnly: false,
+		allowsInlineApply: false,
+		previewRequired: true,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+} );
+
+function getSurfaceContract( surface ) {
+	return SURFACE_INTERACTION_CONTRACT[ surface ] || null;
+}
+
+function normalizeStringMessage( value ) {
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function getNormalizedReadyState(
+	surface,
+	{ hasPreview = false, hasResult = false }
+) {
+	const contract = getSurfaceContract( surface );
+
+	if ( ! contract || ! hasResult ) {
+		return 'idle';
+	}
+
+	if ( contract.previewRequired && hasPreview ) {
+		return 'preview-ready';
+	}
+
+	return contract.readyState;
+}
+
+function getNormalizedInteractionState( surface, options = {} ) {
+	const {
+		requestStatus = 'idle',
+		requestError = '',
+		applyStatus = 'idle',
+		applyError = '',
+		undoStatus = 'idle',
+		undoError = '',
+		hasResult = false,
+		hasPreview = false,
+		hasSuccess = false,
+		hasUndoSuccess = false,
+	} = options;
+
+	if (
+		normalizeStringMessage( requestError ) ||
+		normalizeStringMessage( applyError ) ||
+		normalizeStringMessage( undoError )
+	) {
+		return 'error';
+	}
+
+	if ( undoStatus === 'undoing' ) {
+		return 'undoing';
+	}
+
+	if ( applyStatus === 'applying' ) {
+		return 'applying';
+	}
+
+	if ( requestStatus === 'loading' ) {
+		return 'loading';
+	}
+
+	if (
+		hasUndoSuccess ||
+		hasSuccess ||
+		applyStatus === 'success' ||
+		undoStatus === 'success'
+	) {
+		return 'success';
+	}
+
+	return getNormalizedReadyState( surface, {
+		hasPreview,
+		hasResult,
+	} );
+}
+
+function isSurfaceApplyAllowedForState( surface, options = {} ) {
+	const contract = getSurfaceContract( surface );
+
+	if ( ! contract || contract.advisoryOnly ) {
+		return false;
+	}
+
+	if ( contract.previewRequired ) {
+		return Boolean(
+			options.hasPreview &&
+				options.hasOperations &&
+				options.applyStatus !== 'applying'
+		);
+	}
+
+	return Boolean( options.hasResult );
+}
+
+function getBlockRequestError( state, clientId ) {
+	return normalizeStringMessage(
+		getStoredBlockRequestState( state, clientId ).error
+	);
+}
+
+function getNavigationRequestError( state, blockClientId = null ) {
+	return normalizeStringMessage(
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? ''
+			: state.navigationError
+	);
+}
+
+function getNavigationHasResult( state, blockClientId = null ) {
+	return Boolean(
+		( ! blockClientId ||
+			state.navigationBlockClientId === blockClientId ) &&
+			state.navigationStatus === 'ready'
+	);
+}
+
+function getTemplateHasResult( state ) {
+	return Boolean(
+		state.templateRef &&
+			( state.templateRecommendations.length > 0 ||
+				normalizeStringMessage( state.templateExplanation ) )
+	);
+}
+
+function getTemplatePartHasResult( state ) {
+	return Boolean(
+		state.templatePartRef &&
+			( state.templatePartRecommendations.length > 0 ||
+				normalizeStringMessage( state.templatePartExplanation ) )
+	);
+}
+
+function getSurfaceStatusNotice( surface, options = {} ) {
+	const requestError = normalizeStringMessage( options.requestError );
+
+	if ( requestError ) {
+		return {
+			source: 'request',
+			tone: 'error',
+			message: requestError,
+			isDismissible: Boolean( options.onDismissAction ),
+			actionType: options.onDismissAction ? 'dismiss' : null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const undoError = normalizeStringMessage( options.undoError );
+
+	if ( undoError ) {
+		return {
+			source: 'undo',
+			tone: 'error',
+			message: undoError,
+			isDismissible: Boolean( options.onUndoDismissAction ),
+			actionType: options.onUndoDismissAction ? 'dismiss' : null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const undoSuccessMessage = normalizeStringMessage(
+		options.undoSuccessMessage
+	);
+
+	if ( undoSuccessMessage ) {
+		return {
+			source: 'undo',
+			tone: 'success',
+			message: undoSuccessMessage,
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const applyError = normalizeStringMessage( options.applyError );
+
+	if ( applyError ) {
+		return {
+			source: 'apply',
+			tone: 'error',
+			message: applyError,
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const applySuccessMessage = normalizeStringMessage(
+		options.applySuccessMessage
+	);
+
+	if ( applySuccessMessage ) {
+		return {
+			source: 'apply',
+			tone: 'success',
+			message: applySuccessMessage,
+			isDismissible: false,
+			actionType: 'undo',
+			actionLabel: 'Undo',
+			actionDisabled: options.undoStatus === 'undoing',
+		};
+	}
+
+	const advisoryMessage = normalizeStringMessage( options.advisoryMessage );
+	const interactionState = getNormalizedInteractionState( surface, options );
+
+	if ( interactionState === 'advisory-ready' && advisoryMessage ) {
+		return {
+			source: 'advisory',
+			tone: 'info',
+			message: advisoryMessage,
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const emptyMessage = normalizeStringMessage( options.emptyMessage );
+
+	if (
+		options.hasResult &&
+		! options.hasSuggestions &&
+		emptyMessage &&
+		interactionState !== 'loading'
+	) {
+		return {
+			source: 'empty',
+			tone: 'info',
+			message: emptyMessage,
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	return null;
+}
+
 function getStoredBlockRequestState( state, clientId ) {
 	return state.blockRequestState[ clientId ] || DEFAULT_BLOCK_REQUEST_STATE;
 }
@@ -2444,6 +2730,103 @@ const selectors = {
 		state.templatePartLastAppliedSuggestionKey,
 	getTemplatePartLastAppliedOperations: ( state ) =>
 		state.templatePartLastAppliedOperations,
+	getSurfaceInteractionContract: ( state, surface ) => {
+		void state;
+
+		return getSurfaceContract( surface );
+	},
+	isSurfaceAdvisoryOnly: ( state, surface ) => {
+		void state;
+
+		return Boolean( getSurfaceContract( surface )?.advisoryOnly );
+	},
+	isSurfacePreviewRequired: ( state, surface ) => {
+		void state;
+
+		return Boolean( getSurfaceContract( surface )?.previewRequired );
+	},
+	isSurfaceApplyAllowed: ( state, surface, options = {} ) => {
+		void state;
+
+		return isSurfaceApplyAllowedForState( surface, options );
+	},
+	getSurfaceInteractionState: ( state, surface, options = {} ) => {
+		void state;
+
+		return getNormalizedInteractionState( surface, options );
+	},
+	getSurfaceStatusNotice: ( state, surface, options = {} ) => {
+		void state;
+
+		return getSurfaceStatusNotice( surface, options );
+	},
+	getBlockInteractionState: ( state, clientId, options = {} ) =>
+		getNormalizedInteractionState( 'block', {
+			requestStatus: getStoredBlockRequestState( state, clientId ).status,
+			requestError: getBlockRequestError( state, clientId ),
+			hasResult: Boolean(
+				( state.blockRecommendations[ clientId ]?.block?.length || 0 ) +
+					( state.blockRecommendations[ clientId ]?.settings
+						?.length || 0 ) +
+					( state.blockRecommendations[ clientId ]?.styles?.length ||
+						0 ) >
+					0
+			),
+			undoStatus: state.undoStatus,
+			undoError: normalizeStringMessage( options.undoError ),
+			hasSuccess: Boolean( options.hasSuccess ),
+			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			...options,
+		} ),
+	getNavigationInteractionState: (
+		state,
+		blockClientId = null,
+		options = {}
+	) =>
+		getNormalizedInteractionState( 'navigation', {
+			requestStatus:
+				blockClientId && state.navigationBlockClientId !== blockClientId
+					? 'idle'
+					: state.navigationStatus,
+			requestError: getNavigationRequestError( state, blockClientId ),
+			hasResult: getNavigationHasResult( state, blockClientId ),
+			hasSuggestions:
+				selectors.getNavigationRecommendations( state, blockClientId )
+					.length > 0,
+			...options,
+		} ),
+	getTemplateInteractionState: ( state, options = {} ) =>
+		getNormalizedInteractionState( 'template', {
+			requestStatus: state.templateStatus,
+			requestError: normalizeStringMessage( state.templateError ),
+			applyStatus: state.templateApplyStatus,
+			applyError: normalizeStringMessage( state.templateApplyError ),
+			undoStatus: state.undoStatus,
+			undoError: normalizeStringMessage( options.undoError ),
+			hasResult: getTemplateHasResult( state ),
+			hasPreview: Boolean(
+				options.hasPreview ?? state.templateSelectedSuggestionKey
+			),
+			hasSuccess: Boolean( options.hasSuccess ),
+			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			...options,
+		} ),
+	getTemplatePartInteractionState: ( state, options = {} ) =>
+		getNormalizedInteractionState( 'template-part', {
+			requestStatus: state.templatePartStatus,
+			requestError: normalizeStringMessage( state.templatePartError ),
+			applyStatus: state.templatePartApplyStatus,
+			applyError: normalizeStringMessage( state.templatePartApplyError ),
+			undoStatus: state.undoStatus,
+			undoError: normalizeStringMessage( options.undoError ),
+			hasResult: getTemplatePartHasResult( state ),
+			hasPreview: Boolean(
+				options.hasPreview ?? state.templatePartSelectedSuggestionKey
+			),
+			hasSuccess: Boolean( options.hasSuccess ),
+			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			...options,
+		} ),
 };
 
 const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );

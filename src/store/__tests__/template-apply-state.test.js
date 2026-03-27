@@ -241,4 +241,101 @@ describe( 'template apply state', () => {
 			[]
 		);
 	} );
+
+	test( 'template normalized interaction state distinguishes preview-ready, applying, and error', () => {
+		let state = reducer(
+			undefined,
+			actions.setTemplateRecommendations(
+				'theme//home',
+				{
+					suggestions: [ { label: 'Refresh header' } ],
+					explanation: 'Review before applying.',
+				},
+				'Prompt',
+				1
+			)
+		);
+
+		expect( selectors.getTemplateInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
+
+		state = reducer(
+			state,
+			actions.setTemplateSelectedSuggestion( 'Refresh header-0' )
+		);
+
+		expect( selectors.getTemplateInteractionState( state ) ).toBe(
+			'preview-ready'
+		);
+
+		state = reducer( state, actions.setTemplateApplyState( 'applying' ) );
+
+		expect( selectors.getTemplateInteractionState( state ) ).toBe(
+			'applying'
+		);
+
+		state = reducer(
+			state,
+			actions.setTemplateApplyState(
+				'error',
+				'Pattern is missing in the editor.'
+			)
+		);
+
+		expect( selectors.getTemplateInteractionState( state ) ).toBe(
+			'error'
+		);
+	} );
+
+	test( 'undo success notice wins over stale template apply errors', () => {
+		const state = reducer(
+			undefined,
+			actions.setTemplateApplyState(
+				'error',
+				'Pattern is missing in the editor.'
+			)
+		);
+
+		expect(
+			selectors.getSurfaceStatusNotice( state, 'template', {
+				applyError: selectors.getTemplateApplyError( state ),
+				undoSuccessMessage: 'Undid Refresh header.',
+			} )
+		).toEqual(
+			expect.objectContaining( {
+				source: 'undo',
+				tone: 'success',
+				message: 'Undid Refresh header.',
+			} )
+		);
+	} );
+
+	test( 'apply success notices expose the shared undo action affordance', () => {
+		expect(
+			selectors.getSurfaceStatusNotice( undefined, 'template', {
+				applySuccessMessage: 'Applied 1 template operation.',
+			} )
+		).toEqual(
+			expect.objectContaining( {
+				source: 'apply',
+				tone: 'success',
+				message: 'Applied 1 template operation.',
+				actionType: 'undo',
+				actionLabel: 'Undo',
+			} )
+		);
+	} );
+
+	test( 'empty notices stay suppressed while a same-surface request is loading', () => {
+		expect(
+			selectors.getSurfaceStatusNotice( undefined, 'template-part', {
+				requestStatus: 'loading',
+				hasResult: true,
+				hasSuggestions: false,
+				emptyMessage:
+					'No template-part suggestions were returned for this request.',
+			} )
+		).toBeNull();
+	} );
 } );

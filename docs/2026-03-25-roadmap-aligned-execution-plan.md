@@ -89,13 +89,17 @@ Before expanding the roadmap into broader new surfaces, the clearest next steps 
 1. **Finish Epic 1 shared capability UX.** (Completed 2026-03-27)
    - Shared capability/why-unavailable UI now covers block, pattern, navigation, template, and template-part surfaces.
    - `check-status` now exposes the exact surface-ready flags the editor needs instead of requiring each surface to infer degraded-mode behavior independently.
-2. **Deepen the shipped audit slice before adding broader agent behavior.**
+2. **Finish Epic 2 unified inline review model.** (Completed 2026-03-27)
+   - Block, navigation, template, and template-part surfaces now share normalized interaction states and shared advisory/review/status components.
+   - Block keeps explicit inline apply only for safe local attribute updates, while template and template-part stay preview-first and navigation stays advisory-only.
+   - A thin `src/review/notes-adapter.js` shape adapter now exists for future Notes/comment projection without taking a runtime dependency on unstable APIs.
+3. **Deepen the shipped audit slice before adding broader agent behavior.**
    - Expand `Settings > AI Activity` with before/after inspection, request/provider diagnostics, and clearer ordered-undo visibility.
    - Keep the server-backed repository as the source of truth for undo eligibility and diagnostics.
-3. **Record the navigation contract explicitly.**
+4. **Record the navigation contract explicitly.**
    - Navigation stays advisory-only through v1.0; do not add an apply contract in the current milestone.
    - Revisit only if a bounded previewable/undoable navigation executor becomes its own tracked follow-up.
-4. **Refresh live provider-backed verification.**
+5. **Refresh live provider-backed verification.**
    - Re-run end-to-end recommendation execution with valid credentials and capture the results in `STATUS.md`.
    - Use that run to confirm the current Connectors/provider boundary, docs grounding, and recent Gutenberg trunk-alignment work under real credentials.
 5. **Switch from RC/beta assumptions to stable WordPress 7.0 as soon as available.**
@@ -228,7 +232,7 @@ Browser:
 2. All first-party surfaces use the same capability vocabulary and degraded-mode behavior.
 3. No new feature work depends on undocumented provider assumptions.
 
-## Epic 2: Unified Inline Review Model
+## Epic 2: Unified Inline Review Model (Completed 2026-03-27)
 
 ### Objective
 
@@ -244,6 +248,14 @@ The repo already has the right pieces:
 4. activity and undo
 
 What is missing is one clear interaction model that users can learn once and trust across surfaces.
+
+### Progress In Tree
+
+1. `src/store/index.js` now exposes normalized interaction selectors and one shared state vocabulary for block, navigation, template, and template-part surfaces.
+2. `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` now provide the shared review/status shells across the existing editor surfaces.
+3. Block now explicitly explains why safe local attribute updates may apply inline, while template and template-part remain preview-first and navigation remains advisory-only.
+4. `AIActivitySection` remains the shared history block, so activity and undo presentation is now aligned wherever Flavor Agent owns an executable path.
+5. `src/review/notes-adapter.js` adds an optional shape-only adapter for future Notes/comment projection without wiring unstable runtime integrations into Epic 2.
 
 ### In Scope
 

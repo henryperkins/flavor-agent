@@ -210,30 +210,42 @@ function flavor_agent_get_editor_surface_capabilities(
 	);
 	$can_edit_theme        = current_user_can( 'edit_theme_options' );
 	$can_manage_settings   = current_user_can( 'manage_options' );
-	$block_message         = __(
-		$can_manage_settings
-			? 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.'
-			: 'Block recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
-		'flavor-agent'
-	);
-	$template_message      = __(
-		$can_manage_settings
-			? 'Template recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.'
-			: 'Template recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
-		'flavor-agent'
-	);
-	$template_part_message = __(
-		$can_manage_settings
-			? 'Template-part recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.'
-			: 'Template-part recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
-		'flavor-agent'
-	);
-	$navigation_message    = __(
-		$can_manage_settings
-			? 'Navigation recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.'
-			: 'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
-		'flavor-agent'
-	);
+	$block_message         = $can_manage_settings
+		? __(
+			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.',
+			'flavor-agent'
+		)
+		: __(
+			'Block recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'flavor-agent'
+		);
+	$template_message      = $can_manage_settings
+		? __(
+			'Template recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+			'flavor-agent'
+		)
+		: __(
+			'Template recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'flavor-agent'
+		);
+	$template_part_message = $can_manage_settings
+		? __(
+			'Template-part recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+			'flavor-agent'
+		)
+		: __(
+			'Template-part recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'flavor-agent'
+		);
+	$navigation_message    = $can_manage_settings
+		? __(
+			'Navigation recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+			'flavor-agent'
+		)
+		: __(
+			'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'flavor-agent'
+		);
 
 	return [
 		'block'        => [
@@ -260,12 +272,15 @@ function flavor_agent_get_editor_surface_capabilities(
 			'owner'              => 'plugin_settings',
 			'configurationLabel' => $can_manage_settings ? 'Settings > Flavor Agent' : '',
 			'configurationUrl'   => $can_manage_settings ? $settings_url : '',
-			'message'            => __(
-				$can_manage_settings
-					? 'Pattern recommendations rely on Flavor Agent\'s chat and embedding backends plus Qdrant in Settings > Flavor Agent.'
-					: 'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
-				'flavor-agent'
-			),
+			'message'            => $can_manage_settings
+				? __(
+					'Pattern recommendations rely on Flavor Agent\'s chat and embedding backends plus Qdrant in Settings > Flavor Agent.',
+					'flavor-agent'
+				)
+				: __(
+					'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+					'flavor-agent'
+				),
 		],
 		'template'     => [
 			'available'          => $chat_available,

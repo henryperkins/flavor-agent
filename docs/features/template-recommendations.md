@@ -14,6 +14,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by `Provider::chat_configured()`
 - The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the visible pattern set
 
+## Shared Interaction Model
+
+- Learned-once sequence: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo and history
+- Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
+- Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
+- Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
+- Non-executable ideas stay visible in the shared advisory shell instead of disappearing when deterministic validation cannot produce an apply contract
+
 ## End-To-End Flow
 
 1. `TemplateRecommender()` resolves the current `wp_template` reference and template type

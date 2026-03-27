@@ -985,14 +985,17 @@ test("block and pattern surfaces explain unavailable providers in native UI", as
   const promptInput = page.getByPlaceholder("What are you trying to achieve?");
 
   await ensurePanelOpen(page, "AI Recommendations", promptInput);
+  const recommendationsPanel = promptInput.locator(
+    'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " components-panel__body ")][1]',
+  );
   await expect(
-    page.getByRole("link", { name: "Settings > Flavor Agent" }),
+    recommendationsPanel.getByRole("link", { name: "Settings > Flavor Agent" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Settings > Connectors" }),
+    recommendationsPanel.getByRole("link", { name: "Settings > Connectors" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Get Suggestions" }),
+    recommendationsPanel.getByRole("button", { name: "Get Suggestions" }),
   ).toBeDisabled();
 
   await page
@@ -1008,7 +1011,9 @@ test("block and pattern surfaces explain unavailable providers in native UI", as
       .getByText("Pattern recommendations rely on Flavor Agent"),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Settings > Flavor Agent" }),
+    page
+      .locator(".flavor-agent-pattern-notice")
+      .getByRole("link", { name: "Settings > Flavor Agent" }),
   ).toBeVisible();
 });
 
@@ -1056,8 +1061,11 @@ test("navigation surface smoke renders advisory recommendations for a selected n
   );
 
   await ensurePanelOpen(page, "AI Recommendations", promptInput);
+  const recommendationsPanel = promptInput.locator(
+    'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " components-panel__body ")][1]',
+  );
   await promptInput.fill(NAVIGATION_PROMPT);
-  await page
+  await recommendationsPanel
     .getByRole("button", { name: "Get Navigation Suggestions" })
     .click();
 
@@ -1065,13 +1073,23 @@ test("navigation surface smoke renders advisory recommendations for a selected n
   expect(navigationRequests[0].prompt).toBe(NAVIGATION_PROMPT);
   expect(navigationRequests[0].navigationMarkup).toContain("wp:navigation");
 
-  await expect(page.getByText("Navigation recommendations")).toBeVisible();
-  await expect(page.getByText("Advisory only")).toBeVisible();
+  const navigationSummarySection = recommendationsPanel
+    .locator(".flavor-agent-advisory-section")
+    .first();
+
   await expect(
-    page.getByText("Keep utility links together and simplify the top level."),
+    navigationSummarySection.getByText("Navigation recommendations"),
   ).toBeVisible();
   await expect(
-    page.getByText("Group utility links", { exact: true }),
+    navigationSummarySection.getByText("Advisory only", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    recommendationsPanel.getByText(
+      "Keep utility links together and simplify the top level.",
+    ),
+  ).toBeVisible();
+  await expect(
+    recommendationsPanel.getByText("Group utility links", { exact: true }),
   ).toBeVisible();
 });
 

@@ -1,9 +1,4 @@
-import {
-	Button,
-	Notice,
-	TextareaControl,
-	Tooltip,
-} from '@wordpress/components';
+import { Button, TextareaControl, Tooltip } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -16,6 +11,9 @@ import {
 } from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
+import AIAdvisorySection from '../components/AIAdvisorySection';
+import AIReviewSection from '../components/AIReviewSection';
+import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
@@ -488,6 +486,80 @@ export default function TemplatePartRecommender() {
 			),
 		[ recommendations, patternTitleMap ]
 	);
+	const executableSuggestionCards = useMemo(
+		() => suggestionCards.filter( ( suggestion ) => suggestion.canApply ),
+		[ suggestionCards ]
+	);
+	const advisorySuggestionCards = useMemo(
+		() => suggestionCards.filter( ( suggestion ) => ! suggestion.canApply ),
+		[ suggestionCards ]
+	);
+	const hasApplySuccess =
+		applyStatus === 'success' &&
+		lastAppliedSuggestionKey &&
+		lastAppliedOperations.length > 0 &&
+		latestTemplatePartActivity &&
+		latestTemplatePartActivity.id === latestUndoableActivityId;
+	const hasUndoSuccess =
+		undoStatus === 'success' && Boolean( lastUndoneTemplatePartActivity );
+	const { interactionState, statusNotice } = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+
+			return {
+				interactionState: store.getTemplatePartInteractionState( {
+					undoError,
+					hasPreview: Boolean( selectedSuggestionKey ),
+					hasSuccess: Boolean( hasApplySuccess ),
+					hasUndoSuccess,
+				} ),
+				statusNotice: store.getSurfaceStatusNotice( 'template-part', {
+					requestStatus: isLoading ? 'loading' : 'idle',
+					requestError: error,
+					applyError,
+					undoError,
+					undoStatus,
+					applyStatus,
+					hasResult: hasMatchingResult,
+					hasSuggestions,
+					hasPreview: Boolean( selectedSuggestionKey ),
+					hasSuccess: Boolean( hasApplySuccess ),
+					hasUndoSuccess,
+					applySuccessMessage: hasApplySuccess
+						? `Applied ${ formatCount(
+								lastAppliedOperations.length,
+								'template-part operation'
+						  ) }.`
+						: '',
+					undoSuccessMessage: hasUndoSuccess
+						? `Undid ${
+								lastUndoneTemplatePartActivity?.suggestion ||
+								'suggestion'
+						  }.`
+						: '',
+					emptyMessage: hasMatchingResult
+						? 'No template-part suggestions were returned for this request.'
+						: '',
+					onUndoDismissAction: Boolean( undoError ),
+				} ),
+			};
+		},
+		[
+			applyError,
+			applyStatus,
+			error,
+			hasApplySuccess,
+			hasMatchingResult,
+			hasSuggestions,
+			isLoading,
+			lastAppliedOperations,
+			lastUndoneTemplatePartActivity,
+			selectedSuggestionKey,
+			undoError,
+			undoStatus,
+			hasUndoSuccess,
+		]
+	);
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommend ) {
@@ -595,64 +667,28 @@ export default function TemplatePartRecommender() {
 				) }
 
 				{ canRecommend && isLoading && (
-					<Notice status="info" isDismissible={ false }>
-						Analyzing template-part structure…
-					</Notice>
+					<AIStatusNotice
+						notice={ {
+							tone: 'info',
+							message: 'Analyzing template-part structure…',
+						} }
+					/>
 				) }
 
-				{ canRecommend && error && (
-					<Notice status="error" isDismissible={ false }>
-						{ error }
-					</Notice>
-				) }
-
-				{ undoStatus === 'error' && undoError && (
-					<Notice
-						status="error"
-						isDismissible
-						onDismiss={ clearUndoError }
-					>
-						{ undoError }
-					</Notice>
-				) }
-
-				{ applyStatus === 'error' && applyError && (
-					<Notice status="error" isDismissible={ false }>
-						{ applyError }
-					</Notice>
-				) }
-
-				{ applyStatus === 'success' &&
-					lastAppliedSuggestionKey &&
-					lastAppliedOperations.length > 0 &&
-					latestTemplatePartActivity &&
-					latestTemplatePartActivity.id === latestUndoableActivityId && (
-						<Notice status="success" isDismissible={ false }>
-							Applied{ ' ' }
-							{ formatCount(
-								lastAppliedOperations.length,
-								'template-part operation'
-							) }
-							.{ ' ' }
-							<Button
-								variant="link"
-								onClick={ () =>
-									handleUndo( latestTemplatePartActivity.id )
-								}
-								disabled={ undoStatus === 'undoing' }
-							>
-								{ undoStatus === 'undoing' ? 'Undoing…' : 'Undo' }
-							</Button>
-						</Notice>
-					) }
-
-				{ undoStatus === 'success' && lastUndoneTemplatePartActivity && (
-					<Notice status="success" isDismissible={ false }>
-						Undid{ ' ' }
-						<strong>{ lastUndoneTemplatePartActivity.suggestion }</strong>
-						.
-					</Notice>
-				) }
+				<AIStatusNotice
+					notice={ statusNotice }
+					onAction={
+						statusNotice?.actionType === 'undo' &&
+						latestTemplatePartActivity
+							? () => handleUndo( latestTemplatePartActivity.id )
+							: undefined
+					}
+					onDismiss={
+						statusNotice?.source === 'undo'
+							? clearUndoError
+							: undefined
+					}
+				/>
 
 				{ canRecommend && hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
@@ -661,23 +697,18 @@ export default function TemplatePartRecommender() {
 				) }
 
 				<AIActivitySection
+					description={
+						interactionState === 'success' ||
+						templatePartActivityEntries.length > 0
+							? 'Template-part actions share the same history and latest-valid undo behavior as the other executable review surfaces.'
+							: ''
+					}
 					entries={ templatePartActivityEntries }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
 				/>
 
-				{ canRecommend &&
-					hasMatchingResult &&
-					! isLoading &&
-					! error &&
-					! hasSuggestions && (
-						<Notice status="warning" isDismissible={ false }>
-							No template-part suggestions were returned for this
-							request.
-						</Notice>
-					) }
-
-				{ canRecommend && hasSuggestions && (
+				{ canRecommend && executableSuggestionCards.length > 0 && (
 					<div className="flavor-agent-panel__group">
 						<div className="flavor-agent-panel__group-header">
 							<div className="flavor-agent-panel__group-title">
@@ -685,15 +716,56 @@ export default function TemplatePartRecommender() {
 							</div>
 							<span className="flavor-agent-pill">
 								{ formatCount(
-									suggestionCards.length,
+									executableSuggestionCards.length,
 									'suggestion'
 								) }
 							</span>
 						</div>
 						<div className="flavor-agent-panel__group-body">
-							{ suggestionCards.map( ( suggestion, index ) => (
+							{ executableSuggestionCards.map(
+								( suggestion, index ) => (
+									<TemplatePartSuggestionCard
+										key={ `${ resultToken }-${ getSuggestionCardKey(
+											suggestion,
+											index
+										) }` }
+										suggestion={ suggestion }
+										isApplied={
+											lastAppliedSuggestionKey ===
+											suggestion.suggestionKey
+										}
+										isApplying={
+											applyStatus === 'applying'
+										}
+										isSelected={
+											selectedSuggestionKey ===
+											suggestion.suggestionKey
+										}
+										onApplySuggestion={
+											handleApplySuggestion
+										}
+										onCancelPreview={ handleCancelPreview }
+										onPreviewSuggestion={
+											handlePreviewSuggestion
+										}
+									/>
+								)
+							) }
+						</div>
+					</div>
+				) }
+
+				{ canRecommend && advisorySuggestionCards.length > 0 && (
+					<AIAdvisorySection
+						title="Advisory Suggestions"
+						count={ advisorySuggestionCards.length }
+						countNoun="suggestion"
+						description="These suggestions stay visible, but Flavor Agent could not validate an exact deterministic operation sequence for them."
+					>
+						{ advisorySuggestionCards.map(
+							( suggestion, index ) => (
 								<TemplatePartSuggestionCard
-									key={ `${ resultToken }-${ getSuggestionCardKey(
+									key={ `advisory-${ resultToken }-${ getSuggestionCardKey(
 										suggestion,
 										index
 									) }` }
@@ -709,11 +781,13 @@ export default function TemplatePartRecommender() {
 									}
 									onApplySuggestion={ handleApplySuggestion }
 									onCancelPreview={ handleCancelPreview }
-									onPreviewSuggestion={ handlePreviewSuggestion }
+									onPreviewSuggestion={
+										handlePreviewSuggestion
+									}
 								/>
-							) ) }
-						</div>
-					</div>
+							)
+						) }
+					</AIAdvisorySection>
 				) }
 			</div>
 		</PluginDocumentSettingPanel>
@@ -898,41 +972,23 @@ function TemplatePartSuggestionCard( {
 			) }
 
 			{ isSelected && suggestion.operations?.length > 0 && (
-				<div className="flavor-agent-template-preview">
-					<div className="flavor-agent-template-list">
-						<div className="flavor-agent-template-list__header">
-							<div className="flavor-agent-section-label">
-								Review Before Apply
-							</div>
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									suggestion.operations.length,
-									'operation'
-								) }
-							</span>
-						</div>
-						{ suggestion.operations.map( ( operation ) => (
-							<TemplatePartOperationPreviewRow
-								key={ operation.key }
-								operation={ operation }
-							/>
-						) ) }
-					</div>
-					<p className="flavor-agent-subpanel-hint">
-						Flavor Agent will only apply the exact validated
-						operations shown below inside the current template part.
-					</p>
-					<div className="flavor-agent-template-preview__actions">
-						<Button
-							variant="primary"
-							onClick={ () => onApplySuggestion( suggestion ) }
-							disabled={ isApplying }
-							className="flavor-agent-card__apply"
-						>
-							{ isApplying ? 'Applying…' : 'Confirm Apply' }
-						</Button>
-					</div>
-				</div>
+				<AIReviewSection
+					count={ suggestion.operations.length }
+					countNoun="operation"
+					summary="Review the validated operations below before Flavor Agent mutates this template part."
+					hint="Flavor Agent will only apply the exact deterministic operations shown here inside the current template part."
+					confirmLabel={ isApplying ? 'Applying…' : 'Confirm Apply' }
+					confirmDisabled={ isApplying }
+					onConfirm={ () => onApplySuggestion( suggestion ) }
+					onCancel={ onCancelPreview }
+				>
+					{ suggestion.operations.map( ( operation ) => (
+						<TemplatePartOperationPreviewRow
+							key={ operation.key }
+							operation={ operation }
+						/>
+					) ) }
+				</AIReviewSection>
 			) }
 		</div>
 	);

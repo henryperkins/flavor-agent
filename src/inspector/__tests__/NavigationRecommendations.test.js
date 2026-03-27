@@ -87,6 +87,7 @@ function createSelectors() {
 					? getState().store.navigationRecommendations
 					: []
 			),
+			getNavigationInteractionState: jest.fn( () => 'idle' ),
 			getNavigationExplanation: jest.fn( ( clientId ) =>
 				getState().store.navigationBlockClientId === clientId
 					? getState().store.navigationExplanation
@@ -110,6 +111,28 @@ function createSelectors() {
 			getNavigationBlockClientId: jest.fn(
 				() => getState().store.navigationBlockClientId
 			),
+			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
+				void surface;
+
+				if ( options.requestError ) {
+					return {
+						source: 'request',
+						tone: 'error',
+						message: options.requestError,
+						isDismissible: true,
+					};
+				}
+
+				if ( options.emptyMessage ) {
+					return {
+						source: 'empty',
+						tone: 'info',
+						message: options.emptyMessage,
+					};
+				}
+
+				return null;
+			} ),
 		},
 	};
 }

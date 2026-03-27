@@ -1,5 +1,5 @@
 import { serialize } from '@wordpress/blocks';
-import { Button, Notice, TextareaControl } from '@wordpress/components';
+import { Button, TextareaControl } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
@@ -10,6 +10,8 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import AIAdvisorySection from '../components/AIAdvisorySection';
+import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
@@ -156,6 +158,27 @@ export default function NavigationRecommendations( { clientId } ) {
 	const hasMatchingResult =
 		resultBlockClientId === clientId && status === 'ready';
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
+	const { interactionState, statusNotice } = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+
+			return {
+				interactionState:
+					store.getNavigationInteractionState( clientId ),
+				statusNotice: store.getSurfaceStatusNotice( 'navigation', {
+					requestStatus: status,
+					requestError: error,
+					hasResult: hasMatchingResult,
+					hasSuggestions,
+					emptyMessage: hasMatchingResult
+						? 'No navigation suggestions were returned for the current prompt.'
+						: '',
+					onDismissAction: Boolean( error ),
+				} ),
+			};
+		},
+		[ clientId, error, hasMatchingResult, hasSuggestions, status ]
+	);
 
 	useEffect( () => {
 		const blockChanged = previousClientId.current !== clientId;
@@ -206,26 +229,17 @@ export default function NavigationRecommendations( { clientId } ) {
 
 	return (
 		<>
-			<div className="flavor-agent-panel__group">
-				<div className="flavor-agent-panel__group-header">
-					<div className="flavor-agent-panel__group-title">
-						Navigation recommendations
-					</div>
-					<div className="flavor-agent-card__meta">
-						{ menuId > 0 && (
-							<span className="flavor-agent-pill">
-								Menu ID { menuId }
-							</span>
-						) }
-						<span className="flavor-agent-pill">Advisory only</span>
-					</div>
-				</div>
-				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-					Ask for structure, overlay, or accessibility guidance for
-					this navigation block. Flavor Agent will only recommend
-					changes here; it will not apply them automatically.
-				</p>
-			</div>
+			<AIAdvisorySection
+				title="Navigation recommendations"
+				description="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only in v1.0, so the status model stays consistent without introducing an apply path."
+				meta={
+					menuId > 0 ? (
+						<span className="flavor-agent-pill">
+							Menu ID { menuId }
+						</span>
+					) : null
+				}
+			/>
 
 			{ ! canRecommend && <CapabilityNotice surface="navigation" /> }
 
@@ -255,15 +269,14 @@ export default function NavigationRecommendations( { clientId } ) {
 						</Button>
 					</div>
 
-					{ error && (
-						<Notice
-							status="error"
-							isDismissible
-							onDismiss={ clearNavigationError }
-						>
-							{ error }
-						</Notice>
-					) }
+					<AIStatusNotice
+						notice={ statusNotice }
+						onDismiss={
+							statusNotice?.source === 'request'
+								? clearNavigationError
+								: undefined
+						}
+					/>
 
 					{ hasMatchingResult && explanation && (
 						<p className="flavor-agent-explanation flavor-agent-panel__note">
@@ -271,113 +284,93 @@ export default function NavigationRecommendations( { clientId } ) {
 						</p>
 					) }
 
-					{ hasMatchingResult && ! hasSuggestions && ! isLoading && (
-						<Notice status="info" isDismissible={ false }>
-							No navigation suggestions were returned for the
-							current prompt.
-						</Notice>
-					) }
-
 					{ hasSuggestions && (
-						<div className="flavor-agent-panel__group">
-							<div className="flavor-agent-panel__group-header">
-								<div className="flavor-agent-panel__group-title">
-									Navigation ideas
-								</div>
-								<span className="flavor-agent-pill">
-									{ formatCount(
-										recommendations.length,
-										'idea'
-									) }
-								</span>
-							</div>
-							<div className="flavor-agent-panel__group-body">
-								{ recommendations.map(
-									( suggestion, index ) => (
-										<div
-											key={ `${
-												suggestion?.label ||
-												'navigation'
-											}-${ index }` }
-											className="flavor-agent-card"
-										>
-											<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
-												<div className="flavor-agent-card__lead">
-													<div className="flavor-agent-card__label">
-														{ suggestion?.label ||
-															'Navigation suggestion' }
-													</div>
-													<div className="flavor-agent-card__meta">
-														<span className="flavor-agent-pill">
-															{ formatCategoryLabel(
-																suggestion?.category
-															) }
-														</span>
-														<span className="flavor-agent-pill">
-															{ formatCount(
-																suggestion
-																	?.changes
-																	?.length ||
-																	0,
-																'change'
-															) }
-														</span>
-													</div>
-												</div>
+						<AIAdvisorySection
+							title="Navigation ideas"
+							count={ recommendations.length }
+							countNoun="idea"
+							description={
+								interactionState === 'advisory-ready'
+									? 'Review the suggested changes below and make any accepted edits manually in the editor.'
+									: ''
+							}
+							advisoryLabel="Advisory only"
+						>
+							{ recommendations.map( ( suggestion, index ) => (
+								<div
+									key={ `${
+										suggestion?.label || 'navigation'
+									}-${ index }` }
+									className="flavor-agent-card"
+								>
+									<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+										<div className="flavor-agent-card__lead">
+											<div className="flavor-agent-card__label">
+												{ suggestion?.label ||
+													'Navigation suggestion' }
 											</div>
-
-											{ suggestion?.description && (
-												<p className="flavor-agent-card__description">
-													{ suggestion.description }
-												</p>
-											) }
-
-											<div className="flavor-agent-navigation-list">
-												{ (
-													suggestion?.changes || []
-												).map(
-													( change, changeIndex ) => (
-														<div
-															key={ `${
-																suggestion?.label ||
-																'navigation'
-															}-${
-																change?.type ||
-																'change'
-															}-${ changeIndex }` }
-															className="flavor-agent-navigation-change"
-														>
-															<div className="flavor-agent-card__meta">
-																<span className="flavor-agent-pill">
-																	{ formatChangeType(
-																		change?.type
-																	) }
-																</span>
-																{ change?.target && (
-																	<span className="flavor-agent-navigation-change__target">
-																		{
-																			change.target
-																		}
-																	</span>
-																) }
-															</div>
-
-															{ change?.detail && (
-																<p className="flavor-agent-navigation-change__detail">
-																	{
-																		change.detail
-																	}
-																</p>
-															) }
-														</div>
-													)
-												) }
+											<div className="flavor-agent-card__meta">
+												<span className="flavor-agent-pill">
+													{ formatCategoryLabel(
+														suggestion?.category
+													) }
+												</span>
+												<span className="flavor-agent-pill">
+													{ formatCount(
+														suggestion?.changes
+															?.length || 0,
+														'change'
+													) }
+												</span>
 											</div>
 										</div>
-									)
-								) }
-							</div>
-						</div>
+									</div>
+
+									{ suggestion?.description && (
+										<p className="flavor-agent-card__description">
+											{ suggestion.description }
+										</p>
+									) }
+
+									<div className="flavor-agent-navigation-list">
+										{ ( suggestion?.changes || [] ).map(
+											( change, changeIndex ) => (
+												<div
+													key={ `${
+														suggestion?.label ||
+														'navigation'
+													}-${
+														change?.type || 'change'
+													}-${ changeIndex }` }
+													className="flavor-agent-navigation-change"
+												>
+													<div className="flavor-agent-card__meta">
+														<span className="flavor-agent-pill">
+															{ formatChangeType(
+																change?.type
+															) }
+														</span>
+														{ change?.target && (
+															<span className="flavor-agent-navigation-change__target">
+																{
+																	change.target
+																}
+															</span>
+														) }
+													</div>
+
+													{ change?.detail && (
+														<p className="flavor-agent-navigation-change__detail">
+															{ change.detail }
+														</p>
+													) }
+												</div>
+											)
+										) }
+									</div>
+								</div>
+							) ) }
+						</AIAdvisorySection>
 					) }
 				</>
 			) }

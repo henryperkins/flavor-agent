@@ -19,6 +19,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Content-restricted blocks stay visible and show an informational notice; only content-safe suggestions are allowed
 - A selected `core/navigation` block adds the navigation guidance section inside the same panel
 
+## Shared Interaction Model
+
+- Learned-once sequence: prompt -> suggestions -> explanation -> apply where allowed -> undo and history
+- Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
+- Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
+- The panel now states that inline apply is the exception for safe local block updates, while structural surfaces keep the same status/history framing but require preview first
+- `Recent AI Actions` and inline undo use the same shared activity treatment as the template and template-part surfaces
+
 ## End-To-End Flow
 
 1. The user selects a block and optionally enters a prompt in `BlockRecommendationsContent`

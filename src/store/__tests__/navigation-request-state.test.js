@@ -98,4 +98,45 @@ describe( 'navigation request state', () => {
 		);
 		expect( selectors.getNavigationRequestToken( finalState ) ).toBe( 2 );
 	} );
+
+	test( 'navigation maps into the shared advisory-only interaction contract', () => {
+		let state = reducer(
+			undefined,
+			actions.setNavigationStatus( 'loading', null, 1, 'nav-1' )
+		);
+
+		expect(
+			selectors.getNavigationInteractionState( state, 'nav-1' )
+		).toBe( 'loading' );
+
+		state = reducer(
+			state,
+			actions.setNavigationRecommendations(
+				'nav-1',
+				{
+					suggestions: [ { label: 'Group utility links' } ],
+					explanation: 'Keep utility items together.',
+				},
+				'Prompt',
+				1
+			)
+		);
+
+		expect(
+			selectors.getNavigationInteractionState( state, 'nav-1' )
+		).toBe( 'advisory-ready' );
+		expect(
+			selectors.getSurfaceInteractionContract( state, 'navigation' )
+		).toEqual(
+			expect.objectContaining( {
+				advisoryOnly: true,
+				previewRequired: false,
+			} )
+		);
+		expect(
+			selectors.isSurfaceApplyAllowed( state, 'navigation', {
+				hasResult: true,
+			} )
+		).toBe( false );
+	} );
 } );

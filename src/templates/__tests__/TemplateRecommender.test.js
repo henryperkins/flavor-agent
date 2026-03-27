@@ -175,9 +175,58 @@ function createSelectors() {
 			getLastUndoneActivityId: jest.fn(
 				() => getState().store.lastUndoneActivityId
 			),
+			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
+				void surface;
+
+				if ( options.requestError ) {
+					return {
+						source: 'request',
+						tone: 'error',
+						message: options.requestError,
+					};
+				}
+
+				if ( options.undoError ) {
+					return {
+						source: 'undo',
+						tone: 'error',
+						message: options.undoError,
+						isDismissible: true,
+					};
+				}
+
+				if ( options.undoSuccessMessage ) {
+					return {
+						source: 'undo',
+						tone: 'success',
+						message: options.undoSuccessMessage,
+					};
+				}
+
+				if ( options.applyError ) {
+					return {
+						source: 'apply',
+						tone: 'error',
+						message: options.applyError,
+					};
+				}
+
+				if ( options.applySuccessMessage ) {
+					return {
+						source: 'apply',
+						tone: 'success',
+						message: options.applySuccessMessage,
+						actionType: 'undo',
+						actionLabel: 'Undo',
+					};
+				}
+
+				return null;
+			} ),
 			getTemplateApplyError: jest.fn(
 				() => getState().store.templateApplyError
 			),
+			getTemplateInteractionState: jest.fn( () => 'idle' ),
 			getTemplateApplyStatus: jest.fn(
 				() => getState().store.templateApplyStatus
 			),
@@ -589,6 +638,55 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 
 		expect( hasText( 'Undid Clarify hierarchy.' ) ).toBe( true );
+	} );
+
+	test( 'shows an undo action on apply success notices and dispatches undo for the latest template activity', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_suggestion',
+						surface: 'template',
+						suggestion: 'Add hero intro',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+				templateApplyError: null,
+				templateApplyStatus: 'success',
+				templateLastAppliedSuggestionKey: SUGGESTION_KEY,
+				templateLastAppliedOperations: [
+					{
+						type: TEMPLATE_OPERATION_INSERT_PATTERN,
+						patternName: 'theme/hero',
+					},
+				],
+				templateSelectedSuggestionKey: null,
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Applied 1 template operation.' ) ).toBe( true );
+
+		const undoButton = Array.from(
+			container.querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Undo' );
+
+		expect( undoButton ).toBeDefined();
+
+		await act( async () => {
+			undoButton.click();
+		} );
+
+		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
 	} );
 
 	test( 'does not render while editing a page even if edit-site still exposes a template ref', async () => {

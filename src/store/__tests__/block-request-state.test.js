@@ -115,4 +115,52 @@ describe( 'block request state', () => {
 		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
 		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 0 );
 	} );
+
+	test( 'normalized block interaction state exposes advisory-ready and inline-apply semantics', () => {
+		let state = reducer(
+			undefined,
+			actions.setBlockRequestState( 'block-a', 'loading', null, 1 )
+		);
+
+		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+			'loading'
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-a',
+				{
+					block: [ { label: 'Refresh hierarchy' } ],
+				},
+				1
+			)
+		);
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-a', 'ready', null, 1 )
+		);
+
+		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+			'advisory-ready'
+		);
+		expect(
+			selectors.getSurfaceInteractionContract( state, 'block' )
+		).toEqual(
+			expect.objectContaining( {
+				allowsInlineApply: true,
+				previewRequired: false,
+			} )
+		);
+		expect(
+			selectors.isSurfaceApplyAllowed( state, 'block', {
+				hasResult: true,
+			} )
+		).toBe( true );
+		expect(
+			selectors.getBlockInteractionState( state, 'block-a', {
+				hasSuccess: true,
+			} )
+		).toBe( 'success' );
+	} );
 } );

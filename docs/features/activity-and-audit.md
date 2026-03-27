@@ -5,7 +5,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Exact Surfaces
 
 - Inline editor activity: `Recent AI Actions` inside the block, template, and template-part recommendation panels
-- Inline success notices: immediate post-apply and post-undo feedback in those same panels
+- Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
 Navigation recommendations and pattern recommendations do not currently create Flavor Agent activity entries because they do not run Flavor Agent-owned apply flows.
@@ -33,6 +33,7 @@ Navigation recommendations and pattern recommendations do not currently create F
 - Show ordered undo state, including applied, available, undone, blocked, failed, and pending-sync states
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin
+- Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
 ## Ordered Undo Rules
 

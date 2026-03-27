@@ -14,6 +14,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by `Provider::chat_configured()`
 - The panel clears stale recommendations when the template part changes or when the visible pattern context changes
 
+## Shared Interaction Model
+
+- Learned-once sequence: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo and history
+- Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
+- Template-part recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only when the user explicitly opens preview on a validated suggestion
+- Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the same shared status notice pattern as block and template
+- Suggestions that fail deterministic validation stay visible in the shared advisory shell so the user can still review focus blocks and pattern ideas without getting an apply affordance
+
 ## End-To-End Flow
 
 1. `TemplatePartRecommender()` resolves the current template-part reference, slug, and derived area

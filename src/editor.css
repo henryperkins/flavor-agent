@@ -164,6 +164,33 @@
   margin: 0;
 }
 
+.flavor-agent-status-notice {
+  margin: 0;
+}
+
+.flavor-agent-status-notice__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flavor-agent-status-notice__message {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.flavor-agent-status-notice__action.components-button {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+
+.flavor-agent-advisory-section .flavor-agent-panel__group-body {
+  margin-top: 10px;
+}
+
 .flavor-agent-capability-notice {
   display: flex;
   flex-direction: column;
@@ -574,6 +601,17 @@
 
 .flavor-agent-template-list__header .flavor-agent-section-label {
   margin-bottom: 0;
+}
+
+.flavor-agent-review-section__summary {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--flavor-agent-muted);
+}
+
+.flavor-agent-review-section__hint {
+  margin-top: 10px;
 }
 
 /* ---- Interactive suggestion row ---- */

@@ -49,6 +49,7 @@ export default function AIActivitySection( {
 	entries = [],
 	isUndoing = false,
 	onUndo,
+	description = '',
 	title = 'Recent AI Actions',
 } ) {
 	if ( entries.length === 0 ) {
@@ -64,6 +65,12 @@ export default function AIActivitySection( {
 					{ entries.length === 1 ? 'action' : 'actions' }
 				</span>
 			</div>
+
+			{ description && (
+				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+					{ description }
+				</p>
+			) }
 
 			<div className="flavor-agent-panel__group-body">
 				{ entries.map( ( entry ) => {

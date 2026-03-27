@@ -2,6 +2,12 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockFetchBlockRecommendations = jest.fn();
 const mockCollectBlockContext = jest.fn();
+const mockClearBlockError = jest.fn();
+const mockClearUndoError = jest.fn();
+const mockUndoActivity = jest.fn();
+const mockGetLatestAppliedActivity = jest.fn();
+const mockGetLatestUndoableActivity = jest.fn();
+const mockGetResolvedActivityEntries = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -69,9 +75,12 @@ jest.mock( '../../context/collector', () => ( {
 } ) );
 
 jest.mock( '../../store/activity-history', () => ( {
-	getLatestAppliedActivity: jest.fn( () => null ),
-	getLatestUndoableActivity: jest.fn( () => null ),
-	getResolvedActivityEntries: jest.fn( ( entries ) => entries || [] ),
+	getLatestAppliedActivity: ( ...args ) =>
+		mockGetLatestAppliedActivity( ...args ),
+	getLatestUndoableActivity: ( ...args ) =>
+		mockGetLatestUndoableActivity( ...args ),
+	getResolvedActivityEntries: ( ...args ) =>
+		mockGetResolvedActivityEntries( ...args ),
 } ) );
 
 jest.mock( '../../components/AIActivitySection', () => () => null );
@@ -159,6 +168,7 @@ function selectStore( storeName ) {
 			getBlockError: jest.fn(
 				( clientId ) => getState().store.blockErrors[ clientId ] || null
 			),
+			getBlockInteractionState: jest.fn( () => 'idle' ),
 			getBlockRecommendations: jest.fn(
 				( clientId ) =>
 					getState().store.blockRecommendations[ clientId ] || null
@@ -166,6 +176,47 @@ function selectStore( storeName ) {
 			getLastUndoneActivityId: jest.fn(
 				() => getState().store.lastUndoneActivityId
 			),
+			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
+				void surface;
+
+				if ( options.requestError ) {
+					return {
+						source: 'request',
+						tone: 'error',
+						message: options.requestError,
+						isDismissible: true,
+					};
+				}
+
+				if ( options.undoError ) {
+					return {
+						source: 'undo',
+						tone: 'error',
+						message: options.undoError,
+						isDismissible: true,
+					};
+				}
+
+				if ( options.applySuccessMessage ) {
+					return {
+						source: 'apply',
+						tone: 'success',
+						message: options.applySuccessMessage,
+						actionType: 'undo',
+						actionLabel: 'Undo',
+					};
+				}
+
+				if ( options.undoSuccessMessage ) {
+					return {
+						source: 'undo',
+						tone: 'success',
+						message: options.undoSuccessMessage,
+					};
+				}
+
+				return null;
+			} ),
 			getUndoError: jest.fn( () => getState().store.undoError ),
 			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
 			isBlockLoading: jest.fn(
@@ -199,11 +250,21 @@ beforeEach( () => {
 			name: 'core/paragraph',
 		},
 	} );
+	mockGetResolvedActivityEntries.mockImplementation( ( entries ) => entries || [] );
+	mockGetLatestAppliedActivity.mockImplementation(
+		( entries ) => entries?.[ entries.length - 1 ] || null
+	);
+	mockGetLatestUndoableActivity.mockImplementation(
+		( entries ) =>
+			[ ...( entries || [] ) ]
+				.reverse()
+				.find( ( entry ) => entry?.undo?.canUndo ) || null
+	);
 	mockUseDispatch.mockImplementation( () => ( {
-		clearBlockError: jest.fn(),
-		clearUndoError: jest.fn(),
+		clearBlockError: mockClearBlockError,
+		clearUndoError: mockClearUndoError,
 		fetchBlockRecommendations: mockFetchBlockRecommendations,
-		undoActivity: jest.fn(),
+		undoActivity: mockUndoActivity,
 	} ) );
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( selectStore )
@@ -328,5 +389,66 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( container.textContent ).toContain(
 			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
 		);
+	} );
+
+	test( 'shows an undo action on apply success notices and dispatches undo for the latest block activity', () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						suggestion: 'Refresh hero copy',
+						target: {
+							clientId: 'block-1',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+			},
+		} );
+
+		renderPanel();
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						suggestion: 'Refresh hero copy',
+						target: {
+							clientId: 'block-1',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+			},
+		} );
+		renderPanel();
+
+		expect( container.textContent ).toContain( 'Applied Refresh hero copy.' );
+
+		const undoButton = Array.from(
+			container.querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Undo' );
+
+		expect( undoButton ).toBeDefined();
+
+		act( () => {
+			undoButton.click();
+		} );
+
+		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
 	} );
 } );

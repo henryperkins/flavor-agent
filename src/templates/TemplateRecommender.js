@@ -14,12 +14,7 @@
  * Free-form text (explanation, description, reason) is scanned for
  * entity mentions and linked inline with the same type-aware actions.
  */
-import {
-	Button,
-	Notice,
-	TextareaControl,
-	Tooltip,
-} from '@wordpress/components';
+import { Button, TextareaControl, Tooltip } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -32,6 +27,9 @@ import {
 } from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
+import AIAdvisorySection from '../components/AIAdvisorySection';
+import AIReviewSection from '../components/AIReviewSection';
+import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
 import {
@@ -474,6 +472,77 @@ export default function TemplateRecommender() {
 			),
 		[ recommendations, patternTitleMap ]
 	);
+	const executableSuggestionCards = useMemo(
+		() => suggestionCards.filter( ( suggestion ) => suggestion.canApply ),
+		[ suggestionCards ]
+	);
+	const advisorySuggestionCards = useMemo(
+		() => suggestionCards.filter( ( suggestion ) => ! suggestion.canApply ),
+		[ suggestionCards ]
+	);
+	const hasApplySuccess =
+		applyStatus === 'success' &&
+		lastAppliedSuggestionKey &&
+		lastAppliedOperations.length > 0 &&
+		latestTemplateActivity &&
+		latestTemplateActivity.id === latestUndoableActivityId;
+	const hasUndoSuccess =
+		undoStatus === 'success' && Boolean( lastUndoneTemplateActivity );
+	const { interactionState, statusNotice } = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+
+			return {
+				interactionState: store.getTemplateInteractionState( {
+					undoError,
+					hasPreview: Boolean( selectedSuggestionKey ),
+					hasSuccess: Boolean( hasApplySuccess ),
+					hasUndoSuccess,
+				} ),
+				statusNotice: store.getSurfaceStatusNotice( 'template', {
+					requestStatus: isLoading ? 'loading' : 'idle',
+					requestError: error,
+					applyError,
+					undoError,
+					undoStatus,
+					applyStatus,
+					hasResult: hasMatchingResult,
+					hasSuggestions,
+					hasPreview: Boolean( selectedSuggestionKey ),
+					hasSuccess: Boolean( hasApplySuccess ),
+					hasUndoSuccess,
+					applySuccessMessage: hasApplySuccess
+						? `Applied ${ formatCount(
+								lastAppliedOperations.length,
+								'template operation'
+						  ) }.`
+						: '',
+					undoSuccessMessage: hasUndoSuccess
+						? `Undid ${
+								lastUndoneTemplateActivity?.suggestion ||
+								'suggestion'
+						  }.`
+						: '',
+					onUndoDismissAction: Boolean( undoError ),
+				} ),
+			};
+		},
+		[
+			applyError,
+			applyStatus,
+			error,
+			hasApplySuccess,
+			hasMatchingResult,
+			hasSuggestions,
+			isLoading,
+			lastAppliedOperations,
+			lastUndoneTemplateActivity,
+			selectedSuggestionKey,
+			undoError,
+			undoStatus,
+			hasUndoSuccess,
+		]
+	);
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommend ) {
@@ -584,63 +653,28 @@ export default function TemplateRecommender() {
 				) }
 
 				{ canRecommend && isLoading && (
-					<Notice status="info" isDismissible={ false }>
-						Analyzing template structure…
-					</Notice>
+					<AIStatusNotice
+						notice={ {
+							tone: 'info',
+							message: 'Analyzing template structure…',
+						} }
+					/>
 				) }
 
-				{ canRecommend && error && (
-					<Notice status="error" isDismissible={ false }>
-						{ error }
-					</Notice>
-				) }
-
-				{ undoStatus === 'error' && undoError && (
-					<Notice
-						status="error"
-						isDismissible
-						onDismiss={ clearUndoError }
-					>
-						{ undoError }
-					</Notice>
-				) }
-
-				{ applyStatus === 'error' && applyError && (
-					<Notice status="error" isDismissible={ false }>
-						{ applyError }
-					</Notice>
-				) }
-
-				{ applyStatus === 'success' &&
-					lastAppliedSuggestionKey &&
-					lastAppliedOperations.length > 0 &&
-					latestTemplateActivity &&
-					latestTemplateActivity.id === latestUndoableActivityId && (
-						<Notice status="success" isDismissible={ false }>
-							Applied{ ' ' }
-							{ formatCount(
-								lastAppliedOperations.length,
-								'template operation'
-							) }
-							.{ ' ' }
-							<Button
-								variant="link"
-								onClick={ () =>
-									handleUndo( latestTemplateActivity.id )
-								}
-								disabled={ undoStatus === 'undoing' }
-							>
-								{ undoStatus === 'undoing' ? 'Undoing…' : 'Undo' }
-							</Button>
-						</Notice>
-					) }
-
-				{ undoStatus === 'success' && lastUndoneTemplateActivity && (
-					<Notice status="success" isDismissible={ false }>
-						Undid{ ' ' }
-						<strong>{ lastUndoneTemplateActivity.suggestion }</strong>.
-					</Notice>
-				) }
+				<AIStatusNotice
+					notice={ statusNotice }
+					onAction={
+						statusNotice?.actionType === 'undo' &&
+						latestTemplateActivity
+							? () => handleUndo( latestTemplateActivity.id )
+							: undefined
+					}
+					onDismiss={
+						statusNotice?.source === 'undo'
+							? clearUndoError
+							: undefined
+					}
+				/>
 
 				{ canRecommend && hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
@@ -653,12 +687,18 @@ export default function TemplateRecommender() {
 				) }
 
 				<AIActivitySection
+					description={
+						interactionState === 'success' ||
+						templateActivityEntries.length > 0
+							? 'Template actions use the same latest-valid undo rule as the block review surface.'
+							: ''
+					}
 					entries={ templateActivityEntries }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
 				/>
 
-				{ canRecommend && hasSuggestions && (
+				{ canRecommend && executableSuggestionCards.length > 0 && (
 					<div className="flavor-agent-panel__group">
 						<div className="flavor-agent-panel__group-header">
 							<div className="flavor-agent-panel__group-title">
@@ -666,15 +706,61 @@ export default function TemplateRecommender() {
 							</div>
 							<span className="flavor-agent-pill">
 								{ formatCount(
-									suggestionCards.length,
+									executableSuggestionCards.length,
 									'suggestion'
 								) }
 							</span>
 						</div>
 						<div className="flavor-agent-panel__group-body">
-							{ suggestionCards.map( ( suggestion, index ) => (
+							{ executableSuggestionCards.map(
+								( suggestion, index ) => (
+									<TemplateSuggestionCard
+										key={ `${ resultToken }-${ getSuggestionCardKey(
+											suggestion,
+											index
+										) }` }
+										suggestion={ suggestion }
+										entityMap={ entityMap }
+										insertionPointLabel={
+											insertionPointLabel
+										}
+										isApplied={
+											lastAppliedSuggestionKey ===
+											suggestion.suggestionKey
+										}
+										isApplying={
+											applyStatus === 'applying'
+										}
+										isSelected={
+											selectedSuggestionKey ===
+											suggestion.suggestionKey
+										}
+										onEntityClick={ handleEntityAction }
+										onApplySuggestion={
+											handleApplySuggestion
+										}
+										onCancelPreview={ handleCancelPreview }
+										onPreviewSuggestion={
+											handlePreviewSuggestion
+										}
+									/>
+								)
+							) }
+						</div>
+					</div>
+				) }
+
+				{ canRecommend && advisorySuggestionCards.length > 0 && (
+					<AIAdvisorySection
+						title="Advisory Suggestions"
+						count={ advisorySuggestionCards.length }
+						countNoun="suggestion"
+						description="These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them."
+					>
+						{ advisorySuggestionCards.map(
+							( suggestion, index ) => (
 								<TemplateSuggestionCard
-									key={ `${ resultToken }-${ getSuggestionCardKey(
+									key={ `advisory-${ resultToken }-${ getSuggestionCardKey(
 										suggestion,
 										index
 									) }` }
@@ -693,11 +779,13 @@ export default function TemplateRecommender() {
 									onEntityClick={ handleEntityAction }
 									onApplySuggestion={ handleApplySuggestion }
 									onCancelPreview={ handleCancelPreview }
-									onPreviewSuggestion={ handlePreviewSuggestion }
+									onPreviewSuggestion={
+										handlePreviewSuggestion
+									}
 								/>
-							) ) }
-						</div>
-					</div>
+							)
+						) }
+					</AIAdvisorySection>
 				) }
 			</div>
 		</PluginDocumentSettingPanel>
@@ -913,43 +1001,24 @@ function TemplateSuggestionCard( {
 			) }
 
 			{ isSelected && suggestion.operations?.length > 0 && (
-				<div className="flavor-agent-template-preview">
-					<div className="flavor-agent-template-list">
-						<div className="flavor-agent-template-list__header">
-							<div className="flavor-agent-section-label">
-								Review Before Apply
-							</div>
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									suggestion.operations.length,
-									'operation'
-								) }
-							</span>
-						</div>
-						{ suggestion.operations.map( ( operation ) => (
-							<TemplateOperationPreviewRow
-								key={ operation.key }
-								insertionPointLabel={ insertionPointLabel }
-								operation={ operation }
-							/>
-						) ) }
-					</div>
-					<p className="flavor-agent-subpanel-hint">
-						Pattern insertions use the current insertion point. To
-						change where a pattern lands, select a different block
-						in the canvas before confirming.
-					</p>
-					<div className="flavor-agent-template-preview__actions">
-						<Button
-							variant="primary"
-							onClick={ () => onApplySuggestion( suggestion ) }
-							disabled={ isApplying }
-							className="flavor-agent-card__apply"
-						>
-							{ isApplying ? 'Applying…' : 'Confirm Apply' }
-						</Button>
-					</div>
-				</div>
+				<AIReviewSection
+					count={ suggestion.operations.length }
+					countNoun="operation"
+					summary="Review the validated structural operations below before Flavor Agent mutates the template."
+					hint="Pattern insertions use the current insertion point. Select a different block in the canvas before confirming if you want the insertion to land elsewhere."
+					confirmLabel={ isApplying ? 'Applying…' : 'Confirm Apply' }
+					confirmDisabled={ isApplying }
+					onConfirm={ () => onApplySuggestion( suggestion ) }
+					onCancel={ onCancelPreview }
+				>
+					{ suggestion.operations.map( ( operation ) => (
+						<TemplateOperationPreviewRow
+							key={ operation.key }
+							insertionPointLabel={ insertionPointLabel }
+							operation={ operation }
+						/>
+					) ) }
+				</AIReviewSection>
 			) }
 		</div>
 	);
