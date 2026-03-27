@@ -28,7 +28,9 @@ import './activity-log.css';
 import {
 	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
+	clampActivityViewPage,
 	normalizeActivityEntries,
+	normalizeStoredActivityView,
 	readPersistedActivityView,
 	writePersistedActivityView,
 } from './activity-log-utils';
@@ -147,7 +149,7 @@ function getDetailFields() {
 			readOnly: true,
 			render: ( { item } ) => (
 				<span>
-					{ item.statusLabel } · { item.surfaceLabel }
+					{ item.statusLabel } · { item.operationTypeLabel }
 				</span>
 			),
 		},
@@ -209,14 +211,50 @@ function getDetailFields() {
 			readOnly: true,
 		},
 		{
+			id: 'operationTypeLabel',
+			label: 'Action type',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'activityTypeLabel',
+			label: 'Recorded activity type',
+			type: 'text',
+			readOnly: true,
+		},
+		{
 			id: 'entity',
 			label: 'Entity',
 			type: 'text',
 			readOnly: true,
 		},
 		{
+			id: 'postType',
+			label: 'Post type',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'entityId',
+			label: 'Entity ID',
+			type: 'text',
+			readOnly: true,
+		},
+		{
 			id: 'documentLabel',
 			label: 'Document',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'documentScopeKey',
+			label: 'Document scope',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'blockPath',
+			label: 'Block path',
 			type: 'text',
 			readOnly: true,
 		},
@@ -278,6 +316,17 @@ function getDetailFields() {
 			label: 'Undo error',
 			type: 'text',
 			readOnly: true,
+		},
+		{
+			id: 'stateDiff',
+			label: 'Structured diff',
+			type: 'text',
+			readOnly: true,
+			render: ( { item } ) => (
+				<pre className="flavor-agent-activity-log__code">
+					{ item.stateDiff }
+				</pre>
+			),
 		},
 		{
 			id: 'beforeSummary',
@@ -346,9 +395,15 @@ function getDetailForm() {
 				children: [
 					'statusLabel',
 					'timestampDisplay',
+					'operationTypeLabel',
+					'activityTypeLabel',
 					'surfaceLabel',
 					'entity',
+					'postType',
+					'entityId',
 					'documentLabel',
+					'documentScopeKey',
+					'blockPath',
 					'user',
 				],
 				layout: {
@@ -386,7 +441,7 @@ function getDetailForm() {
 			{
 				id: 'state',
 				label: 'State snapshots',
-				children: [ 'beforeSummary', 'afterSummary' ],
+				children: [ 'stateDiff', 'beforeSummary', 'afterSummary' ],
 				layout: {
 					type: 'details',
 				},
@@ -442,8 +497,12 @@ function ActivityEntryDetails( { entry } ) {
 								Open target
 							</Button>
 						) }
-						<Button href={ entry.settingsUrl } variant="tertiary">
-							<Icon icon={ settings } />
+						<Button
+							aria-label="Open Flavor Agent settings"
+							href={ entry.settingsUrl }
+							variant="tertiary"
+						>
+							<Icon aria-hidden="true" icon={ settings } />
 						</Button>
 					</div>
 				</div>
@@ -460,7 +519,7 @@ function ActivityEntryDetails( { entry } ) {
 	);
 }
 
-function ActivityLogApp( { bootData } ) {
+export function ActivityLogApp( { bootData } ) {
 	const [ view, setView ] = useState( () => readPersistedActivityView() );
 	const [ entries, setEntries ] = useState( [] );
 	const [ error, setError ] = useState( '' );
@@ -520,29 +579,19 @@ function ActivityLogApp( { bootData } ) {
 		};
 	}, [ bootData, reloadToken ] );
 
-	useEffect( () => {
-		writePersistedActivityView( view );
-	}, [ view ] );
-
-	useEffect( () => {
-		if ( entries.length === 0 ) {
-			setSelectedEntryId( '' );
-			return;
-		}
-
-		if ( ! entries.some( ( entry ) => entry.id === selectedEntryId ) ) {
-			setSelectedEntryId( entries[ 0 ].id );
-		}
-	}, [ entries, selectedEntryId ] );
-
 	const fields = useMemo( () => {
 		const surfaceElements = buildSelectElements( entries, 'surface' );
+		const operationTypeElements = buildSelectElements(
+			entries,
+			'operationType'
+		);
 		const statusElements = [
 			{ value: 'applied', label: 'Applied' },
 			{ value: 'undone', label: 'Undone' },
 			{ value: 'blocked', label: 'Undo blocked' },
 			{ value: 'failed', label: 'Undo unavailable' },
 		];
+		const postTypeElements = buildSelectElements( entries, 'postType' );
 		const userElements = buildSelectElements( entries, 'user' );
 		const providerElements = buildSelectElements( entries, 'provider' );
 
@@ -582,9 +631,19 @@ function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'day',
-				label: 'Day',
+				label: 'Date',
 				type: 'date',
 				enableSorting: false,
+				filterBy: {
+					operators: [
+						'on',
+						'before',
+						'after',
+						'between',
+						'inThePast',
+						'over',
+					],
+				},
 			},
 			{
 				id: 'timestamp',
@@ -599,6 +658,19 @@ function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				render: ( { item } ) => <span>{ item.timestampDisplay }</span>,
+			},
+			{
+				id: 'operationType',
+				label: 'Action type',
+				type: 'text',
+				enableSorting: false,
+				elements: operationTypeElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
+				render: ( { item } ) => (
+					<span>{ item.operationTypeLabel }</span>
+				),
 			},
 			{
 				id: 'surface',
@@ -640,8 +712,39 @@ function ActivityLogApp( { bootData } ) {
 				},
 			},
 			{
+				id: 'postType',
+				label: 'Post type',
+				type: 'text',
+				enableSorting: false,
+				enableGlobalSearch: true,
+				elements: postTypeElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
+			},
+			{
+				id: 'entityId',
+				label: 'Entity ID',
+				type: 'text',
+				enableSorting: false,
+				enableGlobalSearch: true,
+				filterBy: {
+					operators: [ 'contains', 'notContains', 'startsWith' ],
+				},
+			},
+			{
 				id: 'entity',
 				label: 'Entity',
+				type: 'text',
+				enableSorting: false,
+				enableGlobalSearch: true,
+				filterBy: {
+					operators: [ 'contains', 'notContains', 'startsWith' ],
+				},
+			},
+			{
+				id: 'blockPath',
+				label: 'Block path',
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
@@ -670,6 +773,16 @@ function ActivityLogApp( { bootData } ) {
 				},
 			},
 			{
+				id: 'activityTypeLabel',
+				label: 'Recorded activity type',
+				type: 'text',
+				enableSorting: false,
+				enableGlobalSearch: true,
+				filterBy: {
+					operators: [ 'contains', 'notContains', 'startsWith' ],
+				},
+			},
+			{
 				id: 'requestPrompt',
 				label: 'Prompt',
 				type: 'text',
@@ -682,19 +795,71 @@ function ActivityLogApp( { bootData } ) {
 		];
 	}, [ entries ] );
 
-	const processedData = useMemo(
-		() => filterSortAndPaginate( entries, view, fields ),
-		[ entries, fields, view ]
+	const processedViewData = useMemo( () => {
+		const normalizedView = normalizeStoredActivityView( view );
+		const initialProcessedData = filterSortAndPaginate(
+			entries,
+			normalizedView,
+			fields
+		);
+		const effectiveView = clampActivityViewPage(
+			normalizedView,
+			initialProcessedData?.paginationInfo
+		);
+
+		if ( areActivityViewsEqual( effectiveView, normalizedView ) ) {
+			return {
+				effectiveView,
+				processedData: initialProcessedData,
+			};
+		}
+
+		return {
+			effectiveView,
+			processedData: filterSortAndPaginate(
+				entries,
+				effectiveView,
+				fields
+			),
+		};
+	}, [ entries, fields, view ] );
+	const { effectiveView, processedData } = processedViewData;
+	const visibleEntries = useMemo(
+		() => processedData?.data || [],
+		[ processedData?.data ]
 	);
 	const selectedEntry =
-		processedData?.data?.find(
-			( entry ) => entry.id === selectedEntryId
-		) ||
-		entries.find( ( entry ) => entry.id === selectedEntryId ) ||
+		visibleEntries.find( ( entry ) => entry.id === selectedEntryId ) ||
 		null;
+
+	useEffect( () => {
+		writePersistedActivityView( effectiveView );
+	}, [ effectiveView ] );
+
+	useEffect( () => {
+		if ( ! areActivityViewsEqual( view, effectiveView ) ) {
+			setView( effectiveView );
+		}
+	}, [ effectiveView, view ] );
+
+	useEffect( () => {
+		if ( visibleEntries.length === 0 ) {
+			if ( selectedEntryId ) {
+				setSelectedEntryId( '' );
+			}
+			return;
+		}
+
+		if (
+			! visibleEntries.some( ( entry ) => entry.id === selectedEntryId )
+		) {
+			setSelectedEntryId( visibleEntries[ 0 ].id );
+		}
+	}, [ selectedEntryId, visibleEntries ] );
+
 	const summaryCards = getSummaryCards( entries );
 	const isViewModified = ! areActivityViewsEqual(
-		view,
+		effectiveView,
 		DEFAULT_ACTIVITY_VIEW
 	);
 
@@ -759,9 +924,9 @@ function ActivityLogApp( { bootData } ) {
 			) }
 
 			<DataViews
-				data={ processedData.data }
+				data={ visibleEntries }
 				fields={ fields }
-				view={ view }
+				view={ effectiveView }
 				onChangeView={ setView }
 				getItemId={ ( item ) => item.id }
 				paginationInfo={ processedData.paginationInfo }
@@ -782,16 +947,6 @@ function ActivityLogApp( { bootData } ) {
 						callback: ( items ) => {
 							if ( items[ 0 ] ) {
 								setSelectedEntryId( items[ 0 ].id );
-							}
-						},
-					},
-					{
-						id: 'open-target',
-						label: 'Open affected target',
-						isEligible: ( item ) => Boolean( item.targetUrl ),
-						callback: ( items ) => {
-							if ( items[ 0 ]?.targetUrl ) {
-								window.location.assign( items[ 0 ].targetUrl );
 							}
 						},
 					},

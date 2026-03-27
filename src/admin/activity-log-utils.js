@@ -8,7 +8,15 @@ export const DEFAULT_ACTIVITY_VIEW = Object.freeze( {
 	page: 1,
 	perPage: 20,
 	filters: [],
-	fields: [ 'timestampDisplay', 'surface', 'status', 'user', 'provider' ],
+	fields: [
+		'timestampDisplay',
+		'operationType',
+		'surface',
+		'status',
+		'postType',
+		'user',
+		'provider',
+	],
 	titleField: 'title',
 	descriptionField: 'description',
 	mediaField: 'icon',
@@ -28,6 +36,21 @@ export const DEFAULT_ACTIVITY_VIEW = Object.freeze( {
 } );
 
 const EMPTY_VALUE = 'Not recorded';
+
+const STYLE_ATTRIBUTE_KEYS = new Set( [
+	'align',
+	'backgroundColor',
+	'borderColor',
+	'className',
+	'fontFamily',
+	'fontSize',
+	'gradient',
+	'layout',
+	'style',
+	'textAlign',
+	'textColor',
+	'width',
+] );
 
 function isPlainObject( value ) {
 	return (
@@ -127,6 +150,37 @@ function formatBlockName( blockName = '' ) {
 		.join( ' ' );
 }
 
+function humanizeValueLabel( value = '' ) {
+	if ( typeof value !== 'string' || ! value.trim() ) {
+		return '';
+	}
+
+	return value
+		.replaceAll( '/', ' ' )
+		.replaceAll( '_', ' ' )
+		.replaceAll( '-', ' ' )
+		.split( /\s+/ )
+		.filter( Boolean )
+		.map( ( part ) => part.charAt( 0 ).toUpperCase() + part.slice( 1 ) )
+		.join( ' ' );
+}
+
+function formatBlockPath( blockPath = [] ) {
+	if ( ! Array.isArray( blockPath ) || blockPath.length === 0 ) {
+		return '';
+	}
+
+	return blockPath
+		.map( ( value ) => {
+			const numericValue = Number( value );
+
+			return Number.isFinite( numericValue )
+				? String( Math.trunc( numericValue ) + 1 )
+				: String( value );
+		} )
+		.join( ' → ' );
+}
+
 function parseScopeKey( scopeKey = '' ) {
 	if ( typeof scopeKey !== 'string' || ! scopeKey.includes( ':' ) ) {
 		return {
@@ -178,6 +232,289 @@ function formatDocumentLabel( postType = '', entityId = '' ) {
 	return postType || '';
 }
 
+function formatActivityTypeLabel( activityType = '' ) {
+	switch ( activityType ) {
+		case 'apply_suggestion':
+			return 'Apply block suggestion';
+		case 'apply_template_suggestion':
+			return 'Apply template suggestion';
+		case 'apply_template_part_suggestion':
+			return 'Apply template-part suggestion';
+		default:
+			return humanizeValueLabel( activityType ) || EMPTY_VALUE;
+	}
+}
+
+function getOperationEntries( state = {} ) {
+	return Array.isArray( state?.operations ) ? state.operations : [];
+}
+
+function summarizeOperation( operation = {} ) {
+	const typeLabel = humanizeValueLabel( operation?.type || 'operation' );
+
+	if ( operation?.patternTitle ) {
+		return `${ typeLabel }: ${ operation.patternTitle }`;
+	}
+
+	if ( operation?.patternName ) {
+		return `${ typeLabel }: ${ operation.patternName }`;
+	}
+
+	if ( operation?.slug ) {
+		return `${ typeLabel }: ${ operation.slug }`;
+	}
+
+	if ( operation?.expectedSlug ) {
+		return `${ typeLabel }: ${ operation.expectedSlug }`;
+	}
+
+	return typeLabel;
+}
+
+function flattenStateEntries( value, prefix = '' ) {
+	if ( Array.isArray( value ) ) {
+		if ( prefix.endsWith( 'operations' ) ) {
+			return value.map( ( entry, index ) => [
+				`${ prefix }[${ index }]`,
+				summarizeOperation( entry ),
+			] );
+		}
+
+		return value.flatMap( ( entry, index ) =>
+			flattenStateEntries( entry, `${ prefix }[${ index }]` )
+		);
+	}
+
+	if ( isPlainObject( value ) ) {
+		return Object.entries( value ).flatMap( ( [ key, entry ] ) =>
+			flattenStateEntries( entry, prefix ? `${ prefix }.${ key }` : key )
+		);
+	}
+
+	const normalizedPrefix = prefix || 'value';
+
+	return [ [ normalizedPrefix, value ] ];
+}
+
+function simplifyDiffPath( path = '' ) {
+	if ( typeof path !== 'string' || ! path ) {
+		return 'value';
+	}
+
+	return path
+		.replace( /^attributes\./, '' )
+		.replace( /^before\./, '' )
+		.replace( /^after\./, '' );
+}
+
+function formatDiffValue( value ) {
+	if ( value === undefined ) {
+		return '∅';
+	}
+
+	if ( value === null ) {
+		return 'null';
+	}
+
+	if ( typeof value === 'string' ) {
+		return value;
+	}
+
+	if ( typeof value === 'number' || typeof value === 'boolean' ) {
+		return String( value );
+	}
+
+	try {
+		return JSON.stringify( value );
+	} catch {
+		return EMPTY_VALUE;
+	}
+}
+
+function buildStructuredStateDiff( beforeState, afterState ) {
+	const beforeEntries = new Map( flattenStateEntries( beforeState ) );
+	const afterEntries = new Map( flattenStateEntries( afterState ) );
+	const keys = Array.from(
+		new Set( [ ...beforeEntries.keys(), ...afterEntries.keys() ] )
+	).sort( ( left, right ) => left.localeCompare( right ) );
+	const lines = keys
+		.map( ( key ) => {
+			const beforeValue = beforeEntries.get( key );
+			const afterValue = afterEntries.get( key );
+
+			if ( beforeValue === afterValue ) {
+				return null;
+			}
+
+			if ( beforeValue === undefined ) {
+				return `+ ${ simplifyDiffPath( key ) }: ${ formatDiffValue(
+					afterValue
+				) }`;
+			}
+
+			if ( afterValue === undefined ) {
+				return `- ${ simplifyDiffPath( key ) }: ${ formatDiffValue(
+					beforeValue
+				) }`;
+			}
+
+			return `~ ${ simplifyDiffPath( key ) }: ${ formatDiffValue(
+				beforeValue
+			) } → ${ formatDiffValue( afterValue ) }`;
+		} )
+		.filter( Boolean );
+
+	return lines.length ? lines.join( '\n' ) : EMPTY_VALUE;
+}
+
+function areTrackedAttributeValuesEqual( left, right ) {
+	if ( Object.is( left, right ) ) {
+		return true;
+	}
+
+	if ( Array.isArray( left ) || Array.isArray( right ) ) {
+		if ( ! Array.isArray( left ) || ! Array.isArray( right ) ) {
+			return false;
+		}
+
+		if ( left.length !== right.length ) {
+			return false;
+		}
+
+		return left.every( ( value, index ) =>
+			areTrackedAttributeValuesEqual( value, right[ index ] )
+		);
+	}
+
+	if ( isPlainObject( left ) || isPlainObject( right ) ) {
+		if ( ! isPlainObject( left ) || ! isPlainObject( right ) ) {
+			return false;
+		}
+
+		const leftKeys = Object.keys( left ).sort();
+		const rightKeys = Object.keys( right ).sort();
+
+		if ( leftKeys.length !== rightKeys.length ) {
+			return false;
+		}
+
+		return leftKeys.every(
+			( key, index ) =>
+				key === rightKeys[ index ] &&
+				areTrackedAttributeValuesEqual( left[ key ], right[ key ] )
+		);
+	}
+
+	return false;
+}
+
+function hasStyleMutation( entry ) {
+	const beforeAttributes = isPlainObject( entry?.before?.attributes )
+		? entry.before.attributes
+		: {};
+	const afterAttributes = isPlainObject( entry?.after?.attributes )
+		? entry.after.attributes
+		: {};
+	const keys = new Set( [
+		...Object.keys( beforeAttributes ),
+		...Object.keys( afterAttributes ),
+	] );
+
+	for ( const key of keys ) {
+		if ( ! STYLE_ATTRIBUTE_KEYS.has( key ) ) {
+			continue;
+		}
+
+		if (
+			! areTrackedAttributeValuesEqual(
+				beforeAttributes[ key ],
+				afterAttributes[ key ]
+			)
+		) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function getPrimaryOperation( entry ) {
+	const operations = getOperationEntries( entry?.after );
+
+	if ( operations.length ) {
+		return operations[ 0 ];
+	}
+
+	const beforeOperations = getOperationEntries( entry?.before );
+
+	return beforeOperations.length ? beforeOperations[ 0 ] : null;
+}
+
+function deriveOperationType( entry ) {
+	const primaryOperation = getPrimaryOperation( entry );
+	const operationType = String( primaryOperation?.type || '' );
+
+	if (
+		operationType === 'insert_pattern' ||
+		operationType === 'insert_block'
+	) {
+		return {
+			value: 'insert',
+			label:
+				operationType === 'insert_pattern'
+					? 'Insert pattern'
+					: 'Insert block',
+		};
+	}
+
+	if (
+		operationType === 'replace_template_part' ||
+		operationType === 'assign_template_part'
+	) {
+		return {
+			value: 'replace',
+			label:
+				operationType === 'replace_template_part'
+					? 'Replace template part'
+					: 'Assign template part',
+		};
+	}
+
+	if ( hasStyleMutation( entry ) ) {
+		return {
+			value: 'apply-style',
+			label: 'Apply style',
+		};
+	}
+
+	if ( entry?.surface === 'block' ) {
+		return {
+			value: 'modify-attributes',
+			label: 'Modify attributes',
+		};
+	}
+
+	return {
+		value: operationType || String( entry?.type || 'recorded' ),
+		label:
+			humanizeValueLabel(
+				operationType || String( entry?.type || 'recorded' )
+			) || EMPTY_VALUE,
+	};
+}
+
+function getBlockPathLabel( entry ) {
+	const blockPath = formatBlockPath( entry?.target?.blockPath || [] );
+
+	if ( ! blockPath ) {
+		return EMPTY_VALUE;
+	}
+
+	const blockName = formatBlockName( entry?.target?.blockName || '' );
+
+	return blockName ? `${ blockName } · ${ blockPath }` : blockPath;
+}
+
 export function formatSurfaceLabel( surface = '' ) {
 	switch ( surface ) {
 		case 'template':
@@ -198,21 +535,7 @@ export function summarizeActivityState( state ) {
 
 	if ( Array.isArray( state.operations ) && state.operations.length ) {
 		return state.operations
-			.map( ( operation ) => {
-				const type = String(
-					operation?.type || 'operation'
-				).replaceAll( '_', ' ' );
-
-				if ( operation?.patternName ) {
-					return `${ type }: ${ operation.patternName }`;
-				}
-
-				if ( operation?.slug ) {
-					return `${ type }: ${ operation.slug }`;
-				}
-
-				return type;
-			} )
+			.map( ( operation ) => summarizeOperation( operation ) )
 			.join( '; ' );
 	}
 
@@ -296,6 +619,12 @@ function getActivityTitle( entry ) {
 		return entry.suggestion.trim();
 	}
 
+	const operationType = deriveOperationType( entry );
+
+	if ( operationType.label && operationType.label !== EMPTY_VALUE ) {
+		return operationType.label;
+	}
+
 	if ( entry?.surface === 'template' ) {
 		return 'Template suggestion applied';
 	}
@@ -332,7 +661,13 @@ function getActivityEntityLabel( entry ) {
 }
 
 function getActivityDescription( entry, entityLabel, documentLabel ) {
-	const segments = [ formatSurfaceLabel( entry?.surface ), entityLabel ];
+	const operationType = deriveOperationType( entry );
+	const blockPathLabel = getBlockPathLabel( entry );
+	const segments = [ operationType.label, entityLabel ];
+
+	if ( blockPathLabel !== EMPTY_VALUE ) {
+		segments.push( blockPathLabel );
+	}
 
 	if ( documentLabel && documentLabel !== entityLabel ) {
 		segments.push( documentLabel );
@@ -485,6 +820,24 @@ export function normalizeStoredActivityView( view ) {
 	};
 }
 
+export function clampActivityViewPage( view, paginationInfo = {} ) {
+	const normalizedView = normalizeStoredActivityView( view );
+	const totalPages = Number.isInteger( paginationInfo?.totalPages )
+		? paginationInfo.totalPages
+		: 0;
+	const lastPage = totalPages > 0 ? totalPages : 1;
+	const nextPage = Math.min( normalizedView.page, lastPage );
+
+	if ( nextPage === normalizedView.page ) {
+		return normalizedView;
+	}
+
+	return {
+		...normalizedView,
+		page: nextPage,
+	};
+}
+
 export function areActivityViewsEqual( left, right ) {
 	return (
 		JSON.stringify( normalizeStoredActivityView( left ) ) ===
@@ -540,6 +893,7 @@ export function normalizeActivityEntry(
 	const status = getActivityStatus( entry, allEntries );
 	const entityLabel = getActivityEntityLabel( entry );
 	const documentLabel = formatDocumentLabel( postType, entityId );
+	const operationType = deriveOperationType( entry );
 	let userLabel = EMPTY_VALUE;
 
 	if ( typeof entry?.userLabel === 'string' && entry.userLabel.trim() ) {
@@ -566,6 +920,18 @@ export function normalizeActivityEntry(
 		statusLabel: getActivityStatusLabel( entry, allEntries ),
 		surface: String( entry?.surface || '' ),
 		surfaceLabel: formatSurfaceLabel( entry?.surface ),
+		activityType: String( entry?.type || '' ) || EMPTY_VALUE,
+		activityTypeLabel: formatActivityTypeLabel( entry?.type ),
+		operationType: operationType.value || EMPTY_VALUE,
+		operationTypeLabel: operationType.label || EMPTY_VALUE,
+		postType: postType || EMPTY_VALUE,
+		entityId: entityId || EMPTY_VALUE,
+		documentScopeKey:
+			typeof entry?.document?.scopeKey === 'string' &&
+			entry.document.scopeKey.trim()
+				? entry.document.scopeKey.trim()
+				: EMPTY_VALUE,
+		blockPath: getBlockPathLabel( entry ),
 		user: userLabel,
 		entity: entityLabel,
 		documentLabel: documentLabel || EMPTY_VALUE,
@@ -581,6 +947,7 @@ export function normalizeActivityEntry(
 				: EMPTY_VALUE,
 		beforeSummary: summarizeActivityState( entry?.before ),
 		afterSummary: summarizeActivityState( entry?.after ),
+		stateDiff: buildStructuredStateDiff( entry?.before, entry?.after ),
 		undoStatusLabel:
 			resolvedUndo?.status === 'available'
 				? 'Undo available'

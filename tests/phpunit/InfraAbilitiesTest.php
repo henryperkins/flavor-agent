@@ -47,6 +47,8 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'provider-managed', $status['model'] );
 		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertSame( 'ready', $status['surfaces']['block']['reason'] );
+		$this->assertSame( 'plugin_or_core', $status['surfaces']['block']['owner'] );
 		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
 	}
 
@@ -82,8 +84,12 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['model'] );
 		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertSame( 'plugin_or_core', $status['surfaces']['block']['owner'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertTrue( $status['surfaces']['navigation']['available'] );
+		$this->assertSame( 'ready', $status['surfaces']['navigation']['reason'] );
 		$this->assertTrue( $status['backends']['azure_openai']['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['backends']['azure_openai']['chatDeployment'] );
 		$this->assertNull( $status['backends']['azure_openai']['embeddingDeployment'] );
@@ -111,6 +117,9 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['navigation']['available'] );
 		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['backends']['openai_native']['chatModel'] );
 		$this->assertSame(
@@ -156,6 +165,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['backends']['openai_native']['chatModel'] );
 		$this->assertSame(
@@ -166,5 +176,80 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['backends']['openai_native']['connectorRegistered'] );
 		$this->assertTrue( $status['backends']['openai_native']['connectorConfigured'] );
 		$this->assertSame( 'database', $status['backends']['openai_native']['connectorKeySource'] );
+	}
+
+	public function test_check_status_marks_navigation_surface_unavailable_without_theme_capability(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+		WordPressTestState::$options      = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertFalse( $status['surfaces']['navigation']['available'] );
+		$this->assertSame(
+			'missing_theme_capability',
+			$status['surfaces']['navigation']['reason']
+		);
+		$this->assertNotContains(
+			'flavor-agent/recommend-navigation',
+			$status['availableAbilities']
+		);
+	}
+
+	public function test_check_status_marks_pattern_surface_unavailable_without_plugin_backends(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$options      = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertFalse( $status['surfaces']['pattern']['available'] );
+		$this->assertSame(
+			'pattern_backend_unconfigured',
+			$status['surfaces']['pattern']['reason']
+		);
+		$this->assertSame(
+			'plugin_settings',
+			$status['surfaces']['pattern']['owner']
+		);
+		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertNotContains(
+			'flavor-agent/recommend-patterns',
+			$status['availableAbilities']
+		);
+	}
+
+	public function test_check_status_marks_block_surface_unavailable_without_plugin_or_core_backends(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertFalse( $status['configured'] );
+		$this->assertFalse( $status['surfaces']['block']['available'] );
+		$this->assertSame(
+			'block_backend_unconfigured',
+			$status['surfaces']['block']['reason']
+		);
+		$this->assertSame(
+			'plugin_or_core',
+			$status['surfaces']['block']['owner']
+		);
+		$this->assertNotContains(
+			'flavor-agent/recommend-block',
+			$status['availableAbilities']
+		);
 	}
 }

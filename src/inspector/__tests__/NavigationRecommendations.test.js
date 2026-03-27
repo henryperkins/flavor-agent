@@ -189,6 +189,46 @@ describe( 'NavigationRecommendations', () => {
 		expect( container.textContent ).toBe( '' );
 	} );
 
+	test( 'shows a shared capability notice without a dead-end settings link when theme capability is missing', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		window.flavorAgentData = {
+			canRecommendNavigation: false,
+			capabilities: {
+				surfaces: {
+					navigation: {
+						available: false,
+						reason: 'missing_theme_capability',
+						message:
+							'Navigation recommendations require the edit_theme_options capability.',
+					},
+				},
+			},
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+		};
+
+		renderComponent();
+
+		expect( container.textContent ).toContain(
+			'Navigation recommendations require the edit_theme_options capability.'
+		);
+		expect( container.textContent ).not.toContain(
+			'Settings > Flavor Agent'
+		);
+		expect( container.textContent ).not.toContain(
+			'Get Navigation Suggestions'
+		);
+	} );
+
 	test( 'fetches navigation suggestions with serialized block markup when structure is available', () => {
 		currentState.blockEditor.blocks = {
 			'nav-1': {

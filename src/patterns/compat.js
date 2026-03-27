@@ -20,6 +20,7 @@ export {
 	INSERTER_SEARCH_SELECTORS,
 	INSERTER_TOGGLE_SELECTOR,
 	INSERTER_TOGGLE_TOOLBAR_SELECTORS,
+	findInserterContainer,
 	findInserterSearchInput,
 	findInserterToggle,
 } from './inserter-dom';

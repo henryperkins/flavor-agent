@@ -3,8 +3,24 @@ const mockUseSelect = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
 const mockGetBlockPatterns = jest.fn();
 const mockSetBlockPatterns = jest.fn();
+const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
+
+jest.mock( '@wordpress/components', () => {
+	const { createElement } = require( '@wordpress/element' );
+
+	return {
+		Button: ( { children, href = '', className = '' } ) =>
+			createElement(
+				href ? 'a' : 'button',
+				{ className, href },
+				children
+			),
+		Notice: ( { children, className = '' } ) =>
+			createElement( 'div', { className }, children ),
+	};
+} );
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -25,6 +41,7 @@ jest.mock( '../pattern-settings', () => ( {
 } ) );
 
 jest.mock( '../inserter-dom', () => ( {
+	findInserterContainer: ( ...args ) => mockFindInserterContainer( ...args ),
 	findInserterSearchInput: ( ...args ) =>
 		mockFindInserterSearchInput( ...args ),
 } ) );
@@ -115,6 +132,7 @@ describe( 'PatternRecommender', () => {
 		mockFetchPatternRecommendations.mockReset();
 		mockGetBlockPatterns.mockReset();
 		mockSetBlockPatterns.mockReset();
+		mockFindInserterContainer.mockReset();
 		mockFindInserterSearchInput.mockReset();
 		mockGetVisiblePatternNames.mockReset();
 		mockUseDispatch.mockReturnValue( {
@@ -253,5 +271,44 @@ describe( 'PatternRecommender', () => {
 				keywords: [ 'recommended', 'hero', 'pattern' ],
 			},
 		] );
+	} );
+
+	test( 'shows a shared capability notice inside the inserter when pattern recommendations are unavailable', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		window.flavorAgentData = {
+			canRecommendPatterns: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+		};
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+		expect( document.body.textContent ).toContain(
+			'Pattern recommendations rely on Flavor Agent'
+		);
+		expect( document.body.textContent ).toContain(
+			'Settings > Flavor Agent'
+		);
+		expect(
+			inserterContainer.querySelector(
+				'.flavor-agent-pattern-notice-slot'
+			)
+		).not.toBeNull();
+
+		act( () => {
+			root.unmount();
+		} );
+
+		expect(
+			inserterContainer.querySelector(
+				'.flavor-agent-pattern-notice-slot'
+			)
+		).toBeNull();
+		root = null;
 	} );
 } );

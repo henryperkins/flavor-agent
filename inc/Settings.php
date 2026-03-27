@@ -246,7 +246,7 @@ final class Settings {
 			[
 				'option'      => Provider::OPTION_NAME,
 				'choices'     => Provider::choices(),
-				'description' => 'Choose which OpenAI backend Flavor Agent should use for block, pattern, template, and navigation recommendations whenever chat credentials are configured here. If not, block recommendations fall back to Settings > Connectors.',
+				'description' => 'Choose which plugin-managed backend Flavor Agent should use for pattern, template, template-part, and navigation recommendations. When chat credentials are configured here, block recommendations can use the same direct backend; otherwise they fall back to the WordPress AI Client path in Settings &gt; Connectors.',
 			]
 		);
 
@@ -434,7 +434,15 @@ final class Settings {
 			<p class="description">
 				<?php
 				echo esc_html__(
-					'Flavor Agent uses the selected OpenAI provider for block, pattern, template, and navigation recommendations whenever chat credentials are configured here. If not, block recommendations fall back to the core Settings > Connectors screen through the WordPress AI Client. This page also manages Qdrant, Cloudflare, and pattern sync settings.',
+					'Settings > Connectors remains the core-managed home for WordPress AI Client providers and inherited OpenAI connector credentials. Settings > Flavor Agent remains the plugin-managed home for direct Azure OpenAI / OpenAI Native model selection, Qdrant, Cloudflare grounding, and pattern sync.',
+					'flavor-agent'
+				);
+				?>
+			</p>
+			<p class="description">
+				<?php
+				echo esc_html__(
+					'Block recommendations can use either the direct chat backend configured here or the WordPress AI Client path in Settings > Connectors, while pattern, template, template-part, and navigation recommendations rely on the plugin-managed backends configured on this screen.',
 					'flavor-agent'
 				);
 				?>
@@ -493,7 +501,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Used when the provider is set to Azure OpenAI. Find these credentials in the Azure Portal under your OpenAI resource > Keys and Endpoint.',
+				'Used when the provider is set to Azure OpenAI. These direct Responses and Embeddings credentials stay plugin-managed here; find them in the Azure Portal under your OpenAI resource > Keys and Endpoint.',
 				'flavor-agent'
 			)
 		);
@@ -503,7 +511,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Flavor Agent uses the selected OpenAI provider for block recommendations, pattern embeddings, pattern ranking, template recommendations, and navigation recommendations. If chat credentials are not configured here, block recommendations fall back to Settings > Connectors.',
+				'Settings > Connectors remains the core-managed home for WordPress AI Client providers. This section is plugin-managed and controls Flavor Agent\'s direct Azure OpenAI / OpenAI Native backends for pattern, template, template-part, and navigation work. Block recommendations can use the same direct chat backend when it is configured here, or fall back to Settings > Connectors.',
 				'flavor-agent'
 			)
 		);
@@ -521,7 +529,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Used when the provider is set to OpenAI Native. Flavor Agent sends requests directly to the official OpenAI Responses and Embeddings APIs. The API key can be stored here as a plugin-specific override or inherited from Settings > Connectors while model IDs remain plugin-managed.',
+				'Used when the provider is set to OpenAI Native. Flavor Agent sends requests directly to the official OpenAI Responses and Embeddings APIs. The API key can be stored here as a plugin-specific override or inherited from Settings > Connectors while model IDs remain plugin-managed on this screen.',
 				'flavor-agent'
 			)
 		);
@@ -541,7 +549,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Qdrant stores pattern embeddings for similarity search. Find your cluster URL and API key in the Qdrant Cloud console under Clusters > your cluster > Access.',
+				'Qdrant is plugin-managed infrastructure for pattern embeddings and similarity search; there is no core Connectors equivalent for it. Find your cluster URL and API key in the Qdrant Cloud console under Clusters > your cluster > Access.',
 				'flavor-agent'
 			)
 		);

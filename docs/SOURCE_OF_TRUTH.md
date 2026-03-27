@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-03-26
+> Last updated: 2026-03-27
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -24,6 +24,8 @@ Flavor Agent is a WordPress plugin that adds AI-powered recommendations directly
 Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage, with editor-scoped hydration and `sessionStorage` retained only as a cache/fallback for the current editing surface.
 
 The activity system now also has a first dedicated wp-admin audit page at `Settings > AI Activity`, built with WordPress-native `DataViews` and `DataForm` primitives rather than a plugin-only table shell.
+
+When a recommendation surface is in scope but unavailable, the native UI now stays visible long enough to explain whether the missing dependency belongs in core `Settings > Connectors` or plugin-owned `Settings > Flavor Agent`, including the inserter-backed pattern surface.
 
 Five first-party recommendation surfaces exist today:
 
@@ -204,7 +206,7 @@ flavor-agent/
 
 | Service | Purpose | Required For | Config Options |
 |---------|---------|-------------|----------------|
-| WordPress AI Client + Connectors | Block recommendation LLM | Block Inspector recommendations | Core-managed in `Settings > Connectors` |
+| WordPress AI Client + Connectors | Block recommendation fallback LLM | Block Inspector recommendations when direct plugin chat is not configured | Core-managed in `Settings > Connectors` |
 | Provider selection | Chooses between Azure OpenAI and OpenAI Native | Pattern/template/navigation recommendations | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`) |
 | Azure OpenAI Embeddings | Pattern embedding (3072-dim) | Pattern index + pattern recommendations (Azure provider) | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment` |
 | Azure OpenAI Responses | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Azure provider) | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment` |
@@ -224,7 +226,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 #### Block Inspector Recommendations
 - **Trigger:** User selects a block, types optional prompt, clicks "Get Suggestions".
 - **Context sent:** Block name, attributes, styles, supports, inspector panels, editing mode, content/config attributes, child count, structural identity (role, location, position), sibling blocks, ancestor chain, theme tokens, WordPress docs guidance (cache-only).
-- **LLM:** WordPress AI Client via `WordPressAIClient::chat()`.
+- **LLM:** `ChatClient::chat()`; prefers the direct plugin-managed provider when configured and otherwise falls back to the WordPress AI Client / Connectors path.
 - **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`.
 - **Apply:** One-click per suggestion. Safe deep-merge for `metadata` and `style` keys. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
 - **Guards:** Content-only blocks receive only content-attribute suggestions. Disabled blocks receive no suggestions. `blockVisibility` (boolean and viewport-object forms) respected.
@@ -316,7 +318,7 @@ Settings page at Settings > Flavor Agent with five sections:
 - Qdrant (URL, key)
 - Cloudflare AI Search (account ID, instance ID, API token, max results)
 
-Block recommendation providers are configured separately in core under `Settings > Connectors`.
+Block recommendations can use the direct plugin-managed chat backend configured here or the core `Settings > Connectors` path when the direct backend is not configured.
 When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
 
 Plus pattern sync status panel with manual trigger.
@@ -356,10 +358,10 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 
 ### Current Open Backlog
 
-- Decide whether navigation should remain advisory-only or grow a bounded apply contract, while keeping the UX native to the Inspector and Site Editor.
 - Deepen the new admin activity page into a richer audit/observability surface with before/after inspection, better diagnostics, and a cleaner action/discovery layer.
 - Rerun live provider-backed recommendation execution with valid credentials to refresh end-to-end verification on the active provider path.
 - Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
+- Revisit navigation apply only if a bounded previewable/undoable executor becomes its own tracked post-v1 milestone.
 - Keep Interactivity API work in the future backlog, not the current remediation backlog, until the plugin grows a front-end runtime surface.
 
 ## Data Flow Diagrams
@@ -625,10 +627,14 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 
 ## Key Technical Decisions
 
-1. **Split recommendation backends**: WordPress AI Client for block recommendations (provider-agnostic, connector-managed), plus provider-selected embeddings/responses via `Provider` for pattern/template/navigation ranking. Not a redundancy -- different strengths for different tasks.
+1. **Split recommendation backends**: Block recommendations use `ChatClient`, which prefers the direct plugin-managed provider when configured and otherwise falls back to the WordPress AI Client / Connectors path; pattern/template/navigation use provider-selected embeddings/responses via `Provider`. Not a redundancy -- different strengths for different tasks.
 2. **Narrow approval model**: Block suggestions still apply inline on click, but template suggestions use an explicit preview-confirm-apply step. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
 5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, prior queries, or first-request misses that queue follow-up warming. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
 7. **Store is the contract boundary for executable surfaces**: Block, pattern, template, and template-part UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, stale-request rejection, and activity/undo coordination.
+8. **Navigation is advisory-only through v1.0**: The inspector surface is intentionally guidance-only until a bounded previewable/undoable executor earns its own milestone.
+9. **Client-side `@wordpress/core-abilities` usage stays deferred for v1**: First-party JS continues to use feature-specific stores and REST endpoints; client-side abilities remain an external-agent/admin integration surface rather than the editor runtime baseline.
+10. **Pattern Overrides, expanded `contentOnly`, and first-style extras stay bounded**: Pattern Overrides-aware ranking, broader `contentOnly` structural semantics, width/height preset transforms, and pseudo-element-aware token extraction are all deferred until later bounded milestones rather than being treated as ambient WP 7.0 work.
+11. **`customCSS` recommendation generation is out of scope for v1**: The product remains grounded in native Gutenberg structures and theme tokens, not raw CSS authoring.

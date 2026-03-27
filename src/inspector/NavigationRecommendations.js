@@ -10,7 +10,9 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
+import { getSurfaceCapability } from '../utils/capability-flags';
 
 function formatCount( count, noun ) {
 	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
@@ -60,7 +62,7 @@ export function buildNavigationFetchInput( {
 		input.menuId = menuId;
 	}
 
-	const navigationMarkup = serialize( [ block ] ).trim();
+	const navigationMarkup = String( serialize( [ block ] ) || '' ).trim();
 
 	if ( navigationMarkup ) {
 		input.navigationMarkup = navigationMarkup;
@@ -98,10 +100,7 @@ function buildNavigationContextSignature( { block, blockClientId } ) {
 }
 
 export default function NavigationRecommendations( { clientId } ) {
-	const canRecommend =
-		typeof window === 'undefined'
-			? true
-			: window.flavorAgentData?.canRecommendNavigation ?? true;
+	const canRecommend = getSurfaceCapability( 'navigation' ).available;
 	const {
 		navigationBlock,
 		recommendations,
@@ -194,12 +193,12 @@ export default function NavigationRecommendations( { clientId } ) {
 	] );
 
 	const handleFetch = useCallback( () => {
-		if ( requestInput ) {
+		if ( canRecommend && requestInput ) {
 			fetchNavigationRecommendations( requestInput );
 		}
-	}, [ fetchNavigationRecommendations, requestInput ] );
+	}, [ canRecommend, fetchNavigationRecommendations, requestInput ] );
 
-	if ( ! canRecommend || navigationBlock?.name !== 'core/navigation' ) {
+	if ( navigationBlock?.name !== 'core/navigation' ) {
 		return null;
 	}
 
@@ -228,138 +227,159 @@ export default function NavigationRecommendations( { clientId } ) {
 				</p>
 			</div>
 
-			<div className="flavor-agent-panel__composer">
-				<TextareaControl
-					__nextHasNoMarginBottom
-					label="What do you want to improve about this navigation?"
-					hideLabelFromVision
-					placeholder="Describe the structure or behavior you want."
-					value={ prompt }
-					onChange={ setPrompt }
-					rows={ 3 }
-					className="flavor-agent-prompt"
-				/>
+			{ ! canRecommend && <CapabilityNotice surface="navigation" /> }
 
-				<Button
-					variant="secondary"
-					onClick={ handleFetch }
-					disabled={ isLoading || ! requestInput }
-					className="flavor-agent-fetch-button"
-				>
-					{ isLoading
-						? 'Getting navigation suggestions…'
-						: 'Get Navigation Suggestions' }
-				</Button>
-			</div>
+			{ canRecommend && (
+				<>
+					<div className="flavor-agent-panel__composer">
+						<TextareaControl
+							__nextHasNoMarginBottom
+							label="What do you want to improve about this navigation?"
+							hideLabelFromVision
+							placeholder="Describe the structure or behavior you want."
+							value={ prompt }
+							onChange={ setPrompt }
+							rows={ 3 }
+							className="flavor-agent-prompt"
+						/>
 
-			{ error && (
-				<Notice
-					status="error"
-					isDismissible
-					onDismiss={ clearNavigationError }
-				>
-					{ error }
-				</Notice>
-			) }
-
-			{ hasMatchingResult && explanation && (
-				<p className="flavor-agent-explanation flavor-agent-panel__note">
-					{ explanation }
-				</p>
-			) }
-
-			{ hasMatchingResult && ! hasSuggestions && ! isLoading && (
-				<Notice status="info" isDismissible={ false }>
-					No navigation suggestions were returned for the current
-					prompt.
-				</Notice>
-			) }
-
-			{ hasSuggestions && (
-				<div className="flavor-agent-panel__group">
-					<div className="flavor-agent-panel__group-header">
-						<div className="flavor-agent-panel__group-title">
-							Navigation ideas
-						</div>
-						<span className="flavor-agent-pill">
-							{ formatCount( recommendations.length, 'idea' ) }
-						</span>
+						<Button
+							variant="secondary"
+							onClick={ handleFetch }
+							disabled={ isLoading || ! requestInput }
+							className="flavor-agent-fetch-button"
+						>
+							{ isLoading
+								? 'Getting navigation suggestions…'
+								: 'Get Navigation Suggestions' }
+						</Button>
 					</div>
-					<div className="flavor-agent-panel__group-body">
-						{ recommendations.map( ( suggestion, index ) => (
-							<div
-								key={ `${
-									suggestion?.label || 'navigation'
-								}-${ index }` }
-								className="flavor-agent-card"
-							>
-								<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
-									<div className="flavor-agent-card__lead">
-										<div className="flavor-agent-card__label">
-											{ suggestion?.label ||
-												'Navigation suggestion' }
-										</div>
-										<div className="flavor-agent-card__meta">
-											<span className="flavor-agent-pill">
-												{ formatCategoryLabel(
-													suggestion?.category
-												) }
-											</span>
-											<span className="flavor-agent-pill">
-												{ formatCount(
-													suggestion?.changes
-														?.length || 0,
-													'change'
-												) }
-											</span>
-										</div>
-									</div>
+
+					{ error && (
+						<Notice
+							status="error"
+							isDismissible
+							onDismiss={ clearNavigationError }
+						>
+							{ error }
+						</Notice>
+					) }
+
+					{ hasMatchingResult && explanation && (
+						<p className="flavor-agent-explanation flavor-agent-panel__note">
+							{ explanation }
+						</p>
+					) }
+
+					{ hasMatchingResult && ! hasSuggestions && ! isLoading && (
+						<Notice status="info" isDismissible={ false }>
+							No navigation suggestions were returned for the
+							current prompt.
+						</Notice>
+					) }
+
+					{ hasSuggestions && (
+						<div className="flavor-agent-panel__group">
+							<div className="flavor-agent-panel__group-header">
+								<div className="flavor-agent-panel__group-title">
+									Navigation ideas
 								</div>
-
-								{ suggestion?.description && (
-									<p className="flavor-agent-card__description">
-										{ suggestion.description }
-									</p>
-								) }
-
-								<div className="flavor-agent-navigation-list">
-									{ ( suggestion?.changes || [] ).map(
-										( change, changeIndex ) => (
-											<div
-												key={ `${
-													suggestion?.label ||
-													'navigation'
-												}-${
-													change?.type || 'change'
-												}-${ changeIndex }` }
-												className="flavor-agent-navigation-change"
-											>
-												<div className="flavor-agent-card__meta">
-													<span className="flavor-agent-pill">
-														{ formatChangeType(
-															change?.type
-														) }
-													</span>
-													{ change?.target && (
-														<span className="flavor-agent-navigation-change__target">
-															{ change.target }
+								<span className="flavor-agent-pill">
+									{ formatCount(
+										recommendations.length,
+										'idea'
+									) }
+								</span>
+							</div>
+							<div className="flavor-agent-panel__group-body">
+								{ recommendations.map(
+									( suggestion, index ) => (
+										<div
+											key={ `${
+												suggestion?.label ||
+												'navigation'
+											}-${ index }` }
+											className="flavor-agent-card"
+										>
+											<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+												<div className="flavor-agent-card__lead">
+													<div className="flavor-agent-card__label">
+														{ suggestion?.label ||
+															'Navigation suggestion' }
+													</div>
+													<div className="flavor-agent-card__meta">
+														<span className="flavor-agent-pill">
+															{ formatCategoryLabel(
+																suggestion?.category
+															) }
 														</span>
-													) }
+														<span className="flavor-agent-pill">
+															{ formatCount(
+																suggestion
+																	?.changes
+																	?.length ||
+																	0,
+																'change'
+															) }
+														</span>
+													</div>
 												</div>
+											</div>
 
-												{ change?.detail && (
-													<p className="flavor-agent-navigation-change__detail">
-														{ change.detail }
-													</p>
+											{ suggestion?.description && (
+												<p className="flavor-agent-card__description">
+													{ suggestion.description }
+												</p>
+											) }
+
+											<div className="flavor-agent-navigation-list">
+												{ (
+													suggestion?.changes || []
+												).map(
+													( change, changeIndex ) => (
+														<div
+															key={ `${
+																suggestion?.label ||
+																'navigation'
+															}-${
+																change?.type ||
+																'change'
+															}-${ changeIndex }` }
+															className="flavor-agent-navigation-change"
+														>
+															<div className="flavor-agent-card__meta">
+																<span className="flavor-agent-pill">
+																	{ formatChangeType(
+																		change?.type
+																	) }
+																</span>
+																{ change?.target && (
+																	<span className="flavor-agent-navigation-change__target">
+																		{
+																			change.target
+																		}
+																	</span>
+																) }
+															</div>
+
+															{ change?.detail && (
+																<p className="flavor-agent-navigation-change__detail">
+																	{
+																		change.detail
+																	}
+																</p>
+															) }
+														</div>
+													)
 												) }
 											</div>
-										)
-									) }
-								</div>
+										</div>
+									)
+								) }
 							</div>
-						) ) }
-					</div>
-				</div>
+						</div>
+					) }
+				</>
 			) }
 		</>
 	);

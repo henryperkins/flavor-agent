@@ -18,8 +18,10 @@ import {
 } from '../store/activity-history';
 import { collectBlockContext } from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
+import CapabilityNotice from '../components/CapabilityNotice';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
+import { getSurfaceCapability } from '../utils/capability-flags';
 
 export function findBlockPath( blocks, clientId, path = [] ) {
 	for ( let index = 0; index < blocks.length; index++ ) {
@@ -51,9 +53,7 @@ export function blockPathMatches( left, right ) {
 }
 
 function getCanRecommendBlocks() {
-	return typeof window === 'undefined'
-		? true
-		: window.flavorAgentData?.canRecommendBlocks ?? true;
+	return getSurfaceCapability( 'block' ).available;
 }
 
 function useBlockRecommendationState( clientId ) {
@@ -206,13 +206,7 @@ export function BlockRecommendationsContent( {
 
 	return (
 		<div className="flavor-agent-panel">
-			{ ! canRecommendBlocks && (
-				<Notice status="warning" isDismissible={ false }>
-					Configure Azure OpenAI or OpenAI Native in Settings &gt;
-					Flavor Agent, or configure a text-generation provider in
-					Settings &gt; Connectors, to enable block recommendations.
-				</Notice>
-			) }
+			{ ! canRecommendBlocks && <CapabilityNotice surface="block" /> }
 
 			{ isContentRestricted && (
 				<Notice

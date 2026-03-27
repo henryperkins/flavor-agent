@@ -303,4 +303,30 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( container.textContent ).toBe( '' );
 	} );
+
+	test( 'shows the shared capability notice when block recommendations are unavailable', () => {
+		window.flavorAgentData = {
+			canRecommendBlocks: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			connectorsUrl:
+				'https://example.test/wp-admin/options-connectors.php',
+		};
+
+		renderPanel();
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+		} );
+
+		renderPanel();
+
+		expect( container.textContent ).toContain( 'Settings > Flavor Agent' );
+		expect( container.textContent ).toContain( 'Settings > Connectors' );
+		expect( container.textContent ).toContain(
+			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
+		);
+	} );
 } );

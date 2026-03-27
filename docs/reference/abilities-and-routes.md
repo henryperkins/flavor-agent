@@ -35,7 +35,7 @@ Use it when you need to answer:
 
 - All eleven abilities are registered in `inc/Abilities/Registration.php`
 - On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
-- `flavor-agent/check-status` currently reports a subset of runtime-gated abilities in `availableAbilities`; the dedicated `flavor-agent/recommend-navigation` ability is registered separately even though it is not currently added to that summary list
+- `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, and navigation UIs
 
 ## REST Routes
 

@@ -17,6 +17,7 @@ import {
 	getAllowedPatterns,
 	getPatternAPIPath,
 	getPatternRuntimeDiagnostics,
+	findInserterContainer,
 	findInserterSearchInput,
 	findInserterToggle,
 	INSERTER_CONTAINER_SELECTORS,
@@ -398,6 +399,44 @@ describe( 'findInserterSearchInput', () => {
 		expect( findInserterSearchInput( document )?.id ).toBe(
 			'tabbed-search'
 		);
+	} );
+} );
+
+describe( 'findInserterContainer', () => {
+	beforeEach( () => {
+		document.body.innerHTML = '';
+	} );
+
+	afterEach( () => {
+		document.body.innerHTML = '';
+	} );
+
+	test( 'returns the active inserter container resolved from the search input', () => {
+		document.body.innerHTML = `
+			<div class="block-editor-inserter__menu"></div>
+			<div class="block-editor-inserter__content" id="content-container">
+				<input id="content-search" role="searchbox" />
+			</div>
+		`;
+
+		expect( findInserterContainer( document )?.id ).toBe(
+			'content-container'
+		);
+	} );
+
+	test( 'falls back to the first known inserter container when no search input exists', () => {
+		document.body.innerHTML = `
+			<div class="block-editor-inserter__panel-content" id="panel-container"></div>
+		`;
+
+		expect( findInserterContainer( document )?.id ).toBe(
+			'panel-container'
+		);
+	} );
+
+	test( 'returns null when the root cannot query the DOM', () => {
+		expect( findInserterContainer( null ) ).toBeNull();
+		expect( findInserterContainer( {} ) ).toBeNull();
 	} );
 } );
 

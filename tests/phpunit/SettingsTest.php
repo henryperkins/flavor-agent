@@ -770,6 +770,25 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_page_explains_core_and_plugin_managed_settings_boundaries(): void {
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'Settings &gt; Connectors remains the core-managed home',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Settings &gt; Flavor Agent remains the plugin-managed home',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Block recommendations can use either the direct chat backend configured here or the WordPress AI Client path in Settings &gt; Connectors',
+			$output
+		);
+	}
+
 	private function reset_validation_state(): void {
 		$azure_state = new ReflectionProperty( Settings::class, 'azure_validation_state' );
 		$azure_state->setAccessible( true );

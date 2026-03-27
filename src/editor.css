@@ -164,6 +164,19 @@
   margin: 0;
 }
 
+.flavor-agent-capability-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.flavor-agent-capability-notice__link.components-button {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+
 .flavor-agent-pill {
   display: inline-flex;
   align-items: center;
@@ -812,6 +825,14 @@
 
 .flavor-agent-inserter-badge-anchor {
   position: relative;
+}
+
+.flavor-agent-pattern-notice {
+  padding: 8px 8px 0;
+}
+
+.flavor-agent-pattern-notice .components-notice {
+  margin: 0 0 8px;
 }
 
 .flavor-agent-inserter-badge {

@@ -612,6 +612,51 @@ describe( 'TemplateRecommender', () => {
 		).toBeNull();
 	} );
 
+	test( 'keeps undo history visible when template recommendations are unavailable', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_suggestion',
+						surface: 'template',
+						suggestion: 'Clarify hierarchy',
+						target: {
+							templateRef: TEMPLATE_REF,
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+						persistence: {
+							status: 'server',
+						},
+					},
+				],
+			},
+		} );
+		window.flavorAgentData = {
+			canRecommendTemplates: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+		};
+
+		await renderPanel();
+
+		expect(
+			container.querySelector(
+				'[data-panel-title="AI Template Recommendations"]'
+			)
+		).not.toBeNull();
+		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
+		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
+		expect( hasText( 'Clarify hierarchy' ) ).toBe( true );
+		expect( hasText( 'Undo available' ) ).toBe( true );
+		expect( hasText( 'Suggested Composition' ) ).toBe( false );
+		expect( getTextarea() ).toBeNull();
+	} );
+
 	test( 'recomputes template undo availability when the block tree changes', async () => {
 		mockGetTemplateActivityUndoState.mockImplementation(
 			( activity, blockEditorSelect ) =>

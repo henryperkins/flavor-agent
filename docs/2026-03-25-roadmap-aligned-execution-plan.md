@@ -78,6 +78,7 @@ In current code:
    - bindings-aware prompt routing is aligned with the dedicated bindings inspector slot, with bindable attributes collected into block context
    - pattern API docs/tests now treat `__experimental*` pattern settings and selectors as the current upstream baseline, with stable keys treated as future-facing probes
 5. The first-party JS still does not consume `@wordpress/core-abilities`, so client-side Abilities runtime usage remains a future admin-side integration opportunity rather than current baseline behavior.
+6. Several WP 7.0 migration opportunities remain intentionally uncommitted until they are translated into bounded milestone work, especially client-side Abilities usage, Pattern Overrides-aware recommendations, and expanded `contentOnly` structural constraints.
 
 That means the next milestones should build forward from those foundations instead of re-planning them from scratch, especially in Epic 5 where the first admin audit slice is already shipped.
 
@@ -85,15 +86,15 @@ That means the next milestones should build forward from those foundations inste
 
 Before expanding the roadmap into broader new surfaces, the clearest next steps are:
 
-1. **Finish Epic 1 shared capability UX.**
-   - Add shared capability/why-unavailable UI and one normalized status vocabulary across block, navigation, template, and template-part surfaces.
-   - Make `check-status` expose the exact surface-ready flags the editor needs instead of requiring each panel to infer degraded-mode behavior independently.
+1. **Finish Epic 1 shared capability UX.** (Completed 2026-03-27)
+   - Shared capability/why-unavailable UI now covers block, pattern, navigation, template, and template-part surfaces.
+   - `check-status` now exposes the exact surface-ready flags the editor needs instead of requiring each surface to infer degraded-mode behavior independently.
 2. **Deepen the shipped audit slice before adding broader agent behavior.**
    - Expand `Settings > AI Activity` with before/after inspection, request/provider diagnostics, and clearer ordered-undo visibility.
    - Keep the server-backed repository as the source of truth for undo eligibility and diagnostics.
-3. **Decide the navigation contract explicitly.**
-   - Either document navigation as advisory-only through v1.0, or ship one bounded previewable/undoable navigation action.
-   - Do not leave the product in an ambiguous middle state.
+3. **Record the navigation contract explicitly.**
+   - Navigation stays advisory-only through v1.0; do not add an apply contract in the current milestone.
+   - Revisit only if a bounded previewable/undoable navigation executor becomes its own tracked follow-up.
 4. **Refresh live provider-backed verification.**
    - Re-run end-to-end recommendation execution with valid credentials and capture the results in `STATUS.md`.
    - Use that run to confirm the current Connectors/provider boundary, docs grounding, and recent Gutenberg trunk-alignment work under real credentials.
@@ -101,7 +102,14 @@ Before expanding the roadmap into broader new surfaces, the clearest next steps 
    - Update the WP 7.0 Docker/browser harness to the stable image tag.
    - Re-audit experimental adapters (`pattern-settings.js`, theme settings sources, and any remaining trunk-sensitive inspector modeling) against final 7.0 core.
 
-Only after those five items land should the roadmap move aggressively into new style-book or higher-level site-agent surface work.
+6. **Record the remaining WP 7.0 feature-surface decisions that were previously only noted in migration analysis.**
+   - Client-side `@wordpress/core-abilities` consumption stays deferred for v1; first-party JS remains on feature-specific stores and REST endpoints until a narrow admin/runtime integration is separately scoped.
+   - Pattern Overrides support for custom blocks stays deferred until there is a bounded metadata contract worth feeding into ranking and review UI.
+   - Expanded `contentOnly` semantics are a tracked structural-constraint update for the later structural milestone, not an implicit current-surface expansion.
+   - The first Style milestone does not include width/height preset transforms or pseudo-element-aware token extraction; both stay deferred until style intelligence has its own bounded slice.
+   - `customCSS` recommendation generation is explicitly out of scope for v1 unless the product thesis changes.
+
+Only after those six items land should the roadmap move aggressively into new style-book or higher-level site-agent surface work.
 
 ## Ordered Execution
 
@@ -141,8 +149,9 @@ Some of Epic 1's settings-boundary work is now already in the tree:
 
 1. `Provider.php` now models OpenAI Native credential precedence, connector registration, and connector key-source metadata instead of treating the core connector as only a raw option fallback.
 2. `InfraAbilities::check_status()` now reports `credentialSource`, `connectorRegistered`, `connectorConfigured`, and `connectorKeySource` for the `openai_native` backend.
-3. `Settings.php` now tells the user which OpenAI Native credential source is currently effective and whether the core OpenAI connector is registered/configured.
-4. Shared capability notices and per-surface disabled-state vocabulary across the JS panels are still pending.
+3. `Settings.php` now tells the user which OpenAI Native credential source is currently effective, whether the core OpenAI connector is registered/configured, and which backend ownership boundary belongs to `Settings > Connectors` vs `Settings > Flavor Agent`.
+4. Shared capability notices now exist across block, pattern, navigation, template, and template-part surfaces, and `check-status` reports surface-ready states instead of only backend fragments.
+5. The Epic 1 acceptance suite now has current verification entries in `STATUS.md` for the roadmap PHP filter, the JS store filter, and disabled-state browser smokes.
 
 ### In Scope
 
@@ -153,6 +162,10 @@ Some of Epic 1's settings-boundary work is now already in the tree:
 3. Tighten `check-status` and per-surface availability reporting.
 4. Reduce duplicate provider messaging in UI copy and settings.
 5. Keep the current connector fallback behavior, but make the responsibility boundaries easier to reason about.
+6. Make an explicit decision about client-side Abilities runtime usage:
+   - either keep first-party JS on feature-specific stores/endpoints for v1
+   - or add a narrow admin/runtime integration plan for `@wordpress/core-abilities`
+   - but do not leave this as an untracked future-facing note.
 
 ### Non-Goals
 
@@ -188,6 +201,10 @@ Likely new files only if extraction becomes necessary:
 3. Refactor first-party surfaces to use shared capability and "why unavailable" messaging instead of ad hoc copy.
 4. Update `Settings.php` to make "core-managed vs plugin-managed" backend ownership explicit.
 5. Keep connector fallback support in `Provider.php`, but document and test the precedence clearly.
+6. Where core AI provider availability is being inferred from custom option checks, evaluate replacing or supplementing those checks with connector-registry-aware lookups (`wp_get_connector()`, `wp_is_connector_registered()`) when that reduces ambiguity without weakening support for fallback credential sources.
+7. Record the v1 stance on client-side Abilities consumption in docs and tests:
+   - if deferred, state the boundary clearly
+   - if adopted, keep the first integration narrow and admin-scoped rather than broad UI rewiring.
 
 ### Acceptance Tests
 
@@ -323,12 +340,17 @@ This is the clearest way to push beyond current WordPress.com-style integration 
 2. Add style-variation and preset-transform suggestions where WordPress supports them.
 3. Add a first-party Flavor Agent surface for site-level style intelligence that stays native to site-editor and style tooling.
 4. Keep all output grounded in theme tokens, supported design tools, and existing WordPress style semantics.
+5. Expand the style-intelligence backlog to explicitly evaluate newer WP 7.0 style surfaces that fit the plugin thesis:
+   - width/height preset-aware transformations
+   - pseudo-element-aware theme token extraction where the theme/tooling surface exposes stable data
+   - stronger supported-style reasoning before any recommendation is surfaced.
 
 ### Non-Goals
 
 1. Raw CSS generation as a default path.
 2. A custom visual design tool outside the Site Editor.
 3. A parallel design system.
+4. Per-block `customCSS` recommendation generation, unless a later product decision explicitly expands the style contract beyond theme-token-safe and supported-tooling-safe transforms.
 
 ### File Targets
 
@@ -365,6 +387,10 @@ Likely new files:
    - preset substitutions
    - style variation selection
    - supported block style attributes only
+6. For the first style milestone, explicitly evaluate:
+   - `dimensions.width` / `dimensions.height` recommendations using available preset data
+   - whether pseudo-element theme styles should be represented in token extraction
+   - whether any `customCSS`-adjacent capability should remain out of scope rather than silently implied.
 
 ### Acceptance Tests
 
@@ -403,6 +429,8 @@ The repo already has validated composition primitives. The next step is to incre
 2. Improve navigation guidance and, where safe, add validated navigation actions later.
 3. Improve structural context in prompts and collectors.
 4. Build on the now-modeled `list` inspector surface only if a dedicated UI layer becomes necessary; do not invent a separate site-structure module by default.
+5. Evaluate whether Pattern Overrides-aware metadata should influence recommendation quality for patterns used in custom-block-heavy flows, especially where WordPress 7.0 broadens override support via bindings-related infrastructure.
+6. Re-audit structural recommendation safety against expanded `contentOnly` behavior in WordPress 7.0, especially for unsynced patterns, template parts, and parent/child insertion constraints.
 
 ### Non-Goals
 
@@ -441,6 +469,14 @@ Existing files:
    - stronger bound page and structure reasoning
 4. Use the existing `list` inspector modeling and block-context collectors before introducing any dedicated site-structure surface.
 5. Keep all new structural operations passing through `template-operation-sequence.js` and executor validation.
+6. If Pattern Overrides support is adopted, keep the first increment recommendation-oriented rather than mutation-oriented:
+   - collect override-relevant metadata
+   - feed it into pattern recommendation/ranking or explanation
+   - avoid introducing new structural writes until the value is proven.
+7. Extend structural validation and recommendation filtering to account for newer `contentOnly` semantics:
+   - unsynced pattern defaults where relevant
+   - `"contentOnly": true` / `contentRole`-style modeling
+   - parent/child insertion constraints before suggestions are presented as executable.
 
 ### Acceptance Tests
 

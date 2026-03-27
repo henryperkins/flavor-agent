@@ -6,6 +6,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Primary surface: the native block inserter, patched so recommended patterns appear in a `Recommended` category
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
+- Unavailable state: when plugin-owned pattern backends are missing, the native inserter prepends a shared capability notice that explains the missing backend and links to `Settings > Flavor Agent`
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow
 
 ## Surfacing Conditions
@@ -15,6 +16,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open
 - Results are scoped by `visiblePatternNames`, derived from the current inserter root so nested insertion contexts only see patterns WordPress already allows there
+- When `window.flavorAgentData.canRecommendPatterns` is false, no fetch runs and opening the inserter shows the shared unavailable-state notice instead of a silent no-op
 
 ## End-To-End Flow
 
@@ -25,8 +27,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 5. `PatternAbilities::recommend_patterns()` validates backend configuration and pattern-index runtime state
 6. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()`, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
 7. The store saves the recommendations and `patchInserterPatterns()` rewrites the native pattern registry metadata through the compatibility layer
-8. `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
-9. The user inserts a recommended pattern through the normal WordPress inserter flow
+8. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
+9. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
+10. The user inserts a recommended pattern through the normal WordPress inserter flow
 
 ## What This Surface Can Do
 
@@ -35,10 +38,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
 - Show inserter-level status as count, loading, or error feedback
+- Explain missing plugin-owned ranking backends inside the native inserter before any recommendation request can succeed
 
 ## Guardrails And Failure Modes
 
 - If `visiblePatternNames` is present but empty, the backend returns no recommendations instead of suggesting invalid patterns
+- If the pattern backends are unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
 - WordPress docs grounding is cache-only and non-blocking; cache misses fall back to the existing retrieval-and-rerank path instead of failing the request
 - The badge fails closed when the inserter DOM anchor cannot be found
@@ -49,6 +54,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Layer | Function / class | Role |
 |---|---|---|
 | UI shell | `PatternRecommender()` in `src/patterns/PatternRecommender.js` | Watches editor state, search input, and visible pattern context |
+| Unavailable notice | `PatternRecommender()` + `CapabilityNotice` | Mount shared why-unavailable messaging into the native inserter when backends are missing |
 | Inserter patching | `patchInserterPatterns()` in `src/patterns/PatternRecommender.js` | Rewrites native pattern metadata for the recommended set |
 | Badge UI | `InserterBadge()` and `getInserterBadgeState()` | Render count/loading/error state next to the inserter toggle |
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state |

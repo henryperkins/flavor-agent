@@ -1042,6 +1042,30 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'settings_fields' ) ) {
+		function settings_fields( string $option_group ): void {
+			printf(
+				'<input type="hidden" name="option_page" value="%s" />',
+				htmlspecialchars( $option_group, ENT_QUOTES, 'UTF-8' )
+			);
+		}
+	}
+
+	if ( ! function_exists( 'do_settings_sections' ) ) {
+		function do_settings_sections( string $page ): void {
+			unset( $page );
+		}
+	}
+
+	if ( ! function_exists( 'submit_button' ) ) {
+		function submit_button( string $text = 'Save Changes' ): void {
+			printf(
+				'<button type="submit">%s</button>',
+				htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' )
+			);
+		}
+	}
+
 	if ( ! function_exists( 'get_post' ) ) {
 		function get_post( $post_id = null ) {
 			if ( $post_id === null ) {

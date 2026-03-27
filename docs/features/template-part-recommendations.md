@@ -6,12 +6,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Part Recommendations`
 - Scope: only while editing a `wp_template_part` entity
-- UI shape: prompt field, slug and area badges, explanation text, focus-block links, suggested-pattern links, preview-before-apply, recent activity, and inline undo
+- UI shape: settings-backed capability notice when unavailable, otherwise a prompt field, slug and area badges, explanation text, focus-block links, suggested-pattern links, preview-before-apply, recent activity, and inline undo
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendTemplateParts` must be true; this localized flag is driven by `Provider::chat_configured()`
 - `TemplatePartRecommender()` must resolve a current template-part reference from `core/edit-site`
+- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by `Provider::chat_configured()`
 - The panel clears stale recommendations when the template part changes or when the visible pattern context changes
 
 ## End-To-End Flow

@@ -163,23 +163,149 @@ function flavor_agent_enqueue_editor(): void {
 		);
 	}
 
+	$settings_url         = admin_url( 'options-general.php?page=flavor-agent' );
+	$connectors_url       = admin_url( 'options-connectors.php' );
+	$surface_capabilities = flavor_agent_get_editor_surface_capabilities(
+		$settings_url,
+		$connectors_url
+	);
+	$can_manage_settings  = current_user_can( 'manage_options' );
+
 	wp_localize_script(
 		'flavor-agent-editor',
 		'flavorAgentData',
 		[
-			'restUrl'                   => rest_url( 'flavor-agent/v1/' ),
-			'nonce'                     => wp_create_nonce( 'wp_rest' ),
-			'canRecommendBlocks'        => FlavorAgent\LLM\ChatClient::is_supported(),
-			'canRecommendPatterns'      => (bool) (
-				Provider::embedding_configured()
-				&& Provider::chat_configured()
-				&& get_option( 'flavor_agent_qdrant_url' )
-				&& get_option( 'flavor_agent_qdrant_key' )
-			),
-			'canRecommendTemplates'     => Provider::chat_configured(),
-			'canRecommendTemplateParts' => Provider::chat_configured(),
-			'canRecommendNavigation'    => Provider::chat_configured() && current_user_can( 'edit_theme_options' ),
-			'templatePartAreas'         => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
+			'restUrl'                      => rest_url( 'flavor-agent/v1/' ),
+			'nonce'                        => wp_create_nonce( 'wp_rest' ),
+			'settingsUrl'                  => $settings_url,
+			'connectorsUrl'                => $connectors_url,
+			'canManageFlavorAgentSettings' => $can_manage_settings,
+			'capabilities'                 => [
+				'surfaces' => $surface_capabilities,
+			],
+			'canRecommendBlocks'           => $surface_capabilities['block']['available'],
+			'canRecommendPatterns'         => $surface_capabilities['pattern']['available'],
+			'canRecommendTemplates'        => $surface_capabilities['template']['available'],
+			'canRecommendTemplateParts'    => $surface_capabilities['templatePart']['available'],
+			'canRecommendNavigation'       => $surface_capabilities['navigation']['available'],
+			'templatePartAreas'            => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
 		]
 	);
+}
+
+/**
+ * @return array<string, array<string, mixed>>
+ */
+function flavor_agent_get_editor_surface_capabilities(
+	string $settings_url,
+	string $connectors_url
+): array {
+	$block_available       = FlavorAgent\LLM\ChatClient::is_supported();
+	$chat_available        = Provider::chat_configured();
+	$pattern_available     = (bool) (
+		Provider::embedding_configured()
+		&& $chat_available
+		&& get_option( 'flavor_agent_qdrant_url' )
+		&& get_option( 'flavor_agent_qdrant_key' )
+	);
+	$can_edit_theme        = current_user_can( 'edit_theme_options' );
+	$can_manage_settings   = current_user_can( 'manage_options' );
+	$block_message         = __(
+		$can_manage_settings
+			? 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.'
+			: 'Block recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+		'flavor-agent'
+	);
+	$template_message      = __(
+		$can_manage_settings
+			? 'Template recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.'
+			: 'Template recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+		'flavor-agent'
+	);
+	$template_part_message = __(
+		$can_manage_settings
+			? 'Template-part recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.'
+			: 'Template-part recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+		'flavor-agent'
+	);
+	$navigation_message    = __(
+		$can_manage_settings
+			? 'Navigation recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.'
+			: 'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+		'flavor-agent'
+	);
+
+	return [
+		'block'        => [
+			'available' => $block_available,
+			'reason'    => $block_available ? 'ready' : 'block_backend_unconfigured',
+			'owner'     => 'plugin_or_core',
+			'actions'   => $can_manage_settings
+				? [
+					[
+						'label' => 'Settings > Flavor Agent',
+						'href'  => $settings_url,
+					],
+					[
+						'label' => 'Settings > Connectors',
+						'href'  => $connectors_url,
+					],
+				]
+				: [],
+			'message'   => $block_message,
+		],
+		'pattern'      => [
+			'available'          => $pattern_available,
+			'reason'             => $pattern_available ? 'ready' : 'pattern_backend_unconfigured',
+			'owner'              => 'plugin_settings',
+			'configurationLabel' => $can_manage_settings ? 'Settings > Flavor Agent' : '',
+			'configurationUrl'   => $can_manage_settings ? $settings_url : '',
+			'message'            => __(
+				$can_manage_settings
+					? 'Pattern recommendations rely on Flavor Agent\'s chat and embedding backends plus Qdrant in Settings > Flavor Agent.'
+					: 'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+				'flavor-agent'
+			),
+		],
+		'template'     => [
+			'available'          => $chat_available,
+			'reason'             => $chat_available ? 'ready' : 'plugin_provider_unconfigured',
+			'owner'              => 'plugin_settings',
+			'configurationLabel' => $can_manage_settings ? 'Settings > Flavor Agent' : '',
+			'configurationUrl'   => $can_manage_settings ? $settings_url : '',
+			'message'            => $template_message,
+		],
+		'templatePart' => [
+			'available'          => $chat_available,
+			'reason'             => $chat_available ? 'ready' : 'plugin_provider_unconfigured',
+			'owner'              => 'plugin_settings',
+			'configurationLabel' => $can_manage_settings ? 'Settings > Flavor Agent' : '',
+			'configurationUrl'   => $can_manage_settings ? $settings_url : '',
+			'message'            => $template_part_message,
+		],
+		'navigation'   => [
+			'available'          => $chat_available && $can_edit_theme,
+			'reason'             => ! $can_edit_theme
+				? 'missing_theme_capability'
+				: ( $chat_available ? 'ready' : 'plugin_provider_unconfigured' ),
+			'owner'              => 'plugin_settings',
+			'configurationLabel' => ( $can_edit_theme && $can_manage_settings ) ? 'Settings > Flavor Agent' : '',
+			'configurationUrl'   => ( $can_edit_theme && $can_manage_settings ) ? $settings_url : '',
+			'actions'            => ( $can_edit_theme && $can_manage_settings )
+				? [
+					[
+						'label' => 'Settings > Flavor Agent',
+						'href'  => $settings_url,
+					],
+				]
+				: [],
+			'advisoryOnly'       => true,
+			'message'            => ! $can_edit_theme
+				? __(
+					'Navigation recommendations require the edit_theme_options capability.',
+					'flavor-agent'
+				)
+				: $navigation_message,
+		],
+	];
 }

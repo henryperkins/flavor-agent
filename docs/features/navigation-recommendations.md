@@ -6,12 +6,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: inside the block `AI Recommendations` panel
 - Scope: only for selected `core/navigation` blocks
-- UI shape: prompt field, advisory-only badge, grouped recommendation cards, and per-change detail rows
+- UI shape: advisory-only header, capability notice when unavailable, otherwise a prompt field plus grouped recommendation cards and per-change detail rows
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendNavigation` must be true; the localized flag requires the active chat provider and `edit_theme_options`
 - The selected block must be `core/navigation`
+- The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag requires the active chat provider and `edit_theme_options`
 - The request button is only enabled when `buildNavigationFetchInput()` can derive either:
   - a menu ID from `attributes.ref`, or
   - serialized navigation block markup
@@ -35,7 +35,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Guardrails And Failure Modes
 
-- This surface is advisory-only today; there is no validated apply contract
+- This surface is advisory-only through v1.0; there is no validated apply contract
 - It does not write activity entries and does not participate in inline undo
 - The panel clears stale results when the selected block changes or when the navigation context signature changes
 - If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled

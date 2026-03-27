@@ -6,12 +6,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Recommendations`
 - Scope: only while editing a `wp_template` entity
-- UI shape: prompt field, explanation text with linked entities, suggestion cards, preview-before-apply, recent activity, and inline undo
+- UI shape: settings-backed capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, suggestion cards, preview-before-apply, recent activity, and inline undo
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendTemplates` must be true; this localized flag is driven by `Provider::chat_configured()`
 - `TemplateRecommender()` must resolve a current template reference through `core/editor` or `core/edit-site`
+- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by `Provider::chat_configured()`
 - The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the visible pattern set
 
 ## End-To-End Flow

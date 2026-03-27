@@ -1,4 +1,5 @@
 import {
+	clampActivityViewPage,
 	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
 	buildActivityTargetUrl,
@@ -70,6 +71,135 @@ describe( 'activity log utils', () => {
 		expect( entries[ 1 ].statusLabel ).toBe( 'Applied' );
 	} );
 
+	test( 'normalizeActivityEntries derives operation, document, path, and diff metadata', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				before: {
+					attributes: {
+						content: 'Before copy',
+					},
+				},
+				after: {
+					attributes: {
+						content: 'After copy',
+					},
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			operationType: 'modify-attributes',
+			operationTypeLabel: 'Modify attributes',
+			postType: 'post',
+			entityId: '42',
+			blockPath: 'Paragraph · 1',
+		} );
+		expect( entries[ 0 ].stateDiff ).toContain(
+			'~ content: Before copy → After copy'
+		);
+	} );
+
+	test( 'normalizeActivityEntries does not misclassify unchanged structured style payloads as style edits', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				before: {
+					attributes: {
+						style: {
+							color: {
+								text: 'red',
+							},
+						},
+						content: 'Before copy',
+					},
+				},
+				after: {
+					attributes: {
+						style: {
+							color: {
+								text: 'red',
+							},
+						},
+						content: 'After copy',
+					},
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			operationType: 'modify-attributes',
+			operationTypeLabel: 'Modify attributes',
+		} );
+		expect( entries[ 0 ].stateDiff ).toContain(
+			'~ content: Before copy → After copy'
+		);
+	} );
+
+	test( 'normalizeActivityEntries still classifies nested style changes as apply style', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				before: {
+					attributes: {
+						style: {
+							color: {
+								text: 'red',
+							},
+						},
+					},
+				},
+				after: {
+					attributes: {
+						style: {
+							color: {
+								text: 'blue',
+							},
+						},
+					},
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			operationType: 'apply-style',
+			operationTypeLabel: 'Apply style',
+		} );
+		expect( entries[ 0 ].stateDiff ).toContain(
+			'~ style.color.text: red → blue'
+		);
+	} );
+
+	test( 'normalizeActivityEntries maps template operations to normalized action types', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				type: 'apply_template_suggestion',
+				surface: 'template',
+				target: {
+					templateRef: 'theme//home',
+				},
+				document: {
+					scopeKey: 'wp_template:theme//home',
+					postType: 'wp_template',
+					entityId: 'theme//home',
+				},
+				after: {
+					operations: [
+						{
+							type: 'insert_pattern',
+							patternName: 'theme/hero',
+						},
+					],
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			operationType: 'insert',
+			operationTypeLabel: 'Insert pattern',
+			activityTypeLabel: 'Apply template suggestion',
+			postType: 'wp_template',
+			entityId: 'theme//home',
+		} );
+	} );
+
 	test( 'buildActivityTargetUrl returns site editor and post editor links', () => {
 		const templateUrl = buildActivityTargetUrl(
 			createEntry( {
@@ -119,5 +249,47 @@ describe( 'activity log utils', () => {
 				nextView
 			)
 		).toBe( true );
+	} );
+
+	test( 'clampActivityViewPage keeps pagination in range', () => {
+		expect(
+			clampActivityViewPage(
+				{
+					...DEFAULT_ACTIVITY_VIEW,
+					page: 5,
+				},
+				{
+					totalPages: 2,
+				}
+			).page
+		).toBe( 2 );
+		expect(
+			clampActivityViewPage(
+				{
+					...DEFAULT_ACTIVITY_VIEW,
+					page: 3,
+				},
+				{
+					totalPages: 0,
+				}
+			).page
+		).toBe( 1 );
+		expect(
+			clampActivityViewPage(
+				{
+					...DEFAULT_ACTIVITY_VIEW,
+					page: 2,
+				},
+				{
+					totalPages: 4,
+				}
+			).page
+		).toBe( 2 );
+		expect(
+			clampActivityViewPage( {
+				...DEFAULT_ACTIVITY_VIEW,
+				page: 4,
+			} ).page
+		).toBe( 1 );
 	} );
 } );

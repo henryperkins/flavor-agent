@@ -25,6 +25,34 @@ export const INSERTER_TOGGLE_TOOLBAR_SELECTORS = [
 	'.edit-site-header__start',
 ];
 
+export function findInserterContainer( root = document ) {
+	if ( ! root?.querySelector || ! root?.querySelectorAll ) {
+		return null;
+	}
+
+	const searchInput = findInserterSearchInput( root );
+
+	if ( searchInput?.closest ) {
+		const activeContainer = searchInput.closest(
+			INSERTER_CONTAINER_SELECTORS.join( ', ' )
+		);
+
+		if ( activeContainer ) {
+			return activeContainer;
+		}
+	}
+
+	for ( const containerSelector of INSERTER_CONTAINER_SELECTORS ) {
+		const container = root.querySelector( containerSelector );
+
+		if ( container ) {
+			return container;
+		}
+	}
+
+	return null;
+}
+
 export function findInserterSearchInput( root ) {
 	if ( ! root?.querySelectorAll ) {
 		return null;

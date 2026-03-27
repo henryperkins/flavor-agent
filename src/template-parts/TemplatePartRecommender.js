@@ -16,6 +16,7 @@ import {
 } from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
+import CapabilityNotice from '../components/CapabilityNotice';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
 import {
@@ -38,6 +39,7 @@ import {
 	validateTemplatePartOperationSequence,
 } from '../utils/template-operation-sequence';
 import { getTemplatePartAreaLookup } from '../utils/template-part-areas';
+import { getSurfaceCapability } from '../utils/capability-flags';
 
 function formatCount( count, noun ) {
 	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
@@ -285,7 +287,7 @@ function buildTemplatePartSuggestionViewModel(
 }
 
 export default function TemplatePartRecommender() {
-	const canRecommend = window.flavorAgentData?.canRecommendTemplateParts;
+	const canRecommend = getSurfaceCapability( 'template-part' ).available;
 	const templatePartRef = useSelect( ( select ) => {
 		const editSite = select( 'core/edit-site' );
 
@@ -488,6 +490,10 @@ export default function TemplatePartRecommender() {
 	);
 
 	const handleFetch = useCallback( () => {
+		if ( ! canRecommend ) {
+			return;
+		}
+
 		fetchTemplatePartRecommendations(
 			buildTemplatePartFetchInput( {
 				templatePartRef,
@@ -496,6 +502,7 @@ export default function TemplatePartRecommender() {
 			} )
 		);
 	}, [
+		canRecommend,
 		fetchTemplatePartRecommendations,
 		prompt,
 		templatePartRef,
@@ -523,7 +530,7 @@ export default function TemplatePartRecommender() {
 		[ undoActivity ]
 	);
 
-	if ( ! canRecommend || ! templatePartRef ) {
+	if ( ! templatePartRef ) {
 		return null;
 	}
 
@@ -557,37 +564,43 @@ export default function TemplatePartRecommender() {
 					</p>
 				</div>
 
-				<div className="flavor-agent-panel__composer">
-					<TextareaControl
-						__nextHasNoMarginBottom
-						label="What are you trying to achieve with this template part?"
-						hideLabelFromVision
-						placeholder="Describe the structure or layout you want."
-						value={ prompt }
-						onChange={ setPrompt }
-						rows={ 3 }
-						className="flavor-agent-prompt"
-					/>
+				{ ! canRecommend && (
+					<CapabilityNotice surface="template-part" />
+				) }
 
-					<Button
-						variant="primary"
-						onClick={ handleFetch }
-						disabled={ isLoading }
-						className="flavor-agent-fetch-button"
-					>
-						{ isLoading
-							? 'Getting suggestions…'
-							: 'Get Suggestions' }
-					</Button>
-				</div>
+				{ canRecommend && (
+					<div className="flavor-agent-panel__composer">
+						<TextareaControl
+							__nextHasNoMarginBottom
+							label="What are you trying to achieve with this template part?"
+							hideLabelFromVision
+							placeholder="Describe the structure or layout you want."
+							value={ prompt }
+							onChange={ setPrompt }
+							rows={ 3 }
+							className="flavor-agent-prompt"
+						/>
 
-				{ isLoading && (
+						<Button
+							variant="primary"
+							onClick={ handleFetch }
+							disabled={ isLoading }
+							className="flavor-agent-fetch-button"
+						>
+							{ isLoading
+								? 'Getting suggestions…'
+								: 'Get Suggestions' }
+						</Button>
+					</div>
+				) }
+
+				{ canRecommend && isLoading && (
 					<Notice status="info" isDismissible={ false }>
 						Analyzing template-part structure…
 					</Notice>
 				) }
 
-				{ error && (
+				{ canRecommend && error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
 					</Notice>
@@ -613,8 +626,7 @@ export default function TemplatePartRecommender() {
 					lastAppliedSuggestionKey &&
 					lastAppliedOperations.length > 0 &&
 					latestTemplatePartActivity &&
-					latestTemplatePartActivity.id ===
-						latestUndoableActivityId && (
+					latestTemplatePartActivity.id === latestUndoableActivityId && (
 						<Notice status="success" isDismissible={ false }>
 							Applied{ ' ' }
 							{ formatCount(
@@ -629,25 +641,20 @@ export default function TemplatePartRecommender() {
 								}
 								disabled={ undoStatus === 'undoing' }
 							>
-								{ undoStatus === 'undoing'
-									? 'Undoing…'
-									: 'Undo' }
+								{ undoStatus === 'undoing' ? 'Undoing…' : 'Undo' }
 							</Button>
 						</Notice>
 					) }
 
-				{ undoStatus === 'success' &&
-					lastUndoneTemplatePartActivity && (
-						<Notice status="success" isDismissible={ false }>
-							Undid{ ' ' }
-							<strong>
-								{ lastUndoneTemplatePartActivity.suggestion }
-							</strong>
-							.
-						</Notice>
-					) }
+				{ undoStatus === 'success' && lastUndoneTemplatePartActivity && (
+					<Notice status="success" isDismissible={ false }>
+						Undid{ ' ' }
+						<strong>{ lastUndoneTemplatePartActivity.suggestion }</strong>
+						.
+					</Notice>
+				) }
 
-				{ hasMatchingResult && explanation && (
+				{ canRecommend && hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
 						{ explanation }
 					</p>
@@ -659,7 +666,8 @@ export default function TemplatePartRecommender() {
 					onUndo={ handleUndo }
 				/>
 
-				{ hasMatchingResult &&
+				{ canRecommend &&
+					hasMatchingResult &&
 					! isLoading &&
 					! error &&
 					! hasSuggestions && (
@@ -669,7 +677,7 @@ export default function TemplatePartRecommender() {
 						</Notice>
 					) }
 
-				{ hasSuggestions && (
+				{ canRecommend && hasSuggestions && (
 					<div className="flavor-agent-panel__group">
 						<div className="flavor-agent-panel__group-header">
 							<div className="flavor-agent-panel__group-title">
@@ -701,9 +709,7 @@ export default function TemplatePartRecommender() {
 									}
 									onApplySuggestion={ handleApplySuggestion }
 									onCancelPreview={ handleCancelPreview }
-									onPreviewSuggestion={
-										handlePreviewSuggestion
-									}
+									onPreviewSuggestion={ handlePreviewSuggestion }
 								/>
 							) ) }
 						</div>

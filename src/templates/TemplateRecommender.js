@@ -32,6 +32,7 @@ import {
 } from '@wordpress/element';
 
 import AIActivitySection from '../components/AIActivitySection';
+import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
@@ -63,6 +64,7 @@ import {
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 	TEMPLATE_OPERATION_REPLACE,
 } from './template-recommender-helpers';
+import { getSurfaceCapability } from '../utils/capability-flags';
 
 /**
  * Case-insensitive word-boundary search.
@@ -255,7 +257,7 @@ function getEditedEntityRef( select, expectedPostType ) {
 }
 
 export default function TemplateRecommender() {
-	const canRecommend = window.flavorAgentData?.canRecommendTemplates;
+	const canRecommend = getSurfaceCapability( 'template' ).available;
 	const templateBlocks = useSelect(
 		( select ) => select( blockEditorStore )?.getBlocks?.() || [],
 		[]
@@ -474,6 +476,10 @@ export default function TemplateRecommender() {
 	);
 
 	const handleFetch = useCallback( () => {
+		if ( ! canRecommend ) {
+			return;
+		}
+
 		fetchTemplateRecommendations(
 			buildTemplateFetchInput( {
 				templateRef,
@@ -484,6 +490,7 @@ export default function TemplateRecommender() {
 			} )
 		);
 	}, [
+		canRecommend,
 		editorSlots,
 		fetchTemplateRecommendations,
 		prompt,
@@ -527,7 +534,7 @@ export default function TemplateRecommender() {
 		[ undoActivity ]
 	);
 
-	if ( ! canRecommend || ! templateRef ) {
+	if ( ! templateRef ) {
 		return null;
 	}
 
@@ -548,37 +555,41 @@ export default function TemplateRecommender() {
 					</p>
 				</div>
 
-				<div className="flavor-agent-panel__composer">
-					<TextareaControl
-						__nextHasNoMarginBottom
-						label="What are you trying to achieve with this template?"
-						hideLabelFromVision
-						placeholder="Describe the structure or layout you want."
-						value={ prompt }
-						onChange={ setPrompt }
-						rows={ 3 }
-						className="flavor-agent-prompt"
-					/>
+				{ ! canRecommend && <CapabilityNotice surface="template" /> }
 
-					<Button
-						variant="primary"
-						onClick={ handleFetch }
-						disabled={ isLoading }
-						className="flavor-agent-fetch-button"
-					>
-						{ isLoading
-							? 'Getting suggestions…'
-							: 'Get Suggestions' }
-					</Button>
-				</div>
+				{ canRecommend && (
+					<div className="flavor-agent-panel__composer">
+						<TextareaControl
+							__nextHasNoMarginBottom
+							label="What are you trying to achieve with this template?"
+							hideLabelFromVision
+							placeholder="Describe the structure or layout you want."
+							value={ prompt }
+							onChange={ setPrompt }
+							rows={ 3 }
+							className="flavor-agent-prompt"
+						/>
 
-				{ isLoading && (
+						<Button
+							variant="primary"
+							onClick={ handleFetch }
+							disabled={ isLoading }
+							className="flavor-agent-fetch-button"
+						>
+							{ isLoading
+								? 'Getting suggestions…'
+								: 'Get Suggestions' }
+						</Button>
+					</div>
+				) }
+
+				{ canRecommend && isLoading && (
 					<Notice status="info" isDismissible={ false }>
 						Analyzing template structure…
 					</Notice>
 				) }
 
-				{ error && (
+				{ canRecommend && error && (
 					<Notice status="error" isDismissible={ false }>
 						{ error }
 					</Notice>
@@ -619,9 +630,7 @@ export default function TemplateRecommender() {
 								}
 								disabled={ undoStatus === 'undoing' }
 							>
-								{ undoStatus === 'undoing'
-									? 'Undoing…'
-									: 'Undo' }
+								{ undoStatus === 'undoing' ? 'Undoing…' : 'Undo' }
 							</Button>
 						</Notice>
 					) }
@@ -629,14 +638,11 @@ export default function TemplateRecommender() {
 				{ undoStatus === 'success' && lastUndoneTemplateActivity && (
 					<Notice status="success" isDismissible={ false }>
 						Undid{ ' ' }
-						<strong>
-							{ lastUndoneTemplateActivity.suggestion }
-						</strong>
-						.
+						<strong>{ lastUndoneTemplateActivity.suggestion }</strong>.
 					</Notice>
 				) }
 
-				{ hasMatchingResult && explanation && (
+				{ canRecommend && hasMatchingResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
 						<LinkedText
 							text={ explanation }
@@ -652,7 +658,7 @@ export default function TemplateRecommender() {
 					onUndo={ handleUndo }
 				/>
 
-				{ hasSuggestions && (
+				{ canRecommend && hasSuggestions && (
 					<div className="flavor-agent-panel__group">
 						<div className="flavor-agent-panel__group-header">
 							<div className="flavor-agent-panel__group-title">
@@ -687,9 +693,7 @@ export default function TemplateRecommender() {
 									onEntityClick={ handleEntityAction }
 									onApplySuggestion={ handleApplySuggestion }
 									onCancelPreview={ handleCancelPreview }
-									onPreviewSuggestion={
-										handlePreviewSuggestion
-									}
+									onPreviewSuggestion={ handlePreviewSuggestion }
 								/>
 							) ) }
 						</div>

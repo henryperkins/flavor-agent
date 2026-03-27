@@ -1,0 +1,316 @@
+const mockUseDispatch = jest.fn();
+const mockUseSelect = jest.fn();
+const mockGetBlockPatterns = jest.fn();
+const mockGetTemplatePartActivityUndoState = jest.fn(
+	( activity ) => activity?.undo || {}
+);
+const mockGetTemplatePartAreaLookup = jest.fn( () => ( {} ) );
+
+jest.mock( '@wordpress/block-editor', () => ( {
+	store: 'core/block-editor',
+} ) );
+
+jest.mock( '@wordpress/components', () => {
+	const { Fragment, createElement } = require( '@wordpress/element' );
+
+	return {
+		Button: ( { children, className, disabled, onClick } ) =>
+			createElement(
+				'button',
+				{
+					type: 'button',
+					className,
+					disabled,
+					onClick,
+				},
+				children
+			),
+		Notice: ( { children } ) =>
+			createElement( 'div', { role: 'alert' }, children ),
+		TextareaControl: ( {
+			className,
+			label,
+			onChange,
+			placeholder,
+			rows,
+			value,
+		} ) =>
+			createElement(
+				'label',
+				null,
+				createElement( 'span', null, label ),
+				createElement( 'textarea', {
+					'aria-label': label,
+					className,
+					rows,
+					placeholder,
+					value,
+					onChange: ( event ) => onChange( event.target.value ),
+				} )
+			),
+		Tooltip: ( { children } ) => createElement( Fragment, null, children ),
+	};
+} );
+
+jest.mock( '@wordpress/data', () => ( {
+	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useSelect: ( ...args ) => mockUseSelect( ...args ),
+} ) );
+
+jest.mock( '@wordpress/editor', () => {
+	const { createElement } = require( '@wordpress/element' );
+
+	return {
+		PluginDocumentSettingPanel: ( { children, title } ) =>
+			createElement( 'section', { 'data-panel-title': title }, children ),
+	};
+} );
+
+jest.mock( '../../patterns/compat', () => ( {
+	getBlockPatterns: ( ...args ) => mockGetBlockPatterns( ...args ),
+} ) );
+
+jest.mock( '../../store', () => ( {
+	STORE_NAME: 'flavor-agent',
+} ) );
+
+jest.mock( '../../utils/template-actions', () => ( {
+	getTemplatePartActivityUndoState: ( ...args ) =>
+		mockGetTemplatePartActivityUndoState( ...args ),
+	openInserterForPattern: jest.fn(),
+	selectBlockByPath: jest.fn(),
+} ) );
+
+jest.mock( '../../utils/visible-patterns', () => ( {
+	getVisiblePatternNames: jest.fn( () => [] ),
+} ) );
+
+jest.mock( '../../utils/template-part-areas', () => ( {
+	getTemplatePartAreaLookup: ( ...args ) =>
+		mockGetTemplatePartAreaLookup( ...args ),
+} ) );
+
+jest.mock( '../../utils/template-operation-sequence', () => ( {
+	TEMPLATE_OPERATION_INSERT_PATTERN: 'insert_pattern',
+	TEMPLATE_OPERATION_REMOVE_BLOCK: 'remove_block',
+	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN:
+		'replace_block_with_pattern',
+	TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH: 'after_block_path',
+	TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH: 'before_block_path',
+	validateTemplatePartOperationSequence: jest.fn( ( operations ) => ( {
+		ok: true,
+		operations,
+	} ) ),
+} ) );
+
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { act } = require( 'react' );
+const { createRoot } = require( '@wordpress/element' );
+
+import TemplatePartRecommender from '../TemplatePartRecommender';
+
+let currentState = null;
+let container = null;
+let root = null;
+
+window.IS_REACT_ACT_ENVIRONMENT = true;
+
+function getState() {
+	return currentState;
+}
+
+function createState( overrides = {} ) {
+	return {
+		editSite: {
+			postId: 'theme//header',
+			postType: 'wp_template_part',
+			...overrides.editSite,
+		},
+		blockEditor: {
+			blocks: [],
+			...overrides.blockEditor,
+		},
+		store: {
+			activityLog: [],
+			lastUndoneActivityId: null,
+			templatePartApplyError: null,
+			templatePartApplyStatus: 'idle',
+			templatePartError: null,
+			templatePartExplanation: '',
+			templatePartLastAppliedOperations: [],
+			templatePartLastAppliedSuggestionKey: null,
+			templatePartRecommendations: [],
+			templatePartResultRef: null,
+			templatePartResultToken: 1,
+			templatePartSelectedSuggestionKey: null,
+			templatePartStatus: 'idle',
+			undoError: null,
+			undoStatus: 'idle',
+			...overrides.store,
+		},
+	};
+}
+
+function selectStore( storeName ) {
+	if ( storeName === 'core/block-editor' ) {
+		return {
+			getBlocks: jest.fn( () => getState().blockEditor.blocks ),
+		};
+	}
+
+	if ( storeName === 'core/edit-site' ) {
+		return {
+			getEditedPostId: jest.fn( () => getState().editSite.postId ),
+			getEditedPostType: jest.fn( () => getState().editSite.postType ),
+		};
+	}
+
+	if ( storeName === 'flavor-agent' ) {
+		return {
+			getActivityLog: jest.fn( () => getState().store.activityLog ),
+			getLastUndoneActivityId: jest.fn(
+				() => getState().store.lastUndoneActivityId
+			),
+			getTemplatePartApplyError: jest.fn(
+				() => getState().store.templatePartApplyError
+			),
+			getTemplatePartApplyStatus: jest.fn(
+				() => getState().store.templatePartApplyStatus
+			),
+			getTemplatePartError: jest.fn(
+				() => getState().store.templatePartError
+			),
+			getTemplatePartExplanation: jest.fn(
+				() => getState().store.templatePartExplanation
+			),
+			getTemplatePartLastAppliedOperations: jest.fn(
+				() => getState().store.templatePartLastAppliedOperations
+			),
+			getTemplatePartLastAppliedSuggestionKey: jest.fn(
+				() => getState().store.templatePartLastAppliedSuggestionKey
+			),
+			getTemplatePartRecommendations: jest.fn(
+				() => getState().store.templatePartRecommendations
+			),
+			getTemplatePartResultRef: jest.fn(
+				() => getState().store.templatePartResultRef
+			),
+			getTemplatePartResultToken: jest.fn(
+				() => getState().store.templatePartResultToken
+			),
+			getTemplatePartSelectedSuggestionKey: jest.fn(
+				() => getState().store.templatePartSelectedSuggestionKey
+			),
+			getUndoError: jest.fn( () => getState().store.undoError ),
+			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
+			isTemplatePartLoading: jest.fn(
+				() => getState().store.templatePartStatus === 'loading'
+			),
+		};
+	}
+
+	return {};
+}
+
+function hasText( value ) {
+	return container.textContent.includes( value );
+}
+
+function getTextarea() {
+	return container.querySelector( 'textarea' );
+}
+
+async function renderPanel() {
+	await act( async () => {
+		root.render( <TemplatePartRecommender /> );
+	} );
+}
+
+beforeEach( async () => {
+	jest.clearAllMocks();
+	currentState = createState();
+	window.flavorAgentData = {
+		canRecommendTemplateParts: true,
+	};
+	mockGetBlockPatterns.mockReturnValue( [] );
+	mockUseDispatch.mockImplementation( () => ( {
+		applyTemplatePartSuggestion: jest.fn(),
+		clearTemplatePartRecommendations: jest.fn(),
+		clearUndoError: jest.fn(),
+		fetchTemplatePartRecommendations: jest.fn(),
+		setTemplatePartSelectedSuggestion: jest.fn(),
+		undoActivity: jest.fn(),
+	} ) );
+	mockUseSelect.mockImplementation( ( mapSelect ) =>
+		mapSelect( selectStore )
+	);
+	container = document.createElement( 'div' );
+	document.body.appendChild( container );
+	root = createRoot( container );
+	await renderPanel();
+} );
+
+afterEach( async () => {
+	delete window.flavorAgentData;
+
+	if ( root ) {
+		await act( async () => {
+			root.unmount();
+		} );
+	}
+
+	if ( container ) {
+		container.remove();
+	}
+
+	root = null;
+	container = null;
+	currentState = null;
+} );
+
+describe( 'TemplatePartRecommender', () => {
+	test( 'keeps undo history visible when template-part recommendations are unavailable', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_part_suggestion',
+						surface: 'template-part',
+						suggestion: 'Add utility links',
+						target: {
+							templatePartRef: 'theme//header',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+						persistence: {
+							status: 'server',
+						},
+					},
+				],
+			},
+		} );
+		window.flavorAgentData = {
+			canRecommendTemplateParts: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+		};
+
+		await renderPanel();
+
+		expect(
+			container.querySelector(
+				'[data-panel-title="AI Template Part Recommendations"]'
+			)
+		).not.toBeNull();
+		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
+		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
+		expect( hasText( 'Add utility links' ) ).toBe( true );
+		expect( hasText( 'Undo available' ) ).toBe( true );
+		expect( hasText( 'Suggested Composition' ) ).toBe( false );
+		expect( getTextarea() ).toBeNull();
+	} );
+} );
