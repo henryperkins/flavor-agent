@@ -171,13 +171,13 @@ final class Agent_Controller {
 				'callback'            => [ __CLASS__, 'handle_recommend_template_part' ],
 				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
 				'args'                => [
-					'templatePartRef' => [
+					'templatePartRef'     => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => static fn( $value ): bool => is_string( $value ) && $value !== '',
 					],
-					'prompt'          => [
+					'prompt'              => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
@@ -202,10 +202,15 @@ final class Agent_Controller {
 					'permission_callback' => [ ActivityPermissions::class, 'can_access_activity_request' ],
 					'args'                => [
 						'scopeKey'   => [
-							'required'          => true,
+							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
-							'validate_callback' => static fn( $value ): bool => is_string( $value ) && '' !== $value,
+						],
+						'global'     => [
+							'required'          => false,
+							'type'              => 'boolean',
+							'default'           => false,
+							'sanitize_callback' => static fn( $value ): bool => in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
 						],
 						'surface'    => [
 							'required'          => false,
@@ -221,6 +226,11 @@ final class Agent_Controller {
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'userId'     => [
+							'required'          => false,
+							'type'              => 'integer',
+							'sanitize_callback' => 'absint',
 						],
 						'limit'      => [
 							'required'          => false,
@@ -502,9 +512,11 @@ final class Agent_Controller {
 		$entries = ActivityRepository::query(
 			[
 				'scopeKey'   => $request->get_param( 'scopeKey' ),
+				'global'     => $request->get_param( 'global' ),
 				'surface'    => $request->get_param( 'surface' ),
 				'entityType' => $request->get_param( 'entityType' ),
 				'entityRef'  => $request->get_param( 'entityRef' ),
+				'userId'     => $request->get_param( 'userId' ),
 				'limit'      => $request->get_param( 'limit' ),
 			]
 		);

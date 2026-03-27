@@ -44,18 +44,20 @@ Read these documents in this order:
 3. `STATUS.md`
    - Current verified state, known issues, recent verification, and top-level documentation map.
    - This is the fastest way to answer "what is true in the tree today?"
-4. `docs/flavor-agent-readme.md`
+4. `docs/FEATURE_SURFACE_MATRIX.md`
+   - Fast scan of every shipped surface, where it appears, and when it is gated.
+   - Start here when the question is "where does this feature actually show up?"
+5. `docs/features/README.md`
+   - Entry point for the per-surface deep dives.
+   - Use this when you need exact end-to-end user flow details.
+6. `docs/reference/abilities-and-routes.md`
+   - Canonical mapping of abilities, REST routes, permissions, and first-party callers.
+7. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
-   - Use this for implementation-oriented product behavior and surface details.
-5. `docs/2026-03-25-roadmap-aligned-execution-plan.md`
+   - Use this as the architecture-oriented companion to the feature docs.
+8. `docs/2026-03-25-roadmap-aligned-execution-plan.md`
    - Current forward plan.
    - Use this for milestone order, file targets, acceptance tests, and roadmap alignment.
-6. `docs/NEXT_STEPS_PLAN.md`
-   - Historical execution context from the earlier post-v1 planning pass.
-   - Keep for lineage, not as the main forward plan.
-7. `docs/historical/`
-   - Superseded design documents and early roadmap ideas.
-   - Reference only when tracing earlier intent.
 
 ## Doc Ownership
 
@@ -69,10 +71,21 @@ Each top-level doc has one job:
    - What is currently working?
    - What is known broken, partial, or unverified?
    - What checks most recently passed?
-3. `docs/flavor-agent-readme.md` answers:
+3. `docs/FEATURE_SURFACE_MATRIX.md` answers:
+   - Where does each feature surface appear?
+   - Under what conditions does it show, hide, or degrade?
+   - Which surfaces support deterministic apply and inline undo?
+4. `docs/features/` answers:
    - How do the user-facing editor flows work?
-   - What data moves through each surface?
-4. `docs/2026-03-25-roadmap-aligned-execution-plan.md` answers:
+   - What can each surface do today?
+   - Which UI, store, REST, and backend layers make it work?
+5. `docs/reference/abilities-and-routes.md` answers:
+   - Which ability or route owns a contract?
+   - Which permissions and backend gates apply?
+6. `docs/flavor-agent-readme.md` answers:
+   - How does the broader editor architecture fit together?
+   - How do the surface docs fit into the repo-level implementation story?
+7. `docs/2026-03-25-roadmap-aligned-execution-plan.md` answers:
    - What should we build next?
    - In what order?
    - In which files?
@@ -84,9 +97,12 @@ When changing the plugin:
 
 1. Update `STATUS.md` if the verified current state, known issues, or documentation map changes.
 2. Update `docs/SOURCE_OF_TRUTH.md` if the product definition, inventory, guardrails, or backlog framing changes.
-3. Update `docs/flavor-agent-readme.md` if a shipped editor flow or surface behavior changes.
-4. Update `docs/2026-03-25-roadmap-aligned-execution-plan.md` if milestone order, file targets, or acceptance gates materially change.
-5. Move a document into `docs/historical/` instead of letting two forward-looking plans compete.
+3. Update `docs/FEATURE_SURFACE_MATRIX.md` if a surface location, gating rule, or apply/undo contract changes.
+4. Update the matching file in `docs/features/` if a shipped surface behavior changes.
+5. Update `docs/reference/abilities-and-routes.md` if an ability, route, permission, or response contract changes.
+6. Update `docs/flavor-agent-readme.md` if the architecture-level editor flow or repo walkthrough changes.
+7. Update `docs/2026-03-25-roadmap-aligned-execution-plan.md` if milestone order, file targets, or acceptance gates materially change.
+8. Delete or rewrite stale planning docs instead of letting two forward-looking plans compete.
 
 ## Current Backbone
 
@@ -94,7 +110,10 @@ Right now the intended doc stack is:
 
 1. Goal and guardrails: `docs/SOURCE_OF_TRUTH.md`
 2. Current state: `STATUS.md`
-3. Surface behavior: `docs/flavor-agent-readme.md`
-4. Way forward: `docs/2026-03-25-roadmap-aligned-execution-plan.md`
+3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
+4. Per-surface deep dives: `docs/features/README.md`
+5. Programmatic contracts: `docs/reference/abilities-and-routes.md`
+6. Architecture companion: `docs/flavor-agent-readme.md`
+7. Way forward: `docs/2026-03-25-roadmap-aligned-execution-plan.md`
 
-If those four docs stay aligned, the repo has a solid documentation backbone.
+If those seven docs stay aligned, the repo has a solid documentation backbone.

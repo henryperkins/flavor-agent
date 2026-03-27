@@ -1,0 +1,86 @@
+# Settings, Backends, And Sync
+
+Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/reference/abilities-and-routes.md` for the exact contract.
+
+## Exact Surface
+
+- Settings page: `Settings > Flavor Agent`
+- Admin audit page: `Settings > AI Activity` is documented separately in `docs/features/activity-and-audit.md`
+- Sync surface: `Sync Pattern Catalog` panel on the main Flavor Agent settings page
+
+## Surfacing Conditions
+
+- The page requires `manage_options`
+- Settings sections always render for admins, but save-time validation only runs when relevant credentials changed and the required values are present
+
+## What The User Can Configure
+
+- Active OpenAI provider selection (`azure_openai` or `openai_native`)
+- Azure OpenAI endpoint, API key, embedding deployment, and chat deployment
+- OpenAI Native API key override plus embedding and chat model IDs
+- Qdrant URL and API key
+- Cloudflare AI Search account ID, instance ID, API token, and max result count
+- Manual pattern sync through the `Sync Pattern Catalog` button
+
+## Backend Gating Rules
+
+| Surface | Primary gate |
+|---|---|
+| Block recommendations | `ChatClient::is_supported()`; selected provider when chat is configured here, otherwise WordPress AI Client / Connectors fallback |
+| Pattern recommendations | Active provider chat + embeddings, Qdrant configured, and a usable pattern index |
+| Template recommendations | Active provider chat configured |
+| Template-part recommendations | Active provider chat configured |
+| Navigation recommendations | Active provider chat configured and current user can edit theme options |
+| WordPress docs grounding | Optional Cloudflare AI Search configuration; recommendation-time use is cache-only and non-blocking |
+
+## Save And Validation Flow
+
+1. The user changes settings on `Settings > Flavor Agent`
+2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
+3. Flavor Agent validates Azure, OpenAI Native, Qdrant, and Cloudflare settings only when those credential sets changed and enough data is present to run the validation
+4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
+5. If OpenAI Native is selected, the page also reports the current effective API key source and whether the core OpenAI connector is registered/configured
+
+## Pattern Sync Flow
+
+1. The admin clicks the `Sync Pattern Catalog` button
+2. `src/admin/sync-button.js` posts to `POST /flavor-agent/v1/sync-patterns`
+3. `FlavorAgent\REST\Agent_Controller::handle_sync_patterns()` calls `FlavorAgent\Patterns\PatternIndex::sync()`
+4. The UI reports indexed, removed, and status counts inline on the settings page
+
+## Primary Functions And Handlers
+
+| Layer | Function / class | Role |
+|---|---|---|
+| Settings page | `Settings::add_menu()` / `Settings::render_page()` | Registers and renders `Settings > Flavor Agent` |
+| Settings registration | `Settings::register_settings()` | Registers options, sections, and fields |
+| Provider diagnostics | `Provider::openai_connector_status()` / `Provider::native_effective_api_key_source()` | Explain effective OpenAI Native credential ownership |
+| Backend status | `InfraAbilities::check_status()` | Returns backend inventory and currently available abilities |
+| Theme tokens | `InfraAbilities::get_theme_tokens()` | Exposes the current theme token snapshot through an ability |
+| Docs grounding | `WordPressDocsAbilities::search_wordpress_docs()` | Exposes trusted developer-doc grounding through an ability |
+| Manual sync UI | `src/admin/sync-button.js` | Calls the sync route and renders the result |
+| Pattern sync backend | `PatternIndex::sync()` | Rebuilds the vector-backed pattern catalog |
+
+## Guardrails And Failure Modes
+
+- Block recommendations do not require plugin-managed chat credentials if the WordPress AI Client / Connectors path is available
+- Pattern recommendations fail closed when either the active provider or Qdrant is not configured
+- Cloudflare validation only accepts guidance sourced from `developer.wordpress.org`
+- Sync is admin-only and does not bypass pattern-index validation or locking rules
+
+## Related Routes And Abilities
+
+- REST: `POST /flavor-agent/v1/sync-patterns`
+- Ability: `flavor-agent/check-status`
+- Ability: `flavor-agent/get-theme-tokens`
+- Ability: `flavor-agent/search-wordpress-docs`
+
+## Key Implementation Files
+
+- `inc/Settings.php`
+- `inc/OpenAI/Provider.php`
+- `inc/Abilities/InfraAbilities.php`
+- `inc/Abilities/WordPressDocsAbilities.php`
+- `inc/Patterns/PatternIndex.php`
+- `src/admin/sync-button.js`
+- `inc/REST/Agent_Controller.php`

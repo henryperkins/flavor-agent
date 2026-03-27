@@ -35,7 +35,8 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
         {
           "type": "insert_pattern",
           "patternName": "pattern/name-from-patterns-list",
-          "placement": "start"
+          "placement": "before_block_path",
+          "targetPath": [0, 1]
         }
       ]
     }
@@ -48,14 +49,28 @@ Rules:
 - blockHints[].label should be short and human-readable.
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
 - operations[] is optional and advisory-first. Only return it when the change is fully safe and deterministic.
-- operations[] may only contain one `insert_pattern` entry.
+- operations[] may contain at most 3 entries.
+- Supported operation types are:
+  - `insert_pattern`
+  - `replace_block_with_pattern`
+  - `remove_block`
 - operations[].patternName MUST be a pattern name from the Available Patterns list.
-- operations[].placement MUST be either `start` or `end`.
+- `insert_pattern` placements MUST be one of:
+  - `start`
+  - `end`
+  - `before_block_path`
+  - `after_block_path`
+- `before_block_path` and `after_block_path` MUST include `targetPath`.
+- `replace_block_with_pattern` MUST include `targetPath`, `expectedBlockName`, and `patternName`.
+- `remove_block` MUST include `targetPath` and `expectedBlockName`.
+- Every `targetPath` MUST resolve to a real block from the Current Block Tree.
+- `expectedBlockName` MUST match the real block at `targetPath`.
 - Keep patternSuggestions aligned with any executable operations you return.
 - Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Respect the theme's design tokens when suggesting patterns or structural changes.
+- When multiple operations are returned, keep the plan small, explicit, and ordered.
 - If no matching patterns are available, leave patternSuggestions as an empty array.
 - Return 1-3 suggestions. Each should be distinct and actionable.
 - Keep labels under 60 characters. Keep descriptions under 200 characters.
@@ -369,12 +384,19 @@ SYSTEM;
 			);
 			$operations = self::validate_operations(
 				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
+				$block_lookup,
 				$pattern_lookup
 			);
 
 			if ( count( $operations ) > 0 ) {
 				foreach ( $operations as $operation ) {
-					if ( 'insert_pattern' !== ( $operation['type'] ?? '' ) ) {
+					if (
+						! in_array(
+							$operation['type'] ?? '',
+							[ 'insert_pattern', 'replace_block_with_pattern' ],
+							true
+						)
+					) {
 						continue;
 					}
 
@@ -405,16 +427,22 @@ SYSTEM;
 	}
 
 	/**
-	 * @param array<int, mixed>   $operations
-	 * @param array<string, true> $pattern_lookup
+	 * @param array<int, mixed>                   $operations
+	 * @param array<string, array<string, mixed>> $block_lookup
+	 * @param array<string, true>                 $pattern_lookup
 	 * @return array<int, array<string, string>>
 	 */
-	private static function validate_operations( array $operations, array $pattern_lookup ): array {
+	private static function validate_operations( array $operations, array $block_lookup, array $pattern_lookup ): array {
+		if ( count( $operations ) > 3 ) {
+			return [];
+		}
+
 		$valid              = [];
-		$has_pattern_insert = false;
 		$allowed_placements = [
-			'start' => true,
-			'end'   => true,
+			'start'             => true,
+			'end'               => true,
+			'before_block_path' => true,
+			'after_block_path'  => true,
 		];
 
 		foreach ( $operations as $operation ) {
@@ -424,29 +452,104 @@ SYSTEM;
 
 			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
 
-			if ( 'insert_pattern' !== $type || $has_pattern_insert ) {
-				continue;
+			switch ( $type ) {
+				case 'insert_pattern':
+					$pattern_name = sanitize_text_field(
+						(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
+					);
+					$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
+					$target_path  = self::sanitize_block_path( $operation['targetPath'] ?? null );
+
+					if (
+						'' === $pattern_name
+						|| ! isset( $pattern_lookup[ $pattern_name ] )
+						|| ! isset( $allowed_placements[ $placement ] )
+					) {
+						continue 2;
+					}
+
+					if (
+						in_array( $placement, [ 'before_block_path', 'after_block_path' ], true )
+						&& (
+							null === $target_path ||
+							! isset( $block_lookup[ self::block_path_key( $target_path ) ] )
+						)
+					) {
+						continue 2;
+					}
+
+					$normalized = [
+						'type'        => 'insert_pattern',
+						'patternName' => $pattern_name,
+						'placement'   => $placement,
+					];
+
+					if ( null !== $target_path ) {
+						$normalized['targetPath'] = $target_path;
+					}
+
+					$valid[] = $normalized;
+					break;
+
+				case 'replace_block_with_pattern':
+					$pattern_name        = sanitize_text_field(
+						(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
+					);
+					$expected_block_name = sanitize_text_field( (string) ( $operation['expectedBlockName'] ?? '' ) );
+					$target_path         = self::sanitize_block_path( $operation['targetPath'] ?? null );
+
+					if (
+						'' === $pattern_name ||
+						'' === $expected_block_name ||
+						null === $target_path ||
+						! isset( $pattern_lookup[ $pattern_name ] )
+					) {
+						continue 2;
+					}
+
+					$path_key    = self::block_path_key( $target_path );
+					$target_node = $block_lookup[ $path_key ] ?? null;
+
+					if (
+						! is_array( $target_node ) ||
+						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
+					) {
+						continue 2;
+					}
+
+					$valid[] = [
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => $pattern_name,
+						'expectedBlockName' => $expected_block_name,
+						'targetPath'        => $target_path,
+					];
+					break;
+
+				case 'remove_block':
+					$expected_block_name = sanitize_text_field( (string) ( $operation['expectedBlockName'] ?? '' ) );
+					$target_path         = self::sanitize_block_path( $operation['targetPath'] ?? null );
+
+					if ( '' === $expected_block_name || null === $target_path ) {
+						continue 2;
+					}
+
+					$path_key    = self::block_path_key( $target_path );
+					$target_node = $block_lookup[ $path_key ] ?? null;
+
+					if (
+						! is_array( $target_node ) ||
+						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
+					) {
+						continue 2;
+					}
+
+					$valid[] = [
+						'type'              => 'remove_block',
+						'expectedBlockName' => $expected_block_name,
+						'targetPath'        => $target_path,
+					];
+					break;
 			}
-
-			$pattern_name = sanitize_text_field(
-				(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
-			);
-			$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
-
-			if (
-				'' === $pattern_name
-				|| ! isset( $pattern_lookup[ $pattern_name ] )
-				|| ! isset( $allowed_placements[ $placement ] )
-			) {
-				continue;
-			}
-
-			$valid[]            = [
-				'type'        => 'insert_pattern',
-				'patternName' => $pattern_name,
-				'placement'   => $placement,
-			];
-			$has_pattern_insert = true;
 		}
 
 		return $valid;

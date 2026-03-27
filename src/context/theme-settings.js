@@ -167,6 +167,56 @@ function hasStableThemeTokenParity(
 	);
 }
 
+function mergeThemeFeatureValue( stableValue, experimentalValue ) {
+	if (
+		stableValue === undefined ||
+		stableValue === null ||
+		( Array.isArray( stableValue ) && stableValue.length === 0 )
+	) {
+		return experimentalValue;
+	}
+
+	if (
+		experimentalValue === undefined ||
+		experimentalValue === null ||
+		( Array.isArray( experimentalValue ) &&
+			experimentalValue.length === 0 )
+	) {
+		return stableValue;
+	}
+
+	if ( Array.isArray( stableValue ) || Array.isArray( experimentalValue ) ) {
+		return stableValue;
+	}
+
+	if (
+		isObjectLike( stableValue ) &&
+		isObjectLike( experimentalValue )
+	) {
+		const merged = { ...stableValue };
+
+		for ( const [ key, experimentalEntry ] of Object.entries(
+			experimentalValue
+		) ) {
+			merged[ key ] = mergeThemeFeatureValue(
+				stableValue?.[ key ],
+				experimentalEntry
+			);
+		}
+
+		return merged;
+	}
+
+	return stableValue;
+}
+
+function mergeStableThemeFeatures(
+	stableFeatures = {},
+	experimentalFeatures = {}
+) {
+	return mergeThemeFeatureValue( stableFeatures, experimentalFeatures );
+}
+
 export function getThemeEditorSettings() {
 	return select( blockEditorStore ).getSettings?.() || {};
 }
@@ -200,10 +250,13 @@ export function getThemeTokenSourceDetails(
 		}
 
 		return {
-			source: 'experimental',
-			settingsKey: EXPERIMENTAL_THEME_FEATURES_KEY,
-			reason: 'stable-parity-mismatch',
-			features: experimentalFeatures,
+			source: 'stable-fallback',
+			settingsKey: STABLE_THEME_FEATURES_KEY,
+			reason: 'stable-with-experimental-gaps',
+			features: mergeStableThemeFeatures(
+				stableFeatures,
+				experimentalFeatures
+			),
 		};
 	}
 

@@ -8,7 +8,7 @@
  *     Patterns tab, pre-filtered to the exact pattern so the user sees
  *     a live preview and can choose an insertion point).
  */
-import { rawHandler } from '@wordpress/blocks';
+import { createBlock, rawHandler } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { dispatch, select } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
@@ -16,9 +16,13 @@ import { getAllowedPatterns } from '../patterns/pattern-settings';
 import {
 	TEMPLATE_OPERATION_ASSIGN,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
+	TEMPLATE_OPERATION_REMOVE_BLOCK,
 	TEMPLATE_PART_PLACEMENT_END,
+	TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH,
+	TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH,
 	TEMPLATE_PART_PLACEMENT_START,
 	TEMPLATE_OPERATION_REPLACE,
+	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
 	validateTemplatePartOperationSequence,
 	validateTemplateOperationSequence,
 } from './template-operation-sequence';
@@ -149,6 +153,118 @@ function normalizeBlockSnapshots( blocks = [] ) {
 	return Array.isArray( blocks )
 		? blocks.filter( Boolean ).map( ( block ) => normalizeBlockSnapshot( block ) )
 		: [];
+}
+
+function cloneBlockTree( blocks = [] ) {
+	return Array.isArray( blocks )
+		? blocks
+				.filter( Boolean )
+				.map( ( block ) => ( {
+					...block,
+					attributes: normalizeSerializableValue(
+						block.attributes || {}
+					),
+					innerBlocks: cloneBlockTree( block.innerBlocks || [] ),
+				} ) )
+		: [];
+}
+
+function getBlockContainerByPath( blocks, path = [] ) {
+	let currentBlocks = blocks;
+
+	for ( const index of path ) {
+		const block = currentBlocks?.[ index ];
+
+		if ( ! block || ! Array.isArray( block.innerBlocks ) ) {
+			return null;
+		}
+
+		currentBlocks = block.innerBlocks;
+	}
+
+	return Array.isArray( currentBlocks ) ? currentBlocks : null;
+}
+
+function buildRootLocatorFromPath( blocks, path = [] ) {
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
+		return {
+			type: 'root',
+			path: [],
+		};
+	}
+
+	const block = getBlockByPath( blocks, path );
+
+	if ( ! block ) {
+		return null;
+	}
+
+	return {
+		type: 'block',
+		path,
+		blockName: block.name || '',
+	};
+}
+
+function resolveInsertionRootClientId(
+	rootLocator,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const resolvedRoot = resolveRootLocator( rootLocator, blockEditorSelect );
+
+	if ( ! resolvedRoot ) {
+		return {
+			ok: false,
+			error: 'Flavor Agent could not resolve the current insertion container for this template-part operation.',
+		};
+	}
+
+	return {
+		ok: true,
+		rootClientId: resolvedRoot.rootClientId ?? null,
+	};
+}
+
+function rebuildBlockFromSnapshot( snapshot ) {
+	if ( ! snapshot?.name ) {
+		return null;
+	}
+
+	const innerBlocks = Array.isArray( snapshot.innerBlocks )
+		? snapshot.innerBlocks
+				.map( ( innerSnapshot ) =>
+					rebuildBlockFromSnapshot( innerSnapshot )
+				)
+				.filter( Boolean )
+		: [];
+
+	try {
+		return createBlock( snapshot.name, snapshot.attributes || {}, innerBlocks );
+	} catch {
+		return {
+			name: snapshot.name,
+			attributes: snapshot.attributes || {},
+			innerBlocks,
+		};
+	}
+}
+
+function rebuildBlocksFromSnapshots( snapshots = [] ) {
+	return Array.isArray( snapshots )
+		? snapshots
+				.map( ( snapshot ) => rebuildBlockFromSnapshot( snapshot ) )
+				.filter( Boolean )
+		: [];
+}
+
+function isAncestorPath( ancestorPath = [], descendantPath = [] ) {
+	if ( ancestorPath.length >= descendantPath.length ) {
+		return false;
+	}
+
+	return ancestorPath.every(
+		( segment, index ) => descendantPath[ index ] === segment
+	);
 }
 
 function buildRootLocator( rootClientId ) {
@@ -373,20 +489,63 @@ function resolveInsertionPoint() {
 
 function resolveTemplatePartInsertionPoint(
 	placement,
-	blockEditorSelect = select( blockEditorStore )
+	targetPath = null,
+	blocks = getBlocks()
 ) {
-	const blocks = blockEditorSelect?.getBlocks?.() || [];
-	let index = blocks.length;
-
 	if ( placement === TEMPLATE_PART_PLACEMENT_START ) {
-		index = 0;
-	} else if ( placement === TEMPLATE_PART_PLACEMENT_END ) {
-		index = blocks.length;
+		return {
+			rootLocator: {
+				type: 'root',
+				path: [],
+			},
+			index: 0,
+			targetPath: null,
+			targetBlockName: '',
+		};
+	}
+
+	if ( placement === TEMPLATE_PART_PLACEMENT_END ) {
+		return {
+			rootLocator: {
+				type: 'root',
+				path: [],
+			},
+			index: Array.isArray( blocks ) ? blocks.length : 0,
+			targetPath: null,
+			targetBlockName: '',
+		};
+	}
+
+	if (
+		placement !== TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH &&
+		placement !== TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+	) {
+		return null;
+	}
+
+	if ( ! Array.isArray( targetPath ) || targetPath.length === 0 ) {
+		return null;
+	}
+
+	const parentPath = targetPath.slice( 0, -1 );
+	const targetIndex = targetPath[ targetPath.length - 1 ];
+	const container = getBlockContainerByPath( blocks, parentPath );
+	const targetBlock = Array.isArray( container )
+		? container[ targetIndex ] || null
+		: null;
+
+	if ( ! targetBlock ) {
+		return null;
 	}
 
 	return {
-		rootClientId: null,
-		index,
+		rootLocator: buildRootLocatorFromPath( blocks, parentPath ),
+		index:
+			placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH
+				? targetIndex
+				: targetIndex + 1,
+		targetPath,
+		targetBlockName: targetBlock.name || '',
 	};
 }
 
@@ -542,15 +701,45 @@ function prepareInsertPatternOperation( operation ) {
 
 function prepareTemplatePartInsertPatternOperation(
 	operation,
+	workingBlocks = getBlocks(),
 	blockEditorSelect = select( blockEditorStore )
 ) {
 	const patternName = operation?.patternName || '';
 	const placement = operation?.placement || '';
+	const targetPath = Array.isArray( operation?.targetPath )
+		? operation.targetPath
+		: null;
 	const insertionPoint = resolveTemplatePartInsertionPoint(
 		placement,
+		targetPath,
+		workingBlocks
+	);
+
+	if ( ! insertionPoint?.rootLocator ) {
+		return {
+			error:
+				placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
+				placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+					? 'Flavor Agent could not resolve the targetPath for this template-part insertion.'
+					: `Flavor Agent could not resolve the ${ placement } insertion point for this template part.`,
+		};
+	}
+
+	const resolvedRoot = resolveInsertionRootClientId(
+		insertionPoint.rootLocator,
 		blockEditorSelect
 	);
-	const pattern = resolvePatternByName( patternName, insertionPoint.rootClientId );
+
+	if ( ! resolvedRoot.ok ) {
+		return {
+			error: resolvedRoot.error,
+		};
+	}
+
+	const pattern = resolvePatternByName(
+		patternName,
+		resolvedRoot.rootClientId
+	);
 
 	if (
 		! pattern ||
@@ -579,15 +768,21 @@ function prepareTemplatePartInsertPatternOperation(
 			! block?.name ||
 			blockEditorSelect?.canInsertBlockType?.(
 				block.name,
-				insertionPoint.rootClientId
+				resolvedRoot.rootClientId
 			) !== false
 	);
 
 	if ( ! canInsertAll ) {
+		const placementLabel =
+			placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
+			placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+				? `${ placement.replaceAll( '_', ' ' ) } target`
+				: `${ placement } of this template part`;
+
 		return {
 			error: `Pattern “${
 				pattern.title || patternName
-			}” cannot be inserted at the ${ placement } of this template part.`,
+			}” cannot be inserted at the ${ placementLabel }.`,
 		};
 	}
 
@@ -597,12 +792,306 @@ function prepareTemplatePartInsertPatternOperation(
 		patternTitle: pattern.title || patternName,
 		placement,
 		blocks,
-		rootClientId: insertionPoint.rootClientId,
-		rootLocator: {
-			type: 'root',
-			path: [],
-		},
+		targetPath: insertionPoint.targetPath,
+		targetBlockName: insertionPoint.targetBlockName,
+		rootLocator: insertionPoint.rootLocator,
 		index: insertionPoint.index,
+	};
+}
+
+function resolveTemplatePartTargetByPath( targetPath, workingBlocks ) {
+	if ( ! Array.isArray( targetPath ) || targetPath.length === 0 ) {
+		return {
+			error: 'Flavor Agent could not resolve the targetPath for this template-part operation.',
+		};
+	}
+
+	const targetBlock = getBlockByPath( workingBlocks, targetPath );
+
+	if ( ! targetBlock ) {
+		return {
+			error: 'The target block path no longer exists in this template part. Regenerate recommendations and try again.',
+		};
+	}
+
+	const parentPath = targetPath.slice( 0, -1 );
+	const index = targetPath[ targetPath.length - 1 ];
+	const rootLocator = buildRootLocatorFromPath( workingBlocks, parentPath );
+
+	if ( ! rootLocator ) {
+		return {
+			error: 'Flavor Agent could not resolve the parent container for this template-part operation.',
+		};
+	}
+
+	return {
+		targetBlock,
+		parentPath,
+		rootLocator,
+		index,
+	};
+}
+
+function removeWorkingBlockAtPath( blocks, targetPath ) {
+	const parentPath = targetPath.slice( 0, -1 );
+	const index = targetPath[ targetPath.length - 1 ];
+	const container = getBlockContainerByPath( blocks, parentPath );
+
+	if ( ! Array.isArray( container ) || ! container[ index ] ) {
+		return null;
+	}
+
+	return container.splice( index, 1 )[ 0 ] || null;
+}
+
+function insertWorkingBlocksAtIndex( blocks, parentPath, index, blocksToInsert ) {
+	const container = getBlockContainerByPath( blocks, parentPath );
+
+	if ( ! Array.isArray( container ) ) {
+		return false;
+	}
+
+	container.splice( index, 0, ...cloneBlockTree( blocksToInsert ) );
+
+	return true;
+}
+
+function replaceWorkingBlockAtPath(
+	blocks,
+	targetPath,
+	blocksToInsert
+) {
+	const parentPath = targetPath.slice( 0, -1 );
+	const index = targetPath[ targetPath.length - 1 ];
+	const container = getBlockContainerByPath( blocks, parentPath );
+
+	if ( ! Array.isArray( container ) || ! container[ index ] ) {
+		return null;
+	}
+
+	return {
+		removedBlock: container.splice(
+			index,
+			1,
+			...cloneBlockTree( blocksToInsert )
+		)[ 0 ] || null,
+		index,
+		parentPath,
+	};
+}
+
+function buildRemovalAnchor(
+	rootLocator,
+	index,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const nextSlice = getCurrentBlockSlice(
+		{
+			rootLocator,
+			index,
+			count: 1,
+		},
+		blockEditorSelect
+	);
+
+	if ( nextSlice?.blocks?.length ) {
+		return {
+			type: 'next-block',
+			blocksSnapshot: normalizeBlockSnapshots( nextSlice.blocks ),
+		};
+	}
+
+	return {
+		type: 'end',
+	};
+}
+
+function validateRemovalAnchor(
+	anchor,
+	rootLocator,
+	index,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	if ( anchor?.type === 'next-block' ) {
+		const expectedBlocks = Array.isArray( anchor.blocksSnapshot )
+			? anchor.blocksSnapshot
+			: [];
+		const currentSlice = getCurrentBlockSlice(
+			{
+				rootLocator,
+				index,
+				count: expectedBlocks.length,
+			},
+			blockEditorSelect
+		);
+
+		if (
+			! currentSlice ||
+			JSON.stringify( normalizeBlockSnapshots( currentSlice.blocks ) ) !==
+				JSON.stringify( expectedBlocks )
+		) {
+			return {
+				ok: false,
+				error:
+					'Template-part content changed after this block was removed and cannot be undone automatically.',
+			};
+		}
+
+		return {
+			ok: true,
+		};
+	}
+
+	const resolvedRoot = resolveRootLocator( rootLocator, blockEditorSelect );
+
+	if ( ! resolvedRoot ) {
+		return {
+			ok: false,
+			error:
+				'Flavor Agent could not resolve the parent container for this removed block.',
+		};
+	}
+
+	if ( resolvedRoot.blocks.length !== index ) {
+		return {
+			ok: false,
+			error:
+				'Template-part content changed after this block was removed and cannot be undone automatically.',
+		};
+	}
+
+	return {
+		ok: true,
+	};
+}
+
+function prepareTemplatePartReplaceBlockOperation(
+	operation,
+	workingBlocks = getBlocks(),
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const patternName = operation?.patternName || '';
+	const expectedBlockName = operation?.expectedBlockName || '';
+	const targetPath = Array.isArray( operation?.targetPath )
+		? operation.targetPath
+		: [];
+	const resolvedTarget = resolveTemplatePartTargetByPath(
+		targetPath,
+		workingBlocks
+	);
+
+	if ( resolvedTarget.error ) {
+		return resolvedTarget;
+	}
+
+	if ( resolvedTarget.targetBlock?.name !== expectedBlockName ) {
+		return {
+			error: `The target block at path ${ targetPath.join(
+				' > '
+			) } is no longer a “${ expectedBlockName }” block.`,
+		};
+	}
+
+	const resolvedRoot = resolveInsertionRootClientId(
+		resolvedTarget.rootLocator,
+		blockEditorSelect
+	);
+
+	if ( ! resolvedRoot.ok ) {
+		return {
+			error: resolvedRoot.error,
+		};
+	}
+
+	const pattern = resolvePatternByName(
+		patternName,
+		resolvedRoot.rootClientId
+	);
+
+	if (
+		! pattern ||
+		typeof pattern.content !== 'string' ||
+		pattern.content.trim() === ''
+	) {
+		return {
+			error: `Pattern “${
+				patternName || 'unknown'
+			}” is not available in the current template-part context.`,
+		};
+	}
+
+	const blocks = rawHandler( { HTML: pattern.content } ).filter( Boolean );
+
+	if ( blocks.length === 0 ) {
+		return {
+			error: `Pattern “${
+				pattern.title || patternName
+			}” could not be converted into blocks.`,
+		};
+	}
+
+	const canInsertAll = blocks.every(
+		( block ) =>
+			! block?.name ||
+			blockEditorSelect?.canInsertBlockType?.(
+				block.name,
+				resolvedRoot.rootClientId
+			) !== false
+	);
+
+	if ( ! canInsertAll ) {
+		return {
+			error: `Pattern “${
+				pattern.title || patternName
+			}” cannot replace the targeted block at path ${ targetPath.join(
+				' > '
+			) }.`,
+		};
+	}
+
+	return {
+		type: TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+		patternName,
+		patternTitle: pattern.title || patternName,
+		expectedBlockName,
+		targetPath,
+		rootLocator: resolvedTarget.rootLocator,
+		index: resolvedTarget.index,
+		blocks,
+	};
+}
+
+function prepareTemplatePartRemoveBlockOperation(
+	operation,
+	workingBlocks = getBlocks()
+) {
+	const expectedBlockName = operation?.expectedBlockName || '';
+	const targetPath = Array.isArray( operation?.targetPath )
+		? operation.targetPath
+		: [];
+	const resolvedTarget = resolveTemplatePartTargetByPath(
+		targetPath,
+		workingBlocks
+	);
+
+	if ( resolvedTarget.error ) {
+		return resolvedTarget;
+	}
+
+	if ( resolvedTarget.targetBlock?.name !== expectedBlockName ) {
+		return {
+			error: `The target block at path ${ targetPath.join(
+				' > '
+			) } is no longer a “${ expectedBlockName }” block.`,
+		};
+	}
+
+	return {
+		type: TEMPLATE_OPERATION_REMOVE_BLOCK,
+		expectedBlockName,
+		targetPath,
+		rootLocator: resolvedTarget.rootLocator,
+		index: resolvedTarget.index,
 	};
 }
 
@@ -670,12 +1159,37 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 
 	const preparedOperations = [];
 	const blockEditorSelect = select( blockEditorStore );
+	const workingBlocks = cloneBlockTree(
+		blockEditorSelect?.getBlocks?.() || []
+	);
+	const targetedPaths = [];
 
 	for ( const operation of sequence.operations ) {
+		const targetPath = Array.isArray( operation?.targetPath )
+			? operation.targetPath
+			: null;
+
+		if ( targetPath ) {
+			const hasConflictingTarget = targetedPaths.some(
+				( candidate ) =>
+					candidate.join( '|' ) === targetPath.join( '|' ) ||
+					isAncestorPath( candidate, targetPath ) ||
+					isAncestorPath( targetPath, candidate )
+			);
+
+			if ( hasConflictingTarget ) {
+				return {
+					ok: false,
+					error: 'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+				};
+			}
+		}
+
 		switch ( operation?.type ) {
 			case TEMPLATE_OPERATION_INSERT_PATTERN: {
 				const prepared = prepareTemplatePartInsertPatternOperation(
 					operation,
+					workingBlocks,
 					blockEditorSelect
 				);
 
@@ -684,6 +1198,72 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 				}
 
 				preparedOperations.push( prepared );
+
+				if (
+					! insertWorkingBlocksAtIndex(
+						workingBlocks,
+						prepared.rootLocator?.path || [],
+						prepared.index,
+						prepared.blocks
+					)
+				) {
+					return {
+						ok: false,
+						error: 'Flavor Agent could not update the working template-part structure for this insertion.',
+					};
+				}
+
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
+				const prepared = prepareTemplatePartReplaceBlockOperation(
+					operation,
+					workingBlocks,
+					blockEditorSelect
+				);
+
+				if ( prepared?.error ) {
+					return { ok: false, error: prepared.error };
+				}
+
+				preparedOperations.push( prepared );
+
+				if (
+					! replaceWorkingBlockAtPath(
+						workingBlocks,
+						prepared.targetPath,
+						prepared.blocks
+					)
+				) {
+					return {
+						ok: false,
+						error: 'Flavor Agent could not update the working template-part structure for this replacement.',
+					};
+				}
+
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
+				const prepared = prepareTemplatePartRemoveBlockOperation(
+					operation,
+					workingBlocks
+				);
+
+				if ( prepared?.error ) {
+					return { ok: false, error: prepared.error };
+				}
+
+				preparedOperations.push( prepared );
+
+				if ( ! removeWorkingBlockAtPath( workingBlocks, prepared.targetPath ) ) {
+					return {
+						ok: false,
+						error: 'Flavor Agent could not update the working template-part structure for this removal.',
+					};
+				}
+
 				break;
 			}
 
@@ -694,6 +1274,10 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 						operation?.type || 'unknown'
 					}”.`,
 				};
+		}
+
+		if ( targetPath ) {
+			targetedPaths.push( targetPath );
 		}
 	}
 
@@ -784,11 +1368,23 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 
 	for ( const operation of prepared.operations ) {
 		switch ( operation.type ) {
-			case TEMPLATE_OPERATION_INSERT_PATTERN:
+			case TEMPLATE_OPERATION_INSERT_PATTERN: {
+				const resolvedRoot = resolveInsertionRootClientId(
+					operation.rootLocator,
+					blockEditorSelect
+				);
+
+				if ( ! resolvedRoot.ok ) {
+					return {
+						ok: false,
+						error: resolvedRoot.error,
+					};
+				}
+
 				blockEditorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
-					operation.rootClientId,
+					resolvedRoot.rootClientId,
 					true,
 					0
 				);
@@ -806,6 +1402,8 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					patternName: operation.patternName,
 					patternTitle: operation.patternTitle,
 					placement: operation.placement,
+					targetPath: operation.targetPath || null,
+					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator,
 					index: operation.index,
 					insertedBlocksSnapshot: normalizeBlockSnapshots(
@@ -813,6 +1411,127 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					),
 				} );
 				break;
+			}
+
+			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
+				const targetBlock = getBlockByPath(
+					blockEditorSelect?.getBlocks?.() || [],
+					operation.targetPath
+				);
+				const resolvedRoot = resolveInsertionRootClientId(
+					operation.rootLocator,
+					blockEditorSelect
+				);
+
+				if ( ! targetBlock?.clientId ) {
+					return {
+						ok: false,
+						error:
+							'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
+					};
+				}
+
+				if ( targetBlock.name !== operation.expectedBlockName ) {
+					return {
+						ok: false,
+						error: `The target block at path ${ operation.targetPath.join(
+							' > '
+						) } is no longer a “${
+							operation.expectedBlockName
+						}” block.`,
+					};
+				}
+
+				if ( ! resolvedRoot.ok ) {
+					return {
+						ok: false,
+						error: resolvedRoot.error,
+					};
+				}
+
+				const removedBlocksSnapshot = normalizeBlockSnapshots( [
+					targetBlock,
+				] );
+
+				blockEditorDispatch.removeBlocks( [ targetBlock.clientId ], false );
+				blockEditorDispatch.insertBlocks(
+					operation.blocks,
+					operation.index,
+					resolvedRoot.rootClientId,
+					true,
+					0
+				);
+
+				const insertedSlice =
+					getCurrentBlockSlice(
+						{
+							rootLocator: operation.rootLocator,
+							index: operation.index,
+							count: operation.blocks.length,
+						},
+						blockEditorSelect
+					) || null;
+
+				appliedOperations.push( {
+					type: operation.type,
+					patternName: operation.patternName,
+					patternTitle: operation.patternTitle,
+					expectedBlockName: operation.expectedBlockName,
+					targetPath: operation.targetPath,
+					rootLocator: operation.rootLocator,
+					index: operation.index,
+					removedBlocksSnapshot,
+					insertedBlocksSnapshot: normalizeBlockSnapshots(
+						insertedSlice?.blocks || operation.blocks
+					),
+				} );
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
+				const targetBlock = getBlockByPath(
+					blockEditorSelect?.getBlocks?.() || [],
+					operation.targetPath
+				);
+
+				if ( ! targetBlock?.clientId ) {
+					return {
+						ok: false,
+						error:
+							'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
+					};
+				}
+
+				if ( targetBlock.name !== operation.expectedBlockName ) {
+					return {
+						ok: false,
+						error: `The target block at path ${ operation.targetPath.join(
+							' > '
+						) } is no longer a “${
+							operation.expectedBlockName
+						}” block.`,
+					};
+				}
+
+				blockEditorDispatch.removeBlocks( [ targetBlock.clientId ], false );
+
+				appliedOperations.push( {
+					type: operation.type,
+					expectedBlockName: operation.expectedBlockName,
+					targetPath: operation.targetPath,
+					rootLocator: operation.rootLocator,
+					index: operation.index,
+					removedBlocksSnapshot: normalizeBlockSnapshots( [
+						targetBlock,
+					] ),
+					postApplyAnchor: buildRemovalAnchor(
+						operation.rootLocator,
+						operation.index,
+						blockEditorSelect
+					),
+				} );
+				break;
+			}
 		}
 	}
 
@@ -1018,6 +1737,75 @@ function prepareUndoInsertPatternOperation(
 	};
 }
 
+function prepareUndoReplaceBlockWithPatternOperation(
+	operation,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const resolvedSlice = resolveInsertedPatternSlice(
+		operation,
+		blockEditorSelect
+	);
+
+	if ( ! resolvedSlice.ok ) {
+		return {
+			error: resolvedSlice.error,
+		};
+	}
+
+	if (
+		! Array.isArray( operation?.removedBlocksSnapshot ) ||
+		operation.removedBlocksSnapshot.length === 0
+	) {
+		return {
+			error:
+				'This template-part block replacement is missing the removed-block snapshot needed for automatic undo.',
+		};
+	}
+
+	return {
+		type: TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+		insertedClientIds: resolvedSlice.insertedClientIds,
+		rootLocator: operation.rootLocator,
+		index: operation.index,
+		removedBlocksSnapshot: operation.removedBlocksSnapshot,
+	};
+}
+
+function prepareUndoRemoveBlockOperation(
+	operation,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	if (
+		! Array.isArray( operation?.removedBlocksSnapshot ) ||
+		operation.removedBlocksSnapshot.length === 0
+	) {
+		return {
+			error:
+				'This template-part block removal is missing the removed-block snapshot needed for automatic undo.',
+		};
+	}
+
+	const anchorCheck = validateRemovalAnchor(
+		operation?.postApplyAnchor,
+		operation?.rootLocator,
+		operation?.index,
+		blockEditorSelect
+	);
+
+	if ( ! anchorCheck.ok ) {
+		return {
+			error: anchorCheck.error,
+		};
+	}
+
+	return {
+		type: TEMPLATE_OPERATION_REMOVE_BLOCK,
+		rootLocator: operation.rootLocator,
+		index: operation.index,
+		removedBlocksSnapshot: operation.removedBlocksSnapshot,
+	};
+}
+
 export function prepareTemplateUndoOperations(
 	activity,
 	blockEditorSelect = select( blockEditorStore )
@@ -1101,6 +1889,35 @@ export function prepareTemplatePartUndoOperations(
 		switch ( operation?.type ) {
 			case TEMPLATE_OPERATION_INSERT_PATTERN: {
 				const prepared = prepareUndoInsertPatternOperation(
+					operation,
+					blockEditorSelect
+				);
+
+				if ( prepared?.error ) {
+					return { ok: false, error: prepared.error };
+				}
+
+				preparedOperations.push( prepared );
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
+				const prepared =
+					prepareUndoReplaceBlockWithPatternOperation(
+						operation,
+						blockEditorSelect
+					);
+
+				if ( prepared?.error ) {
+					return { ok: false, error: prepared.error };
+				}
+
+				preparedOperations.push( prepared );
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
+				const prepared = prepareUndoRemoveBlockOperation(
 					operation,
 					blockEditorSelect
 				);
@@ -1266,6 +2083,7 @@ export function undoTemplatePartSuggestionOperations( activity ) {
 	}
 
 	const blockEditorDispatch = dispatch( blockEditorStore );
+	const blockEditorSelect = select( blockEditorStore );
 	const undoneOperations = [];
 
 	for ( const operation of prepared.operations ) {
@@ -1280,6 +2098,67 @@ export function undoTemplatePartSuggestionOperations( activity ) {
 					insertedClientIds: operation.insertedClientIds,
 				} );
 				break;
+
+			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
+				const resolvedRoot = resolveInsertionRootClientId(
+					operation.rootLocator,
+					blockEditorSelect
+				);
+
+				if ( ! resolvedRoot.ok ) {
+					return {
+						ok: false,
+						error: resolvedRoot.error,
+					};
+				}
+
+				blockEditorDispatch.removeBlocks(
+					operation.insertedClientIds,
+					false
+				);
+				blockEditorDispatch.insertBlocks(
+					rebuildBlocksFromSnapshots(
+						operation.removedBlocksSnapshot
+					),
+					operation.index,
+					resolvedRoot.rootClientId,
+					true,
+					0
+				);
+				undoneOperations.push( {
+					type: operation.type,
+					insertedClientIds: operation.insertedClientIds,
+				} );
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
+				const resolvedRoot = resolveInsertionRootClientId(
+					operation.rootLocator,
+					blockEditorSelect
+				);
+
+				if ( ! resolvedRoot.ok ) {
+					return {
+						ok: false,
+						error: resolvedRoot.error,
+					};
+				}
+
+				blockEditorDispatch.insertBlocks(
+					rebuildBlocksFromSnapshots(
+						operation.removedBlocksSnapshot
+					),
+					operation.index,
+					resolvedRoot.rootClientId,
+					true,
+					0
+				);
+				undoneOperations.push( {
+					type: operation.type,
+				} );
+				break;
+			}
 		}
 	}
 

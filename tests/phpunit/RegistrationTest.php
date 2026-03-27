@@ -183,5 +183,17 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$suggestion['properties']['operations']['items']['properties']['placement']['type'] ?? null
 		);
+		$this->assertSame(
+			'array',
+			$suggestion['properties']['operations']['items']['properties']['targetPath']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$suggestion['properties']['operations']['items']['properties']['targetPath']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['expectedBlockName']['type'] ?? null
+		);
 	}
 }

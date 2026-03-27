@@ -4,6 +4,8 @@
 > Reviewed: 2026-03-25
 > Sources: WP 7.0-beta5 core, Gutenberg 22.8.0-rc.1, official dev notes through 2026-03-24
 > Scope: API changes, new features, and deprecations relevant to block editor plugin development
+> Status: release-cycle reference snapshot, not the live backlog or the canonical source for shipped Flavor Agent behavior.
+> Use `STATUS.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current product truth and priorities.
 
 ### Official References
 

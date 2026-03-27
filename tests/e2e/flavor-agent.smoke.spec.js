@@ -16,43 +16,85 @@ const BLOCK_RESPONSE = {
 	},
 };
 const PATTERN_REASON = 'Recommended for this content block.';
+const NAVIGATION_PROMPT = 'Simplify the header navigation.';
 const TEMPLATE_PROMPT = 'Make this template read more like an editorial front page.';
 const TEMPLATE_INSERTED_CONTENT = 'Inserted by Flavor Agent';
 const TEMPLATE_PATTERN_NAME = 'flavor-agent/editorial-banner';
 const TEMPLATE_PATTERN_TITLE = 'Editorial Banner';
+const TEMPLATE_PART_PROMPT = 'Add a compact utility row before the navigation.';
+const TEMPLATE_PART_INSERTED_CONTENT =
+	'Inserted into the template part by Flavor Agent';
+const TEMPLATE_PART_PATTERN_NAME = 'flavor-agent/header-utility-row';
+const TEMPLATE_PART_PATTERN_TITLE = 'Header Utility Row';
 
 async function dismissWelcomeGuide( page ) {
 	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
-	const closeButton = welcomeOverlay
-		.getByRole( 'button', { name: 'Close' } )
-		.first();
 
-	const didAppear = await closeButton
-		.waitFor( { state: 'visible', timeout: 10000 } )
-		.then( () => true )
-		.catch( () => false );
+	await page
+		.evaluate( () => {
+			const preferences =
+				window.wp?.data?.dispatch( 'core/preferences' );
 
-	if ( didAppear ) {
-		await closeButton.click();
-		await expect( welcomeOverlay ).toBeHidden();
+			preferences?.set?.( 'core/edit-post', 'welcomeGuide', false );
+			preferences?.set?.(
+				'core/edit-post',
+				'welcomeGuideTemplate',
+				false
+			);
+			preferences?.set?.( 'core/edit-site', 'welcomeGuide', false );
+			preferences?.set?.(
+				'core/edit-site',
+				'welcomeGuideTemplate',
+				false
+			);
+			preferences?.set?.(
+				'core/edit-site',
+				'welcomeGuideStyles',
+				false
+			);
+		} )
+		.catch( () => {} );
+
+	for ( let attempt = 0; attempt < 4; attempt++ ) {
+		if ( await welcomeOverlay.isVisible().catch( () => false ) ) {
+			break;
+		}
+
+		await page.waitForTimeout( 250 );
 	}
+
+	for ( let attempt = 0; attempt < 4; attempt++ ) {
+		const isVisible = await welcomeOverlay.isVisible().catch( () => false );
+
+		if ( ! isVisible ) {
+			return;
+		}
+
+		const closeButton = welcomeOverlay
+			.getByRole( 'button', { name: 'Close' } )
+			.first();
+		const getStartedButton = welcomeOverlay
+			.getByRole( 'button', { name: 'Get started' } )
+			.first();
+
+		if ( await closeButton.isVisible().catch( () => false ) ) {
+			await closeButton.click();
+		} else if (
+			await getStartedButton.isVisible().catch( () => false )
+		) {
+			await getStartedButton.click();
+		} else {
+			await page.keyboard.press( 'Escape' ).catch( () => {} );
+		}
+
+		await page.waitForTimeout( 250 );
+	}
+
+	await expect( welcomeOverlay ).toBeHidden( { timeout: 10000 } );
 }
 
 async function dismissSiteEditorWelcomeGuide( page ) {
-	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
-	const getStartedButton = welcomeOverlay
-		.getByRole( 'button', { name: 'Get started' } )
-		.first();
-
-	const didAppear = await getStartedButton
-		.waitFor( { state: 'visible', timeout: 10000 } )
-		.then( () => true )
-		.catch( () => false );
-
-	if ( didAppear ) {
-		await getStartedButton.click();
-		await expect( welcomeOverlay ).toBeHidden();
-	}
+	await dismissWelcomeGuide( page );
 }
 
 async function waitForWordPressReady( page ) {
@@ -166,14 +208,95 @@ async function seedParagraphBlock( page ) {
 	} );
 }
 
+async function seedNavigationBlock( page ) {
+	await page.evaluate( () => {
+		const { createBlock } = window.wp.blocks;
+		const navigationLink = createBlock( 'core/navigation-link', {
+			label: 'Home',
+			url: '/',
+		} );
+		const navigationBlock = createBlock(
+			'core/navigation',
+			{
+				overlayMenu: 'mobile',
+			},
+			[ navigationLink ]
+		);
+
+		window.flavorAgentData.canRecommendNavigation = true;
+		window.wp?.data?.dispatch( 'core/editor' )?.editPost( {
+			title: 'Navigation Smoke',
+		} );
+		window.wp?.data
+			?.dispatch( 'core/block-editor' )
+			?.resetBlocks?.( [ navigationBlock ] );
+		window.wp?.data
+			?.dispatch( 'core/block-editor' )
+			?.selectBlock?.( navigationBlock.clientId );
+	} );
+
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const blockEditor =
+					window.wp?.data?.select( 'core/block-editor' );
+				const block = blockEditor?.getBlocks?.()?.[ 0 ] || null;
+
+				return {
+					name: block?.name || '',
+					selectedClientId:
+						blockEditor?.getSelectedBlockClientId?.() || null,
+				};
+			} )
+		)
+		.toEqual(
+			expect.objectContaining( {
+				name: 'core/navigation',
+			} )
+		);
+
+	return page.evaluate(
+		() =>
+			window.wp?.data
+				?.select( 'core/block-editor' )
+				?.getSelectedBlockClientId?.() || null
+	);
+}
+
 async function ensureSettingsSidebarOpen( page ) {
-	const settingsButton = page.getByRole( 'button', {
-		name: 'Settings',
+	await dismissWelcomeGuide( page );
+
+	await page.evaluate( () => {
+		window.wp?.data
+			?.dispatch( 'core/edit-post' )
+			?.openGeneralSidebar?.( 'edit-post/block' );
+	} );
+
+	await page.waitForFunction(
+		() =>
+			window.wp?.data
+				?.select( 'core/edit-post' )
+				?.getActiveGeneralSidebarName?.() === 'edit-post/block'
+	);
+
+	const blockTab = page.getByRole( 'tab', {
+		name: 'Block',
 		exact: true,
 	} );
 
-	if ( ( await settingsButton.getAttribute( 'aria-pressed' ) ) !== 'true' ) {
-		await settingsButton.click();
+	if ( await blockTab.isVisible().catch( () => false ) ) {
+		await blockTab.click();
+	}
+
+	const inspectorSettingsTab = page
+		.getByRole( 'region', { name: 'Editor settings' } )
+		.getByRole( 'tab', {
+			name: 'Settings',
+			exact: true,
+		} );
+
+	if ( await inspectorSettingsTab.isVisible().catch( () => false ) ) {
+		await inspectorSettingsTab.click();
 	}
 }
 
@@ -305,7 +428,51 @@ async function openFirstTemplateEditor( page ) {
 	await waitForFlavorAgent( page );
 }
 
+function buildTemplatePartRefFromTemplateTarget( templateTarget ) {
+	const templateRef = templateTarget?.templateRef || '';
+	const slug = templateTarget?.templatePart?.slug || '';
+	const themePrefix = templateRef.includes( '//' )
+		? templateRef.slice( 0, templateRef.indexOf( '//' ) )
+		: '';
+
+	if ( ! themePrefix || ! slug ) {
+		return null;
+	}
+
+	return `${ themePrefix }//${ slug }`;
+}
+
+async function openTemplatePartEditor( page, templatePartRef ) {
+	await page.goto(
+		`/wp-admin/site-editor.php?postType=wp_template_part&postId=${ encodeURIComponent(
+			templatePartRef
+		) }`,
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await page.waitForFunction(
+		( nextTemplatePartRef ) =>
+			window.wp?.data?.select( 'core/edit-site' )?.getEditedPostType?.() ===
+				'wp_template_part' &&
+			window.wp?.data?.select( 'core/edit-site' )?.getEditedPostId?.() ===
+				nextTemplatePartRef,
+		templatePartRef
+	);
+}
+
 async function enableTemplateDocumentSidebar( page ) {
+	await enableSiteEditorDocumentSidebar( page );
+	await expect(
+		page.getByRole( 'tab', { name: 'Template', exact: true } )
+	).toBeVisible();
+}
+
+async function enableSiteEditorDocumentSidebar( page ) {
 	await page.evaluate( () => {
 		window.wp.data
 			.dispatch( 'core/preferences' )
@@ -314,9 +481,20 @@ async function enableTemplateDocumentSidebar( page ) {
 			.dispatch( 'core/interface' )
 			.enableComplementaryArea( 'core/edit-site', 'edit-post/document' );
 	} );
-	await expect(
-		page.getByRole( 'tab', { name: 'Template', exact: true } )
-	).toBeVisible();
+}
+
+async function openTemplatePartRecommendationsPanel( page ) {
+	const promptInput = page.getByPlaceholder(
+		'Describe the structure or layout you want.'
+	);
+
+	await ensurePanelOpen(
+		page,
+		'AI Template Part Recommendations',
+		promptInput
+	);
+
+	return promptInput;
 }
 
 async function registerTemplatePattern(
@@ -512,6 +690,169 @@ async function getTemplateInsertState( page, insertedContent ) {
 	}, { nextInsertedContent: insertedContent } );
 }
 
+async function getTemplatePartInsertState( page, insertedContent ) {
+	return page.evaluate( ( { nextInsertedContent } ) => {
+		function normalizeValue( value ) {
+			if ( Array.isArray( value ) ) {
+				return value.map( ( item ) =>
+					normalizeValue( item === undefined ? null : item )
+				);
+			}
+
+			if ( value && typeof value === 'object' ) {
+				return Object.fromEntries(
+					Object.entries( value )
+						.filter( ( [ , entryValue ] ) => entryValue !== undefined )
+						.sort( ( [ leftKey ], [ rightKey ] ) =>
+							leftKey.localeCompare( rightKey )
+						)
+						.map( ( [ key, entryValue ] ) => [
+							key,
+							normalizeValue( entryValue ),
+						] )
+				);
+			}
+
+			return value;
+		}
+
+		function normalizeBlockSnapshot( block ) {
+			return {
+				name: block?.name || '',
+				attributes: normalizeValue( block?.attributes || {} ),
+				innerBlocks: Array.isArray( block?.innerBlocks )
+					? block.innerBlocks.map( normalizeBlockSnapshot )
+					: [],
+			};
+		}
+
+		function hasInsertedParagraph( blocks ) {
+			for ( const block of blocks ) {
+				const content = String( block?.attributes?.content || '' );
+
+				if (
+					block?.name === 'core/paragraph' &&
+					content.includes( nextInsertedContent )
+				) {
+					return true;
+				}
+
+				if (
+					Array.isArray( block?.innerBlocks ) &&
+					hasInsertedParagraph( block.innerBlocks )
+				) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		const flavorAgent = window.wp.data.select( 'flavor-agent' );
+		const activityLog =
+			( flavorAgent.getActivityLog?.() || [] ).filter(
+				( entry ) => entry?.surface === 'template-part'
+			);
+		const lastActivity = activityLog[ activityLog.length - 1 ] || null;
+		const blocks =
+			window.wp.data.select( 'core/block-editor' ).getBlocks?.() || [];
+		const lastOperation =
+			( lastActivity?.after?.operations || [] ).find(
+				( operation ) =>
+					operation?.type === 'insert_pattern' ||
+					operation?.type === 'replace_block_with_pattern'
+			) || null;
+		const insertedBlocksSnapshot = Array.isArray(
+			lastOperation?.insertedBlocksSnapshot
+		)
+			? lastOperation.insertedBlocksSnapshot
+			: [];
+		let hasInsertedContent = hasInsertedParagraph( blocks );
+
+		if (
+			! hasInsertedContent &&
+			insertedBlocksSnapshot.length > 0 &&
+			lastOperation?.rootLocator &&
+			Number.isInteger( lastOperation?.index )
+		) {
+			let currentBlocks = blocks;
+
+			if (
+				lastOperation.rootLocator.type === 'block' &&
+				Array.isArray( lastOperation.rootLocator.path ) &&
+				lastOperation.rootLocator.path.length > 0
+			) {
+				let rootBlock = null;
+
+				for ( const index of lastOperation.rootLocator.path ) {
+					rootBlock = currentBlocks[ index ] || null;
+
+					if ( ! rootBlock ) {
+						currentBlocks = [];
+						break;
+					}
+
+					currentBlocks = rootBlock.innerBlocks || [];
+				}
+			}
+
+			const slice = currentBlocks.slice(
+				lastOperation.index,
+				lastOperation.index + insertedBlocksSnapshot.length
+			);
+
+			hasInsertedContent =
+				JSON.stringify( slice.map( normalizeBlockSnapshot ) ) ===
+				JSON.stringify( insertedBlocksSnapshot );
+		}
+
+		return {
+			hasInsertedContent,
+			undoStatus: lastActivity?.undo?.status || '',
+		};
+	}, { nextInsertedContent: insertedContent } );
+}
+
+async function selectFirstNavigationBlock( page ) {
+	return page.evaluate( () => {
+		function findNavigation( blocks ) {
+			for ( const block of blocks ) {
+				if ( block?.name === 'core/navigation' ) {
+					return block;
+				}
+
+				if ( Array.isArray( block?.innerBlocks ) ) {
+					const nested = findNavigation( block.innerBlocks );
+
+					if ( nested ) {
+						return nested;
+					}
+				}
+			}
+
+			return null;
+		}
+
+		const blockEditor = window.wp?.data?.select( 'core/block-editor' );
+		const navigationBlock = findNavigation(
+			blockEditor?.getBlocks?.() || []
+		);
+
+		if ( ! navigationBlock?.clientId ) {
+			return null;
+		}
+
+		window.wp.data
+			.dispatch( 'core/block-editor' )
+			.selectBlock( navigationBlock.clientId );
+
+		return {
+			clientId: navigationBlock.clientId,
+			menuId: navigationBlock.attributes?.ref || null,
+		};
+	} );
+}
+
 test( 'block inspector smoke applies, persists, and undoes AI recommendations', async ( {
 	page,
 } ) => {
@@ -648,6 +989,74 @@ test( 'block inspector smoke applies, persists, and undoes AI recommendations', 
 			content: 'Hello world',
 			undoStatus: 'undone',
 		} );
+} );
+
+test( 'navigation surface smoke renders advisory recommendations for a selected navigation block', async ( {
+	page,
+} ) => {
+	const navigationRequests = [];
+
+	await page.route(
+		'**/*recommend-navigation*',
+		async ( route ) => {
+			navigationRequests.push( route.request().postDataJSON() );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					explanation: 'Keep utility links together and simplify the top level.',
+					suggestions: [
+						{
+							label: 'Group utility links',
+							description: 'Move account and contact items into one submenu.',
+							category: 'structure',
+							changes: [
+								{
+									type: 'group',
+									target: 'Account and Contact',
+									detail: 'Keep the top level shorter.',
+								},
+							],
+						},
+					],
+				} ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/post-new.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await seedNavigationBlock( page );
+	await ensureSettingsSidebarOpen( page );
+
+	const promptInput = page.getByPlaceholder(
+		'Describe the structure or behavior you want.'
+	);
+
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await promptInput.fill( NAVIGATION_PROMPT );
+	await page
+		.getByRole( 'button', { name: 'Get Navigation Suggestions' } )
+		.click();
+
+	await expect.poll( () => navigationRequests.length ).toBe( 1 );
+	expect( navigationRequests[ 0 ].prompt ).toBe( NAVIGATION_PROMPT );
+	expect( navigationRequests[ 0 ].navigationMarkup ).toContain(
+		'wp:navigation'
+	);
+
+	await expect( page.getByText( 'Navigation recommendations' ) ).toBeVisible();
+	await expect( page.getByText( 'Advisory only' ) ).toBeVisible();
+	await expect(
+		page.getByText( 'Keep utility links together and simplify the top level.' )
+	).toBeVisible();
+	await expect(
+		page.getByText( 'Group utility links', { exact: true } )
+	).toBeVisible();
 } );
 
 test( 'pattern surface smoke uses the inserter search to fetch recommendations', async ( {
@@ -850,6 +1259,143 @@ test( 'template surface smoke previews and applies executable template recommend
 	await expect( page.locator( '.flavor-agent-activity-row' ) ).toContainText(
 		'Clarify template hierarchy'
 	);
+} );
+
+test( '@wp70-site-editor template-part surface smoke previews, applies, and undoes executable recommendations', async ( {
+	page,
+} ) => {
+	const templatePartRequests = [];
+
+	await page.route(
+		'**/*recommend-template-part*',
+		async ( route ) => {
+			templatePartRequests.push( route.request().postDataJSON() );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					explanation:
+						'Add a compact utility row at the end of the header part.',
+					suggestions: [
+						{
+							label: 'Add utility row',
+							description:
+								'Insert a compact row at the end of this header part.',
+							blockHints: [
+								{
+									path: [ 0 ],
+									label: 'Header wrapper',
+									reason: 'Keep the insertion inside the existing container.',
+								},
+							],
+							patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PART_PATTERN_NAME,
+									placement: 'end',
+								},
+							],
+						},
+					],
+				} ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await openFirstTemplateEditor( page );
+	await dismissSiteEditorWelcomeGuide( page );
+
+	const templateTarget = await getTemplateTarget( page );
+	const templatePartRef = buildTemplatePartRefFromTemplateTarget(
+		templateTarget
+	);
+
+	expect( templatePartRef ).toBeTruthy();
+
+	await openTemplatePartEditor( page, templatePartRef );
+	await page.waitForFunction(
+		() =>
+			Boolean( window.flavorAgentData?.canRecommendTemplateParts ) &&
+			window.wp?.data?.select( 'core/edit-site' )?.getEditedPostType?.() ===
+				'wp_template_part'
+	);
+	await page.waitForFunction(
+		() =>
+			(
+				window.wp?.data
+					?.select( 'core/block-editor' )
+					?.getBlocks?.() || []
+			).length > 0
+	);
+
+	await enableSiteEditorDocumentSidebar( page );
+	await registerTemplatePattern( page, {
+		insertedContent: TEMPLATE_PART_INSERTED_CONTENT,
+		patternName: TEMPLATE_PART_PATTERN_NAME,
+		patternTitle: TEMPLATE_PART_PATTERN_TITLE,
+	} );
+
+	const promptInput = await openTemplatePartRecommendationsPanel(
+		page
+	);
+	await promptInput.fill( TEMPLATE_PART_PROMPT );
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	await expect.poll( () => templatePartRequests.length ).toBe( 1 );
+	expect( templatePartRequests[ 0 ].templatePartRef ).toBe(
+		templatePartRef
+	);
+	expect( templatePartRequests[ 0 ].prompt ).toBe(
+		TEMPLATE_PART_PROMPT
+	);
+	expect( templatePartRequests[ 0 ] ).toHaveProperty(
+		'visiblePatternNames'
+	);
+	expect( templatePartRequests[ 0 ].visiblePatternNames ).toContain(
+		TEMPLATE_PART_PATTERN_NAME
+	);
+
+	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
+	await page.getByRole( 'button', { name: 'Preview Apply' } ).click();
+	await expect( page.getByText( 'Review Before Apply' ) ).toBeVisible();
+	await page.getByRole( 'button', { name: 'Confirm Apply' } ).click();
+
+	await expect
+		.poll( () =>
+			getTemplatePartInsertState(
+				page,
+				TEMPLATE_PART_INSERTED_CONTENT
+			)
+		)
+		.toEqual( {
+			hasInsertedContent: true,
+			undoStatus: 'available',
+		} );
+
+	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
+	await page
+		.locator( '.flavor-agent-activity-row' )
+		.getByRole( 'button', { name: 'Undo', exact: true } )
+		.click();
+
+	await expect
+		.poll( () =>
+			getTemplatePartInsertState(
+				page,
+				TEMPLATE_PART_INSERTED_CONTENT
+			)
+		)
+		.toEqual( {
+			hasInsertedContent: false,
+			undoStatus: 'undone',
+		} );
 } );
 
 test( '@wp70-site-editor template undo survives a Site Editor refresh when the template has not drifted', async ( {

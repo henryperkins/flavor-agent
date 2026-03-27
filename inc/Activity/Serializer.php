@@ -155,6 +155,7 @@ final class Serializer {
 			self::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' ),
 			$timestamp
 		);
+		$user_id   = self::normalize_positive_int( $row['user_id'] ?? 0, 0 );
 
 		return [
 			'id'              => self::normalize_string( $row['activity_id'] ?? '' ),
@@ -171,7 +172,8 @@ final class Serializer {
 			'timestamp'       => $timestamp,
 			'executionResult' => self::normalize_string( $row['execution_result'] ?? 'applied' ),
 			'undo'            => $undo,
-			'userId'          => self::normalize_positive_int( $row['user_id'] ?? 0, 0 ),
+			'userId'          => $user_id,
+			'userLabel'       => self::resolve_user_label( $user_id ),
 			'persistence'     => [
 				'status' => 'server',
 			],
@@ -256,5 +258,25 @@ final class Serializer {
 
 	private static function normalize_string( $value ): string {
 		return trim( (string) $value );
+	}
+
+	private static function resolve_user_label( int $user_id ): string {
+		if ( $user_id <= 0 ) {
+			return '';
+		}
+
+		if ( function_exists( 'get_userdata' ) ) {
+			$user = get_userdata( $user_id );
+
+			if ( is_object( $user ) && isset( $user->display_name ) ) {
+				$display_name = trim( (string) $user->display_name );
+
+				if ( '' !== $display_name ) {
+					return $display_name;
+				}
+			}
+		}
+
+		return sprintf( 'User #%d', $user_id );
 	}
 }

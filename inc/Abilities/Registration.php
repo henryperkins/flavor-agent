@@ -360,6 +360,11 @@ final class Registration {
 												'type'        => [ 'type' => 'string' ],
 												'patternName' => [ 'type' => 'string' ],
 												'placement'   => [ 'type' => 'string' ],
+												'targetPath'  => [
+													'type'  => 'array',
+													'items' => [ 'type' => 'integer' ],
+												],
+												'expectedBlockName' => [ 'type' => 'string' ],
 											],
 										],
 									],

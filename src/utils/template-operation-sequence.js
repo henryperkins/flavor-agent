@@ -1,13 +1,41 @@
 const TEMPLATE_OPERATION_ASSIGN = 'assign_template_part';
 const TEMPLATE_OPERATION_REPLACE = 'replace_template_part';
 const TEMPLATE_OPERATION_INSERT_PATTERN = 'insert_pattern';
+const TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN =
+	'replace_block_with_pattern';
+const TEMPLATE_OPERATION_REMOVE_BLOCK = 'remove_block';
 const TEMPLATE_PART_PLACEMENT_START = 'start';
 const TEMPLATE_PART_PLACEMENT_END = 'end';
+const TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH = 'before_block_path';
+const TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH = 'after_block_path';
 
 function toNonEmptyString( value ) {
 	return typeof value === 'string' && value.trim() !== ''
 		? value.trim()
 		: '';
+}
+
+function normalizeBlockPath( value ) {
+	if ( ! Array.isArray( value ) || value.length === 0 ) {
+		return null;
+	}
+
+	const path = [];
+
+	for ( const segment of value ) {
+		const normalizedSegment = Number( segment );
+
+		if (
+			! Number.isInteger( normalizedSegment ) ||
+			normalizedSegment < 0
+		) {
+			return null;
+		}
+
+		path.push( normalizedSegment );
+	}
+
+	return path;
 }
 
 export function validateTemplateOperationSequence( operations = [] ) {
@@ -133,8 +161,18 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 		};
 	}
 
+	if ( operations.length > 3 ) {
+		return {
+			ok: false,
+			error: 'Template-part suggestions can apply at most 3 operations automatically.',
+		};
+	}
+
 	const normalizedOperations = [];
-	let hasPatternInsert = false;
+	const anchoredPlacements = new Set( [
+		TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH,
+		TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH,
+	] );
 
 	for ( const rawOperation of operations ) {
 		const type = toNonEmptyString( rawOperation?.type );
@@ -145,6 +183,9 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					rawOperation?.patternName ?? rawOperation?.name
 				);
 				const placement = toNonEmptyString( rawOperation?.placement );
+				const targetPath = normalizeBlockPath(
+					rawOperation?.targetPath
+				);
 
 				if ( ! patternName || ! placement ) {
 					return {
@@ -155,26 +196,85 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 
 				if (
 					placement !== TEMPLATE_PART_PLACEMENT_START &&
-					placement !== TEMPLATE_PART_PLACEMENT_END
+					placement !== TEMPLATE_PART_PLACEMENT_END &&
+					placement !==
+						TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH &&
+					placement !==
+						TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
 				) {
 					return {
 						ok: false,
-						error: 'Template-part pattern insertions must use an explicit start or end placement.',
+						error: 'Template-part pattern insertions must use an explicit start, end, before_block_path, or after_block_path placement.',
 					};
 				}
 
-				if ( hasPatternInsert ) {
+				if ( anchoredPlacements.has( placement ) && ! targetPath ) {
 					return {
 						ok: false,
-						error: 'Only one template-part pattern insertion can be applied automatically per suggestion.',
+						error: 'Anchored template-part pattern insertions must include a targetPath.',
 					};
 				}
 
-				hasPatternInsert = true;
-				normalizedOperations.push( {
+				const normalizedOperation = {
 					type,
 					patternName,
 					placement,
+				};
+
+				if ( targetPath ) {
+					normalizedOperation.targetPath = targetPath;
+				}
+
+				normalizedOperations.push( normalizedOperation );
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
+				const patternName = toNonEmptyString(
+					rawOperation?.patternName ?? rawOperation?.name
+				);
+				const expectedBlockName = toNonEmptyString(
+					rawOperation?.expectedBlockName
+				);
+				const targetPath = normalizeBlockPath(
+					rawOperation?.targetPath
+				);
+
+				if ( ! patternName || ! expectedBlockName || ! targetPath ) {
+					return {
+						ok: false,
+						error: 'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
+					};
+				}
+
+				normalizedOperations.push( {
+					type,
+					patternName,
+					expectedBlockName,
+					targetPath,
+				} );
+				break;
+			}
+
+			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
+				const expectedBlockName = toNonEmptyString(
+					rawOperation?.expectedBlockName
+				);
+				const targetPath = normalizeBlockPath(
+					rawOperation?.targetPath
+				);
+
+				if ( ! expectedBlockName || ! targetPath ) {
+					return {
+						ok: false,
+						error: 'Template-part block removals must include expectedBlockName and targetPath.',
+					};
+				}
+
+				normalizedOperations.push( {
+					type,
+					expectedBlockName,
+					targetPath,
 				} );
 				break;
 			}
@@ -198,7 +298,11 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 export {
 	TEMPLATE_OPERATION_ASSIGN,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
+	TEMPLATE_OPERATION_REMOVE_BLOCK,
 	TEMPLATE_OPERATION_REPLACE,
+	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+	TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH,
+	TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH,
 	TEMPLATE_PART_PLACEMENT_END,
 	TEMPLATE_PART_PLACEMENT_START,
 };

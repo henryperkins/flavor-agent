@@ -62,6 +62,7 @@ function createSelectMap() {
 			getEditedPostId: jest.fn( () => state.editSite.postId ),
 		},
 		'core/block-editor': {
+			getSettings: jest.fn( () => state.blockEditor.settings || {} ),
 			getSelectedBlockClientId: jest.fn(
 				() => state.blockEditor.selectedBlockClientId
 			),
@@ -98,6 +99,7 @@ describe( 'PatternRecommender', () => {
 				postId: null,
 			},
 			blockEditor: {
+				settings: {},
 				selectedBlockClientId: null,
 				selectedBlockName: null,
 				insertionPoint: {
@@ -121,7 +123,9 @@ describe( 'PatternRecommender', () => {
 		mockUseSelect.mockImplementation( ( callback ) =>
 			callback( ( storeName ) => createSelectMap()[ storeName ] )
 		);
-		mockGetBlockPatterns.mockReturnValue( [] );
+		mockGetBlockPatterns.mockImplementation(
+			() => state.blockEditor.runtimePatterns || []
+		);
 		mockGetVisiblePatternNames.mockReturnValue( [ 'theme/hero' ] );
 		window.flavorAgentData = { canRecommendPatterns: true };
 		originalMutationObserver = window.MutationObserver;
@@ -204,5 +208,50 @@ describe( 'PatternRecommender', () => {
 			searchInput.addEventListener.mock.calls[ 0 ][ 1 ]
 		);
 		root = null;
+	} );
+
+	test( 'reapplies recommendations when the pattern registry becomes available after the initial fetch', () => {
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.blockEditor.settings = {};
+		state.blockEditor.runtimePatterns = [];
+
+		renderComponent();
+
+		expect( mockSetBlockPatterns ).not.toHaveBeenCalled();
+
+		state.blockEditor.settings = {
+			blockPatterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero',
+					categories: [ 'featured' ],
+				},
+			],
+		};
+		state.blockEditor.runtimePatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				categories: [ 'featured' ],
+			},
+		];
+
+		renderComponent();
+
+		expect( mockSetBlockPatterns ).toHaveBeenCalledWith( [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				description: 'Recommended hero pattern.',
+				categories: [ 'featured', 'recommended' ],
+				keywords: [ 'recommended', 'hero', 'pattern' ],
+			},
+		] );
 	} );
 } );

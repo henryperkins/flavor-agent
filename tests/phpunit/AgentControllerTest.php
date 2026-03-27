@@ -77,11 +77,13 @@ final class AgentControllerTest extends TestCase {
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
 		];
-		WordPressTestState::$current_user_id    = 7;
+		WordPressTestState::$current_user_id     = 7;
 		WordPressTestState::$ai_client_supported = true;
 	}
 
 	public function test_handle_recommend_block_wraps_payload_with_client_id(): void {
+		WordPressTestState::$options = [];
+
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
 		$request->set_param( 'clientId', 'client-123' );
 		$request->set_param( 'prompt', 'Make it sharper' );
@@ -272,7 +274,7 @@ final class AgentControllerTest extends TestCase {
 	public function test_handle_recommend_template_prefers_live_editor_slots_over_saved_template_slots(): void {
 		WordPressTestState::$block_templates['wp_template'][0]->content =
 			'<!-- wp:template-part {"area":"header"} /-->';
-		WordPressTestState::$remote_post_response = [
+		WordPressTestState::$remote_post_response                       = [
 			'response' => [
 				'code' => 200,
 			],
@@ -461,14 +463,14 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_navigation_forwards_selected_navigation_context(): void {
-		WordPressTestState::$posts[42] = (object) [
+		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
 			'post_type'    => 'wp_navigation',
 			'post_content' => '<!-- wp:navigation-link {"label":"Saved Home","url":"/"} /-->',
 		];
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:navigation {"ref":42} /-->';
-		WordPressTestState::$remote_post_response = [
+		WordPressTestState::$remote_post_response                            = [
 			'response' => [
 				'code' => 200,
 			],
@@ -597,6 +599,49 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_get_activity_supports_global_admin_queries(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['manage_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-1' ) );
+		ActivityRepository::create(
+			array_merge(
+				$this->build_activity_entry( 'activity-2' ),
+				[
+					'document' => [
+						'scopeKey' => 'post:42',
+						'postType' => 'post',
+						'entityId' => '42',
+					],
+					'surface'  => 'block',
+					'target'   => [
+						'clientId'  => 'block-1',
+						'blockName' => 'core/paragraph',
+						'blockPath' => [ 0 ],
+					],
+				]
+			)
+		);
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'global', true );
+		$request->set_param( 'limit', 10 );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 2, $response->get_data()['entries'] ?? [] );
+		$this->assertSame(
+			'activity-1',
+			$response->get_data()['entries'][0]['id'] ?? null
+		);
+		$this->assertSame(
+			'activity-2',
+			$response->get_data()['entries'][1]['id'] ?? null
+		);
+	}
+
 	public function test_handle_update_activity_undo_persists_status_changes(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
@@ -665,17 +710,17 @@ final class AgentControllerTest extends TestCase {
 	 */
 	private function build_activity_entry( string $id ): array {
 		return [
-			'id'        => $id,
-			'type'      => 'apply_template_suggestion',
-			'surface'   => 'template',
-			'target'    => [
+			'id'         => $id,
+			'type'       => 'apply_template_suggestion',
+			'surface'    => 'template',
+			'target'     => [
 				'templateRef' => 'theme//home',
 			],
 			'suggestion' => 'Clarify hierarchy',
-			'before'    => [
+			'before'     => [
 				'operations' => [],
 			],
-			'after'     => [
+			'after'      => [
 				'operations' => [
 					[
 						'type'        => 'insert_pattern',
@@ -683,16 +728,16 @@ final class AgentControllerTest extends TestCase {
 					],
 				],
 			],
-			'request'   => [
+			'request'    => [
 				'prompt'    => 'Make the home template feel more editorial.',
 				'reference' => 'template:theme//home:3',
 			],
-			'document'  => [
+			'document'   => [
 				'scopeKey' => 'wp_template:theme//home',
 				'postType' => 'wp_template',
 				'entityId' => 'theme//home',
 			],
-			'timestamp' => '2026-03-24T10:00:00Z',
+			'timestamp'  => '2026-03-24T10:00:00Z',
 		];
 	}
 }

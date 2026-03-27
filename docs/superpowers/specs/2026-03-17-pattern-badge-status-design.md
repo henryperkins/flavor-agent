@@ -1,8 +1,11 @@
 # Pattern Recommendation Badge - Unified Status Surface
 
 **Date:** 2026-03-17
-**Status:** Draft
+**Status:** Implemented reference spec
 **Scope:** Enrich the `InserterBadge` component to serve as the unified status indicator for the pattern recommendation pipeline (loading, ready, error).
+
+> Historical note: this design is already implemented in the current tree.
+> Use `docs/features/pattern-recommendations.md`, `docs/FEATURE_SURFACE_MATRIX.md`, and `STATUS.md` for current shipped behavior.
 
 ## Problem
 

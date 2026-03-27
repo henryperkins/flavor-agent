@@ -94,6 +94,23 @@ export default function PatternRecommender() {
 				?.rootClientId ?? null
 		);
 	}, [] );
+	const patternRegistryVersion = useSelect( ( select ) => {
+		const settings = select( blockEditorStore ).getSettings?.() || {};
+
+		if ( Array.isArray( settings.blockPatterns ) ) {
+			return `stable:${ settings.blockPatterns.length }`;
+		}
+
+		if ( Array.isArray( settings.__experimentalAdditionalBlockPatterns ) ) {
+			return `experimental-additional:${ settings.__experimentalAdditionalBlockPatterns.length }`;
+		}
+
+		if ( Array.isArray( settings.__experimentalBlockPatterns ) ) {
+			return `experimental:${ settings.__experimentalBlockPatterns.length }`;
+		}
+
+		return 'none:0';
+	}, [] );
 	const recommendations = useSelect(
 		( select ) => select( STORE_NAME ).getPatternRecommendations(),
 		[]
@@ -131,7 +148,7 @@ export default function PatternRecommender() {
 
 	useEffect( () => {
 		patchInserterPatterns( recommendations );
-	}, [ recommendations ] );
+	}, [ recommendations, patternRegistryVersion ] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {

@@ -240,14 +240,12 @@ describe( 'getAllowedPatterns', () => {
 		expect( experimentalSelector ).toHaveBeenCalledWith( null );
 	} );
 
-	test( 'falls back to getBlockPatterns when no selector exists', () => {
+	test( 'fails closed when no contextual allowed-pattern selector exists', () => {
 		mockBlockEditorStore( {
 			__experimentalBlockPatterns: [ { name: 'theme/fallback' } ],
 		} );
 
-		expect( getAllowedPatterns() ).toEqual( [
-			{ name: 'theme/fallback' },
-		] );
+		expect( getAllowedPatterns() ).toEqual( [] );
 	} );
 
 	test( 'returns empty array when everything is missing', () => {
@@ -290,7 +288,7 @@ describe( 'getPatternAPIPath', () => {
 describe( 'getPatternRuntimeDiagnostics', () => {
 	beforeEach( () => mockRegistrySelect.mockReset() );
 
-	test( 'reports the broad allowed-pattern fallback explicitly when selectors are unavailable', () => {
+	test( 'reports missing contextual selector support explicitly when selectors are unavailable', () => {
 		mockBlockEditorStore( {
 			__experimentalBlockPatterns: [ { name: 'theme/fallback' } ],
 		} );
@@ -298,8 +296,8 @@ describe( 'getPatternRuntimeDiagnostics', () => {
 		expect( getPatternRuntimeDiagnostics() ).toEqual( {
 			patternsPath: 'experimental',
 			categoriesPath: 'none',
-			allowedPatternsPath: 'all-patterns-fallback',
-			allowedPatternsFallbackMode: 'all-patterns',
+			allowedPatternsPath: 'missing-selector',
+			allowedPatternsFallbackMode: 'none',
 		} );
 	} );
 

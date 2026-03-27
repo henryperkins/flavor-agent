@@ -52,6 +52,22 @@ final class ActivityPermissionsTest extends TestCase {
 		$this->assertCount( 1, $response->get_data()['entries'] ?? [] );
 	}
 
+	public function test_handle_get_activity_requires_manage_options_for_global_queries(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		ActivityRepository::create( $this->build_block_activity_entry( 'activity-1', '42' ) );
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'global', true );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 403, $response->get_error_data()['status'] ?? null );
+	}
+
 	public function test_handle_update_activity_undo_requires_direct_edit_post_access_for_entry_scope(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
@@ -91,35 +107,35 @@ final class ActivityPermissionsTest extends TestCase {
 	 */
 	private function build_block_activity_entry( string $id, string $entity_id ): array {
 		return [
-			'id'        => $id,
-			'type'      => 'apply_suggestion',
-			'surface'   => 'block',
-			'target'    => [
+			'id'         => $id,
+			'type'       => 'apply_suggestion',
+			'surface'    => 'block',
+			'target'     => [
 				'clientId'  => 'block-1',
 				'blockName' => 'core/paragraph',
 				'blockPath' => [ 0 ],
 			],
 			'suggestion' => 'Refresh content',
-			'before'    => [
+			'before'     => [
 				'attributes' => [
 					'content' => 'Before',
 				],
 			],
-			'after'     => [
+			'after'      => [
 				'attributes' => [
 					'content' => 'After',
 				],
 			],
-			'request'   => [
+			'request'    => [
 				'prompt'    => 'Tighten the copy.',
 				'reference' => 'block:block-1:1',
 			],
-			'document'  => [
+			'document'   => [
 				'scopeKey' => "post:{$entity_id}",
 				'postType' => 'post',
 				'entityId' => $entity_id,
 			],
-			'timestamp' => '2026-03-24T10:00:00Z',
+			'timestamp'  => '2026-03-24T10:00:00Z',
 		];
 	}
 
@@ -128,17 +144,17 @@ final class ActivityPermissionsTest extends TestCase {
 	 */
 	private function build_template_activity_entry( string $id ): array {
 		return [
-			'id'        => $id,
-			'type'      => 'apply_template_suggestion',
-			'surface'   => 'template',
-			'target'    => [
+			'id'         => $id,
+			'type'       => 'apply_template_suggestion',
+			'surface'    => 'template',
+			'target'     => [
 				'templateRef' => 'theme//home',
 			],
 			'suggestion' => 'Clarify hierarchy',
-			'before'    => [
+			'before'     => [
 				'operations' => [],
 			],
-			'after'     => [
+			'after'      => [
 				'operations' => [
 					[
 						'type'        => 'insert_pattern',
@@ -146,16 +162,16 @@ final class ActivityPermissionsTest extends TestCase {
 					],
 				],
 			],
-			'request'   => [
+			'request'    => [
 				'prompt'    => 'Make the home template feel more editorial.',
 				'reference' => 'template:theme//home:3',
 			],
-			'document'  => [
+			'document'   => [
 				'scopeKey' => 'wp_template:theme//home',
 				'postType' => 'wp_template',
 				'entityId' => 'theme//home',
 			],
-			'timestamp' => '2026-03-24T10:00:00Z',
+			'timestamp'  => '2026-03-24T10:00:00Z',
 		];
 	}
 }

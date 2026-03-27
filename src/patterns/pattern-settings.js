@@ -98,19 +98,9 @@ function resolveAllowedPatternsResult(
 		};
 	}
 
-	const fallbackPatterns = getBlockPatterns();
-
-	if ( fallbackPatterns.length > 0 ) {
-		return {
-			value: fallbackPatterns,
-			path: 'all-patterns-fallback',
-			fallbackMode: 'all-patterns',
-		};
-	}
-
 	return {
 		value: [],
-		path: 'none',
+		path: 'missing-selector',
 		fallbackMode: 'none',
 	};
 }

@@ -12,7 +12,7 @@
 | `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | Provider-selected embeddings + Qdrant retrieval + LLM reranking |
 | `flavor-agent/recommend-template` | `TemplateAbilities` | Provider-selected template composition suggestions for Site Editor templates |
-| `flavor-agent/recommend-template-part` | `TemplateAbilities` | Template-part composition suggestions with validated start/end pattern insertion for Site Editor template parts |
+| `flavor-agent/recommend-template-part` | `TemplateAbilities` | Template-part composition suggestions with validated bounded composition operations for Site Editor template parts |
 | `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
@@ -29,7 +29,7 @@
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | Advisory navigation recommendations for selected `core/navigation` blocks |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | Template composition recommendations for the Site Editor |
 | `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | Template-part composition recommendations for the Site Editor |
-| `GET/POST /flavor-agent/v1/activity` | contextual editor/theme capability | Activity query and persistence for AI actions |
+| `GET/POST /flavor-agent/v1/activity` | contextual editor/theme capability; sitewide GET requires `manage_options` | Activity query and persistence for AI actions |
 | `POST /flavor-agent/v1/activity/{id}/undo` | contextual editor/theme capability | Persisted undo status transition for an activity entry |
 | `POST /flavor-agent/v1/sync-patterns` | `manage_options` | Manual pattern index sync |
 
@@ -40,7 +40,7 @@
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
 - Pattern recommendation and indexing backends now have direct PHPUnit coverage for backend gating, runtime-state handling, Qdrant retrieval/reranking, fingerprinting, scheduling, full/incremental sync, deletion, lock contention, and remote failure persistence
 - Site Editor template recommendation panel for `wp_template` documents with review-confirm-apply support for validated template-part assignment/replacement and pattern insertion operations
-- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, and review-confirm-apply support for validated `insert_pattern` operations at the start or end of the current template part
+- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, and review-confirm-apply support for validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with start/end and before/after-block-path placement where applicable
 - Inspector-panel navigation recommendations for selected `core/navigation` blocks with advisory structure, overlay, and accessibility guidance
 - Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template and template-part undo still rely on stable locators plus recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable
@@ -52,31 +52,44 @@
 - Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must pass a lightweight probe search returning trusted `developer.wordpress.org` guidance before they are saved, which keeps the settings flow compatible with documented AI Search Run tokens
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback
 - Explicit `flavor-agent/search-wordpress-docs` requests always seed the exact-query cache and only seed entity cache when a valid `entityKey` or legacy query inference resolves
-- Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation) using the same trust-filtered Cloudflare search pipeline; throttled by credential fingerprint + 1-hour cooldown; admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts
+- Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation) using the same trust-filtered Cloudflare search pipeline; exact entity misses now also fall back to prewarmed generic guidance families for template, template-part, and editor guidance before returning empty; throttled by credential fingerprint + 1-hour cooldown; admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts
+
+### Admin UI
+
+- Settings > `AI Activity` now opens a dedicated wp-admin audit page for recent server-backed Flavor Agent actions across block, template, and template-part surfaces
+- The admin page uses WordPress `DataViews` with the `activity` layout as the default feed, plus persisted/resettable view preferences and grouped summary cards for recorded, applied, undone, and review-needed activity
+- A read-only `DataForm` details panel surfaces stored request metadata, ordered undo status, before/after summaries, and quick links back to the affected entity, plugin settings, and core Connectors when available
+- Sitewide activity queries now flow through the same REST route and repository, but only `manage_options` users can access unscoped/global reads
 
 ## Known Issues
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - JS tooling now expects Node `20.x` with npm `10.x`; on this host, the global Node `24.14.0` / npm `11.9.0` pair fails `npm ci` immediately via `engine-strict` (`EBADENGINE`), so the repo now pins the supported toolchain instead of assuming the global default.
-- Browser coverage is now split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor and template preview/apply coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for the active refresh/drift undo cases that Playground cannot hold open reliably. The default `npm run test:e2e` command still points only at the Playground harness, and there is still no checked-in `wp_template_part` browser smoke.
-- WordPress `7.0` is still pre-release as of 2026-03-25, with general release scheduled for 2026-04-09. The Docker-backed Site Editor harness still pins `wordpress:beta-7.0-beta4-php8.2-apache`; swap that override once the official stable image exists.
-- `recommend-navigation` now has a first-party inspector surface and plugin REST route, but it remains advisory-only. There is still no validated navigation apply contract or browser smoke for that flow.
-- AI activity is now persisted server-side and hydrated into editor-scoped history, but there is still no dedicated admin audit screen, cross-device review surface, or broader observability UI yet.
-- Template-part execution is still intentionally narrow: only validated `insert_pattern` operations at `start` or `end` are executable today.
+- Browser coverage is intentionally split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for refresh/drift-sensitive flows that Playground cannot hold open reliably. The default `npm run test:e2e` command now aggregates both harnesses, and the checked-in smoke suite now covers block, navigation, pattern, template, and `wp_template_part` surfaces. The remaining operational prerequisite is Docker on PATH for the WP 7.0 half.
+- WordPress `7.0` is still pre-release as of 2026-03-26, with general release scheduled for 2026-04-09. The Docker-backed Site Editor harness still pins `wordpress:beta-7.0-beta4-php8.2-apache`; swap that override once the official stable image exists.
+- `recommend-navigation` now has a first-party inspector surface, plugin REST route, and checked-in browser smoke, but it remains advisory-only. There is still no validated navigation apply contract.
+- AI activity now has a first admin audit screen in wp-admin, but the feature is still not a full observability product: there is no diff-oriented inspection view, no abilities-backed row-action layer yet, and no cross-device/operator workflows beyond the recent-activity timeline.
 - Live recommendation execution with valid LLM credentials was not rerun in this pass.
-- Pattern/runtime compatibility is now split into focused adapters: `src/patterns/pattern-settings.js` owns stable-vs-experimental settings and selector negotiation plus explicit diagnostics for contextual vs `all-patterns-fallback` behavior, while `src/patterns/inserter-dom.js` owns fail-closed search/toggle discovery so callers degrade cleanly when editor markup is absent. Theme-token reads now pass through `src/context/theme-settings.js`, which only promotes a stable `features` source when parity with `__experimentalFeatures` is proven; on the current WordPress 7.0 path the active source still resolves to `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and intentionally no longer preserves deprecated `__experimentalRole` compatibility.
 
 ## Open Backlog
 
-- Close the current navigation follow-through by adding browser smoke and deciding whether the surface should remain advisory-only or grow a bounded apply contract, while keeping it native to the Inspector and Site Editor.
-- Promote the current activity foundation into a durable audit and observability surface with ordered undo review and admin visibility.
-- Expand the template-part executor into a bounded composition contract beyond one start/end pattern insertion.
-- Harden the remaining WordPress 7.0 compatibility adapters so contextual pattern scoping fails closed and theme-token reads stop over-promoting experimental sources.
-- Make `npm run test:e2e` cover both the Playground and WP 7.0 harnesses, and add a checked-in `wp_template_part` browser smoke flow.
+- Decide whether navigation should remain advisory-only or grow a bounded apply contract, while keeping the UX native to the Inspector and Site Editor.
+- Deepen the new admin activity page with richer diagnostics, before/after inspection, and a cleaner action/discovery layer rather than treating audit visibility as greenfield work.
+- Rerun live provider-backed recommendation execution with valid credentials to refresh end-to-end verification on the active provider path.
+- Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
 - Interactivity API runtime work is explicitly future-facing, not part of the current remediation backlog, because the shipped plugin is still editor/admin only and has no front-end runtime surface that needs it.
 
 ## Recent Verification
 
+- 2026-03-26 template-part-followthrough: `vendor/bin/phpunit --filter "(TemplatePartPromptTest|RegistrationTest|AISearchClientTest)"` passed (`33` tests, `178` assertions).
+- 2026-03-26 template-part-followthrough: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/patterns/__tests__/compat.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/template-parts` passed (`4` suites, `78` tests).
+- 2026-03-26 template-part-followthrough: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed.
+- 2026-03-26 template-part-followthrough: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:playground -- --reporter=line` passed (`4` Playwright smoke tests: block apply/persist/undo, navigation advisory recommendations, pattern inserter flow, template preview/apply/undo).
+- 2026-03-26 template-part-followthrough: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line -g "template-part surface smoke"` could not run on this host because `docker` was not found on `PATH`.
+- 2026-03-26 activity-admin-log: `vendor/bin/phpunit --filter "(ActivityRepositoryTest|AgentControllerTest|ActivityPermissionsTest)"` passed (`25` tests, `96` assertions).
+- 2026-03-26 activity-admin-log: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npx wp-scripts lint-js src/admin/activity-log.js src/admin/activity-log-utils.js src/admin/__tests__/activity-log-utils.test.js` passed.
+- 2026-03-26 activity-admin-log: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/admin/__tests__/activity-log-utils.test.js` passed (`1` suite, `3` tests).
+- 2026-03-26 activity-admin-log: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed.
 - 2026-03-25 connectors-alignment: `vendor/bin/phpcs inc/OpenAI/Provider.php inc/Abilities/InfraAbilities.php inc/Settings.php tests/phpunit/bootstrap.php tests/phpunit/InfraAbilitiesTest.php tests/phpunit/SettingsTest.php` passed.
 - 2026-03-25 connectors-alignment: `vendor/bin/phpunit --filter "(SettingsTest|InfraAbilitiesTest)"` passed (`26` tests, `160` assertions).
 - 2026-03-24 docs-freshness: `vendor/bin/phpunit` passed (`179` tests, `910` assertions).
@@ -116,13 +129,12 @@
 
 - **`docs/README.md`** -- Documentation entry point: purpose, reading order, ownership, and update contract
 - **`docs/SOURCE_OF_TRUTH.md`** -- Definitive project reference: scope, architecture, inventory, roadmap, definition of done
+- **`docs/FEATURE_SURFACE_MATRIX.md`** -- Fast matrix for every shipped surface: location, surfacing conditions, gating, and apply/undo support
+- **`docs/features/README.md`** -- Entry point for the detailed surface docs in `docs/features/`
+- **`docs/reference/abilities-and-routes.md`** -- Canonical mapping of Abilities API contracts, REST routes, permissions, and first-party callers
+- **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference
 - **`docs/2026-03-25-roadmap-aligned-execution-plan.md`** -- Active forward plan aligned to WordPress 7.0, Gutenberg, and official AI plugin roadmaps
-- **`docs/flavor-agent-readme.md`** -- Architecture details and editor flow reference
-- **`docs/2026-03-24-repository-progress-assessment.md`** -- Historical assessment snapshot from the 2026-03-24 docs pass; use `STATUS.md` and `docs/SOURCE_OF_TRUTH.md` for the current verified backlog
-- **`docs/2026-03-24-findings-remediation-plan.md`** -- Historical remediation snapshot from the 2026-03-24 pass; keep for lineage, not as the live backlog source
 - **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
-- **`docs/NEXT_STEPS_PLAN.md`** -- Historical execution-plan snapshot from the 2026-03-23 repo review; phases 0-5 are lineage, not the live backlog
-- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 compatibility reference
-- **`docs/2026-03-18-cloudflare-ai-search-grounding-assessment.md`** -- Cloudflare AI Search integration assessment
-
-Historical docs (superseded early designs) have been moved to `docs/historical/`.
+- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 reference snapshot for compatibility and API research
+- **`docs/wordpress-7.0-developer-docs-index.md`** -- Discovery snapshot of official WordPress 7.0 developer documentation sources
+- **`docs/wp7-migration-opportunities.md`** -- Point-in-time WordPress 7.0 migration assessment; useful for follow-up ideas, not the live backlog

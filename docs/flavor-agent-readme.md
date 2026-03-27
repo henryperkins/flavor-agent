@@ -2,15 +2,15 @@
 
 Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the block editor.
 
-This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`.
+This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`.
 
 It currently has five primary editor experiences:
 
-- Block recommendations in the native Inspector, powered by the WordPress AI Client and core Connectors.
+- Block recommendations in the native Inspector, powered by the selected plugin provider when chat is configured here and otherwise falling back to the WordPress AI Client plus core Connectors.
 - Pattern recommendations in the native inserter, powered by the active OpenAI provider (Azure OpenAI or OpenAI Native) plus Qdrant.
 - Navigation recommendations in the native Inspector for selected `core/navigation` blocks, powered by the active OpenAI provider and scoped as advisory guidance today.
 - Template recommendations in the Site Editor, powered by the active OpenAI provider with validated template-part and pattern operations.
-- Template-part recommendations in the Site Editor, scoped to individual template parts with a narrow review-confirm-apply path for validated pattern insertion at the start or end of the current part.
+- Template-part recommendations in the Site Editor, scoped to individual template parts with a narrow review-confirm-apply path for validated bounded operations.
 
 There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback.
 
@@ -88,7 +88,7 @@ The client behavior is:
 - Passive fetch on editor load when the active provider plus Qdrant are configured.
 - Search-triggered refresh when the inserter search box changes.
 - Native pattern patching through `src/patterns/compat.js`, which prefers stable `blockPatterns` / `blockPatternCategories` keys, then `__experimentalAdditional*` override keys, and falls back to `__experimental*` base variants when needed.
-- A toolbar `!` badge when any recommendation score is `>= 0.9`.
+- A toolbar badge that shows recommendation count, loading state, or error state next to the inserter toggle.
 
 The server behavior is:
 
@@ -128,7 +128,7 @@ The client behavior is:
 - Uses a dedicated `PluginDocumentSettingPanel` implemented in `src/template-parts/TemplatePartRecommender.js`.
 - Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
 - Renders advisory suggestion cards with block-focus links and pattern-browse links, and surfaces preview/apply controls only for validated executable suggestions.
-- Supports one narrow executable operation today: `insert_pattern` at the explicit `start` or `end` of the current template part.
+- Supports validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with `start`, `end`, `before_block_path`, and `after_block_path` placement where applicable.
 
 The server behavior is:
 
@@ -137,7 +137,7 @@ The server behavior is:
 - Rank template-part suggestions with the active provider's responses configuration.
 - Return explanatory text plus advisory `blockHints`, `patternSuggestions`, and optional validated `operations`.
 
-This surface remains advisory-first overall: unsupported or ambiguous recommendations stay browse-only, and only deterministic start/end pattern insertion participates in preview/apply/undo.
+This surface remains advisory-first overall: unsupported or ambiguous recommendations stay browse-only, and only validated bounded operations participate in preview/apply/undo.
 
 ### AI Activity and Undo
 
@@ -147,8 +147,8 @@ Applied block, template, and template-part suggestions write structured activity
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Block recommendation providers are configured separately in the core `Settings > Connectors` screen.
-When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
+When chat credentials are configured on that screen, Flavor Agent uses the selected provider for block, pattern, template, and navigation recommendations. If not, block recommendations fall back to the core `Settings > Connectors` screen through the WordPress AI Client path.
+When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for block/pattern/template/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
 
 When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the plugin validates the configured account, instance, and token by running a lightweight probe search that must return trusted `developer.wordpress.org` guidance, and keeps the previous values if validation fails. This allows documented AI Search Run tokens to pass validation without requiring instance metadata read access. Successful saves still use the standard Settings API notice flow, and failed validation surfaces the Cloudflare error on the same screen.
 

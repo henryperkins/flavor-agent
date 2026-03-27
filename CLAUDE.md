@@ -1,6 +1,6 @@
 # CLAUDE.md — Flavor Agent
 
-WordPress plugin: AI-powered block recommendations in the Gutenberg Inspector, vector-powered pattern recommendations in the inserter, template composition suggestions in the Site Editor, template-part recommendations, and navigation structure suggestions.
+WordPress plugin: AI-powered block recommendations in the Gutenberg Inspector, vector-powered pattern recommendations in the inserter, template composition suggestions in the Site Editor, template-part recommendations, navigation structure suggestions, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
@@ -9,13 +9,17 @@ Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 ```bash
 npm ci                 # install JS deps reproducibly (Node 20 / npm 10)
 npm start              # dev build with watch (webpack via @wordpress/scripts)
-npm run build          # production build → build/index.js, build/admin.js
+npm run build          # production build → build/index.js, build/admin.js, build/activity-log.js
 npm run lint:js        # ESLint on src/
 npm run test:unit -- --runInBand  # Jest unit tests
-npm run test:e2e       # Playwright smoke tests
+npm run test:e2e       # Playwright smoke suites (Playground + WP 7.0)
+npm run test:e2e:playground  # fast Playground smoke suite
+npm run test:e2e:wp70  # Docker-backed WP 7.0 Site Editor suite
 npm run wp:start       # docker compose up (local dev)
 npm run wp:stop        # docker compose down
 npm run wp:reset       # docker compose down -v (destroys volumes)
+npm run wp:e2e:wp70:bootstrap  # provision WP 7.0 browser harness
+npm run wp:e2e:wp70:teardown   # stop WP 7.0 browser harness
 
 composer install       # install PHP deps (PSR-4 autoloader)
 composer lint:php      # WPCS via phpcs
@@ -31,7 +35,12 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 
 | Namespace | Purpose |
 |-----------|---------|
-| `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-template, recommend-template-part, sync-patterns) |
+| `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-navigation, recommend-template, recommend-template-part, activity, sync-patterns) |
+| `Admin\ActivityPage` | Registers `Settings > AI Activity` and enqueues the admin audit app |
+| `Activity\Repository` | Server-backed AI activity storage, query, create, and ordered undo-state updates |
+| `Activity\Permissions` | Contextual capability checks for activity queries and mutations |
+| `Activity\Serializer` | Activity entry normalization and storage serialization |
+| `LLM\ChatClient` | Chat wrapper that prefers plugin-managed providers and falls back to the WordPress AI Client for block recommendations |
 | `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations via `wp_ai_client_prompt()` and `is_supported_for_text_generation()` |
 | `LLM\Prompt` | Block recommendation prompt assembly and response parsing |
 | `LLM\TemplatePrompt` | Template recommendation prompt assembly and executable operation parsing |
@@ -89,17 +98,20 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `utils/template-types.js` | Template slug normalization per pattern templateTypes vocabulary |
 | `utils/pattern-names.js` | Extract distinct pattern names from collections |
 | `utils/visible-patterns.js` | Get editor-visible pattern names for current context |
-| `admin/sync-button.js` | Admin page: manual pattern index sync button |
+| `admin/sync-button.js` | Settings page: manual pattern index sync button |
+| `admin/activity-log.js` | `Settings > AI Activity` DataViews/DataForm audit app |
+| `admin/activity-log-utils.js` | Activity-log formatting, filters, summary cards, and admin links |
 
-**Webpack** has two entry points: `src/index.js` (editor) and `src/admin/sync-button.js` (admin page).
+**Webpack** has three entry points: `src/index.js` (editor), `src/admin/sync-button.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page).
 
 ## Key Integration Points
 
 - **Inspector injection**: `editor.BlockEdit` filter via `createHigherOrderComponent` + `<InspectorControls group="...">` for each tab (settings, styles, color, typography, dimensions, border).
-- **REST API**: All routes live under `flavor-agent/v1/`, registered in `Agent_Controller::register_routes()`. `recommend-block` and `recommend-patterns` use `edit_posts`, `recommend-template` and `recommend-template-part` use `edit_theme_options`, and `sync-patterns` uses `manage_options`.
+- **REST API**: All routes live under `flavor-agent/v1/`, registered in `Agent_Controller::register_routes()`. `recommend-block` and `recommend-patterns` use `edit_posts`, `recommend-navigation`, `recommend-template`, and `recommend-template-part` use `edit_theme_options`, activity routes use contextual `Activity\Permissions`, and `sync-patterns` uses `manage_options`.
 - **Pattern index lifecycle**: Auto-reindexes on theme switch, plugin activation/deactivation, upgrades, and relevant option changes. Uses WP cron event `flavor_agent_reindex_patterns`.
 - **Docs grounding lifecycle**: Prewarm and context-warm cron events (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) scheduled on activation.
-- **Activity history**: Block and template applies write structured session-scoped activity records keyed by the current post/template reference and validated again before undo.
+- **Activity history**: Block, template, and template-part applies write structured activity entries through the server-backed activity repository; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state again before undo.
+- **Admin audit UI**: `Settings > AI Activity` is powered by `src/admin/activity-log.js` and reads the same server-backed activity data used by inline editor history.
 - **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 11 abilities across block, pattern, template, navigation, docs, and infra categories. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
 
 ## External Services
@@ -126,14 +138,19 @@ Each recommendation surface disables independently when its required backend is 
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.
 - The plugin respects `contentOnly` editing mode: suggestions won't propose changes to locked attributes.
 - `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
-- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendTemplates`, `canRecommendTemplateParts`, and `templatePartAreas` to the editor script.
-- A second JS global `flavorAgentAdmin` (localized on the admin settings page) exposes `restUrl` and `nonce` to the admin script.
+- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, and `templatePartAreas` to the editor script.
+- The JS global `flavorAgentAdmin` (localized on the main settings page) exposes `restUrl` and `nonce` to the settings-page admin script.
+- The JS global `flavorAgentActivityLog` (localized on `Settings > AI Activity`) exposes `restUrl`, `nonce`, `adminUrl`, `settingsUrl`, `connectorsUrl`, and `defaultLimit` to the activity-log app.
 - Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`; the adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys. Direct experimental usages remain in `src/context/theme-tokens.js` and `src/context/block-inspector.js` because WordPress has not promoted stable replacements yet.
 
 ## Docs
 
+- `docs/README.md` — documentation backbone: reading order, ownership, and update contract
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference: scope, architecture, inventory, roadmap, definition of done
-- `docs/flavor-agent-readme.md` — detailed architecture and LLM prompt/response format
+- `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
+- `docs/features/README.md` — entry point for detailed per-surface docs
+- `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
+- `docs/flavor-agent-readme.md` — architecture companion and editor-flow reference
 - `docs/local-wordpress-ide.md` — local Docker/devcontainer workflow
-- `docs/NEXT_STEPS_PLAN.md` — execution-plan snapshot and backlog history
+- `docs/2026-03-25-roadmap-aligned-execution-plan.md` — active forward plan
 - `STATUS.md` — working feature inventory and verification log

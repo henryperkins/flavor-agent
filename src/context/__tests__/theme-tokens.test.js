@@ -249,7 +249,7 @@ describe( 'summarizeTokens', () => {
 } );
 
 describe( 'theme token source adapter', () => {
-	test( 'prefers experimental features when a stable candidate does not match parity', () => {
+	test( 'keeps stable features active and only uses experimental gaps when parity is not proven', () => {
 		const settings = {
 			features: {
 				color: {
@@ -273,9 +273,9 @@ describe( 'theme token source adapter', () => {
 
 		expect( getThemeTokenSourceDetails( settings ) ).toEqual(
 			expect.objectContaining( {
-				source: 'experimental',
-				settingsKey: '__experimentalFeatures',
-				reason: 'stable-parity-mismatch',
+				source: 'stable-fallback',
+				settingsKey: 'features',
+				reason: 'stable-with-experimental-gaps',
 			} )
 		);
 		expect(
@@ -284,7 +284,7 @@ describe( 'theme token source adapter', () => {
 			expect.arrayContaining( [
 				expect.objectContaining( {
 					slug: 'accent',
-					color: '#ff5500',
+					color: '#000000',
 				} ),
 			] )
 		);
@@ -314,7 +314,7 @@ describe( 'theme token source adapter', () => {
 			);
 	} );
 
-	test( 'rejects stable parity when capability flags diverge from the experimental source', () => {
+	test( 'preserves stable capability values when experimental data only fills missing gaps', () => {
 		const settings = {
 			features: {
 				...COMPLETE_FEATURES,
@@ -332,18 +332,18 @@ describe( 'theme token source adapter', () => {
 
 		expect( getThemeTokenSourceDetails( settings ) ).toEqual(
 			expect.objectContaining( {
-				source: 'experimental',
-				settingsKey: '__experimentalFeatures',
-				reason: 'stable-parity-mismatch',
+				source: 'stable-fallback',
+				settingsKey: 'features',
+				reason: 'stable-with-experimental-gaps',
 			} )
 		);
 		expect( collectThemeTokensFromSettings( settings ) ).toEqual(
 			expect.objectContaining( {
 				color: expect.objectContaining( {
-					linkEnabled: true,
+					linkEnabled: false,
 				} ),
 				spacing: expect.objectContaining( {
-					units: [ 'px', 'rem' ],
+					units: [ 'px' ],
 				} ),
 			} )
 		);

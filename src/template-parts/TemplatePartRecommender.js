@@ -31,6 +31,10 @@ import {
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import {
 	TEMPLATE_OPERATION_INSERT_PATTERN,
+	TEMPLATE_OPERATION_REMOVE_BLOCK,
+	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+	TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH,
+	TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH,
 	validateTemplatePartOperationSequence,
 } from '../utils/template-operation-sequence';
 import { getTemplatePartAreaLookup } from '../utils/template-part-areas';
@@ -138,13 +142,39 @@ function getSuggestionCardKey( suggestion = {}, index ) {
 function getOperationKey( operation = {} ) {
 	return `${ operation?.type || 'operation' }|${
 		operation?.patternName || ''
-	}|${ operation?.placement || '' }`;
+	}|${ operation?.placement || '' }|${
+		Array.isArray( operation?.targetPath )
+			? operation.targetPath.join( '.' )
+			: ''
+	}|${ operation?.expectedBlockName || '' }`;
 }
 
 function formatPlacementLabel( placement ) {
 	return placement === 'start'
 		? 'Start of this template part'
-		: 'End of this template part';
+		: placement === 'end'
+			? 'End of this template part'
+			: placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH
+				? 'Before target block'
+				: 'After target block';
+}
+
+function formatBlockNameLabel( blockName = '' ) {
+	if ( ! blockName ) {
+		return 'block';
+	}
+
+	const normalized = blockName.includes( '/' )
+		? blockName.split( '/' )[ 1 ]
+		: blockName;
+
+	return humanizeLabel( normalized ) || blockName;
+}
+
+function formatTargetPathLabel( path = [] ) {
+	return Array.isArray( path ) && path.length > 0
+		? `Target ${ formatBlockPath( path ) }`
+		: 'Target block';
 }
 
 function buildTemplatePartSuggestionViewModel(
@@ -169,22 +199,52 @@ function buildTemplatePartSuggestionViewModel(
 	const operations = executableOperations.ok
 		? executableOperations.operations
 				.map( ( operation ) => {
-					if (
-						operation?.type !== TEMPLATE_OPERATION_INSERT_PATTERN
-					) {
-						return null;
-					}
+					switch ( operation?.type ) {
+						case TEMPLATE_OPERATION_INSERT_PATTERN:
+							return {
+								key: getOperationKey( operation ),
+								type: TEMPLATE_OPERATION_INSERT_PATTERN,
+								patternName: operation.patternName,
+								patternTitle:
+									patternTitleMap[
+										operation.patternName
+									] || operation.patternName,
+								placement: operation.placement,
+								targetPath:
+									Array.isArray( operation.targetPath )
+										? operation.targetPath
+										: null,
+								badgeLabel: 'Insert',
+							};
 
-					return {
-						key: getOperationKey( operation ),
-						type: TEMPLATE_OPERATION_INSERT_PATTERN,
-						patternName: operation.patternName,
-						patternTitle:
-							patternTitleMap[ operation.patternName ] ||
-							operation.patternName,
-						placement: operation.placement,
-						badgeLabel: 'Insert',
-					};
+						case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN:
+							return {
+								key: getOperationKey( operation ),
+								type: TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+								patternName: operation.patternName,
+								patternTitle:
+									patternTitleMap[
+										operation.patternName
+									] || operation.patternName,
+								expectedBlockName:
+									operation.expectedBlockName,
+								targetPath: operation.targetPath,
+								badgeLabel: 'Replace',
+							};
+
+						case TEMPLATE_OPERATION_REMOVE_BLOCK:
+							return {
+								key: getOperationKey( operation ),
+								type: TEMPLATE_OPERATION_REMOVE_BLOCK,
+								expectedBlockName:
+									operation.expectedBlockName,
+								targetPath: operation.targetPath,
+								badgeLabel: 'Remove',
+							};
+
+						default:
+							return null;
+					}
 				} )
 				.filter( Boolean )
 		: [];
@@ -192,7 +252,9 @@ function buildTemplatePartSuggestionViewModel(
 		new Set(
 			[
 				...rawPatternSuggestions,
-				...operations.map( ( operation ) => operation.patternName ),
+				...operations
+					.map( ( operation ) => operation.patternName )
+					.filter( Boolean ),
 			].filter( Boolean )
 		)
 	).map( ( patternName ) => ( {
@@ -488,7 +550,7 @@ export default function TemplatePartRecommender() {
 						Describe the structural change you want inside this
 						template part. Review the focus blocks and pattern
 						suggestions first, then confirm only the executable
-						insertions Flavor Agent can place deterministically.
+						operations Flavor Agent can validate deterministically.
 					</p>
 				</div>
 
@@ -848,8 +910,8 @@ function TemplatePartSuggestionCard( {
 						) ) }
 					</div>
 					<p className="flavor-agent-subpanel-hint">
-						Flavor Agent will insert this pattern at the exact
-						placement shown below inside the current template part.
+						Flavor Agent will only apply the exact validated
+						operations shown below inside the current template part.
 					</p>
 					<div className="flavor-agent-template-preview__actions">
 						<Button
@@ -868,6 +930,65 @@ function TemplatePartSuggestionCard( {
 }
 
 function TemplatePartOperationPreviewRow( { operation } ) {
+	if (
+		operation.type === TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN
+	) {
+		return (
+			<div className="flavor-agent-tpl-row">
+				<span className="flavor-agent-tpl-row__mapping">
+					<span className="flavor-agent-action-link flavor-agent-action-link--area">
+						{ formatTargetPathLabel( operation.targetPath ) }
+					</span>
+					<span className="flavor-agent-tpl-row__arrow">→</span>
+					<span className="flavor-agent-action-link flavor-agent-action-link--pattern">
+						{ operation.patternTitle }
+					</span>
+				</span>
+				<span className="flavor-agent-pill">{ operation.badgeLabel }</span>
+				<div className="flavor-agent-tpl-row__reason">
+					Replace the{ ' ' }
+					<code>
+						{ formatBlockNameLabel(
+							operation.expectedBlockName
+						) }
+					</code>{ ' ' }
+					at <code>{ formatBlockPath( operation.targetPath ) }</code>{ ' ' }
+					with <code>{ operation.patternTitle }</code>.
+				</div>
+			</div>
+		);
+	}
+
+	if ( operation.type === TEMPLATE_OPERATION_REMOVE_BLOCK ) {
+		return (
+			<div className="flavor-agent-tpl-row">
+				<span className="flavor-agent-tpl-row__mapping">
+					<span className="flavor-agent-action-link flavor-agent-action-link--area">
+						{ formatTargetPathLabel( operation.targetPath ) }
+					</span>
+				</span>
+				<span className="flavor-agent-pill">{ operation.badgeLabel }</span>
+				<div className="flavor-agent-tpl-row__reason">
+					Remove the{ ' ' }
+					<code>
+						{ formatBlockNameLabel(
+							operation.expectedBlockName
+						) }
+					</code>{ ' ' }
+					at <code>{ formatBlockPath( operation.targetPath ) }</code>.
+				</div>
+			</div>
+		);
+	}
+
+	const placementTarget =
+		operation.placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
+		operation.placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+			? `${ formatPlacementLabel( operation.placement ) } (${ formatBlockPath(
+					operation.targetPath
+			  ) })`
+			: formatPlacementLabel( operation.placement );
+
 	return (
 		<div className="flavor-agent-tpl-row">
 			<span className="flavor-agent-tpl-row__mapping">
@@ -876,13 +997,18 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 				</span>
 				<span className="flavor-agent-tpl-row__arrow">→</span>
 				<span className="flavor-agent-action-link flavor-agent-action-link--area">
-					{ formatPlacementLabel( operation.placement ) }
+					{ placementTarget }
 				</span>
 			</span>
 			<span className="flavor-agent-pill">{ operation.badgeLabel }</span>
 			<div className="flavor-agent-tpl-row__reason">
-				Insert <code>{ operation.patternTitle }</code> at the{ ' ' }
-				<code>{ operation.placement }</code> of this template part.
+				Insert <code>{ operation.patternTitle }</code>{ ' ' }
+				{ operation.targetPath ? 'relative to' : 'at' }{ ' ' }
+				<code>
+					{ operation.targetPath
+						? formatBlockPath( operation.targetPath )
+						: operation.placement }
+				</code>.
 			</div>
 		</div>
 	);

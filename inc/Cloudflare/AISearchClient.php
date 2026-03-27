@@ -21,6 +21,9 @@ final class AISearchClient {
 	private const PREWARM_STATE_OPTION      = 'flavor_agent_docs_prewarm_state';
 	private const WARM_QUEUE_OPTION         = 'flavor_agent_docs_warm_queue';
 	private const PREWARM_THROTTLE_SECONDS  = 3600;
+	private const GUIDANCE_BLOCK_EDITOR_KEY = 'guidance:block-editor';
+	private const GUIDANCE_TEMPLATE_KEY     = 'guidance:template';
+	private const GUIDANCE_TEMPLATE_PART_KEY = 'guidance:template-part';
 
 	public const PREWARM_CRON_HOOK      = 'flavor_agent_prewarm_docs';
 	public const CONTEXT_WARM_CRON_HOOK = 'flavor_agent_warm_docs_context';
@@ -29,7 +32,8 @@ final class AISearchClient {
 	 * Entity keys and corresponding search queries for the initial warm set.
 	 *
 	 * Covers the highest-frequency block types used by the inspector surface,
-	 * template entity keys used by the Site Editor, and core/navigation.
+	 * template entity keys used by the Site Editor, core/template-part,
+	 * core/navigation, and generic fallback guidance for long-tail misses.
 	 *
 	 * @var array<string, string>
 	 */
@@ -42,6 +46,7 @@ final class AISearchClient {
 		'core/button'      => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/button. typography, color, border, spacing inspector controls.',
 		'core/list'        => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/list. typography, spacing, color inspector controls.',
 		'core/cover'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/cover. color overlay, dimensions, spacing, typography inspector controls.',
+		'core/template-part' => 'WordPress block theme template parts. template part structure, composition, areas, block patterns, and theme.json guidance.',
 		'core/navigation'  => 'WordPress navigation block. menu structure and organization best practices. overlay responsive menu.',
 		'template:single'  => 'WordPress block theme, site editor, and template part best practices. template type single. template files, template parts, block themes, and theme.json guidance.',
 		'template:page'    => 'WordPress block theme, site editor, and template part best practices. template type page. template files, template parts, block themes, and theme.json guidance.',
@@ -50,6 +55,9 @@ final class AISearchClient {
 		'template:404'     => 'WordPress block theme, site editor, and template part best practices. template type 404. template files, template parts, block themes, and theme.json guidance.',
 		'template:index'   => 'WordPress block theme, site editor, and template part best practices. template type index. template files, template parts, block themes, and theme.json guidance.',
 		'template:search'  => 'WordPress block theme, site editor, and template part best practices. template type search. template files, template parts, block themes, and theme.json guidance.',
+		self::GUIDANCE_BLOCK_EDITOR_KEY => 'WordPress Gutenberg block editor best practices. block settings, styles, inspector controls, block supports, and theme.json guidance.',
+		self::GUIDANCE_TEMPLATE_KEY     => 'WordPress block theme and Site Editor guidance. templates, template hierarchy, template parts, patterns, and theme.json best practices.',
+		self::GUIDANCE_TEMPLATE_PART_KEY => 'WordPress template part guidance. template-part structure, areas, patterns, layout, and theme.json best practices.',
 	];
 
 	public static function is_configured(
@@ -215,6 +223,12 @@ final class AISearchClient {
 		}
 
 		$guidance = self::maybe_search_entity( $entity_key );
+
+		if ( [] === $guidance ) {
+			$guidance = self::maybe_search_entity(
+				self::resolve_generic_entity_fallback( $entity_key, $family_context )
+			);
+		}
 
 		self::schedule_context_warm( $query, $entity_key, $family_context, $max_results );
 
@@ -945,7 +959,38 @@ final class AISearchClient {
 			return $template_type !== '' ? 'template:' . $template_type : '';
 		}
 
+		if ( str_starts_with( $entity_key, 'guidance:' ) ) {
+			$guidance_slug = sanitize_key( substr( $entity_key, strlen( 'guidance:' ) ) );
+
+			return $guidance_slug !== '' ? 'guidance:' . $guidance_slug : '';
+		}
+
 		return preg_match( '/^[a-z0-9-]+\/[a-z0-9-]+$/', $entity_key ) === 1 ? $entity_key : '';
+	}
+
+	/**
+	 * @param array<string, mixed> $family_context
+	 */
+	private static function resolve_generic_entity_fallback( string $entity_key, array $family_context = [] ): string {
+		$entity_key = self::normalize_entity_key( $entity_key );
+		$surface    = sanitize_key( (string) ( $family_context['surface'] ?? '' ) );
+
+		if ( 'core/template-part' === $entity_key || 'template-part' === $surface ) {
+			return self::GUIDANCE_TEMPLATE_PART_KEY;
+		}
+
+		if ( str_starts_with( $entity_key, 'template:' ) || 'template' === $surface ) {
+			return self::GUIDANCE_TEMPLATE_KEY;
+		}
+
+		if (
+			preg_match( '/^[a-z0-9-]+\/[a-z0-9-]+$/', $entity_key ) === 1 ||
+			'block' === $surface
+		) {
+			return self::GUIDANCE_BLOCK_EDITOR_KEY;
+		}
+
+		return '';
 	}
 
 	/**

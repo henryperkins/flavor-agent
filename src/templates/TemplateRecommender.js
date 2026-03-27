@@ -209,29 +209,61 @@ function describeInsertionPoint( {
 	return 'at the end of the template';
 }
 
+function normalizeEditedEntityRef( entityId ) {
+	if ( typeof entityId === 'string' && entityId !== '' ) {
+		return entityId;
+	}
+
+	if ( Number.isInteger( entityId ) && entityId > 0 ) {
+		return String( entityId );
+	}
+
+	return null;
+}
+
+function getEditedEntityRef( select, expectedPostType ) {
+	const editor = select( 'core/editor' );
+	const currentPostType = editor?.getCurrentPostType?.();
+
+	// core/editor tracks the actively edited entity in both post and site
+	// editors, so prefer it to avoid leaking template panels into page editing.
+	if ( typeof currentPostType === 'string' && currentPostType !== '' ) {
+		if ( currentPostType !== expectedPostType ) {
+			return null;
+		}
+
+		const currentPostId = normalizeEditedEntityRef(
+			editor?.getCurrentPostId?.()
+		);
+
+		if ( currentPostId ) {
+			return currentPostId;
+		}
+	}
+
+	const editSite = select( 'core/edit-site' );
+
+	if ( ! editSite?.getEditedPostType || ! editSite?.getEditedPostId ) {
+		return null;
+	}
+
+	if ( editSite.getEditedPostType() !== expectedPostType ) {
+		return null;
+	}
+
+	return normalizeEditedEntityRef( editSite.getEditedPostId() );
+}
+
 export default function TemplateRecommender() {
 	const canRecommend = window.flavorAgentData?.canRecommendTemplates;
 	const templateBlocks = useSelect(
 		( select ) => select( blockEditorStore )?.getBlocks?.() || [],
 		[]
 	);
-	const templateRef = useSelect( ( select ) => {
-		const editSite = select( 'core/edit-site' );
-
-		if ( ! editSite?.getEditedPostType || ! editSite?.getEditedPostId ) {
-			return null;
-		}
-
-		if ( editSite.getEditedPostType() !== 'wp_template' ) {
-			return null;
-		}
-
-		const editedPostId = editSite.getEditedPostId();
-
-		return typeof editedPostId === 'string' && editedPostId !== ''
-			? editedPostId
-			: null;
-	}, [] );
+	const templateRef = useSelect(
+		( select ) => getEditedEntityRef( select, 'wp_template' ),
+		[]
+	);
 	const templateType = normalizeTemplateType( templateRef );
 	const {
 		recommendations,

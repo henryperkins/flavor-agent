@@ -10,7 +10,7 @@ final class Repository {
 	public const SCHEMA_VERSION = 1;
 
 	private const DEFAULT_LIMIT = 20;
-	private const MAX_LIMIT     = 50;
+	private const MAX_LIMIT     = 100;
 	private const TABLE_SUFFIX  = 'flavor_agent_activity';
 
 	public static function maybe_install(): void {
@@ -99,7 +99,7 @@ final class Repository {
 			);
 		}
 
-		$normalized = Serializer::normalize_entry( $entry );
+		$normalized  = Serializer::normalize_entry( $entry );
 		$activity_id = '' !== $normalized['id']
 			? (string) $normalized['id']
 			: self::generate_activity_id();
@@ -173,18 +173,19 @@ final class Repository {
 			return [];
 		}
 
-		$scope_key = trim( (string) ( $filters['scopeKey'] ?? '' ) );
-
-		if ( '' === $scope_key ) {
-			return [];
-		}
-
-		$limit      = self::normalize_limit( $filters['limit'] ?? self::DEFAULT_LIMIT );
-		$conditions = [ 'document_scope_key = %s' ];
-		$args       = [ $scope_key ];
-		$surface    = trim( (string) ( $filters['surface'] ?? '' ) );
+		$scope_key   = trim( (string) ( $filters['scopeKey'] ?? '' ) );
+		$limit       = self::normalize_limit( $filters['limit'] ?? self::DEFAULT_LIMIT );
+		$conditions  = [];
+		$args        = [];
+		$surface     = trim( (string) ( $filters['surface'] ?? '' ) );
 		$entity_type = trim( (string) ( $filters['entityType'] ?? '' ) );
 		$entity_ref  = trim( (string) ( $filters['entityRef'] ?? '' ) );
+		$user_id     = (int) ( $filters['userId'] ?? 0 );
+
+		if ( '' !== $scope_key ) {
+			$conditions[] = 'document_scope_key = %s';
+			$args[]       = $scope_key;
+		}
 
 		if ( '' !== $surface ) {
 			$conditions[] = 'surface = %s';
@@ -201,12 +202,21 @@ final class Repository {
 			$args[]       = $entity_ref;
 		}
 
+		if ( $user_id > 0 ) {
+			$conditions[] = 'user_id = %d';
+			$args[]       = $user_id;
+		}
+
 		$args[] = $limit;
-		$sql    = "SELECT * FROM " . self::table_name() . ' WHERE '
-			. implode( ' AND ', $conditions )
-			. ' ORDER BY created_at DESC, id DESC LIMIT %d';
-		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
-		$rows   = array_reverse( is_array( $rows ) ? $rows : [] );
+		$sql    = 'SELECT * FROM ' . self::table_name();
+
+		if ( [] !== $conditions ) {
+			$sql .= ' WHERE ' . implode( ' AND ', $conditions );
+		}
+
+		$sql .= ' ORDER BY created_at DESC, id DESC LIMIT %d';
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
+		$rows = array_reverse( is_array( $rows ) ? $rows : [] );
 
 		return array_map(
 			static fn ( array $row ): array => Serializer::hydrate_row( $row ),
@@ -266,12 +276,16 @@ final class Repository {
 		}
 
 		$timestamp = gmdate( 'c' );
+		$error_message = (string) ( $current_entry['undo']['error'] ?? 'Undo failed.' );
+
+		if ( 'failed' === $status && ! empty( $error ) ) {
+			$error_message = $error;
+		}
+
 		$undo      = Serializer::normalize_undo_for_storage(
 			[
 				'status'    => $status,
-				'error'     => 'failed' === $status
-					? ( $error ?: (string) ( $current_entry['undo']['error'] ?? 'Undo failed.' ) )
-					: null,
+				'error'     => 'failed' === $status ? $error_message : null,
 				'updatedAt' => $timestamp,
 				'undoneAt'  => 'undone' === $status
 					? $timestamp
@@ -351,9 +365,9 @@ final class Repository {
 	private static function merge_existing_entry( array $existing_row, array $normalized ) {
 		global $wpdb;
 
-		$existing_entry = Serializer::hydrate_row( $existing_row );
-		$existing_undo  = is_array( $existing_entry['undo'] ?? null ) ? $existing_entry['undo'] : [];
-		$incoming_undo  = is_array( $normalized['undo'] ?? null ) ? $normalized['undo'] : [];
+		$existing_entry  = Serializer::hydrate_row( $existing_row );
+		$existing_undo   = is_array( $existing_entry['undo'] ?? null ) ? $existing_entry['undo'] : [];
+		$incoming_undo   = is_array( $normalized['undo'] ?? null ) ? $normalized['undo'] : [];
 		$existing_status = (string) ( $existing_undo['status'] ?? '' );
 		$incoming_status = (string) ( $incoming_undo['status'] ?? '' );
 
@@ -410,7 +424,7 @@ final class Repository {
 			return false;
 		}
 
-		$sql = $wpdb->prepare(
+		$sql  = $wpdb->prepare(
 			'SELECT * FROM ' . self::table_name() . ' WHERE entity_type = %s AND entity_ref = %s ORDER BY created_at ASC, id ASC',
 			(string) ( $row['entity_type'] ?? '' ),
 			(string) ( $row['entity_ref'] ?? '' )

@@ -145,6 +145,10 @@ function getBlockRecord( clientId ) {
 
 function createSelectors() {
 	return {
+		editor: {
+			getCurrentPostId: jest.fn( () => getState().editor.postId ),
+			getCurrentPostType: jest.fn( () => getState().editor.postType ),
+		},
 		blockEditor: {
 			getAllowedPatterns: jest.fn( ( rootClientId ) => {
 				const state = getState();
@@ -225,6 +229,11 @@ const dispatchers = createDispatchers();
 
 function createState( overrides = {} ) {
 	return {
+		editor: {
+			postId: TEMPLATE_REF,
+			postType: 'wp_template',
+			...overrides.editor,
+		},
 		editSite: {
 			postId: TEMPLATE_REF,
 			postType: 'wp_template',
@@ -305,6 +314,10 @@ function createState( overrides = {} ) {
 }
 
 function selectStore( storeName ) {
+	if ( storeName === 'core/editor' ) {
+		return selectors.editor;
+	}
+
 	if ( storeName === 'core/block-editor' ) {
 		return selectors.blockEditor;
 	}
@@ -497,6 +510,10 @@ describe( 'TemplateRecommender', () => {
 
 		currentState = {
 			...getState(),
+			editor: {
+				postId: NEXT_TEMPLATE_REF,
+				postType: 'wp_template',
+			},
 			editSite: {
 				postId: NEXT_TEMPLATE_REF,
 				postType: 'wp_template',
@@ -572,6 +589,27 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 
 		expect( hasText( 'Undid Clarify hierarchy.' ) ).toBe( true );
+	} );
+
+	test( 'does not render while editing a page even if edit-site still exposes a template ref', async () => {
+		currentState = createState( {
+			editor: {
+				postId: 42,
+				postType: 'page',
+			},
+			editSite: {
+				postId: TEMPLATE_REF,
+				postType: 'wp_template',
+			},
+		} );
+
+		await renderPanel();
+
+		expect(
+			container.querySelector(
+				'[data-panel-title="AI Template Recommendations"]'
+			)
+		).toBeNull();
 	} );
 
 	test( 'recomputes template undo availability when the block tree changes', async () => {

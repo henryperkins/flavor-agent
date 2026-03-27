@@ -5,6 +5,8 @@ jest.mock( '@wordpress/block-editor', () => ( {
 const mockRegistrySelect = jest.fn();
 const mockRegistryDispatch = jest.fn();
 const mockRawHandler = jest.fn();
+const mockCreateBlock = jest.fn();
+let generatedBlockId = 0;
 
 jest.mock( '@wordpress/data', () => ( {
 	select: ( ...args ) => mockRegistrySelect( ...args ),
@@ -17,6 +19,7 @@ jest.mock( '@wordpress/editor', () => ( {
 
 jest.mock( '@wordpress/blocks', () => ( {
 	rawHandler: ( ...args ) => mockRawHandler( ...args ),
+	createBlock: ( ...args ) => mockCreateBlock( ...args ),
 } ) );
 
 import {
@@ -114,11 +117,11 @@ function setupBlockEditor( {
 		canInsertBlockType: jest.fn( canInsertBlockType ),
 	};
 
-	if ( allowedPatterns !== undefined ) {
-		blockEditorSelect.getAllowedPatterns = jest.fn( () =>
-			cloneValue( allowedPatterns )
-		);
-	}
+	blockEditorSelect.getAllowedPatterns = jest.fn( () =>
+		cloneValue(
+			allowedPatterns !== undefined ? allowedPatterns : patterns
+		)
+	);
 
 	const updateBlockAttributes = jest.fn( ( clientId, attributes ) => {
 		const block = findBlockByClientId( state.blocks, clientId );
@@ -165,6 +168,16 @@ describe( 'template-actions', () => {
 		mockRegistrySelect.mockReset();
 		mockRegistryDispatch.mockReset();
 		mockRawHandler.mockReset();
+		mockCreateBlock.mockReset();
+		generatedBlockId = 0;
+		mockCreateBlock.mockImplementation(
+			( name, attributes = {}, innerBlocks = [] ) => ( {
+				clientId: `generated-${ ++generatedBlockId }`,
+				name,
+				attributes,
+				innerBlocks,
+			} )
+		);
 		window.flavorAgentData = {
 			templatePartAreas: {
 				header: 'header',
@@ -598,6 +611,52 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'prepareTemplatePartSuggestionOperations supports anchored insertions before a target block path', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				createParagraphBlock( 'existing-2', 'Target' ),
+			],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content:
+						'<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'before_block_path',
+					targetPath: [ 1 ],
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				patternName: 'theme/header-utility',
+				placement: 'before_block_path',
+				targetPath: [ 1 ],
+				index: 1,
+				rootLocator: {
+					type: 'root',
+					path: [],
+				},
+			} ),
+		] );
+	} );
+
 	test( 'prepareTemplatePartSuggestionOperations rejects missing explicit placement', () => {
 		setupBlockEditor( {
 			patterns: [
@@ -664,6 +723,8 @@ describe( 'template-actions', () => {
 				patternName: 'theme/header-utility',
 				patternTitle: 'Header Utility',
 				placement: 'end',
+				targetPath: null,
+				targetBlockName: '',
 				rootLocator: {
 					type: 'root',
 					path: [],
@@ -675,6 +736,133 @@ describe( 'template-actions', () => {
 					),
 				],
 			},
+		] );
+	} );
+
+	test( 'applyTemplatePartSuggestionOperations replaces a targeted block with a pattern snapshot', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'existing-2', 'Replace me' ),
+			],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content:
+						'<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'replace_block_with_pattern',
+					patternName: 'theme/header-utility',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ 1 ],
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			[ 'existing-2' ],
+			false
+		);
+		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
+			[ createParagraphBlock( 'pattern-1', 'Utility' ) ],
+			1,
+			null,
+			true,
+			0
+		);
+		expect( result.operations ).toEqual( [
+			{
+				type: 'replace_block_with_pattern',
+				patternName: 'theme/header-utility',
+				patternTitle: 'Header Utility',
+				expectedBlockName: 'core/paragraph',
+				targetPath: [ 1 ],
+				rootLocator: {
+					type: 'root',
+					path: [],
+				},
+				index: 1,
+				removedBlocksSnapshot: [
+					normalizeBlockSnapshot(
+						createParagraphBlock( 'existing-2', 'Replace me' )
+					),
+				],
+				insertedBlocksSnapshot: [
+					normalizeBlockSnapshot(
+						createParagraphBlock( 'pattern-1', 'Utility' )
+					),
+				],
+			},
+		] );
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Keep' ),
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+	} );
+
+	test( 'applyTemplatePartSuggestionOperations removes a targeted block and records an undo anchor', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'existing-2', 'Remove me' ),
+				createParagraphBlock( 'existing-3', 'After me' ),
+			],
+		} );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'remove_block',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ 1 ],
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			[ 'existing-2' ],
+			false
+		);
+		expect( result.operations ).toEqual( [
+			{
+				type: 'remove_block',
+				expectedBlockName: 'core/paragraph',
+				targetPath: [ 1 ],
+				rootLocator: {
+					type: 'root',
+					path: [],
+				},
+				index: 1,
+				removedBlocksSnapshot: [
+					normalizeBlockSnapshot(
+						createParagraphBlock( 'existing-2', 'Remove me' )
+					),
+				],
+				postApplyAnchor: {
+					type: 'next-block',
+					blocksSnapshot: [
+						normalizeBlockSnapshot(
+							createParagraphBlock( 'existing-3', 'After me' )
+						),
+					],
+				},
+			},
+		] );
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Keep' ),
+			createParagraphBlock( 'existing-3', 'After me' ),
 		] );
 	} );
 
@@ -827,6 +1015,125 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'prepareTemplatePartUndoOperations resolves replaced blocks after refresh when inserted content is unchanged', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'pattern-reloaded', 'Utility' ),
+			],
+		} );
+
+		const result = prepareTemplatePartUndoOperations( {
+			after: {
+				operations: [
+					{
+						type: 'replace_block_with_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						expectedBlockName: 'core/paragraph',
+						targetPath: [ 1 ],
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						removedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock( 'existing-2', 'Replace me' )
+							),
+						],
+						insertedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock(
+									'pattern-before-refresh',
+									'Utility'
+								)
+							),
+						],
+					},
+				],
+			},
+		} );
+
+		expect( result ).toEqual( {
+			ok: true,
+			operations: [
+				{
+					type: 'replace_block_with_pattern',
+					insertedClientIds: [ 'pattern-reloaded' ],
+					rootLocator: {
+						type: 'root',
+						path: [],
+					},
+					index: 1,
+					removedBlocksSnapshot: [
+						normalizeBlockSnapshot(
+							createParagraphBlock( 'existing-2', 'Replace me' )
+						),
+					],
+				},
+			],
+		} );
+	} );
+
+	test( 'prepareTemplatePartUndoOperations resolves removed blocks when the post-apply anchor is unchanged', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'existing-3', 'After me' ),
+			],
+		} );
+
+		const result = prepareTemplatePartUndoOperations( {
+			after: {
+				operations: [
+					{
+						type: 'remove_block',
+						expectedBlockName: 'core/paragraph',
+						targetPath: [ 1 ],
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						removedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock( 'existing-2', 'Remove me' )
+							),
+						],
+						postApplyAnchor: {
+							type: 'next-block',
+							blocksSnapshot: [
+								normalizeBlockSnapshot(
+									createParagraphBlock( 'existing-3', 'After me' )
+								),
+							],
+						},
+					},
+				],
+			},
+		} );
+
+		expect( result ).toEqual( {
+			ok: true,
+			operations: [
+				{
+					type: 'remove_block',
+					rootLocator: {
+						type: 'root',
+						path: [],
+					},
+					index: 1,
+					removedBlocksSnapshot: [
+						normalizeBlockSnapshot(
+							createParagraphBlock( 'existing-2', 'Remove me' )
+						),
+					],
+				},
+			],
+		} );
+	} );
+
 	test( 'undoTemplateSuggestionOperations removes inserted blocks and restores previous template parts', () => {
 		const { blockEditorDispatch, state } = setupBlockEditor( {
 			blocks: [
@@ -947,6 +1254,137 @@ describe( 'template-actions', () => {
 		);
 		expect( state.blocks ).toEqual( [
 			createParagraphBlock( 'existing-1', 'Existing' ),
+		] );
+		expect( result.ok ).toBe( true );
+	} );
+
+	test( 'undoTemplatePartSuggestionOperations restores a replaced block after removing the inserted pattern', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'pattern-reloaded', 'Utility' ),
+			],
+		} );
+
+		const result = undoTemplatePartSuggestionOperations( {
+			after: {
+				operations: [
+					{
+						type: 'replace_block_with_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						removedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock( 'existing-2', 'Replace me' )
+							),
+						],
+						insertedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock(
+									'pattern-before-refresh',
+									'Utility'
+								)
+							),
+						],
+					},
+				],
+			},
+		} );
+
+		expect( blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			[ 'pattern-reloaded' ],
+			false
+		);
+		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
+			[
+				expect.objectContaining( {
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Replace me',
+					},
+				} ),
+			],
+			1,
+			null,
+			true,
+			0
+		);
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Keep' ),
+			expect.objectContaining( {
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Replace me',
+				},
+			} ),
+		] );
+		expect( result.ok ).toBe( true );
+	} );
+
+	test( 'undoTemplatePartSuggestionOperations restores a removed block when the anchor still matches', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'existing-3', 'After me' ),
+			],
+		} );
+
+		const result = undoTemplatePartSuggestionOperations( {
+			after: {
+				operations: [
+					{
+						type: 'remove_block',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						removedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock( 'existing-2', 'Remove me' )
+							),
+						],
+						postApplyAnchor: {
+							type: 'next-block',
+							blocksSnapshot: [
+								normalizeBlockSnapshot(
+									createParagraphBlock( 'existing-3', 'After me' )
+								),
+							],
+						},
+					},
+				],
+			},
+		} );
+
+		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalledWith(
+			[
+				expect.objectContaining( {
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Remove me',
+					},
+				} ),
+			],
+			1,
+			null,
+			true,
+			0
+		);
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Keep' ),
+			expect.objectContaining( {
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Remove me',
+				},
+			} ),
+			createParagraphBlock( 'existing-3', 'After me' ),
 		] );
 		expect( result.ok ).toBe( true );
 	} );

@@ -60,17 +60,17 @@ final class ActivityRepositoryTest extends TestCase {
 
 		$stored = Repository::create(
 			[
-				'id'        => 'activity-1',
-				'type'      => 'apply_template_suggestion',
-				'surface'   => 'template',
-				'target'    => [
+				'id'         => 'activity-1',
+				'type'       => 'apply_template_suggestion',
+				'surface'    => 'template',
+				'target'     => [
 					'templateRef' => 'theme//home',
 				],
 				'suggestion' => 'Clarify hierarchy',
-				'before'    => [
+				'before'     => [
 					'operations' => [],
 				],
-				'after'     => [
+				'after'      => [
 					'operations' => [
 						[
 							'type'        => 'insert_pattern',
@@ -78,16 +78,16 @@ final class ActivityRepositoryTest extends TestCase {
 						],
 					],
 				],
-				'request'   => [
+				'request'    => [
 					'prompt'    => 'Make the page feel more editorial.',
 					'reference' => 'template:theme//home:3',
 				],
-				'document'  => [
+				'document'   => [
 					'scopeKey' => 'wp_template:theme//home',
 					'postType' => 'wp_template',
 					'entityId' => 'theme//home',
 				],
-				'timestamp' => '2026-03-24T10:00:00Z',
+				'timestamp'  => '2026-03-24T10:00:00Z',
 			]
 		);
 
@@ -137,6 +137,57 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertCount( 20, $entries );
 		$this->assertSame( 'activity-6', $entries[0]['id'] ?? null );
 		$this->assertSame( 'activity-25', $entries[19]['id'] ?? null );
+	}
+
+	public function test_query_can_return_recent_entries_without_a_scope_key(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_template_entry( 'activity-template', '2026-03-24T10:00:00Z' )
+		);
+		Repository::create(
+			[
+				'id'         => 'activity-block',
+				'type'       => 'apply_suggestion',
+				'surface'    => 'block',
+				'target'     => [
+					'clientId'  => 'block-1',
+					'blockName' => 'core/paragraph',
+					'blockPath' => [ 0 ],
+				],
+				'suggestion' => 'Tighten the intro copy',
+				'before'     => [
+					'attributes' => [
+						'content' => 'Before',
+					],
+				],
+				'after'      => [
+					'attributes' => [
+						'content' => 'After',
+					],
+				],
+				'request'    => [
+					'prompt'    => 'Tighten the intro copy.',
+					'reference' => 'block:block-1:1',
+				],
+				'document'   => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+				'timestamp'  => '2026-03-24T10:00:01Z',
+			]
+		);
+
+		$entries = Repository::query(
+			[
+				'limit' => 10,
+			]
+		);
+
+		$this->assertCount( 2, $entries );
+		$this->assertSame( 'activity-template', $entries[0]['id'] ?? null );
+		$this->assertSame( 'activity-block', $entries[1]['id'] ?? null );
 	}
 
 	public function test_update_undo_status_requires_ordered_tail_eligibility(): void {
@@ -197,17 +248,17 @@ final class ActivityRepositoryTest extends TestCase {
 	 */
 	private function build_template_entry( string $id, string $timestamp ): array {
 		return [
-			'id'        => $id,
-			'type'      => 'apply_template_suggestion',
-			'surface'   => 'template',
-			'target'    => [
+			'id'         => $id,
+			'type'       => 'apply_template_suggestion',
+			'surface'    => 'template',
+			'target'     => [
 				'templateRef' => 'theme//home',
 			],
 			'suggestion' => 'Clarify hierarchy',
-			'before'    => [
+			'before'     => [
 				'operations' => [],
 			],
-			'after'     => [
+			'after'      => [
 				'operations' => [
 					[
 						'type'        => 'insert_pattern',
@@ -215,16 +266,16 @@ final class ActivityRepositoryTest extends TestCase {
 					],
 				],
 			],
-			'request'   => [
+			'request'    => [
 				'prompt'    => 'Make the page feel more editorial.',
 				'reference' => 'template:theme//home:3',
 			],
-			'document'  => [
+			'document'   => [
 				'scopeKey' => 'wp_template:theme//home',
 				'postType' => 'wp_template',
 				'entityId' => 'theme//home',
 			],
-			'timestamp' => $timestamp,
+			'timestamp'  => $timestamp,
 		];
 	}
 }

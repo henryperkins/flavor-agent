@@ -2,6 +2,9 @@
 
 Generated: 2026-03-25 UTC
 
+> Status: discovery snapshot for release-cycle research, not a live backlog or product-behavior document.
+> Use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current Flavor Agent truth.
+
 ## Scope
 
 This index covers official, release-specific WordPress 7.0 developer documentation discovered from:

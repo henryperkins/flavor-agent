@@ -2,6 +2,9 @@
 
 Generated: 2026-03-25
 
+> Status: point-in-time migration assessment, not the live backlog.
+> Use `docs/2026-03-25-roadmap-aligned-execution-plan.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `STATUS.md` for current priorities and shipped behavior.
+
 ## Applied Changes
 
 ### 1. Removed Dead Compatibility Guards

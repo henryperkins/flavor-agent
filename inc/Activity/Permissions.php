@@ -7,6 +7,10 @@ namespace FlavorAgent\Activity;
 final class Permissions {
 
 	public static function can_access_activity_request( \WP_REST_Request $request ): bool {
+		if ( self::is_global_request( $request ) ) {
+			return current_user_can( 'manage_options' );
+		}
+
 		$activity_id = trim( (string) $request->get_param( 'id' ) );
 
 		if ( '' !== $activity_id ) {
@@ -189,5 +193,33 @@ final class Permissions {
 			[ 'wp_template', 'wp_template_part' ],
 			true
 		);
+	}
+
+	private static function is_global_request( \WP_REST_Request $request ): bool {
+		$activity_id = trim( (string) $request->get_param( 'id' ) );
+
+		if ( '' !== $activity_id ) {
+			return false;
+		}
+
+		$entry = $request->get_param( 'entry' );
+
+		if ( is_array( $entry ) || is_object( $entry ) ) {
+			return false;
+		}
+
+		$global = $request->get_param( 'global' );
+
+		if (
+			true === $global
+			|| 1 === $global
+			|| '1' === $global
+			|| 'true' === $global
+			|| 'yes' === $global
+		) {
+			return true;
+		}
+
+		return '' === trim( (string) $request->get_param( 'scopeKey' ) );
 	}
 }

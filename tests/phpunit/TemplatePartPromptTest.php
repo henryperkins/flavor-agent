@@ -113,8 +113,23 @@ final class TemplatePartPromptTest extends TestCase {
 					'path'       => [ 0 ],
 					'name'       => 'core/group',
 					'attributes' => [],
-					'childCount' => 0,
-					'children'   => [],
+					'childCount' => 2,
+					'children'   => [
+						[
+							'path'       => [ 0, 0 ],
+							'name'       => 'core/site-logo',
+							'attributes' => [],
+							'childCount' => 0,
+							'children'   => [],
+						],
+						[
+							'path'       => [ 0, 1 ],
+							'name'       => 'core/navigation',
+							'attributes' => [],
+							'childCount' => 0,
+							'children'   => [],
+						],
+					],
 				],
 			],
 			'patterns'  => [
@@ -139,7 +154,8 @@ final class TemplatePartPromptTest extends TestCase {
 							[
 								'type'        => 'insert_pattern',
 								'patternName' => 'theme/header-utility',
-								'placement'   => 'start',
+								'placement'   => 'before_block_path',
+								'targetPath'  => [ 0, 1 ],
 							],
 							[
 								'type'        => 'insert_pattern',
@@ -166,7 +182,95 @@ final class TemplatePartPromptTest extends TestCase {
 						[
 							'type'        => 'insert_pattern',
 							'patternName' => 'theme/header-utility',
-							'placement'   => 'start',
+							'placement'   => 'before_block_path',
+							'targetPath'  => [ 0, 1 ],
+						],
+					],
+				],
+			],
+			$result['suggestions']
+		);
+	}
+
+	public function test_parse_response_accepts_replace_and_remove_operations_when_paths_match(): void {
+		$context = [
+			'blockTree' => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'attributes' => [],
+					'childCount' => 2,
+					'children'   => [
+						[
+							'path'       => [ 0, 0 ],
+							'name'       => 'core/site-logo',
+							'attributes' => [],
+							'childCount' => 0,
+							'children'   => [],
+						],
+						[
+							'path'       => [ 0, 1 ],
+							'name'       => 'core/navigation',
+							'attributes' => [],
+							'childCount' => 0,
+							'children'   => [],
+						],
+					],
+				],
+			],
+			'patterns'  => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Reshape the header cluster',
+						'description'        => 'Replace the wrapper and remove the redundant logo.',
+						'patternSuggestions' => [],
+						'operations'         => [
+							[
+								'type'              => 'replace_block_with_pattern',
+								'patternName'       => 'theme/header-utility',
+								'expectedBlockName' => 'core/group',
+								'targetPath'        => [ 0 ],
+							],
+							[
+								'type'              => 'remove_block',
+								'expectedBlockName' => 'core/site-logo',
+								'targetPath'        => [ 0, 0 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Reshape the header cluster',
+					'description'        => 'Replace the wrapper and remove the redundant logo.',
+					'blockHints'         => [],
+					'patternSuggestions' => [ 'theme/header-utility' ],
+					'operations'         => [
+						[
+							'type'              => 'replace_block_with_pattern',
+							'patternName'       => 'theme/header-utility',
+							'expectedBlockName' => 'core/group',
+							'targetPath'        => [ 0 ],
+						],
+						[
+							'type'              => 'remove_block',
+							'expectedBlockName' => 'core/site-logo',
+							'targetPath'        => [ 0, 0 ],
 						],
 					],
 				],
