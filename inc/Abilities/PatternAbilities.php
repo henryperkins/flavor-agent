@@ -7,6 +7,7 @@ namespace FlavorAgent\Abilities;
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
@@ -112,19 +113,36 @@ final class PatternAbilities {
 		}
 
 		// Step 2: Build query string.
-		$post_type        = $input['postType'] ?? 'post';
-		$block_context    = $input['blockContext'] ?? null;
-		$template_type    = $input['templateType'] ?? null;
-		$prompt           = $input['prompt'] ?? null;
+		$post_type        = isset( $input['postType'] ) && is_string( $input['postType'] ) && sanitize_key( $input['postType'] ) !== ''
+			? sanitize_key( $input['postType'] )
+			: 'post';
+		$block_context    = self::normalize_input( $input['blockContext'] ?? [] );
+		$block_name       = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+			? sanitize_text_field( $block_context['blockName'] )
+			: '';
+		$template_type    = isset( $input['templateType'] ) && is_string( $input['templateType'] )
+			? sanitize_key( $input['templateType'] )
+			: '';
+		$prompt           = isset( $input['prompt'] ) && is_string( $input['prompt'] )
+			? sanitize_textarea_field( $input['prompt'] )
+			: '';
 		$visible_lookup   = is_array( $visible_pattern_names )
 			? array_fill_keys( $visible_pattern_names, true )
 			: null;
 		$semantic_limit   = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
 		$structural_limit = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
+		$docs_guidance    = self::collect_wordpress_docs_guidance(
+			[
+				'postType'     => $post_type,
+				'templateType' => $template_type,
+				'blockContext' => $block_context,
+			],
+			$prompt
+		);
 
 		$query = "Recommend patterns for a {$post_type} post";
-		if ( $block_context && ! empty( $block_context['blockName'] ) ) {
-			$query .= " near a {$block_context['blockName']} block";
+		if ( $block_name !== '' ) {
+			$query .= " near a {$block_name} block";
 		}
 		if ( $template_type ) {
 			$query .= " in a {$template_type} template";
@@ -154,10 +172,10 @@ final class PatternAbilities {
 				'match' => [ 'value' => $template_type ],
 			];
 		}
-		if ( $block_context && ! empty( $block_context['blockName'] ) ) {
+		if ( $block_name !== '' ) {
 			$should_clauses[] = [
 				'key'   => 'blockTypes',
-				'match' => [ 'value' => $block_context['blockName'] ],
+				'match' => [ 'value' => $block_name ],
 			];
 		}
 
@@ -215,9 +233,10 @@ final class PatternAbilities {
 
 		$llm_input = "## Editing Context\n"
 			. "Post type: {$post_type}\n"
-			. ( $block_context ? "Block context: {$block_context['blockName']}\n" : '' )
+			. ( $block_name !== '' ? "Block context: {$block_name}\n" : '' )
 			. ( $template_type ? "Template type: {$template_type}\n" : '' )
 			. ( $prompt ? "User instruction: {$prompt}\n" : '' )
+			. self::build_wordpress_docs_guidance_section( $docs_guidance )
 			. "\n## Candidate Patterns\n"
 			. wp_json_encode( $candidates_for_llm, JSON_PRETTY_PRINT );
 
@@ -296,7 +315,7 @@ final class PatternAbilities {
 You are a WordPress pattern recommendation engine.
 
 You receive a list of candidate block patterns and an editing context
-(post type, nearby block, template type, user instruction).
+(post type, nearby block, template type, user instruction, optional WordPress Developer Guidance).
 
 Your job: score each pattern for relevance to the context and explain why.
 
@@ -318,10 +337,181 @@ Rules:
 - Order by score descending.
 - Consider: post type conventions, block proximity, template structure,
   category relevance, and the user's stated intent.
+- When WordPress Developer Guidance is provided, prefer recommendations that
+  align with documented pattern, block, template, and theme.json guidance.
 - Return only name, score, and reason per pattern. Title, categories,
   and content are attached from the source data.
 - Return at most 8 recommendations.
 SYSTEM;
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
+		$query          = self::build_wordpress_docs_query( $context, $prompt );
+		$entity_key     = self::build_wordpress_docs_entity_key( $context );
+		$family_context = self::build_wordpress_docs_family_context( $context, $entity_key );
+
+		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
+	}
+
+	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
+		$post_type     = isset( $context['postType'] ) && is_string( $context['postType'] )
+			? sanitize_key( $context['postType'] )
+			: 'post';
+		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+			? sanitize_key( $context['templateType'] )
+			: '';
+		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
+		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+			? sanitize_text_field( $block_context['blockName'] )
+			: '';
+		$parts         = [ 'WordPress block patterns, inserter, and editor composition best practices' ];
+
+		if ( $post_type !== '' ) {
+			$parts[] = "post type {$post_type}";
+		}
+
+		if ( $template_type !== '' ) {
+			$parts[] = "template type {$template_type}";
+		}
+
+		if ( $block_name !== '' ) {
+			$parts[] = "near block type {$block_name}";
+		}
+
+		if ( $prompt !== '' ) {
+			$parts[] = $prompt;
+		}
+
+		$parts[] = 'block patterns, inserter context, theme.json, and site editor guidance';
+
+		return implode(
+			'. ',
+			array_values(
+				array_filter(
+					$parts,
+					static fn( string $part ): bool => $part !== ''
+				)
+			)
+		);
+	}
+
+	private static function build_wordpress_docs_entity_key( array $context ): string {
+		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+			? sanitize_key( $context['templateType'] )
+			: '';
+		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
+		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+			? sanitize_text_field( $block_context['blockName'] )
+			: '';
+
+		if ( $block_name !== '' ) {
+			$entity_key = AISearchClient::resolve_entity_key( $block_name );
+
+			if ( $entity_key !== '' ) {
+				return $entity_key;
+			}
+
+			if ( str_starts_with( $block_name, 'core/template-part/' ) ) {
+				return 'core/template-part';
+			}
+		}
+
+		if ( $template_type !== '' ) {
+			return AISearchClient::resolve_entity_key( 'template:' . $template_type );
+		}
+
+		return AISearchClient::resolve_entity_key( 'guidance:block-editor' );
+	}
+
+	/**
+	 * @param string $entity_key Normalized AI Search entity key.
+	 * @return array<string, mixed>
+	 */
+	private static function build_wordpress_docs_family_context( array $context, string $entity_key ): array {
+		$post_type     = isset( $context['postType'] ) && is_string( $context['postType'] )
+			? sanitize_key( $context['postType'] )
+			: 'post';
+		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+			? sanitize_key( $context['templateType'] )
+			: '';
+		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
+		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+			? sanitize_text_field( $block_context['blockName'] )
+			: '';
+		$surface       = 'block';
+
+		if ( $entity_key === 'core/template-part' || str_starts_with( $block_name, 'core/template-part/' ) ) {
+			$surface = 'template-part';
+		} elseif ( str_starts_with( $entity_key, 'template:' ) || ( $template_type !== '' && $block_name === '' ) ) {
+			$surface = 'template';
+		}
+
+		$family_context = [
+			'surface'   => $surface,
+			'entityKey' => $entity_key,
+			'postType'  => $post_type,
+		];
+
+		if ( $template_type !== '' ) {
+			$family_context['templateType'] = $template_type;
+		}
+
+		if ( $block_name !== '' ) {
+			$family_context['nearBlock'] = $block_name;
+		}
+
+		return $family_context;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $docs_guidance
+	 */
+	private static function build_wordpress_docs_guidance_section( array $docs_guidance ): string {
+		if ( empty( $docs_guidance ) ) {
+			return '';
+		}
+
+		$lines = [];
+
+		foreach ( array_slice( $docs_guidance, 0, 3 ) as $guidance ) {
+			if ( ! is_array( $guidance ) ) {
+				continue;
+			}
+
+			$summary = self::format_guidance_line( $guidance );
+
+			if ( $summary !== '' ) {
+				$lines[] = '- ' . $summary;
+			}
+		}
+
+		if ( empty( $lines ) ) {
+			return '';
+		}
+
+		return "\n## WordPress Developer Guidance\n" . implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * @param array<string, mixed> $guidance
+	 */
+	private static function format_guidance_line( array $guidance ): string {
+		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
+
+		if ( $prefix === '' ) {
+			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
+		}
+
+		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+
+		if ( $excerpt === '' ) {
+			return '';
+		}
+
+		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
 	}
 
 	/**

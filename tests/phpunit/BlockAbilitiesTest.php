@@ -222,6 +222,27 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertFalse( $prepared['context']['themeTokens']['layout']['allowEditing'] );
 		$this->assertTrue( $prepared['context']['themeTokens']['enabledFeatures']['backgroundImage'] );
 		$this->assertSame( 'var(--wp--preset--color--contrast)', $prepared['context']['themeTokens']['elementStyles']['button']['base']['text'] );
+		$this->assertSame( [ 'content' ], $prepared['context']['block']['bindableAttributes'] );
+		$this->assertSame( [ 'content' ], $prepared['context']['block']['inspectorPanels']['bindings'] );
+	}
+
+	public function test_prepare_recommend_block_input_preserves_explicit_empty_bindable_attributes_from_editor_context(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'               => 'core/paragraph',
+						'currentAttributes'  => [
+							'content' => 'Hello world',
+						],
+						'bindableAttributes' => [],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $prepared['context']['block']['bindableAttributes'] );
+		$this->assertArrayNotHasKey( 'bindings', $prepared['context']['block']['inspectorPanels'] );
 	}
 
 	public function test_recommend_block_short_circuits_disabled_blocks_before_api_key_validation(): void {

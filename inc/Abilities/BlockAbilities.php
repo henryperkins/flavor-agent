@@ -130,6 +130,18 @@ final class BlockAbilities {
 			$normalized['block']['inspectorPanels'] = $inspector_panels;
 		}
 
+		if ( array_key_exists( 'bindableAttributes', $block ) ) {
+			$bindable_attributes = StringArray::sanitize( $block['bindableAttributes'] ?? [] );
+			$normalized['block']['bindableAttributes'] = $bindable_attributes;
+
+			if ( [] === $bindable_attributes ) {
+				unset( $normalized['block']['inspectorPanels']['bindings'] );
+			} else {
+				$normalized['block']['inspectorPanels']['bindings'] =
+					$normalized['block']['inspectorPanels']['bindings'] ?? $bindable_attributes;
+			}
+		}
+
 			$styles = self::normalize_list( $block['styles'] ?? [] );
 		if ( ! empty( $styles ) ) {
 			$normalized['block']['styles'] = $styles;

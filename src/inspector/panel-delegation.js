@@ -28,13 +28,14 @@ export const DELEGATED_STYLE_PANELS = new Set( [
 /**
  * Settings panels delegated to sub-panel chip groups.
  *
- * Maps to: position, advanced, bindings groups in
+ * Maps to: position, advanced, bindings, list groups in
  * InspectorInjector.js SubPanelSuggestions.
  */
 export const DELEGATED_SETTINGS_PANELS = new Set( [
 	'position',
 	'advanced',
 	'bindings',
+	'list',
 ] );
 
 /**

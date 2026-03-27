@@ -121,7 +121,7 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertSame( [ 'customCSS' ], $manifest['inspectorPanels']['advanced'] );
 	}
 
-	public function test_introspect_block_type_maps_list_view_support_to_settings_panel(): void {
+	public function test_introspect_block_type_maps_list_view_support_to_list_panel(): void {
 		\WP_Block_Type_Registry::get_instance()->register(
 			'plugin/list-view-block',
 			[
@@ -134,7 +134,49 @@ final class ServerCollectorTest extends TestCase {
 
 		$manifest = ServerCollector::introspect_block_type( 'plugin/list-view-block' );
 
-		$this->assertSame( [ 'listView' ], $manifest['inspectorPanels']['settings'] );
+		$this->assertSame( [ 'listView' ], $manifest['inspectorPanels']['list'] );
+	}
+
+	public function test_introspect_block_type_exposes_bindings_panel_for_bindable_blocks(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'core/paragraph',
+			[
+				'title'      => 'Paragraph',
+				'attributes' => [
+					'content' => [
+						'type' => 'string',
+						'role' => 'content',
+					],
+				],
+			]
+		);
+
+		$manifest = ServerCollector::introspect_block_type( 'core/paragraph' );
+
+		$this->assertSame( [ 'content' ], $manifest['bindableAttributes'] );
+		$this->assertSame( [ 'content' ], $manifest['inspectorPanels']['bindings'] );
+	}
+
+	public function test_introspect_block_type_maps_new_typography_supports_to_typography_panel(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/typography-block',
+			[
+				'title'    => 'Typography Block',
+				'supports' => [
+					'typography' => [
+						'fitText'    => true,
+						'textIndent' => true,
+					],
+				],
+			]
+		);
+
+		$manifest = ServerCollector::introspect_block_type( 'plugin/typography-block' );
+
+		$this->assertSame(
+			[ 'typography.fitText', 'typography.textIndent' ],
+			$manifest['inspectorPanels']['typography']
+		);
 	}
 
 	public function test_for_template_limits_candidate_patterns_after_typed_then_generic_ordering(): void {

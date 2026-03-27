@@ -1,8 +1,9 @@
 # WordPress 7.0 / Gutenberg 22.8 -- Developer Reference
 
 > Compiled: 2026-03-19
-> Reviewed: 2026-03-25
-> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0-rc.1, official dev notes through 2026-03-24
+> Reviewed: 2026-03-27
+> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0 and 22.8.1 release notes, official dev notes through 2026-03-24
+> Scope anchor: Flavor Agent should treat Gutenberg 22.8.x as the compatibility target for this WordPress 7.0 cycle snapshot
 > Scope: API changes, new features, and deprecations relevant to block editor plugin development
 > Status: release-cycle reference snapshot, not the live backlog or the canonical source for shipped Flavor Agent behavior.
 > Use `STATUS.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current product truth and priorities.
@@ -16,6 +17,8 @@
 - [AI as a WordPress Fundamental](https://make.wordpress.org/core/2025/12/04/ai-as-a-wordpress-fundamental/) -- Vision for AI in core
 - [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/) -- Final WordPress 7.0 AI client dev note
 - [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/) -- Final JavaScript Abilities API dev note
+- [Gutenberg 22.8.0 Release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0) -- Release notes for the 2026-03-25 scope anchor
+- [Gutenberg 22.8.1 Release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1) -- Patch release notes for the 2026-03-26 bugfix baseline
 
 ---
 
@@ -874,6 +877,8 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | DataViews / DataForm | [DataViews, DataForm, et al. in WordPress 7.0](https://make.wordpress.org/core/2026/03/04/dataviews-dataform-et-al-in-wordpress-7-0/) |
 | Breadcrumb Block Filters | [Breadcrumb block filters](https://make.wordpress.org/core/2026/03/04/breadcrumb-block-filters/) |
 | PHP 7.2/7.3 Dropped | [Dropping support for PHP 7.2 and 7.3](https://make.wordpress.org/core/2026/01/09/dropping-support-for-php-7-2-and-7-3/) |
+| Gutenberg 22.8.1 | [Release 22.8.1](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1) |
+| Gutenberg 22.8.0 | [Release 22.8.0](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0) |
 | Gutenberg 22.7 | [What's new in Gutenberg 22.7 (11 March)](https://make.wordpress.org/core/2026/03/11/whats-new-in-gutenberg-22-7-11-march/) |
 | Gutenberg 22.6 | [What's new in Gutenberg 22.6 (25 February)](https://make.wordpress.org/core/2026/02/25/whats-new-in-gutenberg-22-6-25-february/) |
 
@@ -891,7 +896,7 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 
 | Opportunity | Description |
 |-------------|-------------|
-| Block bindings context for LLM | Include `metadata.bindings` in block context so LLM can reason about bound vs. free attributes. |
+| Bindings panel routing for LLM | Keep the dedicated `bindings` inspector surface aligned with the prompt schema so bindings-aware suggestions can route back to the correct UI. |
 
 ### No Action Needed
 
@@ -905,7 +910,7 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | Client-side Abilities auto-registration | Flavor Agent already registers its abilities server-side with `show_in_rest`, so WordPress 7.0 now exposes them in the admin-side `core/abilities` store without extra plugin setup. The current UI can continue using scoped REST endpoints. |
 | Navigation overlay support | `recommend-navigation` is implemented, and server-side navigation context already collects `navigation-overlay` template parts. |
 | Editor iframe changes (punted to 7.1) | Plugin uses iframe-safe patterns already |
-| New typography supports (`fitText`, `textIndent`) | Auto-detected by `resolveInspectorPanels()` |
+| New typography supports (`fitText`, `textIndent`) | Mapped in both support collectors and exposed through the typography panel model |
 | All three `__experimental*` pattern APIs | Still the correct and only way to access these features |
 | `PluginDocumentSettingPanel` location | Already imports from `@wordpress/editor` |
 | `setIsInserterOpened` location | Already dispatches on `core/editor` |

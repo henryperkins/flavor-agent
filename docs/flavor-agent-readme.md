@@ -87,7 +87,7 @@ The client behavior is:
 
 - Passive fetch on editor load when the active provider plus Qdrant are configured.
 - Search-triggered refresh when the inserter search box changes.
-- Native pattern patching through `src/patterns/compat.js`, which prefers stable `blockPatterns` / `blockPatternCategories` keys, then `__experimentalAdditional*` override keys, and falls back to `__experimental*` base variants when needed.
+- Native pattern patching through `src/patterns/compat.js`, which probes future stable `blockPatterns` / `blockPatternCategories` keys for forward compatibility but currently lands on `__experimentalAdditional*` or `__experimental*` settings on Gutenberg trunk / WordPress 7.0.
 - A toolbar badge that shows recommendation count, loading state, or error state next to the inserter toggle.
 
 The server behavior is:
@@ -227,6 +227,6 @@ vendor/bin/phpunit
 
 - Plugin header now targets WordPress 7.0+ and PHP 8.0+.
 - The editor-side inserter enhancement uses DOM access for the search input observer and the toolbar badge anchor. It is editor-specific code, not a DOM-free abstraction.
-- The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, preferring stable APIs, then `__experimentalAdditional*` override keys, and falling back to `__experimental*` base variants only when needed.
+- The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, probing future stable APIs first but treating `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the current upstream baseline on Gutenberg trunk / WordPress 7.0.
 - Theme-token source selection now lives in `src/context/theme-settings.js`, which promotes the stable `features` path only when parity with `__experimentalFeatures` is proven and otherwise passes the experimental source through to `src/context/theme-tokens.js`.
 - Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key. Compatibility with deprecated `__experimentalRole` is intentionally no longer preserved.

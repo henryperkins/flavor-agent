@@ -391,6 +391,68 @@ describe( 'update helpers', () => {
 		).toEqual( suggestion.attributeUpdates );
 	} );
 
+	test( 'getSuggestionAttributeUpdates rejects unsupported metadata.bindings updates when bindable attributes are known', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+							bindings: {
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+								text: {
+									source: 'core/post-meta',
+									args: { key: 'cta_label' },
+								},
+							},
+						},
+					},
+				},
+				{
+					bindableAttributes: [ 'url' ],
+					isInsideContentOnly: false,
+				}
+			)
+		).toEqual( {
+			metadata: {
+				name: 'Hero CTA',
+				bindings: {
+					url: {
+						source: 'core/post-meta',
+						args: { key: 'cta_url' },
+					},
+				},
+			},
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates drops binding-only suggestions when no bindable attributes are allowed', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+							bindings: {
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+							},
+						},
+					},
+				},
+				{
+					bindableAttributes: [],
+					isInsideContentOnly: false,
+				}
+			)
+		).toEqual( {} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext preserves optional UI metadata for unlocked blocks', () => {
 		const recommendations = {
 			settings: [
@@ -424,6 +486,97 @@ describe( 'update helpers', () => {
 				isInsideContentOnly: false,
 			} )
 		).toEqual( recommendations );
+	} );
+
+	test( 'sanitizeRecommendationsForContext strips unsupported metadata.bindings updates for unlocked blocks', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Connect button text and URL',
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+							bindings: {
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+								text: {
+									source: 'core/post-meta',
+									args: { key: 'cta_label' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Only supported bindings should survive.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, {
+				bindableAttributes: [ 'url' ],
+				isInsideContentOnly: false,
+			} )
+		).toEqual( {
+			settings: [
+				{
+					label: 'Connect button text and URL',
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+							bindings: {
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Only supported bindings should survive.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext drops binding-only suggestions when no bindable attributes are allowed', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Connect CTA fields',
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+							bindings: {
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Unsupported bindings should not degrade into renames.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, {
+				bindableAttributes: [],
+				isInsideContentOnly: false,
+			} )
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: 'Unsupported bindings should not degrade into renames.',
+		} );
 	} );
 
 	test( 'buildUndoAttributeUpdates restores removed keys and previous nested objects', () => {

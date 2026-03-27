@@ -21,7 +21,7 @@ describe( 'panel delegation constants', () => {
 
 	test( 'DELEGATED_SETTINGS_PANELS contains all sub-panel settings groups', () => {
 		expect( DELEGATED_SETTINGS_PANELS ).toEqual(
-			new Set( [ 'position', 'advanced', 'bindings' ] )
+			new Set( [ 'position', 'advanced', 'bindings', 'list' ] )
 		);
 	} );
 
@@ -41,6 +41,7 @@ describe( 'panel delegation constants', () => {
 		expect( isDelegatedSettingsPanel( 'position' ) ).toBe( true );
 		expect( isDelegatedSettingsPanel( 'advanced' ) ).toBe( true );
 		expect( isDelegatedSettingsPanel( 'bindings' ) ).toBe( true );
+		expect( isDelegatedSettingsPanel( 'list' ) ).toBe( true );
 	} );
 
 	test( 'isDelegatedSettingsPanel returns false for non-delegated panels', () => {

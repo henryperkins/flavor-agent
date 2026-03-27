@@ -75,6 +75,27 @@ function usesInnerBlocksAsContent( blockContext ) {
 }
 
 /**
+ * @param {Object} blockContext Block context.
+ * @return {?string[]} Bindable attribute names when context exposes them.
+ */
+function getBindableAttributeKeys( blockContext ) {
+	if ( ! Array.isArray( blockContext?.bindableAttributes ) ) {
+		return null;
+	}
+
+	return [
+		...new Set(
+			blockContext.bindableAttributes
+				.filter(
+					( attribute ) =>
+						typeof attribute === 'string' && attribute.trim() !== ''
+				)
+				.map( ( attribute ) => attribute.trim() )
+		),
+	];
+}
+
+/**
  * Derive editing restrictions from block context.
  *
  * WordPress editing modes: 'default' (unrestricted), 'contentOnly', 'disabled'.
@@ -221,6 +242,114 @@ export function filterAttributeUpdatesForContentOnly(
 }
 
 /**
+ * @param {Object}    attributeUpdates        Suggested attribute updates.
+ * @param {?string[]} bindableAttributeKeys  Supported binding targets, or null when unknown.
+ * @return {Object} Binding-safe attribute updates.
+ */
+function filterAttributeUpdatesForBindableAttributes(
+	attributeUpdates,
+	bindableAttributeKeys = null
+) {
+	if (
+		! isPlainObject( attributeUpdates ) ||
+		! Array.isArray( bindableAttributeKeys )
+	) {
+		return isPlainObject( attributeUpdates ) ? attributeUpdates : {};
+	}
+
+	if (
+		! isPlainObject( attributeUpdates.metadata ) ||
+		! isPlainObject( attributeUpdates.metadata.bindings )
+	) {
+		return attributeUpdates;
+	}
+
+	const allowedKeys = new Set( bindableAttributeKeys );
+	const filteredBindings = {};
+
+	for ( const [ key, value ] of Object.entries(
+		attributeUpdates.metadata.bindings
+	) ) {
+		if ( allowedKeys.has( key ) ) {
+			filteredBindings[ key ] = value;
+		}
+	}
+
+	const nextUpdates = { ...attributeUpdates };
+	const nextMetadata = { ...attributeUpdates.metadata };
+
+	if ( Object.keys( filteredBindings ).length > 0 ) {
+		nextMetadata.bindings = filteredBindings;
+	} else {
+		delete nextUpdates.metadata;
+		return nextUpdates;
+	}
+
+	if ( Object.keys( nextMetadata ).length > 0 ) {
+		nextUpdates.metadata = nextMetadata;
+	} else {
+		delete nextUpdates.metadata;
+	}
+
+	return nextUpdates;
+}
+
+/**
+ * @param {Object}    suggestion            Suggestion candidate.
+ * @param {?string[]} bindableAttributeKeys Supported binding targets, or null when unknown.
+ * @return {object|null} Sanitized suggestion or null when no applicable updates remain.
+ */
+function sanitizeSuggestionForBindableAttributes(
+	suggestion,
+	bindableAttributeKeys
+) {
+	if ( ! isPlainObject( suggestion?.attributeUpdates ) ) {
+		return suggestion;
+	}
+
+	if (
+		! Array.isArray( bindableAttributeKeys ) ||
+		! isPlainObject( suggestion.attributeUpdates.metadata ) ||
+		! isPlainObject( suggestion.attributeUpdates.metadata.bindings )
+	) {
+		return suggestion;
+	}
+
+	const filteredUpdates = filterAttributeUpdatesForBindableAttributes(
+		suggestion.attributeUpdates,
+		bindableAttributeKeys
+	);
+
+	if ( Object.keys( filteredUpdates ).length === 0 ) {
+		return null;
+	}
+
+	return {
+		...suggestion,
+		attributeUpdates: filteredUpdates,
+	};
+}
+
+/**
+ * @param {Array}     suggestions            Suggestion group.
+ * @param {?string[]} bindableAttributeKeys Supported binding targets, or null when unknown.
+ * @return {Array} Sanitized suggestion group.
+ */
+function sanitizeSuggestionGroupForBindableAttributes(
+	suggestions,
+	bindableAttributeKeys
+) {
+	return suggestions
+		.map( ( suggestion ) =>
+			sanitizeSuggestionForBindableAttributes(
+				suggestion,
+				bindableAttributeKeys
+			)
+		)
+		.filter( Boolean );
+}
+
+/**
  * @param {Object} recommendations   Raw recommendations payload.
  * @param {Object} [blockContext={}] Block context used to enforce locking rules.
  * @return {Object} Normalized and filtered recommendation payload.
@@ -231,10 +360,26 @@ export function sanitizeRecommendationsForContext(
 ) {
 	const normalized = normalizeSuggestionGroups( recommendations );
 	const restrictions = getEditingRestrictions( blockContext );
+	const bindableAttributeKeys = getBindableAttributeKeys( blockContext );
+	const bindingSafeRecommendations = {
+		...normalized,
+		settings: sanitizeSuggestionGroupForBindableAttributes(
+			normalized.settings,
+			bindableAttributeKeys
+		),
+		styles: sanitizeSuggestionGroupForBindableAttributes(
+			normalized.styles,
+			bindableAttributeKeys
+		),
+		block: sanitizeSuggestionGroupForBindableAttributes(
+			normalized.block,
+			bindableAttributeKeys
+		),
+	};
 
 	if ( restrictions.disabled ) {
 		return {
-			...normalized,
+			...bindingSafeRecommendations,
 			settings: [],
 			styles: [],
 			block: [],
@@ -242,12 +387,12 @@ export function sanitizeRecommendationsForContext(
 	}
 
 	if ( ! restrictions.contentOnly ) {
-		return normalized;
+		return bindingSafeRecommendations;
 	}
 
 	if ( usesInnerBlocksAsContent( blockContext ) ) {
 		return {
-			...normalized,
+			...bindingSafeRecommendations,
 			settings: [],
 			styles: [],
 			block: [],
@@ -257,10 +402,10 @@ export function sanitizeRecommendationsForContext(
 	const contentAttributeKeys = getContentAttributeKeys( blockContext );
 
 	return {
-		...normalized,
+		...bindingSafeRecommendations,
 		settings: [],
 		styles: [],
-		block: normalized.block
+		block: bindingSafeRecommendations.block
 			.map( ( suggestion ) =>
 				filterSuggestionForContentOnly(
 					suggestion,
@@ -282,13 +427,17 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 	}
 
 	const restrictions = getEditingRestrictions( blockContext );
+	const bindingSafeUpdates = filterAttributeUpdatesForBindableAttributes(
+		suggestion.attributeUpdates,
+		getBindableAttributeKeys( blockContext )
+	);
 
 	if ( restrictions.disabled ) {
 		return {};
 	}
 
 	if ( ! restrictions.contentOnly ) {
-		return suggestion.attributeUpdates;
+		return bindingSafeUpdates;
 	}
 
 	if ( usesInnerBlocksAsContent( blockContext ) ) {
@@ -296,7 +445,7 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 	}
 
 	return filterAttributeUpdatesForContentOnly(
-		suggestion.attributeUpdates,
+		bindingSafeUpdates,
 		getContentAttributeKeys( blockContext )
 	);
 }

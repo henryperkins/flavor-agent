@@ -23,7 +23,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 3. The store posts the request to `POST /flavor-agent/v1/recommend-patterns`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates backend configuration and pattern-index runtime state
-6. The backend builds a query string, embeds it through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
+6. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()`, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
 7. The store saves the recommendations and `patchInserterPatterns()` rewrites the native pattern registry metadata through the compatibility layer
 8. `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
 9. The user inserts a recommended pattern through the normal WordPress inserter flow
@@ -40,6 +40,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - If `visiblePatternNames` is present but empty, the backend returns no recommendations instead of suggesting invalid patterns
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
+- WordPress docs grounding is cache-only and non-blocking; cache misses fall back to the existing retrieval-and-rerank path instead of failing the request
 - The badge fails closed when the inserter DOM anchor cannot be found
 - Flavor Agent does not directly insert or undo recommended patterns; insertion still belongs to the core editor workflow
 
@@ -53,6 +54,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state |
 | REST handler | `Agent_Controller::handle_recommend_patterns()` | Adapts the REST request to the backend ability |
 | Backend ability | `PatternAbilities::recommend_patterns()` | Runs validation, retrieval, reranking, and filtering |
+| Docs grounding | `AISearchClient::maybe_search_with_cache_fallbacks()` | Supplies cache-backed WordPress developer guidance for the ranking prompt |
 | Embeddings | `EmbeddingClient::embed()` | Turns the query into a vector |
 | Vector search | `QdrantClient::search()` | Retrieves semantic and structural candidates |
 | Ranking | `ResponsesClient::rank()` | Produces the final ordered recommendation set |

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\BlockAbilities;
+use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
 use FlavorAgent\Abilities\WordPressDocsAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
@@ -115,6 +116,55 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 			$query_guidance,
 			$this->invoke_private_array_method(
 				TemplateAbilities::class,
+				'collect_wordpress_docs_guidance',
+				[ $context, $prompt ]
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_pattern_docs_guidance_uses_query_cache_before_entity_cache(): void {
+		$query_guidance  = [
+			[
+				'id'        => 'query-chunk',
+				'title'     => 'Cover pattern guidance',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/cover',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
+				'excerpt'   => 'Patterns near cover blocks should respect focal point and overlay readability.',
+				'score'     => 0.95,
+			],
+		];
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Cover block reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/cover',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
+				'excerpt'   => 'Generic cover block guidance.',
+				'score'     => 0.84,
+			],
+		];
+		$context         = [
+			'postType'     => 'page',
+			'templateType' => 'home',
+			'blockContext' => [
+				'blockName' => 'core/cover',
+			],
+		];
+		$prompt          = 'Make the hero feel more editorial.';
+		$query           = $this->invoke_private_string_method(
+			PatternAbilities::class,
+			'build_wordpress_docs_query',
+			[ $context, $prompt ]
+		);
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ]             = $query_guidance;
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/cover' ) ] = $entity_guidance;
+
+		$this->assertSame(
+			$query_guidance,
+			$this->invoke_private_array_method(
+				PatternAbilities::class,
 				'collect_wordpress_docs_guidance',
 				[ $context, $prompt ]
 			)

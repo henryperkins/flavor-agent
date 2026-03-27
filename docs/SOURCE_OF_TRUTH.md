@@ -211,7 +211,7 @@ flavor-agent/
 | OpenAI Native Embeddings | Pattern embedding | Pattern index + pattern recommendations (Native provider) | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
 | OpenAI Native Chat | LLM ranking / chat | Pattern ranking, template/navigation recommendations (Native provider) | Optional `flavor_agent_openai_native_api_key` override, `_chat_model`; otherwise inherits core OpenAI connector credentials |
 | Qdrant | Vector similarity search | Pattern recommendations | `flavor_agent_qdrant_url`, `_key` |
-| Cloudflare AI Search | WordPress dev-doc grounding | Supplemental doc context for block/template recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results` |
+| Cloudflare AI Search | WordPress dev-doc grounding | Supplemental doc context for block, pattern, template, template-part, and navigation recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results` |
 
 The plugin works in degraded mode without any services configured. Each surface gracefully disables when its required backends are absent.
 
@@ -231,8 +231,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### Pattern Recommendations
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
-- **Pipeline:** Build query text -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores < 0.3 -> return max 8.
-- **Inserter integration:** Via `compat.js`, patches block patterns (stable `blockPatterns` key preferred, then `__experimentalAdditionalBlockPatterns`, then `__experimentalBlockPatterns` fallback) to add "Recommended" category, enriched descriptions, and extracted keywords.
+- **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores < 0.3 -> return max 8.
+- **Inserter integration:** Via `compat.js`, probes future stable pattern settings first for forward compatibility, but current Gutenberg trunk / WordPress 7.0 still resolves through `__experimentalAdditionalBlockPatterns` and `__experimentalBlockPatterns`. The adapter patches whichever path the editor actually exposes to add the "Recommended" category, enriched descriptions, and extracted keywords.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
 
@@ -292,7 +292,7 @@ All abilities registered with full JSON Schema input/output definitions:
 
 #### WordPress Docs Grounding (Cloudflare AI Search)
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
-- Recommendation-time grounding is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
+- Recommendation-time grounding for block, pattern, template, template-part, and navigation suggestions is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
 - Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks). Source keys with an `ai-search/<instanceId>/` prefix are now recognized alongside the plain `developer.wordpress.org/` prefix.
 - Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation). Exact entity misses now also fall back to prewarmed generic editor/template/template-part guidance families before returning empty. Throttled by credential fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
 
@@ -348,7 +348,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 1. **`composer lint:php`**: Green across production code, but `tests/phpunit/bootstrap.php` is intentionally excluded from WPCS due to its multi-namespace stub harness.
 2. **JS toolchain must stay on Node 20 / npm 10**: This repo now pins that combo because Node 24 / npm 11 on this host fails `npm ci` immediately via `engine-strict` (`EBADENGINE`).
 3. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
-4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` prefers stable `blockPatterns`/`blockPatternCategories`/`getAllowedPatterns` paths when present, then `__experimentalAdditional*` and `__experimental*` variants, and now returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
+4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
 6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. Because WordPress `7.0` is still beta as of 2026-03-26, that harness currently pins `wordpress:beta-7.0-beta4-php8.2-apache` instead of a final stable `7.0` image tag.
 7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews/DataForm timeline for privileged users, but there is still no diff-oriented inspection UI, no abilities-backed row actions/discovery layer, and no broader observability workflow beyond the stored timeline.
@@ -406,7 +406,7 @@ Editor loads (or inserter search changes)
         <- JSON response: [{ name, score, reason, ... }]
   -> store: SET_PATTERN_RECS + setPatternStatus('ready')
   -> recommendation-utils.js: patchPatternMetadata()
-     -> compat.js: setBlockPatterns() (stable key preferred, experimental fallback)
+    -> compat.js: setBlockPatterns() (future stable key if present, otherwise current experimental path)
      -> Adds "Recommended" category, enriched descriptions/keywords
   -> InserterBadge renders count/loading/error via portal
 ```

@@ -10,7 +10,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Secondary surfaces after a successful request:
   - `SettingsRecommendations` in the default Inspector group
   - `StylesRecommendations` in the `styles` group
-  - compact `SuggestionChips` injected into sub-panels such as position, advanced, bindings, color, typography, dimensions, border, filter, and background
+  - compact `SuggestionChips` injected into sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, filter, and background
 
 ## Surfacing Conditions
 
@@ -22,7 +22,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## End-To-End Flow
 
 1. The user selects a block and optionally enters a prompt in `BlockRecommendationsContent`
-2. `collectBlockContext()` in `src/context/collector.js` builds the client-side block snapshot
+2. `collectBlockContext()` in `src/context/collector.js` builds the client-side block snapshot, including bindable attributes and native inspector panel availability
 3. `fetchBlockRecommendations()` in `src/store/index.js` posts that context to `POST /flavor-agent/v1/recommend-block`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_block()` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, and calls `FlavorAgent\LLM\ChatClient::chat()`

@@ -2,8 +2,9 @@
 
 > Created: 2026-03-25
 > Scope: repo-specific execution plan for the next 5 milestones
-> External alignment snapshot verified: 2026-03-25
+> External alignment snapshot verified: 2026-03-27
 > Support target: WordPress 7.0 RC -> stable, PHP 8.0+, Node 20 / npm 10
+> Scope anchor: Gutenberg 22.8.x (`22.8.0` released 2026-03-25; `22.8.1` released 2026-03-26)
 > Baseline: current repo already ships block, pattern, template, template-part, navigation, and activity surfaces
 
 ## Goal
@@ -20,26 +21,26 @@ It intentionally does **not** align with an Elementor-style AI code generator or
 
 ## Alignment Snapshot
 
-These are the external constraints this repo should treat as current on 2026-03-25:
+These are the external constraints this repo should treat as current on 2026-03-27:
 
 1. WordPress 7.0 is still in release-candidate phase and is scheduled for general release on **April 9, 2026**. Build for the 7.0 API surface now, but keep experimental integrations adapter-backed until after the stable release.
-2. The WordPress 7.0 planning post explicitly highlights:
-   - Abilities and Workflows API
+2. The WordPress 7.0 planning thread highlighted and later refined:
+   - Abilities and Workflows API, with the client-side Abilities work landing more concretely than the broader Workflows ambition during the 7.0 cycle
    - WP client AI API
    - DataViews and DataForms iterations
-   - design-system token work
    - revisions with visual diffs and better undo/review affordances
    - server-side creation of blocks and patterns
    - navigation overlay work as a template-part-aware flow
-3. Gutenberg 22.7 introduced or highlighted:
-   - the Connectors screen and API
-   - style variation transform previews
-   - Content Guidelines experiment work
+   - by the late-cycle planning update, Design System work was explicitly canceled for 7.0, so treat that as adjacent ecosystem direction rather than a 7.0 dependency for this plugin
+3. Gutenberg 22.8 is the scope anchor for this plan. Treat the `22.8.x` line as the current plugin-alignment baseline:
+   - `22.8.0` (2026-03-25) expanded Connectors with registry extensibility, unregister/upsert support, and better empty-state polish
+   - `22.8.0` also advanced editor-adjacent surfaces relevant to this plugin, including Global Styles pseudo-selector state UI, pattern-editing/block-fields selection highlighting, and navigation/site-design polish
+   - `22.8.1` (2026-03-26) is primarily a collaboration-heavy patch release, so treat it as bugfix baseline coverage rather than a new product-direction signal
 4. The official `AI` plugin now positions itself as the reference implementation for:
    - inline/editor-native AI features
    - Connectors-based provider setup
    - opt-in feature toggles
-   - review-first UX
+   - review-oriented UX such as Review Notes
    - roadmap items like contextual tagging, comment moderation, logging/observability, content assistant, and site agent
 5. The AI team is still treating the official plugin as a features-as-plugins lab, not a signal to duplicate provider setup or invent parallel abstractions.
 
@@ -70,8 +71,37 @@ In current code:
    - a plugin REST route
    - an inline inspector surface for `core/navigation`
 2. Activity is already persisted server-side through the activity repository and REST endpoints, even though the UI still behaves like a lightweight editor-scoped history surface.
+3. A sitewide admin audit slice already exists under `Settings > AI Activity`, backed by `DataViews` / `DataForm` over the same server-backed activity repository.
+4. The Gutenberg trunk-alignment pass is now part of the baseline:
+   - newer typography supports (`typography.fitText`, `typography.textIndent`) are modeled in both support collectors
+   - `listView` is modeled as the dedicated `list` inspector surface, not generic settings
+   - bindings-aware prompt routing is aligned with the dedicated bindings inspector slot, with bindable attributes collected into block context
+   - pattern API docs/tests now treat `__experimental*` pattern settings and selectors as the current upstream baseline, with stable keys treated as future-facing probes
+5. The first-party JS still does not consume `@wordpress/core-abilities`, so client-side Abilities runtime usage remains a future admin-side integration opportunity rather than current baseline behavior.
 
-That means the next milestones should build forward from those foundations instead of re-planning them from scratch.
+That means the next milestones should build forward from those foundations instead of re-planning them from scratch, especially in Epic 5 where the first admin audit slice is already shipped.
+
+## Immediate Gap-Closure Queue
+
+Before expanding the roadmap into broader new surfaces, the clearest next steps are:
+
+1. **Finish Epic 1 shared capability UX.**
+   - Add shared capability/why-unavailable UI and one normalized status vocabulary across block, navigation, template, and template-part surfaces.
+   - Make `check-status` expose the exact surface-ready flags the editor needs instead of requiring each panel to infer degraded-mode behavior independently.
+2. **Deepen the shipped audit slice before adding broader agent behavior.**
+   - Expand `Settings > AI Activity` with before/after inspection, request/provider diagnostics, and clearer ordered-undo visibility.
+   - Keep the server-backed repository as the source of truth for undo eligibility and diagnostics.
+3. **Decide the navigation contract explicitly.**
+   - Either document navigation as advisory-only through v1.0, or ship one bounded previewable/undoable navigation action.
+   - Do not leave the product in an ambiguous middle state.
+4. **Refresh live provider-backed verification.**
+   - Re-run end-to-end recommendation execution with valid credentials and capture the results in `STATUS.md`.
+   - Use that run to confirm the current Connectors/provider boundary, docs grounding, and recent Gutenberg trunk-alignment work under real credentials.
+5. **Switch from RC/beta assumptions to stable WordPress 7.0 as soon as available.**
+   - Update the WP 7.0 Docker/browser harness to the stable image tag.
+   - Re-audit experimental adapters (`pattern-settings.js`, theme settings sources, and any remaining trunk-sensitive inspector modeling) against final 7.0 core.
+
+Only after those five items land should the roadmap move aggressively into new style-book or higher-level site-agent surface work.
 
 ## Ordered Execution
 
@@ -372,7 +402,7 @@ The repo already has validated composition primitives. The next step is to incre
 1. Expand template and template-part executable operations in bounded ways.
 2. Improve navigation guidance and, where safe, add validated navigation actions later.
 3. Improve structural context in prompts and collectors.
-4. Explore list-view or site-structure affordances only where they can stay native and low-risk.
+4. Build on the now-modeled `list` inspector surface only if a dedicated UI layer becomes necessary; do not invent a separate site-structure module by default.
 
 ### Non-Goals
 
@@ -398,23 +428,18 @@ Existing files:
 - `src/utils/template-operation-sequence.js`
 - `src/utils/template-part-areas.js`
 
-Likely new files:
-
-- `src/site-structure/ListViewRecommendations.js`
-- `src/site-structure/__tests__/ListViewRecommendations.test.js`
-
 ### Implementation Slices
 
 1. Extend template operations carefully beyond the current contract:
    - bounded placement targeting
    - safe replacement flows
    - limited move operations only when validation is deterministic
-2. Expand template-part operations beyond start/end insertion only after snapshot-based undo coverage is ready.
+2. Continue expanding template-part operations from the current bounded contract, with snapshot-based undo and stable-locator coverage remaining the prerequisite for any wider mutation set.
 3. Deepen navigation context:
    - overlay/template-part awareness
    - block focus cues
    - stronger bound page and structure reasoning
-4. Add site-structure cues that integrate with existing editor affordances before inventing new surfaces.
+4. Use the existing `list` inspector modeling and block-context collectors before introducing any dedicated site-structure surface.
 5. Keep all new structural operations passing through `template-operation-sequence.js` and executor validation.
 
 ### Acceptance Tests
@@ -425,7 +450,7 @@ PHP:
 
 JS:
 
-- `npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/site-structure/__tests__/ListViewRecommendations.test.js`
+- `npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/context/__tests__/block-inspector.test.js`
 
 Browser:
 
@@ -451,11 +476,21 @@ Turn activity into a durable trust layer first, then add a small, roadmap-aligne
 
 The official AI plugin roadmap explicitly points toward logging, observability, contextual tagging, comment moderation, content assistance, and a future site agent. Flavor Agent should not skip straight to broad agent actions without first shipping durable trust and review infrastructure.
 
+### Progress In Tree
+
+Some of Epic 5 Stage A is already in the tree:
+
+1. `inc/Admin/ActivityPage.php` and `src/admin/activity-log.js` already ship a `Settings > AI Activity` admin screen.
+2. That screen already uses WordPress `DataViews` and `DataForm` over the shared server-backed activity repository.
+3. Editor-scoped activity and undo already round-trip through the repository and REST layer.
+
+Remaining work is deeper inspection, broader observability, and any future narrow site-agent actions.
+
 ### In Scope
 
 Stage A: audit and observability
 
-1. Promote the existing activity foundation into a durable admin-visible audit surface.
+1. Expand the existing activity foundation and admin-visible audit surface.
 2. Add before/after inspection, ordered undo eligibility, and better diagnostics.
 3. Add request logging and backend observability appropriate for plugin-owned AI calls.
 
@@ -480,8 +515,11 @@ Existing files:
 - `inc/Activity/Repository.php`
 - `inc/Activity/Serializer.php`
 - `inc/Activity/Permissions.php`
+- `inc/Admin/ActivityPage.php`
 - `inc/REST/Agent_Controller.php`
 - `inc/Settings.php`
+- `src/admin/activity-log.js`
+- `src/admin/activity-log-utils.js`
 - `src/components/ActivitySessionBootstrap.js`
 - `src/components/AIActivitySection.js`
 - `src/store/index.js`
@@ -490,8 +528,6 @@ Existing files:
 
 Likely new files:
 
-- `inc/Admin/ActivityPage.php`
-- `src/admin/activity-log.js`
 - `inc/Abilities/ContentAbilities.php`
 - `inc/LLM/ContentPrompt.php`
 - `src/post-editor/TaggingSuggestions.js`
@@ -504,7 +540,7 @@ Likely new files:
    - request metadata
    - before/after diffs
    - backend/provider cost or timing diagnostics where available
-2. Add an admin-visible activity page instead of relying on editor panels alone.
+2. Deepen the existing admin-visible activity page instead of relying on editor panels alone.
 3. Keep ordered undo enforcement on the server as the source of truth.
 4. Add opt-in settings for any higher-level AI admin actions.
 5. Only after Stage A is stable, add a narrow content/admin ability set that mirrors the official roadmap rather than inventing a large custom agent surface.
@@ -576,7 +612,7 @@ The external alignment in this plan is based on these primary sources:
 
 1. WordPress 7.0 release schedule (scheduled release: April 9, 2026)
 2. Planning for WordPress 7.0
-3. Gutenberg 22.7 release notes
+3. Gutenberg 22.8.0 and 22.8.1 release notes
 4. AI team weekly summary, 2026-03-11
 5. Official `AI` plugin page and roadmap
 6. WordPress AI GitHub repository overview

@@ -93,6 +93,13 @@ const withAIRecommendations = createHigherOrderComponent((BlockEdit) => {
                             label="AI bindings suggestions"
                         />
                         <SubPanelSuggestions
+                            group="list"
+                            panel="list"
+                            clientId={clientId}
+                            suggestions={recommendations.settings}
+                            label="AI list view suggestions"
+                        />
+                        <SubPanelSuggestions
                             group="color"
                             panel="color"
                             clientId={clientId}

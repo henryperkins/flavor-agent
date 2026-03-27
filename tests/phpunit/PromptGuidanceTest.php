@@ -144,11 +144,15 @@ final class PromptGuidanceTest extends TestCase {
 		$prompt = Prompt::build_system();
 
 		$this->assertStringContainsString(
-			'general|layout|position|advanced|color|filter|typography|dimensions|border|shadow|background',
+			'general|layout|position|advanced|bindings|list|color|filter|typography|dimensions|border|shadow|background',
 			$prompt
 		);
 		$this->assertStringContainsString(
 			'Appearance tab (color, filter, typography, dimensions, border, shadow, background, style variations)',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Settings tab (layout, alignment, position, advanced, bindings, list, general config)',
 			$prompt
 		);
 	}
@@ -167,6 +171,7 @@ final class PromptGuidanceTest extends TestCase {
 							],
 						],
 					],
+					'bindableAttributes' => [ 'content', 'url', 'linkTarget' ],
 				],
 				'themeTokens' => [
 					'duotone'         => [ 'midnight: #111111 / #f5f5f5' ],
@@ -198,10 +203,14 @@ final class PromptGuidanceTest extends TestCase {
 			'Duotone preset details:',
 			$prompt
 		);
-		$this->assertStringContainsString(
-			'Block bindings:',
-			$prompt
-		);
+			$this->assertStringContainsString(
+				'Block bindings:',
+				$prompt
+			);
+			$this->assertStringContainsString(
+				'Bindable attributes: ["content","url","linkTarget"]',
+				$prompt
+			);
 		$this->assertStringContainsString(
 			'Theme feature flags:',
 			$prompt

@@ -1,6 +1,6 @@
 # WordPress 7.0 Developer Docs Index
 
-Generated: 2026-03-25 UTC
+Generated: 2026-03-27 UTC
 
 > Status: discovery snapshot for release-cycle research, not a live backlog or product-behavior document.
 > Use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current Flavor Agent truth.
@@ -13,6 +13,7 @@ This index covers official, release-specific WordPress 7.0 developer documentati
 - Make/Test release and feature-testing posts
 - WordPress Developer Blog roundup posts returned by a `WordPress 7.0` search
 - the official `Keeping up with Gutenberg: Index 2026` page plus linked Gutenberg 22.5-22.7 weekly update posts listed under the WordPress 7.0 heading
+- the Gutenberg GitHub releases page for the 22.8.x line that landed after the index's latest refresh
 
 This workspace did not have Cloudflare AI Search credentials configured, so discovery was done from the official WordPress site search and REST API endpoints above.
 
@@ -30,13 +31,14 @@ Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable 
 - [Make/Test search for "WordPress 7.0"](https://make.wordpress.org/test/?s=WordPress+7.0)
 - [Developer Blog search for "WordPress 7.0"](https://developer.wordpress.org/news/?s=WordPress+7.0)
 - [Keeping up with Gutenberg: Index 2026](https://make.wordpress.org/core/handbook/references/keeping-up-with-gutenberg-index/)
+- [Gutenberg releases](https://github.com/WordPress/gutenberg/releases)
 
 ## New Notes This Refresh
 
 - The March 10, 2026 Developer Blog roundup says the "always-iframed post editor" work was punted to WordPress 7.1, so the WordPress 7.0 iframe note should be read as the inserted-block-version gate rather than a blanket always-iframed rollout.
 - The February 20, 2026 `Help Test WordPress 7.0` post expands the concrete release-test surface beyond the standalone dev notes: admin refresh, client-side media processing, Icon and Breadcrumbs blocks, Gallery lightbox, Cover external video, and Grid controls are all called out explicitly.
 - The March 11, 2026 Gutenberg 22.7 update shows Connectors work continuing after the standalone Connectors dev note: the Connectors screen and API landed, connector setting names gained the `_ai_` prefix, and providers are dynamically registered from the WP AI Client registry.
-- The official Gutenberg 2026 index lists the Gutenberg 22.5, 22.6, and 22.7 weekly update posts under the WordPress 7.0 heading, making it the best official cross-check for cycle-adjacent Gutenberg changes that are not always published as standalone 7.0 dev notes.
+- The official Gutenberg 2026 index page was still last updated on 2026-03-19, so it stops at Gutenberg 22.7; Gutenberg `22.8.0` (2026-03-25) and `22.8.1` (2026-03-26) were cross-checked directly from the GitHub releases page.
 
 ## Release Hub and Planning
 
@@ -83,8 +85,10 @@ Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable 
 
 ## Supplemental Gutenberg Cycle Coverage
 
-These are not dedicated WordPress 7.0 dev notes, but the official Gutenberg index lists them under the WordPress 7.0 heading and they carry relevant release-cycle detail.
+These are not dedicated WordPress 7.0 dev notes. The official Gutenberg index carries 22.5-22.7 under the WordPress 7.0 heading, and 22.8.x was cross-checked directly from the GitHub releases page because the index had not yet been refreshed.
 
+- 2026-03-26: [Gutenberg 22.8.1 release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1)
+- 2026-03-25: [Gutenberg 22.8.0 release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0)
 - 2026-03-11: [What’s new in Gutenberg 22.7? (11 March)](https://make.wordpress.org/core/2026/03/11/whats-new-in-gutenberg-22-7-11-march/)
 - 2026-02-25: [What’s new in Gutenberg 22.6? (25 February)](https://make.wordpress.org/core/2026/02/25/whats-new-in-gutenberg-22-6-25-february/)
 - 2026-02-04: [What’s new in Gutenberg 22.5? (04 February)](https://make.wordpress.org/core/2026/02/04/whats-new-in-gutenberg-22-5-04-february/)
@@ -104,4 +108,4 @@ These are not dedicated release docs, but they surfaced in Developer Blog search
 - 18 Make/Core dev notes
 - 5 testing docs
 - 4 supplemental Developer Blog roundup posts
-- 3 supplemental Gutenberg weekly update posts
+- 5 supplemental Gutenberg release/update posts

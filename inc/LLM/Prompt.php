@@ -30,7 +30,7 @@ Each item in settings/styles/block is an object:
 {
   "label": "Human-readable name (e.g. 'Use theme accent background')",
   "description": "Why this helps (one sentence)",
-  "panel": "Which Inspector panel: general|layout|position|advanced|color|filter|typography|dimensions|border|shadow|background",
+	"panel": "Which Inspector panel: general|layout|position|advanced|bindings|list|color|filter|typography|dimensions|border|shadow|background",
   "type": "Optional: attribute_change|style_variation",
   "attributeUpdates": { "attributeName": "value" },
   "currentValue": "Optional: current value for before/after display",
@@ -44,10 +44,12 @@ Each item in settings/styles/block is an object:
 }
 
 Rules:
-- "settings" array: suggestions for the Settings tab (layout, alignment, position, advanced, general config).
+- "settings" array: suggestions for the Settings tab (layout, alignment, position, advanced, bindings, list, general config).
 - "styles" array: suggestions for the Appearance tab (color, filter, typography, dimensions, border, shadow, background, style variations).
 - "block" array: block-level suggestions (style variation changes, structural recommendations).
 - Only suggest changes for panels listed in the block's inspectorPanels.
+- Use "list" for List View tab suggestions.
+- When bindableAttributes are provided, only suggest metadata.bindings changes for those attribute names.
 - Only suggest preset values that exist in the provided themeTokens.
 - When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented Gutenberg capabilities or theme.json standards.
 - When structural identity is provided, treat it as the block's job on this page. Distinguish role and location from raw block name alone (for example, header navigation vs footer navigation, main query vs sidebar query).
@@ -91,6 +93,22 @@ SYSTEM;
 
 		if ( ! empty( $block['currentAttributes']['metadata']['bindings'] ) ) {
 			$parts[] = 'Block bindings: ' . wp_json_encode( $block['currentAttributes']['metadata']['bindings'] );
+		}
+
+		$bindable_attributes = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $attribute ): string => is_string( $attribute )
+						? ( self::sanitize_attribute_update_key( $attribute ) ?? '' )
+						: '',
+					(array) ( $block['bindableAttributes'] ?? [] )
+				),
+				static fn( string $attribute ): bool => $attribute !== ''
+			)
+		);
+
+		if ( ! empty( $bindable_attributes ) ) {
+			$parts[] = 'Bindable attributes: ' . wp_json_encode( $bindable_attributes );
 		}
 
 		if ( ! empty( $block['supportsContentRole'] ) ) {
@@ -323,6 +341,8 @@ SYSTEM;
 			];
 		}
 
+		$payload = self::filter_payload_for_bindable_attributes( $payload, $block );
+
 		if ( ! $restrictions['contentOnly'] ) {
 			return $payload;
 		}
@@ -344,6 +364,48 @@ SYSTEM;
 		];
 	}
 
+	private static function filter_payload_for_bindable_attributes( array $payload, array $block ): array {
+		$bindable_attribute_keys = self::get_bindable_attribute_keys( $block );
+
+		if ( null === $bindable_attribute_keys ) {
+			return $payload;
+		}
+
+		return [
+			'settings'    => self::filter_suggestion_group_for_bindable_attributes(
+				$payload['settings'] ?? [],
+				$bindable_attribute_keys
+			),
+			'styles'      => self::filter_suggestion_group_for_bindable_attributes(
+				$payload['styles'] ?? [],
+				$bindable_attribute_keys
+			),
+			'block'       => self::filter_suggestion_group_for_bindable_attributes(
+				$payload['block'] ?? [],
+				$bindable_attribute_keys
+			),
+			'explanation' => $payload['explanation'] ?? '',
+		];
+	}
+
+	/**
+	 * @param string[] $bindable_attribute_keys
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function filter_suggestion_group_for_bindable_attributes( array $suggestions, array $bindable_attribute_keys ): array {
+		return array_values(
+			array_filter(
+				array_map(
+					fn( array $suggestion ): ?array => self::filter_suggestion_for_bindable_attributes(
+						$suggestion,
+						$bindable_attribute_keys
+					),
+					$suggestions
+				)
+			)
+		);
+	}
+
 	private static function validate_suggestions( array $suggestions ): array {
 		$valid = [];
 		foreach ( $suggestions as $s ) {
@@ -353,7 +415,7 @@ SYSTEM;
 			$valid[] = [
 				'label'            => sanitize_text_field( $s['label'] ),
 				'description'      => sanitize_text_field( $s['description'] ?? '' ),
-				'panel'            => sanitize_key( $s['panel'] ?? 'general' ),
+				'panel'            => self::normalize_panel_key( $s['panel'] ?? 'general' ),
 				'type'             => isset( $s['type'] ) ? sanitize_key( $s['type'] ) : null,
 				'attributeUpdates' => self::sanitize_attribute_updates( $s['attributeUpdates'] ?? [] ),
 				'currentValue'     => self::sanitize_display_value( $s['currentValue'] ?? null ),
@@ -389,6 +451,87 @@ SYSTEM;
 		$suggestion['attributeUpdates'] = $filtered_updates;
 
 		return $suggestion;
+	}
+
+	/**
+	 * @param string[] $bindable_attribute_keys
+	 */
+	private static function filter_suggestion_for_bindable_attributes( array $suggestion, array $bindable_attribute_keys ): ?array {
+		if ( ! is_array( $suggestion['attributeUpdates'] ?? null ) ) {
+			return $suggestion;
+		}
+
+		$filtered_updates = self::filter_attribute_updates_for_bindable_attributes(
+			$suggestion['attributeUpdates'],
+			$bindable_attribute_keys
+		);
+
+		if ( empty( $filtered_updates ) ) {
+			return null;
+		}
+
+		$suggestion['attributeUpdates'] = $filtered_updates;
+
+		return $suggestion;
+	}
+
+	/**
+	 * @param string[] $bindable_attribute_keys
+	 */
+	private static function filter_attribute_updates_for_bindable_attributes( array $attribute_updates, array $bindable_attribute_keys ): array {
+		$metadata = $attribute_updates['metadata'] ?? null;
+		$bindings = is_array( $metadata['bindings'] ?? null ) ? $metadata['bindings'] : null;
+
+		if ( ! is_array( $metadata ) || ! is_array( $bindings ) ) {
+			return $attribute_updates;
+		}
+
+		$allowed_bindings  = array_fill_keys( $bindable_attribute_keys, true );
+		$filtered_bindings = [];
+
+		foreach ( $bindings as $attribute_name => $binding ) {
+			if ( is_string( $attribute_name ) && isset( $allowed_bindings[ $attribute_name ] ) ) {
+				$filtered_bindings[ $attribute_name ] = $binding;
+			}
+		}
+
+		if ( [] === $filtered_bindings ) {
+			unset( $attribute_updates['metadata'] );
+			return $attribute_updates;
+		} else {
+			$metadata['bindings'] = $filtered_bindings;
+		}
+
+		if ( [] === $metadata ) {
+			unset( $attribute_updates['metadata'] );
+		} else {
+			$attribute_updates['metadata'] = $metadata;
+		}
+
+		return $attribute_updates;
+	}
+
+	/**
+	 * @return string[]|null
+	 */
+	private static function get_bindable_attribute_keys( array $block ): ?array {
+		if ( ! array_key_exists( 'bindableAttributes', $block ) ) {
+			return null;
+		}
+
+		return array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static fn( mixed $attribute ): string => is_string( $attribute )
+							? ( self::sanitize_attribute_update_key( $attribute ) ?? '' )
+							: '',
+						(array) $block['bindableAttributes']
+					),
+					static fn( string $attribute ): bool => $attribute !== ''
+				)
+			)
+		);
 	}
 
 	private static function get_block_restrictions( array $block ): array {
@@ -454,6 +597,15 @@ SYSTEM;
 
 	private static function sanitize_display_value( mixed $data ): mixed {
 		return self::sanitize_attribute_updates( $data );
+	}
+
+	private static function normalize_panel_key( mixed $panel ): string {
+		$normalized = sanitize_key( is_string( $panel ) ? $panel : 'general' );
+
+		return match ( $normalized ) {
+			'listview', 'list-view' => 'list',
+			default => $normalized !== '' ? $normalized : 'general',
+		};
 	}
 
 	private static function sanitize_attribute_update_key( mixed $key ): ?string {

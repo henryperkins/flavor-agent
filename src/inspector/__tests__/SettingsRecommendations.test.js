@@ -90,6 +90,7 @@ describe( 'SettingsRecommendations', () => {
 			makeSuggestion( 'position' ),
 			makeSuggestion( 'advanced' ),
 			makeSuggestion( 'bindings' ),
+			makeSuggestion( 'list' ),
 		];
 		const kept = [ makeSuggestion( 'general' ) ];
 
@@ -100,6 +101,7 @@ describe( 'SettingsRecommendations', () => {
 		expect( text ).not.toContain( 'Suggestion for position' );
 		expect( text ).not.toContain( 'Suggestion for advanced' );
 		expect( text ).not.toContain( 'Suggestion for bindings' );
+		expect( text ).not.toContain( 'Suggestion for list' );
 		expect( text ).toContain( 'Suggestion for general' );
 	} );
 

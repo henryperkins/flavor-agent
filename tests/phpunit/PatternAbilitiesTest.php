@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
@@ -294,6 +295,71 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'parse_error', $result->get_error_code() );
 	}
 
+	public function test_recommend_patterns_includes_cached_wordpress_docs_guidance_in_ranking_input(): void {
+		$this->configure_backends();
+		$this->configure_docs_grounding();
+		$this->save_index_state();
+
+		AISearchClient::cache_entity_guidance(
+			'core/cover',
+			[
+				[
+					'id'        => 'cover-doc',
+					'title'     => 'Cover block reference',
+					'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/cover',
+					'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/cover/',
+					'excerpt'   => 'Cover blocks support focal point, overlay styling, and inner content layout controls.',
+					'score'     => 0.91,
+				],
+			]
+		);
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.71 ),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.79 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.82,
+								'reason' => 'Matches the cover hero context.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'     => 'page',
+				'templateType' => 'home',
+				'blockContext' => [
+					'blockName' => 'core/cover',
+				],
+				'prompt'       => 'Make the hero feel more editorial.',
+			]
+		);
+
+		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$this->assertStringContainsString( '## WordPress Developer Guidance', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Cover block reference', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'overlay styling, and inner content layout controls', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
 	public function test_recommend_patterns_caps_and_sorts_recommendations(): void {
 		$this->configure_backends();
 		$this->save_index_state();
@@ -355,6 +421,17 @@ final class PatternAbilitiesTest extends TestCase {
 				'flavor_agent_openai_native_chat_model' => 'gpt-5.4',
 				'flavor_agent_qdrant_url'               => 'https://example.cloud.qdrant.io:6333',
 				'flavor_agent_qdrant_key'               => 'qdrant-key',
+			]
+		);
+	}
+
+	private function configure_docs_grounding(): void {
+		WordPressTestState::$options = array_merge(
+			WordPressTestState::$options,
+			[
+				'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+				'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+				'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 			]
 		);
 	}

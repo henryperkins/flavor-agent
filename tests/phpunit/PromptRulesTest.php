@@ -130,4 +130,111 @@ final class PromptRulesTest extends TestCase {
 		);
 		$this->assertSame( 'Container lock.', $result['explanation'] );
 	}
+
+	public function test_parse_response_normalizes_list_view_panel_aliases(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [
+						[
+							'label'            => 'Open list items by default',
+							'panel'            => 'list-view',
+							'attributeUpdates' => [ 'ordered' => true ],
+						],
+					],
+					'styles'      => [],
+					'block'       => [],
+					'explanation' => 'List view routing should be normalized.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'list', $result['settings'][0]['panel'] );
+	}
+
+	public function test_enforce_block_context_rules_strips_unsupported_bindings_for_unlocked_blocks(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Connect CTA fields',
+						'attributeUpdates' => [
+							'metadata' => [
+								'name'     => 'Hero CTA',
+								'bindings' => [
+									'url'  => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_url' ],
+									],
+									'text' => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_label' ],
+									],
+								],
+							],
+						],
+					],
+				],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Only supported binding targets should survive.',
+			],
+			[
+				'bindableAttributes' => [ 'url' ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Connect CTA fields',
+					'attributeUpdates' => [
+						'metadata' => [
+							'name'     => 'Hero CTA',
+							'bindings' => [
+								'url' => [
+									'source' => 'core/post-meta',
+									'args'   => [ 'key' => 'cta_url' ],
+								],
+							],
+						],
+					],
+				],
+			],
+			$result['settings']
+		);
+	}
+
+	public function test_enforce_block_context_rules_drops_binding_only_suggestions_when_no_bindable_attributes_are_allowed(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Connect CTA fields',
+						'attributeUpdates' => [
+							'metadata' => [
+								'name'     => 'Hero CTA',
+								'bindings' => [
+									'url' => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_url' ],
+									],
+								],
+							],
+						],
+					],
+				],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Unsupported bindings should not degrade into renames.',
+			],
+			[
+				'bindableAttributes' => [],
+			]
+		);
+
+		$this->assertSame( [], $result['settings'] );
+		$this->assertSame( 'Unsupported bindings should not degrade into renames.', $result['explanation'] );
+	}
 }

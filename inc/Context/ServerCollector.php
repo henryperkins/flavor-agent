@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Context;
 
+use FlavorAgent\Support\StringArray;
+
 final class ServerCollector {
 
 	public const TEMPLATE_PATTERN_CANDIDATE_CAP = 30;
@@ -17,8 +19,10 @@ final class ServerCollector {
 		'color.button'               => 'color',
 		'color.gradients'            => 'color',
 		'typography.fontSize'        => 'typography',
+		'typography.fitText'         => 'typography',
 		'typography.lineHeight'      => 'typography',
 		'typography.textAlign'       => 'typography',
+		'typography.textIndent'      => 'typography',
 		'spacing.margin'             => 'dimensions',
 		'spacing.padding'            => 'dimensions',
 		'spacing.blockGap'           => 'dimensions',
@@ -39,7 +43,14 @@ final class ServerCollector {
 		'layout'                     => 'layout',
 		'anchor'                     => 'advanced',
 		'customCSS'                  => 'advanced',
-		'listView'                   => 'settings',
+		'listView'                   => 'list',
+	];
+
+	private const DEFAULT_BINDABLE_ATTRIBUTES = [
+		'core/paragraph' => [ 'content' ],
+		'core/heading'   => [ 'content' ],
+		'core/image'     => [ 'id', 'url', 'title', 'alt' ],
+		'core/button'    => [ 'url', 'text', 'linkTarget', 'rel' ],
 	];
 
 	private const KNOWN_TEMPLATE_TYPES = [
@@ -72,6 +83,7 @@ final class ServerCollector {
 		$attributes            = $block_type->attributes ?? [];
 		$styles                = $block_type->styles ?? [];
 		$variations            = $block_type->variations ?? [];
+		$bindable_attributes   = self::resolve_bindable_attributes( $block_name );
 
 		$content_attrs = [];
 		$config_attrs  = [];
@@ -103,7 +115,11 @@ final class ServerCollector {
 			'description'         => $block_type->description ?? '',
 			'supports'            => $supports,
 			'supportsContentRole' => $supports_content_role,
-			'inspectorPanels'     => self::resolve_inspector_panels( $supports ),
+			'inspectorPanels'     => self::merge_bindings_inspector_panel(
+				self::resolve_inspector_panels( $supports ),
+				$bindable_attributes
+			),
+			'bindableAttributes'  => $bindable_attributes,
 			'contentAttributes'   => $content_attrs,
 			'configAttributes'    => $config_attrs,
 			'styles'              => array_map(
@@ -142,6 +158,30 @@ final class ServerCollector {
 		}
 
 		return $panels;
+	}
+
+	/**
+	 * @return string[]
+	 */
+	private static function resolve_bindable_attributes( string $block_name ): array {
+		if ( function_exists( 'get_block_bindings_supported_attributes' ) ) {
+			return StringArray::sanitize( get_block_bindings_supported_attributes( $block_name ) );
+		}
+
+		return StringArray::sanitize( self::DEFAULT_BINDABLE_ATTRIBUTES[ $block_name ] ?? [] );
+	}
+
+	/**
+	 * @param string[] $bindable_attributes
+	 */
+	private static function merge_bindings_inspector_panel( array $inspector_panels, array $bindable_attributes ): array {
+		if ( [] === $bindable_attributes ) {
+			return $inspector_panels;
+		}
+
+		$inspector_panels['bindings'] = $bindable_attributes;
+
+		return $inspector_panels;
 	}
 
 	public static function for_tokens(): array {
@@ -250,6 +290,7 @@ final class ServerCollector {
 				'styles'              => $type_info['styles'] ?? [],
 				'activeStyle'         => self::extract_active_style( $attributes['className'] ?? '', $type_info['styles'] ?? [] ),
 				'variations'          => $type_info['variations'] ?? [],
+				'bindableAttributes'  => $type_info['bindableAttributes'] ?? [],
 				'supportsContentRole' => ! empty( $type_info['supportsContentRole'] ),
 				'contentAttributes'   => $type_info['contentAttributes'] ?? [],
 				'configAttributes'    => $type_info['configAttributes'] ?? [],
