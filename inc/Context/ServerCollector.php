@@ -419,22 +419,22 @@ final class ServerCollector {
 			'topLevelBlocks'  => $top_level_blocks,
 			'blockCounts'     => $block_counts,
 			'structureStats'  => [
-				'blockCount'           => $summary_stats['blockCount'],
-				'maxDepth'             => $summary_stats['maxDepth'],
-				'hasNavigation'        => ! empty( $block_counts['core/navigation'] ),
-				'containsLogo'         => ! empty( $block_counts['core/site-logo'] ),
-				'containsSiteTitle'    => ! empty( $block_counts['core/site-title'] ),
-				'containsSearch'       => ! empty( $block_counts['core/search'] ),
-				'containsSocialLinks'  => ! empty( $block_counts['core/social-links'] ),
-				'containsQuery'        => ! empty( $block_counts['core/query'] ),
-				'containsColumns'      => ! empty( $block_counts['core/columns'] ),
-				'containsButtons'      => ! empty( $block_counts['core/buttons'] ),
-				'containsSpacer'       => ! empty( $block_counts['core/spacer'] ),
-				'containsSeparator'    => ! empty( $block_counts['core/separator'] ),
-				'firstTopLevelBlock'   => $top_level_blocks[0] ?? '',
-				'lastTopLevelBlock'    => count( $top_level_blocks ) > 0 ? $top_level_blocks[ count( $top_level_blocks ) - 1 ] : '',
+				'blockCount'            => $summary_stats['blockCount'],
+				'maxDepth'              => $summary_stats['maxDepth'],
+				'hasNavigation'         => ! empty( $block_counts['core/navigation'] ),
+				'containsLogo'          => ! empty( $block_counts['core/site-logo'] ),
+				'containsSiteTitle'     => ! empty( $block_counts['core/site-title'] ),
+				'containsSearch'        => ! empty( $block_counts['core/search'] ),
+				'containsSocialLinks'   => ! empty( $block_counts['core/social-links'] ),
+				'containsQuery'         => ! empty( $block_counts['core/query'] ),
+				'containsColumns'       => ! empty( $block_counts['core/columns'] ),
+				'containsButtons'       => ! empty( $block_counts['core/buttons'] ),
+				'containsSpacer'        => ! empty( $block_counts['core/spacer'] ),
+				'containsSeparator'     => ! empty( $block_counts['core/separator'] ),
+				'firstTopLevelBlock'    => $top_level_blocks[0] ?? '',
+				'lastTopLevelBlock'     => count( $top_level_blocks ) > 0 ? $top_level_blocks[ count( $top_level_blocks ) - 1 ] : '',
 				'hasSingleWrapperGroup' => count( $top_level_blocks ) === 1 && $top_level_blocks[0] === 'core/group',
-				'isNearlyEmpty'        => $summary_stats['blockCount'] <= 1,
+				'isNearlyEmpty'         => $summary_stats['blockCount'] <= 1,
 			],
 			'patterns'        => self::collect_template_part_candidate_patterns( $area, $visible_pattern_names ),
 			'themeTokens'     => self::for_tokens(),
@@ -814,7 +814,7 @@ final class ServerCollector {
 				continue;
 			}
 
-			$block_types   = $pattern['blockTypes'] ?? [];
+			$block_types    = $pattern['blockTypes'] ?? [];
 			$template_types = $pattern['templateTypes'] ?? [];
 			if (
 				( ! is_array( $block_types ) || count( $block_types ) === 0 ) &&
@@ -1058,8 +1058,8 @@ final class ServerCollector {
 	 */
 	private static function collect_template_part_block_stats( array $blocks ): array {
 		$stats = [
-			'blockCount' => 0,
-			'maxDepth'   => 0,
+			'blockCount'  => 0,
+			'maxDepth'    => 0,
 			'blockCounts' => [],
 		];
 
@@ -1085,7 +1085,7 @@ final class ServerCollector {
 			}
 
 			++$stats['blockCount'];
-			$stats['maxDepth'] = max( $stats['maxDepth'], $depth );
+			$stats['maxDepth']             = max( $stats['maxDepth'], $depth );
 			$stats['blockCounts'][ $name ] = ( $stats['blockCounts'][ $name ] ?? 0 ) + 1;
 
 			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
@@ -1331,7 +1331,7 @@ final class ServerCollector {
 		$nav_block = self::find_navigation_block( $blocks );
 
 		if ( null !== $nav_block ) {
-			$inner = is_array( $nav_block['innerBlocks'] ?? null )
+			$inner                = is_array( $nav_block['innerBlocks'] ?? null )
 				? $nav_block['innerBlocks']
 				: [];
 			$has_explicit_wrapper = str_contains(

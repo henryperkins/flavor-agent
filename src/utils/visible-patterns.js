@@ -11,8 +11,8 @@ import { getAllowedPatterns } from '../patterns/pattern-settings';
  * @param {Object}  [blockEditor] Optional block-editor selector object.
  * @return {string[]} Visible pattern names for the current inserter context.
  */
-export function getVisiblePatternNames(rootClientId = null, blockEditor) {
+export function getVisiblePatternNames( rootClientId = null, blockEditor ) {
 	return extractPatternNames(
-		getAllowedPatterns(rootClientId, blockEditor)
+		getAllowedPatterns( rootClientId, blockEditor )
 	);
 }

@@ -477,4 +477,4 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
-} 
+}

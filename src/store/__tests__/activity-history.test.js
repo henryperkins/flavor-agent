@@ -171,9 +171,7 @@ describe( 'activity history helpers', () => {
 				id: newer.id,
 			} )
 		);
-		expect(
-			getLatestUndoableActivity( [ older, undoneNewer ] )
-		).toEqual(
+		expect( getLatestUndoableActivity( [ older, undoneNewer ] ) ).toEqual(
 			expect.objectContaining( {
 				id: older.id,
 			} )

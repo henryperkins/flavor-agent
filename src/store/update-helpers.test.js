@@ -563,7 +563,8 @@ describe( 'update helpers', () => {
 			],
 			styles: [],
 			block: [],
-			explanation: 'Unsupported bindings should not degrade into renames.',
+			explanation:
+				'Unsupported bindings should not degrade into renames.',
 		};
 
 		expect(
@@ -575,7 +576,8 @@ describe( 'update helpers', () => {
 			settings: [],
 			styles: [],
 			block: [],
-			explanation: 'Unsupported bindings should not degrade into renames.',
+			explanation:
+				'Unsupported bindings should not degrade into renames.',
 		} );
 	} );
 

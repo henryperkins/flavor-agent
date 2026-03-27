@@ -95,10 +95,10 @@ final class TemplateAbilities {
 	public static function recommend_template_part( mixed $input ): array|\WP_Error {
 		$input = self::normalize_input( $input );
 
-		$template_part_ref = isset( $input['templatePartRef'] )
+		$template_part_ref     = isset( $input['templatePartRef'] )
 			? trim( (string) $input['templatePartRef'] )
 			: '';
-		$prompt            = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
+		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;

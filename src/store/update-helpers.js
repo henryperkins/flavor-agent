@@ -242,8 +242,8 @@ export function filterAttributeUpdatesForContentOnly(
 }
 
 /**
- * @param {Object}    attributeUpdates        Suggested attribute updates.
- * @param {?string[]} bindableAttributeKeys  Supported binding targets, or null when unknown.
+ * @param {Object}    attributeUpdates      Suggested attribute updates.
+ * @param {?string[]} bindableAttributeKeys Supported binding targets, or null when unknown.
  * @return {Object} Binding-safe attribute updates.
  */
 function filterAttributeUpdatesForBindableAttributes(
@@ -331,7 +331,7 @@ function sanitizeSuggestionForBindableAttributes(
 }
 
 /**
- * @param {Array}     suggestions            Suggestion group.
+ * @param {Array}     suggestions           Suggestion group.
  * @param {?string[]} bindableAttributeKeys Supported binding targets, or null when unknown.
  * @return {Array} Sanitized suggestion group.
  */
@@ -427,14 +427,15 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 	}
 
 	const restrictions = getEditingRestrictions( blockContext );
-	const bindingSafeUpdates = filterAttributeUpdatesForBindableAttributes(
-		suggestion.attributeUpdates,
-		getBindableAttributeKeys( blockContext )
-	);
 
 	if ( restrictions.disabled ) {
 		return {};
 	}
+
+	const bindingSafeUpdates = filterAttributeUpdatesForBindableAttributes(
+		suggestion.attributeUpdates,
+		getBindableAttributeKeys( blockContext )
+	);
 
 	if ( ! restrictions.contentOnly ) {
 		return bindingSafeUpdates;

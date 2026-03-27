@@ -41,7 +41,7 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $settings_errors = [];
 
-		/** @var array<string, array{hook: string, timestamp: int}> */
+		/** @var array<string, array<string, mixed>> */
 		public static array $scheduled_events = [];
 
 		/** @var array<string, mixed> */
@@ -311,14 +311,18 @@ namespace {
 				}
 
 				foreach ( $flat_args as $arg ) {
-					if ( ! preg_match( '/%[sd]/', $query, $matches ) ) {
+					if ( ! preg_match( '/%[sdi]/', $query, $matches ) ) {
 						break;
 					}
 
 					$placeholder = (string) ( $matches[0] ?? '%s' );
-					$replacement = '%d' === $placeholder
-						? (string) (int) $arg
-						: "'" . str_replace( "'", "\\'", (string) $arg ) . "'";
+					if ( '%d' === $placeholder ) {
+						$replacement = (string) (int) $arg;
+					} elseif ( '%i' === $placeholder ) {
+						$replacement = str_replace( '`', '``', (string) $arg );
+					} else {
+						$replacement = "'" . str_replace( "'", "\\'", (string) $arg ) . "'";
+					}
 
 					$query = preg_replace(
 						'/' . preg_quote( $placeholder, '/' ) . '/',
@@ -340,6 +344,25 @@ namespace {
 					if ( '' !== $table && ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
 						WordPressTestState::$db_tables[ $table ] = [];
 					}
+				}
+
+				if ( preg_match( '/DELETE FROM\s+([^\s]+)\s+WHERE\s+created_at\s*<\s*\'([^\']+)\'/i', $query, $matches ) ) {
+					$table  = (string) ( $matches[1] ?? '' );
+					$cutoff = (string) ( $matches[2] ?? '' );
+
+					if ( isset( WordPressTestState::$db_tables[ $table ] ) ) {
+						$before_count = count( WordPressTestState::$db_tables[ $table ] );
+						WordPressTestState::$db_tables[ $table ] = array_values(
+							array_filter(
+								WordPressTestState::$db_tables[ $table ],
+								static fn ( array $row ): bool => (string) ( $row['created_at'] ?? '' ) >= $cutoff
+							)
+						);
+
+						return $before_count - count( WordPressTestState::$db_tables[ $table ] );
+					}
+
+					return 0;
 				}
 
 				return 1;
@@ -1106,6 +1129,19 @@ namespace {
 		function update_option( string $name, $value, $autoload = null ): bool {
 			WordPressTestState::$options[ $name ] = $value;
 			WordPressTestState::$updated_options[ $name ] = $value;
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'wp_schedule_event' ) ) {
+		function wp_schedule_event( int $timestamp, string $recurrence, string $hook, array $args = [] ): bool {
+			WordPressTestState::$scheduled_events[ $hook ] = [
+				'hook'       => $hook,
+				'timestamp'  => $timestamp,
+				'recurrence' => $recurrence,
+				'args'       => $args,
+			];
 
 			return true;
 		}

@@ -14,197 +14,199 @@ import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
 
 const FEEDBACK_MS = 1200;
 
-export default function SettingsRecommendations({ clientId, suggestions }) {
-	const { applySuggestion } = useDispatch(STORE_NAME);
-	const [appliedKey, setAppliedKey] = useState(null);
-	const resetTimerRef = useRef(null);
+export default function SettingsRecommendations( { clientId, suggestions } ) {
+	const { applySuggestion } = useDispatch( STORE_NAME );
+	const [ appliedKey, setAppliedKey ] = useState( null );
+	const resetTimerRef = useRef( null );
 
-	useEffect(() => {
+	useEffect( () => {
 		return () => {
-			if (resetTimerRef.current) {
-				window.clearTimeout(resetTimerRef.current);
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
 			}
 		};
-	}, []);
+	}, [] );
 
-	useEffect(() => {
-		if (resetTimerRef.current) {
-			window.clearTimeout(resetTimerRef.current);
+	useEffect( () => {
+		if ( resetTimerRef.current ) {
+			window.clearTimeout( resetTimerRef.current );
 			resetTimerRef.current = null;
 		}
 
-		setAppliedKey(null);
-	}, [suggestions]);
+		setAppliedKey( null );
+	}, [ suggestions ] );
 
 	const handleApply = useCallback(
-		async (suggestion) => {
-			const didApply = await applySuggestion(clientId, suggestion);
+		async ( suggestion ) => {
+			const didApply = await applySuggestion( clientId, suggestion );
 
-			if (!didApply) {
+			if ( ! didApply ) {
 				return;
 			}
 
-			const key = getSuggestionKey(suggestion);
+			const key = getSuggestionKey( suggestion );
 
-			if (resetTimerRef.current) {
-				window.clearTimeout(resetTimerRef.current);
+			if ( resetTimerRef.current ) {
+				window.clearTimeout( resetTimerRef.current );
 			}
 
-			setAppliedKey(key);
+			setAppliedKey( key );
 
-			resetTimerRef.current = window.setTimeout(() => {
-				setAppliedKey(null);
+			resetTimerRef.current = window.setTimeout( () => {
+				setAppliedKey( null );
 				resetTimerRef.current = null;
-			}, FEEDBACK_MS);
+			}, FEEDBACK_MS );
 		},
-		[clientId, applySuggestion]
+		[ clientId, applySuggestion ]
 	);
 
-	if (!suggestions.length) {
+	if ( ! suggestions.length ) {
 		return null;
 	}
 
 	const grouped = {};
-	for (const s of suggestions) {
-		const key = getSuggestionPanel(s);
-		if (DELEGATED_SETTINGS_PANELS.has(key)) {
+	for ( const s of suggestions ) {
+		const key = getSuggestionPanel( s );
+		if ( DELEGATED_SETTINGS_PANELS.has( key ) ) {
 			continue;
 		}
-		if (!grouped[key]) {
-			grouped[key] = [];
+		if ( ! grouped[ key ] ) {
+			grouped[ key ] = [];
 		}
-		grouped[key].push(s);
+		grouped[ key ].push( s );
 	}
 
-	if (!Object.keys(grouped).length) {
+	if ( ! Object.keys( grouped ).length ) {
 		return null;
 	}
 
 	return (
 		<PanelBody title="AI Settings" initialOpen>
 			<div className="flavor-agent-panel">
-				{Object.entries(grouped).map(([panel, items]) => (
-					<div key={panel} className="flavor-agent-panel__group">
-						{Object.keys(grouped).length > 1 && (
+				{ Object.entries( grouped ).map( ( [ panel, items ] ) => (
+					<div key={ panel } className="flavor-agent-panel__group">
+						{ Object.keys( grouped ).length > 1 && (
 							<div className="flavor-agent-panel__group-header">
 								<div className="flavor-agent-panel__group-title">
-									{panelLabel(panel)}
+									{ panelLabel( panel ) }
 								</div>
 								<span className="flavor-agent-pill">
-									{formatCount(
+									{ formatCount(
 										items.length,
 										'suggestion'
-									)}
+									) }
 								</span>
 							</div>
-						)}
+						) }
 
 						<div className="flavor-agent-panel__group-body">
-							{items.map((suggestion) => {
-								const key = getSuggestionKey(suggestion);
+							{ items.map( ( suggestion ) => {
+								const key = getSuggestionKey( suggestion );
 								return (
 									<SuggestionCard
-										key={key}
-										suggestion={suggestion}
-										onApply={() =>
-											void handleApply(suggestion)
+										key={ key }
+										suggestion={ suggestion }
+										onApply={ () =>
+											void handleApply( suggestion )
 										}
-										applied={appliedKey === key}
+										applied={ appliedKey === key }
 									/>
 								);
-							})}
+							} ) }
 						</div>
 					</div>
-				))}
+				) ) }
 			</div>
 		</PanelBody>
 	);
 }
 
-function SuggestionCard({ suggestion, onApply, applied }) {
+function SuggestionCard( { suggestion, onApply, applied } ) {
 	const { label, description, confidence, currentValue, suggestedValue } =
 		suggestion;
 	const confidenceLabel =
 		confidence !== null && confidence !== undefined
-			? formatConfidenceLabel(confidence)
+			? formatConfidenceLabel( confidence )
 			: null;
 
 	return (
 		<div className="flavor-agent-card">
 			<div
-				className={`flavor-agent-card__header${description || confidenceLabel
+				className={ `flavor-agent-card__header${
+					description || confidenceLabel
 						? ' flavor-agent-card__header--spaced'
 						: ''
-					}`}
+				}` }
 			>
 				<div className="flavor-agent-card__lead">
-					<span className="flavor-agent-card__label">{label}</span>
-					{confidenceLabel && (
+					<span className="flavor-agent-card__label">{ label }</span>
+					{ confidenceLabel && (
 						<div className="flavor-agent-card__meta">
 							<span className="flavor-agent-pill">
-								{confidenceLabel}
+								{ confidenceLabel }
 							</span>
 						</div>
-					)}
+					) }
 				</div>
 				<Button
 					size="small"
 					variant="tertiary"
-					onClick={onApply}
-					icon={applied ? check : arrowRight}
-					label={applied ? 'Applied' : 'Apply suggestion'}
-					className={`flavor-agent-card__apply${applied ? ' flavor-agent-card__apply--applied' : ''
-						}`}
-					disabled={applied}
+					onClick={ onApply }
+					icon={ applied ? check : arrowRight }
+					label={ applied ? 'Applied' : 'Apply suggestion' }
+					className={ `flavor-agent-card__apply${
+						applied ? ' flavor-agent-card__apply--applied' : ''
+					}` }
+					disabled={ applied }
 				/>
 			</div>
 
-			{description && (
+			{ description && (
 				<p className="flavor-agent-card__description">
-					{description}
+					{ description }
 				</p>
-			)}
+			) }
 
-			{currentValue !== undefined && suggestedValue !== undefined && (
+			{ currentValue !== undefined && suggestedValue !== undefined && (
 				<div className="flavor-agent-card__value-grid">
 					<div className="flavor-agent-card__value">
 						<span className="flavor-agent-card__value-label">
 							Current
 						</span>
-						<code>{formatValue(currentValue)}</code>
+						<code>{ formatValue( currentValue ) }</code>
 					</div>
 					<Icon
-						icon={arrowRight}
-						size={14}
+						icon={ arrowRight }
+						size={ 14 }
 						className="flavor-agent-card__value-arrow"
 					/>
 					<div className="flavor-agent-card__value">
 						<span className="flavor-agent-card__value-label">
 							Suggested
 						</span>
-						<code>{formatValue(suggestedValue)}</code>
+						<code>{ formatValue( suggestedValue ) }</code>
 					</div>
 				</div>
-			)}
+			) }
 
-			{confidence !== null && confidence !== undefined && (
+			{ confidence !== null && confidence !== undefined && (
 				<div
 					className="flavor-agent-card__confidence"
 					aria-hidden="true"
 				>
 					<div
 						className="flavor-agent-card__confidence-bar"
-						style={{
-							width: `${clampConfidence(confidence)}%`,
-						}}
+						style={ {
+							width: `${ clampConfidence( confidence ) }%`,
+						} }
 					/>
 				</div>
-			)}
+			) }
 		</div>
 	);
 }
 
-function panelLabel(panel) {
+function panelLabel( panel ) {
 	const labels = {
 		general: 'General',
 		layout: 'Layout',
@@ -215,37 +217,37 @@ function panelLabel(panel) {
 		list: 'List View',
 		'list-view': 'List View',
 	};
-	return labels[panel] || panel;
+	return labels[ panel ] || panel;
 }
 
-function formatCount(count, noun) {
-	return `${count} ${count === 1 ? noun : `${noun}s`}`;
+function formatCount( count, noun ) {
+	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
 }
 
-function formatConfidenceLabel(confidence) {
-	return `${clampConfidence(confidence)}% confidence`;
+function formatConfidenceLabel( confidence ) {
+	return `${ clampConfidence( confidence ) }% confidence`;
 }
 
-function formatValue(value) {
-	if (value === true) {
+function formatValue( value ) {
+	if ( value === true ) {
 		return 'true';
 	}
 
-	if (value === false) {
+	if ( value === false ) {
 		return 'false';
 	}
 
-	if (value === null || value === undefined) {
+	if ( value === null || value === undefined ) {
 		return 'none';
 	}
 
-	if (typeof value === 'object') {
-		return JSON.stringify(value);
+	if ( typeof value === 'object' ) {
+		return JSON.stringify( value );
 	}
 
-	return String(value);
+	return String( value );
 }
 
-function clampConfidence(confidence) {
-	return Math.max(0, Math.min(100, Math.round(confidence * 100)));
+function clampConfidence( confidence ) {
+	return Math.max( 0, Math.min( 100, Math.round( confidence * 100 ) ) );
 }

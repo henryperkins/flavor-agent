@@ -311,7 +311,7 @@ describe( 'theme token source adapter', () => {
 					slug: 'display',
 				} ),
 			] )
-			);
+		);
 	} );
 
 	test( 'preserves stable capability values when experimental data only fills missing gaps', () => {

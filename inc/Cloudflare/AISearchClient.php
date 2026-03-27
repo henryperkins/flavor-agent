@@ -6,23 +6,23 @@ namespace FlavorAgent\Cloudflare;
 
 final class AISearchClient {
 
-	private const DEFAULT_MAX_RESULTS       = 4;
-	private const MAX_MAX_RESULTS           = 8;
-	private const ALLOWED_DOC_HOST          = 'developer.wordpress.org';
-	private const ALLOWED_SOURCE_KEY_PREFIX = 'developer.wordpress.org/';
-	private const CACHE_KEY_PREFIX          = 'flavor_agent_ai_search_';
-	private const CACHE_TTL                 = 21600;
-	private const FAMILY_CACHE_PREFIX       = 'flavor_agent_docs_family_';
-	private const FAMILY_CACHE_TTL          = 28800;
-	private const ENTITY_CACHE_PREFIX       = 'flavor_agent_docs_entity_';
-	private const ENTITY_CACHE_TTL          = 43200;
-	private const VALIDATION_PROBE_QUERY    = 'block editor';
-	private const VALIDATION_PROBE_RESULTS  = 3;
-	private const PREWARM_STATE_OPTION      = 'flavor_agent_docs_prewarm_state';
-	private const WARM_QUEUE_OPTION         = 'flavor_agent_docs_warm_queue';
-	private const PREWARM_THROTTLE_SECONDS  = 3600;
-	private const GUIDANCE_BLOCK_EDITOR_KEY = 'guidance:block-editor';
-	private const GUIDANCE_TEMPLATE_KEY     = 'guidance:template';
+	private const DEFAULT_MAX_RESULTS        = 4;
+	private const MAX_MAX_RESULTS            = 8;
+	private const ALLOWED_DOC_HOST           = 'developer.wordpress.org';
+	private const ALLOWED_SOURCE_KEY_PREFIX  = 'developer.wordpress.org/';
+	private const CACHE_KEY_PREFIX           = 'flavor_agent_ai_search_';
+	private const CACHE_TTL                  = 21600;
+	private const FAMILY_CACHE_PREFIX        = 'flavor_agent_docs_family_';
+	private const FAMILY_CACHE_TTL           = 28800;
+	private const ENTITY_CACHE_PREFIX        = 'flavor_agent_docs_entity_';
+	private const ENTITY_CACHE_TTL           = 43200;
+	private const VALIDATION_PROBE_QUERY     = 'block editor';
+	private const VALIDATION_PROBE_RESULTS   = 3;
+	private const PREWARM_STATE_OPTION       = 'flavor_agent_docs_prewarm_state';
+	private const WARM_QUEUE_OPTION          = 'flavor_agent_docs_warm_queue';
+	private const PREWARM_THROTTLE_SECONDS   = 3600;
+	private const GUIDANCE_BLOCK_EDITOR_KEY  = 'guidance:block-editor';
+	private const GUIDANCE_TEMPLATE_KEY      = 'guidance:template';
 	private const GUIDANCE_TEMPLATE_PART_KEY = 'guidance:template-part';
 
 	public const PREWARM_CRON_HOOK      = 'flavor_agent_prewarm_docs';
@@ -38,25 +38,25 @@ final class AISearchClient {
 	 * @var array<string, string>
 	 */
 	private const WARM_SET = [
-		'core/paragraph'   => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/paragraph. typography, spacing, color inspector controls.',
-		'core/heading'     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/heading. typography, spacing, color inspector controls.',
-		'core/image'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/image. dimensions, border, color inspector controls.',
-		'core/group'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/group. layout, spacing, background, border inspector controls.',
-		'core/columns'     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/columns. layout, spacing, color inspector controls.',
-		'core/button'      => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/button. typography, color, border, spacing inspector controls.',
-		'core/list'        => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/list. typography, spacing, color inspector controls.',
-		'core/cover'       => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/cover. color overlay, dimensions, spacing, typography inspector controls.',
-		'core/template-part' => 'WordPress block theme template parts. template part structure, composition, areas, block patterns, and theme.json guidance.',
-		'core/navigation'  => 'WordPress navigation block. menu structure and organization best practices. overlay responsive menu.',
-		'template:single'  => 'WordPress block theme, site editor, and template part best practices. template type single. template files, template parts, block themes, and theme.json guidance.',
-		'template:page'    => 'WordPress block theme, site editor, and template part best practices. template type page. template files, template parts, block themes, and theme.json guidance.',
-		'template:archive' => 'WordPress block theme, site editor, and template part best practices. template type archive. template files, template parts, block themes, and theme.json guidance.',
-		'template:home'    => 'WordPress block theme, site editor, and template part best practices. template type home. template files, template parts, block themes, and theme.json guidance.',
-		'template:404'     => 'WordPress block theme, site editor, and template part best practices. template type 404. template files, template parts, block themes, and theme.json guidance.',
-		'template:index'   => 'WordPress block theme, site editor, and template part best practices. template type index. template files, template parts, block themes, and theme.json guidance.',
-		'template:search'  => 'WordPress block theme, site editor, and template part best practices. template type search. template files, template parts, block themes, and theme.json guidance.',
-		self::GUIDANCE_BLOCK_EDITOR_KEY => 'WordPress Gutenberg block editor best practices. block settings, styles, inspector controls, block supports, and theme.json guidance.',
-		self::GUIDANCE_TEMPLATE_KEY     => 'WordPress block theme and Site Editor guidance. templates, template hierarchy, template parts, patterns, and theme.json best practices.',
+		'core/paragraph'                 => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/paragraph. typography, spacing, color inspector controls.',
+		'core/heading'                   => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/heading. typography, spacing, color inspector controls.',
+		'core/image'                     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/image. dimensions, border, color inspector controls.',
+		'core/group'                     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/group. layout, spacing, background, border inspector controls.',
+		'core/columns'                   => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/columns. layout, spacing, color inspector controls.',
+		'core/button'                    => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/button. typography, color, border, spacing inspector controls.',
+		'core/list'                      => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/list. typography, spacing, color inspector controls.',
+		'core/cover'                     => 'WordPress Gutenberg block editor best practices and design tool guidance. block type core/cover. color overlay, dimensions, spacing, typography inspector controls.',
+		'core/template-part'             => 'WordPress block theme template parts. template part structure, composition, areas, block patterns, and theme.json guidance.',
+		'core/navigation'                => 'WordPress navigation block. menu structure and organization best practices. overlay responsive menu.',
+		'template:single'                => 'WordPress block theme, site editor, and template part best practices. template type single. template files, template parts, block themes, and theme.json guidance.',
+		'template:page'                  => 'WordPress block theme, site editor, and template part best practices. template type page. template files, template parts, block themes, and theme.json guidance.',
+		'template:archive'               => 'WordPress block theme, site editor, and template part best practices. template type archive. template files, template parts, block themes, and theme.json guidance.',
+		'template:home'                  => 'WordPress block theme, site editor, and template part best practices. template type home. template files, template parts, block themes, and theme.json guidance.',
+		'template:404'                   => 'WordPress block theme, site editor, and template part best practices. template type 404. template files, template parts, block themes, and theme.json guidance.',
+		'template:index'                 => 'WordPress block theme, site editor, and template part best practices. template type index. template files, template parts, block themes, and theme.json guidance.',
+		'template:search'                => 'WordPress block theme, site editor, and template part best practices. template type search. template files, template parts, block themes, and theme.json guidance.',
+		self::GUIDANCE_BLOCK_EDITOR_KEY  => 'WordPress Gutenberg block editor best practices. block settings, styles, inspector controls, block supports, and theme.json guidance.',
+		self::GUIDANCE_TEMPLATE_KEY      => 'WordPress block theme and Site Editor guidance. templates, template hierarchy, template parts, patterns, and theme.json best practices.',
 		self::GUIDANCE_TEMPLATE_PART_KEY => 'WordPress template part guidance. template-part structure, areas, patterns, layout, and theme.json best practices.',
 	];
 
@@ -1406,8 +1406,8 @@ final class AISearchClient {
 	 * @return array<int, string>
 	 */
 	private static function trusted_source_key_prefixes( ?string $instance_id = null ): array {
-		$prefixes             = [ self::ALLOWED_SOURCE_KEY_PREFIX ];
-		$normalized_instance  = self::normalize_source_key_instance_id( $instance_id );
+		$prefixes            = [ self::ALLOWED_SOURCE_KEY_PREFIX ];
+		$normalized_instance = self::normalize_source_key_instance_id( $instance_id );
 
 		if ( $normalized_instance !== '' ) {
 			$prefixes[] = 'ai-search/' . $normalized_instance . '/' . self::ALLOWED_SOURCE_KEY_PREFIX;

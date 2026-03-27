@@ -37,10 +37,6 @@ final class ActivityPage {
 	public static function render_page(): void {
 		?>
 		<div class="wrap">
-			<h1><?php echo esc_html__( 'Flavor Agent AI Activity', 'flavor-agent' ); ?></h1>
-			<p>
-				<?php echo esc_html__( 'Inspect recent server-backed AI actions, ordered undo state, and stored request diagnostics across Flavor Agent surfaces.', 'flavor-agent' ); ?>
-			</p>
 			<div id="flavor-agent-activity-log-root"></div>
 		</div>
 		<?php

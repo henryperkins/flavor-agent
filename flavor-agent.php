@@ -28,6 +28,7 @@ register_activation_hook(
 	FLAVOR_AGENT_FILE,
 	function () {
 		FlavorAgent\Activity\Repository::install();
+		FlavorAgent\Activity\Repository::ensure_prune_schedule();
 		FlavorAgent\Patterns\PatternIndex::activate();
 		FlavorAgent\Cloudflare\AISearchClient::schedule_prewarm();
 	}
@@ -36,6 +37,7 @@ register_deactivation_hook(
 	FLAVOR_AGENT_FILE,
 	function () {
 		FlavorAgent\Patterns\PatternIndex::deactivate();
+		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::PRUNE_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK );
 	}
@@ -43,6 +45,7 @@ register_deactivation_hook(
 
 add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
+add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
@@ -87,6 +90,10 @@ add_action(
 add_action(
 	FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK,
 	[ FlavorAgent\Cloudflare\AISearchClient::class, 'process_context_warm_queue' ]
+);
+add_action(
+	FlavorAgent\Activity\Repository::PRUNE_CRON_HOOK,
+	[ FlavorAgent\Activity\Repository::class, 'prune' ]
 );
 
 // Recommended pattern category for AI-ranked patterns in the inserter.

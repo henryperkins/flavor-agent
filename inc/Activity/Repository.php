@@ -6,8 +6,10 @@ namespace FlavorAgent\Activity;
 
 final class Repository {
 
-	public const SCHEMA_OPTION  = 'flavor_agent_activity_schema_version';
-	public const SCHEMA_VERSION = 1;
+	public const SCHEMA_OPTION          = 'flavor_agent_activity_schema_version';
+	public const SCHEMA_VERSION         = 1;
+	public const PRUNE_CRON_HOOK        = 'flavor_agent_prune_activity';
+	public const DEFAULT_RETENTION_DAYS = 90;
 
 	private const DEFAULT_LIMIT = 20;
 	private const MAX_LIMIT     = 100;
@@ -76,8 +78,9 @@ final class Repository {
 		}
 
 		if ( function_exists( 'dbDelta' ) ) {
-			dbDelta( $sql );
+			\dbDelta( $sql );
 		} else {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Internal schema definition for plugin-owned table.
 			$wpdb->query( $sql );
 		}
 
@@ -215,6 +218,7 @@ final class Repository {
 		}
 
 		$sql .= ' ORDER BY created_at DESC, id DESC LIMIT %d';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
 		$rows = array_reverse( is_array( $rows ) ? $rows : [] );
 
@@ -275,14 +279,14 @@ final class Repository {
 			);
 		}
 
-		$timestamp = gmdate( 'c' );
+		$timestamp     = gmdate( 'c' );
 		$error_message = (string) ( $current_entry['undo']['error'] ?? 'Undo failed.' );
 
 		if ( 'failed' === $status && ! empty( $error ) ) {
 			$error_message = $error;
 		}
 
-		$undo      = Serializer::normalize_undo_for_storage(
+		$undo    = Serializer::normalize_undo_for_storage(
 			[
 				'status'    => $status,
 				'error'     => 'failed' === $status ? $error_message : null,
@@ -293,7 +297,7 @@ final class Repository {
 			],
 			$timestamp
 		);
-		$updated   = $wpdb->update(
+		$updated = $wpdb->update(
 			self::table_name(),
 			[
 				'undo_state' => Serializer::encode_json( $undo ),
@@ -325,6 +329,62 @@ final class Repository {
 		);
 	}
 
+	/**
+	 * Delete activity entries created before the given ISO 8601 timestamp.
+	 *
+	 * @return int Number of deleted rows, or 0 on failure.
+	 */
+	public static function delete_before( string $before_timestamp ): int {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return 0;
+		}
+
+		$unix_timestamp = strtotime( $before_timestamp );
+
+		if ( false === $unix_timestamp ) {
+			return 0;
+		}
+
+		$table_name = self::table_name();
+		$deleted    = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE FROM %i WHERE created_at < %s',
+				$table_name,
+				gmdate( 'Y-m-d H:i:s', $unix_timestamp )
+			)
+		);
+
+		return is_int( $deleted ) ? $deleted : 0;
+	}
+
+	public static function prune(): int {
+		$retention_days = (int) get_option(
+			'flavor_agent_activity_retention_days',
+			self::DEFAULT_RETENTION_DAYS
+		);
+
+		if ( $retention_days <= 0 ) {
+			return 0;
+		}
+
+		$seconds_per_day = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
+		$cutoff          = gmdate( 'c', time() - ( $retention_days * $seconds_per_day ) );
+
+		return self::delete_before( $cutoff );
+	}
+
+	public static function ensure_prune_schedule(): void {
+		if ( ! function_exists( 'wp_next_scheduled' ) || ! function_exists( 'wp_schedule_event' ) ) {
+			return;
+		}
+
+		if ( false === wp_next_scheduled( self::PRUNE_CRON_HOOK ) ) {
+			wp_schedule_event( time(), 'daily', self::PRUNE_CRON_HOOK );
+		}
+	}
+
 	public static function table_name(): string {
 		global $wpdb;
 
@@ -345,10 +405,13 @@ final class Repository {
 			return null;
 		}
 
-		$sql = $wpdb->prepare(
-			'SELECT * FROM ' . self::table_name() . ' WHERE activity_id = %s LIMIT 1',
+		$table_name = self::table_name();
+		$sql        = $wpdb->prepare(
+			'SELECT * FROM %i WHERE activity_id = %s LIMIT 1',
+			$table_name,
 			$activity_id
 		);
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
 		$row = $wpdb->get_row( $sql, ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
@@ -424,44 +487,54 @@ final class Repository {
 			return false;
 		}
 
-		$sql  = $wpdb->prepare(
-			'SELECT * FROM ' . self::table_name() . ' WHERE entity_type = %s AND entity_ref = %s ORDER BY created_at ASC, id ASC',
+		$table_name = self::table_name();
+		$sql        = $wpdb->prepare(
+			'SELECT activity_id, undo_state FROM %i WHERE entity_type = %s AND entity_ref = %s ORDER BY created_at ASC, id ASC',
+			$table_name,
 			(string) ( $row['entity_type'] ?? '' ),
 			(string) ( $row['entity_ref'] ?? '' )
 		);
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
 			return false;
 		}
 
-		$seen_current = false;
+		$current_activity_id = (string) ( $row['activity_id'] ?? '' );
 
 		for ( $index = count( $rows ) - 1; $index >= 0; --$index ) {
-			$entry = Serializer::hydrate_row( $rows[ $index ] );
-
-			if ( (string) ( $entry['id'] ?? '' ) === (string) ( $current_entry['id'] ?? '' ) ) {
-				$seen_current = true;
-				break;
+			if ( (string) ( $rows[ $index ]['activity_id'] ?? '' ) === $current_activity_id ) {
+				return true;
 			}
 
-			if ( 'undone' !== (string) ( $entry['undo']['status'] ?? '' ) ) {
+			$undo = Serializer::decode_json(
+				isset( $rows[ $index ]['undo_state'] ) ? (string) $rows[ $index ]['undo_state'] : ''
+			);
+
+			if ( 'undone' !== (string) ( $undo['status'] ?? '' ) ) {
 				return false;
 			}
 		}
 
-		return $seen_current;
+		return false;
 	}
 
 	private static function generate_activity_id(): string {
-		static $sequence = 0;
-
-		++$sequence;
+		if ( function_exists( 'wp_generate_uuid4' ) ) {
+			return \wp_generate_uuid4();
+		}
 
 		return sprintf(
-			'activity-%s-%d',
-			str_replace( '.', '', (string) microtime( true ) ),
-			$sequence
+			'%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+			random_int( 0, 0xffff ),
+			random_int( 0, 0xffff ),
+			random_int( 0, 0xffff ),
+			random_int( 0, 0x0fff ) | 0x4000,
+			random_int( 0, 0x3fff ) | 0x8000,
+			random_int( 0, 0xffff ),
+			random_int( 0, 0xffff ),
+			random_int( 0, 0xffff )
 		);
 	}
 

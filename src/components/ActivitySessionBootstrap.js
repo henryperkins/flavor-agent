@@ -48,7 +48,13 @@ export default function ActivitySessionBootstrap() {
 		loadActivitySession( {
 			allowUnsavedMigration,
 		} );
-	}, [ loadActivitySession, scopeEntityId, scopeHint, scopeKey, scopePostType ] );
+	}, [
+		loadActivitySession,
+		scopeEntityId,
+		scopeHint,
+		scopeKey,
+		scopePostType,
+	] );
 
 	return null;
 }

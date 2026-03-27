@@ -1,127 +1,127 @@
-jest.mock('@wordpress/block-editor', () => ({
+jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
-}));
+} ) );
 
 const mockRegistrySelect = jest.fn();
 
-jest.mock('@wordpress/data', () => ({
-	select: (...args) => mockRegistrySelect(...args),
-	dispatch: (...args) => mockRegistrySelect(...args),
-}));
+jest.mock( '@wordpress/data', () => ( {
+	select: ( ...args ) => mockRegistrySelect( ...args ),
+	dispatch: ( ...args ) => mockRegistrySelect( ...args ),
+} ) );
 
 import { extractPatternNames } from '../pattern-names';
 import { getVisiblePatternNames } from '../visible-patterns';
 
-describe('visible-patterns', () => {
-	beforeEach(() => {
+describe( 'visible-patterns', () => {
+	beforeEach( () => {
 		mockRegistrySelect.mockReset();
-	});
+	} );
 
-	test('extractPatternNames returns unique pattern names in order', () => {
+	test( 'extractPatternNames returns unique pattern names in order', () => {
 		expect(
-			extractPatternNames([
+			extractPatternNames( [
 				{ name: 'theme/header' },
 				{ name: 'theme/footer' },
 				{ name: 'theme/header' },
-			])
-		).toEqual(['theme/header', 'theme/footer']);
-	});
+			] )
+		).toEqual( [ 'theme/header', 'theme/footer' ] );
+	} );
 
-	test('extractPatternNames ignores missing names and non-arrays', () => {
+	test( 'extractPatternNames ignores missing names and non-arrays', () => {
 		expect(
-			extractPatternNames([
+			extractPatternNames( [
 				{ name: 'theme/hero' },
 				{},
 				null,
 				{ name: '' },
-			])
-		).toEqual(['theme/hero']);
-		expect(extractPatternNames(null)).toEqual([]);
-	});
+			] )
+		).toEqual( [ 'theme/hero' ] );
+		expect( extractPatternNames( null ) ).toEqual( [] );
+	} );
 
-	test('getVisiblePatternNames supports a future stable getAllowedPatterns selector when available', () => {
+	test( 'getVisiblePatternNames supports a future stable getAllowedPatterns selector when available', () => {
 		const blockEditor = {
 			getAllowedPatterns: jest
 				.fn()
-				.mockReturnValue([
+				.mockReturnValue( [
 					{ name: 'theme/hero' },
 					{ name: 'theme/hero' },
 					{ name: 'theme/footer' },
-				]),
+				] ),
 		};
 
-		mockRegistrySelect.mockReturnValue(blockEditor);
+		mockRegistrySelect.mockReturnValue( blockEditor );
 
-		expect(getVisiblePatternNames('root-123')).toEqual([
+		expect( getVisiblePatternNames( 'root-123' ) ).toEqual( [
 			'theme/hero',
 			'theme/footer',
-		]);
-		expect(blockEditor.getAllowedPatterns).toHaveBeenCalledWith(
+		] );
+		expect( blockEditor.getAllowedPatterns ).toHaveBeenCalledWith(
 			'root-123'
 		);
-	});
+	} );
 
-	test('getVisiblePatternNames prefers an injected block editor selector', () => {
+	test( 'getVisiblePatternNames prefers an injected block editor selector', () => {
 		const injectedBlockEditor = {
 			getAllowedPatterns: jest
 				.fn()
-				.mockReturnValue([
+				.mockReturnValue( [
 					{ name: 'theme/nested-hero' },
 					{ name: 'theme/nested-hero' },
 					{ name: 'theme/nested-footer' },
-				]),
+				] ),
 		};
 
 		expect(
-			getVisiblePatternNames('root-789', injectedBlockEditor)
-		).toEqual(['theme/nested-hero', 'theme/nested-footer']);
-		expect(injectedBlockEditor.getAllowedPatterns).toHaveBeenCalledWith(
+			getVisiblePatternNames( 'root-789', injectedBlockEditor )
+		).toEqual( [ 'theme/nested-hero', 'theme/nested-footer' ] );
+		expect( injectedBlockEditor.getAllowedPatterns ).toHaveBeenCalledWith(
 			'root-789'
 		);
-		expect(mockRegistrySelect).not.toHaveBeenCalled();
-	});
+		expect( mockRegistrySelect ).not.toHaveBeenCalled();
+	} );
 
-	test('getVisiblePatternNames falls back to __experimentalGetAllowedPatterns', () => {
+	test( 'getVisiblePatternNames falls back to __experimentalGetAllowedPatterns', () => {
 		const blockEditor = {
 			__experimentalGetAllowedPatterns: jest
 				.fn()
-				.mockReturnValue([
+				.mockReturnValue( [
 					{ name: 'theme/hero' },
 					{ name: 'theme/hero' },
 					{ name: 'theme/footer' },
-				]),
+				] ),
 		};
 
-		mockRegistrySelect.mockReturnValue(blockEditor);
+		mockRegistrySelect.mockReturnValue( blockEditor );
 
-		expect(getVisiblePatternNames('root-123')).toEqual([
+		expect( getVisiblePatternNames( 'root-123' ) ).toEqual( [
 			'theme/hero',
 			'theme/footer',
-		]);
+		] );
 		expect(
 			blockEditor.__experimentalGetAllowedPatterns
-		).toHaveBeenCalledWith('root-123');
-	});
+		).toHaveBeenCalledWith( 'root-123' );
+	} );
 
-	test('getVisiblePatternNames keeps null root as the top-level fallback', () => {
+	test( 'getVisiblePatternNames keeps null root as the top-level fallback', () => {
 		const blockEditor = {
 			__experimentalGetAllowedPatterns: jest
 				.fn()
-				.mockReturnValue([{ name: 'theme/index' }]),
+				.mockReturnValue( [ { name: 'theme/index' } ] ),
 		};
 
-		mockRegistrySelect.mockReturnValue(blockEditor);
+		mockRegistrySelect.mockReturnValue( blockEditor );
 
-		expect(getVisiblePatternNames()).toEqual(['theme/index']);
+		expect( getVisiblePatternNames() ).toEqual( [ 'theme/index' ] );
 		expect(
 			blockEditor.__experimentalGetAllowedPatterns
-		).toHaveBeenCalledWith(null);
-	});
+		).toHaveBeenCalledWith( null );
+	} );
 
-	test('getVisiblePatternNames with null root returns document-root scoped patterns', () => {
+	test( 'getVisiblePatternNames with null root returns document-root scoped patterns', () => {
 		const blockEditor = {
-			getAllowedPatterns: jest.fn((rootClientId) => {
-				if (rootClientId === null) {
+			getAllowedPatterns: jest.fn( ( rootClientId ) => {
+				if ( rootClientId === null ) {
 					return [
 						{ name: 'theme/hero' },
 						{ name: 'theme/footer' },
@@ -129,56 +129,56 @@ describe('visible-patterns', () => {
 					];
 				}
 
-				return [{ name: 'theme/hero' }];
-			}),
+				return [ { name: 'theme/hero' } ];
+			} ),
 		};
 
 		// null root should return all document-level patterns
-		expect(getVisiblePatternNames(null, blockEditor)).toEqual([
+		expect( getVisiblePatternNames( null, blockEditor ) ).toEqual( [
 			'theme/hero',
 			'theme/footer',
 			'theme/sidebar',
-		]);
-		expect(blockEditor.getAllowedPatterns).toHaveBeenCalledWith(null);
+		] );
+		expect( blockEditor.getAllowedPatterns ).toHaveBeenCalledWith( null );
 
 		// nested root returns a narrower set
 		expect(
-			getVisiblePatternNames('nested-group-123', blockEditor)
-		).toEqual(['theme/hero']);
-		expect(blockEditor.getAllowedPatterns).toHaveBeenCalledWith(
+			getVisiblePatternNames( 'nested-group-123', blockEditor )
+		).toEqual( [ 'theme/hero' ] );
+		expect( blockEditor.getAllowedPatterns ).toHaveBeenCalledWith(
 			'nested-group-123'
 		);
-	});
+	} );
 
-	test('getVisiblePatternNames fails closed when no contextual selector exists even if settings contain patterns', () => {
+	test( 'getVisiblePatternNames fails closed when no contextual selector exists even if settings contain patterns', () => {
 		const blockEditor = {
-			getSettings: jest.fn().mockReturnValue({
+			getSettings: jest.fn().mockReturnValue( {
 				__experimentalBlockPatterns: [
 					{ name: 'theme/hero' },
 					{},
 					{ name: 'theme/hero' },
 					{ name: 'theme/footer' },
 				],
-			}),
+			} ),
 		};
 
-		mockRegistrySelect.mockReturnValue(blockEditor);
+		mockRegistrySelect.mockReturnValue( blockEditor );
 
-		expect(getVisiblePatternNames('root-456')).toEqual([]);
-	});
+		expect( getVisiblePatternNames( 'root-456' ) ).toEqual( [] );
+	} );
 
-	test('getVisiblePatternNames remains selector-driven even if future stable settings exist without a contextual selector', () => {
+	test( 'getVisiblePatternNames remains selector-driven even if future stable settings exist without a contextual selector', () => {
 		const blockEditor = {
-			getSettings: jest.fn().mockReturnValue({
-				blockPatterns: [{ name: 'theme/stable-hero' }],
+			getSettings: jest.fn().mockReturnValue( {
+				blockPatterns: [ { name: 'theme/stable-hero' } ],
 				__experimentalBlockPatterns: [
 					{ name: 'theme/experimental-hero' },
 				],
-			}),
+			} ),
 		};
 
-		mockRegistrySelect.mockReturnValue(blockEditor);
+		mockRegistrySelect.mockReturnValue( blockEditor );
 
-		expect(getVisiblePatternNames()).toEqual([]);
-	});
-});
+		expect( getVisiblePatternNames() ).toEqual( [] );
+	} );
+} );

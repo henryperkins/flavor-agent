@@ -212,7 +212,7 @@ final class Serializer {
 		return gmdate( 'c', $timestamp );
 	}
 
-	private static function normalize_structured_value( $value ) {
+	public static function normalize_structured_value( $value ) {
 		if ( is_object( $value ) ) {
 			$value = get_object_vars( $value );
 		}
@@ -250,10 +250,10 @@ final class Serializer {
 		return '' === $string ? null : $string;
 	}
 
-	private static function normalize_positive_int( $value, int $default ): int {
+	private static function normalize_positive_int( $value, int $fallback ): int {
 		$normalized = (int) $value;
 
-		return $normalized >= 0 ? $normalized : $default;
+		return $normalized >= 0 ? $normalized : $fallback;
 	}
 
 	private static function normalize_string( $value ): string {
@@ -266,7 +266,7 @@ final class Serializer {
 		}
 
 		if ( function_exists( 'get_userdata' ) ) {
-			$user = get_userdata( $user_id );
+			$user = \get_userdata( $user_id );
 
 			if ( is_object( $user ) && isset( $user->display_name ) ) {
 				$display_name = trim( (string) $user->display_name );

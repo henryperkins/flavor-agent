@@ -311,11 +311,11 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'templatePartRef' => [
+						'templatePartRef'     => [
 							'type'        => 'string',
 							'description' => 'Template-part identifier from the Site Editor.',
 						],
-						'prompt'          => [ 'type' => 'string' ],
+						'prompt'              => [ 'type' => 'string' ],
 						'visiblePatternNames' => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
@@ -338,13 +338,13 @@ final class Registration {
 										'items' => [
 											'type'       => 'object',
 											'properties' => [
-												'path'      => [
-													'type'  => 'array',
+												'path'   => [
+													'type' => 'array',
 													'items' => [ 'type' => 'integer' ],
 												],
-												'label'     => [ 'type' => 'string' ],
+												'label'  => [ 'type' => 'string' ],
 												'blockName' => [ 'type' => 'string' ],
-												'reason'    => [ 'type' => 'string' ],
+												'reason' => [ 'type' => 'string' ],
 											],
 										],
 									],
@@ -357,11 +357,11 @@ final class Registration {
 										'items' => [
 											'type'       => 'object',
 											'properties' => [
-												'type'        => [ 'type' => 'string' ],
+												'type' => [ 'type' => 'string' ],
 												'patternName' => [ 'type' => 'string' ],
-												'placement'   => [ 'type' => 'string' ],
-												'targetPath'  => [
-													'type'  => 'array',
+												'placement' => [ 'type' => 'string' ],
+												'targetPath' => [
+													'type' => 'array',
 													'items' => [ 'type' => 'integer' ],
 												],
 												'expectedBlockName' => [ 'type' => 'string' ],

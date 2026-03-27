@@ -1,6 +1,8 @@
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	getTemplateActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	undoTemplateSuggestionOperations: jest.fn(),
 } ) );
 
@@ -101,8 +103,7 @@ describe( 'activity history reducer state', () => {
 					undo: {
 						canUndo: false,
 						status: 'failed',
-						error:
-							'This template action was recorded before refresh-safe undo support and cannot be undone automatically.',
+						error: 'This template action was recorded before refresh-safe undo support and cannot be undone automatically.',
 					},
 				},
 			] )

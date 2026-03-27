@@ -158,7 +158,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 			[ $context, $prompt ]
 		);
 
-		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ]             = $query_guidance;
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ]           = $query_guidance;
 		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/cover' ) ] = $entity_guidance;
 
 		$this->assertSame(

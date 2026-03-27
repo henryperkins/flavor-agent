@@ -666,11 +666,11 @@ final class AISearchClientTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
 
-		$family_context = [
-			'surface'      => 'template-part',
-			'entityKey'    => 'core/template-part',
-			'area'         => 'header',
-			'slug'         => 'marketing-header',
+		$family_context   = [
+			'surface'   => 'template-part',
+			'entityKey' => 'core/template-part',
+			'area'      => 'header',
+			'slug'      => 'marketing-header',
 		];
 		$generic_guidance = [
 			[
@@ -683,9 +683,7 @@ final class AISearchClientTest extends TestCase {
 			],
 		];
 
-		WordPressTestState::$transients[
-			$this->build_entity_cache_key( 'guidance:template-part' )
-		] = $generic_guidance;
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:template-part' ) ] = $generic_guidance;
 
 		$result = AISearchClient::maybe_search_with_cache_fallbacks(
 			'missing query cache',

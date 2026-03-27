@@ -150,13 +150,19 @@ function getOperationKey( operation = {} ) {
 }
 
 function formatPlacementLabel( placement ) {
-	return placement === 'start'
-		? 'Start of this template part'
-		: placement === 'end'
-			? 'End of this template part'
-			: placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH
-				? 'Before target block'
-				: 'After target block';
+	if ( placement === 'start' ) {
+		return 'Start of this template part';
+	}
+
+	if ( placement === 'end' ) {
+		return 'End of this template part';
+	}
+
+	if ( placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ) {
+		return 'Before target block';
+	}
+
+	return 'After target block';
 }
 
 function formatBlockNameLabel( blockName = '' ) {
@@ -206,14 +212,14 @@ function buildTemplatePartSuggestionViewModel(
 								type: TEMPLATE_OPERATION_INSERT_PATTERN,
 								patternName: operation.patternName,
 								patternTitle:
-									patternTitleMap[
-										operation.patternName
-									] || operation.patternName,
+									patternTitleMap[ operation.patternName ] ||
+									operation.patternName,
 								placement: operation.placement,
-								targetPath:
-									Array.isArray( operation.targetPath )
-										? operation.targetPath
-										: null,
+								targetPath: Array.isArray(
+									operation.targetPath
+								)
+									? operation.targetPath
+									: null,
 								badgeLabel: 'Insert',
 							};
 
@@ -223,11 +229,9 @@ function buildTemplatePartSuggestionViewModel(
 								type: TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
 								patternName: operation.patternName,
 								patternTitle:
-									patternTitleMap[
-										operation.patternName
-									] || operation.patternName,
-								expectedBlockName:
-									operation.expectedBlockName,
+									patternTitleMap[ operation.patternName ] ||
+									operation.patternName,
+								expectedBlockName: operation.expectedBlockName,
 								targetPath: operation.targetPath,
 								badgeLabel: 'Replace',
 							};
@@ -236,8 +240,7 @@ function buildTemplatePartSuggestionViewModel(
 							return {
 								key: getOperationKey( operation ),
 								type: TEMPLATE_OPERATION_REMOVE_BLOCK,
-								expectedBlockName:
-									operation.expectedBlockName,
+								expectedBlockName: operation.expectedBlockName,
 								targetPath: operation.targetPath,
 								badgeLabel: 'Remove',
 							};
@@ -930,9 +933,7 @@ function TemplatePartSuggestionCard( {
 }
 
 function TemplatePartOperationPreviewRow( { operation } ) {
-	if (
-		operation.type === TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN
-	) {
+	if ( operation.type === TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN ) {
 		return (
 			<div className="flavor-agent-tpl-row">
 				<span className="flavor-agent-tpl-row__mapping">
@@ -944,13 +945,13 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 						{ operation.patternTitle }
 					</span>
 				</span>
-				<span className="flavor-agent-pill">{ operation.badgeLabel }</span>
+				<span className="flavor-agent-pill">
+					{ operation.badgeLabel }
+				</span>
 				<div className="flavor-agent-tpl-row__reason">
 					Replace the{ ' ' }
 					<code>
-						{ formatBlockNameLabel(
-							operation.expectedBlockName
-						) }
+						{ formatBlockNameLabel( operation.expectedBlockName ) }
 					</code>{ ' ' }
 					at <code>{ formatBlockPath( operation.targetPath ) }</code>{ ' ' }
 					with <code>{ operation.patternTitle }</code>.
@@ -967,13 +968,13 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 						{ formatTargetPathLabel( operation.targetPath ) }
 					</span>
 				</span>
-				<span className="flavor-agent-pill">{ operation.badgeLabel }</span>
+				<span className="flavor-agent-pill">
+					{ operation.badgeLabel }
+				</span>
 				<div className="flavor-agent-tpl-row__reason">
 					Remove the{ ' ' }
 					<code>
-						{ formatBlockNameLabel(
-							operation.expectedBlockName
-						) }
+						{ formatBlockNameLabel( operation.expectedBlockName ) }
 					</code>{ ' ' }
 					at <code>{ formatBlockPath( operation.targetPath ) }</code>.
 				</div>
@@ -984,9 +985,9 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 	const placementTarget =
 		operation.placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
 		operation.placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
-			? `${ formatPlacementLabel( operation.placement ) } (${ formatBlockPath(
-					operation.targetPath
-			  ) })`
+			? `${ formatPlacementLabel(
+					operation.placement
+			  ) } (${ formatBlockPath( operation.targetPath ) })`
 			: formatPlacementLabel( operation.placement );
 
 	return (
@@ -1008,7 +1009,8 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 					{ operation.targetPath
 						? formatBlockPath( operation.targetPath )
 						: operation.placement }
-				</code>.
+				</code>
+				.
 			</div>
 		</div>
 	);

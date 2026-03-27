@@ -161,8 +161,8 @@ final class PromptGuidanceTest extends TestCase {
 		$prompt = Prompt::build_user(
 			[
 				'block'       => [
-					'name'              => 'core/image',
-					'currentAttributes' => [
+					'name'               => 'core/image',
+					'currentAttributes'  => [
 						'metadata' => [
 							'bindings' => [
 								'url' => [

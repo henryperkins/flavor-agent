@@ -6,6 +6,7 @@ namespace FlavorAgent\REST;
 
 use FlavorAgent\Activity\Permissions as ActivityPermissions;
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Activity\Serializer;
 use FlavorAgent\Abilities\BlockAbilities;
 use FlavorAgent\Abilities\NavigationAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
@@ -302,41 +303,13 @@ final class Agent_Controller {
 	}
 
 	public static function sanitize_structured_value( $value ): array {
-		$sanitized = self::normalize_structured_value( $value );
+		$sanitized = Serializer::normalize_structured_value( $value );
 
 		return is_array( $sanitized ) ? $sanitized : [];
 	}
 
 	public static function sanitize_block_markup( $value ): string {
 		return is_string( $value ) ? trim( $value ) : '';
-	}
-
-	private static function normalize_structured_value( $value ) {
-		if ( is_object( $value ) ) {
-			$value = get_object_vars( $value );
-		}
-
-		if ( is_array( $value ) ) {
-			$normalized = [];
-
-			foreach ( $value as $key => $entry ) {
-				$normalized[ $key ] = self::normalize_structured_value( $entry );
-			}
-
-			return $normalized;
-		}
-
-		if (
-			is_string( $value )
-			|| is_int( $value )
-			|| is_float( $value )
-			|| is_bool( $value )
-			|| null === $value
-		) {
-			return $value;
-		}
-
-		return null;
 	}
 
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
@@ -512,7 +485,6 @@ final class Agent_Controller {
 		$entries = ActivityRepository::query(
 			[
 				'scopeKey'   => $request->get_param( 'scopeKey' ),
-				'global'     => $request->get_param( 'global' ),
 				'surface'    => $request->get_param( 'surface' ),
 				'entityType' => $request->get_param( 'entityType' ),
 				'entityRef'  => $request->get_param( 'entityRef' ),

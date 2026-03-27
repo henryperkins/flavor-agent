@@ -329,7 +329,7 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	public function test_for_navigation_uses_live_block_attributes_with_saved_menu_structure(): void {
-		WordPressTestState::$posts[42] = (object) [
+		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
 			'post_type'    => 'wp_navigation',
 			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->'
@@ -360,7 +360,7 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	public function test_for_navigation_preserves_an_explicitly_empty_live_navigation_structure(): void {
-		WordPressTestState::$posts[42] = (object) [
+		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
 			'post_type'    => 'wp_navigation',
 			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->'

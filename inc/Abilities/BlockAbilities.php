@@ -131,7 +131,7 @@ final class BlockAbilities {
 		}
 
 		if ( array_key_exists( 'bindableAttributes', $block ) ) {
-			$bindable_attributes = StringArray::sanitize( $block['bindableAttributes'] ?? [] );
+			$bindable_attributes                       = StringArray::sanitize( $block['bindableAttributes'] ?? [] );
 			$normalized['block']['bindableAttributes'] = $bindable_attributes;
 
 			if ( [] === $bindable_attributes ) {

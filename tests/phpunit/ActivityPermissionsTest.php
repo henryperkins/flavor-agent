@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Activity\Permissions as ActivityPermissions;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\REST\Agent_Controller;
 use FlavorAgent\Tests\Support\WordPressTestState;
@@ -66,6 +67,41 @@ final class ActivityPermissionsTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $response );
 		$this->assertSame( 403, $response->get_error_data()['status'] ?? null );
+	}
+
+	public function test_can_access_activity_request_prefers_explicit_entity_id_over_scope_fallback(): void {
+		WordPressTestState::$capabilities = [
+			'edit_post:42' => false,
+			'edit_post:99' => true,
+			'edit_posts'   => false,
+		];
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'scopeKey', 'post:42' );
+		$request->set_param( 'postType', 'post' );
+		$request->set_param( 'entityType', 'block' );
+		$request->set_param( 'entityId', '99' );
+
+		$this->assertTrue(
+			ActivityPermissions::can_access_activity_request( $request )
+		);
+	}
+
+	public function test_is_global_request_treats_sanitized_boolean_true_as_global(): void {
+		WordPressTestState::$capabilities = [
+			'manage_options' => true,
+		];
+
+		ActivityRepository::create( $this->build_block_activity_entry( 'activity-global-1', '42' ) );
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'global', true );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotEmpty( $response->get_data()['entries'] ?? [] );
 	}
 
 	public function test_handle_update_activity_undo_requires_direct_edit_post_access_for_entry_scope(): void {

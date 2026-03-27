@@ -179,8 +179,7 @@ function mergeThemeFeatureValue( stableValue, experimentalValue ) {
 	if (
 		experimentalValue === undefined ||
 		experimentalValue === null ||
-		( Array.isArray( experimentalValue ) &&
-			experimentalValue.length === 0 )
+		( Array.isArray( experimentalValue ) && experimentalValue.length === 0 )
 	) {
 		return stableValue;
 	}
@@ -189,10 +188,7 @@ function mergeThemeFeatureValue( stableValue, experimentalValue ) {
 		return stableValue;
 	}
 
-	if (
-		isObjectLike( stableValue ) &&
-		isObjectLike( experimentalValue )
-	) {
+	if ( isObjectLike( stableValue ) && isObjectLike( experimentalValue ) ) {
 		const merged = { ...stableValue };
 
 		for ( const [ key, experimentalEntry ] of Object.entries(

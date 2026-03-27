@@ -1,6 +1,8 @@
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	getTemplateActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	undoTemplateSuggestionOperations: jest.fn(),
 } ) );
 
@@ -26,19 +28,21 @@ describe( 'navigation request state', () => {
 			)
 		);
 
-		expect( selectors.getNavigationRecommendations( state, 'nav-1' ) ).toEqual( [
-			{ label: 'Group utility links' },
-		] );
+		expect(
+			selectors.getNavigationRecommendations( state, 'nav-1' )
+		).toEqual( [ { label: 'Group utility links' } ] );
 		expect( selectors.getNavigationExplanation( state, 'nav-1' ) ).toBe(
 			'Review the top-level structure.'
 		);
-		expect( selectors.getNavigationRecommendations( state, 'nav-2' ) ).toEqual(
-			[]
-		);
+		expect(
+			selectors.getNavigationRecommendations( state, 'nav-2' )
+		).toEqual( [] );
 		expect( selectors.getNavigationExplanation( state, 'nav-2' ) ).toBe(
 			''
 		);
-		expect( selectors.getNavigationResultToken( state, 'nav-2' ) ).toBe( 0 );
+		expect( selectors.getNavigationResultToken( state, 'nav-2' ) ).toBe(
+			0
+		);
 	} );
 
 	test( 'stale navigation completions are ignored', () => {
@@ -86,9 +90,9 @@ describe( 'navigation request state', () => {
 			)
 		);
 
-		expect( selectors.getNavigationRecommendations( finalState, 'nav-1' ) ).toEqual(
-			[ { label: 'Fresh result' } ]
-		);
+		expect(
+			selectors.getNavigationRecommendations( finalState, 'nav-1' )
+		).toEqual( [ { label: 'Fresh result' } ] );
 		expect( selectors.getNavigationStatus( finalState, 'nav-1' ) ).toBe(
 			'ready'
 		);

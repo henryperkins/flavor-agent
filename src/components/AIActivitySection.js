@@ -91,10 +91,8 @@ export default function AIActivitySection( {
 										Activity audit sync pending.
 									</div>
 								) }
-								{ (
-									entry?.undo?.status === 'failed' ||
-									entry?.undo?.status === 'blocked'
-								) &&
+								{ ( entry?.undo?.status === 'failed' ||
+									entry?.undo?.status === 'blocked' ) &&
 									entry?.undo?.error && (
 										<div className="flavor-agent-activity-row__meta">
 											{ entry.undo.error }

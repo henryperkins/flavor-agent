@@ -1,11 +1,28 @@
 .flavor-agent-activity-log {
-	--flavor-agent-activity-log-accent: #0b5c7c;
-	--flavor-agent-activity-log-border: #d7dee7;
-	--flavor-agent-activity-log-muted: #59636e;
-	--flavor-agent-activity-log-surface: linear-gradient(
-		135deg,
-		#ffffff 0%,
-		#f4f7fb 100%
+	--flavor-agent-activity-log-accent: var(--wp-admin-theme-color, #0b5c7c);
+	--flavor-agent-activity-log-accent-darker: var(
+		--wp-admin-theme-color-darker-10,
+		#094a63
+	);
+	--flavor-agent-activity-log-border: var(
+		--wp-components-color-gray-300,
+		#d7dee7
+	);
+	--flavor-agent-activity-log-muted: var(
+		--wp-components-color-gray-700,
+		#59636e
+	);
+	--flavor-agent-activity-log-text: var(
+		--wp-components-color-foreground,
+		#11161d
+	);
+	--flavor-agent-activity-log-surface-from: var(
+		--wp-components-color-background,
+		#ffffff
+	);
+	--flavor-agent-activity-log-surface-to: var(
+		--wp-components-color-gray-100,
+		#f4f7fb
 	);
 	display: flex;
 	flex-direction: column;
@@ -24,7 +41,11 @@
 
 .flavor-agent-activity-log__intro {
 	align-items: flex-end;
-	background: var(--flavor-agent-activity-log-surface);
+	background: linear-gradient(
+		135deg,
+		var(--flavor-agent-activity-log-surface-from) 0%,
+		var(--flavor-agent-activity-log-surface-to) 100%
+	);
 	display: flex;
 	gap: 16px;
 	justify-content: space-between;
@@ -68,7 +89,7 @@
 
 .flavor-agent-activity-log__page-title,
 .flavor-agent-activity-log__section-title {
-	color: #11161d;
+	color: var(--flavor-agent-activity-log-text);
 	margin: 0;
 }
 
@@ -89,7 +110,7 @@
 }
 
 .flavor-agent-activity-log__summary-value {
-	color: #11161d;
+	color: var(--flavor-agent-activity-log-text);
 	font-size: 30px;
 	font-weight: 600;
 	line-height: 1;
@@ -158,8 +179,8 @@
 }
 
 .flavor-agent-activity-log__status.is-undone {
-	background: #eef0f5;
-	color: #4c5561;
+	background: var(--wp-components-color-gray-100, #eef0f5);
+	color: var(--wp-components-color-gray-700, #4c5561);
 }
 
 .flavor-agent-activity-log__status.is-blocked {
@@ -173,7 +194,7 @@
 }
 
 .flavor-agent-activity-log__icon {
-	background: #edf4f8;
+	background: var(--wp-components-color-gray-100, #edf4f8);
 	color: var(--flavor-agent-activity-log-accent);
 	height: 32px;
 	justify-content: center;
@@ -187,13 +208,13 @@
 }
 
 .flavor-agent-activity-log__icon.is-undone {
-	background: #eef0f5;
-	color: #4c5561;
+	background: var(--wp-components-color-gray-100, #eef0f5);
+	color: var(--wp-components-color-gray-700, #4c5561);
 }
 
 .flavor-agent-activity-log__code {
-	background: #f6f8fb;
-	border: 1px solid #e2e8f0;
+	background: var(--wp-components-color-gray-100, #f6f8fb);
+	border: 1px solid var(--wp-components-color-gray-200, #e2e8f0);
 	border-radius: 12px;
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	font-size: 12px;

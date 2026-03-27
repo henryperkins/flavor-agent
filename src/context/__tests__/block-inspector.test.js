@@ -1,70 +1,70 @@
 const mockBlocksStore = {};
 const mockBlockEditorStore = {};
 
-jest.mock('@wordpress/data', () => ({
+jest.mock( '@wordpress/data', () => ( {
 	select: jest.fn(),
-}));
+} ) );
 
-jest.mock('@wordpress/blocks', () => ({
+jest.mock( '@wordpress/blocks', () => ( {
 	store: mockBlocksStore,
-}));
+} ) );
 
-jest.mock('@wordpress/block-editor', () => ({
+jest.mock( '@wordpress/block-editor', () => ( {
 	store: mockBlockEditorStore,
-}));
+} ) );
 
-const { select } = require('@wordpress/data');
+const { select } = require( '@wordpress/data' );
 const {
 	introspectBlockType,
 	resolveInspectorPanels,
-} = require('../block-inspector');
+} = require( '../block-inspector' );
 
-describe('resolveInspectorPanels', () => {
+describe( 'resolveInspectorPanels', () => {
 	let blocksSelectors;
 	let blockEditorSelectors;
 
-	beforeEach(() => {
+	beforeEach( () => {
 		blocksSelectors = {
 			getBlockType: jest.fn(),
-			getBlockStyles: jest.fn().mockReturnValue([]),
-			getBlockVariations: jest.fn().mockReturnValue([]),
+			getBlockStyles: jest.fn().mockReturnValue( [] ),
+			getBlockVariations: jest.fn().mockReturnValue( [] ),
 		};
 		blockEditorSelectors = {
-			getSettings: jest.fn().mockReturnValue({}),
+			getSettings: jest.fn().mockReturnValue( {} ),
 		};
 
-		select.mockImplementation((store) => {
-			if (store === mockBlocksStore) {
+		select.mockImplementation( ( store ) => {
+			if ( store === mockBlocksStore ) {
 				return blocksSelectors;
 			}
 
-			if (store === mockBlockEditorStore) {
+			if ( store === mockBlockEditorStore ) {
 				return blockEditorSelectors;
 			}
 
 			return {};
-		});
-	});
+		} );
+	} );
 
-	test('maps current Gutenberg support keys to the same panels as the server collector', () => {
+	test( 'maps current Gutenberg support keys to the same panels as the server collector', () => {
 		expect(
-			resolveInspectorPanels({
+			resolveInspectorPanels( {
 				customCSS: true,
 				listView: true,
 				typography: {
 					fitText: true,
 					textIndent: true,
 				},
-			})
-		).toEqual({
-			advanced: ['customCSS'],
-			list: ['listView'],
-			typography: ['typography.fitText', 'typography.textIndent'],
-		});
-	});
+			} )
+		).toEqual( {
+			advanced: [ 'customCSS' ],
+			list: [ 'listView' ],
+			typography: [ 'typography.fitText', 'typography.textIndent' ],
+		} );
+	} );
 
-	test('adds the bindings panel when Gutenberg exposes bindable attributes for the block', () => {
-		blocksSelectors.getBlockType.mockReturnValue({
+	test( 'adds the bindings panel when Gutenberg exposes bindable attributes for the block', () => {
+		blocksSelectors.getBlockType.mockReturnValue( {
 			title: 'Paragraph',
 			category: 'text',
 			description: 'Paragraph block',
@@ -75,17 +75,17 @@ describe('resolveInspectorPanels', () => {
 					role: 'content',
 				},
 			},
-		});
-		blockEditorSelectors.getSettings.mockReturnValue({
+		} );
+		blockEditorSelectors.getSettings.mockReturnValue( {
 			canUpdateBlockBindings: true,
 			__experimentalBlockBindingsSupportedAttributes: {
-				'core/paragraph': ['content'],
+				'core/paragraph': [ 'content' ],
 			},
-		});
+		} );
 
-		const manifest = introspectBlockType('core/paragraph');
+		const manifest = introspectBlockType( 'core/paragraph' );
 
-		expect(manifest.bindableAttributes).toEqual(['content']);
-		expect(manifest.inspectorPanels.bindings).toEqual(['content']);
-	});
-});
+		expect( manifest.bindableAttributes ).toEqual( [ 'content' ] );
+		expect( manifest.inspectorPanels.bindings ).toEqual( [ 'content' ] );
+	} );
+} );

@@ -4,8 +4,7 @@ const MAX_ACTIVITY_HISTORY = 20;
 const LEGACY_TEMPLATE_UNDO_ERROR =
 	'This template action was recorded before refresh-safe undo support and cannot be undone automatically.';
 
-export const ORDERED_UNDO_BLOCKED_ERROR =
-	'Undo blocked by newer AI actions.';
+export const ORDERED_UNDO_BLOCKED_ERROR = 'Undo blocked by newer AI actions.';
 
 let activitySequence = 0;
 
@@ -62,40 +61,39 @@ function buildUndoState( timestamp, undo = {} ) {
 	const updatedAt = normalizeActivityTimestamp(
 		undo?.updatedAt || timestamp
 	);
+	let undoneAt = null;
+
+	if ( status === 'undone' ) {
+		undoneAt = normalizeActivityTimestamp(
+			undo?.undoneAt || undo?.updatedAt || timestamp
+		);
+	} else if ( undo?.undoneAt ) {
+		undoneAt = normalizeActivityTimestamp( undo.undoneAt );
+	}
 
 	return {
-		canUndo:
-			status === 'available'
-				? undo?.canUndo ?? true
-				: false,
+		canUndo: status === 'available' ? undo?.canUndo ?? true : false,
 		status,
 		error:
 			status === 'blocked'
 				? undo?.error || ORDERED_UNDO_BLOCKED_ERROR
 				: undo?.error ?? null,
 		updatedAt,
-		undoneAt:
-			status === 'undone'
-				? normalizeActivityTimestamp(
-						undo?.undoneAt || undo?.updatedAt || timestamp
-				  )
-				: undo?.undoneAt
-					? normalizeActivityTimestamp( undo.undoneAt )
-					: null,
+		undoneAt,
 	};
 }
 
 function buildPersistenceState( timestamp, persistence = {} ) {
 	const status = persistence?.status === 'server' ? 'server' : 'local';
+	let syncType = null;
+
+	if ( status !== 'server' ) {
+		syncType = persistence?.syncType === 'undo' ? 'undo' : 'create';
+	}
 
 	return {
 		status,
-		syncType:
-			status === 'server'
-				? null
-				: persistence?.syncType === 'undo'
-					? 'undo'
-					: 'create',
+		syncType,
 		updatedAt: normalizeActivityTimestamp(
 			persistence?.updatedAt || timestamp
 		),
@@ -123,16 +121,12 @@ function hasRefreshSafeTemplateUndoMetadata( entry ) {
 			case 'replace_template_part':
 				return Boolean(
 					operation?.previousAttributes &&
-						(
-							operation?.undoLocator?.area ||
+						( operation?.undoLocator?.area ||
 							operation?.area ||
-							operation?.nextAttributes?.area
-						) &&
-						(
-							operation?.undoLocator?.expectedSlug ||
+							operation?.nextAttributes?.area ) &&
+						( operation?.undoLocator?.expectedSlug ||
 							operation?.slug ||
-							operation?.nextAttributes?.slug
-						)
+							operation?.nextAttributes?.slug )
 				);
 
 			case 'insert_pattern':
@@ -189,16 +183,12 @@ function normalizePersistedActivityEntry(
 	};
 
 	if (
-		(
-			normalizedEntry.surface === 'template' ||
-			normalizedEntry.surface === 'template-part'
-		) &&
+		( normalizedEntry.surface === 'template' ||
+			normalizedEntry.surface === 'template-part' ) &&
 		normalizedEntry.undo.status !== 'undone' &&
-		(
-			storageVersion < ACTIVITY_STORAGE_VERSION ||
+		( storageVersion < ACTIVITY_STORAGE_VERSION ||
 			normalizedEntry.schemaVersion < ACTIVITY_STORAGE_VERSION ||
-			! hasRefreshSafeTemplateUndoMetadata( normalizedEntry )
-		)
+			! hasRefreshSafeTemplateUndoMetadata( normalizedEntry ) )
 	) {
 		return {
 			...normalizedEntry,
@@ -319,10 +309,7 @@ export function readPersistedActivityLog( scopeKey ) {
 
 		return limitActivityLog( parsed?.entries )
 			.map( ( entry ) =>
-				normalizePersistedActivityEntry(
-					entry,
-					storageVersion
-				)
+				normalizePersistedActivityEntry( entry, storageVersion )
 			)
 			.filter( Boolean );
 	} catch {
@@ -416,7 +403,6 @@ export function getActivityEntityKey( entry ) {
 	}
 
 	const surface = String( entry?.surface || '' );
-	const documentScopeKey = String( entry?.document?.scopeKey || '' );
 
 	if ( surface === 'template' ) {
 		return `template:${ String( entry?.target?.templateRef || '' ) }`;
@@ -428,13 +414,12 @@ export function getActivityEntityKey( entry ) {
 		) }`;
 	}
 
+	const documentScopeKey = String( entry?.document?.scopeKey || '' );
 	const blockPath = Array.isArray( entry?.target?.blockPath )
 		? entry.target.blockPath.join( '.' )
 		: '';
 	const blockIdentity =
-		blockPath ||
-		String( entry?.target?.clientId || '' ) ||
-		'unknown';
+		blockPath || String( entry?.target?.clientId || '' ) || 'unknown';
 	const blockName = String( entry?.target?.blockName || '' );
 
 	return `block:${ documentScopeKey }:${ blockIdentity }:${ blockName }`;
@@ -452,7 +437,6 @@ export function getResolvedActivityUndoState(
 		} );
 	}
 
-	const timestamp = normalizeActivityTimestamp( entry.timestamp );
 	const baseUndo = getBaseUndoState( entry );
 
 	if ( baseUndo.status === 'undone' ) {
@@ -472,6 +456,7 @@ export function getResolvedActivityUndoState(
 	}
 
 	if ( runtimeUndoState ) {
+		const timestamp = normalizeActivityTimestamp( entry.timestamp );
 		const resolvedUndo = buildUndoState( timestamp, {
 			...baseUndo,
 			...runtimeUndoState,
@@ -525,8 +510,9 @@ export function getLatestAppliedActivity( entries = [] ) {
 	return (
 		[ ...sortActivityEntries( entries ) ]
 			.reverse()
-			.find( ( entry ) => getBaseUndoState( entry ).status !== 'undone' ) ||
-		null
+			.find(
+				( entry ) => getBaseUndoState( entry ).status !== 'undone'
+			) || null
 	);
 }
 

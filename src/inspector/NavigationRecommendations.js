@@ -20,9 +20,7 @@ function humanizeValue( value ) {
 	return String( value || '' )
 		.split( /[-_]/ )
 		.filter( Boolean )
-		.map(
-			( part ) => part.charAt( 0 ).toUpperCase() + part.slice( 1 )
-		)
+		.map( ( part ) => part.charAt( 0 ).toUpperCase() + part.slice( 1 ) )
 		.join( ' ' );
 }
 
@@ -79,10 +77,7 @@ export function buildNavigationFetchInput( {
 	return input;
 }
 
-function buildNavigationContextSignature( {
-	block,
-	blockClientId,
-} ) {
+function buildNavigationContextSignature( { block, blockClientId } ) {
 	const input = buildNavigationFetchInput( {
 		block,
 		blockClientId,
@@ -122,15 +117,12 @@ export default function NavigationRecommendations( { clientId } ) {
 
 			return {
 				navigationBlock: blockEditor.getBlock?.( clientId ) || null,
-				recommendations: store.getNavigationRecommendations(
-					clientId
-				),
+				recommendations: store.getNavigationRecommendations( clientId ),
 				explanation: store.getNavigationExplanation( clientId ),
 				error: store.getNavigationError( clientId ),
 				isLoading: store.isNavigationLoading( clientId ),
 				status: store.getNavigationStatus( clientId ),
-				resultBlockClientId:
-					store.getNavigationBlockClientId(),
+				resultBlockClientId: store.getNavigationBlockClientId(),
 			};
 		},
 		[ clientId ]
@@ -151,7 +143,6 @@ export default function NavigationRecommendations( { clientId } ) {
 			} ),
 		[ clientId, navigationBlock, prompt ]
 	);
-	const menuId = Number( navigationBlock?.attributes?.ref || 0 );
 	const recommendationContextSignature = useMemo(
 		() =>
 			buildNavigationContextSignature( {
@@ -183,11 +174,7 @@ export default function NavigationRecommendations( { clientId } ) {
 
 		if (
 			! blockChanged &&
-			! (
-				resultBlockClientId === clientId ||
-				isLoading ||
-				error
-			)
+			! ( resultBlockClientId === clientId || isLoading || error )
 		) {
 			return;
 		}
@@ -216,6 +203,8 @@ export default function NavigationRecommendations( { clientId } ) {
 		return null;
 	}
 
+	const menuId = Number( navigationBlock?.attributes?.ref || 0 );
+
 	return (
 		<>
 			<div className="flavor-agent-panel__group">
@@ -229,9 +218,7 @@ export default function NavigationRecommendations( { clientId } ) {
 								Menu ID { menuId }
 							</span>
 						) }
-						<span className="flavor-agent-pill">
-							Advisory only
-						</span>
+						<span className="flavor-agent-pill">Advisory only</span>
 					</div>
 				</div>
 				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
@@ -295,22 +282,22 @@ export default function NavigationRecommendations( { clientId } ) {
 							Navigation ideas
 						</div>
 						<span className="flavor-agent-pill">
-							{ formatCount(
-								recommendations.length,
-								'idea'
-							) }
+							{ formatCount( recommendations.length, 'idea' ) }
 						</span>
 					</div>
 					<div className="flavor-agent-panel__group-body">
 						{ recommendations.map( ( suggestion, index ) => (
 							<div
-								key={ `${ suggestion?.label || 'navigation' }-${ index }` }
+								key={ `${
+									suggestion?.label || 'navigation'
+								}-${ index }` }
 								className="flavor-agent-card"
 							>
 								<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 									<div className="flavor-agent-card__lead">
 										<div className="flavor-agent-card__label">
-											{ suggestion?.label || 'Navigation suggestion' }
+											{ suggestion?.label ||
+												'Navigation suggestion' }
 										</div>
 										<div className="flavor-agent-card__meta">
 											<span className="flavor-agent-pill">
@@ -320,7 +307,8 @@ export default function NavigationRecommendations( { clientId } ) {
 											</span>
 											<span className="flavor-agent-pill">
 												{ formatCount(
-													suggestion?.changes?.length || 0,
+													suggestion?.changes
+														?.length || 0,
 													'change'
 												) }
 											</span>
@@ -338,7 +326,12 @@ export default function NavigationRecommendations( { clientId } ) {
 									{ ( suggestion?.changes || [] ).map(
 										( change, changeIndex ) => (
 											<div
-												key={ `${ suggestion?.label || 'navigation' }-${ change?.type || 'change' }-${ changeIndex }` }
+												key={ `${
+													suggestion?.label ||
+													'navigation'
+												}-${
+													change?.type || 'change'
+												}-${ changeIndex }` }
 												className="flavor-agent-navigation-change"
 											>
 												<div className="flavor-agent-card__meta">

@@ -1,6 +1,8 @@
 jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn( ( activity ) => activity?.undo || {} ),
+	getTemplateActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	undoTemplateSuggestionOperations: jest.fn(),
 } ) );
 

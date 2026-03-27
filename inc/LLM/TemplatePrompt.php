@@ -679,7 +679,7 @@ SYSTEM;
 						continue 2;
 					}
 
-					$valid[]      = [
+					$valid[]                        = [
 						'type' => $type,
 						'slug' => $slug,
 						'area' => $area,
@@ -741,7 +741,7 @@ SYSTEM;
 						continue 2;
 					}
 
-					$valid[]      = [
+					$valid[] = [
 						'type'        => $type,
 						'currentSlug' => $current_slug,
 						'slug'        => $slug,
@@ -773,7 +773,7 @@ SYSTEM;
 						];
 					}
 
-					$valid[]      = [
+					$valid[] = [
 						'type'        => $type,
 						'patternName' => $pattern_name,
 					];

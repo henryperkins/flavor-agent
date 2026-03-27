@@ -190,6 +190,37 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'activity-block', $entries[1]['id'] ?? null );
 	}
 
+	public function test_create_generates_a_uuid_v4_activity_id_when_none_is_provided(): void {
+		Repository::install();
+
+		$stored = Repository::create(
+			[
+				'type'       => 'apply_suggestion',
+				'surface'    => 'block',
+				'target'     => [
+					'clientId'  => 'block-1',
+					'blockName' => 'core/paragraph',
+				],
+				'suggestion' => 'Tighten copy',
+				'before'     => [],
+				'after'      => [],
+				'request'    => [],
+				'document'   => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+				'timestamp'  => '2026-03-27T10:00:00Z',
+			]
+		);
+
+		$this->assertIsArray( $stored );
+		$this->assertMatchesRegularExpression(
+			'/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
+			$stored['id'] ?? ''
+		);
+	}
+
 	public function test_update_undo_status_requires_ordered_tail_eligibility(): void {
 		Repository::install();
 
@@ -213,6 +244,32 @@ final class ActivityRepositoryTest extends TestCase {
 
 		$this->assertIsArray( $older );
 		$this->assertSame( 'undone', $older['undo']['status'] ?? null );
+	}
+
+	public function test_ordered_undo_check_works_with_many_entries_for_same_entity(): void {
+		Repository::install();
+
+		for ( $index = 1; $index <= 50; ++$index ) {
+			Repository::create(
+				$this->build_template_entry(
+					'activity-bulk-' . $index,
+					sprintf( '2026-03-24T10:%02d:%02dZ', intdiv( $index, 60 ), $index % 60 )
+				)
+			);
+		}
+
+		$blocked = Repository::update_undo_status( 'activity-bulk-1', 'undone' );
+
+		$this->assertInstanceOf( \WP_Error::class, $blocked );
+		$this->assertSame(
+			'flavor_agent_activity_undo_blocked',
+			$blocked->get_error_code()
+		);
+
+		$tail = Repository::update_undo_status( 'activity-bulk-50', 'undone' );
+
+		$this->assertIsArray( $tail );
+		$this->assertSame( 'undone', $tail['undo']['status'] ?? null );
 	}
 
 	public function test_create_merges_newer_terminal_undo_state_when_the_row_already_exists(): void {
@@ -240,6 +297,80 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame(
 			'2026-03-24T10:05:00+00:00',
 			$merged['undo']['updatedAt'] ?? null
+		);
+	}
+
+	public function test_delete_before_removes_entries_older_than_the_cutoff(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_template_entry( 'activity-old', '2026-01-01T10:00:00Z' )
+		);
+		Repository::create(
+			$this->build_template_entry( 'activity-recent', '2026-03-27T10:00:00Z' )
+		);
+
+		$deleted = Repository::delete_before( '2026-03-01T00:00:00Z' );
+
+		$this->assertSame( 1, $deleted );
+
+		$entries = Repository::query( [ 'limit' => 100 ] );
+
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'activity-recent', $entries[0]['id'] ?? null );
+	}
+
+	public function test_delete_before_returns_zero_when_nothing_matches(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_template_entry( 'activity-recent', '2026-03-27T10:00:00Z' )
+		);
+
+		$deleted = Repository::delete_before( '2026-01-01T00:00:00Z' );
+
+		$this->assertSame( 0, $deleted );
+	}
+
+	public function test_delete_before_returns_zero_when_timestamp_is_invalid(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_template_entry( 'activity-recent', '2026-03-27T10:00:00Z' )
+		);
+
+		$deleted = Repository::delete_before( 'not-a-timestamp' );
+
+		$this->assertSame( 0, $deleted );
+
+		$entries = Repository::query( [ 'limit' => 100 ] );
+
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'activity-recent', $entries[0]['id'] ?? null );
+	}
+
+	public function test_ensure_prune_schedule_schedules_a_daily_event_once(): void {
+		$this->assertFalse( wp_next_scheduled( Repository::PRUNE_CRON_HOOK ) );
+
+		Repository::ensure_prune_schedule();
+
+		$this->assertSame(
+			Repository::PRUNE_CRON_HOOK,
+			WordPressTestState::$scheduled_events[ Repository::PRUNE_CRON_HOOK ]['hook'] ?? null
+		);
+		$this->assertSame(
+			'daily',
+			WordPressTestState::$scheduled_events[ Repository::PRUNE_CRON_HOOK ]['recurrence'] ?? null
+		);
+
+		$first_timestamp = WordPressTestState::$scheduled_events[ Repository::PRUNE_CRON_HOOK ]['timestamp'] ?? null;
+
+		Repository::ensure_prune_schedule();
+
+		$this->assertCount( 1, WordPressTestState::$scheduled_events );
+		$this->assertSame(
+			$first_timestamp,
+			WordPressTestState::$scheduled_events[ Repository::PRUNE_CRON_HOOK ]['timestamp'] ?? null
 		);
 	}
 

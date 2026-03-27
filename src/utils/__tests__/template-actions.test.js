@@ -81,7 +81,10 @@ function removeBlocksByClientIds( blocks, clientIds ) {
 	}
 }
 
-function createParagraphBlock( clientId, content = 'Inserted by Flavor Agent' ) {
+function createParagraphBlock(
+	clientId,
+	content = 'Inserted by Flavor Agent'
+) {
 	return {
 		clientId,
 		name: 'core/paragraph',
@@ -118,9 +121,7 @@ function setupBlockEditor( {
 	};
 
 	blockEditorSelect.getAllowedPatterns = jest.fn( () =>
-		cloneValue(
-			allowedPatterns !== undefined ? allowedPatterns : patterns
-		)
+		cloneValue( allowedPatterns !== undefined ? allowedPatterns : patterns )
 	);
 
 	const updateBlockAttributes = jest.fn( ( clientId, attributes ) => {
@@ -204,8 +205,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/hero',
 					title: 'Hero Banner',
-					content:
-						'<!-- wp:paragraph {"content":"Inserted"} /-->',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
 				},
 			],
 			insertionPoint: {
@@ -385,8 +385,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/hero',
 					title: 'Hero Banner',
-					content:
-						'<!-- wp:paragraph {"content":"Inserted"} /-->',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
 				},
 			],
 			insertionPoint: {
@@ -544,8 +543,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/hero',
 					title: 'Hero Banner',
-					content:
-						'<!-- wp:paragraph {"content":"Inserted"} /-->',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
 				},
 			],
 			allowedPatterns: [],
@@ -577,8 +575,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/header-utility',
 					title: 'Header Utility',
-					content:
-						'<!-- wp:paragraph {"content":"Utility"} /-->',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
 				},
 			],
 		} );
@@ -621,8 +618,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/header-utility',
 					title: 'Header Utility',
-					content:
-						'<!-- wp:paragraph {"content":"Utility"} /-->',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
 				},
 			],
 		} );
@@ -690,8 +686,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/header-utility',
 					title: 'Header Utility',
-					content:
-						'<!-- wp:paragraph {"content":"Utility"} /-->',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
 				},
 			],
 		} );
@@ -749,8 +744,7 @@ describe( 'template-actions', () => {
 				{
 					name: 'theme/header-utility',
 					title: 'Header Utility',
-					content:
-						'<!-- wp:paragraph {"content":"Utility"} /-->',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
 				},
 			],
 		} );
@@ -1039,7 +1033,10 @@ describe( 'template-actions', () => {
 						index: 1,
 						removedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'existing-2', 'Replace me' )
+								createParagraphBlock(
+									'existing-2',
+									'Replace me'
+								)
 							),
 						],
 						insertedBlocksSnapshot: [
@@ -1098,14 +1095,20 @@ describe( 'template-actions', () => {
 						index: 1,
 						removedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'existing-2', 'Remove me' )
+								createParagraphBlock(
+									'existing-2',
+									'Remove me'
+								)
 							),
 						],
 						postApplyAnchor: {
 							type: 'next-block',
 							blocksSnapshot: [
 								normalizeBlockSnapshot(
-									createParagraphBlock( 'existing-3', 'After me' )
+									createParagraphBlock(
+										'existing-3',
+										'After me'
+									)
 								),
 							],
 						},
@@ -1181,7 +1184,10 @@ describe( 'template-actions', () => {
 						index: 1,
 						insertedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'pattern-before', 'Inserted' )
+								createParagraphBlock(
+									'pattern-before',
+									'Inserted'
+								)
 							),
 						],
 					},
@@ -1193,13 +1199,12 @@ describe( 'template-actions', () => {
 			[ 'pattern-reloaded' ],
 			false
 		);
-		expect( blockEditorDispatch.updateBlockAttributes ).toHaveBeenCalledWith(
-			'tp-reloaded',
-			{
-				slug: 'header',
-				area: 'header',
-			}
-		);
+		expect(
+			blockEditorDispatch.updateBlockAttributes
+		).toHaveBeenCalledWith( 'tp-reloaded', {
+			slug: 'header',
+			area: 'header',
+		} );
 		expect( state.blocks ).toEqual( [
 			{
 				clientId: 'tp-reloaded',
@@ -1280,7 +1285,10 @@ describe( 'template-actions', () => {
 						index: 1,
 						removedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'existing-2', 'Replace me' )
+								createParagraphBlock(
+									'existing-2',
+									'Replace me'
+								)
 							),
 						],
 						insertedBlocksSnapshot: [
@@ -1346,14 +1354,20 @@ describe( 'template-actions', () => {
 						index: 1,
 						removedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'existing-2', 'Remove me' )
+								createParagraphBlock(
+									'existing-2',
+									'Remove me'
+								)
 							),
 						],
 						postApplyAnchor: {
 							type: 'next-block',
 							blocksSnapshot: [
 								normalizeBlockSnapshot(
-									createParagraphBlock( 'existing-3', 'After me' )
+									createParagraphBlock(
+										'existing-3',
+										'After me'
+									)
 								),
 							],
 						},
@@ -1391,7 +1405,9 @@ describe( 'template-actions', () => {
 
 	test( 'prepareTemplateUndoOperations rejects edited inserted paragraph content', () => {
 		setupBlockEditor( {
-			blocks: [ createParagraphBlock( 'pattern-1', 'Changed after apply' ) ],
+			blocks: [
+				createParagraphBlock( 'pattern-1', 'Changed after apply' ),
+			],
 		} );
 
 		const result = prepareTemplateUndoOperations( {
@@ -1407,7 +1423,10 @@ describe( 'template-actions', () => {
 						index: 0,
 						insertedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'pattern-before', 'Inserted by Flavor Agent' )
+								createParagraphBlock(
+									'pattern-before',
+									'Inserted by Flavor Agent'
+								)
 							),
 						],
 					},
@@ -1442,7 +1461,10 @@ describe( 'template-actions', () => {
 						index: 0,
 						insertedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'pattern-before', 'Inserted by Flavor Agent' )
+								createParagraphBlock(
+									'pattern-before',
+									'Inserted by Flavor Agent'
+								)
 							),
 						],
 					},
@@ -1474,10 +1496,16 @@ describe( 'template-actions', () => {
 						index: 0,
 						insertedBlocksSnapshot: [
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'pattern-before-1', 'First block' )
+								createParagraphBlock(
+									'pattern-before-1',
+									'First block'
+								)
 							),
 							normalizeBlockSnapshot(
-								createParagraphBlock( 'pattern-before-2', 'Second block' )
+								createParagraphBlock(
+									'pattern-before-2',
+									'Second block'
+								)
 							),
 						],
 					},

@@ -26,15 +26,15 @@ import InserterBadge from './patterns/InserterBadge';
 import TemplateRecommender from './templates/TemplateRecommender';
 import TemplatePartRecommender from './template-parts/TemplatePartRecommender';
 
-registerPlugin('flavor-agent', {
-    render: () => (
-        <>
-            <ActivitySessionBootstrap />
-            <BlockRecommendationsDocumentPanel />
-            <PatternRecommender />
-            <InserterBadge />
-            <TemplateRecommender />
-            <TemplatePartRecommender />
-        </>
-    ),
-});
+registerPlugin( 'flavor-agent', {
+	render: () => (
+		<>
+			<ActivitySessionBootstrap />
+			<BlockRecommendationsDocumentPanel />
+			<PatternRecommender />
+			<InserterBadge />
+			<TemplateRecommender />
+			<TemplatePartRecommender />
+		</>
+	),
+} );

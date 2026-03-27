@@ -361,7 +361,7 @@ SYSTEM;
 				continue;
 			}
 
-			$label = sanitize_text_field( substr( (string) ( $suggestion['label'] ?? '' ), 0, 60 ) );
+			$label       = sanitize_text_field( substr( (string) ( $suggestion['label'] ?? '' ), 0, 60 ) );
 			$description = sanitize_text_field(
 				substr(
 					(string) ( $suggestion['description'] ?? '' ),
@@ -374,7 +374,7 @@ SYSTEM;
 				continue;
 			}
 
-			$block_hints = self::validate_block_hints(
+			$block_hints         = self::validate_block_hints(
 				is_array( $suggestion['blockHints'] ?? null ) ? $suggestion['blockHints'] : [],
 				$block_lookup
 			);
@@ -382,7 +382,7 @@ SYSTEM;
 				is_array( $suggestion['patternSuggestions'] ?? null ) ? $suggestion['patternSuggestions'] : [],
 				$pattern_lookup
 			);
-			$operations = self::validate_operations(
+			$operations          = self::validate_operations(
 				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
 				$block_lookup,
 				$pattern_lookup
@@ -588,7 +588,7 @@ SYSTEM;
 				$label = self::humanize_block_name( $block_name );
 			}
 
-			$valid[]     = [
+			$valid[]      = [
 				'path'      => $path,
 				'label'     => $label,
 				'blockName' => $block_name,
@@ -622,7 +622,7 @@ SYSTEM;
 				continue;
 			}
 
-			$valid[]      = $name;
+			$valid[]       = $name;
 			$seen[ $name ] = true;
 		}
 

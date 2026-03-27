@@ -102,9 +102,7 @@ export function buildTemplateFetchInput( {
 		input.editorSlots = editorSlots;
 	}
 
-	if (
-		Array.isArray( normalizedVisiblePatternNames )
-	) {
+	if ( Array.isArray( normalizedVisiblePatternNames ) ) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
 	}
 

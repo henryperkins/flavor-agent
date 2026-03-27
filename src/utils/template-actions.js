@@ -108,9 +108,7 @@ function getPatternRegistry( rootClientId = null ) {
 function normalizeSerializableValue( value ) {
 	if ( Array.isArray( value ) ) {
 		return value.map( ( item ) =>
-			normalizeSerializableValue(
-				item === undefined ? null : item
-			)
+			normalizeSerializableValue( item === undefined ? null : item )
 		);
 	}
 
@@ -151,21 +149,21 @@ export function normalizeBlockSnapshot( block ) {
 
 function normalizeBlockSnapshots( blocks = [] ) {
 	return Array.isArray( blocks )
-		? blocks.filter( Boolean ).map( ( block ) => normalizeBlockSnapshot( block ) )
+		? blocks
+				.filter( Boolean )
+				.map( ( block ) => normalizeBlockSnapshot( block ) )
 		: [];
 }
 
 function cloneBlockTree( blocks = [] ) {
 	return Array.isArray( blocks )
-		? blocks
-				.filter( Boolean )
-				.map( ( block ) => ( {
-					...block,
-					attributes: normalizeSerializableValue(
-						block.attributes || {}
-					),
-					innerBlocks: cloneBlockTree( block.innerBlocks || [] ),
-				} ) )
+		? blocks.filter( Boolean ).map( ( block ) => ( {
+				...block,
+				attributes: normalizeSerializableValue(
+					block.attributes || {}
+				),
+				innerBlocks: cloneBlockTree( block.innerBlocks || [] ),
+		  } ) )
 		: [];
 }
 
@@ -239,7 +237,11 @@ function rebuildBlockFromSnapshot( snapshot ) {
 		: [];
 
 	try {
-		return createBlock( snapshot.name, snapshot.attributes || {}, innerBlocks );
+		return createBlock(
+			snapshot.name,
+			snapshot.attributes || {},
+			innerBlocks
+		);
 	} catch {
 		return {
 			name: snapshot.name,
@@ -384,7 +386,10 @@ function buildTemplatePartWorkingState(
 				if ( area ) {
 					const currentAreaEntry = state.byArea.get( area ) || null;
 
-					if ( ! currentAreaEntry || ( currentAreaEntry.slug && ! slug ) ) {
+					if (
+						! currentAreaEntry ||
+						( currentAreaEntry.slug && ! slug )
+					) {
 						state.byArea.set( area, entry );
 					}
 				}
@@ -394,7 +399,10 @@ function buildTemplatePartWorkingState(
 				}
 			}
 
-			if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
+			if (
+				Array.isArray( block?.innerBlocks ) &&
+				block.innerBlocks.length
+			) {
 				visitBlocks( block.innerBlocks );
 			}
 		}
@@ -405,10 +413,7 @@ function buildTemplatePartWorkingState(
 	return state;
 }
 
-function resolveWorkingTemplatePartTarget(
-	operation,
-	workingState
-) {
+function resolveWorkingTemplatePartTarget( operation, workingState ) {
 	const currentSlug = operation?.currentSlug || '';
 	const area = operation?.area || '';
 	let block = null;
@@ -627,7 +632,11 @@ function prepareTemplatePartOperation(
 		},
 	};
 
-	updateWorkingTemplatePartState( workingState, block, preparedOperation.nextAttributes );
+	updateWorkingTemplatePartState(
+		workingState,
+		block,
+		preparedOperation.nextAttributes
+	);
 
 	return preparedOperation;
 }
@@ -844,7 +853,12 @@ function removeWorkingBlockAtPath( blocks, targetPath ) {
 	return container.splice( index, 1 )[ 0 ] || null;
 }
 
-function insertWorkingBlocksAtIndex( blocks, parentPath, index, blocksToInsert ) {
+function insertWorkingBlocksAtIndex(
+	blocks,
+	parentPath,
+	index,
+	blocksToInsert
+) {
 	const container = getBlockContainerByPath( blocks, parentPath );
 
 	if ( ! Array.isArray( container ) ) {
@@ -856,11 +870,7 @@ function insertWorkingBlocksAtIndex( blocks, parentPath, index, blocksToInsert )
 	return true;
 }
 
-function replaceWorkingBlockAtPath(
-	blocks,
-	targetPath,
-	blocksToInsert
-) {
+function replaceWorkingBlockAtPath( blocks, targetPath, blocksToInsert ) {
 	const parentPath = targetPath.slice( 0, -1 );
 	const index = targetPath[ targetPath.length - 1 ];
 	const container = getBlockContainerByPath( blocks, parentPath );
@@ -870,11 +880,12 @@ function replaceWorkingBlockAtPath(
 	}
 
 	return {
-		removedBlock: container.splice(
-			index,
-			1,
-			...cloneBlockTree( blocksToInsert )
-		)[ 0 ] || null,
+		removedBlock:
+			container.splice(
+				index,
+				1,
+				...cloneBlockTree( blocksToInsert )
+			)[ 0 ] || null,
 		index,
 		parentPath,
 	};
@@ -932,8 +943,7 @@ function validateRemovalAnchor(
 		) {
 			return {
 				ok: false,
-				error:
-					'Template-part content changed after this block was removed and cannot be undone automatically.',
+				error: 'Template-part content changed after this block was removed and cannot be undone automatically.',
 			};
 		}
 
@@ -947,16 +957,14 @@ function validateRemovalAnchor(
 	if ( ! resolvedRoot ) {
 		return {
 			ok: false,
-			error:
-				'Flavor Agent could not resolve the parent container for this removed block.',
+			error: 'Flavor Agent could not resolve the parent container for this removed block.',
 		};
 	}
 
 	if ( resolvedRoot.blocks.length !== index ) {
 		return {
 			ok: false,
-			error:
-				'Template-part content changed after this block was removed and cannot be undone automatically.',
+			error: 'Template-part content changed after this block was removed and cannot be undone automatically.',
 		};
 	}
 
@@ -1096,7 +1104,9 @@ function prepareTemplatePartRemoveBlockOperation(
 }
 
 export function prepareTemplateSuggestionOperations( suggestion ) {
-	const sequence = validateTemplateOperationSequence( suggestion?.operations );
+	const sequence = validateTemplateOperationSequence(
+		suggestion?.operations
+	);
 
 	if ( ! sequence.ok ) {
 		return sequence;
@@ -1159,9 +1169,16 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 
 	const preparedOperations = [];
 	const blockEditorSelect = select( blockEditorStore );
-	const workingBlocks = cloneBlockTree(
-		blockEditorSelect?.getBlocks?.() || []
-	);
+	let workingBlocks;
+	const getWorkingBlocks = () => {
+		if ( ! workingBlocks ) {
+			workingBlocks = cloneBlockTree(
+				blockEditorSelect?.getBlocks?.() || []
+			);
+		}
+
+		return workingBlocks;
+	};
 	const targetedPaths = [];
 
 	for ( const operation of sequence.operations ) {
@@ -1185,11 +1202,13 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 			}
 		}
 
+		const currentWorkingBlocks = getWorkingBlocks();
+
 		switch ( operation?.type ) {
 			case TEMPLATE_OPERATION_INSERT_PATTERN: {
 				const prepared = prepareTemplatePartInsertPatternOperation(
 					operation,
-					workingBlocks,
+					currentWorkingBlocks,
 					blockEditorSelect
 				);
 
@@ -1201,7 +1220,7 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 
 				if (
 					! insertWorkingBlocksAtIndex(
-						workingBlocks,
+						currentWorkingBlocks,
 						prepared.rootLocator?.path || [],
 						prepared.index,
 						prepared.blocks
@@ -1219,7 +1238,7 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
 				const prepared = prepareTemplatePartReplaceBlockOperation(
 					operation,
-					workingBlocks,
+					currentWorkingBlocks,
 					blockEditorSelect
 				);
 
@@ -1231,7 +1250,7 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 
 				if (
 					! replaceWorkingBlockAtPath(
-						workingBlocks,
+						currentWorkingBlocks,
 						prepared.targetPath,
 						prepared.blocks
 					)
@@ -1248,7 +1267,7 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
 				const prepared = prepareTemplatePartRemoveBlockOperation(
 					operation,
-					workingBlocks
+					currentWorkingBlocks
 				);
 
 				if ( prepared?.error ) {
@@ -1257,7 +1276,12 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 
 				preparedOperations.push( prepared );
 
-				if ( ! removeWorkingBlockAtPath( workingBlocks, prepared.targetPath ) ) {
+				if (
+					! removeWorkingBlockAtPath(
+						currentWorkingBlocks,
+						prepared.targetPath
+					)
+				) {
 					return {
 						ok: false,
 						error: 'Flavor Agent could not update the working template-part structure for this removal.',
@@ -1362,8 +1386,15 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 		return prepared;
 	}
 
-	const blockEditorDispatch = dispatch( blockEditorStore );
 	const blockEditorSelect = select( blockEditorStore );
+	let blockEditorDispatch;
+	const getBlockEditorDispatch = () => {
+		if ( ! blockEditorDispatch ) {
+			blockEditorDispatch = dispatch( blockEditorStore );
+		}
+
+		return blockEditorDispatch;
+	};
 	const appliedOperations = [];
 
 	for ( const operation of prepared.operations ) {
@@ -1381,7 +1412,9 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					};
 				}
 
-				blockEditorDispatch.insertBlocks(
+				const editorDispatch = getBlockEditorDispatch();
+
+				editorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
 					resolvedRoot.rootClientId,
@@ -1426,8 +1459,7 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				if ( ! targetBlock?.clientId ) {
 					return {
 						ok: false,
-						error:
-							'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
+						error: 'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
 					};
 				}
 
@@ -1452,9 +1484,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				const removedBlocksSnapshot = normalizeBlockSnapshots( [
 					targetBlock,
 				] );
+				const editorDispatch = getBlockEditorDispatch();
 
-				blockEditorDispatch.removeBlocks( [ targetBlock.clientId ], false );
-				blockEditorDispatch.insertBlocks(
+				editorDispatch.removeBlocks( [ targetBlock.clientId ], false );
+				editorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
 					resolvedRoot.rootClientId,
@@ -1497,8 +1530,7 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				if ( ! targetBlock?.clientId ) {
 					return {
 						ok: false,
-						error:
-							'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
+						error: 'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
 					};
 				}
 
@@ -1513,7 +1545,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					};
 				}
 
-				blockEditorDispatch.removeBlocks( [ targetBlock.clientId ], false );
+				getBlockEditorDispatch().removeBlocks(
+					[ targetBlock.clientId ],
+					false
+				);
 
 				appliedOperations.push( {
 					type: operation.type,
@@ -1652,10 +1687,7 @@ export function resolveInsertedPatternSlice(
 		? operation.insertedBlocksSnapshot
 		: [];
 
-	if (
-		! operation?.rootLocator ||
-		! Number.isInteger( operation?.index )
-	) {
+	if ( ! operation?.rootLocator || ! Number.isInteger( operation?.index ) ) {
 		return {
 			ok: false,
 			error:
@@ -1757,8 +1789,7 @@ function prepareUndoReplaceBlockWithPatternOperation(
 		operation.removedBlocksSnapshot.length === 0
 	) {
 		return {
-			error:
-				'This template-part block replacement is missing the removed-block snapshot needed for automatic undo.',
+			error: 'This template-part block replacement is missing the removed-block snapshot needed for automatic undo.',
 		};
 	}
 
@@ -1780,8 +1811,7 @@ function prepareUndoRemoveBlockOperation(
 		operation.removedBlocksSnapshot.length === 0
 	) {
 		return {
-			error:
-				'This template-part block removal is missing the removed-block snapshot needed for automatic undo.',
+			error: 'This template-part block removal is missing the removed-block snapshot needed for automatic undo.',
 		};
 	}
 
@@ -1902,11 +1932,10 @@ export function prepareTemplatePartUndoOperations(
 			}
 
 			case TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
-				const prepared =
-					prepareUndoReplaceBlockWithPatternOperation(
-						operation,
-						blockEditorSelect
-					);
+				const prepared = prepareUndoReplaceBlockWithPatternOperation(
+					operation,
+					blockEditorSelect
+				);
 
 				if ( prepared?.error ) {
 					return { ok: false, error: prepared.error };

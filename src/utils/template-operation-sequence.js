@@ -10,9 +10,7 @@ const TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH = 'before_block_path';
 const TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH = 'after_block_path';
 
 function toNonEmptyString( value ) {
-	return typeof value === 'string' && value.trim() !== ''
-		? value.trim()
-		: '';
+	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
 }
 
 function normalizeBlockPath( value ) {
@@ -142,7 +140,9 @@ export function validateTemplateOperationSequence( operations = [] ) {
 			default:
 				return {
 					ok: false,
-					error: `Unsupported template operation “${ type || 'unknown' }”.`,
+					error: `Unsupported template operation “${
+						type || 'unknown'
+					}”.`,
 				};
 		}
 	}
@@ -197,10 +197,8 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				if (
 					placement !== TEMPLATE_PART_PLACEMENT_START &&
 					placement !== TEMPLATE_PART_PLACEMENT_END &&
-					placement !==
-						TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH &&
-					placement !==
-						TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+					placement !== TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH &&
+					placement !== TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
 				) {
 					return {
 						ok: false,

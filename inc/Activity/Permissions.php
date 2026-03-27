@@ -79,8 +79,8 @@ final class Permissions {
 		$scope_key   = trim( (string) $request->get_param( 'scopeKey' ) );
 		$surface     = trim( (string) $request->get_param( 'surface' ) );
 		$entity_type = trim( (string) $request->get_param( 'entityType' ) );
-		$post_type   = '';
-		$entity_id   = '';
+		$post_type   = trim( (string) $request->get_param( 'postType' ) );
+		$entity_id   = trim( (string) $request->get_param( 'entityId' ) );
 
 		if ( '' === $post_type || '' === $entity_id ) {
 			$parsed_scope = self::parse_scope_key( $scope_key );
@@ -208,15 +208,7 @@ final class Permissions {
 			return false;
 		}
 
-		$global = $request->get_param( 'global' );
-
-		if (
-			true === $global
-			|| 1 === $global
-			|| '1' === $global
-			|| 'true' === $global
-			|| 'yes' === $global
-		) {
+		if ( true === $request->get_param( 'global' ) ) {
 			return true;
 		}
 

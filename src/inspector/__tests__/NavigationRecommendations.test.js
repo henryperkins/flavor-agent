@@ -14,7 +14,7 @@ jest.mock( '@wordpress/blocks', () => ( {
 } ) );
 
 jest.mock( '@wordpress/components', () => {
-	const { Fragment, createElement } = require( '@wordpress/element' );
+	const { createElement } = require( '@wordpress/element' );
 
 	return {
 		Button: ( { children, className, disabled, onClick } ) =>
@@ -30,13 +30,7 @@ jest.mock( '@wordpress/components', () => {
 			),
 		Notice: ( { children } ) =>
 			createElement( 'div', { role: 'alert' }, children ),
-		TextareaControl: ( {
-			label,
-			onChange,
-			placeholder,
-			rows,
-			value,
-		} ) =>
+		TextareaControl: ( { label, onChange, placeholder, rows, value } ) =>
 			createElement(
 				'label',
 				null,
@@ -83,7 +77,8 @@ function createSelectors() {
 	return {
 		blockEditor: {
 			getBlock: jest.fn(
-				( clientId ) => getState().blockEditor.blocks[ clientId ] || null
+				( clientId ) =>
+					getState().blockEditor.blocks[ clientId ] || null
 			),
 		},
 		store: {
@@ -102,9 +97,10 @@ function createSelectors() {
 					? getState().store.navigationError
 					: null
 			),
-			isNavigationLoading: jest.fn( ( clientId ) =>
-				getState().store.navigationBlockClientId === clientId &&
-				getState().store.navigationStatus === 'loading'
+			isNavigationLoading: jest.fn(
+				( clientId ) =>
+					getState().store.navigationBlockClientId === clientId &&
+					getState().store.navigationStatus === 'loading'
 			),
 			getNavigationStatus: jest.fn( ( clientId ) =>
 				getState().store.navigationBlockClientId === clientId
@@ -221,9 +217,10 @@ describe( 'NavigationRecommendations', () => {
 
 		renderComponent();
 
-		const button = Array.from( container.querySelectorAll( 'button' ) ).find(
-			( element ) =>
-				element.textContent === 'Get Navigation Suggestions'
+		const button = Array.from(
+			container.querySelectorAll( 'button' )
+		).find(
+			( element ) => element.textContent === 'Get Navigation Suggestions'
 		);
 
 		act( () => {
@@ -259,9 +256,10 @@ describe( 'NavigationRecommendations', () => {
 
 		renderComponent();
 
-		const button = Array.from( container.querySelectorAll( 'button' ) ).find(
-			( element ) =>
-				element.textContent === 'Get Navigation Suggestions'
+		const button = Array.from(
+			container.querySelectorAll( 'button' )
+		).find(
+			( element ) => element.textContent === 'Get Navigation Suggestions'
 		);
 
 		act( () => {
