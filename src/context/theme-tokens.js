@@ -13,6 +13,7 @@
 import {
 	getThemeEditorSettings,
 	getThemeTokenFeatures,
+	getThemeTokenSourceDetails,
 } from './theme-settings';
 
 /**
@@ -20,6 +21,16 @@ import {
  */
 export function collectThemeTokens() {
 	return collectThemeTokensFromSettings( getThemeEditorSettings() );
+}
+
+export function collectThemeTokenDiagnosticsFromSettings( settings = {} ) {
+	const sourceDetails = getThemeTokenSourceDetails( settings );
+
+	return {
+		source: sourceDetails?.source || 'unknown',
+		settingsKey: sourceDetails?.settingsKey || '',
+		reason: sourceDetails?.reason || 'unknown',
+	};
 }
 
 export function collectThemeTokensFromSettings( settings = {} ) {
@@ -35,6 +46,7 @@ export function collectThemeTokensFromSettings( settings = {} ) {
 		background: collectBackgroundTokens( features ),
 		elements: collectElementStyles( features ),
 		blockPseudoStyles: collectBlockPseudoStyles( features ),
+		diagnostics: collectThemeTokenDiagnosticsFromSettings( settings ),
 	};
 }
 
@@ -288,5 +300,10 @@ export function summarizeTokens( tokens ) {
 		},
 		elementStyles: tokens.elements,
 		blockPseudoStyles: tokens.blockPseudoStyles,
+		diagnostics: tokens.diagnostics || {
+			source: 'unknown',
+			settingsKey: '',
+			reason: 'unknown',
+		},
 	};
 }

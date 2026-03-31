@@ -103,6 +103,19 @@ describe( 'AIActivitySection', () => {
 								syncType: 'undo',
 							},
 						},
+						{
+							id: 'activity-5',
+							suggestion: 'Darken the site canvas',
+							surface: 'global-styles',
+							target: {
+								globalStylesId: '17',
+							},
+							undo: {
+								canUndo: false,
+								status: 'failed',
+								error: 'Global Styles changed after apply.',
+							},
+						},
 					] }
 				/>
 			);
@@ -121,6 +134,7 @@ describe( 'AIActivitySection', () => {
 		expect( container.textContent ).toContain(
 			'Activity audit sync pending.'
 		);
+		expect( container.textContent ).toContain( 'Global Styles action' );
 		expect( container.querySelectorAll( 'button' ) ).toHaveLength( 1 );
 
 		container.querySelector( 'button' ).click();

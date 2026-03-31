@@ -25,6 +25,7 @@ import PatternRecommender from './patterns/PatternRecommender';
 import InserterBadge from './patterns/InserterBadge';
 import TemplateRecommender from './templates/TemplateRecommender';
 import TemplatePartRecommender from './template-parts/TemplatePartRecommender';
+import GlobalStylesRecommender from './global-styles/GlobalStylesRecommender';
 
 registerPlugin( 'flavor-agent', {
 	render: () => (
@@ -35,6 +36,7 @@ registerPlugin( 'flavor-agent', {
 			<InserterBadge />
 			<TemplateRecommender />
 			<TemplatePartRecommender />
+			<GlobalStylesRecommender />
 		</>
 	),
 } );

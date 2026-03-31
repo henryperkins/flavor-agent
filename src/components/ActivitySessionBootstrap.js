@@ -2,10 +2,34 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect, useRef } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
-import { resolveActivityScope } from '../store/activity-history';
+import {
+	resolveActivityScope,
+	resolveGlobalStylesScope,
+} from '../store/activity-history';
 
 export default function ActivitySessionBootstrap() {
 	const scope = useSelect( ( select ) => {
+		const interfaceStore = select( 'core/interface' );
+		const coreStore = select( 'core' );
+		const activeComplementaryArea =
+			interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
+		const globalStylesId =
+			coreStore?.__experimentalGetCurrentGlobalStylesId?.() || '';
+
+		if (
+			activeComplementaryArea === 'edit-site/global-styles' &&
+			globalStylesId
+		) {
+			return (
+				resolveGlobalStylesScope( globalStylesId ) || {
+					key: null,
+					hint: '',
+					postType: '',
+					entityId: '',
+				}
+			);
+		}
+
 		const editor = select( 'core/editor' );
 		const editSite = select( 'core/edit-site' );
 		const postType =

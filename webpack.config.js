@@ -6,9 +6,6 @@ module.exports = {
 	entry: {
 		index: path.resolve( __dirname, 'src/index.js' ),
 		admin: path.resolve( __dirname, 'src/admin/sync-button.js' ),
-		'activity-log': path.resolve(
-			__dirname,
-			'src/admin/activity-log.js'
-		),
+		'activity-log': path.resolve( __dirname, 'src/admin/activity-log.js' ),
 	},
 };

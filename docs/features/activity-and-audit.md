@@ -4,7 +4,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Exact Surfaces
 
-- Inline editor activity: `Recent AI Actions` inside the block, template, and template-part recommendation panels
+- Inline editor activity: `Recent AI Actions` inside the block, template, template-part, and Global Styles recommendation panels
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
@@ -12,13 +12,13 @@ Navigation recommendations and pattern recommendations do not currently create F
 
 ## Surfacing Conditions
 
-- Inline activity appears only when the current editor scope has recorded block, template, or template-part AI actions
+- Inline activity appears only when the current editor scope has recorded block, template, template-part, or Global Styles AI actions
 - The admin audit page appears only for users with `manage_options`
 - Sitewide activity queries are admin-only; scoped activity access follows contextual capability checks through `FlavorAgent\Activity\Permissions`
 
 ## End-To-End Flow
 
-1. A deterministic apply flow succeeds in the block, template, or template-part surface
+1. A deterministic apply flow succeeds in the block, template, template-part, or Global Styles surface
 2. The store builds a structured activity entry and persists it through the server-backed activity repository
 3. `ActivitySessionBootstrap()` resolves the current editor scope and calls `loadActivitySession()` whenever the edited entity changes
 4. The store hydrates the current scope from server entries, merges pending local entries, and keeps `sessionStorage` as a cache/fallback for the active surface
@@ -28,7 +28,7 @@ Navigation recommendations and pattern recommendations do not currently create F
 
 ## What This Surface Can Do
 
-- Persist block, template, and template-part apply events to a shared server-backed activity store
+- Persist block, template, template-part, and Global Styles apply events to a shared server-backed activity store
 - Hydrate activity back into editor-scoped history when the current entity changes
 - Show ordered undo state, including applied, available, undone, blocked, failed, and pending-sync states
 - Let the user undo the newest valid tail action directly from the editor panel
@@ -40,6 +40,7 @@ Navigation recommendations and pattern recommendations do not currently create F
 - Undo is tail-ordered: older entries are blocked while newer still-applied AI actions remain
 - Block undo is path-plus-attribute based
 - Template and template-part undo rely on stable locators plus persisted post-apply snapshots
+- Global Styles undo relies on the active `root/globalStyles` entity id plus the persisted post-apply user config snapshot
 - If the live editor state no longer matches the recorded post-apply state, the entry becomes blocked or unavailable instead of forcing an unsafe undo
 
 ## Primary Functions And Handlers
@@ -50,6 +51,7 @@ Navigation recommendations and pattern recommendations do not currently create F
 | Inline UI | `AIActivitySection` in `src/components/AIActivitySection.js` | Renders recent entries and inline undo buttons |
 | Store hydration | `loadActivitySession()` in `src/store/index.js` | Merges local and server-backed activity for the active scope |
 | Store undo | `undoActivity()` in `src/store/index.js` | Runs safe undo and persists the undo-status transition |
+| Global Styles undo helpers | `getGlobalStylesActivityUndoState()` and `undoGlobalStyleSuggestionOperations()` in `src/utils/style-operations.js` | Validate and restore the current Global Styles entity |
 | Admin page registration | `ActivityPage` in `inc/Admin/ActivityPage.php` | Registers `Settings > AI Activity` and localizes admin boot data |
 | Admin UI | `src/admin/activity-log.js` | Renders the DataViews feed, summary cards, and read-only detail form |
 | REST handlers | `Agent_Controller::handle_get_activity()`, `handle_create_activity()`, `handle_update_activity_undo()` | Serve activity query, persistence, and undo-status updates |

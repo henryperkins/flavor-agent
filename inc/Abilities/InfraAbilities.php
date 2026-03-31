@@ -38,6 +38,12 @@ final class InfraAbilities {
 		$active_chat_configured        = Provider::chat_configured();
 		$active_pattern_provider       = Provider::embedding_configured() && $active_chat_configured;
 		$navigation_configured         = $active_chat_configured && current_user_can( 'edit_theme_options' );
+		$settings_url                  = function_exists( 'admin_url' )
+			? admin_url( 'options-general.php?page=flavor-agent' )
+			: '';
+		$connectors_url                = function_exists( 'admin_url' )
+			? admin_url( 'options-connectors.php' )
+			: '';
 
 		$abilities = self::available_abilities(
 			$block_recommendations_configured,
@@ -51,36 +57,10 @@ final class InfraAbilities {
 			'configured'         => $block_recommendations_configured || $active_chat_configured || $cloudflare_configured || ( $active_pattern_provider && $qdrant_configured ),
 			'model'              => self::resolve_primary_model( $block_recommendations_configured, $active_chat_configured ),
 			'availableAbilities' => $abilities,
-			'surfaces'           => [
-				'block'        => [
-					'available' => $block_recommendations_configured,
-					'reason'    => $block_recommendations_configured ? 'ready' : 'block_backend_unconfigured',
-					'owner'     => 'plugin_or_core',
-				],
-				'pattern'      => [
-					'available' => $active_pattern_provider && $qdrant_configured,
-					'reason'    => ( $active_pattern_provider && $qdrant_configured ) ? 'ready' : 'pattern_backend_unconfigured',
-					'owner'     => 'plugin_settings',
-				],
-				'template'     => [
-					'available' => $active_chat_configured,
-					'reason'    => $active_chat_configured ? 'ready' : 'plugin_provider_unconfigured',
-					'owner'     => 'plugin_settings',
-				],
-				'templatePart' => [
-					'available' => $active_chat_configured,
-					'reason'    => $active_chat_configured ? 'ready' : 'plugin_provider_unconfigured',
-					'owner'     => 'plugin_settings',
-				],
-				'navigation'   => [
-					'available'    => $navigation_configured,
-					'reason'       => ! current_user_can( 'edit_theme_options' )
-						? 'missing_theme_capability'
-						: ( $active_chat_configured ? 'ready' : 'plugin_provider_unconfigured' ),
-					'owner'        => 'plugin_settings',
-					'advisoryOnly' => true,
-				],
-			],
+			'surfaces'           => SurfaceCapabilities::build(
+				$settings_url,
+				$connectors_url
+			),
 			'backends'           => [
 				'wordpress_ai_client'  => [
 					'configured' => $wordpress_ai_client_configured,
@@ -149,6 +129,7 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-template-part', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-navigation', 'edit_theme_options', $chat_configured );
+		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-style', 'edit_theme_options', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/search-wordpress-docs', WordPressDocsAbilities::REQUIRED_CAPABILITY, $cloudflare_configured );
 
 		return $abilities;

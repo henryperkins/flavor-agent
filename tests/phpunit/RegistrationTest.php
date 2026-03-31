@@ -196,4 +196,48 @@ final class RegistrationTest extends TestCase {
 			$suggestion['properties']['operations']['items']['properties']['expectedBlockName']['type'] ?? null
 		);
 	}
+
+	public function test_register_abilities_exposes_style_and_surface_status_schemas(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$style_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-style'] ?? null;
+		$status_ability = WordPressTestState::$registered_abilities['flavor-agent/check-status'] ?? null;
+		$tokens_ability = WordPressTestState::$registered_abilities['flavor-agent/get-theme-tokens'] ?? null;
+
+		$this->assertIsArray( $style_ability );
+		$this->assertSame( [ 'scope', 'styleContext' ], $style_ability['input_schema']['required'] ?? null );
+		$this->assertSame(
+			'object',
+			$style_ability['input_schema']['properties']['scope']['type'] ?? null
+		);
+		$this->assertSame(
+			'array',
+			$style_ability['output_schema']['properties']['suggestions']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$style_ability['output_schema']['properties']['suggestions']['items']['properties']['operations']['items']['properties']['variationTitle']['type'] ?? null
+		);
+
+		$this->assertIsArray( $status_ability );
+		$this->assertSame(
+			'object',
+			$status_ability['output_schema']['properties']['surfaces']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$status_ability['output_schema']['properties']['surfaces']['properties']['globalStyles']['properties']['available']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$status_ability['output_schema']['properties']['surfaces']['properties']['template']['properties']['message']['type'] ?? null
+		);
+
+		$this->assertIsArray( $tokens_ability );
+		$this->assertSame(
+			'object',
+			$tokens_ability['output_schema']['properties']['diagnostics']['type'] ?? null
+		);
+	}
 }

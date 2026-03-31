@@ -250,7 +250,9 @@ beforeEach( () => {
 			name: 'core/paragraph',
 		},
 	} );
-	mockGetResolvedActivityEntries.mockImplementation( ( entries ) => entries || [] );
+	mockGetResolvedActivityEntries.mockImplementation(
+		( entries ) => entries || []
+	);
 	mockGetLatestAppliedActivity.mockImplementation(
 		( entries ) => entries?.[ entries.length - 1 ] || null
 	);
@@ -437,7 +439,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 		renderPanel();
 
-		expect( container.textContent ).toContain( 'Applied Refresh hero copy.' );
+		expect( container.textContent ).toContain(
+			'Applied Refresh hero copy.'
+		);
 
 		const undoButton = Array.from(
 			container.querySelectorAll( 'button' )

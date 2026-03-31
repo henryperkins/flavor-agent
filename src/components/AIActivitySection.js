@@ -38,6 +38,10 @@ function describeActivity( entry ) {
 		return 'Template part action';
 	}
 
+	if ( entry?.surface === 'global-styles' ) {
+		return 'Global Styles action';
+	}
+
 	if ( entry?.target?.blockName ) {
 		return entry.target.blockName.replace( 'core/', '' );
 	}

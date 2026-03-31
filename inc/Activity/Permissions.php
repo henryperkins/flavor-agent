@@ -61,10 +61,11 @@ final class Permissions {
 		string $entity_type = ''
 	): string {
 		if (
-			in_array( $surface, [ 'template', 'template-part' ], true )
-			|| in_array( $entity_type, [ 'template', 'template-part' ], true )
+			in_array( $surface, [ 'template', 'template-part', 'global-styles' ], true )
+			|| in_array( $entity_type, [ 'template', 'template-part', 'global-styles' ], true )
 			|| str_starts_with( $scope_key, 'wp_template:' )
 			|| str_starts_with( $scope_key, 'wp_template_part:' )
+			|| str_starts_with( $scope_key, 'global_styles:' )
 		) {
 			return 'edit_theme_options';
 		}
@@ -180,7 +181,7 @@ final class Permissions {
 		string $post_type,
 		string $entity_type
 	): bool {
-		if ( in_array( $entity_type, [ 'template', 'template-part' ], true ) ) {
+		if ( in_array( $entity_type, [ 'template', 'template-part', 'global-styles' ], true ) ) {
 			return false;
 		}
 
@@ -190,7 +191,7 @@ final class Permissions {
 
 		return ! in_array(
 			$resolved_post_type,
-			[ 'wp_template', 'wp_template_part' ],
+			[ 'wp_template', 'wp_template_part', 'global_styles' ],
 			true
 		);
 	}

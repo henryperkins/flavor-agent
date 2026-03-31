@@ -43,9 +43,15 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame( '', $capabilities['templatePart']['configurationLabel'] );
 		$this->assertSame( [], $capabilities['navigation']['actions'] );
 		$this->assertSame( '', $capabilities['navigation']['configurationLabel'] );
+		$this->assertSame( [], $capabilities['globalStyles']['actions'] );
+		$this->assertSame( '', $capabilities['globalStyles']['configurationLabel'] );
 		$this->assertSame(
 			'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
 			$capabilities['navigation']['message']
+		);
+		$this->assertSame(
+			'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			$capabilities['globalStyles']['message']
 		);
 	}
 
@@ -93,6 +99,19 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 				],
 			],
 			$capabilities['navigation']['actions']
+		);
+		$this->assertSame(
+			'Settings > Flavor Agent',
+			$capabilities['globalStyles']['configurationLabel']
+		);
+		$this->assertSame(
+			[
+				[
+					'label' => 'Settings > Flavor Agent',
+					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+				],
+			],
+			$capabilities['globalStyles']['actions']
 		);
 	}
 }

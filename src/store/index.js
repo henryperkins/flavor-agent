@@ -10,6 +10,11 @@ import { createReduxStore, register } from '@wordpress/data';
 
 import { getPatternBadgeReason } from '../patterns/recommendation-utils';
 import {
+	applyGlobalStyleSuggestionOperations,
+	getGlobalStylesActivityUndoState,
+	undoGlobalStyleSuggestionOperations,
+} from '../utils/style-operations';
+import {
 	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
 	getTemplateActivityUndoState,
@@ -91,6 +96,21 @@ const DEFAULT_STATE = {
 	templatePartApplyError: null,
 	templatePartLastAppliedSuggestionKey: null,
 	templatePartLastAppliedOperations: [],
+	globalStylesSuggestions: [],
+	globalStylesExplanation: '',
+	globalStylesStatus: 'idle',
+	globalStylesError: null,
+	globalStylesRequestPrompt: '',
+	globalStylesScopeKey: null,
+	globalStylesEntityId: null,
+	globalStylesContextSignature: null,
+	globalStylesRequestToken: 0,
+	globalStylesResultToken: 0,
+	globalStylesSelectedSuggestionKey: null,
+	globalStylesApplyStatus: 'idle',
+	globalStylesApplyError: null,
+	globalStylesLastAppliedSuggestionKey: null,
+	globalStylesLastAppliedOperations: [],
 };
 
 const SHARED_PANEL_SEQUENCE = Object.freeze( [
@@ -129,6 +149,14 @@ const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
 	} ),
 	'template-part': Object.freeze( {
 		surface: 'template-part',
+		advisoryOnly: false,
+		allowsInlineApply: false,
+		previewRequired: true,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+	'global-styles': Object.freeze( {
+		surface: 'global-styles',
 		advisoryOnly: false,
 		allowsInlineApply: false,
 		previewRequired: true,
@@ -264,6 +292,14 @@ function getTemplatePartHasResult( state ) {
 		state.templatePartRef &&
 			( state.templatePartRecommendations.length > 0 ||
 				normalizeStringMessage( state.templatePartExplanation ) )
+	);
+}
+
+function getGlobalStylesHasResult( state ) {
+	return Boolean(
+		state.globalStylesEntityId &&
+			( state.globalStylesSuggestions.length > 0 ||
+				normalizeStringMessage( state.globalStylesExplanation ) )
 	);
 }
 
@@ -418,6 +454,14 @@ function isStaleNavigationRequest( state, requestToken ) {
 	return requestToken < ( state.navigationRequestToken || 0 );
 }
 
+function isStaleGlobalStylesRequest( state, requestToken ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	return requestToken < ( state.globalStylesRequestToken || 0 );
+}
+
 function buildActivityDocument( scope ) {
 	if ( ! scope?.key ) {
 		return null;
@@ -427,6 +471,9 @@ function buildActivityDocument( scope ) {
 		scopeKey: scope.key,
 		postType: scope.postType,
 		entityId: scope.entityId,
+		entityKind: scope.entityKind || '',
+		entityName: scope.entityName || '',
+		stylesheet: scope.stylesheet || '',
 	};
 }
 
@@ -956,6 +1003,39 @@ function buildTemplatePartActivityEntry( {
 		prompt: requestPrompt,
 		requestRef: `template-part:${
 			templatePartRef || 'unknown'
+		}:${ requestToken }`,
+		document: buildActivityDocument( scope ),
+	} );
+}
+
+function buildGlobalStylesActivityEntry( {
+	operations,
+	beforeConfig,
+	afterConfig,
+	requestPrompt = '',
+	requestToken = 0,
+	scope = null,
+	suggestion,
+	globalStylesId,
+} ) {
+	return createActivityEntry( {
+		type: 'apply_global_styles_suggestion',
+		surface: 'global-styles',
+		target: {
+			globalStylesId,
+		},
+		suggestion: suggestion?.label || '',
+		suggestionKey: suggestion?.suggestionKey || null,
+		before: {
+			userConfig: beforeConfig,
+		},
+		after: {
+			userConfig: afterConfig,
+			operations,
+		},
+		prompt: requestPrompt,
+		requestRef: `global-styles:${
+			globalStylesId || 'unknown'
 		}:${ requestToken }`,
 		document: buildActivityDocument( scope ),
 	} );
@@ -1559,6 +1639,54 @@ const actions = {
 		};
 	},
 
+	setGlobalStylesStatus( status, error = null, requestToken = null ) {
+		return {
+			type: 'SET_GLOBAL_STYLES_STATUS',
+			status,
+			error,
+			requestToken,
+		};
+	},
+
+	setGlobalStylesRecommendations(
+		scope,
+		payload,
+		prompt = '',
+		requestToken = null,
+		contextSignature = null
+	) {
+		return {
+			type: 'SET_GLOBAL_STYLES_RECS',
+			scope,
+			payload,
+			prompt,
+			requestToken,
+			contextSignature,
+		};
+	},
+
+	setGlobalStylesSelectedSuggestion( suggestionKey = null ) {
+		return {
+			type: 'SET_GLOBAL_STYLES_SELECTED_SUGGESTION',
+			suggestionKey,
+		};
+	},
+
+	setGlobalStylesApplyState(
+		status,
+		error = null,
+		suggestionKey = null,
+		operations = []
+	) {
+		return {
+			type: 'SET_GLOBAL_STYLES_APPLY_STATE',
+			status,
+			error,
+			suggestionKey,
+			operations,
+		};
+	},
+
 	clearTemplateRecommendations() {
 		return ( { dispatch } ) => {
 			if ( actions._templateAbort ) {
@@ -1578,6 +1706,17 @@ const actions = {
 			}
 
 			dispatch( { type: 'CLEAR_TEMPLATE_PART_RECS' } );
+		};
+	},
+
+	clearGlobalStylesRecommendations() {
+		return ( { dispatch } ) => {
+			if ( actions._globalStylesAbort ) {
+				actions._globalStylesAbort.abort();
+				actions._globalStylesAbort = null;
+			}
+
+			dispatch( { type: 'CLEAR_GLOBAL_STYLES_RECS' } );
 		};
 	},
 
@@ -1791,18 +1930,27 @@ const actions = {
 
 			if (
 				activity.surface === 'template' ||
-				activity.surface === 'template-part'
+				activity.surface === 'template-part' ||
+				activity.surface === 'global-styles'
 			) {
-				const runtimeUndo =
-					activity.surface === 'template'
-						? getTemplateActivityUndoState(
-								activity,
-								registry?.select?.( 'core/block-editor' )
-						  )
-						: getTemplatePartActivityUndoState(
-								activity,
-								registry?.select?.( 'core/block-editor' )
-						  );
+				let runtimeUndo;
+
+				if ( activity.surface === 'template' ) {
+					runtimeUndo = getTemplateActivityUndoState(
+						activity,
+						registry?.select?.( 'core/block-editor' )
+					);
+				} else if ( activity.surface === 'template-part' ) {
+					runtimeUndo = getTemplatePartActivityUndoState(
+						activity,
+						registry?.select?.( 'core/block-editor' )
+					);
+				} else {
+					runtimeUndo = getGlobalStylesActivityUndoState(
+						activity,
+						registry
+					);
+				}
 				resolvedUndo = getResolvedActivityUndoState(
 					activity,
 					entityEntries,
@@ -1850,6 +1998,11 @@ const actions = {
 				result = undoTemplateSuggestionOperations( activity );
 			} else if ( activity.surface === 'template-part' ) {
 				result = undoTemplatePartSuggestionOperations( activity );
+			} else if ( activity.surface === 'global-styles' ) {
+				result = undoGlobalStyleSuggestionOperations(
+					activity,
+					registry
+				);
 			} else {
 				result = undoBlockActivity( activity, registry );
 			}
@@ -2028,6 +2181,58 @@ const actions = {
 		};
 	},
 
+	applyGlobalStylesSuggestion( suggestion ) {
+		return async ( { dispatch: localDispatch, registry, select } ) => {
+			const scope = getCurrentActivityScope( registry );
+
+			syncActivitySession( localDispatch, select, scope );
+
+			localDispatch( actions.setGlobalStylesApplyState( 'applying' ) );
+
+			const result = applyGlobalStyleSuggestionOperations(
+				suggestion,
+				registry
+			);
+
+			if ( ! result.ok ) {
+				localDispatch(
+					actions.setGlobalStylesApplyState(
+						'error',
+						result.error || 'Global Styles apply failed.'
+					)
+				);
+
+				return result;
+			}
+
+			await recordActivityEntry(
+				localDispatch,
+				select,
+				buildGlobalStylesActivityEntry( {
+					operations: result.operations,
+					beforeConfig: result.beforeConfig,
+					afterConfig: result.afterConfig,
+					requestPrompt:
+						select.getGlobalStylesRequestPrompt?.() || '',
+					requestToken: select.getGlobalStylesResultToken?.() || 0,
+					scope,
+					suggestion,
+					globalStylesId: result.globalStylesId,
+				} )
+			);
+			localDispatch(
+				actions.setGlobalStylesApplyState(
+					'success',
+					null,
+					suggestion?.suggestionKey || null,
+					result.operations
+				)
+			);
+
+			return result;
+		};
+	},
+
 	fetchTemplateRecommendations( input ) {
 		return async ( { dispatch, select } ) => {
 			if ( actions._templateAbort ) {
@@ -2149,6 +2354,72 @@ const actions = {
 			} finally {
 				if ( actions._templatePartAbort === controller ) {
 					actions._templatePartAbort = null;
+				}
+			}
+		};
+	},
+
+	fetchGlobalStylesRecommendations( input ) {
+		return async ( { dispatch, select } ) => {
+			if ( actions._globalStylesAbort ) {
+				actions._globalStylesAbort.abort();
+			}
+
+			const controller = new AbortController();
+			actions._globalStylesAbort = controller;
+			const requestToken =
+				( select.getGlobalStylesRequestToken?.() || 0 ) + 1;
+
+			dispatch(
+				actions.setGlobalStylesStatus( 'loading', null, requestToken )
+			);
+
+			try {
+				const { contextSignature = null, ...requestData } = input;
+				const result = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-style',
+					method: 'POST',
+					data: requestData,
+					signal: controller.signal,
+				} );
+
+				dispatch(
+					actions.setGlobalStylesRecommendations(
+						input.scope,
+						result,
+						input.prompt || '',
+						requestToken,
+						contextSignature
+					)
+				);
+			} catch ( err ) {
+				if ( err.name === 'AbortError' ) {
+					return;
+				}
+
+				dispatch(
+					actions.setGlobalStylesRecommendations(
+						input.scope,
+						{
+							suggestions: [],
+							explanation: '',
+						},
+						input.prompt || '',
+						requestToken,
+						input.contextSignature || null
+					)
+				);
+				dispatch(
+					actions.setGlobalStylesStatus(
+						'error',
+						err?.message ||
+							'Global Styles recommendation request failed.',
+						requestToken
+					)
+				);
+			} finally {
+				if ( actions._globalStylesAbort === controller ) {
+					actions._globalStylesAbort = null;
 				}
 			}
 		};
@@ -2291,6 +2562,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 			const isTemplatePartUndone =
 				action.status === 'undone' &&
 				matchedEntry?.surface === 'template-part';
+			const isGlobalStylesUndone =
+				action.status === 'undone' &&
+				matchedEntry?.surface === 'global-styles';
 
 			return {
 				...state,
@@ -2354,6 +2628,18 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templatePartLastAppliedOperations: isTemplatePartUndone
 					? []
 					: state.templatePartLastAppliedOperations,
+				globalStylesApplyStatus: isGlobalStylesUndone
+					? 'idle'
+					: state.globalStylesApplyStatus,
+				globalStylesApplyError: isGlobalStylesUndone
+					? null
+					: state.globalStylesApplyError,
+				globalStylesLastAppliedSuggestionKey: isGlobalStylesUndone
+					? null
+					: state.globalStylesLastAppliedSuggestionKey,
+				globalStylesLastAppliedOperations: isGlobalStylesUndone
+					? []
+					: state.globalStylesLastAppliedOperations,
 			};
 		}
 		case 'SET_PATTERN_STATUS':
@@ -2519,6 +2805,92 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateLastAppliedSuggestionKey: null,
 				templateLastAppliedOperations: [],
 			};
+		case 'SET_GLOBAL_STYLES_STATUS':
+			if ( isStaleGlobalStylesRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				globalStylesStatus: action.status,
+				globalStylesError: action.error ?? null,
+				globalStylesRequestToken:
+					action.requestToken ?? state.globalStylesRequestToken,
+				globalStylesSelectedSuggestionKey:
+					action.status === 'loading'
+						? null
+						: state.globalStylesSelectedSuggestionKey,
+				globalStylesApplyStatus:
+					action.status === 'loading'
+						? 'idle'
+						: state.globalStylesApplyStatus,
+				globalStylesApplyError:
+					action.status === 'loading'
+						? null
+						: state.globalStylesApplyError,
+				globalStylesLastAppliedSuggestionKey:
+					action.status === 'loading'
+						? null
+						: state.globalStylesLastAppliedSuggestionKey,
+				globalStylesLastAppliedOperations:
+					action.status === 'loading'
+						? []
+						: state.globalStylesLastAppliedOperations,
+			};
+		case 'SET_GLOBAL_STYLES_RECS':
+			if ( isStaleGlobalStylesRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				globalStylesSuggestions: action.payload?.suggestions ?? [],
+				globalStylesExplanation: action.payload?.explanation ?? '',
+				globalStylesRequestPrompt: action.prompt ?? '',
+				globalStylesScopeKey: action.scope?.scopeKey || null,
+				globalStylesEntityId:
+					action.scope?.globalStylesId ||
+					action.scope?.entityId ||
+					null,
+				globalStylesContextSignature: action.contextSignature ?? null,
+				globalStylesRequestToken:
+					action.requestToken ?? state.globalStylesRequestToken,
+				globalStylesResultToken: state.globalStylesResultToken + 1,
+				globalStylesStatus: 'ready',
+				globalStylesError: null,
+				globalStylesSelectedSuggestionKey: null,
+				globalStylesApplyStatus: 'idle',
+				globalStylesApplyError: null,
+				globalStylesLastAppliedSuggestionKey: null,
+				globalStylesLastAppliedOperations: [],
+			};
+		case 'SET_GLOBAL_STYLES_SELECTED_SUGGESTION':
+			return {
+				...state,
+				globalStylesSelectedSuggestionKey: action.suggestionKey ?? null,
+				globalStylesApplyStatus:
+					state.globalStylesApplyStatus === 'error'
+						? 'idle'
+						: state.globalStylesApplyStatus,
+				globalStylesApplyError:
+					state.globalStylesApplyStatus === 'error'
+						? null
+						: state.globalStylesApplyError,
+			};
+		case 'SET_GLOBAL_STYLES_APPLY_STATE':
+			return {
+				...state,
+				globalStylesApplyStatus: action.status,
+				globalStylesApplyError: action.error ?? null,
+				globalStylesLastAppliedSuggestionKey:
+					action.status === 'success'
+						? action.suggestionKey ?? null
+						: state.globalStylesLastAppliedSuggestionKey,
+				globalStylesLastAppliedOperations:
+					action.status === 'success'
+						? action.operations ?? []
+						: state.globalStylesLastAppliedOperations,
+			};
 		case 'SET_TEMPLATE_PART_STATUS':
 			if ( isStaleTemplatePartRequest( state, action.requestToken ) ) {
 				return state;
@@ -2616,6 +2988,25 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templatePartApplyError: null,
 				templatePartLastAppliedSuggestionKey: null,
 				templatePartLastAppliedOperations: [],
+			};
+		case 'CLEAR_GLOBAL_STYLES_RECS':
+			return {
+				...state,
+				globalStylesSuggestions: [],
+				globalStylesExplanation: '',
+				globalStylesStatus: 'idle',
+				globalStylesError: null,
+				globalStylesRequestPrompt: '',
+				globalStylesScopeKey: null,
+				globalStylesEntityId: null,
+				globalStylesContextSignature: null,
+				globalStylesRequestToken: state.globalStylesRequestToken + 1,
+				globalStylesResultToken: state.globalStylesResultToken + 1,
+				globalStylesSelectedSuggestionKey: null,
+				globalStylesApplyStatus: 'idle',
+				globalStylesApplyError: null,
+				globalStylesLastAppliedSuggestionKey: null,
+				globalStylesLastAppliedOperations: [],
 			};
 		default:
 			return state;
@@ -2730,6 +3121,28 @@ const selectors = {
 		state.templatePartLastAppliedSuggestionKey,
 	getTemplatePartLastAppliedOperations: ( state ) =>
 		state.templatePartLastAppliedOperations,
+	getGlobalStylesRecommendations: ( state ) => state.globalStylesSuggestions,
+	getGlobalStylesExplanation: ( state ) => state.globalStylesExplanation,
+	getGlobalStylesError: ( state ) => state.globalStylesError,
+	getGlobalStylesRequestPrompt: ( state ) => state.globalStylesRequestPrompt,
+	getGlobalStylesResultRef: ( state ) => state.globalStylesEntityId,
+	getGlobalStylesScopeKey: ( state ) => state.globalStylesScopeKey,
+	getGlobalStylesContextSignature: ( state ) =>
+		state.globalStylesContextSignature,
+	getGlobalStylesRequestToken: ( state ) => state.globalStylesRequestToken,
+	getGlobalStylesResultToken: ( state ) => state.globalStylesResultToken,
+	isGlobalStylesLoading: ( state ) => state.globalStylesStatus === 'loading',
+	getGlobalStylesStatus: ( state ) => state.globalStylesStatus,
+	getGlobalStylesSelectedSuggestionKey: ( state ) =>
+		state.globalStylesSelectedSuggestionKey,
+	getGlobalStylesApplyStatus: ( state ) => state.globalStylesApplyStatus,
+	getGlobalStylesApplyError: ( state ) => state.globalStylesApplyError,
+	isGlobalStylesApplying: ( state ) =>
+		state.globalStylesApplyStatus === 'applying',
+	getGlobalStylesLastAppliedSuggestionKey: ( state ) =>
+		state.globalStylesLastAppliedSuggestionKey,
+	getGlobalStylesLastAppliedOperations: ( state ) =>
+		state.globalStylesLastAppliedOperations,
 	getSurfaceInteractionContract: ( state, surface ) => {
 		void state;
 
@@ -2822,6 +3235,22 @@ const selectors = {
 			hasResult: getTemplatePartHasResult( state ),
 			hasPreview: Boolean(
 				options.hasPreview ?? state.templatePartSelectedSuggestionKey
+			),
+			hasSuccess: Boolean( options.hasSuccess ),
+			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			...options,
+		} ),
+	getGlobalStylesInteractionState: ( state, options = {} ) =>
+		getNormalizedInteractionState( 'global-styles', {
+			requestStatus: state.globalStylesStatus,
+			requestError: normalizeStringMessage( state.globalStylesError ),
+			applyStatus: state.globalStylesApplyStatus,
+			applyError: normalizeStringMessage( state.globalStylesApplyError ),
+			undoStatus: state.undoStatus,
+			undoError: normalizeStringMessage( options.undoError ),
+			hasResult: getGlobalStylesHasResult( state ),
+			hasPreview: Boolean(
+				options.hasPreview ?? state.globalStylesSelectedSuggestionKey
 			),
 			hasSuccess: Boolean( options.hasSuccess ),
 			hasUndoSuccess: Boolean( options.hasUndoSuccess ),

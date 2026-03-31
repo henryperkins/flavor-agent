@@ -221,6 +221,10 @@ function formatDocumentLabel( postType = '', entityId = '' ) {
 		return `Template part ${ entityId || EMPTY_VALUE }`;
 	}
 
+	if ( postType === 'global_styles' ) {
+		return `Global Styles ${ entityId || EMPTY_VALUE }`;
+	}
+
 	if ( /^\d+$/.test( entityId ) ) {
 		return `${ postType || 'Post' } #${ entityId }`;
 	}
@@ -240,6 +244,8 @@ function formatActivityTypeLabel( activityType = '' ) {
 			return 'Apply template suggestion';
 		case 'apply_template_part_suggestion':
 			return 'Apply template-part suggestion';
+		case 'apply_global_styles_suggestion':
+			return 'Apply Global Styles suggestion';
 		default:
 			return humanizeValueLabel( activityType ) || EMPTY_VALUE;
 	}
@@ -521,6 +527,8 @@ export function formatSurfaceLabel( surface = '' ) {
 			return 'Template';
 		case 'template-part':
 			return 'Template part';
+		case 'global-styles':
+			return 'Global Styles';
 		case 'block':
 			return 'Block';
 		default:
@@ -633,6 +641,10 @@ function getActivityTitle( entry ) {
 		return 'Template-part suggestion applied';
 	}
 
+	if ( entry?.surface === 'global-styles' ) {
+		return 'Global Styles suggestion applied';
+	}
+
 	if ( entry?.target?.blockName ) {
 		return `${ formatBlockName(
 			entry.target.blockName
@@ -650,6 +662,12 @@ function getActivityEntityLabel( entry ) {
 	if ( entry?.surface === 'template-part' ) {
 		return `Template part ${
 			entry?.target?.templatePartRef || EMPTY_VALUE
+		}`;
+	}
+
+	if ( entry?.surface === 'global-styles' ) {
+		return `Global Styles ${
+			entry?.target?.globalStylesId || EMPTY_VALUE
 		}`;
 	}
 
@@ -721,6 +739,13 @@ export function buildActivityTargetUrl( entry, adminBaseUrl = '' ) {
 		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
 			postType: 'wp_template_part',
 			postId: entry?.target?.templatePartRef || entityId,
+		} );
+	}
+
+	if ( postType === 'global_styles' || entry?.surface === 'global-styles' ) {
+		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
+			canvas: 'edit',
+			path: '/wp_global_styles',
 		} );
 	}
 

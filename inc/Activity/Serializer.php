@@ -66,6 +66,15 @@ final class Serializer {
 			];
 		}
 
+		if ( 'global-styles' === $surface ) {
+			$global_styles_ref = self::normalize_string( $target['globalStylesId'] ?? '' );
+
+			return [
+				'type' => 'global-styles',
+				'ref'  => '' !== $global_styles_ref ? $global_styles_ref : $document_key,
+			];
+		}
+
 		$block_name = self::normalize_string( $target['blockName'] ?? '' );
 		$block_path = '';
 

@@ -21,6 +21,7 @@ final class Registration {
 		self::register_pattern_abilities();
 		self::register_template_abilities();
 		self::register_navigation_abilities();
+		self::register_style_abilities();
 		self::register_wordpress_docs_abilities();
 		self::register_infra_abilities();
 	}
@@ -455,6 +456,62 @@ final class Registration {
 		);
 	}
 
+	private static function register_style_abilities(): void {
+		wp_register_ability(
+			'flavor-agent/recommend-style',
+			[
+				'label'               => __( 'Recommend site styles', 'flavor-agent' ),
+				'description'         => __( 'Suggest theme-safe Global Styles changes and theme style variations for the Site Editor.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ StyleAbilities::class, 'recommend_style' ],
+				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'scope'        => self::open_object_schema(
+							[
+								'surface'        => [ 'type' => 'string' ],
+								'scopeKey'       => [ 'type' => 'string' ],
+								'globalStylesId' => [ 'type' => 'string' ],
+								'postType'       => [ 'type' => 'string' ],
+								'entityId'       => [ 'type' => 'string' ],
+								'entityKind'     => [ 'type' => 'string' ],
+								'entityName'     => [ 'type' => 'string' ],
+								'stylesheet'     => [ 'type' => 'string' ],
+							],
+							'Resolved Global Styles scope descriptor from the Site Editor.'
+						),
+						'styleContext' => self::open_object_schema(
+							[
+								'currentConfig'         => self::open_object_schema(),
+								'mergedConfig'          => self::open_object_schema(),
+								'availableVariations'   => [
+									'type'  => 'array',
+									'items' => self::open_object_schema(),
+								],
+								'themeTokenDiagnostics' => self::open_object_schema(
+									[
+										'source'      => [ 'type' => 'string' ],
+										'settingsKey' => [ 'type' => 'string' ],
+										'reason'      => [ 'type' => 'string' ],
+									]
+								),
+							],
+							'Current Global Styles editor context needed for style recommendations.'
+						),
+						'prompt'       => [
+							'type'        => 'string',
+							'description' => 'Optional user instruction',
+						],
+					],
+					'required'   => [ 'scope', 'styleContext' ],
+				],
+				'output_schema'       => self::style_recommendation_output_schema(),
+				'meta'                => [ 'show_in_rest' => true ],
+			]
+		);
+	}
+
 	private static function register_wordpress_docs_abilities(): void {
 		wp_register_ability(
 			'flavor-agent/search-wordpress-docs',
@@ -532,6 +589,7 @@ final class Registration {
 						'fontFamilies'      => [ 'type' => 'array' ],
 						'spacing'           => [ 'type' => 'array' ],
 						'shadows'           => [ 'type' => 'array' ],
+						'diagnostics'       => [ 'type' => 'object' ],
 						'layout'            => [ 'type' => 'object' ],
 						'enabledFeatures'   => [ 'type' => 'object' ],
 						'blockPseudoStyles' => [ 'type' => 'object' ],
@@ -572,6 +630,7 @@ final class Registration {
 							'description' => 'Abilities currently available to the requesting user under the active backend configuration.',
 							'items'       => [ 'type' => 'string' ],
 						],
+						'surfaces'           => SurfaceCapabilities::surfaces_output_schema(),
 						'backends'           => [
 							'type'       => 'object',
 							'properties' => [
@@ -772,6 +831,47 @@ final class Registration {
 				'block'       => [
 					'type'  => 'array',
 					'items' => $suggestion_schema,
+				],
+				'explanation' => [ 'type' => 'string' ],
+			],
+		];
+	}
+
+	private static function style_recommendation_output_schema(): array {
+		return [
+			'type'       => 'object',
+			'properties' => [
+				'suggestions' => [
+					'type'  => 'array',
+					'items' => [
+						'type'       => 'object',
+						'properties' => [
+							'label'       => [ 'type' => 'string' ],
+							'description' => [ 'type' => 'string' ],
+							'category'    => [ 'type' => 'string' ],
+							'tone'        => [ 'type' => 'string' ],
+							'operations'  => [
+								'type'  => 'array',
+								'items' => [
+									'type'       => 'object',
+									'properties' => [
+										'type'           => [ 'type' => 'string' ],
+										'path'           => [
+											'type'  => 'array',
+											'items' => [ 'type' => 'string' ],
+										],
+										'value'          => [ 'type' => [ 'string', 'number', 'boolean', 'object', 'array', 'null' ] ],
+										'valueType'      => [ 'type' => 'string' ],
+										'presetType'     => [ 'type' => 'string' ],
+										'presetSlug'     => [ 'type' => 'string' ],
+										'cssVar'         => [ 'type' => 'string' ],
+										'variationIndex' => [ 'type' => 'integer' ],
+										'variationTitle' => [ 'type' => 'string' ],
+									],
+								],
+							],
+						],
+					],
 				],
 				'explanation' => [ 'type' => 'string' ],
 			],

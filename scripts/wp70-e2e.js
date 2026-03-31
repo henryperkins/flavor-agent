@@ -30,11 +30,9 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 		wordpressTitle:
 			process.env.FLAVOR_AGENT_WP70_TITLE || 'Flavor Agent WP 7.0 E2E',
 		adminUser: process.env.FLAVOR_AGENT_WP70_ADMIN_USER || 'admin',
-		adminPassword:
-			process.env.FLAVOR_AGENT_WP70_ADMIN_PASSWORD || 'admin',
+		adminPassword: process.env.FLAVOR_AGENT_WP70_ADMIN_PASSWORD || 'admin',
 		adminEmail:
-			process.env.FLAVOR_AGENT_WP70_ADMIN_EMAIL ||
-			'admin@example.com',
+			process.env.FLAVOR_AGENT_WP70_ADMIN_EMAIL || 'admin@example.com',
 		composeEnv: {
 			...process.env,
 			COMPOSE_PROJECT_NAME:
@@ -55,7 +53,8 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 				process.env.FLAVOR_AGENT_WP70_MYSQL_ROOT_PASSWORD || 'root',
 			WORDPRESS_URL: baseURL,
 			WORDPRESS_TITLE:
-				process.env.FLAVOR_AGENT_WP70_TITLE || 'Flavor Agent WP 7.0 E2E',
+				process.env.FLAVOR_AGENT_WP70_TITLE ||
+				'Flavor Agent WP 7.0 E2E',
 			WORDPRESS_ADMIN_USER:
 				process.env.FLAVOR_AGENT_WP70_ADMIN_USER || 'admin',
 			WORDPRESS_ADMIN_PASSWORD:
@@ -123,11 +122,9 @@ function wait( delayMs ) {
 
 async function waitForWordPressCli( harness ) {
 	for ( let attempt = 0; attempt < 40; attempt++ ) {
-		const result = runWpCli(
-			harness,
-			[ 'core', 'version' ],
-			{ allowFailure: true }
-		);
+		const result = runWpCli( harness, [ 'core', 'version' ], {
+			allowFailure: true,
+		} );
 
 		if ( result.status === 0 ) {
 			return;

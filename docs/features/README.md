@@ -22,6 +22,7 @@ Use these docs when you need exact answers for:
 - `docs/features/navigation-recommendations.md` - advisory guidance for selected `core/navigation` blocks
 - `docs/features/template-recommendations.md` - Site Editor template composition suggestions and validated apply flow
 - `docs/features/template-part-recommendations.md` - Site Editor template-part suggestions, focus links, and bounded operations
+- `docs/features/style-and-theme-intelligence.md` - Site Editor Global Styles recommendations, guarded operations, and scoped undo
 - `docs/features/activity-and-audit.md` - inline activity history, ordered undo rules, and the admin audit page
 - `docs/features/settings-backends-and-sync.md` - settings screen, backend gating, validation behavior, and pattern sync
 

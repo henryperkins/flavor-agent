@@ -88,8 +88,11 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
 		$this->assertTrue( $status['surfaces']['navigation']['available'] );
+		$this->assertTrue( $status['surfaces']['globalStyles']['available'] );
 		$this->assertSame( 'ready', $status['surfaces']['navigation']['reason'] );
+		$this->assertSame( 'ready', $status['surfaces']['globalStyles']['reason'] );
 		$this->assertTrue( $status['backends']['azure_openai']['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['backends']['azure_openai']['chatDeployment'] );
 		$this->assertNull( $status['backends']['azure_openai']['embeddingDeployment'] );
@@ -118,8 +121,10 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
 		$this->assertTrue( $status['surfaces']['template']['available'] );
 		$this->assertTrue( $status['surfaces']['navigation']['available'] );
+		$this->assertTrue( $status['surfaces']['globalStyles']['available'] );
 		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['backends']['openai_native']['chatModel'] );
 		$this->assertSame(
@@ -166,6 +171,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['backends']['openai_native']['chatModel'] );
 		$this->assertSame(
@@ -191,12 +197,21 @@ final class InfraAbilitiesTest extends TestCase {
 		$status = InfraAbilities::check_status( [] );
 
 		$this->assertFalse( $status['surfaces']['navigation']['available'] );
+		$this->assertFalse( $status['surfaces']['globalStyles']['available'] );
 		$this->assertSame(
 			'missing_theme_capability',
 			$status['surfaces']['navigation']['reason']
 		);
+		$this->assertSame(
+			'missing_theme_capability',
+			$status['surfaces']['globalStyles']['reason']
+		);
 		$this->assertNotContains(
 			'flavor-agent/recommend-navigation',
+			$status['availableAbilities']
+		);
+		$this->assertNotContains(
+			'flavor-agent/recommend-style',
 			$status['availableAbilities']
 		);
 	}
@@ -224,6 +239,7 @@ final class InfraAbilitiesTest extends TestCase {
 			$status['surfaces']['pattern']['owner']
 		);
 		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['globalStyles']['available'] );
 		$this->assertNotContains(
 			'flavor-agent/recommend-patterns',
 			$status['availableAbilities']
@@ -250,6 +266,11 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertNotContains(
 			'flavor-agent/recommend-block',
 			$status['availableAbilities']
+		);
+		$this->assertFalse( $status['surfaces']['globalStyles']['available'] );
+		$this->assertSame(
+			'missing_theme_capability',
+			$status['surfaces']['globalStyles']['reason']
 		);
 	}
 }

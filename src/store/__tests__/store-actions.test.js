@@ -209,6 +209,73 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'fetchGlobalStylesRecommendations stores the request context signature without posting it to the API', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Use accent canvas' } ],
+			explanation: 'Mocked Global Styles response',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getGlobalStylesRequestToken: jest.fn().mockReturnValue( 2 ),
+		};
+		const input = {
+			scope: {
+				surface: 'global-styles',
+				scopeKey: 'global_styles:17',
+				globalStylesId: '17',
+			},
+			styleContext: {
+				currentConfig: { styles: {} },
+				mergedConfig: { styles: {} },
+				availableVariations: [],
+				themeTokenDiagnostics: {
+					source: 'stable',
+					settingsKey: 'features',
+					reason: 'stable-parity',
+				},
+			},
+			prompt: 'Make the site feel more editorial.',
+			contextSignature:
+				'{"scopeKey":"global_styles:17","globalStylesId":"17"}',
+		};
+
+		await actions.fetchGlobalStylesRecommendations( input )( {
+			dispatch,
+			select,
+		} );
+
+		expect( select.getGlobalStylesRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-style',
+				method: 'POST',
+				data: {
+					scope: input.scope,
+					styleContext: input.styleContext,
+					prompt: input.prompt,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setGlobalStylesStatus( 'loading', null, 3 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setGlobalStylesRecommendations(
+				input.scope,
+				{
+					suggestions: [ { label: 'Use accent canvas' } ],
+					explanation: 'Mocked Global Styles response',
+				},
+				'Make the site feel more editorial.',
+				3,
+				input.contextSignature
+			)
+		);
+	} );
+
 	test( 'loadActivitySession migrates in-memory unsaved activity into the first concrete document scope when explicitly allowed', async () => {
 		const draftEntry = createActivityEntry( {
 			type: 'apply_suggestion',
@@ -296,22 +363,22 @@ describe( 'store action thunks', () => {
 			actions.setActivitySession( 'post:42', [
 				expect.objectContaining( {
 					id: draftEntry.id,
-					document: {
+					document: expect.objectContaining( {
 						scopeKey: 'post:42',
 						postType: 'post',
 						entityId: '42',
-					},
+					} ),
 				} ),
 			] )
 		);
 		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
 			expect.objectContaining( {
 				id: persistedEntry.id,
-				document: {
+				document: expect.objectContaining( {
 					scopeKey: 'post:42',
 					postType: 'post',
 					entityId: '42',
-				},
+				} ),
 				persistence: expect.objectContaining( {
 					status: 'server',
 					updatedAt: draftEntry.timestamp,

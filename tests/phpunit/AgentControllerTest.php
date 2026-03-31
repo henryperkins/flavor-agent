@@ -234,6 +234,109 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_recommend_style_forwards_global_styles_context(): void {
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [
+								[
+									'label'       => 'Adopt Midnight variation',
+									'description' => 'Use the darker preset-backed variation.',
+									'category'    => 'variation',
+									'tone'        => 'executable',
+									'operations'  => [
+										[
+											'type'           => 'set_theme_variation',
+											'variationIndex' => 1,
+											'variationTitle' => 'Midnight',
+										],
+									],
+								],
+							],
+							'explanation' => 'The Midnight variation gives the site a stronger visual hierarchy.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-style' );
+		$request->set_param(
+			'scope',
+			[
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+				'postType'       => 'global_styles',
+				'entityId'       => '17',
+				'entityKind'     => 'root',
+				'entityName'     => 'globalStyles',
+			]
+		);
+		$request->set_param(
+			'styleContext',
+			[
+				'currentConfig' => [
+					'styles' => [],
+				],
+				'mergedConfig'  => [
+					'styles' => [],
+				],
+				'availableVariations' => [
+					[
+						'title'    => 'Default',
+						'settings' => [],
+						'styles'   => [],
+					],
+					[
+						'title'       => 'Midnight',
+						'description' => 'Dark editorial palette',
+						'settings'    => [],
+						'styles'      => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
+						],
+					],
+				],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			]
+		);
+		$request->set_param( 'prompt', 'Make the site feel more editorial.' );
+
+		$response = Agent_Controller::handle_recommend_style( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Midnight',
+			$response->get_data()['suggestions'][0]['operations'][0]['variationTitle'] ?? null
+		);
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'global_styles:17',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Midnight',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
 	public function test_handle_recommend_template_preserves_explicit_empty_visible_pattern_filter(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],

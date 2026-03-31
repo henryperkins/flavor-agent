@@ -73,8 +73,22 @@ describe( 'collectBlockContext', () => {
 			structuralAncestors: [],
 			branchRoot: null,
 		} );
-		mockCollectThemeTokens.mockReturnValue( { color: {} } );
-		mockSummarizeTokens.mockReturnValue( { colors: [ 'accent: #f00' ] } );
+		mockCollectThemeTokens.mockReturnValue( {
+			color: {},
+			diagnostics: {
+				source: 'stable',
+				settingsKey: 'features',
+				reason: 'stable-parity',
+			},
+		} );
+		mockSummarizeTokens.mockReturnValue( {
+			colors: [ 'accent: #f00' ],
+			diagnostics: {
+				source: 'stable',
+				settingsKey: 'features',
+				reason: 'stable-parity',
+			},
+		} );
 		mockSelect.mockReturnValue( {
 			getBlockRootClientId: jest.fn().mockReturnValue( null ),
 			getBlockOrder: jest.fn().mockReturnValue( [] ),
@@ -104,7 +118,14 @@ describe( 'collectBlockContext', () => {
 			siblingsAfter: [],
 			structuralAncestors: [],
 			structuralBranch: [],
-			themeTokens: { colors: [ 'accent: #f00' ] },
+			themeTokens: {
+				colors: [ 'accent: #f00' ],
+				diagnostics: {
+					source: 'stable',
+					settingsKey: 'features',
+					reason: 'stable-parity',
+				},
+			},
 		} );
 	} );
 } );

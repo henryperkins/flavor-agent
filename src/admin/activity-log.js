@@ -53,6 +53,8 @@ function getIconForEntry( entry ) {
 				case 'template':
 				case 'template-part':
 					return page;
+				case 'global-styles':
+					return plugins;
 				case 'block':
 					return symbol;
 				default:

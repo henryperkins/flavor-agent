@@ -4,6 +4,7 @@ const LEGACY_FLAG_KEYS = Object.freeze( {
 	template: 'canRecommendTemplates',
 	'template-part': 'canRecommendTemplateParts',
 	navigation: 'canRecommendNavigation',
+	'global-styles': 'canRecommendGlobalStyles',
 } );
 
 const STRUCTURED_SURFACE_KEYS = Object.freeze( {
@@ -12,6 +13,7 @@ const STRUCTURED_SURFACE_KEYS = Object.freeze( {
 	template: 'template',
 	'template-part': 'templatePart',
 	navigation: 'navigation',
+	'global-styles': 'globalStyles',
 } );
 
 function getFlavorAgentData( input = null ) {
@@ -108,6 +110,12 @@ function getDefaultMessage( surface, reason ) {
 			}
 
 			return "Navigation recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+		case 'global-styles':
+			if ( reason === 'missing_theme_capability' ) {
+				return 'Global Styles recommendations require the edit_theme_options capability.';
+			}
+
+			return "Global Styles recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
 		case 'pattern':
 			return "Pattern recommendations rely on Flavor Agent's chat and embedding backends plus Qdrant in Settings > Flavor Agent.";
 		default:

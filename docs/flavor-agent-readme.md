@@ -139,16 +139,36 @@ The server behavior is:
 
 This surface remains advisory-first overall: unsupported or ambiguous recommendations stay browse-only, and only validated bounded operations participate in preview/apply/undo.
 
+### Global Styles Recommendations
+
+Global Styles recommendations are exposed through `POST /flavor-agent/v1/recommend-style` and the `flavor-agent/recommend-style` ability.
+
+The client behavior is:
+
+- Available only while the Site Editor Styles sidebar is active for the current `root/globalStyles` entity.
+- Prefers a native Global Styles sidebar mount and falls back to a `PluginDocumentSettingPanel` implemented in `src/global-styles/GlobalStylesRecommender.js`.
+- Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
+- Renders advisory or executable suggestion cards, with preview/apply controls only for validated `set_styles` and `set_theme_variation` operations.
+
+The server behavior is:
+
+- Resolve the current Global Styles scope, current user config, available theme style variations, and theme-token source diagnostics.
+- Collect theme tokens plus supported site-level style paths.
+- Rank Global Styles suggestions with the active provider's responses configuration.
+- Return explanatory text plus optional validated site-level style operations bounded to supported paths and registered variations.
+
+This surface is explicitly theme-safe: raw CSS, `customCSS`, unsupported style paths, width/height transforms, and pseudo-element-only operations stay out of scope for the first milestone.
+
 ### AI Activity and Undo
 
-Applied block, template, and template-part suggestions write structured activity records through the server-backed activity repository, keyed to the current post, template, or template-part scope. The editor hydrates that log on load and keeps `sessionStorage` only as a fast cache/fallback. Undo remains inline and editor-scoped: the newest valid tail of AI actions can be undone when the live state still matches the recorded post-apply snapshot, while older entries are blocked until newer AI actions are undone.
+Applied block, template, template-part, and Global Styles suggestions write structured activity records through the server-backed activity repository, keyed to the current post, template, template-part, or Global Styles scope. The editor hydrates that log on load and keeps `sessionStorage` only as a fast cache/fallback. Undo remains inline and editor-scoped: the newest valid tail of AI actions can be undone when the live state still matches the recorded post-apply snapshot, while older entries are blocked until newer AI actions are undone.
 
 ## Settings
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-When chat credentials are configured on that screen, Flavor Agent uses the selected provider for block, pattern, template, and navigation recommendations. If not, block recommendations fall back to the core `Settings > Connectors` screen through the WordPress AI Client path.
-When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for block/pattern/template/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
+When chat credentials are configured on that screen, Flavor Agent uses the selected provider for pattern, template, template-part, Global Styles, and navigation recommendations. If not, block recommendations still fall back to the core `Settings > Connectors` screen through the WordPress AI Client path.
+When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for block/pattern/template/template-part/Global Styles/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
 
 When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the plugin validates the configured account, instance, and token by running a lightweight probe search that must return trusted `developer.wordpress.org` guidance, and keeps the previous values if validation fails. This allows documented AI Search Run tokens to pass validation without requiring instance metadata read access. Successful saves still use the standard Settings API notice flow, and failed validation surfaces the Cloudflare error on the same screen.
 
@@ -183,6 +203,7 @@ Implemented abilities:
 - `flavor-agent/list-patterns`
 - `flavor-agent/recommend-template` (accepts optional `visiblePatternNames`)
 - `flavor-agent/recommend-template-part`
+- `flavor-agent/recommend-style`
 - `flavor-agent/list-template-parts`
 - `flavor-agent/search-wordpress-docs`
 - `flavor-agent/get-theme-tokens`

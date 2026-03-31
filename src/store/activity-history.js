@@ -267,6 +267,27 @@ export function resolveActivityScope( postType, entityId ) {
 	};
 }
 
+export function resolveGlobalStylesScope(
+	globalStylesId,
+	{ stylesheet = '' } = {}
+) {
+	const normalizedEntityId = normalizeScopeValue( globalStylesId );
+
+	if ( ! normalizedEntityId ) {
+		return null;
+	}
+
+	return {
+		key: `global_styles:${ normalizedEntityId }`,
+		hint: `global_styles:${ normalizedEntityId }`,
+		postType: 'global_styles',
+		entityId: normalizedEntityId,
+		entityKind: 'root',
+		entityName: 'globalStyles',
+		stylesheet: normalizeScopeValue( stylesheet ),
+	};
+}
+
 export function sortActivityEntries( entries = [] ) {
 	return Array.isArray( entries )
 		? [ ...entries ].filter( Boolean ).sort( compareActivityEntries )
@@ -280,6 +301,22 @@ export function limitActivityLog( entries = [] ) {
 export function getCurrentActivityScope( registry ) {
 	const editor = registry?.select?.( 'core/editor' ) || {};
 	const editSite = registry?.select?.( 'core/edit-site' ) || {};
+	const interfaceStore = registry?.select?.( 'core/interface' ) || {};
+	const coreStore = registry?.select?.( 'core' ) || {};
+	const activeComplementaryArea =
+		interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
+	const globalStylesId =
+		coreStore?.__experimentalGetCurrentGlobalStylesId?.() || null;
+
+	if (
+		activeComplementaryArea === 'edit-site/global-styles' &&
+		globalStylesId !== null &&
+		globalStylesId !== undefined &&
+		globalStylesId !== ''
+	) {
+		return resolveGlobalStylesScope( globalStylesId );
+	}
+
 	const postType =
 		normalizeScopeValue( editor.getCurrentPostType?.() ) ||
 		normalizeScopeValue( editSite.getEditedPostType?.() );
@@ -411,6 +448,12 @@ export function getActivityEntityKey( entry ) {
 	if ( surface === 'template-part' ) {
 		return `template-part:${ String(
 			entry?.target?.templatePartRef || ''
+		) }`;
+	}
+
+	if ( surface === 'global-styles' ) {
+		return `global-styles:${ String(
+			entry?.target?.globalStylesId || entry?.document?.entityId || ''
 		) }`;
 	}
 

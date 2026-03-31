@@ -245,6 +245,11 @@ describe( 'summarizeTokens', () => {
 				},
 			},
 		} );
+		expect( summary.diagnostics ).toEqual( {
+			source: 'unknown',
+			settingsKey: '',
+			reason: 'unknown',
+		} );
 	} );
 } );
 
@@ -465,6 +470,25 @@ describe( 'theme token source adapter', () => {
 			background: expect.any( Object ),
 			elements: {},
 			blockPseudoStyles: {},
+			diagnostics: {
+				source: 'none',
+				settingsKey: '',
+				reason: 'missing',
+			},
+		} );
+	} );
+
+	test( 'collectThemeTokensFromSettings includes source diagnostics for downstream contracts', () => {
+		const settings = {
+			features: COMPLETE_FEATURES,
+		};
+
+		expect(
+			collectThemeTokensFromSettings( settings ).diagnostics
+		).toEqual( {
+			source: 'stable-fallback',
+			settingsKey: 'features',
+			reason: 'stable-unverified',
 		} );
 	} );
 } );

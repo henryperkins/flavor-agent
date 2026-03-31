@@ -10,6 +10,7 @@ use FlavorAgent\Activity\Serializer;
 use FlavorAgent\Abilities\BlockAbilities;
 use FlavorAgent\Abilities\NavigationAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
+use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\StringArray;
@@ -116,6 +117,35 @@ final class Agent_Controller {
 						'validate_callback' => static fn( $value ): bool => is_string( $value ),
 					],
 					'prompt'           => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_textarea_field',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/recommend-style',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'handle_recommend_style' ],
+				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'args'                => [
+					'scope'        => [
+						'required'          => true,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
+					'styleContext' => [
+						'required'          => true,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
+					'prompt'       => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
@@ -441,6 +471,33 @@ final class Agent_Controller {
 		}
 
 		$result = TemplateAbilities::recommend_template( $input );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * Handle POST /recommend-style with a thin ability adapter.
+	 */
+	public static function handle_recommend_style( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$input = [
+			'scope'        => self::sanitize_structured_value(
+				$request->get_param( 'scope' )
+			),
+			'styleContext' => self::sanitize_structured_value(
+				$request->get_param( 'styleContext' )
+			),
+		];
+
+		$prompt = $request->get_param( 'prompt' );
+		if ( is_string( $prompt ) && $prompt !== '' ) {
+			$input['prompt'] = $prompt;
+		}
+
+		$result = StyleAbilities::recommend_style( $input );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;

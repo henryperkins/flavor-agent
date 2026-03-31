@@ -20,6 +20,8 @@ import ActivitySessionBootstrap from '../ActivitySessionBootstrap';
 let container = null;
 let root = null;
 let currentEditorState = null;
+let currentInterfaceState = null;
+let currentCoreState = null;
 
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -29,6 +31,12 @@ beforeEach( () => {
 		postType: 'post',
 		postId: null,
 	};
+	currentInterfaceState = {
+		activeComplementaryArea: '',
+	};
+	currentCoreState = {
+		globalStylesId: null,
+	};
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( ( storeName ) => {
@@ -36,6 +44,20 @@ beforeEach( () => {
 				return {
 					getCurrentPostType: () => currentEditorState.postType,
 					getCurrentPostId: () => currentEditorState.postId,
+				};
+			}
+
+			if ( storeName === 'core/interface' ) {
+				return {
+					getActiveComplementaryArea: () =>
+						currentInterfaceState.activeComplementaryArea,
+				};
+			}
+
+			if ( storeName === 'core' ) {
+				return {
+					__experimentalGetCurrentGlobalStylesId: () =>
+						currentCoreState.globalStylesId,
 				};
 			}
 
@@ -91,6 +113,23 @@ describe( 'ActivitySessionBootstrap', () => {
 		} );
 
 		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith( {
+			allowUnsavedMigration: false,
+		} );
+	} );
+
+	test( 'switches to the explicit global styles scope when the Styles sidebar is active', () => {
+		currentInterfaceState = {
+			activeComplementaryArea: 'edit-site/global-styles',
+		};
+		currentCoreState = {
+			globalStylesId: '17',
+		};
+
+		act( () => {
+			root.render( <ActivitySessionBootstrap /> );
+		} );
+
+		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
 			allowUnsavedMigration: false,
 		} );
 	} );

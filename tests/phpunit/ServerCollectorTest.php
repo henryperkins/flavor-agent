@@ -78,6 +78,30 @@ final class ServerCollectorTest extends TestCase {
 		);
 	}
 
+	public function test_for_tokens_exposes_diagnostics(): void {
+		WordPressTestState::$global_settings = [
+			'color' => [
+				'palette' => [
+					[
+						'slug'  => 'accent',
+						'color' => '#ff5500',
+					],
+				],
+			],
+		];
+
+		$tokens = ServerCollector::for_tokens();
+
+		$this->assertSame(
+			[
+				'source'      => 'server',
+				'settingsKey' => 'wp_get_global_settings',
+				'reason'      => 'server-global-settings',
+			],
+			$tokens['diagnostics']
+		);
+	}
+
 	public function test_introspect_block_type_supports_content_role_and_attribute_role(): void {
 		\WP_Block_Type_Registry::get_instance()->register(
 			'plugin/content-block',

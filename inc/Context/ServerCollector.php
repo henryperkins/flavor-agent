@@ -245,6 +245,11 @@ final class ServerCollector {
 			'spacing'           => $spacing,
 			'shadows'           => $shadows,
 			'duotone'           => $duotone,
+			'diagnostics'       => [
+				'source'      => 'server',
+				'settingsKey' => 'wp_get_global_settings',
+				'reason'      => 'server-global-settings',
+			],
 			'duotonePresets'    => array_map(
 				static fn( array $preset ): array => [
 					'slug'   => (string) ( $preset['slug'] ?? '' ),

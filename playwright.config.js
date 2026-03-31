@@ -4,10 +4,7 @@ const { defineConfig } = require( '@playwright/test' );
 const rootDir = __dirname;
 const port = Number( process.env.PLAYWRIGHT_PORT || 9402 );
 const pluginDir = rootDir;
-const muPluginDir = path.join(
-	rootDir,
-	'tests/e2e/playground-mu-plugin'
-);
+const muPluginDir = path.join( rootDir, 'tests/e2e/playground-mu-plugin' );
 
 module.exports = defineConfig( {
 	testDir: path.join( rootDir, 'tests/e2e' ),

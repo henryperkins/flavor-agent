@@ -5,6 +5,7 @@ import {
 	getResolvedActivityEntries,
 	readPersistedActivityLog,
 	resolveActivityScope,
+	resolveGlobalStylesScope,
 	writePersistedActivityLog,
 } from '../activity-history';
 
@@ -71,6 +72,18 @@ describe( 'activity history helpers', () => {
 
 		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [ entry ] );
 		expect( readPersistedActivityLog( 'post:99' ) ).toEqual( [] );
+	} );
+
+	test( 'resolveGlobalStylesScope returns a stable explicit scope key', () => {
+		expect( resolveGlobalStylesScope( '17' ) ).toEqual( {
+			key: 'global_styles:17',
+			hint: 'global_styles:17',
+			postType: 'global_styles',
+			entityId: '17',
+			entityKind: 'root',
+			entityName: 'globalStyles',
+			stylesheet: '',
+		} );
 	} );
 
 	test( 'legacy persisted template activity entries load as non-undoable', () => {

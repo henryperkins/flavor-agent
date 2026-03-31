@@ -802,6 +802,14 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'admin_url' ) ) {
+		function admin_url( string $path = '' ): string {
+			$normalized = ltrim( $path, '/' );
+
+			return 'https://example.test/wp-admin/' . $normalized;
+		}
+	}
+
 	if ( ! function_exists( 'wp_get_global_settings' ) ) {
 		function wp_get_global_settings(): array {
 			return WordPressTestState::$global_settings;
