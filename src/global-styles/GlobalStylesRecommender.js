@@ -14,9 +14,16 @@ import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
-import { collectThemeTokenDiagnosticsFromSettings } from '../context/theme-tokens';
+import {
+	buildGlobalStylesExecutionContractFromSettings,
+	collectThemeTokenDiagnosticsFromSettings,
+} from '../context/theme-tokens';
 import { STORE_NAME } from '../store';
-import { getResolvedActivityEntries } from '../store/activity-history';
+import {
+	getLatestAppliedActivity,
+	getLatestUndoableActivity,
+	getResolvedActivityEntries,
+} from '../store/activity-history';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import {
 	buildGlobalStylesRecommendationContextSignature,
@@ -76,6 +83,13 @@ function formatOperation( operation = {} ) {
 	return 'Review this change before applying it.';
 }
 
+function findGlobalStylesSidebarPanel( root = document ) {
+	return (
+		root.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+		root.querySelector( '[role="region"][aria-label="Styles"]' )
+	);
+}
+
 function buildRequestInput( {
 	scope,
 	prompt,
@@ -113,11 +127,13 @@ function GlobalStylesPanel( {
 	capabilityAvailable,
 	isLoading,
 	isApplying,
+	isUndoing,
 	selectedSuggestion,
 	suggestions,
 	explanation,
 	notice,
 	activityEntries,
+	onNoticeAction,
 	onRequest,
 	onReview,
 	onCancelReview,
@@ -127,7 +143,7 @@ function GlobalStylesPanel( {
 	return (
 		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
 			<CapabilityNotice surface="global-styles" />
-			<AIStatusNotice notice={ notice } />
+			<AIStatusNotice notice={ notice } onAction={ onNoticeAction } />
 
 			<div className="flavor-agent-panel__group">
 				<div className="flavor-agent-panel__group-header">
@@ -259,7 +275,7 @@ function GlobalStylesPanel( {
 
 			<AIActivitySection
 				entries={ activityEntries }
-				isUndoing={ isApplying }
+				isUndoing={ isUndoing }
 				onUndo={ onUndo }
 				title="Recent AI Style Actions"
 				description="Undo is only available while the current Global Styles state still matches the applied AI change."
@@ -277,6 +293,13 @@ export default function GlobalStylesRecommender() {
 	);
 	const themeTokenDiagnostics = useMemo(
 		() => collectThemeTokenDiagnosticsFromSettings( blockEditorSettings ),
+		[ blockEditorSettings ]
+	);
+	const executionContract = useMemo(
+		() =>
+			buildGlobalStylesExecutionContractFromSettings(
+				blockEditorSettings
+			),
 		[ blockEditorSettings ]
 	);
 
@@ -340,7 +363,7 @@ export default function GlobalStylesRecommender() {
 		return {
 			isGlobalStylesActive:
 				activeComplementaryArea === 'edit-site/global-styles',
-			isSiteEditor: Boolean( editSite?.getEditedPostType ),
+			isSiteEditor: Boolean( editSite ),
 			scope: globalStylesData
 				? {
 						surface: 'global-styles',
@@ -394,6 +417,7 @@ export default function GlobalStylesRecommender() {
 			mergedConfig,
 			availableVariations,
 			themeTokenDiagnostics,
+			executionContract,
 		} );
 	const hasMatchingResult = Boolean(
 		scope?.globalStylesId &&
@@ -414,6 +438,18 @@ export default function GlobalStylesRecommender() {
 			) || null,
 		[ selectedSuggestionKey, suggestions ]
 	);
+	const latestGlobalStylesActivity = useMemo(
+		() => getLatestAppliedActivity( activityEntries ),
+		[ activityEntries ]
+	);
+	const latestUndoableActivityId = useMemo(
+		() => getLatestUndoableActivity( activityEntries )?.id || null,
+		[ activityEntries ]
+	);
+	const hasApplySuccess =
+		applyStatus === 'success' &&
+		Boolean( latestGlobalStylesActivity ) &&
+		latestGlobalStylesActivity?.id === latestUndoableActivityId;
 
 	const {
 		applyGlobalStylesSuggestion,
@@ -433,10 +469,9 @@ export default function GlobalStylesRecommender() {
 				undoSuccessMessage: hasUndoSuccess
 					? 'Flavor Agent restored the previous Global Styles config.'
 					: '',
-				applySuccessMessage:
-					applyStatus === 'success'
-						? 'Flavor Agent applied the selected Global Styles change.'
-						: '',
+				applySuccessMessage: hasApplySuccess
+					? 'Flavor Agent applied the selected Global Styles change.'
+					: '',
 				hasResult: suggestions.length > 0 || Boolean( explanation ),
 				hasSuggestions: suggestions.length > 0,
 				hasPreview: Boolean( selectedSuggestion ),
@@ -464,9 +499,7 @@ export default function GlobalStylesRecommender() {
 
 		let nextPortalNode = null;
 		const ensurePortalNode = () => {
-			const panel = document.querySelector(
-				'.editor-global-styles-sidebar__panel'
-			);
+			const panel = findGlobalStylesSidebarPanel( document );
 
 			if ( ! panel ) {
 				if ( nextPortalNode ) {
@@ -619,11 +652,17 @@ export default function GlobalStylesRecommender() {
 			capabilityAvailable={ capability.available && Boolean( scope ) }
 			isLoading={ isLoading }
 			isApplying={ isApplying }
+			isUndoing={ undoStatus === 'undoing' }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }
 			notice={ notice }
 			activityEntries={ activityEntries }
+			onNoticeAction={
+				notice?.actionType === 'undo' && latestGlobalStylesActivity
+					? () => handleUndo( latestGlobalStylesActivity.id )
+					: undefined
+			}
 			onRequest={ handleRequest }
 			onReview={ setGlobalStylesSelectedSuggestion }
 			onCancelReview={ () => setGlobalStylesSelectedSuggestion( null ) }

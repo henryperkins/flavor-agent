@@ -85,16 +85,26 @@ final class StyleAbilities {
 		$paths = [];
 
 		if ( ! empty( $theme_tokens['colors'] ) ) {
-			$paths[] = self::supported_path( [ 'color', 'background' ], 'color' );
-			$paths[] = self::supported_path( [ 'color', 'text' ], 'color' );
+			if ( ! empty( $features['backgroundColor'] ) ) {
+				$paths[] = self::supported_path( [ 'color', 'background' ], 'color' );
+			}
+
+			if ( ! empty( $features['textColor'] ) ) {
+				$paths[] = self::supported_path( [ 'color', 'text' ], 'color' );
+			}
 
 			if ( ! empty( $features['linkColor'] ) ) {
 				$paths[] = self::supported_path( [ 'elements', 'link', 'color', 'text' ], 'color' );
 			}
 
-			$paths[] = self::supported_path( [ 'elements', 'button', 'color', 'background' ], 'color' );
-			$paths[] = self::supported_path( [ 'elements', 'button', 'color', 'text' ], 'color' );
-			$paths[] = self::supported_path( [ 'elements', 'heading', 'color', 'text' ], 'color' );
+			if ( ! empty( $features['buttonColor'] ) ) {
+				$paths[] = self::supported_path( [ 'elements', 'button', 'color', 'background' ], 'color' );
+				$paths[] = self::supported_path( [ 'elements', 'button', 'color', 'text' ], 'color' );
+			}
+
+			if ( ! empty( $features['headingColor'] ) ) {
+				$paths[] = self::supported_path( [ 'elements', 'heading', 'color', 'text' ], 'color' );
+			}
 		}
 
 		if ( ! empty( $theme_tokens['fontSizes'] ) ) {

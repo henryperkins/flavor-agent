@@ -23,6 +23,11 @@ export function collectThemeTokens() {
 	return collectThemeTokensFromSettings( getThemeEditorSettings() );
 }
 
+function getSortedUniqueSlugs( entries = [] ) {
+	return [ ...new Set( entries.map( ( entry ) => entry?.slug ).filter( Boolean ) ) ]
+		.sort( ( left, right ) => left.localeCompare( right ) );
+}
+
 export function collectThemeTokenDiagnosticsFromSettings( settings = {} ) {
 	const sourceDetails = getThemeTokenSourceDetails( settings );
 
@@ -48,6 +53,164 @@ export function collectThemeTokensFromSettings( settings = {} ) {
 		blockPseudoStyles: collectBlockPseudoStyles( features ),
 		diagnostics: collectThemeTokenDiagnosticsFromSettings( settings ),
 	};
+}
+
+export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
+	const supportedPaths = [];
+	const hasColorPresets = Array.isArray( tokens?.color?.palette )
+		? tokens.color.palette.length > 0
+		: false;
+	const hasFontSizePresets = Array.isArray( tokens?.typography?.fontSizes )
+		? tokens.typography.fontSizes.length > 0
+		: false;
+	const hasFontFamilyPresets = Array.isArray( tokens?.typography?.fontFamilies )
+		? tokens.typography.fontFamilies.length > 0
+		: false;
+	const hasSpacingPresets = Array.isArray( tokens?.spacing?.spacingSizes )
+		? tokens.spacing.spacingSizes.length > 0
+		: false;
+	const hasShadowPresets = Array.isArray( tokens?.shadow?.presets )
+		? tokens.shadow.presets.length > 0
+		: false;
+
+	if ( hasColorPresets ) {
+		if ( tokens?.color?.backgroundEnabled ) {
+			supportedPaths.push( {
+				path: [ 'color', 'background' ],
+				valueSource: 'color',
+			} );
+		}
+
+		if ( tokens?.color?.textEnabled ) {
+			supportedPaths.push( {
+				path: [ 'color', 'text' ],
+				valueSource: 'color',
+			} );
+		}
+
+		if ( tokens?.color?.linkEnabled ) {
+			supportedPaths.push( {
+				path: [ 'elements', 'link', 'color', 'text' ],
+				valueSource: 'color',
+			} );
+		}
+
+		if ( tokens?.color?.buttonEnabled ) {
+			supportedPaths.push(
+				{
+					path: [ 'elements', 'button', 'color', 'background' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'button', 'color', 'text' ],
+					valueSource: 'color',
+				}
+			);
+		}
+
+		if ( tokens?.color?.headingEnabled ) {
+			supportedPaths.push( {
+				path: [ 'elements', 'heading', 'color', 'text' ],
+				valueSource: 'color',
+			} );
+		}
+	}
+
+	if ( hasFontSizePresets ) {
+		supportedPaths.push( {
+			path: [ 'typography', 'fontSize' ],
+			valueSource: 'font-size',
+		} );
+	}
+
+	if ( hasFontFamilyPresets ) {
+		supportedPaths.push(
+			{
+				path: [ 'typography', 'fontFamily' ],
+				valueSource: 'font-family',
+			},
+			{
+				path: [ 'elements', 'heading', 'typography', 'fontFamily' ],
+				valueSource: 'font-family',
+			}
+		);
+	}
+
+	if ( tokens?.typography?.lineHeight ) {
+		supportedPaths.push( {
+			path: [ 'typography', 'lineHeight' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if ( tokens?.spacing?.blockGap && hasSpacingPresets ) {
+		supportedPaths.push( {
+			path: [ 'spacing', 'blockGap' ],
+			valueSource: 'spacing',
+		} );
+	}
+
+	if ( tokens?.border?.color ) {
+		supportedPaths.push( {
+			path: [ 'border', 'color' ],
+			valueSource: 'color',
+		} );
+	}
+
+	if ( tokens?.border?.radius ) {
+		supportedPaths.push( {
+			path: [ 'border', 'radius' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if ( tokens?.border?.style ) {
+		supportedPaths.push( {
+			path: [ 'border', 'style' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if ( tokens?.border?.width ) {
+		supportedPaths.push( {
+			path: [ 'border', 'width' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if ( hasShadowPresets ) {
+		supportedPaths.push( {
+			path: [ 'shadow' ],
+			valueSource: 'shadow',
+		} );
+	}
+
+	return supportedPaths;
+}
+
+export function buildGlobalStylesExecutionContract( tokens = {} ) {
+	return {
+		supportedStylePaths: getGlobalStylesSupportedStylePathsFromTokens( tokens ),
+		presetSlugs: {
+			color: getSortedUniqueSlugs( tokens?.color?.palette || [] ),
+			fontsize: getSortedUniqueSlugs(
+				tokens?.typography?.fontSizes || []
+			),
+			fontfamily: getSortedUniqueSlugs(
+				tokens?.typography?.fontFamilies || []
+			),
+			spacing: getSortedUniqueSlugs(
+				tokens?.spacing?.spacingSizes || []
+			),
+			shadow: getSortedUniqueSlugs( tokens?.shadow?.presets || [] ),
+		},
+	};
+}
+
+export function buildGlobalStylesExecutionContractFromSettings( settings = {} ) {
+	return buildGlobalStylesExecutionContract(
+		collectThemeTokensFromSettings( settings )
+	);
 }
 
 function collectColorTokens( settings, features ) {
@@ -80,6 +243,8 @@ function collectColorTokens( settings, features ) {
 		backgroundEnabled: features?.color?.background !== false,
 		textEnabled: features?.color?.text !== false,
 		linkEnabled: features?.color?.link ?? false,
+		buttonEnabled: features?.color?.button ?? false,
+		headingEnabled: features?.color?.heading ?? false,
 	};
 }
 
@@ -286,7 +451,11 @@ export function summarizeTokens( tokens ) {
 			lineHeight: tokens.typography.lineHeight,
 			dropCap: tokens.typography.dropCap,
 			customColors: tokens.color.customColors,
+			backgroundColor: tokens.color.backgroundEnabled,
+			textColor: tokens.color.textEnabled,
 			linkColor: tokens.color.linkEnabled,
+			buttonColor: tokens.color.buttonEnabled,
+			headingColor: tokens.color.headingEnabled,
 			fluid: tokens.typography.fluidTypography,
 			margin: tokens.spacing.margin,
 			padding: tokens.spacing.padding,

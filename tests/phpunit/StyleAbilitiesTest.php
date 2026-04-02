@@ -204,6 +204,69 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_supported_style_paths_omit_disabled_color_controls(): void {
+		WordPressTestState::$global_settings = [
+			'color' => [
+				'background' => false,
+				'text'       => false,
+				'link'       => false,
+				'button'     => false,
+				'heading'    => false,
+				'palette'    => [
+					[
+						'slug'  => 'accent',
+						'color' => '#ff5500',
+					],
+				],
+			],
+		];
+
+		$paths = StyleAbilities::supported_style_paths();
+
+		$this->assertNotContains(
+			[
+				'path'        => [ 'color', 'background' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'color', 'text' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'elements', 'link', 'color', 'text' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'elements', 'button', 'color', 'background' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'elements', 'button', 'color', 'text' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'elements', 'heading', 'color', 'text' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+	}
+
 	public function test_recommend_style_strips_non_semantic_config_fields_from_prompt_context(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],

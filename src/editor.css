@@ -66,14 +66,9 @@
 
 .flavor-agent-panel__intro {
   padding: 12px;
-  background:
-    linear-gradient(
+  background: linear-gradient(
       135deg,
-      color-mix(
-        in srgb,
-        var(--flavor-agent-accent) 10%,
-        transparent
-      ),
+      color-mix(in srgb, var(--flavor-agent-accent) 10%, transparent),
       transparent 70%
     ),
     var(--flavor-agent-surface);
@@ -673,7 +668,7 @@
   text-decoration: underline;
 }
 
-.flavor-agent-action-link.components-button.is-link:focus {
+.flavor-agent-action-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
     var(--wp-components-color-accent, #3858e9);
 }
@@ -686,12 +681,20 @@
 /* Type: template-part slug — monospace pill, blue accent */
 .flavor-agent-action-link--part.components-button.is-link {
   font-family: monospace;
-  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wp-components-color-accent, #3858e9) 10%,
+    transparent
+  );
   color: var(--wp-components-color-accent, #3858e9);
 }
 
 .flavor-agent-action-link--part.components-button.is-link:hover {
-  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 18%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wp-components-color-accent, #3858e9) 18%,
+    transparent
+  );
 }
 
 /* Type: area — monospace pill, muted */
@@ -763,7 +766,7 @@
   text-decoration-style: solid;
 }
 
-.flavor-agent-inline-link.components-button.is-link:focus {
+.flavor-agent-inline-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
     var(--wp-components-color-accent, #3858e9);
 }
@@ -774,7 +777,11 @@
 }
 
 .flavor-agent-inline-link--part.components-button.is-link:hover {
-  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 8%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wp-components-color-accent, #3858e9) 8%,
+    transparent
+  );
 }
 
 /* Inline type: area — same accent so "header" / "footer" stand out */
@@ -784,7 +791,11 @@
 }
 
 .flavor-agent-inline-link--area.components-button.is-link:hover {
-  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 8%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wp-components-color-accent, #3858e9) 8%,
+    transparent
+  );
 }
 
 /* Inline type: pattern — green accent so patterns are visually distinct */
@@ -800,8 +811,7 @@
 
 .flavor-agent-card--template.is-applied {
   border-color: color-mix(in srgb, #00a32a 24%, var(--flavor-agent-border));
-  background:
-    linear-gradient(
+  background: linear-gradient(
       135deg,
       color-mix(in srgb, #00a32a 10%, transparent),
       transparent 55%
@@ -819,28 +829,33 @@
   margin-top: 10px;
 }
 
-.flavor-agent-template-preview .flavor-agent-action-link {
+.flavor-agent-preview-token {
   display: inline-flex;
   align-items: center;
   font-size: 11px;
   padding: 2px 8px;
   line-height: 1.4;
   border-radius: 999px;
+  white-space: nowrap;
 }
 
-.flavor-agent-template-preview .flavor-agent-action-link--part {
+.flavor-agent-preview-token--part {
   font-family: monospace;
-  background: color-mix(in srgb, var(--wp-components-color-accent, #3858e9) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wp-components-color-accent, #3858e9) 10%,
+    transparent
+  );
   color: var(--wp-components-color-accent, #3858e9);
 }
 
-.flavor-agent-template-preview .flavor-agent-action-link--area {
+.flavor-agent-preview-token--area {
   font-family: monospace;
   background: var(--wp-components-color-gray-100, #f0f0f0);
   color: var(--wp-components-color-foreground, #1e1e1e);
 }
 
-.flavor-agent-template-preview .flavor-agent-action-link--pattern {
+.flavor-agent-preview-token--pattern {
   background: color-mix(in srgb, #00a32a 8%, transparent);
   color: #00782d;
 }
@@ -918,6 +933,12 @@
   50% {
     transform: scale(1.35);
     opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flavor-agent-inserter-badge--loading {
+    animation: none;
   }
 }
 

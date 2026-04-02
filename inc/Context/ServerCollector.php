@@ -267,7 +267,15 @@ final class ServerCollector {
 				'lineHeight'      => $settings['typography']['lineHeight'] ?? false,
 				'dropCap'         => $settings['typography']['dropCap'] ?? true,
 				'customColors'    => $settings['color']['custom'] ?? true,
+				'backgroundColor' => array_key_exists( 'background', $settings['color'] ?? [] )
+					? (bool) $settings['color']['background']
+					: true,
+				'textColor'       => array_key_exists( 'text', $settings['color'] ?? [] )
+					? (bool) $settings['color']['text']
+					: true,
 				'linkColor'       => $settings['color']['link'] ?? false,
+				'buttonColor'     => $settings['color']['button'] ?? false,
+				'headingColor'    => $settings['color']['heading'] ?? false,
 				'margin'          => $settings['spacing']['margin'] ?? false,
 				'padding'         => $settings['spacing']['padding'] ?? false,
 				'blockGap'        => $settings['spacing']['blockGap'] ?? null,

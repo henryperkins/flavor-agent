@@ -812,4 +812,17 @@ describe( 'TemplateRecommender', () => {
 			)
 		).toBe( true );
 	} );
+
+	test( 'renders non-interactive preview tokens in the review overlay', () => {
+		expect(
+			container.querySelector(
+				'.flavor-agent-template-preview .flavor-agent-preview-token--pattern'
+			)
+		).not.toBeNull();
+		expect(
+			container.querySelector(
+				'.flavor-agent-template-preview .flavor-agent-action-link'
+			)
+		).toBeNull();
+	} );
 } );

@@ -200,6 +200,22 @@ update_option( 'page_for_posts', 0 );
 	] );
 }
 
+function seedFlavorAgentOptions( harness ) {
+	const optionValues = {
+		flavor_agent_openai_provider: 'azure_openai',
+		flavor_agent_azure_openai_endpoint: 'https://example.test/openai',
+		flavor_agent_azure_openai_key: 'playground-key',
+		flavor_agent_azure_embedding_deployment: 'playground-embeddings',
+		flavor_agent_azure_chat_deployment: 'playground-chat',
+		flavor_agent_qdrant_url: 'https://example.test/qdrant',
+		flavor_agent_qdrant_key: 'playground-qdrant-key',
+	};
+
+	for ( const [ optionName, value ] of Object.entries( optionValues ) ) {
+		runWpCli( harness, [ 'option', 'update', optionName, value ] );
+	}
+}
+
 async function bootstrapWp70Harness() {
 	const harness = getWp70HarnessConfig();
 
@@ -234,6 +250,7 @@ async function bootstrapWp70Harness() {
 	runWpCli( harness, [ 'option', 'update', 'home', harness.baseURL ] );
 	runWpCli( harness, [ 'option', 'update', 'siteurl', harness.baseURL ] );
 	runWpCli( harness, [ 'plugin', 'activate', 'flavor-agent' ] );
+	seedFlavorAgentOptions( harness );
 	runWpCli( harness, [ 'theme', 'activate', harness.themeSlug ] );
 	runWpCli( harness, [ 'rewrite', 'structure', '/%postname%/', '--hard' ] );
 	resetSiteEditorState( harness );

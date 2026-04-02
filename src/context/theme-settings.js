@@ -1,5 +1,4 @@
 import { select } from '@wordpress/data';
-import { store as blockEditorStore } from '@wordpress/block-editor';
 
 export const STABLE_THEME_FEATURES_KEY = 'features';
 export const EXPERIMENTAL_THEME_FEATURES_KEY = '__experimentalFeatures';
@@ -105,6 +104,8 @@ function buildThemeParitySnapshot( settings = {}, features = {} ) {
 				background: color.background !== false,
 				text: color.text !== false,
 				link: color.link ?? false,
+				button: color.button ?? false,
+				heading: color.heading ?? false,
 			},
 			typography: {
 				customFontSize: typography.customFontSize !== false,
@@ -214,7 +215,7 @@ function mergeStableThemeFeatures(
 }
 
 export function getThemeEditorSettings() {
-	return select( blockEditorStore ).getSettings?.() || {};
+	return select( 'core/block-editor' )?.getSettings?.() || {};
 }
 
 export function getThemeTokenSourceDetails(

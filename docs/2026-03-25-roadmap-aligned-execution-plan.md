@@ -1,11 +1,11 @@
 # Flavor Agent Roadmap-Aligned Execution Plan
 
 > Created: 2026-03-25
-> Scope: repo-specific execution plan for the next 5 milestones
+> Scope: repo-specific execution plan for the current 5-epic roadmap
 > External alignment snapshot verified: 2026-03-27
 > Support target: WordPress 7.0 RC -> stable, PHP 8.0+, Node 20 / npm 10
 > Scope anchor: Gutenberg 22.8.x (`22.8.0` released 2026-03-25; `22.8.1` released 2026-03-26)
-> Baseline: current repo already ships block, pattern, template, template-part, navigation, and activity surfaces
+> Baseline: current repo already ships block, pattern, template, template-part, navigation, global styles, and activity surfaces
 
 ## Goal
 
@@ -117,17 +117,17 @@ Only after those six items land should the roadmap move aggressively into new st
 
 ## Ordered Execution
 
-1. Epic 1: Core AI Convergence and Capability Gating
-2. Epic 2: Unified Inline Review Model
-3. Epic 3: Style and Theme Intelligence
+1. Epic 1: Core AI Convergence and Capability Gating (Completed 2026-03-27)
+2. Epic 2: Unified Inline Review Model (Completed 2026-03-27)
+3. Epic 3: Style and Theme Intelligence (Implemented in tree; closeout pending)
 4. Epic 4: Structural Site-Building Intelligence
 5. Epic 5: Durable Audit, Observability, and Narrow Site Agent
 
 The order matters.
 
-Epic 1 reduces architectural drift from WordPress core and the official AI plugin.
-Epic 2 makes the existing surfaces feel like one product.
-Epic 3 pushes deeper into native theme and style tooling.
+Epic 1 reduced architectural drift from WordPress core and the official AI plugin.
+Epic 2 made the existing surfaces feel like one product.
+Epic 3 pushed deeper into native theme and style tooling and is now implemented in tree, with docs/verification closeout still pending.
 Epic 4 expands structural power without leaving Gutenberg semantics.
 Epic 5 adds the durable trust and narrow admin action layer needed before broader agentic behavior.
 
@@ -336,7 +336,7 @@ Browser:
 2. Structural actions are always reviewable before mutation.
 3. Activity and undo presentation are consistent across all surfaces.
 
-## Epic 3: Style and Theme Intelligence
+## Epic 3: Style and Theme Intelligence (Implemented in tree; closeout pending)
 
 ### Objective
 
@@ -346,16 +346,27 @@ Push Flavor Agent deeper into Gutenberg-native styling and theme tooling by expa
 
 This is the clearest way to push beyond current WordPress.com-style integration while still respecting Gutenberg instead of bypassing it.
 
-### In Scope
+### Progress In Tree
+
+The first bounded Epic 3 slice is already implemented in current code:
+
+1. `inc/Abilities/StyleAbilities.php`, `inc/LLM/StylePrompt.php`, `inc/REST/Agent_Controller.php`, and `inc/Abilities/Registration.php` now provide the dedicated style ability, prompt contract, REST route, and schema coverage.
+2. `src/global-styles/GlobalStylesRecommender.js` now ships the native Site Editor Global Styles surface, with a sidebar mount and document-panel fallback.
+3. `src/utils/style-operations.js` plus `src/store/index.js` now provide deterministic Global Styles apply/undo behavior rather than treating style work as advisory-only.
+4. `inc/Abilities/SurfaceCapabilities.php`, localized surface bootstrapping, and `flavor-agent/check-status` now include the shared `globalStyles` readiness contract instead of treating the style surface as a one-off exception.
+5. Global Styles actions are now wired into shared activity persistence, editor hydration, undo validation, and admin audit handling through the existing client/server activity layers.
+6. The current docs and tests already include the style feature doc, route/ability references, PHPUnit coverage for style contracts/readiness, JS coverage for style operations and surface behavior, and a WP 7.0 smoke for preview/apply/undo.
+
+### Delivered Scope
 
 1. Improve current block style recommendations using richer token and support awareness.
-2. Add style-variation and preset-transform suggestions where WordPress supports them.
-3. Add a first-party Flavor Agent surface for site-level style intelligence that stays native to site-editor and style tooling.
-4. Keep all output grounded in theme tokens, supported design tools, and existing WordPress style semantics.
-5. Expand the style-intelligence backlog to explicitly evaluate newer WP 7.0 style surfaces that fit the plugin thesis:
-   - width/height preset-aware transformations
-   - pseudo-element-aware theme token extraction where the theme/tooling surface exposes stable data
-   - stronger supported-style reasoning before any recommendation is surfaced.
+2. Add a first-party Flavor Agent surface for site-level style intelligence that stays native to Site Editor style tooling.
+3. Keep all output grounded in theme tokens, supported design tools, registered style variations, and existing WordPress style semantics.
+4. Keep the first executable contract narrow:
+   - preset substitutions
+   - registered theme style variation selection
+   - validated supported style paths only
+5. Carry the style surface through the shared review, capability, activity, and undo model rather than inventing a separate interaction system.
 
 ### Non-Goals
 
@@ -377,53 +388,43 @@ Existing files:
 - `src/inspector/SettingsRecommendations.js`
 - `src/utils/visible-patterns.js`
 - `src/utils/structural-identity.js`
-
-Likely new files:
-
 - `inc/Abilities/StyleAbilities.php`
 - `inc/LLM/StylePrompt.php`
 - `src/global-styles/GlobalStylesRecommender.js`
+- `src/utils/style-operations.js`
+
+Optional follow-up files only if later bounded work justifies them:
+
 - `src/style-book/StyleBookRecommender.js`
 - `src/style-book/__tests__/StyleBookRecommender.test.js`
 
-### Implementation Slices
+### Remaining Closeout And Follow-Up Slices
 
-1. Harden `theme-settings.js` and `theme-tokens.js` so the plugin can consume stable sources whenever possible and isolate experimental fallbacks.
-2. Extend the server collector with any style metadata needed for style-book or global-style recommendations.
-3. Add a style-focused ability and prompt contract instead of overloading block/template prompts.
-4. Implement a native site-editor surface for style intelligence:
-   - previewable preset swaps
-   - block style-variation suggestions
-   - theme-token-safe transformations
-5. Keep the first executable contract narrow:
-   - preset substitutions
-   - style variation selection
-   - supported block style attributes only
-6. For the first style milestone, explicitly evaluate:
-   - `dimensions.width` / `dimensions.height` recommendations using available preset data
-   - whether pseudo-element theme styles should be represented in token extraction
-   - whether any `customCSS`-adjacent capability should remain out of scope rather than silently implied.
+1. Refresh stale milestone docs so Epic 3 is no longer described as pending implementation in planning/verification documents.
+2. Re-run the focused WP 7.0 Global Styles browser smoke on a Docker-capable host and record the result in `STATUS.md`.
+3. After WordPress 7.0 stable images exist, swap the beta-tagged WP 7.0 harness image and re-audit the style surface against the stable runtime.
+4. Keep width/height preset transforms, pseudo-element-aware extraction, and broader Style Book expansion as bounded follow-ups rather than treating them as missing pieces of the shipped slice.
+5. Keep `customCSS` recommendation generation explicitly out of scope for v1 unless the product thesis changes.
 
-### Acceptance Tests
+### Acceptance And Verification
 
 PHP:
 
-- new PHPUnit coverage for `StyleAbilities` and `StylePrompt`
-- existing `InfraAbilitiesTest` and `ServerCollectorTest`
+- `vendor/bin/phpunit --filter '(StyleAbilitiesTest|StylePromptTest|InfraAbilitiesTest|RegistrationTest|AgentControllerTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityPermissionsTest|ActivityRepositoryTest)'`
 
 JS:
 
-- `npm run test:unit -- --runInBand src/context/__tests__/theme-tokens.test.js src/inspector/suggestion-keys.test.js src/style-book/__tests__/StyleBookRecommender.test.js`
+- `npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js`
 
 Browser:
 
-- WP 7.0 harness test covering one style transformation preview and apply path
+- `npm run test:e2e:wp70 -- --reporter=line -g "global styles surface previews, applies, and undoes executable recommendations"`
 
-### Exit Criteria
+### Closure Criteria
 
-1. Flavor Agent can recommend and apply theme-safe style changes without leaving native WordPress style systems.
-2. No generated recommendation proposes a value outside available presets or unsupported design tools.
-3. Style intelligence is visibly stronger without falling back to arbitrary CSS.
+1. The planning docs and `STATUS.md` consistently describe the Global Styles style contract and surface as shipped, not pending.
+2. A fresh WP 7.0 browser result is recorded for the focused Global Styles preview/apply/undo path, or the host limitation is explicitly documented.
+3. Deferred follow-ups remain explicitly deferred rather than being mistaken for missing shipped work.
 
 ## Epic 4: Structural Site-Building Intelligence
 

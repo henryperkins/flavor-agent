@@ -1,7 +1,17 @@
 import { dispatch, select } from '@wordpress/data';
 
+import { buildGlobalStylesExecutionContractFromSettings } from '../context/theme-tokens';
+
 function getCoreSelect( registry ) {
 	return registry?.select?.( 'core' ) || select( 'core' ) || {};
+}
+
+function getBlockEditorSelect( registry ) {
+	return (
+		registry?.select?.( 'core/block-editor' ) ||
+		select( 'core/block-editor' ) ||
+		{}
+	);
 }
 
 function getCoreDispatch( registry ) {
@@ -58,13 +68,57 @@ function getStylePathKey( path = [] ) {
 	return Array.isArray( path ) ? path.join( '.' ) : '';
 }
 
-function isFreeformStylePath( path = [] ) {
-	return [
-		'typography.lineHeight',
-		'border.radius',
-		'border.width',
-		'border.style',
-	].includes( getStylePathKey( path ) );
+function sanitizeKey( value ) {
+	return String( value || '' )
+		.trim()
+		.toLowerCase()
+		.replace( /[^a-z0-9_-]/g, '' );
+}
+
+function normalizePresetType( value ) {
+	return sanitizeKey( value ).replaceAll( '-', '' );
+}
+
+function displayPresetType( presetType ) {
+	switch ( normalizePresetType( presetType ) ) {
+		case 'fontsize':
+			return 'font-size';
+		case 'fontfamily':
+			return 'font-family';
+		default:
+			return sanitizeKey( presetType );
+	}
+}
+
+function parsePresetValue( value ) {
+	if ( typeof value !== 'string' ) {
+		return null;
+	}
+
+	const matches = value.match(
+		/^var:preset\|([a-z0-9-]+)\|([a-z0-9_-]+)$/i
+	);
+
+	if ( ! matches ) {
+		return null;
+	}
+
+	const type = normalizePresetType( matches[ 1 ] );
+	const slug = sanitizeKey( matches[ 2 ] );
+
+	if ( ! type || ! slug ) {
+		return null;
+	}
+
+	return { type, slug };
+}
+
+function buildPresetValue( presetType, presetSlug ) {
+	return `var:preset|${ displayPresetType( presetType ) }|${ presetSlug }`;
+}
+
+function buildPresetCssVar( presetType, presetSlug ) {
+	return `var(--wp--preset--${ displayPresetType( presetType ) }--${ presetSlug })`;
 }
 
 function isPositiveNumberString( value ) {
@@ -228,6 +282,74 @@ function normalizeComparableVariation( variation = {} ) {
 	} );
 }
 
+function normalizeComparableExecutionContract( executionContract = {} ) {
+	const supportedStylePaths = Array.isArray(
+		executionContract?.supportedStylePaths
+	)
+		? executionContract.supportedStylePaths
+				.filter(
+					( pathEntry ) =>
+						Array.isArray( pathEntry?.path ) &&
+						pathEntry.path.length > 0
+				)
+				.map( ( pathEntry ) => ( {
+					path: [ ...pathEntry.path ],
+					valueSource:
+						typeof pathEntry?.valueSource === 'string'
+							? pathEntry.valueSource
+							: '',
+				} ) )
+				.sort( ( left, right ) => {
+					const pathComparison = getStylePathKey(
+						left.path
+					).localeCompare( getStylePathKey( right.path ) );
+
+					if ( pathComparison !== 0 ) {
+						return pathComparison;
+					}
+
+					return String( left.valueSource ).localeCompare(
+						String( right.valueSource )
+					);
+				} )
+		: [];
+	const presetSlugs = Object.fromEntries(
+		Object.entries( executionContract?.presetSlugs || {} )
+			.sort( ( [ leftKey ], [ rightKey ] ) =>
+				leftKey.localeCompare( rightKey )
+			)
+			.map( ( [ key, slugs ] ) => [
+				key,
+				Array.isArray( slugs )
+					? [ ...new Set( slugs.filter( Boolean ) ) ].sort()
+					: [],
+			] )
+	);
+
+	return {
+		supportedStylePaths,
+		presetSlugs,
+	};
+}
+
+function findSupportedStylePathEntry( path = [], executionContract = {} ) {
+	const pathKey = getStylePathKey( path );
+
+	return (
+		( executionContract?.supportedStylePaths || [] ).find(
+			( pathEntry ) => getStylePathKey( pathEntry?.path ) === pathKey
+		) || null
+	);
+}
+
+function getPresetSlugsForType( executionContract = {}, presetType ) {
+	return Array.isArray(
+		executionContract?.presetSlugs?.[ normalizePresetType( presetType ) ]
+	)
+		? executionContract.presetSlugs[ normalizePresetType( presetType ) ]
+		: [];
+}
+
 export function getComparableGlobalStylesConfig( value = {} ) {
 	return {
 		settings: normalizeComparableConfigBranch( value?.settings || {} ),
@@ -241,6 +363,7 @@ export function buildGlobalStylesRecommendationContextSignature( {
 	mergedConfig,
 	availableVariations,
 	themeTokenDiagnostics,
+	executionContract,
 } ) {
 	return JSON.stringify(
 		sortObjectKeysDeep( {
@@ -255,6 +378,8 @@ export function buildGlobalStylesRecommendationContextSignature( {
 			themeTokenDiagnostics: sortObjectKeysDeep(
 				normalizeOperationValue( themeTokenDiagnostics || {} )
 			),
+			executionContract:
+				normalizeComparableExecutionContract( executionContract ),
 		} )
 	);
 }
@@ -465,6 +590,24 @@ function getGlobalStylesRuntime( registry ) {
 	};
 }
 
+function getGlobalStylesExecutionContract( registry ) {
+	const blockEditorSelect = getBlockEditorSelect( registry );
+
+	if ( typeof blockEditorSelect?.getSettings !== 'function' ) {
+		return {
+			ok: false,
+			error: 'The Site Editor could not resolve the current Global Styles execution contract.',
+		};
+	}
+
+	return {
+		ok: true,
+		executionContract: buildGlobalStylesExecutionContractFromSettings(
+			blockEditorSelect.getSettings?.() || {}
+		),
+	};
+}
+
 function configsMatch( left, right ) {
 	return (
 		JSON.stringify( getComparableGlobalStylesConfig( left ) ) ===
@@ -472,11 +615,72 @@ function configsMatch( left, right ) {
 	);
 }
 
+function validatePresetStyleOperation(
+	operation = {},
+	pathEntry = {},
+	executionContract = {}
+) {
+	const expectedPresetType = normalizePresetType( pathEntry?.valueSource );
+	const pathKey = getStylePathKey( operation?.path );
+	const valueType = sanitizeKey( operation?.valueType );
+	const presetType = normalizePresetType( operation?.presetType );
+	const presetSlug = sanitizeKey( operation?.presetSlug );
+	const parsedPresetValue = parsePresetValue( operation?.value );
+
+	if ( valueType !== 'preset' ) {
+		return {
+			ok: false,
+			error: `The suggested Global Styles value for ${ pathKey } must use a theme preset. Global Styles changed; regenerate suggestions.`,
+		};
+	}
+
+	if ( presetType !== expectedPresetType || ! presetSlug ) {
+		return {
+			ok: false,
+			error: `The suggested Global Styles preset metadata for ${ pathKey } no longer matches the live theme contract. Global Styles changed; regenerate suggestions.`,
+		};
+	}
+
+	if (
+		! parsedPresetValue ||
+		parsedPresetValue.type !== expectedPresetType ||
+		parsedPresetValue.slug !== presetSlug
+	) {
+		return {
+			ok: false,
+			error: `The suggested Global Styles preset reference for ${ pathKey } no longer matches its metadata. Global Styles changed; regenerate suggestions.`,
+		};
+	}
+
+	if (
+		! getPresetSlugsForType(
+			executionContract,
+			expectedPresetType
+		).includes( presetSlug )
+	) {
+		return {
+			ok: false,
+			error: `The ${ displayPresetType(
+				expectedPresetType
+			) } preset "${ presetSlug }" is no longer available. Global Styles changed; regenerate suggestions.`,
+		};
+	}
+
+	return {
+		ok: true,
+		value: buildPresetValue( expectedPresetType, presetSlug ),
+		presetType: expectedPresetType,
+		presetSlug,
+		cssVar: buildPresetCssVar( expectedPresetType, presetSlug ),
+	};
+}
+
 function applyOperationToConfig( {
 	beforeConfig,
 	afterConfig,
 	operation,
 	availableVariations,
+	executionContract,
 } ) {
 	if ( operation?.type === 'set_styles' ) {
 		if (
@@ -489,20 +693,51 @@ function applyOperationToConfig( {
 			};
 		}
 
+		const pathEntry = findSupportedStylePathEntry(
+			operation.path,
+			executionContract
+		);
+
+		if ( ! pathEntry ) {
+			return {
+				ok: false,
+				error: `The Global Styles path ${ getStylePathKey(
+					operation.path
+				) } is no longer supported. Global Styles changed; regenerate suggestions.`,
+			};
+		}
+
 		const fullPath = [ 'styles', ...operation.path ];
 		const beforeValue = normalizeOperationValue(
 			readPath( beforeConfig, fullPath )
 		);
 		let nextValue = normalizeOperationValue( operation.value );
-		const validatedFreeformValue = validateFreeformStyleValue(
-			operation.path,
-			nextValue
+		let appliedOperation = {
+			...operation,
+			beforeValue,
+		};
+		const expectedValueSource = normalizePresetType(
+			pathEntry?.valueSource || 'freeform'
 		);
-		const shouldValidateFreeformValue =
-			operation?.valueType === 'freeform' ||
-			isFreeformStylePath( operation.path );
 
-		if ( shouldValidateFreeformValue ) {
+		if ( expectedValueSource === 'freeform' ) {
+			if (
+				operation?.valueType &&
+				sanitizeKey( operation.valueType ) !== 'freeform'
+			) {
+				return {
+					ok: false,
+					error: `The suggested Global Styles value for ${ getStylePathKey(
+						operation.path
+					) } must stay freeform. Global Styles changed; regenerate suggestions.`,
+				};
+			}
+
+			const validatedFreeformValue = validateFreeformStyleValue(
+				operation.path,
+				nextValue
+			);
+
 			if ( ! validatedFreeformValue.valid ) {
 				return {
 					ok: false,
@@ -515,6 +750,34 @@ function applyOperationToConfig( {
 			}
 
 			nextValue = validatedFreeformValue.value;
+			appliedOperation = {
+				...appliedOperation,
+				value: nextValue,
+				valueType: 'freeform',
+				presetType: '',
+				presetSlug: '',
+				cssVar: '',
+			};
+		} else {
+			const validatedPreset = validatePresetStyleOperation(
+				operation,
+				pathEntry,
+				executionContract
+			);
+
+			if ( ! validatedPreset.ok ) {
+				return validatedPreset;
+			}
+
+			nextValue = validatedPreset.value;
+			appliedOperation = {
+				...appliedOperation,
+				value: validatedPreset.value,
+				valueType: 'preset',
+				presetType: validatedPreset.presetType,
+				presetSlug: validatedPreset.presetSlug,
+				cssVar: validatedPreset.cssVar,
+			};
 		}
 
 		return {
@@ -527,10 +790,7 @@ function applyOperationToConfig( {
 					nextValue
 				),
 			},
-			appliedOperation: {
-				...operation,
-				beforeValue,
-			},
+			appliedOperation,
 		};
 	}
 
@@ -594,6 +854,13 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 		return runtime;
 	}
 
+	const executionContractRuntime =
+		getGlobalStylesExecutionContract( registry );
+
+	if ( ! executionContractRuntime.ok ) {
+		return executionContractRuntime;
+	}
+
 	const operations = normalizeOperations( suggestion?.operations );
 
 	if ( operations.length === 0 ) {
@@ -616,6 +883,8 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 			afterConfig,
 			operation,
 			availableVariations,
+			executionContract:
+				executionContractRuntime.executionContract,
 		} );
 
 		if ( ! nextState.ok ) {

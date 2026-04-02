@@ -3,6 +3,10 @@ jest.mock( '@wordpress/data', () => ( {
 	dispatch: jest.fn(),
 } ) );
 
+jest.mock( '@wordpress/block-editor', () => ( {
+	store: {},
+} ) );
+
 const { select, dispatch } = require( '@wordpress/data' );
 const {
 	applyGlobalStyleSuggestionOperations,
@@ -14,11 +18,52 @@ const {
 describe( 'style-operations', () => {
 	let coreSelect;
 	let coreDispatch;
+	let blockEditorSelect;
+	let blockEditorSettings;
 	let currentRecord;
 	let baseConfig;
 	let variations;
 
 	beforeEach( () => {
+		blockEditorSettings = {
+			features: {
+				color: {
+					palette: {
+						theme: [
+							{
+								name: 'Base',
+								slug: 'base',
+								color: '#111111',
+							},
+							{
+								name: 'Accent',
+								slug: 'accent',
+								color: '#ff5500',
+							},
+							{
+								name: 'Contrast',
+								slug: 'contrast',
+								color: '#f5f5f5',
+							},
+						],
+					},
+					background: true,
+					text: true,
+				},
+				typography: {
+					fontSizes: {
+						theme: [
+							{
+								name: 'Body',
+								slug: 'body',
+								size: '1rem',
+							},
+						],
+					},
+					lineHeight: true,
+				},
+			},
+		};
 		currentRecord = {
 			settings: {},
 			styles: {
@@ -83,9 +128,16 @@ describe( 'style-operations', () => {
 				.fn()
 				.mockImplementation( () => variations ),
 		};
+		blockEditorSelect = {
+			getSettings: jest.fn( () => blockEditorSettings ),
+		};
 
 		select.mockImplementation( ( storeName ) =>
-			storeName === 'core' ? coreSelect : {}
+			storeName === 'core'
+				? coreSelect
+				: storeName === 'core/block-editor'
+					? blockEditorSelect
+					: {}
 		);
 		dispatch.mockImplementation( ( storeName ) =>
 			storeName === 'core' ? coreDispatch : {}
@@ -215,6 +267,110 @@ describe( 'style-operations', () => {
 		);
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 		expect( currentRecord.styles.typography ).toBeUndefined();
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations rejects unsupported live style paths', () => {
+		blockEditorSettings = {
+			...blockEditorSettings,
+			features: {
+				...blockEditorSettings.features,
+				color: {
+					...blockEditorSettings.features.color,
+					background: false,
+				},
+			},
+		};
+
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: 'var:preset|color|accent',
+					valueType: 'preset',
+					presetSlug: 'accent',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'color.background' ),
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations rejects missing live preset slugs', () => {
+		blockEditorSettings = {
+			...blockEditorSettings,
+			features: {
+				...blockEditorSettings.features,
+				color: {
+					...blockEditorSettings.features.color,
+					palette: {
+						theme: [
+							{
+								name: 'Base',
+								slug: 'base',
+								color: '#111111',
+							},
+							{
+								name: 'Contrast',
+								slug: 'contrast',
+								color: '#f5f5f5',
+							},
+						],
+					},
+				},
+			},
+		};
+
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: 'var:preset|color|accent',
+					valueType: 'preset',
+					presetSlug: 'accent',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'accent' ),
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations rejects preset type and value mismatches', () => {
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'typography', 'fontSize' ],
+					value: 'var:preset|color|accent',
+					valueType: 'preset',
+					presetSlug: 'accent',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'typography.fontSize' ),
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 	} );
 
 	test( 'applyGlobalStyleSuggestionOperations resolves theme variations deterministically', () => {

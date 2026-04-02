@@ -999,11 +999,11 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 		return (
 			<div className="flavor-agent-tpl-row">
 				<span className="flavor-agent-tpl-row__mapping">
-					<span className="flavor-agent-action-link flavor-agent-action-link--area">
+					<span className="flavor-agent-preview-token flavor-agent-preview-token--area">
 						{ formatTargetPathLabel( operation.targetPath ) }
 					</span>
 					<span className="flavor-agent-tpl-row__arrow">→</span>
-					<span className="flavor-agent-action-link flavor-agent-action-link--pattern">
+					<span className="flavor-agent-preview-token flavor-agent-preview-token--pattern">
 						{ operation.patternTitle }
 					</span>
 				</span>
@@ -1026,7 +1026,7 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 		return (
 			<div className="flavor-agent-tpl-row">
 				<span className="flavor-agent-tpl-row__mapping">
-					<span className="flavor-agent-action-link flavor-agent-action-link--area">
+					<span className="flavor-agent-preview-token flavor-agent-preview-token--area">
 						{ formatTargetPathLabel( operation.targetPath ) }
 					</span>
 				</span>
@@ -1055,11 +1055,11 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 	return (
 		<div className="flavor-agent-tpl-row">
 			<span className="flavor-agent-tpl-row__mapping">
-				<span className="flavor-agent-action-link flavor-agent-action-link--pattern">
+				<span className="flavor-agent-preview-token flavor-agent-preview-token--pattern">
 					{ operation.patternTitle }
 				</span>
 				<span className="flavor-agent-tpl-row__arrow">→</span>
-				<span className="flavor-agent-action-link flavor-agent-action-link--area">
+				<span className="flavor-agent-preview-token flavor-agent-preview-token--area">
 					{ placementTarget }
 				</span>
 			</span>

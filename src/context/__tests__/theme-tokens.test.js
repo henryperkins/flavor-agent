@@ -7,7 +7,9 @@ jest.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 const {
+	buildGlobalStylesExecutionContractFromSettings,
 	collectThemeTokensFromSettings,
+	getGlobalStylesSupportedStylePathsFromTokens,
 	summarizeTokens,
 } = require( '../theme-tokens' );
 const { getThemeTokenSourceDetails } = require( '../theme-settings' );
@@ -61,6 +63,8 @@ const COMPLETE_FEATURES = {
 		background: true,
 		text: true,
 		link: true,
+		button: true,
+		heading: true,
 	},
 	typography: {
 		fontSizes: {
@@ -250,6 +254,89 @@ describe( 'summarizeTokens', () => {
 			settingsKey: '',
 			reason: 'unknown',
 		} );
+	} );
+} );
+
+describe( 'global styles execution contract', () => {
+	test( 'derives supported style paths from live color feature gates', () => {
+		const contract = buildGlobalStylesExecutionContractFromSettings( {
+			features: COMPLETE_FEATURES,
+		} );
+
+		expect( contract.supportedStylePaths ).toEqual(
+			expect.arrayContaining( [
+				{
+					path: [ 'color', 'background' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'color', 'text' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'button', 'color', 'background' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'button', 'color', 'text' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'heading', 'color', 'text' ],
+					valueSource: 'color',
+				},
+			] )
+		);
+		expect( contract.presetSlugs ).toEqual(
+			expect.objectContaining( {
+				color: [ 'accent', 'base', 'brand' ],
+			} )
+		);
+	} );
+
+	test( 'omits disabled color controls from the executable path contract', () => {
+		const tokens = collectThemeTokensFromSettings( {
+			features: {
+				...COMPLETE_FEATURES,
+				color: {
+					...COMPLETE_FEATURES.color,
+					background: false,
+					text: false,
+					link: false,
+					button: false,
+					heading: false,
+				},
+			},
+		} );
+
+		expect( getGlobalStylesSupportedStylePathsFromTokens( tokens ) ).toEqual(
+			expect.not.arrayContaining( [
+				{
+					path: [ 'color', 'background' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'color', 'text' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'link', 'color', 'text' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'button', 'color', 'background' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'button', 'color', 'text' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'elements', 'heading', 'color', 'text' ],
+					valueSource: 'color',
+				},
+			] )
+		);
 	} );
 } );
 

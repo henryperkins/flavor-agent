@@ -29,7 +29,7 @@ const TEMPLATE_PART_PATTERN_NAME = 'flavor-agent/header-utility-row';
 const TEMPLATE_PART_PATTERN_TITLE = 'Header Utility Row';
 const GLOBAL_STYLES_PROMPT =
 	'Warm the canvas slightly and tighten the site-wide vertical rhythm.';
-const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|accent';
+const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|signal';
 const GLOBAL_STYLES_LINE_HEIGHT_VALUE = 1.73;
 
 async function dismissWelcomeGuide(page) {
@@ -465,19 +465,41 @@ async function enableSiteEditorDocumentSidebar(page) {
 
 async function enableSiteEditorGlobalStylesSidebar(page) {
 	await dismissSiteEditorWelcomeGuide(page);
+
+	const stylesLauncher = page.getByRole('button', {
+		name: 'Styles',
+		exact: true,
+	});
+
+	if (await stylesLauncher.count()) {
+		await stylesLauncher.first().click();
+	}
+
 	await page.evaluate(() => {
 		window.wp?.data
 			?.dispatch('core/interface')
 			?.enableComplementaryArea?.('core/edit-site', 'edit-site/global-styles');
 	});
-	await page.waitForFunction(
-		() =>
-			window.wp?.data
-				?.select('core/interface')
-				?.getActiveComplementaryArea?.('core') === 'edit-site/global-styles',
-	);
+	await page.waitForFunction(() => {
+		const activeArea = window.wp?.data
+			?.select('core/interface')
+			?.getActiveComplementaryArea?.('core');
+
+		return (
+			activeArea === 'edit-site/global-styles' ||
+			Boolean(
+				document.querySelector(
+					'.editor-global-styles-sidebar__panel, [role="region"][aria-label="Styles"]',
+				),
+			)
+		);
+	});
 	await page.waitForFunction(() =>
-		Boolean(document.querySelector('.editor-global-styles-sidebar__panel')),
+		Boolean(
+			document.querySelector(
+				'.editor-global-styles-sidebar__panel, [role="region"][aria-label="Styles"]',
+			),
+		),
 	);
 }
 
@@ -1240,12 +1262,12 @@ test('@wp70-site-editor global styles surface previews, applies, and undoes exec
 			contentType: 'application/json',
 			body: JSON.stringify({
 				explanation:
-					'Use the theme accent preset for the canvas and tighten line height slightly.',
+					'Use the theme signal preset for the canvas and tighten line height slightly.',
 				suggestions: [
 					{
 						label: 'Adjust canvas tone and rhythm',
 						description:
-							'Apply the accent canvas preset and tighten the global line height.',
+							'Apply the signal canvas preset and tighten the global line height.',
 						category: 'color',
 						tone: 'executable',
 						operations: [
@@ -1255,8 +1277,8 @@ test('@wp70-site-editor global styles surface previews, applies, and undoes exec
 								value: GLOBAL_STYLES_BACKGROUND_VALUE,
 								valueType: 'preset',
 								presetType: 'color',
-								presetSlug: 'accent',
-								cssVar: 'var(--wp--preset--color--accent)',
+								presetSlug: 'signal',
+								cssVar: 'var(--wp--preset--color--signal)',
 							},
 							{
 								type: 'set_styles',
@@ -1340,7 +1362,7 @@ test('@wp70-site-editor global styles surface previews, applies, and undoes exec
 				globalStylesId: initialState.globalStylesId,
 				settings: initialState.settings,
 				styles: initialState.styles,
-				undoStatus: 'undone',
+				undoStatus: 'success',
 			}),
 		);
 });

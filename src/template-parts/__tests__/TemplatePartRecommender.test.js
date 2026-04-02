@@ -329,6 +329,50 @@ afterEach( async () => {
 } );
 
 describe( 'TemplatePartRecommender', () => {
+	test( 'renders non-interactive preview tokens in the review overlay', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Replace navigation block',
+						description:
+							'Swap the existing navigation block for a utility-links pattern.',
+						operations: [
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/utility-links',
+								expectedBlockName: 'core/navigation',
+								targetPath: [ 0 ],
+							},
+						],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
+				templatePartStatus: 'ready',
+			},
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
+			{
+				name: 'theme/utility-links',
+				title: 'Utility Links',
+			},
+		] );
+
+		await renderPanel();
+
+		expect(
+			container.querySelector(
+				'.flavor-agent-template-preview .flavor-agent-preview-token--pattern'
+			)
+		).not.toBeNull();
+		expect(
+			container.querySelector(
+				'.flavor-agent-template-preview .flavor-agent-action-link'
+			)
+		).toBeNull();
+	} );
+
 	test( 'shows an undo action on apply success notices and dispatches undo for the latest template-part activity', async () => {
 		currentState = createState( {
 			store: {

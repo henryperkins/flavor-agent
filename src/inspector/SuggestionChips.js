@@ -59,7 +59,7 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 	);
 
 	return (
-		<div className="flavor-agent-chips" aria-label={ label }>
+		<div className="flavor-agent-chips" role="group" aria-label={ label }>
 			{ suggestions.map( ( s ) => {
 				const key = getSuggestionKey( s );
 				const wasApplied = appliedKey === key;
