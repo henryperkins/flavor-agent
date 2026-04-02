@@ -1,4 +1,7 @@
-import { getResolvedActivityUndoState } from '../store/activity-history';
+import {
+	getResolvedActivityUndoState,
+	ORDERED_UNDO_BLOCKED_ERROR,
+} from '../store/activity-history';
 
 export const VIEW_STORAGE_KEY = 'flavor-agent:activity-log:view';
 
@@ -14,7 +17,7 @@ export const DEFAULT_ACTIVITY_VIEW = Object.freeze( {
 		'surface',
 		'status',
 		'postType',
-		'user',
+		'userId',
 		'provider',
 	],
 	titleField: 'title',
@@ -36,6 +39,49 @@ export const DEFAULT_ACTIVITY_VIEW = Object.freeze( {
 } );
 
 const EMPTY_VALUE = 'Not recorded';
+
+function normalizeLocale( locale = '' ) {
+	if ( typeof locale !== 'string' || ! locale.trim() ) {
+		return undefined;
+	}
+
+	return locale.replaceAll( '_', '-' );
+}
+
+function normalizeTimeZone( timeZone = '' ) {
+	if ( typeof timeZone !== 'string' || ! timeZone.trim() ) {
+		return 'UTC';
+	}
+
+	return timeZone.trim();
+}
+
+function normalizePositiveInteger( value, fallback, max = Infinity ) {
+	if ( ! Number.isInteger( value ) || value <= 0 ) {
+		return fallback;
+	}
+
+	return Math.min( value, max );
+}
+
+function getDefaultActivityView( {
+	defaultPerPage = DEFAULT_ACTIVITY_VIEW.perPage,
+	maxPerPage = DEFAULT_ACTIVITY_VIEW.perPage,
+} = {} ) {
+	const resolvedMaxPerPage = normalizePositiveInteger(
+		maxPerPage,
+		DEFAULT_ACTIVITY_VIEW.perPage
+	);
+
+	return {
+		...DEFAULT_ACTIVITY_VIEW,
+		perPage: normalizePositiveInteger(
+			defaultPerPage,
+			DEFAULT_ACTIVITY_VIEW.perPage,
+			resolvedMaxPerPage
+		),
+	};
+}
 
 const STYLE_ATTRIBUTE_KEYS = new Set( [
 	'align',
@@ -736,6 +782,17 @@ function getActivityDescription( entry, entityLabel, documentLabel ) {
 }
 
 export function getActivityStatus( entry, allEntries = [] ) {
+	const explicitStatus =
+		typeof entry?.status === 'string' ? entry.status.trim() : '';
+
+	if (
+		[ 'applied', 'undone', 'blocked', 'failed' ].includes(
+			explicitStatus
+		)
+	) {
+		return explicitStatus;
+	}
+
 	const resolvedUndo = getResolvedActivityUndoState( entry, allEntries );
 
 	switch ( resolvedUndo?.status ) {
@@ -751,7 +808,10 @@ export function getActivityStatus( entry, allEntries = [] ) {
 }
 
 export function getActivityStatusLabel( entry, allEntries = [] ) {
-	switch ( getActivityStatus( entry, allEntries ) ) {
+	const status =
+		typeof entry === 'string' ? entry : getActivityStatus( entry, allEntries );
+
+	switch ( status ) {
 		case 'undone':
 			return 'Undone';
 		case 'blocked':
@@ -763,62 +823,123 @@ export function getActivityStatusLabel( entry, allEntries = [] ) {
 	}
 }
 
-export function buildActivityTargetUrl( entry, adminBaseUrl = '' ) {
+export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 	const { postType, entityId } = getDocumentContext( entry );
 
 	if ( postType === 'wp_template' || entry?.surface === 'template' ) {
-		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
-			postType: 'wp_template',
-			postId: entry?.target?.templateRef || entityId,
-		} );
+		return {
+			url: buildAdminUrl( adminBaseUrl, 'site-editor.php', {
+				postType: 'wp_template',
+				postId: entry?.target?.templateRef || entityId,
+			} ),
+			label: 'Open template',
+		};
 	}
 
 	if (
 		postType === 'wp_template_part' ||
 		entry?.surface === 'template-part'
 	) {
-		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
-			postType: 'wp_template_part',
-			postId: entry?.target?.templatePartRef || entityId,
-		} );
+		return {
+			url: buildAdminUrl( adminBaseUrl, 'site-editor.php', {
+				postType: 'wp_template_part',
+				postId: entry?.target?.templatePartRef || entityId,
+			} ),
+			label: 'Open template part',
+		};
 	}
 
 	if ( postType === 'global_styles' || entry?.surface === 'global-styles' ) {
-		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
-			canvas: 'edit',
-			path: '/wp_global_styles',
-		} );
+		return {
+			url: buildAdminUrl( adminBaseUrl, 'site-editor.php', {
+				canvas: 'edit',
+				path: '/wp_global_styles',
+			} ),
+			label: 'Open Styles',
+		};
 	}
 
 	if ( entry?.surface === 'style-book' ) {
-		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
-			canvas: 'edit',
-			path: '/wp_global_styles',
-		} );
+		return {
+			url: buildAdminUrl( adminBaseUrl, 'site-editor.php', {
+				canvas: 'edit',
+				path: '/wp_global_styles',
+			} ),
+			label: 'Open Styles',
+		};
 	}
 
 	if ( /^\d+$/.test( entityId ) ) {
-		return buildAdminUrl( adminBaseUrl, 'post.php', {
-			post: entityId,
-			action: 'edit',
-		} );
+		return {
+			url: buildAdminUrl( adminBaseUrl, 'post.php', {
+				post: entityId,
+				action: 'edit',
+			} ),
+			label: 'Open post',
+		};
 	}
 
-	return '';
+	return {
+		url: '',
+		label: 'Not available',
+	};
 }
 
-function formatTimestamp( timestamp ) {
+export function buildActivityTargetUrl( entry, adminBaseUrl = '' ) {
+	return buildActivityTargetLink( entry, adminBaseUrl ).url;
+}
+
+export function formatActivityTimestamp(
+	timestamp,
+	{ locale = '', timeZone = 'UTC' } = {}
+) {
 	if ( typeof timestamp !== 'string' || ! timestamp ) {
-		return EMPTY_VALUE;
+		return {
+			timestampDisplay: EMPTY_VALUE,
+			dayKey: '',
+		};
 	}
 
 	const date = new Date( timestamp );
 
 	if ( Number.isNaN( date.getTime() ) ) {
-		return EMPTY_VALUE;
+		return {
+			timestampDisplay: EMPTY_VALUE,
+			dayKey: '',
+		};
 	}
 
-	return date.toLocaleString();
+	const normalizedLocale = normalizeLocale( locale );
+	const normalizedTimeZone = normalizeTimeZone( timeZone );
+
+	const timestampFormatter = new Intl.DateTimeFormat( normalizedLocale, {
+		timeZone: normalizedTimeZone,
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit',
+	} );
+	const dayFormatter = new Intl.DateTimeFormat( normalizedLocale, {
+		timeZone: normalizedTimeZone,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	} );
+	const dayParts = Object.fromEntries(
+		dayFormatter
+			.formatToParts( date )
+			.filter( ( part ) => part.type !== 'literal' )
+			.map( ( part ) => [ part.type, part.value ] )
+	);
+
+	return {
+		timestampDisplay: timestampFormatter.format( date ),
+		dayKey:
+			dayParts.year && dayParts.month && dayParts.day
+				? `${ dayParts.year }-${ dayParts.month }-${ dayParts.day }`
+				: '',
+	};
 }
 
 function getStorage( storage ) {
@@ -837,10 +958,12 @@ function getStorage( storage ) {
 	}
 }
 
-export function normalizeStoredActivityView( view ) {
+export function normalizeStoredActivityView( view, options = {} ) {
+	const defaultView = getDefaultActivityView( options );
+
 	if ( ! isPlainObject( view ) ) {
 		return {
-			...DEFAULT_ACTIVITY_VIEW,
+			...defaultView,
 		};
 	}
 
@@ -849,20 +972,20 @@ export function normalizeStoredActivityView( view ) {
 				field:
 					typeof view.sort.field === 'string' && view.sort.field
 						? view.sort.field
-						: DEFAULT_ACTIVITY_VIEW.sort.field,
+						: defaultView.sort.field,
 				direction: view.sort.direction === 'asc' ? 'asc' : 'desc',
 		  }
-		: DEFAULT_ACTIVITY_VIEW.sort;
-	let groupBy = DEFAULT_ACTIVITY_VIEW.groupBy;
+		: defaultView.sort;
+	let groupBy = defaultView.groupBy;
 
 	if ( view.groupBy === undefined ) {
-		groupBy = DEFAULT_ACTIVITY_VIEW.groupBy;
+		groupBy = defaultView.groupBy;
 	} else if ( isPlainObject( view.groupBy ) ) {
 		groupBy = {
 			field:
 				typeof view.groupBy.field === 'string' && view.groupBy.field
 					? view.groupBy.field
-					: DEFAULT_ACTIVITY_VIEW.groupBy.field,
+					: defaultView.groupBy.field,
 			direction: view.groupBy.direction === 'asc' ? 'asc' : 'desc',
 			showLabel: view.groupBy.showLabel !== false,
 		};
@@ -871,30 +994,38 @@ export function normalizeStoredActivityView( view ) {
 	}
 
 	return {
-		...DEFAULT_ACTIVITY_VIEW,
+		...defaultView,
 		search: typeof view.search === 'string' ? view.search : '',
 		page: Number.isInteger( view.page ) && view.page > 0 ? view.page : 1,
-		perPage:
-			Number.isInteger( view.perPage ) && view.perPage > 0
-				? view.perPage
-				: DEFAULT_ACTIVITY_VIEW.perPage,
+		perPage: normalizePositiveInteger(
+			view.perPage,
+			defaultView.perPage,
+			normalizePositiveInteger(
+				options.maxPerPage,
+				defaultView.perPage
+			)
+		),
 		filters: Array.isArray( view.filters ) ? view.filters : [],
 		fields: Array.isArray( view.fields )
 			? view.fields
-			: DEFAULT_ACTIVITY_VIEW.fields,
+			: defaultView.fields,
 		sort,
 		groupBy,
 		layout: isPlainObject( view.layout )
 			? {
-					...DEFAULT_ACTIVITY_VIEW.layout,
+					...defaultView.layout,
 					...view.layout,
 			  }
-			: DEFAULT_ACTIVITY_VIEW.layout,
+			: defaultView.layout,
 	};
 }
 
-export function clampActivityViewPage( view, paginationInfo = {} ) {
-	const normalizedView = normalizeStoredActivityView( view );
+export function clampActivityViewPage(
+	view,
+	paginationInfo = {},
+	options = {}
+) {
+	const normalizedView = normalizeStoredActivityView( view, options );
 	const totalPages = Number.isInteger( paginationInfo?.totalPages )
 		? paginationInfo.totalPages
 		: 0;
@@ -911,34 +1042,36 @@ export function clampActivityViewPage( view, paginationInfo = {} ) {
 	};
 }
 
-export function areActivityViewsEqual( left, right ) {
+export function areActivityViewsEqual( left, right, options = {} ) {
 	return (
-		JSON.stringify( normalizeStoredActivityView( left ) ) ===
-		JSON.stringify( normalizeStoredActivityView( right ) )
+		JSON.stringify( normalizeStoredActivityView( left, options ) ) ===
+		JSON.stringify( normalizeStoredActivityView( right, options ) )
 	);
 }
 
-export function readPersistedActivityView( storage ) {
+export function readPersistedActivityView( storage, options = {} ) {
 	const resolvedStorage = getStorage( storage );
+	const defaultView = getDefaultActivityView( options );
 
 	if ( ! resolvedStorage ) {
 		return {
-			...DEFAULT_ACTIVITY_VIEW,
+			...defaultView,
 		};
 	}
 
 	try {
 		return normalizeStoredActivityView(
-			JSON.parse( resolvedStorage.getItem( VIEW_STORAGE_KEY ) )
+			JSON.parse( resolvedStorage.getItem( VIEW_STORAGE_KEY ) ),
+			options
 		);
 	} catch {
 		return {
-			...DEFAULT_ACTIVITY_VIEW,
+			...defaultView,
 		};
 	}
 }
 
-export function writePersistedActivityView( view, storage ) {
+export function writePersistedActivityView( view, storage, options = {} ) {
 	const resolvedStorage = getStorage( storage );
 
 	if ( ! resolvedStorage ) {
@@ -948,7 +1081,7 @@ export function writePersistedActivityView( view, storage ) {
 	try {
 		resolvedStorage.setItem(
 			VIEW_STORAGE_KEY,
-			JSON.stringify( normalizeStoredActivityView( view ) )
+			JSON.stringify( normalizeStoredActivityView( view, options ) )
 		);
 	} catch {
 		// Ignore storage errors in wp-admin.
@@ -958,15 +1091,29 @@ export function writePersistedActivityView( view, storage ) {
 export function normalizeActivityEntry(
 	entry,
 	allEntries = [],
-	{ adminBaseUrl = '', settingsUrl = '', connectorsUrl = '' } = {}
+	{
+		adminBaseUrl = '',
+		settingsUrl = '',
+		connectorsUrl = '',
+		locale = '',
+		timeZone = 'UTC',
+	} = {}
 ) {
 	const { postType, entityId } = getDocumentContext( entry );
 	const diagnostics = getRequestDiagnostics( entry?.request || {} );
 	const resolvedUndo = getResolvedActivityUndoState( entry, allEntries );
 	const status = getActivityStatus( entry, allEntries );
+	const { timestampDisplay, dayKey } = formatActivityTimestamp(
+		entry?.timestamp,
+		{
+			locale,
+			timeZone,
+		}
+	);
 	const entityLabel = getActivityEntityLabel( entry );
 	const documentLabel = formatDocumentLabel( postType, entityId );
 	const operationType = deriveOperationType( entry );
+	const targetLink = buildActivityTargetLink( entry, adminBaseUrl );
 	let userLabel = EMPTY_VALUE;
 
 	if ( typeof entry?.userLabel === 'string' && entry.userLabel.trim() ) {
@@ -984,13 +1131,10 @@ export function normalizeActivityEntry(
 			entityLabel,
 			documentLabel
 		),
-		day:
-			typeof entry?.timestamp === 'string'
-				? entry.timestamp.slice( 0, 10 )
-				: '',
-		timestampDisplay: formatTimestamp( entry?.timestamp ),
+		day: dayKey,
+		timestampDisplay,
 		status,
-		statusLabel: getActivityStatusLabel( entry, allEntries ),
+		statusLabel: getActivityStatusLabel( status ),
 		surface: String( entry?.surface || '' ),
 		surfaceLabel: formatSurfaceLabel( entry?.surface ),
 		activityType: String( entry?.type || '' ) || EMPTY_VALUE,
@@ -1005,6 +1149,10 @@ export function normalizeActivityEntry(
 				? entry.document.scopeKey.trim()
 				: EMPTY_VALUE,
 		blockPath: getBlockPathLabel( entry ),
+		userId:
+			entry?.userId || entry?.userId === 0
+				? String( entry.userId )
+				: EMPTY_VALUE,
 		user: userLabel,
 		entity: entityLabel,
 		documentLabel: documentLabel || EMPTY_VALUE,
@@ -1022,24 +1170,21 @@ export function normalizeActivityEntry(
 		afterSummary: summarizeActivityState( entry?.after ),
 		stateDiff: buildStructuredStateDiff( entry?.before, entry?.after ),
 		undoStatusLabel:
-			resolvedUndo?.status === 'available'
+			status === 'applied' && resolvedUndo?.status === 'available'
 				? 'Undo available'
-				: getActivityStatusLabel(
-						{
-							...entry,
-							undo: resolvedUndo,
-						},
-						allEntries
-				  ),
+				: getActivityStatusLabel( status ),
 		undoError:
 			typeof resolvedUndo?.error === 'string' && resolvedUndo.error.trim()
 				? resolvedUndo.error.trim()
-				: EMPTY_VALUE,
+				: status === 'blocked'
+					? ORDERED_UNDO_BLOCKED_ERROR
+					: EMPTY_VALUE,
 		provider: diagnostics.provider,
 		model: diagnostics.model,
 		tokenUsage: diagnostics.tokenUsageLabel,
 		latency: diagnostics.latencyLabel,
-		targetUrl: buildActivityTargetUrl( entry, adminBaseUrl ),
+		targetUrl: targetLink.url,
+		targetLinkLabel: targetLink.label,
 		settingsUrl: settingsUrl || '',
 		connectorsUrl: connectorsUrl || '',
 	};

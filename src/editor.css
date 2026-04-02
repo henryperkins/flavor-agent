@@ -228,6 +228,104 @@
   text-transform: none;
 }
 
+.flavor-agent-inline-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--flavor-agent-border);
+  background: var(--wp-components-color-background, #fff);
+  color: var(--flavor-agent-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.flavor-agent-inline-feedback--compact {
+  padding: 6px 8px;
+}
+
+.flavor-agent-inline-feedback__message {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.flavor-agent-style-surface__intro {
+  gap: 10px;
+}
+
+.flavor-agent-style-surface__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flavor-agent-style-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flavor-agent-style-card--active {
+  border-color: color-mix(in srgb, #00a32a 24%, var(--flavor-agent-border));
+  background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #00a32a 10%, transparent),
+      transparent 55%
+    ),
+    var(--wp-components-color-background, #fff);
+}
+
+.flavor-agent-style-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.flavor-agent-style-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.flavor-agent-style-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.flavor-agent-style-operations {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flavor-agent-style-operations li {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--flavor-agent-border);
+  background: var(--flavor-agent-surface);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--flavor-agent-text);
+}
+
+.flavor-agent-style-operations--compact li {
+  padding: 6px 8px;
+}
+
+.flavor-agent-style-feedback-notice {
+  margin-top: 10px;
+}
+
 /* ---------------------------------------------------------------
  * Shared: Section header (uppercase label above grouped items)
  * Used in: SettingsRecommendations, StylesRecommendations,
@@ -394,8 +492,14 @@
  * Suggestion chips (ToolsPanel sub-panels)
  * --------------------------------------------------------------- */
 
-.flavor-agent-chips {
+.flavor-agent-chip-surface {
   grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flavor-agent-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -496,8 +600,9 @@
 .flavor-agent-style-row__header {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   gap: 6px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .flavor-agent-style-row__info {
@@ -522,6 +627,7 @@
 
 .flavor-agent-style-row__apply {
   flex-shrink: 0;
+  align-self: center;
 }
 
 /* ---------------------------------------------------------------

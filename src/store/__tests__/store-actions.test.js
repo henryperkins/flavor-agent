@@ -1603,6 +1603,208 @@ describe( 'store action thunks', () => {
 		} );
 	} );
 
+	test( 'undoActivity allows an older block action once native undo has already reverted the newer AI action', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const olderActivity = {
+			id: 'activity-older',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:00Z',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			before: {
+				attributes: {
+					content: 'Alpha',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'Beta',
+				},
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+		};
+		const newerActivity = {
+			id: 'activity-newer',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:01Z',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			before: {
+				attributes: {
+					content: 'Beta',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'Gamma',
+				},
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+		};
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest
+				.fn()
+				.mockReturnValue( [ olderActivity, newerActivity ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( {
+								clientId: 'block-1',
+								name: 'core/paragraph',
+								attributes: {
+									content: 'Beta',
+								},
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Beta',
+							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'Beta',
+									},
+									innerBlocks: [],
+								},
+							] ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-older' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
+			content: 'Alpha',
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'UPDATE_ACTIVITY_UNDO_STATE',
+				activityId: 'activity-older',
+				status: 'undone',
+			} )
+		);
+		expect( result ).toEqual( { ok: true } );
+	} );
+
+	test( 'undoActivity treats a block action already reverted by native undo as already undone', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [
+				{
+					id: 'activity-1',
+					type: 'apply_suggestion',
+					surface: 'block',
+					target: {
+						clientId: 'block-1',
+						blockName: 'core/paragraph',
+						blockPath: [ 0 ],
+					},
+					before: {
+						attributes: {
+							content: 'Before',
+						},
+					},
+					after: {
+						attributes: {
+							content: 'After',
+						},
+					},
+					document: {
+						scopeKey: 'post:42',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+					},
+				},
+			] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( {
+								clientId: 'block-1',
+								name: 'core/paragraph',
+								attributes: {
+									content: 'Before',
+								},
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Before',
+							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'Before',
+									},
+									innerBlocks: [],
+								},
+							] ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-1' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'SET_UNDO_STATE',
+				status: 'error',
+			} )
+		);
+		expect( result ).toEqual( {
+			ok: true,
+			alreadyUndone: true,
+		} );
+	} );
+
 	test( 'undoActivity refreshes server-backed activity before allowing a historical undo', async () => {
 		const dispatch = jest.fn();
 		const olderActivity = {

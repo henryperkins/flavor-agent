@@ -893,6 +893,46 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
 	} );
 
+	test( 'renders shared style card badges and review state for executable suggestions', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					suggestionKey: 'global-style-1',
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'background' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+				},
+			],
+			explanation: 'Prefer accent palette values.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+			selectedSuggestionKey: 'global-style-1',
+		};
+
+		act( () => {
+			root.render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Review to apply' );
+		expect( sidebar.textContent ).toContain( 'Color' );
+		expect( sidebar.textContent ).toContain( 'Review open' );
+		expect( sidebar.textContent ).toContain( 'color.background → accent' );
+	} );
+
 	test( 'dispatches undo from the Global Styles apply success notice for the latest activity', () => {
 		currentStoreState = {
 			...currentStoreState,
@@ -966,5 +1006,39 @@ describe( 'GlobalStylesRecommender', () => {
 		expect(
 			sidebar.querySelector( '[data-is-undoing="false"]' )
 		).not.toBeNull();
+	} );
+
+	test( 'does not keep an undo success notice once the resolved style activity is available again', () => {
+		currentStoreState = {
+			...currentStoreState,
+			activityLog: [
+				{
+					id: 'activity-1',
+					surface: 'global-styles',
+					suggestion: 'Use accent canvas',
+					target: {
+						globalStylesId: '17',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+						error: null,
+					},
+				},
+			],
+			undoStatus: 'success',
+			lastUndoneActivityId: 'activity-1',
+		};
+
+		act( () => {
+			root.render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).not.toContain(
+			'Flavor Agent restored the previous Global Styles config.'
+		);
+		expect(
+			sidebar.querySelector( '[data-status-notice="true"]' )
+		).toBeNull();
 	} );
 } );

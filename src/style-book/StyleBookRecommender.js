@@ -134,6 +134,44 @@ function buildRequestInput( {
 	};
 }
 
+function isInlineStyleNotice( notice ) {
+	return notice?.source === 'apply' || notice?.source === 'undo';
+}
+
+function formatBadgeLabel( value = '' ) {
+	return String( value )
+		.replace( /[-_]+/g, ' ' )
+		.replace( /\b\w/g, ( char ) => char.toUpperCase() );
+}
+
+function getToneLabel( suggestion ) {
+	return suggestion?.tone === 'executable' ? 'Review to apply' : 'Advisory';
+}
+
+function formatCount( count, noun ) {
+	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
+}
+
+function OperationList( { operations = [], compact = false, suggestionKey = '' } ) {
+	if ( operations.length === 0 ) {
+		return null;
+	}
+
+	return (
+		<ul
+			className={ `flavor-agent-style-operations${
+				compact ? ' flavor-agent-style-operations--compact' : ''
+			}` }
+		>
+			{ operations.map( ( operation, index ) => (
+				<li key={ `${ suggestionKey }-${ index }` }>
+					{ formatOperation( operation ) }
+				</li>
+			) ) }
+		</ul>
+	);
+}
+
 function StyleBookPanel( {
 	prompt,
 	setPrompt,
@@ -154,10 +192,35 @@ function StyleBookPanel( {
 	onApply,
 	onUndo,
 } ) {
+	const panelNotice = isInlineStyleNotice( notice ) ? null : notice;
+	const inlineNotice = isInlineStyleNotice( notice ) ? notice : null;
+
 	return (
 		<div className="flavor-agent-panel flavor-agent-style-book-panel">
 			<CapabilityNotice surface="style-book" />
-			<AIStatusNotice notice={ notice } onAction={ onNoticeAction } />
+			<div className="flavor-agent-panel__intro flavor-agent-style-surface__intro">
+				<p className="flavor-agent-panel__eyebrow">Style Book</p>
+				<p className="flavor-agent-panel__intro-copy">
+					Review stays required before Flavor Agent applies
+					theme-backed block style changes to the active Style Book
+					example.
+				</p>
+				<div className="flavor-agent-style-surface__meta">
+					<span className="flavor-agent-pill">Style Book</span>
+					{ blockTitle && (
+						<span className="flavor-agent-pill">
+							{ blockTitle }
+						</span>
+					) }
+					<span className="flavor-agent-pill">Review before apply</span>
+					{ suggestions.length > 0 && (
+						<span className="flavor-agent-pill">
+							{ formatCount( suggestions.length, 'suggestion' ) }
+						</span>
+					) }
+				</div>
+			</div>
+			<AIStatusNotice notice={ panelNotice } onAction={ onNoticeAction } />
 
 			<div className="flavor-agent-panel__group">
 				<div className="flavor-agent-panel__group-header">
@@ -188,6 +251,16 @@ function StyleBookPanel( {
 				</div>
 			</div>
 
+			{ inlineNotice &&
+				! selectedSuggestion &&
+				suggestions.length === 0 && (
+					<AIStatusNotice
+						notice={ inlineNotice }
+						onAction={ onNoticeAction }
+						className="flavor-agent-style-feedback-notice"
+					/>
+				) }
+
 			{ suggestions.length > 0 && (
 				<div className="flavor-agent-panel__group">
 					<div className="flavor-agent-panel__group-header">
@@ -209,49 +282,86 @@ function StyleBookPanel( {
 					) }
 
 					<div className="flavor-agent-panel__group-body">
+						{ inlineNotice && ! selectedSuggestion && (
+							<AIStatusNotice
+								notice={ inlineNotice }
+								onAction={ onNoticeAction }
+								className="flavor-agent-style-feedback-notice"
+							/>
+						) }
+
 						{ suggestions.map( ( suggestion ) => (
 							<div
 								key={ suggestion.suggestionKey }
-								className="flavor-agent-card"
+								className={ `flavor-agent-card flavor-agent-style-card${
+									selectedSuggestion?.suggestionKey ===
+									suggestion.suggestionKey
+										? ' flavor-agent-style-card--active'
+										: ''
+								}` }
 							>
-								<div className="flavor-agent-style-row">
-									<div className="flavor-agent-style-row__info">
-										<div className="flavor-agent-style-row__header">
-											<div className="flavor-agent-style-row__label">
-												{ suggestion.label }
-											</div>
-											<span className="flavor-agent-pill">
-												{ suggestion.category ||
-													'advisory' }
-											</span>
+								<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+									<div className="flavor-agent-card__lead">
+										<div className="flavor-agent-card__label">
+											{ suggestion.label }
 										</div>
 										{ suggestion.description && (
-											<p className="flavor-agent-style-row__description">
+											<p className="flavor-agent-card__description">
 												{ suggestion.description }
 											</p>
 										) }
-										{ suggestion.operations?.length > 0 && (
-											<div className="flavor-agent-activity-row__meta">
-												{ suggestion.operations
-													.map( formatOperation )
-													.join( ' · ' ) }
-											</div>
+									</div>
+									<div className="flavor-agent-style-card__badges">
+										<span className="flavor-agent-pill">
+											{ getToneLabel( suggestion ) }
+										</span>
+										{ suggestion.category && (
+											<span className="flavor-agent-pill">
+												{ formatBadgeLabel(
+													suggestion.category
+												) }
+											</span>
+										) }
+										{ selectedSuggestion?.suggestionKey ===
+											suggestion.suggestionKey && (
+											<span className="flavor-agent-pill flavor-agent-pill--success">
+												Review open
+											</span>
 										) }
 									</div>
+								</div>
+
+								<OperationList
+									operations={ suggestion.operations || [] }
+									compact
+									suggestionKey={ suggestion.suggestionKey }
+								/>
+
+								<div className="flavor-agent-style-card__footer">
+									<span className="flavor-agent-panel__intro-copy">
+										{ suggestion.tone === 'executable'
+											? `Preview the exact operations before applying them to ${ blockTitle || 'the active block example' }.`
+											: 'This stays advisory until the backend can express it as a safe theme-backed block style operation set.' }
+									</span>
 
 									{ suggestion.tone === 'executable' && (
-										<Button
-											variant="secondary"
-											size="small"
-											onClick={ () =>
-												onReview(
-													suggestion.suggestionKey
-												)
-											}
-											className="flavor-agent-card__apply"
-										>
-											Review
-										</Button>
+										<div className="flavor-agent-style-card__actions">
+											<Button
+												variant="secondary"
+												size="small"
+												onClick={ () =>
+													onReview(
+														suggestion.suggestionKey
+													)
+												}
+												className="flavor-agent-card__apply"
+											>
+												{ selectedSuggestion?.suggestionKey ===
+												suggestion.suggestionKey
+													? 'Reviewing'
+													: 'Review' }
+											</Button>
+										</div>
 									) }
 								</div>
 							</div>
@@ -272,18 +382,20 @@ function StyleBookPanel( {
 					confirmLabel={
 						isApplying ? 'Applying…' : 'Apply Style Change'
 					}
+					className="flavor-agent-style-review"
+					hint="Only the operations shown here will run against the active Style Book example."
 				>
-					<ul className="flavor-agent-global-styles-panel__operations">
-						{ ( selectedSuggestion.operations || [] ).map(
-							( operation, index ) => (
-								<li
-									key={ `${ selectedSuggestion.suggestionKey }-${ index }` }
-								>
-									{ formatOperation( operation ) }
-								</li>
-							)
-						) }
-					</ul>
+					{ inlineNotice && (
+						<AIStatusNotice
+							notice={ inlineNotice }
+							onAction={ onNoticeAction }
+							className="flavor-agent-style-feedback-notice"
+						/>
+					) }
+					<OperationList
+						operations={ selectedSuggestion.operations || [] }
+						suggestionKey={ selectedSuggestion.suggestionKey }
+					/>
 				</AIReviewSection>
 			) }
 
@@ -390,7 +502,9 @@ export default function StyleBookRecommender() {
 			const hasUndoSuccessForScope =
 				typeof selectorLastUndoneActivityId === 'string' &&
 				resolvedActivityEntries.some(
-					( entry ) => entry?.id === selectorLastUndoneActivityId
+					( entry ) =>
+						entry?.id === selectorLastUndoneActivityId &&
+						entry?.undo?.status === 'undone'
 				);
 			const mappedSuggestions = (
 				store?.getStyleBookRecommendations?.() || []

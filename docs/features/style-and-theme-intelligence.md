@@ -26,6 +26,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Global Styles suggestions move `idle -> loading -> advisory-ready` when results arrive, then `preview-ready` only after the user explicitly opens review on an executable suggestion
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
+- Global Styles and Style Book now share the same scope badges, suggestion-card hierarchy, compact operation previews, and inline apply/undo notice placement inside the active suggestion or review shell
 
 ## End-To-End Flow
 

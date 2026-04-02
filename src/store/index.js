@@ -25,11 +25,12 @@ import {
 import {
 	createActivityEntry,
 	getActivityEntityKey,
+	getBlockActivityUndoState,
 	getCurrentActivityScope,
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
 	getPendingActivitySyncType,
-	getResolvedActivityUndoState,
+	getResolvedActivityEntries,
 	isLocalActivityEntry,
 	limitActivityLog,
 	readPersistedActivityLog,
@@ -251,9 +252,7 @@ function getNormalizedInteractionState( surface, options = {} ) {
 
 	if (
 		hasUndoSuccess ||
-		hasSuccess ||
-		applyStatus === 'success' ||
-		undoStatus === 'success'
+		hasSuccess
 	) {
 		return 'success';
 	}
@@ -1185,6 +1184,28 @@ function undoBlockActivity( activity, registry ) {
 	return { ok: true };
 }
 
+function getActivityRuntimeUndoResolver( surface, registry ) {
+	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
+
+	switch ( surface ) {
+		case 'template':
+			return ( entry ) =>
+				getTemplateActivityUndoState( entry, blockEditorSelect );
+		case 'template-part':
+			return ( entry ) =>
+				getTemplatePartActivityUndoState( entry, blockEditorSelect );
+		case 'global-styles':
+		case 'style-book':
+			return ( entry ) =>
+				getGlobalStylesActivityUndoState( entry, registry );
+		case 'block':
+			return ( entry ) =>
+				getBlockActivityUndoState( entry, blockEditorSelect );
+		default:
+			return null;
+	}
+}
+
 function getNextLastUndoneActivityId( currentValue, action ) {
 	if ( action.status === 'success' ) {
 		return action.activityId ?? null;
@@ -1948,6 +1969,15 @@ const actions = {
 				activityLog,
 				activity
 			);
+			const runtimeUndoResolver = getActivityRuntimeUndoResolver(
+				activity?.surface,
+				registry
+			);
+			const resolvedActivity =
+				getResolvedActivityEntries(
+					entityEntries,
+					runtimeUndoResolver
+				).find( ( entry ) => entry?.id === activityId ) || null;
 			const currentPendingSyncType =
 				getPendingActivitySyncType( activity );
 			const buildUndoTransitionEntry = (
@@ -2058,10 +2088,37 @@ const actions = {
 					};
 				}
 			};
-			let resolvedUndo = getResolvedActivityUndoState(
-				activity,
-				entityEntries
-			);
+			const resolvedUndo = resolvedActivity?.undo || activity?.undo || {};
+
+			if ( resolvedUndo?.status === 'undone' ) {
+				return {
+					ok: true,
+					alreadyUndone: true,
+				};
+			}
+
+			if ( resolvedUndo?.status === 'failed' ) {
+				const failureMessage =
+					resolvedUndo?.error ||
+					'This AI action can no longer be undone automatically.';
+				const syncResult = await syncUndoStateChange(
+					'failed',
+					failureMessage
+				);
+				const surfacedError = syncResult.ok
+					? failureMessage
+					: syncResult.error ||
+					  buildUndoAuditSyncError( failureMessage );
+
+				localDispatch(
+					actions.setUndoState( 'error', surfacedError, activityId )
+				);
+
+				return {
+					ok: false,
+					error: surfacedError,
+				};
+			}
 
 			if (
 				resolvedUndo?.canUndo !== true ||
@@ -2082,67 +2139,6 @@ const actions = {
 						resolvedUndo?.error ||
 						'This AI action can no longer be undone automatically.',
 				};
-			}
-
-			if (
-				activity.surface === 'template' ||
-				activity.surface === 'template-part' ||
-				activity.surface === 'global-styles' ||
-				activity.surface === 'style-book'
-			) {
-				let runtimeUndo;
-
-				if ( activity.surface === 'template' ) {
-					runtimeUndo = getTemplateActivityUndoState(
-						activity,
-						registry?.select?.( 'core/block-editor' )
-					);
-				} else if ( activity.surface === 'template-part' ) {
-					runtimeUndo = getTemplatePartActivityUndoState(
-						activity,
-						registry?.select?.( 'core/block-editor' )
-					);
-				} else {
-					runtimeUndo = getGlobalStylesActivityUndoState(
-						activity,
-						registry
-					);
-				}
-				resolvedUndo = getResolvedActivityUndoState(
-					activity,
-					entityEntries,
-					runtimeUndo
-				);
-
-				if (
-					resolvedUndo?.canUndo !== true ||
-					resolvedUndo?.status !== 'available'
-				) {
-					const failureMessage =
-						resolvedUndo?.error ||
-						'This AI action can no longer be undone automatically.';
-					const syncResult = await syncUndoStateChange(
-						'failed',
-						failureMessage
-					);
-					const surfacedError = syncResult.ok
-						? failureMessage
-						: syncResult.error ||
-						  buildUndoAuditSyncError( failureMessage );
-
-					localDispatch(
-						actions.setUndoState(
-							'error',
-							surfacedError,
-							activityId
-						)
-					);
-
-					return {
-						ok: false,
-						error: surfacedError,
-					};
-				}
 			}
 
 			localDispatch(

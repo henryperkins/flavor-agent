@@ -36,6 +36,7 @@ Use it when you need to answer:
 
 - All twelve abilities are registered in `inc/Abilities/Registration.php`
 - On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
+- `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
 
 ## REST Routes
@@ -48,7 +49,7 @@ Use it when you need to answer:
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | `fetchTemplatePartRecommendations()` | `TemplateAbilities::recommend_template_part()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` and `fetchStyleBookRecommendations()` | `StyleAbilities::recommend_style()` | Thin REST adapter over the shared style ability |
-| `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` | Scoped queries for editor use; global queries for the admin audit page |
+| `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` for scoped reads; `ActivityRepository::query_admin()` for global admin reads | Scoped queries power editor/theme history; global admin reads return pagination, summary, and filter-option metadata for the audit page |
 | `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
 | `POST /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/sync-button.js` | `PatternIndex::sync()` | Manual admin-only pattern catalog rebuild |
@@ -99,6 +100,25 @@ Use it when you need to answer:
     ],
     "emptyAreas": ["sidebar"],
     "allowedAreas": ["header", "sidebar"]
+  },
+  "editorStructure": {
+    "topLevelBlockTree": [
+      {
+        "path": [0],
+        "name": "core/template-part",
+        "label": "Header",
+        "attributes": { "slug": "header", "area": "header" },
+        "childCount": 3,
+        "slot": { "slug": "header", "area": "header", "isEmpty": false }
+      },
+      {
+        "path": [1],
+        "name": "core/group",
+        "label": "Content",
+        "attributes": {},
+        "childCount": 2
+      }
+    ]
   }
 }
 ```
@@ -116,7 +136,13 @@ Use it when you need to answer:
           "type": "insert_pattern",
           "patternName": "core/post-meta-two-column",
           "placement": "before_block_path",
-          "targetPath": [1]
+          "targetPath": [1],
+          "expectedTarget": {
+            "name": "core/group",
+            "label": "Content",
+            "attributes": {},
+            "childCount": 2
+          }
         }
       ],
       "templateParts": [],
@@ -298,7 +324,7 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 ## Route Notes
 
 - The recommendation routes sanitize and normalize structured inputs before handing them to the ability layer
-- Template recommendation requests now carry server-collected top-level block anchors; template-part requests now carry server-collected executable targets, insertion anchors, and structural constraints before any apply affordance is shown
+- Template recommendation requests carry an editor-collected `editorStructure` with the top-level block tree; the server normalizes it and derives insertion anchors for validated operations. Template-part requests carry server-collected executable targets, insertion anchors, and structural constraints before any apply affordance is shown
 - Activity permissions are contextual: post-like scopes use `edit_posts` or `edit_post`, while template and template-part scopes use `edit_theme_options`
 - Manual sync is intentionally admin-only because it mutates shared vector-index state
 

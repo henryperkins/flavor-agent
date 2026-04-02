@@ -111,6 +111,7 @@ describe( 'PatternRecommender', () => {
 		state = {
 			postType: 'page',
 			isInserterOpen: true,
+			visiblePatternNames: [ 'theme/hero' ],
 			editSite: {
 				postType: 'page',
 				postId: null,
@@ -144,7 +145,9 @@ describe( 'PatternRecommender', () => {
 		mockGetBlockPatterns.mockImplementation(
 			() => state.blockEditor.runtimePatterns || []
 		);
-		mockGetVisiblePatternNames.mockReturnValue( [ 'theme/hero' ] );
+		mockGetVisiblePatternNames.mockImplementation(
+			() => state.visiblePatternNames
+		);
 		window.flavorAgentData = { canRecommendPatterns: true };
 		originalMutationObserver = window.MutationObserver;
 	} );
@@ -271,6 +274,28 @@ describe( 'PatternRecommender', () => {
 				keywords: [ 'recommended', 'hero', 'pattern' ],
 			},
 		] );
+	} );
+
+	test( 'refetches when visible pattern names hydrate after the initial empty load', () => {
+		state.visiblePatternNames = [];
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [],
+		} );
+
+		state.visiblePatternNames = [ 'theme/hero' ];
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+		} );
 	} );
 
 	test( 'shows a shared capability notice inside the inserter when pattern recommendations are unavailable', () => {

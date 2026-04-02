@@ -11,32 +11,93 @@
  */
 
 /**
- * Style panels delegated to sub-panel chip groups.
+ * Shared delegated Inspector panel metadata.
  *
- * Maps to: color, typography, dimensions, border, filter, background
- * groups in InspectorInjector.js SubPanelSuggestions.
+ * The injector renders these as sub-panel chip groups while the main
+ * recommendation panels exclude them to avoid duplicate rendering.
  */
-export const DELEGATED_STYLE_PANELS = new Set( [
-	'color',
-	'typography',
-	'dimensions',
-	'border',
-	'filter',
-	'background',
-] );
+export const STYLE_PANEL_DELEGATIONS = [
+	{
+		group: 'color',
+		panel: 'color',
+		label: 'AI color suggestions',
+		title: 'Color',
+	},
+	{
+		group: 'typography',
+		panel: 'typography',
+		label: 'AI typography suggestions',
+		title: 'Typography',
+	},
+	{
+		group: 'dimensions',
+		panel: 'dimensions',
+		label: 'AI spacing suggestions',
+		title: 'Dimensions',
+	},
+	{
+		group: 'border',
+		panel: 'border',
+		label: 'AI border suggestions',
+		title: 'Border',
+	},
+	{
+		group: 'filter',
+		panel: 'filter',
+		label: 'AI filter suggestions',
+		title: 'Filter',
+	},
+	{
+		group: 'background',
+		panel: 'background',
+		label: 'AI background suggestions',
+		title: 'Background',
+	},
+];
+
+/**
+ * Style panels delegated to sub-panel chip groups.
+ */
+export const DELEGATED_STYLE_PANELS = new Set(
+	STYLE_PANEL_DELEGATIONS.map( ( { panel } ) => panel )
+);
 
 /**
  * Settings panels delegated to sub-panel chip groups.
- *
- * Maps to: position, advanced, bindings, list groups in
- * InspectorInjector.js SubPanelSuggestions.
  */
-export const DELEGATED_SETTINGS_PANELS = new Set( [
-	'position',
-	'advanced',
-	'bindings',
-	'list',
-] );
+export const SETTINGS_PANEL_DELEGATIONS = [
+	{
+		group: 'position',
+		panel: 'position',
+		label: 'AI position suggestions',
+		title: 'Position',
+	},
+	{
+		group: 'advanced',
+		panel: 'advanced',
+		label: 'AI advanced suggestions',
+		title: 'Advanced',
+	},
+	{
+		group: 'bindings',
+		panel: 'bindings',
+		label: 'AI bindings suggestions',
+		title: 'Bindings',
+	},
+	{
+		group: 'list',
+		panel: 'list',
+		label: 'AI list view suggestions',
+		title: 'List View',
+	},
+];
+
+/**
+ * Settings panels delegated to sub-panel chip groups.
+ */
+export const DELEGATED_SETTINGS_PANELS = new Set(
+	SETTINGS_PANEL_DELEGATIONS.map( ( { panel } ) => panel )
+);
 
 /**
  * @param {string} panel Panel key.

@@ -104,6 +104,12 @@ export default function PatternRecommender() {
 				?.rootClientId ?? null
 		);
 	}, [] );
+	const visiblePatternNames = useSelect( ( select ) => {
+		return getVisiblePatternNames(
+			inserterRootClientId,
+			select( blockEditorStore )
+		);
+	}, [ inserterRootClientId ] );
 	const patternRegistryVersion = useSelect( ( select ) => {
 		const settings = select( blockEditorStore ).getSettings?.() || {};
 
@@ -141,7 +147,7 @@ export default function PatternRecommender() {
 	const buildBaseInput = useCallback( () => {
 		const input = {
 			postType,
-			visiblePatternNames: getVisiblePatternNames( inserterRootClientId ),
+			visiblePatternNames,
 		};
 
 		if ( templateType ) {
@@ -149,7 +155,7 @@ export default function PatternRecommender() {
 		}
 
 		return input;
-	}, [ postType, templateType, inserterRootClientId ] );
+	}, [ postType, templateType, visiblePatternNames ] );
 
 	useEffect( () => {
 		if ( ! canRecommend || ! postType ) {

@@ -17,6 +17,10 @@ import { BlockRecommendationsPanel } from './BlockRecommendationsPanel';
 import SettingsRecommendations from './SettingsRecommendations';
 import StylesRecommendations from './StylesRecommendations';
 import SuggestionChips from './SuggestionChips';
+import {
+	SETTINGS_PANEL_DELEGATIONS,
+	STYLE_PANEL_DELEGATIONS,
+} from './panel-delegation';
 
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
@@ -71,76 +75,22 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 
 				{ hasRecs && (
 					<>
-						<SubPanelSuggestions
-							group="position"
-							panel="position"
-							clientId={ clientId }
-							suggestions={ recommendations.settings }
-							label="AI position suggestions"
-						/>
-						<SubPanelSuggestions
-							group="advanced"
-							panel="advanced"
-							clientId={ clientId }
-							suggestions={ recommendations.settings }
-							label="AI advanced suggestions"
-						/>
-						<SubPanelSuggestions
-							group="bindings"
-							panel="bindings"
-							clientId={ clientId }
-							suggestions={ recommendations.settings }
-							label="AI bindings suggestions"
-						/>
-						<SubPanelSuggestions
-							group="list"
-							panel="list"
-							clientId={ clientId }
-							suggestions={ recommendations.settings }
-							label="AI list view suggestions"
-						/>
-						<SubPanelSuggestions
-							group="color"
-							panel="color"
-							clientId={ clientId }
-							suggestions={ recommendations.styles }
-							label="AI color suggestions"
-						/>
-						<SubPanelSuggestions
-							group="typography"
-							panel="typography"
-							clientId={ clientId }
-							suggestions={ recommendations.styles }
-							label="AI typography suggestions"
-						/>
-						<SubPanelSuggestions
-							group="dimensions"
-							panel="dimensions"
-							clientId={ clientId }
-							suggestions={ recommendations.styles }
-							label="AI spacing suggestions"
-						/>
-						<SubPanelSuggestions
-							group="border"
-							panel="border"
-							clientId={ clientId }
-							suggestions={ recommendations.styles }
-							label="AI border suggestions"
-						/>
-						<SubPanelSuggestions
-							group="filter"
-							panel="filter"
-							clientId={ clientId }
-							suggestions={ recommendations.styles }
-							label="AI filter suggestions"
-						/>
-						<SubPanelSuggestions
-							group="background"
-							panel="background"
-							clientId={ clientId }
-							suggestions={ recommendations.styles }
-							label="AI background suggestions"
-						/>
+						{ SETTINGS_PANEL_DELEGATIONS.map( ( config ) => (
+							<SubPanelSuggestions
+								key={ `settings-${ config.group }` }
+								{ ...config }
+								clientId={ clientId }
+								suggestions={ recommendations.settings }
+							/>
+						) ) }
+						{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
+							<SubPanelSuggestions
+								key={ `styles-${ config.group }` }
+								{ ...config }
+								clientId={ clientId }
+								suggestions={ recommendations.styles }
+							/>
+						) ) }
 					</>
 				) }
 			</>

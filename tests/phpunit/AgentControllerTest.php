@@ -917,21 +917,77 @@ final class AgentControllerTest extends TestCase {
 
 		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
 		$request->set_param( 'global', true );
-		$request->set_param( 'limit', 10 );
+		$request->set_param( 'page', 1 );
+		$request->set_param( 'perPage', 10 );
 
 		$response = Agent_Controller::handle_get_activity( $request );
+		$data     = $response->get_data();
 
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertCount( 2, $response->get_data()['entries'] ?? [] );
-		$this->assertSame(
-			'activity-1',
-			$response->get_data()['entries'][0]['id'] ?? null
-		);
+		$this->assertCount( 2, $data['entries'] ?? [] );
 		$this->assertSame(
 			'activity-2',
-			$response->get_data()['entries'][1]['id'] ?? null
+			$data['entries'][0]['id'] ?? null
 		);
+		$this->assertSame(
+			'activity-1',
+			$data['entries'][1]['id'] ?? null
+		);
+		$this->assertSame( 1, $data['paginationInfo']['page'] ?? null );
+		$this->assertSame( 10, $data['paginationInfo']['perPage'] ?? null );
+		$this->assertSame( 2, $data['paginationInfo']['totalItems'] ?? null );
+		$this->assertSame( 1, $data['paginationInfo']['totalPages'] ?? null );
+		$this->assertSame(
+			[
+				'total'   => 2,
+				'applied' => 2,
+				'undone'  => 0,
+				'review'  => 0,
+			],
+			$data['summary'] ?? null
+		);
+		$this->assertSame(
+			[
+				[ 'value' => 'block', 'label' => 'Block' ],
+				[ 'value' => 'template', 'label' => 'Template' ],
+			],
+			$data['filterOptions']['surface'] ?? null
+		);
+	}
+
+	public function test_handle_get_activity_supports_global_admin_query_pagination(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['manage_options'] = true;
+
+		$base_timestamp = strtotime( '2026-03-24T10:00:00Z' );
+
+		for ( $i = 1; $i <= 25; $i++ ) {
+			ActivityRepository::create(
+				$this->build_block_activity_entry(
+					"activity-{$i}",
+					gmdate( 'Y-m-d\TH:i:s\Z', $base_timestamp + ( ( $i - 1 ) * 60 ) )
+				)
+			);
+		}
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'global', true );
+		$request->set_param( 'page', 3 );
+		$request->set_param( 'perPage', 10 );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+		$data     = $response->get_data();
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 3, $data['paginationInfo']['page'] ?? null );
+		$this->assertSame( 10, $data['paginationInfo']['perPage'] ?? null );
+		$this->assertSame( 25, $data['paginationInfo']['totalItems'] ?? null );
+		$this->assertSame( 3, $data['paginationInfo']['totalPages'] ?? null );
+		$this->assertCount( 5, $data['entries'] ?? [] );
+		$this->assertSame( 'activity-5', $data['entries'][0]['id'] ?? null );
+		$this->assertSame( 'activity-1', $data['entries'][4]['id'] ?? null );
 	}
 
 	public function test_handle_update_activity_undo_persists_status_changes(): void {
@@ -1030,6 +1086,43 @@ final class AgentControllerTest extends TestCase {
 				'entityId' => 'theme//home',
 			],
 			'timestamp'  => '2026-03-24T10:00:00Z',
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_block_activity_entry( string $id, string $timestamp, string $entity_id = '42' ): array {
+		return [
+			'id'         => $id,
+			'type'       => 'apply_block_suggestion',
+			'surface'    => 'block',
+			'target'     => [
+				'clientId'  => 'block-1',
+				'blockName' => 'core/paragraph',
+				'blockPath' => [ 0 ],
+			],
+			'suggestion' => 'Rewrite the introduction.',
+			'before'     => [
+				'attributes' => [
+					'content' => 'Before',
+				],
+			],
+			'after'      => [
+				'attributes' => [
+					'content' => 'After',
+				],
+			],
+			'request'    => [
+				'prompt'    => 'Make the introduction clearer.',
+				'reference' => "post:{$entity_id}:0",
+			],
+			'document'   => [
+				'scopeKey' => "post:{$entity_id}",
+				'postType' => 'post',
+				'entityId' => $entity_id,
+			],
+			'timestamp'  => $timestamp,
 		];
 	}
 }

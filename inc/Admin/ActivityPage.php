@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Admin;
 
+use FlavorAgent\Activity\Repository as ActivityRepository;
+
 final class ActivityPage {
 
 	private const PAGE_SLUG = 'flavor-agent-activity';
@@ -79,13 +81,50 @@ final class ActivityPage {
 			'flavor-agent-activity-log',
 			'flavorAgentActivityLog',
 			[
-				'adminUrl'      => admin_url(),
-				'connectorsUrl' => admin_url( 'options-connectors.php' ),
-				'defaultLimit'  => 100,
-				'nonce'         => wp_create_nonce( 'wp_rest' ),
-				'restUrl'       => rest_url(),
-				'settingsUrl'   => admin_url( 'options-general.php?page=flavor-agent' ),
+				'adminUrl'       => admin_url(),
+				'connectorsUrl'  => admin_url( 'options-connectors.php' ),
+				'defaultPerPage' => ActivityRepository::DEFAULT_PER_PAGE,
+				'locale'         => self::resolve_locale(),
+				'maxPerPage'     => ActivityRepository::MAX_PER_PAGE,
+				'nonce'          => wp_create_nonce( 'wp_rest' ),
+				'restUrl'        => rest_url(),
+				'settingsUrl'    => admin_url( 'options-general.php?page=flavor-agent' ),
+				'timeZone'       => self::resolve_timezone(),
 			]
 		);
+	}
+
+	private static function resolve_locale(): string {
+		if ( function_exists( 'determine_locale' ) ) {
+			$locale = determine_locale();
+
+			if ( is_string( $locale ) && '' !== $locale ) {
+				return $locale;
+			}
+		}
+
+		if ( function_exists( 'get_locale' ) ) {
+			$locale = get_locale();
+
+			if ( is_string( $locale ) && '' !== $locale ) {
+				return $locale;
+			}
+		}
+
+		return 'en-US';
+	}
+
+	private static function resolve_timezone(): string {
+		if ( function_exists( 'wp_timezone_string' ) ) {
+			$timezone = wp_timezone_string();
+
+			if ( is_string( $timezone ) && '' !== $timezone ) {
+				return $timezone;
+			}
+		}
+
+		$timezone = get_option( 'timezone_string', 'UTC' );
+
+		return is_string( $timezone ) && '' !== $timezone ? $timezone : 'UTC';
 	}
 }

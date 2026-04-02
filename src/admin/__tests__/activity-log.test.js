@@ -254,11 +254,14 @@ import { ActivityLogApp } from '../activity-log';
 const BOOT_DATA = {
 	adminUrl: 'https://example.test/wp-admin/',
 	connectorsUrl: 'https://example.test/wp-admin/options-connectors.php',
-	defaultLimit: 100,
+	defaultPerPage: 20,
+	locale: 'en-US',
+	maxPerPage: 100,
 	nonce: 'test-nonce',
 	restUrl: 'https://example.test/wp-json/',
 	settingsUrl:
 		'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+	timeZone: 'UTC',
 };
 
 let container = null;
@@ -270,6 +273,7 @@ function createEntry( overrides = {} ) {
 	return {
 		id: 'activity-1',
 		suggestion: 'Refresh intro copy',
+		status: 'applied',
 		surface: 'block',
 		target: {
 			blockName: 'core/paragraph',
@@ -294,6 +298,27 @@ function createEntry( overrides = {} ) {
 	};
 }
 
+function buildResponse( entries, overrides = {} ) {
+	return {
+		entries,
+		filterOptions: overrides.filterOptions || null,
+		paginationInfo: {
+			page: 1,
+			perPage: BOOT_DATA.defaultPerPage,
+			totalItems: entries.length,
+			totalPages: entries.length > 0 ? 1 : 0,
+			...( overrides.paginationInfo || {} ),
+		},
+		summary: {
+			total: entries.length,
+			applied: entries.length,
+			undone: 0,
+			review: 0,
+			...( overrides.summary || {} ),
+		},
+	};
+}
+
 async function flushEffects() {
 	await act( async () => {
 		await Promise.resolve();
@@ -301,10 +326,12 @@ async function flushEffects() {
 	} );
 }
 
-async function renderApp( entries ) {
-	apiFetch.mockResolvedValue( {
-		entries,
-	} );
+async function renderApp( response ) {
+	if ( response !== undefined ) {
+		apiFetch.mockResolvedValue(
+			Array.isArray( response ) ? buildResponse( response ) : response
+		);
+	}
 
 	await act( async () => {
 		root.render( <ActivityLogApp bootData={ BOOT_DATA } /> );
@@ -317,6 +344,16 @@ function getVisibleTitles() {
 	return Array.from(
 		container.querySelectorAll( '.mock-dataviews-layout button' )
 	).map( ( element ) => element.textContent );
+}
+
+function getSummaryCardValue( label ) {
+	const summaryCard = Array.from(
+		container.querySelectorAll( '.flavor-agent-activity-log__summary-card' )
+	).find( ( element ) => element.textContent.includes( label ) );
+
+	return summaryCard?.querySelector(
+		'.flavor-agent-activity-log__summary-value'
+	)?.textContent;
 }
 
 function getSidebarTitle() {
@@ -363,11 +400,37 @@ describe( 'ActivityLogApp', () => {
 				headers: {
 					'X-WP-Nonce': BOOT_DATA.nonce,
 				},
-				url: `${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&limit=${ BOOT_DATA.defaultLimit }`,
+				url: `${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&sortField=timestamp&sortDirection=desc`,
 			} )
 		);
 		expect( getVisibleTitles() ).toEqual( [ 'First activity entry' ] );
 		expect( container.textContent ).not.toContain( 'No matching activity' );
+	} );
+
+	test( 'renders summary cards from the server response instead of the visible page size', async () => {
+		await renderApp(
+			buildResponse(
+				[
+					createEntry( {
+						id: 'activity-1',
+						suggestion: 'Visible page entry',
+					} ),
+				],
+				{
+					summary: {
+						total: 9,
+						applied: 3,
+						undone: 4,
+						review: 2,
+					},
+				}
+			)
+		);
+
+		expect( getSummaryCardValue( 'Recorded actions' ) ).toBe( '9' );
+		expect( getSummaryCardValue( 'Still applied' ) ).toBe( '3' );
+		expect( getSummaryCardValue( 'Undone' ) ).toBe( '4' );
+		expect( getSummaryCardValue( 'Needs review' ) ).toBe( '2' );
 	} );
 
 	test( 'clamps stale saved pages back into range before rendering the feed', async () => {
@@ -381,14 +444,14 @@ describe( 'ActivityLogApp', () => {
 
 		await renderApp( [
 			createEntry( {
-				id: 'activity-1',
-				suggestion: 'Alpha entry',
-				timestamp: '2026-03-27T10:00:00Z',
-			} ),
-			createEntry( {
 				id: 'activity-2',
 				suggestion: 'Beta entry',
 				timestamp: '2026-03-27T10:00:01Z',
+			} ),
+			createEntry( {
+				id: 'activity-1',
+				suggestion: 'Alpha entry',
+				timestamp: '2026-03-27T10:00:00Z',
 			} ),
 		] );
 		await flushEffects();
@@ -400,19 +463,43 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
-	test( 'keeps the detail sidebar synced to the visible feed', async () => {
-		await renderApp( [
-			createEntry( {
-				id: 'activity-1',
-				suggestion: 'Alpha entry',
-				timestamp: '2026-03-27T10:00:00Z',
-			} ),
-			createEntry( {
-				id: 'activity-2',
-				suggestion: 'Beta entry',
-				timestamp: '2026-03-27T10:00:01Z',
-			} ),
-		] );
+	test( 'keeps the detail sidebar synced to the server-backed visible feed', async () => {
+		apiFetch
+			.mockResolvedValueOnce(
+				buildResponse( [
+					createEntry( {
+						id: 'activity-2',
+						suggestion: 'Beta entry',
+						timestamp: '2026-03-27T10:00:01Z',
+					} ),
+					createEntry( {
+						id: 'activity-1',
+						suggestion: 'Alpha entry',
+						timestamp: '2026-03-27T10:00:00Z',
+					} ),
+				] )
+			)
+			.mockResolvedValueOnce(
+				buildResponse(
+					[
+						createEntry( {
+							id: 'activity-1',
+							suggestion: 'Alpha entry',
+							timestamp: '2026-03-27T10:00:00Z',
+						} ),
+					],
+					{
+						summary: {
+							total: 1,
+							applied: 1,
+							undone: 0,
+							review: 0,
+						},
+					}
+				)
+			);
+
+		await renderApp();
 
 		expect( getSidebarTitle().textContent ).toBe( 'Beta entry' );
 
@@ -427,6 +514,65 @@ describe( 'ActivityLogApp', () => {
 
 		expect( getVisibleTitles() ).toEqual( [ 'Alpha entry' ] );
 		expect( getSidebarTitle().textContent ).toBe( 'Alpha entry' );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toBe(
+			`${ BOOT_DATA.restUrl }flavor-agent/v1/activity?global=1&page=1&perPage=${ BOOT_DATA.defaultPerPage }&search=Alpha&sortField=timestamp&sortDirection=desc`
+		);
+	} );
+
+	test( 'uses server-backed filter options instead of only the visible page entries', async () => {
+		await renderApp(
+			buildResponse( [ createEntry() ], {
+				filterOptions: {
+					surface: [
+						{ value: 'block', label: 'Block' },
+						{ value: 'template', label: 'Template' },
+					],
+					operationType: [
+						{ value: 'insert', label: 'Insert pattern' },
+						{
+							value: 'modify-attributes',
+							label: 'Modify attributes',
+						},
+					],
+					postType: [
+						{ value: 'post', label: 'post' },
+						{ value: 'wp_template', label: 'wp_template' },
+					],
+					userId: [
+						{ value: '11', label: 'User #11' },
+						{ value: '7', label: 'User #7' },
+					],
+				},
+			} )
+		);
+
+		const fields = getDataViewsMockState().latestProps.fields;
+
+		expect( fields.find( ( field ) => field.id === 'surface' ).elements ).toEqual(
+			[
+				{ value: 'block', label: 'Block' },
+				{ value: 'template', label: 'Template' },
+			]
+		);
+		expect(
+			fields.find( ( field ) => field.id === 'operationType' ).elements
+		).toEqual( [
+			{ value: 'insert', label: 'Insert pattern' },
+			{ value: 'modify-attributes', label: 'Modify attributes' },
+		] );
+		expect( fields.find( ( field ) => field.id === 'postType' ).elements ).toEqual(
+			[
+				{ value: 'post', label: 'post' },
+				{ value: 'wp_template', label: 'wp_template' },
+			]
+		);
+		expect( fields.find( ( field ) => field.id === 'userId' ).elements ).toEqual(
+			[
+				{ value: '11', label: 'User #11' },
+				{ value: '7', label: 'User #7' },
+			]
+		);
 	} );
 
 	test( 'adds an accessible name to the icon-only settings control', async () => {
@@ -452,7 +598,7 @@ describe( 'ActivityLogApp', () => {
 		).toEqual( [ 'inspect' ] );
 
 		const targetLink = Array.from( container.querySelectorAll( 'a' ) ).find(
-			( element ) => element.textContent === 'Open target'
+			( element ) => element.textContent === 'Open post'
 		);
 
 		expect( targetLink ).toBeDefined();

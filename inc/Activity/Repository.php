@@ -10,10 +10,10 @@ final class Repository {
 	public const SCHEMA_VERSION         = 1;
 	public const PRUNE_CRON_HOOK        = 'flavor_agent_prune_activity';
 	public const DEFAULT_RETENTION_DAYS = 90;
+	public const DEFAULT_PER_PAGE       = 20;
+	public const MAX_PER_PAGE           = 100;
 
-	private const DEFAULT_LIMIT = 20;
-	private const MAX_LIMIT     = 100;
-	private const TABLE_SUFFIX  = 'flavor_agent_activity';
+	private const TABLE_SUFFIX = 'flavor_agent_activity';
 
 	public static function maybe_install(): void {
 		$installed_version = (int) get_option( self::SCHEMA_OPTION, 0 );
@@ -177,7 +177,7 @@ final class Repository {
 		}
 
 		$scope_key   = trim( (string) ( $filters['scopeKey'] ?? '' ) );
-		$limit       = self::normalize_limit( $filters['limit'] ?? self::DEFAULT_LIMIT );
+		$limit       = self::normalize_per_page( $filters['limit'] ?? self::DEFAULT_PER_PAGE );
 		$conditions  = [];
 		$args        = [];
 		$surface     = trim( (string) ( $filters['surface'] ?? '' ) );
@@ -226,6 +226,73 @@ final class Repository {
 			static fn ( array $row ): array => Serializer::hydrate_row( $row ),
 			$rows
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array{
+	 *   entries: array<int, array<string, mixed>>,
+	 *   paginationInfo: array{page: int, perPage: int, totalItems: int, totalPages: int},
+	 *   summary: array{total: int, applied: int, undone: int, review: int},
+	 *   filterOptions: array{
+	 *     surface: array<int, array{value: string, label: string}>,
+	 *     operationType: array<int, array{value: string, label: string}>,
+	 *     postType: array<int, array{value: string, label: string}>,
+	 *     userId: array<int, array{value: string, label: string}>
+	 *   }
+	 * }
+	 */
+	public static function query_admin( array $filters ): array {
+		$page              = self::normalize_page( $filters['page'] ?? 1 );
+		$per_page          = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
+		$sort_field        = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
+		$sort_direction    = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
+		$timezone          = self::resolve_activity_timezone();
+		$candidate_rows    = self::query_candidate_rows( $filters );
+		$resolved_records  = self::resolve_admin_records(
+			$candidate_rows,
+			$timezone
+		);
+		$filtered_records = self::filter_admin_records(
+			$resolved_records,
+			$filters,
+			$timezone
+		);
+
+		self::sort_admin_records(
+			$filtered_records,
+			$sort_field,
+			$sort_direction
+		);
+
+		$total_items = count( $filtered_records );
+		$total_pages = $total_items > 0
+			? (int) ceil( $total_items / $per_page )
+			: 0;
+		$page         = min( $page, $total_pages > 0 ? $total_pages : 1 );
+		$offset       = ( $page - 1 ) * $per_page;
+		$page_records = array_slice( $filtered_records, $offset, $per_page );
+
+		return [
+			'entries'         => array_values(
+				array_map(
+					static fn ( array $record ): array => self::hydrate_admin_page_entry( $record ),
+					$page_records
+				)
+			),
+			'paginationInfo' => [
+				'page'       => $page,
+				'perPage'    => $per_page,
+				'totalItems' => $total_items,
+				'totalPages' => $total_pages,
+			],
+			'summary'        => self::build_admin_summary( $filtered_records ),
+			'filterOptions'  => self::build_admin_filter_options(
+				$resolved_records,
+				$filters,
+				$timezone
+			),
+		];
 	}
 
 	/**
@@ -538,14 +605,1241 @@ final class Repository {
 		);
 	}
 
-	private static function normalize_limit( $limit ): int {
+	private static function normalize_per_page( $limit ): int {
 		$normalized = (int) $limit;
 
 		if ( $normalized <= 0 ) {
-			return self::DEFAULT_LIMIT;
+			return self::DEFAULT_PER_PAGE;
 		}
 
-		return min( self::MAX_LIMIT, $normalized );
+		return min( self::MAX_PER_PAGE, $normalized );
+	}
+
+	private static function normalize_page( $page ): int {
+		$normalized = (int) $page;
+
+		return $normalized > 0 ? $normalized : 1;
+	}
+
+	private static function normalize_sort_field( $sort_field ): string {
+		$normalized = trim( (string) $sort_field );
+
+		if ( in_array(
+			$normalized,
+			[
+				'status',
+				'surface',
+				'postType',
+				'userId',
+				'operationType',
+			],
+			true
+		) ) {
+			return $normalized;
+		}
+
+		return 'timestamp';
+	}
+
+	private static function normalize_sort_direction( $direction ): string {
+		return 'asc' === strtolower( trim( (string) $direction ) )
+			? 'asc'
+			: 'desc';
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function query_candidate_rows( array $filters ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$conditions  = [];
+		$args        = [];
+		$scope_key   = trim( (string) ( $filters['scopeKey'] ?? '' ) );
+		$surface     = trim( (string) ( $filters['surface'] ?? '' ) );
+		$entity_type = trim( (string) ( $filters['entityType'] ?? '' ) );
+		$entity_ref  = trim( (string) ( $filters['entityRef'] ?? '' ) );
+
+		if ( '' !== $scope_key ) {
+			$conditions[] = 'document_scope_key = %s';
+			$args[]       = $scope_key;
+		}
+
+		if (
+			'' !== $surface
+			&& 'isNot' !== self::normalize_filter_operator( $filters['surfaceOperator'] ?? 'is' )
+		) {
+			$conditions[] = 'surface = %s';
+			$args[]       = $surface;
+		}
+
+		if ( '' !== $entity_type ) {
+			$conditions[] = 'entity_type = %s';
+			$args[]       = $entity_type;
+		}
+
+		if ( '' !== $entity_ref ) {
+			$conditions[] = 'entity_ref = %s';
+			$args[]       = $entity_ref;
+		}
+
+		$sql = 'SELECT * FROM ' . self::table_name();
+
+		if ( [] !== $conditions ) {
+			$sql .= ' WHERE ' . implode( ' AND ', $conditions );
+		}
+
+		$sql .= ' ORDER BY created_at ASC, id ASC';
+		$prepared_sql = [] !== $args ? $wpdb->prepare( $sql, $args ) : $sql;
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
+		$rows = $wpdb->get_results( $prepared_sql, ARRAY_A );
+
+		return array_values( is_array( $rows ) ? $rows : [] );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $rows
+	 * @return array<int, array{row: array<string, mixed>, meta: array<string, mixed>}>
+	 */
+	private static function resolve_admin_records(
+		array $rows,
+		\DateTimeZone $timezone
+	): array {
+		$entity_indexes = [];
+
+		foreach ( $rows as $index => $row ) {
+			$key = self::get_admin_row_identity_key( $row, $index );
+
+			if ( ! isset( $entity_indexes[ $key ] ) ) {
+				$entity_indexes[ $key ] = [];
+			}
+
+			$entity_indexes[ $key ][] = $index;
+		}
+
+		$resolved_statuses = array_fill( 0, count( $rows ), 'applied' );
+
+		foreach ( $entity_indexes as $indexes ) {
+			$has_active_newer_entry = false;
+
+			for ( $index = count( $indexes ) - 1; $index >= 0; --$index ) {
+				$entry_index = $indexes[ $index ];
+				$undo_status = self::get_admin_row_undo_status( $rows[ $entry_index ] );
+
+				if ( 'undone' === $undo_status ) {
+					$resolved_statuses[ $entry_index ] = 'undone';
+					continue;
+				}
+
+				if ( $has_active_newer_entry ) {
+					$resolved_statuses[ $entry_index ] = 'blocked';
+					continue;
+				}
+
+				if ( 'failed' === $undo_status ) {
+					$resolved_statuses[ $entry_index ] = 'failed';
+					$has_active_newer_entry           = true;
+					continue;
+				}
+
+				$resolved_statuses[ $entry_index ] = 'applied';
+				$has_active_newer_entry           = true;
+			}
+		}
+
+		$records = [];
+
+		foreach ( $rows as $index => $row ) {
+			$records[] = self::build_admin_record_from_row(
+				$row,
+				(string) $resolved_statuses[ $index ],
+				$timezone
+			);
+		}
+
+		return $records;
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @return array{row: array<string, mixed>, meta: array<string, mixed>}
+	 */
+	private static function build_admin_record_from_row(
+		array $row,
+		string $resolved_status,
+		\DateTimeZone $timezone
+	): array {
+		$target           = Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' );
+		$document         = Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' );
+		$before           = Serializer::decode_json( isset( $row['before_state'] ) ? (string) $row['before_state'] : '' );
+		$after            = Serializer::decode_json( isset( $row['after_state'] ) ? (string) $row['after_state'] : '' );
+		$request          = Serializer::decode_json( isset( $row['request_json'] ) ? (string) $row['request_json'] : '' );
+		$post_type        = self::get_admin_post_type( $row, $document );
+		$entity_id        = self::get_admin_entity_id( $row, $document );
+		$operation        = self::derive_admin_operation_metadata(
+			$before,
+			$after,
+			trim( (string) ( $row['surface'] ?? '' ) ),
+			trim( (string) ( $row['activity_type'] ?? '' ) )
+		);
+		$operation_type   = $operation['value'];
+		$operation_label  = $operation['label'];
+		$request_meta     = self::get_admin_request_meta( $request );
+		$timestamp_data   = self::get_timestamp_data(
+			self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
+			$timezone
+		);
+		$user_id          = (int) ( $row['user_id'] ?? 0 );
+		$user_label       = self::resolve_admin_user_label( $user_id );
+		$surface          = trim( (string) ( $row['surface'] ?? '' ) );
+		$surface_label    = self::format_surface_label( $surface );
+		$status_label     = self::format_status_label( $resolved_status );
+		$block_path       = self::format_block_path( $target );
+		$operation_labels = array_values(
+			array_filter(
+				array_unique(
+					[
+						$operation_label,
+						self::format_admin_operation_filter_label( $operation_type ),
+					]
+				),
+				static fn ( string $value ): bool => '' !== trim( $value )
+			)
+		);
+
+		return [
+			'row'   => $row,
+			'meta'  => [
+				'status'             => $resolved_status,
+				'statusLabel'        => $status_label,
+				'surface'            => $surface,
+				'surfaceLabel'       => $surface_label,
+				'postType'           => $post_type,
+				'entityId'           => $entity_id,
+				'blockPath'          => $block_path,
+				'userId'             => $user_id,
+				'userLabel'          => $user_label,
+				'operationType'      => $operation_type,
+				'operationTypeLabel' => $operation_label,
+				'dayKey'             => $timestamp_data['dayKey'],
+				'timestamp'          => self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
+				'searchText'         => implode(
+					' ',
+					array_filter(
+						[
+							trim( (string) ( $row['suggestion'] ?? '' ) ),
+							self::build_entity_search_label( $surface, $target ),
+							self::build_document_search_label( $post_type, $entity_id ),
+							$block_path,
+							trim( (string) ( $row['activity_type'] ?? '' ) ),
+							$surface_label,
+							$status_label,
+							...$operation_labels,
+							trim( (string) ( $request['prompt'] ?? '' ) ),
+							trim( (string) ( $request['reference'] ?? '' ) ),
+							$request_meta['provider'],
+							$request_meta['model'],
+							$user_label,
+						],
+						static fn ( $value ): bool => is_string( $value ) && '' !== trim( $value )
+					)
+				),
+			],
+		];
+	}
+
+	/**
+	 * @param array<int, array{row: array<string, mixed>, meta: array<string, mixed>}> $records
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array{row: array<string, mixed>, meta: array<string, mixed>}>
+	 */
+	private static function filter_admin_records(
+		array $records,
+		array $filters,
+		\DateTimeZone $timezone
+	): array {
+		$search                  = self::normalize_search_text( $filters['search'] ?? '' );
+		$surface_operator        = self::normalize_filter_operator( $filters['surfaceOperator'] ?? 'is' );
+		$status_operator         = self::normalize_filter_operator( $filters['statusOperator'] ?? 'is' );
+		$post_type_operator      = self::normalize_filter_operator( $filters['postTypeOperator'] ?? 'is' );
+		$user_id_operator        = self::normalize_filter_operator( $filters['userIdOperator'] ?? 'is' );
+		$operation_type_operator = self::normalize_filter_operator( $filters['operationTypeOperator'] ?? 'is' );
+		$entity_id_operator      = self::normalize_text_filter_operator( $filters['entityIdOperator'] ?? 'contains' );
+		$block_path_operator     = self::normalize_text_filter_operator( $filters['blockPathOperator'] ?? 'contains' );
+		$surface                 = trim( (string) ( $filters['surface'] ?? '' ) );
+		$status                  = trim( (string) ( $filters['status'] ?? '' ) );
+		$post_type               = trim( (string) ( $filters['postType'] ?? '' ) );
+		$operation_type          = trim( (string) ( $filters['operationType'] ?? '' ) );
+		$entity_id               = trim( (string) ( $filters['entityId'] ?? '' ) );
+		$block_path              = trim( (string) ( $filters['blockPath'] ?? '' ) );
+		$user_id                 = self::normalize_optional_int( $filters['userId'] ?? null );
+
+		return array_values(
+			array_filter(
+				$records,
+				static function ( array $record ) use (
+					$search,
+					$surface_operator,
+					$status_operator,
+					$post_type_operator,
+					$user_id_operator,
+					$operation_type_operator,
+					$entity_id_operator,
+					$block_path_operator,
+					$surface,
+					$status,
+					$post_type,
+					$operation_type,
+					$entity_id,
+					$block_path,
+					$user_id,
+					$filters,
+					$timezone
+				): bool {
+					$meta = is_array( $record['meta'] ?? null ) ? $record['meta'] : [];
+
+					if (
+						'' !== $search
+						&& ! str_contains(
+							strtolower( (string) ( $meta['searchText'] ?? '' ) ),
+							$search
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $surface
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['surface'] ?? '' ),
+							$surface,
+							$surface_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $status
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['status'] ?? '' ),
+							$status,
+							$status_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $post_type
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['postType'] ?? '' ),
+							$post_type,
+							$post_type_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						null !== $user_id
+						&& ! self::matches_explicit_filter(
+							(string) (int) ( $meta['userId'] ?? 0 ),
+							(string) $user_id,
+							$user_id_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $operation_type
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['operationType'] ?? '' ),
+							$operation_type,
+							$operation_type_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $entity_id
+						&& ! self::matches_text_filter(
+							(string) ( $meta['entityId'] ?? '' ),
+							$entity_id,
+							$entity_id_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $block_path
+						&& ! self::matches_text_filter(
+							(string) ( $meta['blockPath'] ?? '' ),
+							$block_path,
+							$block_path_operator
+						)
+					) {
+						return false;
+					}
+
+					return self::matches_day_filter( $meta, $filters, $timezone );
+				}
+			)
+		);
+	}
+
+	/**
+	 * @param array<int, array{row: array<string, mixed>, meta: array<string, mixed>}> $records
+	 */
+	private static function sort_admin_records(
+		array &$records,
+		string $sort_field,
+		string $sort_direction
+	): void {
+		usort(
+			$records,
+			static function ( array $left, array $right ) use ( $sort_field, $sort_direction ): int {
+				$left_meta   = is_array( $left['meta'] ?? null ) ? $left['meta'] : [];
+				$right_meta  = is_array( $right['meta'] ?? null ) ? $right['meta'] : [];
+				$left_row    = is_array( $left['row'] ?? null ) ? $left['row'] : [];
+				$right_row   = is_array( $right['row'] ?? null ) ? $right['row'] : [];
+				$result      = 0;
+
+				switch ( $sort_field ) {
+					case 'status':
+						$result = strcmp(
+							(string) ( $left_meta['status'] ?? '' ),
+							(string) ( $right_meta['status'] ?? '' )
+						);
+						break;
+					case 'surface':
+						$result = strcmp(
+							(string) ( $left_meta['surfaceLabel'] ?? $left_meta['surface'] ?? '' ),
+							(string) ( $right_meta['surfaceLabel'] ?? $right_meta['surface'] ?? '' )
+						);
+						break;
+					case 'postType':
+						$result = strcmp(
+							(string) ( $left_meta['postType'] ?? '' ),
+							(string) ( $right_meta['postType'] ?? '' )
+						);
+						break;
+					case 'userId':
+						$result = (int) ( $left_meta['userId'] ?? 0 ) <=> (int) ( $right_meta['userId'] ?? 0 );
+						break;
+					case 'operationType':
+						$result = strcmp(
+							(string) ( $left_meta['operationType'] ?? '' ),
+							(string) ( $right_meta['operationType'] ?? '' )
+						);
+						break;
+					default:
+						$result = strcmp(
+							(string) ( $left_meta['timestamp'] ?? '' ),
+							(string) ( $right_meta['timestamp'] ?? '' )
+						);
+						break;
+				}
+
+				if ( 0 === $result ) {
+					$result = strcmp(
+						(string) ( $left_row['activity_id'] ?? '' ),
+						(string) ( $right_row['activity_id'] ?? '' )
+					);
+				}
+
+				return 'asc' === $sort_direction ? $result : -1 * $result;
+			}
+		);
+	}
+
+	/**
+	 * @param array<int, array{row: array<string, mixed>, meta: array<string, mixed>}> $records
+	 * @return array{total: int, applied: int, undone: int, review: int}
+	 */
+	private static function build_admin_summary( array $records ): array {
+		$summary = [
+			'total'   => count( $records ),
+			'applied' => 0,
+			'undone'  => 0,
+			'review'  => 0,
+		];
+
+		foreach ( $records as $record ) {
+			$status = (string) ( $record['meta']['status'] ?? '' );
+
+			if ( 'applied' === $status ) {
+				++$summary['applied'];
+				continue;
+			}
+
+			if ( 'undone' === $status ) {
+				++$summary['undone'];
+				continue;
+			}
+
+			if ( in_array( $status, [ 'blocked', 'failed' ], true ) ) {
+				++$summary['review'];
+			}
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * @param array{row: array<string, mixed>, meta: array<string, mixed>} $record
+	 */
+	private static function hydrate_admin_page_entry( array $record ): array {
+		$row   = is_array( $record['row'] ?? null ) ? $record['row'] : [];
+		$entry = Serializer::hydrate_row( $row );
+		$entry['status'] = (string) ( $record['meta']['status'] ?? 'applied' );
+
+		return $entry;
+	}
+
+	/**
+	 * @param array<int, array{row: array<string, mixed>, meta: array<string, mixed>}> $records
+	 * @param array<string, mixed> $filters
+	 * @return array{
+	 *   surface: array<int, array{value: string, label: string}>,
+	 *   operationType: array<int, array{value: string, label: string}>,
+	 *   postType: array<int, array{value: string, label: string}>,
+	 *   userId: array<int, array{value: string, label: string}>
+	 * }
+	 */
+	private static function build_admin_filter_options(
+		array $records,
+		array $filters,
+		\DateTimeZone $timezone
+	): array {
+		return [
+			'surface'       => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'surface' ),
+					$timezone
+				),
+				'surface',
+				'surfaceLabel'
+			),
+			'operationType' => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'operationType' ),
+					$timezone
+				),
+				'operationType',
+				'operationTypeLabel'
+			),
+			'postType'      => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'postType' ),
+					$timezone
+				),
+				'postType',
+				'postType'
+			),
+			'userId'        => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'userId' ),
+					$timezone
+				),
+				'userId',
+				'userLabel'
+			),
+		];
+	}
+
+	/**
+	 * @param array<int, array{row: array<string, mixed>, meta: array<string, mixed>}> $records
+	 * @return array<int, array{value: string, label: string}>
+	 */
+	private static function collect_admin_filter_options(
+		array $records,
+		string $value_key,
+		string $label_key
+	): array {
+		$options = [];
+
+		foreach ( $records as $record ) {
+			$meta  = is_array( $record['meta'] ?? null ) ? $record['meta'] : [];
+			$value = trim( (string) ( $meta[ $value_key ] ?? '' ) );
+			$label = trim( (string) ( $meta[ $label_key ] ?? $value ) );
+
+			if ( '' === $value || '' === $label ) {
+				continue;
+			}
+
+			if ( 'userId' === $value_key && (int) $value <= 0 ) {
+				continue;
+			}
+
+			if ( ! isset( $options[ $value ] ) ) {
+				$options[ $value ] = $label;
+			}
+		}
+
+		asort( $options, SORT_NATURAL | SORT_FLAG_CASE );
+
+		return array_values(
+			array_map(
+				static fn ( string $value, string $label ): array => [
+					'value' => $value,
+					'label' => $label,
+				],
+				array_keys( $options ),
+				array_values( $options )
+			)
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<string, mixed>
+	 */
+	private static function without_admin_filter( array $filters, string $field ): array {
+		unset( $filters[ $field ], $filters[ $field . 'Operator' ] );
+
+		return $filters;
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private static function get_admin_row_identity_key( array $row, int $fallback_index ): string {
+		$type = trim( (string) ( $row['entity_type'] ?? '' ) );
+		$ref  = trim( (string) ( $row['entity_ref'] ?? '' ) );
+
+		if ( '' !== $type || '' !== $ref ) {
+			return $type . ':' . $ref;
+		}
+
+		$activity_id = trim( (string) ( $row['activity_id'] ?? '' ) );
+
+		return 'activity:' . ( '' !== $activity_id ? $activity_id : (string) $fallback_index );
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private static function get_admin_row_undo_status( array $row ): string {
+		$undo   = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
+		$status = trim( (string) ( $undo['status'] ?? 'available' ) );
+
+		return in_array( $status, [ 'undone', 'failed' ], true ) ? $status : 'available';
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @param array<string, mixed> $document
+	 */
+	private static function get_admin_post_type( array $row, array $document ): string {
+		$post_type = trim( (string) ( $document['postType'] ?? '' ) );
+
+		if ( '' !== $post_type ) {
+			return $post_type;
+		}
+
+		$scope_key = trim( (string) ( $document['scopeKey'] ?? $row['document_scope_key'] ?? '' ) );
+
+		if ( ! str_contains( $scope_key, ':' ) ) {
+			return '';
+		}
+
+		$parts = explode( ':', $scope_key, 2 );
+
+		return trim( (string) ( $parts[0] ?? '' ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 * @param array<string, mixed> $document
+	 */
+	private static function get_admin_entity_id( array $row, array $document ): string {
+		$entity_id = trim( (string) ( $document['entityId'] ?? '' ) );
+
+		if ( '' !== $entity_id ) {
+			return $entity_id;
+		}
+
+		$scope_key = trim( (string) ( $document['scopeKey'] ?? $row['document_scope_key'] ?? '' ) );
+
+		if ( ! str_contains( $scope_key, ':' ) ) {
+			return '';
+		}
+
+		$parts = explode( ':', $scope_key, 2 );
+
+		return trim( (string) ( $parts[1] ?? '' ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $before
+	 * @param array<string, mixed> $after
+	 * @return array{value: string, label: string}
+	 */
+	private static function derive_admin_operation_metadata(
+		array $before,
+		array $after,
+		string $surface,
+		string $activity_type
+	): array {
+		$primary_operation = self::get_admin_primary_operation( $before, $after );
+		$operation_type    = trim( (string) ( $primary_operation['type'] ?? '' ) );
+
+		if ( in_array( $operation_type, [ 'insert_pattern', 'insert_block' ], true ) ) {
+			return [
+				'value' => 'insert',
+				'label' => 'insert_pattern' === $operation_type
+					? 'Insert pattern'
+					: 'Insert block',
+			];
+		}
+
+		if ( in_array( $operation_type, [ 'replace_template_part', 'assign_template_part' ], true ) ) {
+			return [
+				'value' => 'replace',
+				'label' => 'replace_template_part' === $operation_type
+					? 'Replace template part'
+					: 'Assign template part',
+			];
+		}
+
+		if ( self::has_admin_style_mutation( $before, $after ) ) {
+			return [
+				'value' => 'apply-style',
+				'label' => 'Apply style',
+			];
+		}
+
+		if ( 'block' === $surface ) {
+			return [
+				'value' => 'modify-attributes',
+				'label' => 'Modify attributes',
+			];
+		}
+
+		$resolved_type = '' !== $operation_type
+			? $operation_type
+			: ( '' !== $activity_type ? $activity_type : 'recorded' );
+
+		return [
+			'value' => $resolved_type,
+			'label' => self::humanize_label( $resolved_type ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $before
+	 * @param array<string, mixed> $after
+	 * @return array<string, mixed>
+	 */
+	private static function get_admin_primary_operation( array $before, array $after ): array {
+		if ( isset( $after['operations'] ) && is_array( $after['operations'] ) && isset( $after['operations'][0] ) && is_array( $after['operations'][0] ) ) {
+			return $after['operations'][0];
+		}
+
+		if ( isset( $before['operations'] ) && is_array( $before['operations'] ) && isset( $before['operations'][0] ) && is_array( $before['operations'][0] ) ) {
+			return $before['operations'][0];
+		}
+
+		return [];
+	}
+
+	/**
+	 * @param array<string, mixed> $before
+	 * @param array<string, mixed> $after
+	 */
+	private static function has_admin_style_mutation( array $before, array $after ): bool {
+		$before_attributes = is_array( $before['attributes'] ?? null )
+			? $before['attributes']
+			: [];
+		$after_attributes  = is_array( $after['attributes'] ?? null )
+			? $after['attributes']
+			: [];
+		$style_keys        = [
+			'align',
+			'backgroundColor',
+			'borderColor',
+			'className',
+			'fontFamily',
+			'fontSize',
+			'gradient',
+			'layout',
+			'style',
+			'textAlign',
+			'textColor',
+			'width',
+		];
+
+		foreach ( $style_keys as $style_key ) {
+			if (
+				self::activity_values_equal(
+					$before_attributes[ $style_key ] ?? null,
+					$after_attributes[ $style_key ] ?? null
+				)
+			) {
+				continue;
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
+	private static function activity_values_equal( $left, $right ): bool {
+		if ( $left === $right ) {
+			return true;
+		}
+
+		if ( is_array( $left ) || is_array( $right ) ) {
+			if ( ! is_array( $left ) || ! is_array( $right ) ) {
+				return false;
+			}
+
+			if ( count( $left ) !== count( $right ) ) {
+				return false;
+			}
+
+			foreach ( array_keys( $left ) as $key ) {
+				if ( ! array_key_exists( $key, $right ) ) {
+					return false;
+				}
+
+				if ( ! self::activity_values_equal( $left[ $key ], $right[ $key ] ) ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * @param array<string, mixed> $request
+	 * @return array{provider: string, model: string}
+	 */
+	private static function get_admin_request_meta( array $request ): array {
+		return [
+			'provider' => self::get_first_string(
+				$request,
+				[
+					[ 'provider' ],
+					[ 'providerName' ],
+					[ 'metadata', 'provider' ],
+					[ 'ai', 'provider' ],
+					[ 'result', 'provider' ],
+				]
+			),
+			'model'    => self::get_first_string(
+				$request,
+				[
+					[ 'model' ],
+					[ 'modelName' ],
+					[ 'metadata', 'model' ],
+					[ 'ai', 'model' ],
+					[ 'result', 'model' ],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $value
+	 * @param array<int, array<int, string>> $paths
+	 */
+	private static function get_first_string( array $value, array $paths ): string {
+		foreach ( $paths as $path ) {
+			$current = $value;
+			$valid   = true;
+
+			foreach ( $path as $key ) {
+				if ( ! is_array( $current ) || ! array_key_exists( $key, $current ) ) {
+					$valid = false;
+					break;
+				}
+
+				$current = $current[ $key ];
+			}
+
+			if ( $valid && is_string( $current ) && '' !== trim( $current ) ) {
+				return trim( $current );
+			}
+		}
+
+		return '';
+	}
+
+	private static function mysql_datetime_to_timestamp( string $value ): string {
+		$timestamp = strtotime( $value );
+
+		if ( false === $timestamp ) {
+			return gmdate( 'c' );
+		}
+
+		return gmdate( 'c', $timestamp );
+	}
+
+	private static function resolve_admin_user_label( int $user_id ): string {
+		if ( $user_id <= 0 ) {
+			return '';
+		}
+
+		if ( function_exists( 'get_userdata' ) ) {
+			$user = \get_userdata( $user_id );
+
+			if ( is_object( $user ) && isset( $user->display_name ) ) {
+				$display_name = trim( (string) $user->display_name );
+
+				if ( '' !== $display_name ) {
+					return $display_name;
+				}
+			}
+		}
+
+		return sprintf( 'User #%d', $user_id );
+	}
+
+	/**
+	 * @return array{dayKey: string}
+	 */
+	private static function get_timestamp_data(
+		string $timestamp,
+		\DateTimeZone $timezone
+	): array {
+		try {
+			$date = new \DateTimeImmutable( $timestamp ?: 'now' );
+		} catch ( \Exception $exception ) {
+			$date = new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) );
+		}
+
+		$localized = $date->setTimezone( $timezone );
+
+		return [
+			'dayKey' => $localized->format( 'Y-m-d' ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $meta
+	 * @param array<string, mixed> $filters
+	 */
+	private static function matches_day_filter(
+		array $meta,
+		array $filters,
+		\DateTimeZone $timezone
+	): bool {
+		$entry_day    = trim( (string) ( $meta['dayKey'] ?? '' ) );
+		$day_operator = trim( (string) ( $filters['dayOperator'] ?? 'on' ) );
+
+		if ( '' === $entry_day ) {
+			return false;
+		}
+
+		switch ( $day_operator ) {
+			case 'inThePast':
+			case 'over':
+				$relative_value = self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
+				$relative_unit  = trim( (string) ( $filters['dayRelativeUnit'] ?? 'days' ) );
+
+				if ( null === $relative_value || $relative_value <= 0 ) {
+					return true;
+				}
+
+				$threshold = self::resolve_relative_day_threshold(
+					$relative_value,
+					$relative_unit,
+					$timezone
+				);
+
+				if ( null === $threshold ) {
+					return true;
+				}
+
+				return 'inThePast' === $day_operator
+					? $entry_day >= $threshold
+					: $entry_day < $threshold;
+			case 'before':
+			case 'after':
+			case 'between':
+			case 'on':
+			default:
+				$day_value = trim( (string) ( $filters['day'] ?? '' ) );
+
+				if ( '' === $day_value ) {
+					return true;
+				}
+
+				if ( 'before' === $day_operator ) {
+					return $entry_day < $day_value;
+				}
+
+				if ( 'after' === $day_operator ) {
+					return $entry_day > $day_value;
+				}
+
+				if ( 'between' === $day_operator ) {
+					$day_end = trim( (string) ( $filters['dayEnd'] ?? '' ) );
+
+					return '' !== $day_end
+						&& $day_value <= $day_end
+						&& $entry_day >= $day_value
+						&& $entry_day <= $day_end;
+				}
+
+				return $entry_day === $day_value;
+		}
+	}
+
+	private static function resolve_relative_day_threshold(
+		int $value,
+		string $unit,
+		\DateTimeZone $timezone
+	): ?string {
+		$interval_spec = match ( $unit ) {
+			'hours'  => 'PT' . $value . 'H',
+			'weeks'  => 'P' . $value . 'W',
+			'months' => 'P' . $value . 'M',
+			'years'  => 'P' . $value . 'Y',
+			default  => 'P' . $value . 'D',
+		};
+
+		try {
+			$now      = new \DateTimeImmutable( 'now', $timezone );
+			$interval = new \DateInterval( $interval_spec );
+		} catch ( \Exception $exception ) {
+			return null;
+		}
+
+		return $now->sub( $interval )->format( 'Y-m-d' );
+	}
+
+	private static function normalize_search_text( $search ): string {
+		return strtolower( trim( (string) $search ) );
+	}
+
+	private static function normalize_filter_operator( $operator ): string {
+		return 'isNot' === trim( (string) $operator ) ? 'isNot' : 'is';
+	}
+
+	private static function normalize_text_filter_operator( $operator ): string {
+		return match ( trim( (string) $operator ) ) {
+			'notContains' => 'notContains',
+			'startsWith'  => 'startsWith',
+			default       => 'contains',
+		};
+	}
+
+	private static function matches_explicit_filter(
+		string $value,
+		string $expected,
+		string $operator
+	): bool {
+		$matches = $value === $expected;
+
+		return 'isNot' === $operator ? ! $matches : $matches;
+	}
+
+	private static function matches_text_filter(
+		string $value,
+		string $expected,
+		string $operator
+	): bool {
+		$normalized_value    = strtolower( $value );
+		$normalized_expected = strtolower( $expected );
+
+		if ( '' === $normalized_expected ) {
+			return true;
+		}
+
+		return match ( $operator ) {
+			'notContains' => ! str_contains( $normalized_value, $normalized_expected ),
+			'startsWith'  => str_starts_with( $normalized_value, $normalized_expected ),
+			default       => str_contains( $normalized_value, $normalized_expected ),
+		};
+	}
+
+	private static function normalize_optional_int( $value ): ?int {
+		if ( null === $value || '' === $value ) {
+			return null;
+		}
+
+		$normalized = (int) $value;
+
+		return $normalized > 0 ? $normalized : null;
+	}
+
+	private static function resolve_activity_timezone(): \DateTimeZone {
+		$timezone_name = '';
+
+		if ( function_exists( 'wp_timezone_string' ) ) {
+			$timezone_name = (string) wp_timezone_string();
+		}
+
+		if ( '' === $timezone_name ) {
+			$timezone_name = (string) get_option( 'timezone_string', 'UTC' );
+		}
+
+		if ( '' === $timezone_name ) {
+			$timezone_name = 'UTC';
+		}
+
+		try {
+			return new \DateTimeZone( $timezone_name );
+		} catch ( \Exception $exception ) {
+			return new \DateTimeZone( 'UTC' );
+		}
+	}
+
+	private static function format_status_label( string $status ): string {
+		return match ( $status ) {
+			'undone'  => 'Undone',
+			'blocked' => 'Undo blocked',
+			'failed'  => 'Undo unavailable',
+			default   => 'Applied',
+		};
+	}
+
+	private static function format_surface_label( string $surface ): string {
+		return match ( $surface ) {
+			'template'      => 'Template',
+			'template-part' => 'Template part',
+			'global-styles' => 'Global Styles',
+			'style-book'    => 'Style Book',
+			'block'         => 'Block',
+			default         => 'Activity',
+		};
+	}
+
+	private static function format_admin_operation_filter_label( string $operation_type ): string {
+		return match ( $operation_type ) {
+			'insert'            => 'Insert pattern',
+			'replace'           => 'Replace template part',
+			'apply-style'       => 'Apply style',
+			'modify-attributes' => 'Modify attributes',
+			default             => self::humanize_label( $operation_type ),
+		};
+	}
+
+	/**
+	 * @param array<string, mixed> $target
+	 */
+	private static function build_entity_search_label( string $surface, array $target ): string {
+		if ( 'template' === $surface ) {
+			return trim( (string) ( $target['templateRef'] ?? '' ) );
+		}
+
+		if ( 'template-part' === $surface ) {
+			return trim( (string) ( $target['templatePartRef'] ?? '' ) );
+		}
+
+		if ( in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			return implode(
+				' ',
+				array_filter(
+					[
+						trim( (string) ( $target['globalStylesId'] ?? '' ) ),
+						trim( (string) ( $target['blockTitle'] ?? '' ) ),
+						trim( (string) ( $target['blockName'] ?? '' ) ),
+					],
+					static fn ( $value ): bool => '' !== $value
+				)
+			);
+		}
+
+		return implode(
+			' ',
+			array_filter(
+				[
+					self::humanize_block_name( trim( (string) ( $target['blockName'] ?? '' ) ) ),
+					self::format_block_path( $target ),
+				],
+				static fn ( $value ): bool => '' !== $value
+			)
+		);
+	}
+
+	private static function build_document_search_label(
+		string $post_type,
+		string $entity_id
+	): string {
+		if ( '' === $post_type && '' === $entity_id ) {
+			return '';
+		}
+
+		if ( '' === $entity_id ) {
+			return $post_type;
+		}
+
+		return $post_type . ' ' . $entity_id;
+	}
+
+	/**
+	 * @param array<string, mixed> $target
+	 */
+	private static function format_block_path( array $target ): string {
+		$block_path = is_array( $target['blockPath'] ?? null ) ? $target['blockPath'] : [];
+
+		if ( [] === $block_path ) {
+			return '';
+		}
+
+		$segments   = self::format_block_path_segments( $block_path );
+		$block_name = trim( (string) ( $target['blockName'] ?? '' ) );
+
+		if ( '' === $block_name ) {
+			return $segments;
+		}
+
+		return self::humanize_block_name( $block_name ) . ' · ' . $segments;
+	}
+
+	/**
+	 * @param array<int, mixed> $block_path
+	 */
+	private static function format_block_path_segments( array $block_path ): string {
+		return implode(
+			' → ',
+			array_map(
+				static fn ( $value ): string => (string) ( (int) $value + 1 ),
+				$block_path
+			)
+		);
+	}
+
+	private static function humanize_block_name( string $block_name ): string {
+		$normalized = preg_replace( '#^core/#', '', $block_name ) ?? $block_name;
+
+		return self::humanize_label( $normalized );
+	}
+
+	private static function humanize_label( string $value ): string {
+		$normalized = trim( $value );
+
+		if ( '' === $normalized ) {
+			return '';
+		}
+
+		$parts = preg_split( '/[\s\/_-]+/', $normalized ) ?: [];
+		$parts = array_map(
+			static fn ( string $part ): string => ucfirst( strtolower( $part ) ),
+			array_values( array_filter( $parts, static fn ( string $part ): bool => '' !== $part ) )
+		);
+
+		return implode( ' ', $parts );
 	}
 
 	private static function table_exists(): bool {

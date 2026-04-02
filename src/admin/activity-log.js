@@ -9,11 +9,7 @@ import {
 	Spinner,
 } from '@wordpress/components';
 import { createRoot, useEffect, useMemo, useState } from '@wordpress/element';
-import {
-	DataForm,
-	DataViews,
-	filterSortAndPaginate,
-} from '@wordpress/dataviews/wp';
+import { DataForm, DataViews } from '@wordpress/dataviews/wp';
 import {
 	check,
 	page,
@@ -26,7 +22,6 @@ import {
 import '@wordpress/dataviews/build-style/style.css';
 import './activity-log.css';
 import {
-	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
 	clampActivityViewPage,
 	normalizeActivityEntries,
@@ -64,57 +59,210 @@ function getIconForEntry( entry ) {
 }
 
 function getSummaryCards( entries ) {
-	const blockedOrFailedCount = entries.filter( ( entry ) =>
-		[ 'blocked', 'failed' ].includes( entry.status )
-	).length;
+	const summary = entries || {};
 
 	return [
 		{
 			id: 'total',
 			label: 'Recorded actions',
-			value: entries.length,
+			value: summary?.total || 0,
 			description:
-				'Recent server-backed AI activity across Flavor Agent surfaces.',
+				'Filtered server-backed AI activity across Flavor Agent surfaces.',
 		},
 		{
 			id: 'applied',
 			label: 'Still applied',
-			value: entries.filter( ( entry ) => entry.status === 'applied' )
-				.length,
+			value: summary?.applied || 0,
 			description:
-				'Entries that still appear undo-eligible from the current activity tail.',
+				'Entries that still remain applied across the full filtered result set.',
 		},
 		{
 			id: 'undone',
 			label: 'Undone',
-			value: entries.filter( ( entry ) => entry.status === 'undone' )
-				.length,
+			value: summary?.undone || 0,
 			description:
 				'Entries already reversed and synced to the audit store.',
 		},
 		{
 			id: 'review',
 			label: 'Needs review',
-			value: blockedOrFailedCount,
+			value: summary?.review || 0,
 			description:
 				'Entries with blocked or failed undo paths that need operator context.',
 		},
 	];
 }
 
-function buildSelectElements( entries, key ) {
-	const values = Array.from(
-		new Set(
-			entries
-				.map( ( entry ) => entry?.[ key ] )
-				.filter( ( value ) => typeof value === 'string' && value )
-		)
-	).sort( ( left, right ) => left.localeCompare( right ) );
+function buildSelectElements( entries, key, { labelKey = key } = {} ) {
+	const options = new Map();
 
-	return values.map( ( value ) => ( {
-		value,
-		label: value,
-	} ) );
+	entries.forEach( ( entry ) => {
+		const rawValue = entry?.[ key ];
+
+		if (
+			rawValue === undefined ||
+			rawValue === null ||
+			rawValue === '' ||
+			rawValue === 'Not recorded'
+		) {
+			return;
+		}
+
+		const value = String( rawValue );
+		const label =
+			typeof labelKey === 'function'
+				? labelKey( entry )
+				: String( entry?.[ labelKey ] || value );
+
+		if ( ! options.has( value ) ) {
+			options.set( value, label );
+		}
+	} );
+
+	return Array.from( options.entries() )
+		.sort( ( [ , leftLabel ], [ , rightLabel ] ) =>
+			leftLabel.localeCompare( rightLabel )
+		)
+		.map( ( [ value, label ] ) => ( {
+			value,
+			label,
+		} ) );
+}
+
+function getServerFilterOptions( responseData, key ) {
+	if (
+		! responseData?.filterOptions ||
+		! Object.hasOwn( responseData.filterOptions, key )
+	) {
+		return null;
+	}
+
+	const options = responseData.filterOptions[ key ];
+
+	if ( ! Array.isArray( options ) ) {
+		return [];
+	}
+
+	return options.filter(
+		( option ) =>
+			option &&
+			option.value !== undefined &&
+			option.value !== null &&
+			option.value !== '' &&
+			option.label !== undefined &&
+			option.label !== null &&
+			option.label !== ''
+	);
+}
+
+function getViewFilter( view, field ) {
+	return Array.isArray( view?.filters )
+		? view.filters.find( ( filter ) => filter?.field === field ) || null
+		: null;
+}
+
+function appendExplicitFilter( params, fieldName, filter ) {
+	if ( ! filter ) {
+		return;
+	}
+
+	const value = Array.isArray( filter.value ) ? filter.value[ 0 ] : filter.value;
+
+	if ( value === undefined || value === null || value === '' ) {
+		return;
+	}
+
+	params.set( fieldName, String( value ) );
+
+	if ( filter.operator ) {
+		params.set( `${ fieldName }Operator`, String( filter.operator ) );
+	}
+}
+
+function appendDayFilter( params, filter ) {
+	if ( ! filter || ! filter.operator || filter.value === undefined ) {
+		return;
+	}
+
+	params.set( 'dayOperator', String( filter.operator ) );
+
+	if ( filter.operator === 'between' && Array.isArray( filter.value ) ) {
+		if ( filter.value[ 0 ] ) {
+			params.set( 'day', String( filter.value[ 0 ] ) );
+		}
+
+		if ( filter.value[ 1 ] ) {
+			params.set( 'dayEnd', String( filter.value[ 1 ] ) );
+		}
+
+		return;
+	}
+
+	if (
+		[ 'inThePast', 'over' ].includes( filter.operator ) &&
+		filter.value &&
+		typeof filter.value === 'object'
+	) {
+		if ( Number.isInteger( filter.value.value ) && filter.value.value > 0 ) {
+			params.set( 'dayRelativeValue', String( filter.value.value ) );
+		}
+
+		if ( filter.value.unit ) {
+			params.set( 'dayRelativeUnit', String( filter.value.unit ) );
+		}
+
+		return;
+	}
+
+	if ( filter.value ) {
+		params.set( 'day', String( filter.value ) );
+	}
+}
+
+function getActivityRequestUrl( bootData, view ) {
+	const params = new URLSearchParams( {
+		global: '1',
+		page: String( view.page || 1 ),
+		perPage: String( view.perPage || bootData.defaultPerPage ),
+	} );
+
+	if ( view.search ) {
+		params.set( 'search', view.search );
+	}
+
+	if ( view.sort?.field ) {
+		params.set( 'sortField', view.sort.field );
+		params.set( 'sortDirection', view.sort.direction || 'desc' );
+	}
+
+	appendExplicitFilter( params, 'surface', getViewFilter( view, 'surface' ) );
+	appendExplicitFilter( params, 'status', getViewFilter( view, 'status' ) );
+	appendExplicitFilter( params, 'postType', getViewFilter( view, 'postType' ) );
+	appendExplicitFilter( params, 'userId', getViewFilter( view, 'userId' ) );
+	appendExplicitFilter(
+		params,
+		'operationType',
+		getViewFilter( view, 'operationType' )
+	);
+	appendExplicitFilter( params, 'entityId', getViewFilter( view, 'entityId' ) );
+	appendExplicitFilter(
+		params,
+		'blockPath',
+		getViewFilter( view, 'blockPath' )
+	);
+	appendDayFilter( params, getViewFilter( view, 'day' ) );
+
+	return `${ bootData.restUrl }flavor-agent/v1/activity?${ params.toString() }`;
+}
+
+function getPerPageSizes( defaultPerPage, maxPerPage ) {
+	return Array.from(
+		new Set(
+			[ 10, 20, 50, 100, defaultPerPage ].filter(
+				( value ) => Number.isInteger( value ) && value > 0 && value <= maxPerPage
+			)
+		)
+	).sort( ( left, right ) => left - right );
 }
 
 function EmptyState( { view } ) {
@@ -358,10 +506,7 @@ function getDetailFields() {
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
-				<DetailLink
-					href={ item.targetUrl }
-					label="Open affected entity"
-				/>
+				<DetailLink href={ item.targetUrl } label={ item.targetLinkLabel } />
 			),
 		},
 		{
@@ -496,7 +641,7 @@ function ActivityEntryDetails( { entry } ) {
 								href={ entry.targetUrl }
 								variant="secondary"
 							>
-								Open target
+								{ entry.targetLinkLabel }
 							</Button>
 						) }
 						<Button
@@ -522,12 +667,62 @@ function ActivityEntryDetails( { entry } ) {
 }
 
 export function ActivityLogApp( { bootData } ) {
-	const [ view, setView ] = useState( () => readPersistedActivityView() );
-	const [ entries, setEntries ] = useState( [] );
+	const viewOptions = useMemo(
+		() => ( {
+			defaultPerPage: bootData.defaultPerPage,
+			maxPerPage: bootData.maxPerPage,
+		} ),
+		[ bootData.defaultPerPage, bootData.maxPerPage ]
+	);
+	const defaultView = useMemo(
+		() => normalizeStoredActivityView( undefined, viewOptions ),
+		[ viewOptions ]
+	);
+	const [ view, setView ] = useState( () =>
+		readPersistedActivityView( undefined, viewOptions )
+	);
+	const [ responseData, setResponseData ] = useState( () => ( {
+		entries: [],
+		filterOptions: null,
+		paginationInfo: {
+			page: 1,
+			perPage: defaultView.perPage,
+			totalItems: 0,
+			totalPages: 0,
+		},
+		summary: {
+			total: 0,
+			applied: 0,
+			undone: 0,
+			review: 0,
+		},
+	} ) );
 	const [ error, setError ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
 	const [ selectedEntryId, setSelectedEntryId ] = useState( '' );
+
+	const requestedView = useMemo(
+		() => normalizeStoredActivityView( view, viewOptions ),
+		[ view, viewOptions ]
+	);
+	const effectiveView = useMemo(
+		() =>
+			clampActivityViewPage(
+				requestedView,
+				responseData.paginationInfo,
+				viewOptions
+			),
+		[ requestedView, responseData.paginationInfo, viewOptions ]
+	);
+	const requestUrl = useMemo(
+		() => getActivityRequestUrl( bootData, requestedView ),
+		[ bootData, requestedView ]
+	);
+	const perPageSizes = useMemo(
+		() => getPerPageSizes( defaultView.perPage, bootData.maxPerPage ),
+		[ bootData.maxPerPage, defaultView.perPage ]
+	);
 
 	useEffect( () => {
 		let isCurrent = true;
@@ -538,7 +733,7 @@ export function ActivityLogApp( { bootData } ) {
 
 			try {
 				const response = await apiFetch( {
-					url: `${ bootData.restUrl }flavor-agent/v1/activity?global=1&limit=${ bootData.defaultLimit }`,
+					url: requestUrl,
 					headers: {
 						'X-WP-Nonce': bootData.nonce,
 					},
@@ -549,6 +744,8 @@ export function ActivityLogApp( { bootData } ) {
 						adminBaseUrl: bootData.adminUrl,
 						settingsUrl: bootData.settingsUrl,
 						connectorsUrl: bootData.connectorsUrl,
+						locale: bootData.locale,
+						timeZone: bootData.timeZone,
 					}
 				);
 
@@ -556,13 +753,44 @@ export function ActivityLogApp( { bootData } ) {
 					return;
 				}
 
-				setEntries( normalizedEntries );
+				setResponseData( {
+					entries: normalizedEntries,
+					filterOptions: response?.filterOptions || null,
+					paginationInfo: {
+						page: response?.paginationInfo?.page || requestedView.page,
+						perPage:
+							response?.paginationInfo?.perPage || requestedView.perPage,
+						totalItems: response?.paginationInfo?.totalItems || 0,
+						totalPages: response?.paginationInfo?.totalPages || 0,
+					},
+					summary: {
+						total: response?.summary?.total || 0,
+						applied: response?.summary?.applied || 0,
+						undone: response?.summary?.undone || 0,
+						review: response?.summary?.review || 0,
+					},
+				} );
 			} catch ( fetchError ) {
 				if ( ! isCurrent ) {
 					return;
 				}
 
-				setEntries( [] );
+				setResponseData( {
+					entries: [],
+					filterOptions: null,
+					paginationInfo: {
+						page: 1,
+						perPage: requestedView.perPage,
+						totalItems: 0,
+						totalPages: 0,
+					},
+					summary: {
+						total: 0,
+						applied: 0,
+						undone: 0,
+						review: 0,
+					},
+				} );
 				setError(
 					fetchError?.message ||
 						'Flavor Agent could not load the recent AI activity log.'
@@ -579,23 +807,27 @@ export function ActivityLogApp( { bootData } ) {
 		return () => {
 			isCurrent = false;
 		};
-	}, [ bootData, reloadToken ] );
+	}, [ bootData, requestUrl, reloadToken, requestedView.page, requestedView.perPage ] );
 
 	const fields = useMemo( () => {
-		const surfaceElements = buildSelectElements( entries, 'surface' );
-		const operationTypeElements = buildSelectElements(
-			entries,
-			'operationType'
-		);
-		const statusElements = [
-			{ value: 'applied', label: 'Applied' },
-			{ value: 'undone', label: 'Undone' },
-			{ value: 'blocked', label: 'Undo blocked' },
-			{ value: 'failed', label: 'Undo unavailable' },
-		];
-		const postTypeElements = buildSelectElements( entries, 'postType' );
-		const userElements = buildSelectElements( entries, 'user' );
-		const providerElements = buildSelectElements( entries, 'provider' );
+		const surfaceElements =
+			getServerFilterOptions( responseData, 'surface' ) ||
+			buildSelectElements( responseData.entries, 'surface', {
+				labelKey: 'surfaceLabel',
+			} );
+		const operationTypeElements =
+			getServerFilterOptions( responseData, 'operationType' ) ||
+			buildSelectElements( responseData.entries, 'operationType', {
+				labelKey: 'operationTypeLabel',
+			} );
+		const postTypeElements =
+			getServerFilterOptions( responseData, 'postType' ) ||
+			buildSelectElements( responseData.entries, 'postType' );
+		const userElements =
+			getServerFilterOptions( responseData, 'userId' ) ||
+			buildSelectElements( responseData.entries, 'userId', {
+				labelKey: 'user',
+			} );
 
 		return [
 			{
@@ -617,9 +849,6 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				filterBy: {
-					operators: [ 'contains', 'notContains', 'startsWith' ],
-				},
 			},
 			{
 				id: 'description',
@@ -627,9 +856,6 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				filterBy: {
-					operators: [ 'contains', 'notContains', 'startsWith' ],
-				},
 			},
 			{
 				id: 'day',
@@ -690,7 +916,12 @@ export function ActivityLogApp( { bootData } ) {
 				label: 'Status',
 				type: 'text',
 				enableSorting: false,
-				elements: statusElements,
+				elements: [
+					{ value: 'applied', label: 'Applied' },
+					{ value: 'undone', label: 'Undone' },
+					{ value: 'blocked', label: 'Undo blocked' },
+					{ value: 'failed', label: 'Undo unavailable' },
+				],
 				filterBy: {
 					operators: [ 'is', 'isNot' ],
 				},
@@ -703,15 +934,15 @@ export function ActivityLogApp( { bootData } ) {
 				),
 			},
 			{
-				id: 'user',
+				id: 'userId',
 				label: 'User',
 				type: 'text',
 				enableSorting: false,
-				enableGlobalSearch: true,
 				elements: userElements,
 				filterBy: {
 					operators: [ 'is', 'isNot' ],
 				},
+				render: ( { item } ) => <span>{ item.user }</span>,
 			},
 			{
 				id: 'postType',
@@ -729,7 +960,6 @@ export function ActivityLogApp( { bootData } ) {
 				label: 'Entity ID',
 				type: 'text',
 				enableSorting: false,
-				enableGlobalSearch: true,
 				filterBy: {
 					operators: [ 'contains', 'notContains', 'startsWith' ],
 				},
@@ -740,16 +970,12 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				filterBy: {
-					operators: [ 'contains', 'notContains', 'startsWith' ],
-				},
 			},
 			{
 				id: 'blockPath',
 				label: 'Block path',
 				type: 'text',
 				enableSorting: false,
-				enableGlobalSearch: true,
 				filterBy: {
 					operators: [ 'contains', 'notContains', 'startsWith' ],
 				},
@@ -759,10 +985,7 @@ export function ActivityLogApp( { bootData } ) {
 				label: 'Provider',
 				type: 'text',
 				enableSorting: false,
-				elements: providerElements,
-				filterBy: {
-					operators: [ 'is', 'isNot' ],
-				},
+				enableGlobalSearch: true,
 			},
 			{
 				id: 'model',
@@ -770,9 +993,6 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				filterBy: {
-					operators: [ 'contains', 'notContains', 'startsWith' ],
-				},
 			},
 			{
 				id: 'activityTypeLabel',
@@ -780,9 +1000,6 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				filterBy: {
-					operators: [ 'contains', 'notContains', 'startsWith' ],
-				},
 			},
 			{
 				id: 'requestPrompt',
@@ -790,62 +1007,26 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
-				filterBy: {
-					operators: [ 'contains', 'notContains', 'startsWith' ],
-				},
 			},
 		];
-	}, [ entries ] );
+	}, [ responseData ] );
 
-	const processedViewData = useMemo( () => {
-		const normalizedView = normalizeStoredActivityView( view );
-		const initialProcessedData = filterSortAndPaginate(
-			entries,
-			normalizedView,
-			fields
-		);
-		const effectiveView = clampActivityViewPage(
-			normalizedView,
-			initialProcessedData?.paginationInfo
-		);
-
-		if ( areActivityViewsEqual( effectiveView, normalizedView ) ) {
-			return {
-				effectiveView,
-				processedData: initialProcessedData,
-			};
-		}
-
-		return {
-			effectiveView,
-			processedData: filterSortAndPaginate(
-				entries,
-				effectiveView,
-				fields
-			),
-		};
-	}, [ entries, fields, view ] );
-	const { effectiveView, processedData } = processedViewData;
-	const visibleEntries = useMemo(
-		() => processedData?.data || [],
-		[ processedData?.data ]
-	);
 	const selectedEntry =
-		visibleEntries.find( ( entry ) => entry.id === selectedEntryId ) ||
+		responseData.entries.find( ( entry ) => entry.id === selectedEntryId ) ||
 		null;
 
 	useEffect( () => {
-		writePersistedActivityView( effectiveView );
-	}, [ effectiveView ] );
+		writePersistedActivityView( effectiveView, undefined, viewOptions );
+	}, [ effectiveView, viewOptions ] );
 
 	useEffect( () => {
-		if ( ! areActivityViewsEqual( view, effectiveView ) ) {
+		if ( ! areActivityViewsEqual( view, effectiveView, viewOptions ) ) {
 			setView( effectiveView );
 		}
-	}, [ effectiveView, view ] );
+	}, [ effectiveView, view, viewOptions ] );
 
 	useEffect( () => {
-		if ( visibleEntries.length === 0 ) {
+		if ( responseData.entries.length === 0 ) {
 			if ( selectedEntryId ) {
 				setSelectedEntryId( '' );
 			}
@@ -853,16 +1034,19 @@ export function ActivityLogApp( { bootData } ) {
 		}
 
 		if (
-			! visibleEntries.some( ( entry ) => entry.id === selectedEntryId )
+			! responseData.entries.some(
+				( entry ) => entry.id === selectedEntryId
+			)
 		) {
-			setSelectedEntryId( visibleEntries[ 0 ].id );
+			setSelectedEntryId( responseData.entries[ 0 ].id );
 		}
-	}, [ selectedEntryId, visibleEntries ] );
+	}, [ responseData.entries, selectedEntryId ] );
 
-	const summaryCards = getSummaryCards( entries );
+	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(
 		effectiveView,
-		DEFAULT_ACTIVITY_VIEW
+		defaultView,
+		viewOptions
 	);
 
 	return (
@@ -926,12 +1110,12 @@ export function ActivityLogApp( { bootData } ) {
 			) }
 
 			<DataViews
-				data={ visibleEntries }
+				data={ responseData.entries }
 				fields={ fields }
 				view={ effectiveView }
 				onChangeView={ setView }
 				getItemId={ ( item ) => item.id }
-				paginationInfo={ processedData.paginationInfo }
+				paginationInfo={ responseData.paginationInfo }
 				defaultLayouts={ {
 					activity: {
 						layout: {
@@ -954,15 +1138,11 @@ export function ActivityLogApp( { bootData } ) {
 					},
 				] }
 				config={ {
-					perPageSizes: [ 10, 20, 50, 100 ],
+					perPageSizes,
 				} }
-				onReset={
-					isViewModified
-						? () => setView( DEFAULT_ACTIVITY_VIEW )
-						: false
-				}
+				onReset={ isViewModified ? () => setView( defaultView ) : false }
 				isLoading={ isLoading }
-				empty={ <EmptyState view={ view } /> }
+				empty={ <EmptyState view={ effectiveView } /> }
 			>
 				<div className="flavor-agent-activity-log__controls">
 					<div className="flavor-agent-activity-log__controls-main">
@@ -975,9 +1155,7 @@ export function ActivityLogApp( { bootData } ) {
 						{ isViewModified && (
 							<Button
 								variant="secondary"
-								onClick={ () =>
-									setView( DEFAULT_ACTIVITY_VIEW )
-								}
+								onClick={ () => setView( defaultView ) }
 							>
 								Reset view
 							</Button>

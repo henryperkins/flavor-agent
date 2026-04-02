@@ -7,6 +7,7 @@ jest.mock( '../../style-book/dom', () => ( {
 
 import {
 	createActivityEntry,
+	getBlockActivityUndoState,
 	getCurrentActivityScope,
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
@@ -252,6 +253,148 @@ describe( 'activity history helpers', () => {
 		expect( getLatestUndoableActivity( [ older, undoneNewer ] ) ).toEqual(
 			expect.objectContaining( {
 				id: older.id,
+			} )
+		);
+	} );
+
+	test( 'block runtime state treats a native-undone newer action as undone and re-unlocks the older AI action', () => {
+		const older = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			before: {
+				attributes: {
+					content: 'Alpha',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'Beta',
+				},
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			timestamp: '2026-03-24T10:00:00Z',
+		} );
+		const newer = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			before: {
+				attributes: {
+					content: 'Beta',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'Gamma',
+				},
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			timestamp: '2026-03-24T10:00:01Z',
+		} );
+		const currentBlock = {
+			clientId: 'block-1',
+			name: 'core/paragraph',
+			attributes: {
+				content: 'Beta',
+			},
+		};
+		const blockEditorSelect = {
+			getBlock: () => currentBlock,
+			getBlockAttributes: () => currentBlock.attributes,
+			getBlocks: () => [ currentBlock ],
+		};
+
+		const resolvedEntries = getResolvedActivityEntries(
+			[ older, newer ],
+			( entry ) => getBlockActivityUndoState( entry, blockEditorSelect )
+		);
+
+		expect( resolvedEntries[ 0 ].undo ).toEqual(
+			expect.objectContaining( {
+				status: 'available',
+				canUndo: true,
+			} )
+		);
+		expect( resolvedEntries[ 1 ].undo ).toEqual(
+			expect.objectContaining( {
+				status: 'undone',
+				canUndo: false,
+			} )
+		);
+		expect( getLatestUndoableActivity( resolvedEntries ) ).toEqual(
+			expect.objectContaining( {
+				id: older.id,
+			} )
+		);
+	} );
+
+	test( 'block runtime state revives an AI action after native redo reapplies the recorded after snapshot', () => {
+		const entry = {
+			...createActivityEntry( {
+				type: 'apply_suggestion',
+				surface: 'block',
+				target: {
+					clientId: 'block-1',
+					blockName: 'core/paragraph',
+					blockPath: [ 0 ],
+				},
+				before: {
+					attributes: {
+						content: 'Before',
+					},
+				},
+				after: {
+					attributes: {
+						content: 'After',
+					},
+				},
+				document: {
+					scopeKey: 'post:42',
+				},
+			} ),
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				error: null,
+				updatedAt: '2026-03-24T10:02:00Z',
+				undoneAt: '2026-03-24T10:02:00Z',
+			},
+		};
+		const currentBlock = {
+			clientId: 'block-1',
+			name: 'core/paragraph',
+			attributes: {
+				content: 'After',
+			},
+		};
+		const blockEditorSelect = {
+			getBlock: () => currentBlock,
+			getBlockAttributes: () => currentBlock.attributes,
+			getBlocks: () => [ currentBlock ],
+		};
+
+		expect(
+			getResolvedActivityEntries( [ entry ], ( activity ) =>
+				getBlockActivityUndoState( activity, blockEditorSelect )
+			)[ 0 ].undo
+		).toEqual(
+			expect.objectContaining( {
+				status: 'available',
+				canUndo: true,
+				error: null,
 			} )
 		);
 	} );

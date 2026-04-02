@@ -451,6 +451,46 @@ describe( 'StyleBookRecommender', () => {
 		expect( mockFetchStyleBookRecommendations ).not.toHaveBeenCalled();
 	} );
 
+	test( 'renders shared style card badges and review state for executable style book suggestions', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					suggestionKey: 'style-book-1',
+					label: 'Refine paragraph rhythm',
+					description:
+						'Increase the block gap to give the example more breathing room.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [
+						{
+							type: 'set_block_styles',
+							path: [ 'spacing', 'blockGap' ],
+							value: 'var:preset|spacing|40',
+							presetSlug: '40',
+						},
+					],
+				},
+			],
+			explanation: 'Push spacing slightly further for the example block.',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+			selectedSuggestionKey: 'style-book-1',
+		};
+
+		act( () => {
+			root.render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Style Book' );
+		expect( sidebar.textContent ).toContain( 'Paragraph' );
+		expect( sidebar.textContent ).toContain( 'Review to apply' );
+		expect( sidebar.textContent ).toContain( 'Spacing' );
+		expect( sidebar.textContent ).toContain( 'Review open' );
+		expect( sidebar.textContent ).toContain( 'spacing.blockGap → 40' );
+	} );
+
 	test( 'drops stale recommendations when the selected Style Book block changes', () => {
 		currentStoreState = {
 			...currentStoreState,

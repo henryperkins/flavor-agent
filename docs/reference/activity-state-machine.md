@@ -1,0 +1,98 @@
+# Activity Undo State Machine Reference
+
+This document is the contract reference for the activity entry lifecycle and the undo state machine.
+
+Use it when you need to answer:
+
+- what undo states exist and which transitions are valid
+- when an undo is blocked and why
+- how the client and server coordinate undo state
+
+## Activity Entry Lifecycle
+
+1. User applies a suggestion in the editor
+2. Client creates an activity entry via `POST /flavor-agent/v1/activity` with `undo.status: "available"`
+3. Entry is stored in the `{prefix}_flavor_agent_activity` database table
+4. The entry appears in inline activity history and the admin audit page
+5. User may undo the entry, transitioning through the state machine below
+
+## Undo States
+
+| State | Meaning |
+|---|---|
+| `available` | The action has been applied and can be undone |
+| `undone` | The action was successfully rolled back |
+| `failed` | The undo attempt failed (error message stored in `undo.error`) |
+
+## Valid Transitions
+
+```text
+available -> undone    (successful undo)
+available -> failed    (undo attempted but failed)
+```
+
+No other transitions are accepted. The `update_undo_status()` method rejects any status value other than `undone` or `failed` with a `400` error.
+
+Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`.
+
+At runtime, the client can still resolve an entry back to effectively `available` when the live editor or style state shows the recorded "after" snapshot has been reapplied again (for example after a native redo). That runtime revival is computed from current editor/style state; it is not a persisted `undo.status` transition back to `available`.
+
+## Ordered Undo Rule
+
+Undo is not always permitted even when the state is `available`. The server enforces ordered undo to prevent incoherent rollbacks.
+
+An undo is **blocked** (HTTP 409) when newer activity entries exist on the same entity that have not yet been undone. Specifically:
+
+1. Query all activity entries for the same `entity_type` and `entity_ref`, ordered by `created_at ASC`
+2. Walk backward from the newest entry
+3. If the target entry is reached before encountering any non-`undone` newer entry, the undo is eligible
+4. If any newer entry has a status other than `undone`, the undo is blocked
+
+This ensures undos happen in reverse chronological order per entity, preventing partial rollbacks that would leave the entity in an inconsistent state.
+
+### Client-Side Enforcement
+
+The client also enforces this rule before sending the request:
+
+- `undoActivity()` in the store refreshes server-backed activity before evaluating eligibility
+- If a newer entry on the same entity is still runtime-active after live-state reconciliation, the client blocks the undo locally and returns an error without making a network request
+
+## Undo Metadata Fields
+
+| Field | Type | Set when |
+|---|---|---|
+| `undo.status` | `string` | Always present |
+| `undo.error` | `string` or `null` | Set on `failed` transitions |
+| `undo.updatedAt` | ISO 8601 `string` | Set on any transition |
+| `undo.undoneAt` | ISO 8601 `string` or `null` | Set on `undone` transitions |
+
+## Retry and Merge Behavior
+
+When a `POST /activity` create request arrives for an entry that already exists (duplicate `activity_id`), the server merges rather than rejecting:
+
+- If the existing entry is `available` and the incoming entry is `failed` or `undone`, the server updates the existing row with the incoming undo state
+- This handles the case where the client's original create response was lost but a local undo was already applied
+
+## Pruning
+
+Activity entries are automatically pruned by a daily cron event (`flavor_agent_prune_activity`):
+
+- Default retention: **90 days** (`flavor_agent_activity_retention_days` option)
+- Entries with `created_at` older than the retention window are deleted
+- Pruning runs via `wp_schedule_event` with the `daily` recurrence
+
+## Storage
+
+| Constant | Value |
+|---|---|
+| Table suffix | `flavor_agent_activity` |
+| Default query limit | 20 |
+| Maximum query limit | 100 |
+
+## Primary Source Files
+
+- `inc/Activity/Repository.php`
+- `inc/Activity/Permissions.php`
+- `inc/Activity/Serializer.php`
+- `src/store/index.js` (`undoActivity`, `loadActivitySession`, `createActivityEntry`)
+- `src/store/activity-history.js`

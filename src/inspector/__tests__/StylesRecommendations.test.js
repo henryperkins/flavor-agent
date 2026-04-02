@@ -15,6 +15,7 @@ jest.mock( '@wordpress/components', () => {
 			children,
 			className,
 			disabled,
+			label,
 			onClick,
 			title: btnTitle,
 		} ) =>
@@ -27,7 +28,7 @@ jest.mock( '@wordpress/components', () => {
 					onClick,
 					title: btnTitle,
 				},
-				children
+				children || label || ''
 			),
 		ButtonGroup: ( { children, className } ) =>
 			createElement( 'div', { className }, children ),
@@ -138,16 +139,15 @@ describe( 'StylesRecommendations', () => {
 			makeSuggestion( 'shadow' ),
 		] );
 
-		expect( container.textContent ).toContain(
-			'More suggestions appear in'
-		);
+		expect( container.textContent ).toContain( 'Native Style Panels' );
+		expect( container.textContent ).toContain( 'Filter' );
 	} );
 
 	test( 'does not show hint when no delegated panels have suggestions', () => {
 		renderComponent( [ makeSuggestion( 'shadow' ) ] );
 
 		expect( container.textContent ).not.toContain(
-			'More suggestions appear in'
+			'Native Style Panels'
 		);
 	} );
 
@@ -171,6 +171,26 @@ describe( 'StylesRecommendations', () => {
 	test( 'returns null for empty suggestions', () => {
 		renderComponent( [] );
 		expect( container.innerHTML ).toBe( '' );
+	} );
+
+	test( 'shows inline apply feedback after a style row is applied', async () => {
+		const suggestion = makeSuggestion( 'shadow', 'Use softer shadow' );
+
+		renderComponent( [ suggestion ] );
+
+		const applyButton = Array.from(
+			container.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Apply' );
+
+		await act( async () => {
+			applyButton.click();
+			await Promise.resolve();
+		} );
+
+		expect( mockApplySuggestion ).toHaveBeenCalledWith( 'block-1', suggestion );
+		expect(
+			container.querySelector( '.flavor-agent-inline-feedback' )?.textContent
+		).toBe( 'AppliedUse softer shadow.' );
 	} );
 } );
 

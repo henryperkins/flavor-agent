@@ -190,6 +190,320 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'activity-block', $entries[1]['id'] ?? null );
 	}
 
+	public function test_query_admin_paginates_across_page_two_and_page_three(): void {
+		Repository::install();
+
+		for ( $index = 1; $index <= 250; ++$index ) {
+			Repository::create(
+				$this->build_block_entry(
+					'activity-' . $index,
+					sprintf(
+						'2026-03-24T10:%02d:%02dZ',
+						intdiv( $index - 1, 60 ),
+						( $index - 1 ) % 60
+					)
+				)
+			);
+		}
+
+		$page_two = Repository::query_admin(
+			[
+				'page'    => 2,
+				'perPage' => 100,
+			]
+		);
+		$page_three = Repository::query_admin(
+			[
+				'page'    => 3,
+				'perPage' => 100,
+			]
+		);
+
+		$this->assertSame( 250, $page_two['paginationInfo']['totalItems'] ?? null );
+		$this->assertSame( 3, $page_two['paginationInfo']['totalPages'] ?? null );
+		$this->assertSame( 2, $page_two['paginationInfo']['page'] ?? null );
+		$this->assertCount( 100, $page_two['entries'] ?? [] );
+		$this->assertSame( 'activity-150', $page_two['entries'][0]['id'] ?? null );
+		$this->assertSame( 'activity-51', $page_two['entries'][99]['id'] ?? null );
+		$this->assertSame( 3, $page_three['paginationInfo']['page'] ?? null );
+		$this->assertCount( 50, $page_three['entries'] ?? [] );
+		$this->assertSame( 'activity-50', $page_three['entries'][0]['id'] ?? null );
+		$this->assertSame( 'activity-1', $page_three['entries'][49]['id'] ?? null );
+	}
+
+	public function test_query_admin_summary_counts_the_full_filtered_result_set(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry( 'activity-1', '2026-03-24T10:00:00Z' )
+		);
+		Repository::create(
+			$this->build_block_entry( 'activity-2', '2026-03-24T10:00:01Z' )
+		);
+		Repository::create(
+			$this->build_block_entry( 'activity-3', '2026-03-24T10:00:02Z' )
+		);
+		Repository::create(
+			$this->build_block_entry(
+				'activity-undone',
+				'2026-03-24T10:00:03Z',
+				'99'
+			)
+		);
+		Repository::create(
+			$this->build_block_entry(
+				'activity-failed',
+				'2026-03-24T10:00:04Z',
+				'100'
+			)
+		);
+
+		Repository::update_undo_status( 'activity-undone', 'undone' );
+		Repository::update_undo_status(
+			'activity-failed',
+			'failed',
+			'Undo failed.'
+		);
+
+		$result = Repository::query_admin(
+			[
+				'surface' => 'block',
+				'page'    => 2,
+				'perPage' => 2,
+			]
+		);
+
+		$this->assertCount( 2, $result['entries'] ?? [] );
+		$this->assertSame(
+			[
+				'total'   => 5,
+				'applied' => 1,
+				'undone'  => 1,
+				'review'  => 3,
+			],
+			$result['summary'] ?? []
+		);
+	}
+
+	public function test_query_admin_marks_blocked_rows_when_the_blocking_row_is_on_page_one(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry( 'activity-1', '2026-03-24T10:00:00Z' )
+		);
+		Repository::create(
+			$this->build_block_entry( 'activity-2', '2026-03-24T10:00:01Z' )
+		);
+		Repository::create(
+			$this->build_block_entry( 'activity-3', '2026-03-24T10:00:02Z' )
+		);
+
+		$result = Repository::query_admin(
+			[
+				'page'    => 3,
+				'perPage' => 1,
+			]
+		);
+
+		$this->assertSame( 3, $result['paginationInfo']['totalPages'] ?? null );
+		$this->assertSame( 'activity-1', $result['entries'][0]['id'] ?? null );
+		$this->assertSame( 'blocked', $result['entries'][0]['status'] ?? null );
+	}
+
+	public function test_query_admin_returns_filter_options_for_the_full_filtered_result_set(): void {
+		Repository::install();
+
+		WordPressTestState::$current_user_id = 7;
+		Repository::create(
+			$this->build_block_entry( 'activity-block', '2026-03-24T10:00:00Z' )
+		);
+
+		WordPressTestState::$current_user_id = 11;
+		Repository::create(
+			$this->build_template_entry( 'activity-template', '2026-03-24T10:00:01Z' )
+		);
+
+		$result = Repository::query_admin(
+			[
+				'page'    => 1,
+				'perPage' => 1,
+			]
+		);
+
+		$this->assertCount( 1, $result['entries'] ?? [] );
+		$this->assertSame(
+			[
+				[ 'value' => 'block', 'label' => 'Block' ],
+				[ 'value' => 'template', 'label' => 'Template' ],
+			],
+			$result['filterOptions']['surface'] ?? []
+		);
+		$this->assertSame(
+			[
+				[ 'value' => 'insert', 'label' => 'Insert pattern' ],
+				[ 'value' => 'modify-attributes', 'label' => 'Modify attributes' ],
+			],
+			$result['filterOptions']['operationType'] ?? []
+		);
+		$this->assertSame(
+			[
+				[ 'value' => 'post', 'label' => 'post' ],
+				[ 'value' => 'wp_template', 'label' => 'wp_template' ],
+			],
+			$result['filterOptions']['postType'] ?? []
+		);
+		$this->assertSame(
+			[
+				[ 'value' => '7', 'label' => 'User #7' ],
+				[ 'value' => '11', 'label' => 'User #11' ],
+			],
+			$result['filterOptions']['userId'] ?? []
+		);
+	}
+
+	public function test_query_admin_search_matches_ui_block_paths_and_assign_template_part_labels(): void {
+		Repository::install();
+
+		Repository::create(
+			array_merge(
+				$this->build_block_entry( 'activity-block', '2026-03-24T10:00:00Z' ),
+				[
+					'target' => [
+						'clientId'  => 'block-activity-block',
+						'blockName' => 'core/paragraph',
+						'blockPath' => [ 0, 1 ],
+					],
+				]
+			)
+		);
+		Repository::create(
+			$this->build_template_part_assignment_entry(
+				'activity-assign',
+				'2026-03-24T10:00:01Z'
+			)
+		);
+
+		$block_path_result = Repository::query_admin(
+			[
+				'search' => 'Paragraph · 1 → 2',
+			]
+		);
+		$assignment_result = Repository::query_admin(
+			[
+				'search' => 'Assign template part',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-block' ],
+			array_column( $block_path_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-assign' ],
+			array_column( $assignment_result['entries'] ?? [], 'id' )
+		);
+	}
+
+	public function test_query_admin_supports_relative_day_filters(): void {
+		Repository::install();
+
+		$now = new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) );
+
+		Repository::create(
+			$this->build_block_entry(
+				'activity-recent',
+				$now->sub( new \DateInterval( 'P2D' ) )->format( 'Y-m-d\TH:i:s\Z' )
+			)
+		);
+		Repository::create(
+			$this->build_block_entry(
+				'activity-older',
+				$now->sub( new \DateInterval( 'P10D' ) )->format( 'Y-m-d\TH:i:s\Z' )
+			)
+		);
+
+		$recent_result = Repository::query_admin(
+			[
+				'dayOperator'      => 'inThePast',
+				'dayRelativeValue' => 7,
+				'dayRelativeUnit'  => 'days',
+			]
+		);
+		$older_result  = Repository::query_admin(
+			[
+				'dayOperator'      => 'over',
+				'dayRelativeValue' => 7,
+				'dayRelativeUnit'  => 'days',
+			]
+		);
+		$between_result = Repository::query_admin(
+			[
+				'dayOperator' => 'between',
+				'day'         => $now->sub( new \DateInterval( 'P2D' ) )->format( 'Y-m-d' ),
+				'dayEnd'      => $now->sub( new \DateInterval( 'P2D' ) )->format( 'Y-m-d' ),
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-recent' ],
+			array_column( $recent_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-older' ],
+			array_column( $older_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-recent' ],
+			array_column( $between_result['entries'] ?? [], 'id' )
+		);
+	}
+
+	public function test_query_admin_supports_operator_filters_and_user_sorting(): void {
+		Repository::install();
+
+		WordPressTestState::$current_user_id = 20;
+		Repository::create(
+			$this->build_template_entry( 'activity-template', '2026-03-24T10:00:00Z' )
+		);
+
+		WordPressTestState::$current_user_id = 7;
+		Repository::create(
+			$this->build_block_entry( 'activity-block', '2026-03-24T10:00:01Z' )
+		);
+
+		WordPressTestState::$current_user_id = 11;
+		Repository::create(
+			$this->build_template_part_assignment_entry(
+				'activity-assign',
+				'2026-03-24T10:00:02Z'
+			)
+		);
+
+		$sorted_result = Repository::query_admin(
+			[
+				'userId'         => 20,
+				'userIdOperator' => 'isNot',
+				'sortField'      => 'userId',
+				'sortDirection'  => 'asc',
+			]
+		);
+		$filtered_result = Repository::query_admin(
+			[
+				'operationType'         => 'replace',
+				'operationTypeOperator' => 'is',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-block', 'activity-assign' ],
+			array_column( $sorted_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-assign' ],
+			array_column( $filtered_result['entries'] ?? [], 'id' )
+		);
+	}
+
 	public function test_create_generates_a_uuid_v4_activity_id_when_none_is_provided(): void {
 		Repository::install();
 
@@ -405,6 +719,86 @@ final class ActivityRepositoryTest extends TestCase {
 				'scopeKey' => 'wp_template:theme//home',
 				'postType' => 'wp_template',
 				'entityId' => 'theme//home',
+			],
+			'timestamp'  => $timestamp,
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_block_entry(
+		string $id,
+		string $timestamp,
+		string $entity_id = '42'
+	): array {
+		return [
+			'id'         => $id,
+			'type'       => 'apply_suggestion',
+			'surface'    => 'block',
+			'target'     => [
+				'clientId'  => 'block-' . $id,
+				'blockName' => 'core/paragraph',
+				'blockPath' => [ 0 ],
+			],
+			'suggestion' => 'Tighten the intro copy',
+			'before'     => [
+				'attributes' => [
+					'content' => 'Before',
+				],
+			],
+			'after'      => [
+				'attributes' => [
+					'content' => 'After',
+				],
+			],
+			'request'    => [
+				'prompt'    => 'Tighten the intro copy.',
+				'reference' => 'block:' . $entity_id . ':1',
+			],
+			'document'   => [
+				'scopeKey' => 'post:' . $entity_id,
+				'postType' => 'post',
+				'entityId' => $entity_id,
+			],
+			'timestamp'  => $timestamp,
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_template_part_assignment_entry(
+		string $id,
+		string $timestamp
+	): array {
+		return [
+			'id'         => $id,
+			'type'       => 'apply_template_part_suggestion',
+			'surface'    => 'template-part',
+			'target'     => [
+				'templatePartRef' => 'theme//header',
+			],
+			'suggestion' => '',
+			'before'     => [
+				'operations' => [],
+			],
+			'after'      => [
+				'operations' => [
+					[
+						'type' => 'assign_template_part',
+						'slug' => 'header',
+					],
+				],
+			],
+			'request'    => [
+				'prompt'    => 'Attach the shared header.',
+				'reference' => 'template-part:theme//header:0',
+			],
+			'document'   => [
+				'scopeKey' => 'wp_template_part:theme//header',
+				'postType' => 'wp_template_part',
+				'entityId' => 'theme//header',
 			],
 			'timestamp'  => $timestamp,
 		];

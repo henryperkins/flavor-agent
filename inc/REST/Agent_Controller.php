@@ -263,10 +263,122 @@ final class Agent_Controller {
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 						],
+						'postType'   => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'entityId'   => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'blockPath'  => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'operationType' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'status'     => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'page'       => [
+							'required'          => false,
+							'type'              => 'integer',
+							'default'           => 1,
+							'sanitize_callback' => 'absint',
+						],
+						'perPage'    => [
+							'required'          => false,
+							'type'              => 'integer',
+							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
+							'sanitize_callback' => 'absint',
+						],
+						'search'     => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'sortField'  => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'sortDirection' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'surfaceOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'statusOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'postTypeOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'entityIdOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'blockPathOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'userIdOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'operationTypeOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'day'        => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'dayEnd'     => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'dayOperator' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'dayRelativeValue' => [
+							'required'          => false,
+							'type'              => 'integer',
+							'sanitize_callback' => 'absint',
+						],
+						'dayRelativeUnit' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
 						'limit'      => [
 							'required'          => false,
 							'type'              => 'integer',
-							'default'           => 20,
+							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
 							'sanitize_callback' => 'absint',
 						],
 					],
@@ -542,6 +654,45 @@ final class Agent_Controller {
 	public static function handle_get_activity( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		if ( ! ActivityPermissions::can_access_activity_request( $request ) ) {
 			return ActivityPermissions::forbidden_error();
+		}
+
+		$is_global_request = true === $request->get_param( 'global' )
+			|| '' === trim( (string) $request->get_param( 'scopeKey' ) );
+
+		if ( $is_global_request ) {
+			$result = ActivityRepository::query_admin(
+				[
+					'scopeKey'              => $request->get_param( 'scopeKey' ),
+					'surface'               => $request->get_param( 'surface' ),
+					'surfaceOperator'       => $request->get_param( 'surfaceOperator' ),
+					'status'                => $request->get_param( 'status' ),
+					'statusOperator'        => $request->get_param( 'statusOperator' ),
+					'postType'              => $request->get_param( 'postType' ),
+					'postTypeOperator'      => $request->get_param( 'postTypeOperator' ),
+					'entityId'              => $request->get_param( 'entityId' ),
+					'entityIdOperator'      => $request->get_param( 'entityIdOperator' ),
+					'blockPath'             => $request->get_param( 'blockPath' ),
+					'blockPathOperator'     => $request->get_param( 'blockPathOperator' ),
+					'userId'                => $request->get_param( 'userId' ),
+					'userIdOperator'        => $request->get_param( 'userIdOperator' ),
+					'operationType'         => $request->get_param( 'operationType' ),
+					'operationTypeOperator' => $request->get_param( 'operationTypeOperator' ),
+					'entityType'            => $request->get_param( 'entityType' ),
+					'entityRef'             => $request->get_param( 'entityRef' ),
+					'page'                  => $request->get_param( 'page' ),
+					'perPage'               => $request->get_param( 'perPage' ),
+					'search'                => $request->get_param( 'search' ),
+					'sortField'             => $request->get_param( 'sortField' ),
+					'sortDirection'         => $request->get_param( 'sortDirection' ),
+					'day'                   => $request->get_param( 'day' ),
+					'dayEnd'                => $request->get_param( 'dayEnd' ),
+					'dayOperator'           => $request->get_param( 'dayOperator' ),
+					'dayRelativeValue'      => $request->get_param( 'dayRelativeValue' ),
+					'dayRelativeUnit'       => $request->get_param( 'dayRelativeUnit' ),
+				]
+			);
+
+			return new \WP_REST_Response( $result, 200 );
 		}
 
 		$entries = ActivityRepository::query(

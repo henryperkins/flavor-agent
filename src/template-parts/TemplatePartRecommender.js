@@ -501,7 +501,8 @@ export default function TemplatePartRecommender() {
 		latestTemplatePartActivity &&
 		latestTemplatePartActivity.id === latestUndoableActivityId;
 	const hasUndoSuccess =
-		undoStatus === 'success' && Boolean( lastUndoneTemplatePartActivity );
+		undoStatus === 'success' &&
+		lastUndoneTemplatePartActivity?.undo?.status === 'undone';
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );

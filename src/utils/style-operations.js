@@ -1069,6 +1069,32 @@ export function getGlobalStylesActivityUndoState( activity, registry ) {
 		};
 	}
 
+	const matchesBeforeConfig = isStyleBookActivity
+		? JSON.stringify(
+				getComparableConfigBranchAtPath(
+					runtime.userConfig,
+					styleBookBranchPath
+				)
+		  ) ===
+		  JSON.stringify(
+				getComparableConfigBranchAtPath(
+					activity?.before?.userConfig || {},
+					styleBookBranchPath
+				)
+		  )
+		: configsMatch(
+				runtime.userConfig,
+				activity?.before?.userConfig || {}
+		  );
+
+	if ( matchesBeforeConfig ) {
+		return {
+			canUndo: false,
+			status: 'undone',
+			error: null,
+		};
+	}
+
 	const configsStillMatch = isStyleBookActivity
 		? JSON.stringify(
 				getComparableConfigBranchAtPath(

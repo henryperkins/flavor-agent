@@ -2,7 +2,9 @@ import {
 	clampActivityViewPage,
 	DEFAULT_ACTIVITY_VIEW,
 	areActivityViewsEqual,
+	buildActivityTargetLink,
 	buildActivityTargetUrl,
+	formatActivityTimestamp,
 	normalizeActivityEntries,
 	readPersistedActivityView,
 	writePersistedActivityView,
@@ -53,14 +55,16 @@ function createStorage() {
 }
 
 describe( 'activity log utils', () => {
-	test( 'normalizeActivityEntries marks older entries as blocked when newer actions remain applied', () => {
+	test( 'normalizeActivityEntries preserves server-resolved blocked status for admin rows', () => {
 		const olderEntry = createEntry( {
 			id: 'activity-older',
 			timestamp: '2026-03-26T10:00:00Z',
+			status: 'blocked',
 		} );
 		const newerEntry = createEntry( {
 			id: 'activity-newer',
 			timestamp: '2026-03-26T10:00:01Z',
+			status: 'applied',
 		} );
 
 		const entries = normalizeActivityEntries( [ olderEntry, newerEntry ] );
@@ -226,6 +230,54 @@ describe( 'activity log utils', () => {
 		expect( postUrl ).toBe(
 			'https://example.test/wp-admin/post.php?post=42&action=edit'
 		);
+	} );
+
+	test( 'formatActivityTimestamp uses the same timezone basis for grouping and display', () => {
+		const formatted = formatActivityTimestamp( '2026-03-27T00:30:00Z', {
+			locale: 'en-US',
+			timeZone: 'America/Los_Angeles',
+		} );
+
+		expect( formatted.dayKey ).toBe( '2026-03-26' );
+		expect( formatted.timestampDisplay ).toContain( 'Mar 26' );
+	} );
+
+	test( 'buildActivityTargetLink uses honest styles labels for style surfaces', () => {
+		const globalStylesLink = buildActivityTargetLink(
+			createEntry( {
+				surface: 'global-styles',
+				target: {
+					globalStylesId: '17',
+				},
+				document: {
+					scopeKey: 'global_styles:17',
+					postType: 'global_styles',
+					entityId: '17',
+				},
+			} ),
+			'https://example.test/wp-admin/'
+		);
+		const styleBookLink = buildActivityTargetLink(
+			createEntry( {
+				surface: 'style-book',
+				target: {
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				document: {
+					scopeKey: 'style_book:17:core/paragraph',
+					postType: 'global_styles',
+					entityId: '17',
+				},
+			} ),
+			'https://example.test/wp-admin/'
+		);
+
+		expect( globalStylesLink.label ).toBe( 'Open Styles' );
+		expect( globalStylesLink.url ).toContain( '/wp-admin/site-editor.php?' );
+		expect( styleBookLink.label ).toBe( 'Open Styles' );
+		expect( styleBookLink.url ).toContain( '/wp-admin/site-editor.php?' );
 	} );
 
 	test( 'normalizeActivityEntries labels Style Book activity against the selected block target', () => {

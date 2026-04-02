@@ -1,4 +1,5 @@
 import { getStyleBookUiState } from '../style-book/dom';
+import { attributeSnapshotsMatch } from './update-helpers';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
 const ACTIVITY_STORAGE_VERSION = 3;
@@ -164,6 +165,42 @@ function compareActivityEntries( left, right ) {
 	return String( left?.id || '' ).localeCompare( String( right?.id || '' ) );
 }
 
+function getBlockByPath( blocks = [], path = [] ) {
+	let currentBlocks = Array.isArray( blocks ) ? blocks : [];
+	let block = null;
+
+	for ( const index of Array.isArray( path ) ? path : [] ) {
+		block = currentBlocks[ index ] || null;
+
+		if ( ! block ) {
+			return null;
+		}
+
+		currentBlocks = Array.isArray( block?.innerBlocks )
+			? block.innerBlocks
+			: [];
+	}
+
+	return block;
+}
+
+function resolveActivityBlock( blockEditorSelect, target = {} ) {
+	if ( target?.clientId ) {
+		const directBlock = blockEditorSelect?.getBlock?.( target.clientId );
+
+		if ( directBlock ) {
+			return directBlock;
+		}
+	}
+
+	return Array.isArray( target?.blockPath )
+		? getBlockByPath(
+				blockEditorSelect?.getBlocks?.() || [],
+				target.blockPath
+		  )
+		: null;
+}
+
 function normalizePersistedActivityEntry(
 	entry,
 	storageVersion = ACTIVITY_STORAGE_VERSION
@@ -222,6 +259,20 @@ function getBaseUndoState( entry ) {
 	return undo;
 }
 
+function getPreliminaryUndoState( entry, runtimeUndoState = null ) {
+	const timestamp = normalizeActivityTimestamp( entry?.timestamp );
+	const baseUndo = getBaseUndoState( entry );
+
+	if ( ! runtimeUndoState ) {
+		return buildUndoState( timestamp, baseUndo );
+	}
+
+	return buildUndoState( timestamp, {
+		...baseUndo,
+		...runtimeUndoState,
+	} );
+}
+
 function isOrderedUndoEligible( entry, entries = [] ) {
 	const entityKey = getActivityEntityKey( entry );
 
@@ -241,6 +292,35 @@ function isOrderedUndoEligible( entry, entries = [] ) {
 		}
 
 		if ( getBaseUndoState( currentEntry ).status !== 'undone' ) {
+			return false;
+		}
+	}
+
+	return false;
+}
+
+function isOrderedUndoEligibleWithResolvedStates(
+	orderedEntries,
+	preliminaryUndoStates,
+	entryIndex
+) {
+	const entry = orderedEntries[ entryIndex ] || null;
+	const entityKey = getActivityEntityKey( entry );
+
+	if ( ! entityKey ) {
+		return preliminaryUndoStates[ entryIndex ]?.status === 'available';
+	}
+
+	for ( let index = orderedEntries.length - 1; index >= 0; index-- ) {
+		if ( getActivityEntityKey( orderedEntries[ index ] ) !== entityKey ) {
+			continue;
+		}
+
+		if ( index === entryIndex ) {
+			return true;
+		}
+
+		if ( preliminaryUndoStates[ index ]?.status !== 'undone' ) {
 			return false;
 		}
 	}
@@ -516,6 +596,84 @@ export function getActivityEntityKey( entry ) {
 	return `block:${ documentScopeKey }:${ blockIdentity }:${ blockName }`;
 }
 
+export function getBlockActivityUndoState(
+	entry,
+	blockEditorSelect = {}
+) {
+	const existingUndo = entry?.undo || {};
+
+	if ( entry?.surface !== 'block' ) {
+		return existingUndo;
+	}
+
+	const resolvedBlock = resolveActivityBlock(
+		blockEditorSelect,
+		entry?.target || {}
+	);
+
+	if ( ! resolvedBlock?.clientId ) {
+		return {
+			...existingUndo,
+			canUndo: false,
+			status: 'failed',
+			error: 'The original block target for this AI action is missing.',
+		};
+	}
+
+	if (
+		entry?.target?.blockName &&
+		resolvedBlock.name !== entry.target.blockName
+	) {
+		return {
+			...existingUndo,
+			canUndo: false,
+			status: 'failed',
+			error: 'The target block changed position or type and cannot be undone automatically.',
+		};
+	}
+
+	const currentAttributes =
+		blockEditorSelect?.getBlockAttributes?.( resolvedBlock.clientId ) ||
+		resolvedBlock.attributes ||
+		null;
+	const beforeAttributes = entry?.before?.attributes || {};
+	const afterAttributes = entry?.after?.attributes || {};
+
+	if ( ! currentAttributes ) {
+		return {
+			...existingUndo,
+			canUndo: false,
+			status: 'failed',
+			error: 'The target block is no longer available to undo.',
+		};
+	}
+
+	if ( attributeSnapshotsMatch( afterAttributes, currentAttributes ) ) {
+		return {
+			...existingUndo,
+			canUndo: true,
+			status: 'available',
+			error: null,
+		};
+	}
+
+	if ( attributeSnapshotsMatch( beforeAttributes, currentAttributes ) ) {
+		return {
+			...existingUndo,
+			canUndo: false,
+			status: 'undone',
+			error: null,
+		};
+	}
+
+	return {
+		...existingUndo,
+		canUndo: false,
+		status: 'failed',
+		error: 'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+	};
+}
+
 export function getResolvedActivityUndoState(
 	entry,
 	entries = [],
@@ -525,10 +683,10 @@ export function getResolvedActivityUndoState(
 		return buildUndoState( new Date().toISOString(), {
 			status: 'failed',
 			error: 'The activity entry is unavailable.',
-		} );
+			} );
 	}
 
-	const baseUndo = getBaseUndoState( entry );
+	const baseUndo = getPreliminaryUndoState( entry, runtimeUndoState );
 
 	if ( baseUndo.status === 'undone' ) {
 		return {
@@ -543,26 +701,6 @@ export function getResolvedActivityUndoState(
 			canUndo: false,
 			status: 'blocked',
 			error: ORDERED_UNDO_BLOCKED_ERROR,
-		};
-	}
-
-	if ( runtimeUndoState ) {
-		const timestamp = normalizeActivityTimestamp( entry.timestamp );
-		const resolvedUndo = buildUndoState( timestamp, {
-			...baseUndo,
-			...runtimeUndoState,
-		} );
-
-		if ( resolvedUndo.status !== 'available' ) {
-			return {
-				...resolvedUndo,
-				canUndo: false,
-			};
-		}
-
-		return {
-			...resolvedUndo,
-			canUndo: resolvedUndo.canUndo !== false,
 		};
 	}
 
@@ -584,16 +722,58 @@ export function getResolvedActivityEntries(
 	runtimeUndoResolver = null
 ) {
 	const orderedEntries = sortActivityEntries( entries );
-
-	return orderedEntries.map( ( entry ) => ( {
-		...entry,
-		undo: getResolvedActivityUndoState(
+	const preliminaryUndoStates = orderedEntries.map( ( entry ) =>
+		getPreliminaryUndoState(
 			entry,
-			orderedEntries,
 			typeof runtimeUndoResolver === 'function'
 				? runtimeUndoResolver( entry )
 				: null
-		),
+		)
+	);
+
+	return orderedEntries.map( ( entry, entryIndex ) => ( {
+		...entry,
+		undo: ( () => {
+			const resolvedUndo =
+				entryIndex >= 0
+					? preliminaryUndoStates[ entryIndex ]
+					: getPreliminaryUndoState( entry );
+
+			if ( resolvedUndo?.status === 'undone' ) {
+				return {
+					...resolvedUndo,
+					canUndo: false,
+				};
+			}
+
+			if (
+				entryIndex >= 0 &&
+				! isOrderedUndoEligibleWithResolvedStates(
+					orderedEntries,
+					preliminaryUndoStates,
+					entryIndex
+				)
+			) {
+				return {
+					...resolvedUndo,
+					canUndo: false,
+					status: 'blocked',
+					error: ORDERED_UNDO_BLOCKED_ERROR,
+				};
+			}
+
+			if ( resolvedUndo?.status !== 'available' ) {
+				return {
+					...resolvedUndo,
+					canUndo: false,
+				};
+			}
+
+			return {
+				...resolvedUndo,
+				canUndo: resolvedUndo.canUndo !== false,
+			};
+		} )(),
 	} ) );
 }
 

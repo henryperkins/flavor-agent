@@ -8,6 +8,7 @@ const mockUndoActivity = jest.fn();
 const mockGetLatestAppliedActivity = jest.fn();
 const mockGetLatestUndoableActivity = jest.fn();
 const mockGetResolvedActivityEntries = jest.fn();
+const mockGetBlockActivityUndoState = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -75,6 +76,8 @@ jest.mock( '../../context/collector', () => ( {
 } ) );
 
 jest.mock( '../../store/activity-history', () => ( {
+	getBlockActivityUndoState: ( ...args ) =>
+		mockGetBlockActivityUndoState( ...args ),
 	getLatestAppliedActivity: ( ...args ) =>
 		mockGetLatestAppliedActivity( ...args ),
 	getLatestUndoableActivity: ( ...args ) =>
@@ -252,6 +255,9 @@ beforeEach( () => {
 	} );
 	mockGetResolvedActivityEntries.mockImplementation(
 		( entries ) => entries || []
+	);
+	mockGetBlockActivityUndoState.mockImplementation(
+		( entry ) => entry?.undo || {}
 	);
 	mockGetLatestAppliedActivity.mockImplementation(
 		( entries ) => entries?.[ entries.length - 1 ] || null
@@ -454,5 +460,40 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 
 		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'does not keep an undo success notice once the resolved entry is no longer undone', () => {
+		mockGetLatestAppliedActivity.mockReturnValue( null );
+		mockGetLatestUndoableActivity.mockReturnValue( null );
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						surface: 'block',
+						suggestion: 'Refresh hero copy',
+						target: {
+							clientId: 'block-1',
+						},
+						undo: {
+							canUndo: true,
+							status: 'available',
+							error: null,
+						},
+					},
+				],
+				lastUndoneActivityId: 'activity-1',
+				undoStatus: 'success',
+			},
+		} );
+
+		renderPanel();
+
+		expect( container.textContent ).not.toContain(
+			'Undid Refresh hero copy.'
+		);
+		expect(
+			container.querySelector( '[data-status-notice="true"]' )
+		).toBeNull();
 	} );
 } );

@@ -12,6 +12,7 @@ import { starFilled as icon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 import {
+	getBlockActivityUndoState,
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
@@ -59,6 +60,20 @@ function getCanRecommendBlocks() {
 
 function useBlockRecommendationState( clientId ) {
 	const canRecommendBlocks = getCanRecommendBlocks();
+	const blockEditorSelection = useSelect(
+		( select ) => {
+			const blockEditor = select( blockEditorStore );
+
+			return {
+				getBlock: ( targetClientId ) =>
+					blockEditor.getBlock?.( targetClientId ) || null,
+				getBlockAttributes: ( targetClientId ) =>
+					blockEditor.getBlockAttributes?.( targetClientId ) || null,
+				getBlocks: () => blockEditor.getBlocks?.() || [],
+			};
+		},
+		[]
+	);
 
 	const {
 		recommendations,
@@ -110,8 +125,13 @@ function useBlockRecommendationState( clientId ) {
 		[ clientId ]
 	);
 	const resolvedBlockActivities = useMemo(
-		() => getResolvedActivityEntries( blockActivityLog ),
-		[ blockActivityLog ]
+		() =>
+			getResolvedActivityEntries(
+				blockActivityLog,
+				( entry ) =>
+					getBlockActivityUndoState( entry, blockEditorSelection )
+			),
+		[ blockActivityLog, blockEditorSelection ]
 	);
 	const blockActivityEntries = useMemo(
 		() => [ ...resolvedBlockActivities ].slice( -3 ).reverse(),
@@ -182,7 +202,8 @@ export function BlockRecommendationsContent( {
 		Boolean( latestBlockActivity ) &&
 		latestBlockActivity?.id === latestUndoableActivityId;
 	const hasUndoSuccess =
-		undoStatus === 'success' && Boolean( lastUndoneBlockActivity );
+		undoStatus === 'success' &&
+		lastUndoneBlockActivity?.undo?.status === 'undone';
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );

@@ -162,5 +162,10 @@ describe( 'block request state', () => {
 				hasSuccess: true,
 			} )
 		).toBe( 'success' );
+		expect(
+			selectors.getBlockInteractionState( state, 'block-a', {
+				undoStatus: 'success',
+			} )
+		).toBe( 'advisory-ready' );
 	} );
 } );

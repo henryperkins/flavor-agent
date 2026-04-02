@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-03-28
+> Last updated: 2026-04-02
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -13,7 +13,7 @@ Use these documents together:
 3. `STATUS.md` -- current verified state and known issues
 4. `docs/FEATURE_SURFACE_MATRIX.md` -- feature locations, surfacing conditions, and apply/undo matrix
 5. `docs/features/README.md` -- deep-dive user-flow documentation for each shipped surface
-6. `docs/reference/abilities-and-routes.md` -- canonical ability and REST contract map
+6. `docs/reference/` -- canonical programmatic contract docs (abilities-and-routes, provider-precedence, template-operations, activity-state-machine)
 7. `docs/flavor-agent-readme.md` -- editor-flow and architecture companion
 8. `docs/2026-03-25-roadmap-aligned-execution-plan.md` -- active forward plan
 
@@ -27,16 +27,17 @@ The activity system now also has a first dedicated wp-admin audit page at `Setti
 
 When a recommendation surface is in scope but unavailable, the native UI now stays visible long enough to explain whether the missing dependency belongs in core `Settings > Connectors` or plugin-owned `Settings > Flavor Agent`, including the inserter-backed pattern surface.
 
-Six first-party recommendation surfaces exist today:
+Seven first-party recommendation surfaces exist today:
 
 1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector sidebar tabs.
 2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through the native block inserter with a "Recommended" category.
 3. **Template Compositor** -- Reviewable template-part and pattern composition suggestions for Site Editor templates with a narrow confirm-before-apply path.
 4. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
 5. **Global Styles Recommender** -- Site Editor Global Styles suggestions bounded to native theme-supported style paths and registered style variations.
-6. **Navigation Inspector** -- Advisory navigation structure, overlay, and accessibility guidance for selected `core/navigation` blocks in the native Inspector.
+6. **Style Book Recommender** -- Per-block style suggestions in the Style Book panel, bounded to block-scoped style paths and theme-backed values.
+7. **Navigation Inspector** -- Advisory navigation structure, overlay, and accessibility guidance for selected `core/navigation` blocks in the native Inspector.
 
-A seventh surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
+An eighth surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
 
 ## Repository Layout
 
@@ -115,20 +116,32 @@ flavor-agent/
       activity-log.css      Activity page styling layered on top of wp-admin and DataViews
       activity-log-utils.js Activity-entry normalization, persisted view helpers, and ordered undo-state derivation
     components/
-      AIActivitySection.js  Shared recent-actions list with per-entry undo affordance across block/template/template-part/global-styles
+      AIActivitySection.js  Shared recent-actions list with per-entry undo affordance across block/template/template-part/global-styles/style-book
+      AIAdvisorySection.js  Shared advisory suggestion list for non-executable surfaces
+      AIReviewSection.js    Shared review-confirm-apply framing for executable surfaces
+      AIStatusNotice.js     Shared loading/error/success status notice
       ActivitySessionBootstrap.js  Reloads editor-scoped activity history when the edited entity changes
+      CapabilityNotice.js   Surface-specific unavailable/setup messaging with links to Settings or Connectors
     global-styles/
       GlobalStylesRecommender.js  Site Editor Global Styles AI panel with review-confirm-apply
+    style-book/
+      StyleBookRecommender.js  Style Book per-block style AI panel with review-confirm-apply
+      dom.js                Style Book panel DOM discovery and portal target resolution
     store/
       index.js              @wordpress/data store (flavor-agent): state, actions, selectors, template apply, undo, activity hydration, and history persistence
       activity-history.js   Editor-scoped AI activity schema plus storage adapter and helpers, including Global Styles scope resolution
       update-helpers.js     Safe attribute merge, content-only filtering, and undo snapshot helpers
     inspector/
       InspectorInjector.js  editor.BlockEdit HOC -- injects AI panels into all blocks
+      BlockRecommendationsPanel.js  Block-level recommendation prompt and suggestion panel
+      NavigationRecommendations.js  Navigation advisory panel for core/navigation blocks
       SettingsRecommendations.js  Settings tab suggestion cards
       StylesRecommendations.js   Appearance tab + style variation pills
       SuggestionChips.js    Compact chips for sub-panel injection
       suggestion-keys.js    Stable key generation for suggestion tracking
+      panel-delegation.js   Inspector panel routing for block vs navigation surfaces
+    review/
+      notes-adapter.js      Shape-only adapter for future Notes/comment projection (not wired into runtime UI)
     context/
       collector.js          Assembles full block context for LLM calls
       block-inspector.js    Recursive block capability manifest builder
@@ -149,7 +162,7 @@ flavor-agent/
     template-parts/
       TemplatePartRecommender.js  Template-part-scoped AI recommendations panel
     utils/
-      style-operations.js   Deterministic Global Styles apply and undo helpers
+      style-operations.js   Deterministic Global Styles and Style Book apply and undo helpers
       structural-identity.js  Block tree structural role annotation
       template-part-areas.js  Template-part area resolution
       template-types.js     Template slug normalization
@@ -157,6 +170,7 @@ flavor-agent/
       template-actions.js   Editor navigation actions plus deterministic template operation preparation/execution/undo
       pattern-names.js      Extract distinct pattern names
       visible-patterns.js   Inserter-scoped visible pattern list
+      capability-flags.js   Surface capability flag derivation from localized data
 
   tests/
     e2e/
@@ -194,6 +208,9 @@ flavor-agent/
       *.md                 Block, pattern, navigation, template, Global Styles, activity, settings docs
     reference/
       abilities-and-routes.md  Abilities API and REST contract map
+      provider-precedence.md   AI backend selection and credential fallback chain
+      template-operations.md   Operation type vocabulary and validation rules per surface
+      activity-state-machine.md  Undo states, transitions, ordered undo, and pruning
     SOURCE_OF_TRUTH.md      This document
     flavor-agent-readme.md  Architecture and editor flow reference
     local-wordpress-ide.md  Local WordPress + devcontainer workflow
@@ -267,30 +284,39 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Trigger:** User opens the Site Editor Styles sidebar, types an optional prompt, and clicks "Get Style Suggestions".
 - **Context sent:** Resolved Global Styles scope descriptor, current user config, current merged config, available theme style variations, theme-token source diagnostics, theme tokens, and supported site-level style paths.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
-- **Response:** Up to 4 suggestions, each with `label`, `description`, `category`, `tone`, optional validated `operations`, and `explanation`. Supported executable operations are `set_styles` and `set_theme_variation`.
+- **Response:** Up to 4 suggestions, each with `label`, `description`, `category`, `tone`, optional validated `operations`, and `explanation`. Supported executable operations are `set_styles` (global-styles surface only) and `set_theme_variation`.
 - **UI:** `src/global-styles/GlobalStylesRecommender.js` portals into the native Global Styles sidebar when available and falls back to a document settings panel when the sidebar slot is missing. It uses the shared prompt -> suggestions -> explanation -> review -> apply -> undo/history model.
 - **Apply:** Deterministic client helpers validate supported paths, preset requirements, and still-available theme variations before updating the active `root/globalStyles` entity through `editEntityRecord()`. Applied changes persist before/after user config plus operation metadata for scoped undo.
 - **Guardrails:** Raw CSS, `customCSS`, unsupported style paths, arbitrary preset-less values where a preset family is required, width/height transforms, and pseudo-element-only operations remain out of scope for the first Epic 3 slice.
 
+#### Style Book Recommendations
+- **Trigger:** User opens the Style Book panel for a block type, types an optional prompt, and clicks "Get Style Suggestions".
+- **Context sent:** Resolved scope descriptor with `surface: "style-book"`, target block name and title, current block-scoped styles, merged config, theme-token source diagnostics, and theme tokens.
+- **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`, using the same `StylePrompt` and `StyleAbilities::recommend_style()` as Global Styles with surface-aware operation rules.
+- **Response:** Up to 4 suggestions with validated `operations`. Supported executable operations are `set_block_styles` (style-book surface only) and `set_theme_variation`.
+- **UI:** `src/style-book/StyleBookRecommender.js` portals into the Style Book panel using `src/style-book/dom.js` for target resolution. Uses the same shared prompt -> suggestions -> explanation -> review -> apply -> undo/history model.
+- **Apply:** Deterministic client helpers validate block-scoped style paths, preset requirements, and still-available theme variations before updating the active `root/globalStyles` entity. Applied changes persist before/after config plus operation metadata for scoped undo.
+- **Guardrails:** `set_styles` is rejected on the style-book surface. `set_block_styles.blockName` must exactly match the target block in scope. Same raw CSS, `customCSS`, and unsupported-path guardrails as Global Styles.
+
 #### Shared Inline Review Model
-- **Sequence:** Block, navigation, template, template-part, and Global Styles surfaces now all follow one learned-once order: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo/history.
+- **Sequence:** Block, navigation, template, template-part, Global Styles, and Style Book surfaces now all follow one learned-once order: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo/history.
 - **Normalized states:** The shared editor-side vocabulary is `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, and `error`.
-- **Surface mapping:** Block can move directly from `advisory-ready` to `success` for safe local attribute updates; navigation stops at `advisory-ready`; template, template-part, and Global Styles must explicitly enter `preview-ready` before any mutation occurs.
+- **Surface mapping:** Block can move directly from `advisory-ready` to `success` for safe local attribute updates; navigation stops at `advisory-ready`; template, template-part, Global Styles, and Style Book must explicitly enter `preview-ready` before any mutation occurs.
 - **Shared UI:** `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` now own the common review/status framing, while `AIActivitySection` remains the shared undo/history block.
 - **Notes future-proofing:** `src/review/notes-adapter.js` is a shape-only adapter for future Notes/comment projection. It normalizes shared review evidence but is not wired into runtime UI and does not depend on unstable editor APIs.
 
 #### AI Activity And Undo
-- **Schema:** Block, template, template-part, and Global Styles apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
+- **Schema:** Block, template, template-part, Global Styles, and Style Book apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
 - **Persistence:** Activity records are persisted through the server-backed activity repository when available and are hydrated back into the editor-side storage adapter keyed by the current post, template, template-part, or Global Styles scope reference. The same repository now also supports recent unscoped/admin reads for privileged users. Template, template-part, and Global Styles activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
-- **UI:** The Block Inspector, Navigation section, Template Compositor, Template Part panel, and Global Styles panel now share the same status vocabulary and review framing. Executable surfaces show inline `Undo` on the latest applied action plus a `Recent AI Actions` section with the last few records. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported surfaces through a `DataViews` activity feed and a read-only `DataForm` details panel.
-- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template assignment/replacement undo resolves the current block from a stable area/slug locator, template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot, and Global Styles undo only stays available while the active `root/globalStyles` entity still matches the recorded post-apply user config. The admin audit view applies the same ordered-tail rule when it marks older entries as blocked by newer still-applied actions.
+- **UI:** The Block Inspector, Navigation section, Template Compositor, Template Part panel, Global Styles panel, and Style Book panel now share the same status vocabulary and review framing. Executable surfaces show inline `Undo` on the latest applied action plus a `Recent AI Actions` section with the last few records. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported surfaces through a `DataViews` activity feed and a read-only `DataForm` details panel.
+- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template assignment/replacement undo resolves the current block from a stable area/slug locator, template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot, Global Styles and Style Book undo only stays available while the active `root/globalStyles` entity still matches the recorded post-apply user config. The admin audit view applies the same ordered-tail rule when it marks older entries as blocked by newer still-applied actions.
 
 #### Admin Activity Page
 - **Location:** `Settings > AI Activity`
 - **Permission:** `manage_options`
 - **Bundle:** `inc/Admin/ActivityPage.php` + `src/admin/activity-log.js`
 - **Behavior:** Uses `@wordpress/dataviews/wp` with the `activity` layout as the default feed, persisted/resettable view preferences, grouped summary cards, and a read-only `DataForm` details sidebar for diagnostics and links back to affected entities, plugin settings, and core Connectors.
-- **Scope:** Covers recent server-backed block, template, template-part, and Global Styles actions; it is the first audit surface, not the final observability product.
+- **Scope:** Covers recent server-backed block, template, template-part, Global Styles, and Style Book actions; it is the first audit surface, not the final observability product.
 
 #### Pattern Index Lifecycle
 - **Sync:** Diffs current registered patterns against Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
@@ -534,57 +560,105 @@ User opens the Site Editor Styles sidebar
      -> write an editor-scoped activity entry, persist it through the activity repository, and keep refresh-safe undo metadata
 ```
 
+### Style Book Recommendation Flow
+```
+User opens the Style Book panel for a block type
+  -> StyleBookRecommender.js portals into the Style Book panel via dom.js
+  -> User clicks "Get Style Suggestions"
+  -> store thunk: fetchStyleBookRecommendations(input)
+     -> POST /flavor-agent/v1/recommend-style (scope.surface = "style-book")
+        -> Agent_Controller -> StyleAbilities::recommend_style()
+           -> Resolves style-book surface, target block name and styles
+           -> ServerCollector::for_tokens() contributes theme tokens plus diagnostics
+           -> StylePrompt::build_system() + build_user() (surface-aware rules)
+           -> ResponsesClient::rank(instructions, input)
+           -> StylePrompt::parse_response() (validates block-scoped paths, preset usage, and variation references)
+        <- JSON response: { suggestions, explanation }
+  -> store saves request/result state for the current style_book scope
+  -> UI renders advisory or executable cards plus preview-confirm-apply for validated style operations
+  -> applyStyleBookSuggestion()
+     -> applyGlobalStyleSuggestionOperations() (shared with Global Styles)
+     -> write an editor-scoped activity entry, persist it through the activity repository, and keep refresh-safe undo metadata
+```
+
 ## Test Coverage
 
 ### PHP (PHPUnit)
 | Test File | Tests | What's Covered |
 |-----------|-------|---------------|
-| `AgentControllerTest` | 13 | REST recommend-block/template/style wrapping, activity endpoints, template-part visiblePatternNames forwarding, and string array validation |
-| `ServerCollectorTest` | 13 | Template parts metadata, area lookup, content-role introspection, template candidate ordering, visible-pattern filtering, and token diagnostics |
-| `InfraAbilitiesTest` | 9 | check-status: Cloudflare backend, admin filtering, model fallback, provider inventory, and shared surface readiness including Global Styles |
+| `AgentControllerTest` | 15 | REST recommend-block/template/style wrapping, activity endpoints, template-part visiblePatternNames forwarding, and string array validation |
+| `ServerCollectorTest` | 15 | Template parts metadata, area lookup, content-role introspection, template candidate ordering, visible-pattern filtering, and token diagnostics |
+| `InfraAbilitiesTest` | 9 | check-status: Cloudflare backend, admin filtering, model fallback, provider inventory, and shared surface readiness including Global Styles and Style Book |
 | `RegistrationTest` | 5 | Ability schema structure, check-status surfaces schema, entityKey schema, visiblePatternNames schema, and recommend-style/recommend-template-part schema |
-| `StyleAbilitiesTest` | 2 | Global Styles scope validation and safe style recommendation normalization |
-| `StylePromptTest` | 2 | Global Styles prompt assembly, supported-path validation, and variation parsing |
-| `EditorSurfaceCapabilitiesTest` | 2 | Shared localized capability payload for surface parity, including `globalStyles` |
+| `StyleAbilitiesTest` | 9 | Global Styles and Style Book scope validation, surface-aware operation rules, and safe style recommendation normalization |
+| `StylePromptTest` | 10 | Global Styles and Style Book prompt assembly, supported-path validation, block-scoped path rules, and variation parsing |
+| `EditorSurfaceCapabilitiesTest` | 2 | Shared localized capability payload for surface parity, including `globalStyles` and `styleBook` |
 | `DocsGroundingEntityCacheTest` | 7 | Two-tier cache: query vs entity, seeding, inference, instance-prefixed source keys |
 | `AISearchClientTest` | 24 | Search flow, config, cache, source filtering, URL trust, entity keys, instance-prefixed source keys, probe-only validation, trusted-docs compatibility |
 | `PromptRulesTest` | 3 | Content-only rules, disabled blocks, container behavior |
-| `BlockAbilitiesTest` | 3 | Input normalization, XSS sanitization, disabled block short-circuit |
+| `BlockAbilitiesTest` | 4 | Input normalization, XSS sanitization, disabled block short-circuit, selectedBlock/editorContext input paths |
 | `PromptGuidanceTest` | 8 | Guidance sections, structural identity, content-only restrictions, filter panel coverage, duotone summaries, aspect-ratio rules |
-| `SettingsTest` | 19 | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, probe-only Cloudflare validation, and settings notice rendering |
+| `SettingsTest` | 21 | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, probe-only Cloudflare validation, and settings notice rendering |
 | `AzureBackendValidationTest` | 16 | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks, OpenAI Native validation |
-| `NavigationAbilitiesTest` | 13 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
-| `TemplatePromptTest` | 7 | Structured template operation parsing, conflicting multi-step validation, visible-pattern context, and legacy fallback normalization |
-| `TemplatePartPromptTest` | 3 | Template-part prompt assembly, executable-operation parsing, and advisory fallback validation |
+| `NavigationAbilitiesTest` | 15 | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules |
+| `TemplatePromptTest` | 12 | Structured template operation parsing, editorStructure anchor validation, conflicting multi-step validation, visible-pattern context, and legacy fallback normalization |
+| `TemplatePartPromptTest` | 4 | Template-part prompt assembly, executable-operation parsing, expectedBlockName validation, and advisory fallback |
 | `DocsPrewarmTest` | 19 | Warm set definition, cache seeding, state recording, throttling (same creds, changed creds, expired window), partial/total failure, schedule/should prewarm, diagnostics, resilience |
 | `WordPressAIClientTest` | 3 | Function-based prompt creation, system instruction application, missing-provider error |
-| **Total** | **228** | |
+| `PatternIndexTest` | 13 | Pattern embedding sync, diff-based update, fingerprint lifecycle, batch sizing, and cron scheduling |
+| `ChatClientTest` | 4 | Provider-managed chat, WordPress AI Client fallback, is_supported gating |
+| `PatternAbilitiesTest` | 10 | Pattern recommendation pipeline, list-patterns filtering, Qdrant integration, and score threshold enforcement |
+| `ActivityRepositoryTest` | 14 | Activity create, query, ordered undo eligibility, undo state transitions, merge-on-duplicate, and pruning |
+| `ActivityPermissionsTest` | 7 | Contextual permission checks for post, template, template-part, and global reads |
+| **Total** | **273** | |
 
 ### JS (Jest)
 | Test File | What's Covered |
 |-----------|---------------|
-| `store/__tests__/activity-history.test.js` | Activity scope resolution including Global Styles, session storage persistence, legacy template-entry downgrade, latest-applied/undoable stack rules |
+| `store/__tests__/activity-history.test.js` | Activity scope resolution including Global Styles and Style Book, session storage persistence, legacy template-entry downgrade, latest-applied/undoable stack rules |
 | `store/__tests__/activity-history-state.test.js` | Reducer hydration of persisted activity state, legacy non-undoable template entries, and undo side effects |
 | `store/__tests__/block-request-state.test.js` | Per-block request state, stale token rejection |
+| `store/__tests__/navigation-request-state.test.js` | Per-navigation request state and token lifecycle |
 | `store/__tests__/pattern-status.test.js` | Pattern status/error transitions, badge recalculation |
-| `store/__tests__/store-actions.test.js` | Block/template/template-part/Global Styles apply logging, client-side validation failures, session persistence, and undo thunk behavior |
+| `store/__tests__/store-actions.test.js` | Block/template/template-part/Global Styles/Style Book apply logging, client-side validation failures, session persistence, and undo thunk behavior |
 | `store/__tests__/template-apply-state.test.js` | Template preview/apply reducer state transitions |
 | `store/update-helpers.test.js` | Safe merge, content-only filtering, editing restrictions, and undo snapshot comparison |
+| `inspector/__tests__/BlockRecommendationsPanel.test.js` | Block recommendation panel prompt, suggestion rendering, and capability-gated behavior |
+| `inspector/__tests__/SettingsRecommendations.test.js` | Settings tab suggestion card rendering and apply interactions |
+| `inspector/__tests__/StylesRecommendations.test.js` | Appearance tab style variation pills and recommendation rendering |
+| `inspector/__tests__/SuggestionChips.test.js` | Compact chip rendering and sub-panel layout |
+| `inspector/__tests__/NavigationRecommendations.test.js` | Navigation advisory panel rendering and gating |
+| `inspector/__tests__/panel-delegation.test.js` | Inspector panel routing for block vs navigation surfaces |
+| `inspector/suggestion-keys.test.js` | Key generation |
 | `patterns/__tests__/inserter-badge-state.test.js` | Badge view-model derivation (all 4 states) |
 | `patterns/__tests__/recommendation-utils.test.js` | Metadata patching, badge reason extraction |
 | `patterns/__tests__/find-inserter-search-input.test.js` | DOM search strategy (delegates to compat) |
 | `patterns/__tests__/compat.test.js` | Stable/experimental/additional API negotiation, DOM selector strategies, fallback behavior |
+| `patterns/__tests__/InserterBadge.test.js` | Inserter badge portal rendering and state transitions |
+| `patterns/__tests__/PatternRecommender.test.js` | Pattern fetcher lifecycle, inserter patching, and error handling |
+| `context/__tests__/block-inspector.test.js` | Block capability manifest building and recursive attribute introspection |
 | `context/__tests__/theme-tokens.test.js` | Theme token extraction, summarization, and source diagnostics |
 | `context/__tests__/collector.test.js` | Theme-token collector diagnostics and server-token enrichment |
+| `templates/__tests__/TemplateRecommender.test.js` | Template panel rendering, suggestion lifecycle, and editorStructure integration |
 | `templates/__tests__/template-recommender-helpers.test.js` | Entity map, suggestion view models, context signature, format helpers |
-| `inspector/suggestion-keys.test.js` | Key generation |
+| `template-parts/__tests__/TemplatePartRecommender.test.js` | Template-part panel rendering and operation execution |
+| `components/__tests__/AIStatusNotice.test.js` | Shared status notice rendering across surface states |
+| `components/__tests__/AIAdvisorySection.test.js` | Shared advisory list rendering |
+| `components/__tests__/AIReviewSection.test.js` | Shared review-confirm-apply framing |
+| `components/__tests__/AIActivitySection.test.js` | Shared activity history and undo rendering |
+| `components/__tests__/ActivitySessionBootstrap.test.js` | Entity-change-driven activity reload |
+| `review/__tests__/notes-adapter.test.js` | Notes shape normalization for future comment projection |
 | `utils/__tests__/structural-identity.test.js` | Role annotation, location resolution, position tracking |
 | `utils/__tests__/template-actions.test.js` | Template and template-part operation preparation, placement validation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
 | `utils/__tests__/template-part-areas.test.js` | Area resolution priority chain |
 | `utils/__tests__/template-types.test.js` | Slug normalization |
 | `utils/__tests__/visible-patterns.test.js` | Inserter-scoped pattern list, injected block-editor selector, null-root document scope |
-| `utils/__tests__/style-operations.test.js` | Global Styles runtime resolution, deterministic apply, and refresh-safe undo rules |
+| `utils/__tests__/capability-flags.test.js` | Surface capability flag derivation from localized data |
+| `utils/__tests__/style-operations.test.js` | Global Styles and Style Book runtime resolution, deterministic apply, and refresh-safe undo rules |
 | `global-styles/__tests__/GlobalStylesRecommender.test.js` | Site Editor Global Styles request shaping and scoped sidebar behavior |
+| `style-book/__tests__/StyleBookRecommender.test.js` | Style Book per-block panel rendering, scope resolution, and portal behavior |
+| `admin/__tests__/activity-log.test.js` | Admin audit page DataViews rendering and view persistence |
+| `admin/__tests__/activity-log-utils.test.js` | Activity entry formatting, filters, summary cards, and admin links |
 
 ## Definition of "Complete" (v1.0)
 
@@ -599,7 +673,8 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Template composition panel with review-confirm-apply for validated operations
 - [x] Template-part recommendations panel
 - [x] Global Styles recommendations panel with review-confirm-apply for bounded site-level style changes
-- [x] Undoable block/template/template-part/Global Styles AI actions with server-backed activity persistence plus editor-scoped hydration/cache fallback
+- [x] Style Book recommendations panel with review-confirm-apply for per-block style changes
+- [x] Undoable block/template/template-part/Global Styles/Style Book AI actions with server-backed activity persistence plus editor-scoped hydration/cache fallback
 - [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates)
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
@@ -642,6 +717,9 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/features/README.md` | Entry point for detailed feature docs covering end-to-end flows | **Current** |
 | `docs/features/style-and-theme-intelligence.md` | Detailed Global Styles surface doc: scope contract, prompt/apply flow, guardrails, and undo | **Current** |
 | `docs/reference/abilities-and-routes.md` | Canonical ability and REST contract reference | **Current** |
+| `docs/reference/provider-precedence.md` | AI backend selection and credential fallback chain | **Current** |
+| `docs/reference/template-operations.md` | Operation type vocabulary and validation rules per surface | **Current** |
+| `docs/reference/activity-state-machine.md` | Undo states, transitions, ordered undo, and pruning | **Current** |
 | `docs/flavor-agent-readme.md` | Architecture details: editor flows, settings, pattern lifecycle | **Current** |
 | `docs/local-wordpress-ide.md` | Local Docker/devcontainer workflow and host setup | **Current** |
 | `docs/2026-03-25-roadmap-aligned-execution-plan.md` | Active forward plan aligned to the current WordPress 7.0 and Gutenberg roadmap context | **Current** |
@@ -687,7 +765,7 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
 5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, prior queries, or first-request misses that queue follow-up warming. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
-7. **Store is the contract boundary for executable surfaces**: Block, pattern, template, template-part, and Global Styles UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, stale-request rejection, and activity/undo coordination.
+7. **Store is the contract boundary for executable surfaces**: Block, pattern, template, template-part, Global Styles, and Style Book UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, stale-request rejection, and activity/undo coordination.
 8. **Navigation is advisory-only through v1.0**: The inspector surface is intentionally guidance-only until a bounded previewable/undoable executor earns its own milestone.
 9. **Client-side `@wordpress/core-abilities` usage stays deferred for v1**: First-party JS continues to use feature-specific stores and REST endpoints; client-side abilities remain an external-agent/admin integration surface rather than the editor runtime baseline.
 10. **Pattern Overrides, expanded `contentOnly`, and first-style extras stay bounded**: Pattern Overrides-aware ranking, broader `contentOnly` structural semantics, width/height preset transforms, and pseudo-element-aware token extraction are all deferred until later bounded milestones rather than being treated as ambient WP 7.0 work.

@@ -50,8 +50,11 @@ Read these documents in this order:
 5. `docs/features/README.md`
    - Entry point for the per-surface deep dives.
    - Use this when you need exact end-to-end user flow details.
-6. `docs/reference/abilities-and-routes.md`
-   - Canonical mapping of abilities, REST routes, permissions, and first-party callers.
+6. `docs/reference/`
+   - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
+   - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
+   - `template-operations.md` — operation types, placements, and validation rules per surface.
+   - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
 7. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.
@@ -79,9 +82,11 @@ Each top-level doc has one job:
    - How do the user-facing editor flows work?
    - What can each surface do today?
    - Which UI, store, REST, and backend layers make it work?
-5. `docs/reference/abilities-and-routes.md` answers:
-   - Which ability or route owns a contract?
-   - Which permissions and backend gates apply?
+5. `docs/reference/` answers:
+   - `abilities-and-routes.md` — Which ability or route owns a contract? Which permissions and backend gates apply?
+   - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
+   - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
+   - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?
 6. `docs/flavor-agent-readme.md` answers:
    - How does the broader editor architecture fit together?
    - How do the surface docs fit into the repo-level implementation story?
@@ -99,7 +104,7 @@ When changing the plugin:
 2. Update `docs/SOURCE_OF_TRUTH.md` if the product definition, inventory, guardrails, or backlog framing changes.
 3. Update `docs/FEATURE_SURFACE_MATRIX.md` if a surface location, gating rule, or apply/undo contract changes.
 4. Update the matching file in `docs/features/` if a shipped surface behavior changes.
-5. Update `docs/reference/abilities-and-routes.md` if an ability, route, permission, or response contract changes.
+5. Update the matching file in `docs/reference/` if an ability, route, permission, response contract, provider chain, operation vocabulary, or undo lifecycle changes.
 6. Update `docs/flavor-agent-readme.md` if the architecture-level editor flow or repo walkthrough changes.
 7. Update `docs/2026-03-25-roadmap-aligned-execution-plan.md` if milestone order, file targets, or acceptance gates materially change.
 8. Delete or rewrite stale planning docs instead of letting two forward-looking plans compete.
@@ -112,7 +117,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic contracts: `docs/reference/abilities-and-routes.md`
+5. Programmatic contracts: `docs/reference/` (abilities-and-routes, provider-precedence, template-operations, activity-state-machine)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. Way forward: `docs/2026-03-25-roadmap-aligned-execution-plan.md`
 

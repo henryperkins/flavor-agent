@@ -1,4 +1,5 @@
 const mockUseDispatch = jest.fn();
+const mockApplySuggestion = jest.fn();
 
 jest.mock( '@wordpress/components', () => {
 	const { createElement } = require( '@wordpress/element' );
@@ -36,8 +37,10 @@ let root = null;
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
 beforeEach( () => {
+	mockApplySuggestion.mockReset();
+	mockApplySuggestion.mockResolvedValue( true );
 	mockUseDispatch.mockImplementation( () => ( {
-		applySuggestion: jest.fn().mockResolvedValue( true ),
+		applySuggestion: mockApplySuggestion,
 	} ) );
 
 	container = document.createElement( 'div' );
@@ -74,5 +77,35 @@ describe( 'SuggestionChips', () => {
 				'[role="group"][aria-label="AI color suggestions"]'
 			)
 		).not.toBeNull();
+	} );
+
+	test( 'renders inline feedback near the chip group after apply', async () => {
+		act( () => {
+			root.render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					] }
+				/>
+			);
+		} );
+
+		await act( async () => {
+			container.querySelector( 'button' ).click();
+			await Promise.resolve();
+		} );
+
+		expect( mockApplySuggestion ).toHaveBeenCalledWith( 'block-1', {
+			label: 'Use accent color',
+			panel: 'color',
+		} );
+		expect(
+			container.querySelector( '.flavor-agent-inline-feedback' )?.textContent
+		).toBe( 'AppliedUse accent color' );
 	} );
 } );
