@@ -577,20 +577,24 @@ function matchesExpectedTemplateTarget( block, expectedTarget = {} ) {
 
 	if (
 		Number.isInteger( expectedTarget.childCount ) &&
-		( Array.isArray( block.innerBlocks ) ? block.innerBlocks.length : 0 ) !==
-			expectedTarget.childCount
+		( Array.isArray( block.innerBlocks )
+			? block.innerBlocks.length
+			: 0 ) !== expectedTarget.childCount
 	) {
 		return false;
 	}
 
 	const expectedAttributes =
-		expectedTarget.attributes && typeof expectedTarget.attributes === 'object'
+		expectedTarget.attributes &&
+		typeof expectedTarget.attributes === 'object'
 			? expectedTarget.attributes
 			: {};
 	const blockAttributes =
 		block && typeof block.attributes === 'object' ? block.attributes : {};
 
-	for ( const [ key, expectedValue ] of Object.entries( expectedAttributes ) ) {
+	for ( const [ key, expectedValue ] of Object.entries(
+		expectedAttributes
+	) ) {
 		if ( blockAttributes?.[ key ] !== expectedValue ) {
 			return false;
 		}

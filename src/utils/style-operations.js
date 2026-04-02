@@ -95,9 +95,7 @@ function parsePresetValue( value ) {
 		return null;
 	}
 
-	const matches = value.match(
-		/^var:preset\|([a-z0-9-]+)\|([a-z0-9_-]+)$/i
-	);
+	const matches = value.match( /^var:preset\|([a-z0-9-]+)\|([a-z0-9_-]+)$/i );
 
 	if ( ! matches ) {
 		return null;
@@ -118,7 +116,9 @@ function buildPresetValue( presetType, presetSlug ) {
 }
 
 function buildPresetCssVar( presetType, presetSlug ) {
-	return `var(--wp--preset--${ displayPresetType( presetType ) }--${ presetSlug })`;
+	return `var(--wp--preset--${ displayPresetType(
+		presetType
+	) }--${ presetSlug })`;
 }
 
 function isPositiveNumberString( value ) {
@@ -620,12 +620,8 @@ function validatePresetStyleOperation(
 	pathEntry = {},
 	executionContract = {}
 ) {
-	const expectedPresetType = normalizePresetType( pathEntry?.valueSource );
 	const pathKey = getStylePathKey( operation?.path );
 	const valueType = sanitizeKey( operation?.valueType );
-	const presetType = normalizePresetType( operation?.presetType );
-	const presetSlug = sanitizeKey( operation?.presetSlug );
-	const parsedPresetValue = parsePresetValue( operation?.value );
 
 	if ( valueType !== 'preset' ) {
 		return {
@@ -634,12 +630,18 @@ function validatePresetStyleOperation(
 		};
 	}
 
+	const expectedPresetType = normalizePresetType( pathEntry?.valueSource );
+	const presetType = normalizePresetType( operation?.presetType );
+	const presetSlug = sanitizeKey( operation?.presetSlug );
+
 	if ( presetType !== expectedPresetType || ! presetSlug ) {
 		return {
 			ok: false,
 			error: `The suggested Global Styles preset metadata for ${ pathKey } no longer matches the live theme contract. Global Styles changed; regenerate suggestions.`,
 		};
 	}
+
+	const parsedPresetValue = parsePresetValue( operation?.value );
 
 	if (
 		! parsedPresetValue ||
@@ -883,8 +885,7 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 			afterConfig,
 			operation,
 			availableVariations,
-			executionContract:
-				executionContractRuntime.executionContract,
+			executionContract: executionContractRuntime.executionContract,
 		} );
 
 		if ( ! nextState.ok ) {

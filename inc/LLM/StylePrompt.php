@@ -61,11 +61,11 @@ SYSTEM;
 	}
 
 	public static function build_user( array $context, string $prompt = '' ): string {
-		$scope = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
-		$style_context = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$theme_tokens = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
+		$scope           = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
+		$style_context   = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$theme_tokens    = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
 		$supported_paths = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$sections = [];
+		$sections        = [];
 
 		$sections[] = '## Scope';
 		$sections[] = 'Surface: global-styles';
@@ -106,7 +106,7 @@ SYSTEM;
 				continue;
 			}
 
-			$path = is_array( $path_entry['path'] ?? null ) ? implode( '.', $path_entry['path'] ) : '';
+			$path         = is_array( $path_entry['path'] ?? null ) ? implode( '.', $path_entry['path'] ) : '';
 			$value_source = (string) ( $path_entry['valueSource'] ?? '' );
 
 			if ( '' === $path ) {
@@ -147,7 +147,7 @@ SYSTEM;
 
 	public static function parse_response( string $raw, array $context ): array|\WP_Error {
 		$cleaned = preg_replace( '/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim( $raw ) );
-		$data = json_decode( is_string( $cleaned ) ? $cleaned : '', true );
+		$data    = json_decode( is_string( $cleaned ) ? $cleaned : '', true );
 
 		if ( json_last_error() !== JSON_ERROR_NONE ) {
 			return new \WP_Error(
@@ -182,8 +182,8 @@ SYSTEM;
 				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
 				$context
 			);
-			$tone = sanitize_key( (string) ( $suggestion['tone'] ?? '' ) );
-			$tone = 'executable' === $tone && [] !== $operations
+			$tone       = sanitize_key( (string) ( $suggestion['tone'] ?? '' ) );
+			$tone       = 'executable' === $tone && [] !== $operations
 				? 'executable'
 				: 'advisory';
 
@@ -209,11 +209,11 @@ SYSTEM;
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function validate_operations( array $operations, array $context ): array {
-		$validated_styles = [];
+		$validated_styles    = [];
 		$validated_variation = [];
-		$style_context = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$supported_paths = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$variations = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
+		$style_context       = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$supported_paths     = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
+		$variations          = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
 
 		foreach ( $operations as $operation ) {
 			if ( ! is_array( $operation ) ) {
@@ -223,7 +223,7 @@ SYSTEM;
 			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
 
 			if ( 'set_styles' === $type ) {
-				$path = is_array( $operation['path'] ?? null )
+				$path       = is_array( $operation['path'] ?? null )
 					? array_values(
 						array_filter(
 							array_map(
@@ -240,9 +240,9 @@ SYSTEM;
 					continue;
 				}
 
-				$value_source = (string) ( $path_entry['valueSource'] ?? 'freeform' );
+				$value_source            = (string) ( $path_entry['valueSource'] ?? 'freeform' );
 				$normalized_value_source = self::normalize_preset_type( $value_source );
-				$value = $operation['value'] ?? null;
+				$value                   = $operation['value'] ?? null;
 
 				if ( 'freeform' === $normalized_value_source ) {
 					$validated_freeform = self::validate_freeform_style_value( $path, $value );
@@ -263,9 +263,9 @@ SYSTEM;
 					continue;
 				}
 
-				$value_type = sanitize_key( (string) ( $operation['valueType'] ?? '' ) );
-				$preset_type = (string) ( $operation['presetType'] ?? '' );
-				$preset_slug = sanitize_key( (string) ( $operation['presetSlug'] ?? '' ) );
+				$value_type             = sanitize_key( (string) ( $operation['valueType'] ?? '' ) );
+				$preset_type            = (string) ( $operation['presetType'] ?? '' );
+				$preset_slug            = sanitize_key( (string) ( $operation['presetSlug'] ?? '' ) );
 				$normalized_preset_type = self::normalize_preset_type( $preset_type );
 
 				if ( 'preset' !== $value_type || '' === $preset_slug ) {
@@ -309,7 +309,7 @@ SYSTEM;
 			if ( 'set_theme_variation' === $type ) {
 				$variation_index = isset( $operation['variationIndex'] ) ? (int) $operation['variationIndex'] : -1;
 				$variation_title = sanitize_text_field( (string) ( $operation['variationTitle'] ?? '' ) );
-				$variation = $variations[ $variation_index ] ?? null;
+				$variation       = $variations[ $variation_index ] ?? null;
 
 				if ( ! is_array( $variation ) || '' === $variation_title ) {
 					continue;
@@ -478,7 +478,7 @@ SYSTEM;
 			];
 		}
 
-		$value = strtolower( trim( $value ) );
+		$value          = strtolower( trim( $value ) );
 		$allowed_values = [
 			'none',
 			'solid',

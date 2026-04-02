@@ -309,7 +309,9 @@ describe( 'global styles execution contract', () => {
 			},
 		} );
 
-		expect( getGlobalStylesSupportedStylePathsFromTokens( tokens ) ).toEqual(
+		expect(
+			getGlobalStylesSupportedStylePathsFromTokens( tokens )
+		).toEqual(
 			expect.not.arrayContaining( [
 				{
 					path: [ 'color', 'background' ],

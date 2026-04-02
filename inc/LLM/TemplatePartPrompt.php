@@ -269,13 +269,13 @@ SYSTEM;
 			);
 		}
 
-		$block_lookup   = self::build_block_lookup(
+		$block_lookup            = self::build_block_lookup(
 			is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : []
 		);
 		$operation_target_lookup = self::build_operation_target_lookup( $context );
 		$insertion_anchor_lookup = self::build_insertion_anchor_lookup( $context );
-		$pattern_lookup = self::build_pattern_lookup( $context );
-		$suggestions    = self::validate_suggestions(
+		$pattern_lookup          = self::build_pattern_lookup( $context );
+		$suggestions             = self::validate_suggestions(
 			$data['suggestions'],
 			$block_lookup,
 			$pattern_lookup,
@@ -575,9 +575,7 @@ SYSTEM;
 						&& (
 							null === $target_path ||
 							! isset(
-								$insertion_anchor_lookup[
-									$placement . '|' . self::block_path_key( $target_path )
-								]
+								$insertion_anchor_lookup[ $placement . '|' . self::block_path_key( $target_path ) ]
 							)
 						)
 					) {

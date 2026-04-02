@@ -292,11 +292,11 @@ SYSTEM;
 			);
 		}
 
-		$unused_part_lookup   = self::build_unused_template_part_lookup( $context );
-		$assigned_part_lookup = self::build_assigned_template_part_lookup( $context );
-		$allowed_area_lookup  = self::build_allowed_area_lookup( $context );
-		$empty_area_lookup    = self::build_empty_area_lookup( $context );
-		$pattern_lookup       = self::build_pattern_lookup( $context );
+		$unused_part_lookup    = self::build_unused_template_part_lookup( $context );
+		$assigned_part_lookup  = self::build_assigned_template_part_lookup( $context );
+		$allowed_area_lookup   = self::build_allowed_area_lookup( $context );
+		$empty_area_lookup     = self::build_empty_area_lookup( $context );
+		$pattern_lookup        = self::build_pattern_lookup( $context );
 		$template_block_lookup = self::build_template_block_lookup( $context );
 
 		$suggestions = self::validate_template_suggestions(
@@ -411,13 +411,13 @@ SYSTEM;
 					$validated_pattern_suggestions
 				);
 
-				if (
+			if (
 					count( $entry['operations'] ) === 0
 					&& count( $entry['templateParts'] ) === 0
 					&& count( $entry['patternSuggestions'] ) === 0
 				) {
-					continue;
-				}
+				continue;
+			}
 
 			$valid[] = $entry;
 		}
@@ -859,10 +859,10 @@ SYSTEM;
 					}
 
 					$allowed_placements = [
-						self::TEMPLATE_PLACEMENT_START       => true,
-						self::TEMPLATE_PLACEMENT_END         => true,
+						self::TEMPLATE_PLACEMENT_START => true,
+						self::TEMPLATE_PLACEMENT_END   => true,
 						self::TEMPLATE_PLACEMENT_BEFORE_PATH => true,
-						self::TEMPLATE_PLACEMENT_AFTER_PATH  => true,
+						self::TEMPLATE_PLACEMENT_AFTER_PATH => true,
 					];
 
 					if ( ! isset( $allowed_placements[ $placement ] ) ) {
@@ -899,7 +899,7 @@ SYSTEM;
 						$target_path !== null &&
 						in_array( $placement, [ self::TEMPLATE_PLACEMENT_BEFORE_PATH, self::TEMPLATE_PLACEMENT_AFTER_PATH ], true )
 					) {
-						$normalized['targetPath'] = $target_path;
+						$normalized['targetPath']     = $target_path;
 						$normalized['expectedTarget'] = self::build_expected_target(
 							$template_block_lookup[ self::block_path_key( $target_path ) ]
 						);

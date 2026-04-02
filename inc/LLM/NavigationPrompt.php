@@ -281,7 +281,7 @@ SYSTEM;
 						continue;
 					}
 
-					$type = isset( $change['type'] ) && is_string( $change['type'] )
+					$type   = isset( $change['type'] ) && is_string( $change['type'] )
 						? sanitize_key( $change['type'] )
 						: '';
 					$target = sanitize_text_field( (string) ( $change['target'] ?? '' ) );

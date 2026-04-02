@@ -66,7 +66,11 @@ function normalizeExpectedTarget( value ) {
 		);
 	}
 
-	if ( value.slot && typeof value.slot === 'object' && ! Array.isArray( value.slot ) ) {
+	if (
+		value.slot &&
+		typeof value.slot === 'object' &&
+		! Array.isArray( value.slot )
+	) {
 		expectedTarget.slot = {
 			slug:
 				typeof value.slot.slug === 'string'

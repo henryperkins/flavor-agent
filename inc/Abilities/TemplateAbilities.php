@@ -422,7 +422,7 @@ final class TemplateAbilities {
 				continue;
 			}
 
-			$path_key = self::block_path_key( $path );
+			$path_key                        = self::block_path_key( $path );
 			$anchors[ "before:{$path_key}" ] = [
 				'placement'  => 'before_block_path',
 				'targetPath' => $path,

@@ -400,21 +400,21 @@ final class ServerCollector {
 			);
 		}
 
-		$content          = (string) ( $template_part->content ?? '' );
-		$slug             = sanitize_key( (string) ( $template_part->slug ?? '' ) );
-		$area             = sanitize_key( (string) ( $template_part->area ?? '' ) );
-		$title_source     = (string) ( $template_part->title ?? '' );
-		$title            = sanitize_text_field(
+		$content                = (string) ( $template_part->content ?? '' );
+		$slug                   = sanitize_key( (string) ( $template_part->slug ?? '' ) );
+		$area                   = sanitize_key( (string) ( $template_part->area ?? '' ) );
+		$title_source           = (string) ( $template_part->title ?? '' );
+		$title                  = sanitize_text_field(
 			$title_source !== ''
 				? $title_source
 				: ( $slug !== '' ? $slug : $template_part_ref )
 		);
-		$blocks           = parse_blocks( $content );
-		$block_tree       = self::summarize_template_part_block_tree( $blocks );
-		$operation_targets = self::collect_template_part_operation_targets( $blocks );
-		$insertion_anchors = self::collect_template_part_insertion_anchors( $operation_targets );
+		$blocks                 = parse_blocks( $content );
+		$block_tree             = self::summarize_template_part_block_tree( $blocks );
+		$operation_targets      = self::collect_template_part_operation_targets( $blocks );
+		$insertion_anchors      = self::collect_template_part_insertion_anchors( $operation_targets );
 		$structural_constraints = self::collect_template_part_structural_constraints( $blocks );
-		$top_level_blocks = array_values(
+		$top_level_blocks       = array_values(
 			array_filter(
 				array_map(
 					static fn( array $block ): string => (string) ( $block['blockName'] ?? '' ),
@@ -423,18 +423,18 @@ final class ServerCollector {
 				static fn( string $name ): bool => $name !== ''
 			)
 		);
-		$summary_stats    = self::collect_template_part_block_stats( $blocks );
-		$block_counts     = $summary_stats['blockCounts'];
+		$summary_stats          = self::collect_template_part_block_stats( $blocks );
+		$block_counts           = $summary_stats['blockCounts'];
 
 		return [
-			'templatePartRef' => self::resolve_template_part_ref( $template_part_ref, $template_part ),
-			'slug'            => $slug,
-			'title'           => $title !== '' ? $title : $template_part_ref,
-			'area'            => $area,
-			'blockTree'       => $block_tree,
-			'topLevelBlocks'  => $top_level_blocks,
-			'blockCounts'     => $block_counts,
-			'structureStats'  => [
+			'templatePartRef'       => self::resolve_template_part_ref( $template_part_ref, $template_part ),
+			'slug'                  => $slug,
+			'title'                 => $title !== '' ? $title : $template_part_ref,
+			'area'                  => $area,
+			'blockTree'             => $block_tree,
+			'topLevelBlocks'        => $top_level_blocks,
+			'blockCounts'           => $block_counts,
+			'structureStats'        => [
 				'blockCount'            => $summary_stats['blockCount'],
 				'maxDepth'              => $summary_stats['maxDepth'],
 				'hasNavigation'         => ! empty( $block_counts['core/navigation'] ),
@@ -452,11 +452,11 @@ final class ServerCollector {
 				'hasSingleWrapperGroup' => count( $top_level_blocks ) === 1 && $top_level_blocks[0] === 'core/group',
 				'isNearlyEmpty'         => $summary_stats['blockCount'] <= 1,
 			],
-			'operationTargets' => $operation_targets,
-			'insertionAnchors' => $insertion_anchors,
+			'operationTargets'      => $operation_targets,
+			'insertionAnchors'      => $insertion_anchors,
 			'structuralConstraints' => $structural_constraints,
-			'patterns'        => self::collect_template_part_candidate_patterns( $area, $visible_pattern_names ),
-			'themeTokens'     => self::for_tokens(),
+			'patterns'              => self::collect_template_part_candidate_patterns( $area, $visible_pattern_names ),
+			'themeTokens'           => self::for_tokens(),
 		];
 	}
 
@@ -586,8 +586,8 @@ final class ServerCollector {
 			$part_area_lookup[ $slug ] = (string) ( $part['area'] ?? '' );
 		}
 
-		$template_blocks = parse_blocks( $template->content ?? '' );
-		$slots           = self::collect_template_part_slots(
+		$template_blocks      = parse_blocks( $template->content ?? '' );
+		$slots                = self::collect_template_part_slots(
 			$template_blocks,
 			$part_area_lookup
 		);
@@ -597,18 +597,18 @@ final class ServerCollector {
 		);
 
 		return [
-			'templateRef'    => $template_ref,
-			'templateType'   => $template_type,
-			'title'          => $template->title ?? $template_ref,
-			'assignedParts'  => $slots['assignedParts'],
-			'emptyAreas'     => $slots['emptyAreas'],
-			'allowedAreas'   => $slots['allowedAreas'],
-			'topLevelBlockTree' => $top_level_block_tree,
+			'templateRef'              => $template_ref,
+			'templateType'             => $template_type,
+			'title'                    => $template->title ?? $template_ref,
+			'assignedParts'            => $slots['assignedParts'],
+			'emptyAreas'               => $slots['emptyAreas'],
+			'allowedAreas'             => $slots['allowedAreas'],
+			'topLevelBlockTree'        => $top_level_block_tree,
 			'topLevelInsertionAnchors' => self::collect_template_insertion_anchors( $top_level_block_tree ),
-			'structureStats' => self::collect_template_structure_stats( $template_blocks, $top_level_block_tree ),
-			'availableParts' => $available_parts,
-			'patterns'       => self::collect_template_candidate_patterns( $template_type, $visible_pattern_names ),
-			'themeTokens'    => self::for_tokens(),
+			'structureStats'           => self::collect_template_structure_stats( $template_blocks, $top_level_block_tree ),
+			'availableParts'           => $available_parts,
+			'patterns'                 => self::collect_template_candidate_patterns( $template_type, $visible_pattern_names ),
+			'themeTokens'              => self::for_tokens(),
 		];
 	}
 
@@ -1624,7 +1624,7 @@ final class ServerCollector {
 		}
 
 		// Collect navigation-overlay template parts (WP 7.0+).
-		$overlay_parts = self::for_template_parts( 'navigation-overlay', false );
+		$overlay_parts     = self::for_template_parts( 'navigation-overlay', false );
 		$structure_summary = self::collect_navigation_structure_summary( $menu_items );
 		$uses_overlay      = count( $overlay_parts ) > 0 || ( $attributes['overlayMenu'] ?? 'never' ) !== 'never';
 
@@ -1643,11 +1643,11 @@ final class ServerCollector {
 			'maxDepth'             => self::measure_menu_depth( $menu_items ),
 			'structureSummary'     => $structure_summary,
 			'overlayContext'       => [
-				'usesOverlay'                  => $uses_overlay,
-				'overlayMode'                  => (string) ( $attributes['overlayMenu'] ?? 'never' ),
-				'hasDedicatedOverlayParts'     => count( $overlay_parts ) > 0,
-				'overlayTemplatePartCount'     => count( $overlay_parts ),
-				'overlayTemplatePartSlugs'     => array_values(
+				'usesOverlay'              => $uses_overlay,
+				'overlayMode'              => (string) ( $attributes['overlayMenu'] ?? 'never' ),
+				'hasDedicatedOverlayParts' => count( $overlay_parts ) > 0,
+				'overlayTemplatePartCount' => count( $overlay_parts ),
+				'overlayTemplatePartSlugs' => array_values(
 					array_filter(
 						array_map(
 							static fn( array $part ): string => sanitize_key( (string) ( $part['slug'] ?? '' ) ),
@@ -1823,10 +1823,10 @@ final class ServerCollector {
 	 */
 	private static function collect_navigation_structure_summary( array $items ): array {
 		$summary = [
-			'topLevelCount' => count( $items ),
-			'submenuCount'  => 0,
-			'hasPageList'   => false,
-			'nonLinkTypes'  => [],
+			'topLevelCount'  => count( $items ),
+			'submenuCount'   => 0,
+			'hasPageList'    => false,
+			'nonLinkTypes'   => [],
 			'topLevelLabels' => [],
 		];
 

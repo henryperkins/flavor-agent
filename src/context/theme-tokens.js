@@ -24,8 +24,9 @@ export function collectThemeTokens() {
 }
 
 function getSortedUniqueSlugs( entries = [] ) {
-	return [ ...new Set( entries.map( ( entry ) => entry?.slug ).filter( Boolean ) ) ]
-		.sort( ( left, right ) => left.localeCompare( right ) );
+	return [
+		...new Set( entries.map( ( entry ) => entry?.slug ).filter( Boolean ) ),
+	].sort( ( left, right ) => left.localeCompare( right ) );
 }
 
 export function collectThemeTokenDiagnosticsFromSettings( settings = {} ) {
@@ -63,7 +64,9 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 	const hasFontSizePresets = Array.isArray( tokens?.typography?.fontSizes )
 		? tokens.typography.fontSizes.length > 0
 		: false;
-	const hasFontFamilyPresets = Array.isArray( tokens?.typography?.fontFamilies )
+	const hasFontFamilyPresets = Array.isArray(
+		tokens?.typography?.fontFamilies
+	)
 		? tokens.typography.fontFamilies.length > 0
 		: false;
 	const hasSpacingPresets = Array.isArray( tokens?.spacing?.spacingSizes )
@@ -190,7 +193,8 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 
 export function buildGlobalStylesExecutionContract( tokens = {} ) {
 	return {
-		supportedStylePaths: getGlobalStylesSupportedStylePathsFromTokens( tokens ),
+		supportedStylePaths:
+			getGlobalStylesSupportedStylePathsFromTokens( tokens ),
 		presetSlugs: {
 			color: getSortedUniqueSlugs( tokens?.color?.palette || [] ),
 			fontsize: getSortedUniqueSlugs(
@@ -207,7 +211,9 @@ export function buildGlobalStylesExecutionContract( tokens = {} ) {
 	};
 }
 
-export function buildGlobalStylesExecutionContractFromSettings( settings = {} ) {
+export function buildGlobalStylesExecutionContractFromSettings(
+	settings = {}
+) {
 	return buildGlobalStylesExecutionContract(
 		collectThemeTokensFromSettings( settings )
 	);

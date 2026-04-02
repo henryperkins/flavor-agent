@@ -267,10 +267,10 @@ final class Registration {
 											'attributes' => [ 'type' => 'object' ],
 											'childCount' => [ 'type' => 'integer' ],
 											'slot'       => [
-												'type'       => 'object',
+												'type' => 'object',
 												'properties' => [
-													'slug'    => [ 'type' => 'string' ],
-													'area'    => [ 'type' => 'string' ],
+													'slug' => [ 'type' => 'string' ],
+													'area' => [ 'type' => 'string' ],
 													'isEmpty' => [ 'type' => 'boolean' ],
 												],
 											],
@@ -304,11 +304,11 @@ final class Registration {
 												'patternName' => [ 'type' => 'string' ],
 												'placement' => [ 'type' => 'string' ],
 												'targetPath' => [
-													'type'  => 'array',
+													'type' => 'array',
 													'items' => [ 'type' => 'integer' ],
 												],
 												'expectedTarget' => [
-													'type'       => 'object',
+													'type' => 'object',
 													'properties' => [
 														'name'       => [ 'type' => 'string' ],
 														'label'      => [ 'type' => 'string' ],

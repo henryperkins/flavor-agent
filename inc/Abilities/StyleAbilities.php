@@ -11,13 +11,13 @@ use FlavorAgent\LLM\StylePrompt;
 final class StyleAbilities {
 
 	public static function recommend_style( mixed $input ): array|\WP_Error {
-		$input = self::normalize_map( $input );
-		$scope = self::normalize_map( $input['scope'] ?? [] );
+		$input         = self::normalize_map( $input );
+		$scope         = self::normalize_map( $input['scope'] ?? [] );
 		$style_context = self::normalize_map( $input['styleContext'] ?? [] );
-		$prompt = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$prompt        = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
 
-		$scope_surface = sanitize_key( (string) ( $scope['surface'] ?? '' ) );
-		$scope_key = sanitize_text_field( (string) ( $scope['scopeKey'] ?? '' ) );
+		$scope_surface    = sanitize_key( (string) ( $scope['surface'] ?? '' ) );
+		$scope_key        = sanitize_text_field( (string) ( $scope['scopeKey'] ?? '' ) );
 		$global_styles_id = sanitize_text_field( (string) ( $scope['globalStylesId'] ?? '' ) );
 
 		if ( $scope_surface !== 'global-styles' ) {
@@ -79,10 +79,10 @@ final class StyleAbilities {
 	 */
 	public static function supported_style_paths(): array {
 		$theme_tokens = ServerCollector::for_tokens();
-		$features = is_array( $theme_tokens['enabledFeatures'] ?? null )
+		$features     = is_array( $theme_tokens['enabledFeatures'] ?? null )
 			? $theme_tokens['enabledFeatures']
 			: [];
-		$paths = [];
+		$paths        = [];
 
 		if ( ! empty( $theme_tokens['colors'] ) ) {
 			if ( ! empty( $features['backgroundColor'] ) ) {
@@ -163,7 +163,7 @@ final class StyleAbilities {
 	 */
 	private static function normalize_variation( mixed $variation ): array {
 		$variation = self::normalize_map( $variation );
-		$title = sanitize_text_field( (string) ( $variation['title'] ?? '' ) );
+		$title     = sanitize_text_field( (string) ( $variation['title'] ?? '' ) );
 
 		if ( '' === $title && [] === $variation ) {
 			return [];

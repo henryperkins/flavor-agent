@@ -132,13 +132,17 @@ describe( 'style-operations', () => {
 			getSettings: jest.fn( () => blockEditorSettings ),
 		};
 
-		select.mockImplementation( ( storeName ) =>
-			storeName === 'core'
-				? coreSelect
-				: storeName === 'core/block-editor'
-					? blockEditorSelect
-					: {}
-		);
+		select.mockImplementation( ( storeName ) => {
+			if ( storeName === 'core' ) {
+				return coreSelect;
+			}
+
+			if ( storeName === 'core/block-editor' ) {
+				return blockEditorSelect;
+			}
+
+			return {};
+		} );
 		dispatch.mockImplementation( ( storeName ) =>
 			storeName === 'core' ? coreDispatch : {}
 		);

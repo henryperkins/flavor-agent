@@ -121,8 +121,8 @@ final class NavigationAbilitiesTest extends TestCase {
 				],
 			],
 			'structureSummary'     => [
-				'topLevelCount' => 2,
-				'submenuCount'  => 1,
+				'topLevelCount'  => 2,
+				'submenuCount'   => 1,
 				'topLevelLabels' => [ 'Home', 'About' ],
 			],
 			'overlayContext'       => [

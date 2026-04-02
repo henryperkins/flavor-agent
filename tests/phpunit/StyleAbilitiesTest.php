@@ -14,7 +14,7 @@ final class StyleAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		WordPressTestState::$options = [
+		WordPressTestState::$options         = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
@@ -106,7 +106,7 @@ final class StyleAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_style_downgrades_invalid_freeform_operations_to_advisory(): void {
-		WordPressTestState::$global_settings = [
+		WordPressTestState::$global_settings      = [
 			'color'  => [
 				'palette' => [
 					[

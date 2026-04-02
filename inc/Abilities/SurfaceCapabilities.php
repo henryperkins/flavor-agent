@@ -24,7 +24,7 @@ final class SurfaceCapabilities {
 		$can_edit_theme      = current_user_can( 'edit_theme_options' );
 		$can_manage_settings = current_user_can( 'manage_options' );
 
-		$block_message = $can_manage_settings
+		$block_message         = $can_manage_settings
 			? __(
 				'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.',
 				'flavor-agent'
@@ -33,7 +33,7 @@ final class SurfaceCapabilities {
 				'Block recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 				'flavor-agent'
 			);
-		$pattern_message = $can_manage_settings
+		$pattern_message       = $can_manage_settings
 			? __(
 				'Pattern recommendations rely on Flavor Agent\'s chat and embedding backends plus Qdrant in Settings > Flavor Agent.',
 				'flavor-agent'
@@ -42,7 +42,7 @@ final class SurfaceCapabilities {
 				'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
 				'flavor-agent'
 			);
-		$template_message = $can_manage_settings
+		$template_message      = $can_manage_settings
 			? __(
 				'Template recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
 				'flavor-agent'
@@ -60,7 +60,7 @@ final class SurfaceCapabilities {
 				'Template-part recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
 				'flavor-agent'
 			);
-		$navigation_message = $can_manage_settings
+		$navigation_message    = $can_manage_settings
 			? __(
 				'Navigation recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
 				'flavor-agent'

@@ -106,7 +106,9 @@ function describeTemplateBlockLabel( blockName = '', slug = '', area = '' ) {
 	return normalizedName
 		.split( '-' )
 		.map( ( segment ) =>
-			segment ? segment.charAt( 0 ).toUpperCase() + segment.slice( 1 ) : ''
+			segment
+				? segment.charAt( 0 ).toUpperCase() + segment.slice( 1 )
+				: ''
 		)
 		.join( ' ' );
 }
@@ -445,12 +447,13 @@ export function buildTemplateSuggestionViewModel(
 	const rawOperations = Array.isArray( suggestion?.operations )
 		? suggestion.operations
 		: [];
-	const rawPatternSuggestions = Array.isArray( suggestion?.patternSuggestions )
+	const rawPatternSuggestions = Array.isArray(
+		suggestion?.patternSuggestions
+	)
 		? suggestion.patternSuggestions
 		: [];
-	const executableOperations = validateTemplateOperationSequence(
-		rawOperations
-	);
+	const executableOperations =
+		validateTemplateOperationSequence( rawOperations );
 	const partReasonLookup = templateParts.reduce( ( acc, part ) => {
 		const key = getTemplatePartKey( part?.slug || '', part?.area || '' );
 		acc[ key ] = part?.reason || '';
@@ -459,7 +462,10 @@ export function buildTemplateSuggestionViewModel(
 	const operations = executableOperations.ok
 		? executableOperations.operations
 				.map( ( operation ) =>
-					buildTemplateOperationViewModel( operation, patternTitleMap )
+					buildTemplateOperationViewModel(
+						operation,
+						patternTitleMap
+					)
 				)
 				.filter( Boolean )
 		: [];
@@ -467,7 +473,7 @@ export function buildTemplateSuggestionViewModel(
 		( operation ) =>
 			operation.type === TEMPLATE_OPERATION_ASSIGN ||
 			operation.type === TEMPLATE_OPERATION_REPLACE
-		);
+	);
 	const patternOperations = operations.filter(
 		( operation ) => operation.type === TEMPLATE_OPERATION_INSERT_PATTERN
 	);
@@ -475,7 +481,10 @@ export function buildTemplateSuggestionViewModel(
 	const patternSuggestions = [];
 
 	for ( const operation of patternOperations ) {
-		if ( ! operation.patternName || seenPatternNames.has( operation.patternName ) ) {
+		if (
+			! operation.patternName ||
+			seenPatternNames.has( operation.patternName )
+		) {
 			continue;
 		}
 
@@ -506,9 +515,10 @@ export function buildTemplateSuggestionViewModel(
 		suggestionKey: suggestion?.suggestionKey || '',
 		label: suggestion?.label || '',
 		description: suggestion?.description || '',
-		executionError: rawOperations.length === 0 || executableOperations.ok
-			? ''
-			: executableOperations.error || '',
+		executionError:
+			rawOperations.length === 0 || executableOperations.ok
+				? ''
+				: executableOperations.error || '',
 		operations,
 		templateParts: templateOperations.map( ( operation ) => ( {
 			key: getTemplatePartKey( operation.slug, operation.area ),
@@ -518,11 +528,13 @@ export function buildTemplateSuggestionViewModel(
 				partReasonLookup[
 					getTemplatePartKey( operation.slug, operation.area )
 				] || '',
-				actionType: TEMPLATE_PART_REVIEW_ACTION,
-				ctaLabel: 'Review in editor',
-			} ) ),
+			actionType: TEMPLATE_PART_REVIEW_ACTION,
+			ctaLabel: 'Review in editor',
+		} ) ),
 		patternSuggestions,
 		canApply:
-			rawOperations.length > 0 && executableOperations.ok && operations.length > 0,
+			rawOperations.length > 0 &&
+			executableOperations.ok &&
+			operations.length > 0,
 	};
 }

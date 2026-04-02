@@ -229,7 +229,7 @@ final class RegistrationTest extends TestCase {
 		Registration::register_category();
 		Registration::register_abilities();
 
-		$style_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-style'] ?? null;
+		$style_ability  = WordPressTestState::$registered_abilities['flavor-agent/recommend-style'] ?? null;
 		$status_ability = WordPressTestState::$registered_abilities['flavor-agent/check-status'] ?? null;
 		$tokens_ability = WordPressTestState::$registered_abilities['flavor-agent/get-theme-tokens'] ?? null;
 

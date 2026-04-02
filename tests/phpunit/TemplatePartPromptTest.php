@@ -11,7 +11,7 @@ final class TemplatePartPromptTest extends TestCase {
 
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {
 		$context = [
-			'blockTree' => [
+			'blockTree'        => [
 				[
 					'path'       => [ 0 ],
 					'name'       => 'core/group',
@@ -39,7 +39,7 @@ final class TemplatePartPromptTest extends TestCase {
 					],
 				],
 			],
-			'patterns'  => [
+			'patterns'         => [
 				[
 					'name' => 'theme/header-utility',
 				],
@@ -119,7 +119,7 @@ final class TemplatePartPromptTest extends TestCase {
 
 	public function test_parse_response_keeps_only_valid_template_part_operations(): void {
 		$context = [
-			'blockTree' => [
+			'blockTree'             => [
 				[
 					'path'       => [ 0 ],
 					'name'       => 'core/group',
@@ -143,7 +143,7 @@ final class TemplatePartPromptTest extends TestCase {
 					],
 				],
 			],
-			'patterns'  => [
+			'patterns'              => [
 				[
 					'name' => 'theme/header-utility',
 				],
@@ -151,7 +151,7 @@ final class TemplatePartPromptTest extends TestCase {
 					'name' => 'theme/header-minimal',
 				],
 			],
-			'insertionAnchors' => [
+			'insertionAnchors'      => [
 				[
 					'placement' => 'start',
 					'label'     => 'Start of template part',
@@ -162,7 +162,7 @@ final class TemplatePartPromptTest extends TestCase {
 					'label'      => 'Before Navigation block',
 				],
 			],
-			'operationTargets' => [
+			'operationTargets'      => [
 				[
 					'path'              => [ 0 ],
 					'name'              => 'core/group',
@@ -239,7 +239,7 @@ final class TemplatePartPromptTest extends TestCase {
 
 	public function test_parse_response_accepts_replace_and_remove_operations_when_paths_match(): void {
 		$context = [
-			'blockTree' => [
+			'blockTree'             => [
 				[
 					'path'       => [ 0 ],
 					'name'       => 'core/group',
@@ -263,12 +263,12 @@ final class TemplatePartPromptTest extends TestCase {
 					],
 				],
 			],
-			'patterns'  => [
+			'patterns'              => [
 				[
 					'name' => 'theme/header-utility',
 				],
 			],
-			'operationTargets' => [
+			'operationTargets'      => [
 				[
 					'path'              => [ 0 ],
 					'name'              => 'core/group',

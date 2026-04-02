@@ -245,7 +245,7 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_style_forwards_global_styles_context(): void {
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
-		WordPressTestState::$remote_post_response = [
+		WordPressTestState::$remote_post_response               = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
@@ -259,7 +259,7 @@ final class AgentControllerTest extends TestCase {
 									'tone'        => 'executable',
 									'operations'  => [
 										[
-											'type'           => 'set_theme_variation',
+											'type' => 'set_theme_variation',
 											'variationIndex' => 1,
 											'variationTitle' => 'Midnight',
 										],
@@ -289,13 +289,13 @@ final class AgentControllerTest extends TestCase {
 		$request->set_param(
 			'styleContext',
 			[
-				'currentConfig' => [
+				'currentConfig'         => [
 					'styles' => [],
 				],
-				'mergedConfig'  => [
+				'mergedConfig'          => [
 					'styles' => [],
 				],
-				'availableVariations' => [
+				'availableVariations'   => [
 					[
 						'title'    => 'Default',
 						'settings' => [],
@@ -462,7 +462,21 @@ final class AgentControllerTest extends TestCase {
 				[
 					'output_text' => wp_json_encode(
 						[
-							'suggestions' => [],
+							'suggestions' => [
+								[
+									'label'              => 'Add hero',
+									'description'        => 'Use the hero pattern at the start of the live template.',
+									'operations'         => [
+										[
+											'type'        => 'insert_pattern',
+											'patternName' => 'theme/hero',
+											'placement'   => 'start',
+										],
+									],
+									'templateParts'      => [],
+									'patternSuggestions' => [ 'theme/hero' ],
+								],
+							],
 							'explanation' => 'Use the live editor structure.',
 						]
 					),

@@ -100,8 +100,7 @@ function buildRequestInput( {
 	contextSignature,
 	themeTokenDiagnostics,
 } ) {
-	const normalizedPrompt =
-		typeof prompt === 'string' ? prompt.trim() : '';
+	const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
 
 	return {
 		scope: {

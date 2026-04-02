@@ -655,22 +655,22 @@ export default function TemplateRecommender() {
 		}
 
 		fetchTemplateRecommendations(
-				buildTemplateFetchInput( {
-					templateRef,
-					templateType,
-					prompt,
-					editorSlots,
-					editorStructure,
-					visiblePatternNames,
-				} )
-			);
-		}, [
-			canRecommend,
-			editorSlots,
-			editorStructure,
-			fetchTemplateRecommendations,
-			prompt,
-			templateRef,
+			buildTemplateFetchInput( {
+				templateRef,
+				templateType,
+				prompt,
+				editorSlots,
+				editorStructure,
+				visiblePatternNames,
+			} )
+		);
+	}, [
+		canRecommend,
+		editorSlots,
+		editorStructure,
+		fetchTemplateRecommendations,
+		prompt,
+		templateRef,
 		templateType,
 		visiblePatternNames,
 	] );

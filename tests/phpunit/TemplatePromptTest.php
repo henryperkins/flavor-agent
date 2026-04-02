@@ -553,10 +553,10 @@ final class TemplatePromptTest extends TestCase {
 						'description' => 'Insert the hero before the header slot.',
 						'operations'  => [
 							[
-								'type'        => 'insert_pattern',
-								'patternName' => 'theme/hero',
-								'placement'   => 'before_block_path',
-								'targetPath'  => [ 1 ],
+								'type'           => 'insert_pattern',
+								'patternName'    => 'theme/hero',
+								'placement'      => 'before_block_path',
+								'targetPath'     => [ 1 ],
 								'expectedTarget' => [
 									'name'       => 'core/template-part',
 									'label'      => 'header template part (header)',
@@ -588,10 +588,10 @@ final class TemplatePromptTest extends TestCase {
 					'description'        => 'Insert the hero before the header slot.',
 					'operations'         => [
 						[
-							'type'        => 'insert_pattern',
-							'patternName' => 'theme/hero',
-							'placement'   => 'before_block_path',
-							'targetPath'  => [ 1 ],
+							'type'           => 'insert_pattern',
+							'patternName'    => 'theme/hero',
+							'placement'      => 'before_block_path',
+							'targetPath'     => [ 1 ],
 							'expectedTarget' => [
 								'name'       => 'core/template-part',
 								'label'      => 'header template part (header)',

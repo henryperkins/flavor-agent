@@ -519,7 +519,7 @@ final class ServerCollectorTest extends TestCase {
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:group -->'
 			. '<!-- wp:paragraph --><p>Keep</p><!-- /wp:paragraph -->'
-			. '<!-- wp:paragraph {"lock":{"remove":true}} --><p>Locked</p><!-- /wp:paragraph -->'
+			. '<!-- wp:paragraph {"templateLock":"all"} --><p>Locked</p><!-- /wp:paragraph -->'
 			. '<!-- /wp:group -->';
 
 		$result = ServerCollector::for_template_part( 'theme//header' );
@@ -595,10 +595,10 @@ final class ServerCollectorTest extends TestCase {
 		);
 		$this->assertSame(
 			[
-				'topLevelCount' => 2,
-				'submenuCount'  => 0,
-				'hasPageList'   => false,
-				'nonLinkTypes'  => [],
+				'topLevelCount'  => 2,
+				'submenuCount'   => 0,
+				'hasPageList'    => false,
+				'nonLinkTypes'   => [],
 				'topLevelLabels' => [ 'Home', 'Contact' ],
 			],
 			$result['structureSummary'] ?? null
