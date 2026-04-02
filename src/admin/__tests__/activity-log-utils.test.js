@@ -275,7 +275,9 @@ describe( 'activity log utils', () => {
 		);
 
 		expect( globalStylesLink.label ).toBe( 'Open Styles' );
-		expect( globalStylesLink.url ).toContain( '/wp-admin/site-editor.php?' );
+		expect( globalStylesLink.url ).toContain(
+			'/wp-admin/site-editor.php?'
+		);
 		expect( styleBookLink.label ).toBe( 'Open Styles' );
 		expect( styleBookLink.url ).toContain( '/wp-admin/site-editor.php?' );
 	} );

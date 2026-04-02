@@ -27,35 +27,9 @@ const DEFAULT_EXECUTION_CONTRACT = {
 	},
 };
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, disabled, onClick, ...props } ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					disabled,
-					onClick,
-					...props,
-				},
-				children
-			),
-		TextareaControl: ( { label, value, onChange, help } ) =>
-			createElement(
-				'label',
-				{},
-				label,
-				createElement( 'textarea', {
-					value,
-					onInput: ( event ) => onChange( event.target.value ),
-					onChange: ( event ) => onChange( event.target.value ),
-				} ),
-				help ? createElement( 'div', {}, help ) : null
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
@@ -124,7 +98,9 @@ jest.mock( '../dom', () => ( {
 		const resolvedRoot = root || global.document;
 
 		return (
-			resolvedRoot.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+			resolvedRoot.querySelector(
+				'.editor-global-styles-sidebar__panel'
+			) ||
 			resolvedRoot.querySelector( '.editor-global-styles-sidebar' ) ||
 			resolvedRoot.querySelector( '[role="region"][aria-label="Styles"]' )
 		);
@@ -156,8 +132,29 @@ let currentGlobalStylesData = null;
 let currentStoreState = null;
 let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
+let currentEditedTemplateId = null;
 
 window.IS_REACT_ACT_ENVIRONMENT = true;
+
+function createStyleVariations() {
+	return [
+		{
+			title: 'Default',
+			settings: {},
+			styles: {},
+		},
+		{
+			title: 'Midnight',
+			description: 'Dark editorial palette',
+			settings: {},
+			styles: {
+				color: {
+					background: 'var:preset|color|accent',
+				},
+			},
+		},
+	];
+}
 
 function createGlobalStylesData( globalStylesId = '17' ) {
 	return {
@@ -194,7 +191,7 @@ function createGlobalStylesData( globalStylesId = '17' ) {
 			},
 			_links: {},
 		},
-		variations: [],
+		variations: createStyleVariations(),
 	};
 }
 
@@ -203,14 +200,14 @@ function buildContextSignature() {
 		scope: {
 			scopeKey: 'style_book:17:core/paragraph',
 			globalStylesId: '17',
+			templateSlug: currentEditedTemplateId,
+			templateType: 'home',
 			blockName: 'core/paragraph',
 			blockTitle: 'Paragraph',
 		},
 		currentConfig: currentGlobalStylesData.userConfig,
 		mergedConfig: currentGlobalStylesData.mergedConfig,
-		availableVariations: [],
-		themeTokenDiagnostics:
-			currentBlockEditorSettings.__diagnostics || {},
+		themeTokenDiagnostics: currentBlockEditorSettings.__diagnostics || {},
 		executionContract:
 			currentBlockEditorSettings.__executionContract ||
 			DEFAULT_EXECUTION_CONTRACT,
@@ -228,6 +225,7 @@ beforeEach( () => {
 	currentBlockType = {
 		name: 'core/paragraph',
 		title: 'Paragraph',
+		description: 'Primary intro copy block.',
 		supports: {
 			color: {
 				text: true,
@@ -238,6 +236,7 @@ beforeEach( () => {
 		},
 	};
 	currentGlobalStylesData = createGlobalStylesData();
+	currentEditedTemplateId = 'theme//home';
 	currentStoreState = {
 		activityLog: [],
 		recommendations: [],
@@ -270,7 +269,7 @@ beforeEach( () => {
 		error: null,
 	} );
 	mockGetStyleBookUiState.mockImplementation( () => currentStyleBookUiState );
-	mockSubscribeToStyleBookUi.mockImplementation( ( root, onChange ) => {
+	mockSubscribeToStyleBookUi.mockImplementation( ( _root, onChange ) => {
 		styleBookUiSubscriber = onChange;
 		onChange( currentStyleBookUiState );
 		return () => {};
@@ -293,6 +292,7 @@ beforeEach( () => {
 			if ( storeName === 'core/edit-site' ) {
 				return {
 					getEditedPostType: () => 'wp_template',
+					getEditedPostId: () => currentEditedTemplateId,
 				};
 			}
 
@@ -345,8 +345,7 @@ beforeEach( () => {
 		fetchStyleBookRecommendations: mockFetchStyleBookRecommendations,
 		applyStyleBookSuggestion: mockApplyStyleBookSuggestion,
 		clearStyleBookRecommendations: mockClearStyleBookRecommendations,
-		setStyleBookSelectedSuggestion:
-			mockSetStyleBookSelectedSuggestion,
+		setStyleBookSelectedSuggestion: mockSetStyleBookSelectedSuggestion,
 		undoActivity: mockUndoActivity,
 	} ) );
 
@@ -395,6 +394,9 @@ describe( 'StyleBookRecommender', () => {
 			button.click();
 		} );
 
+		const requestInput =
+			mockFetchStyleBookRecommendations.mock.calls[ 0 ][ 0 ];
+
 		expect( mockFetchStyleBookRecommendations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				scope: expect.objectContaining( {
@@ -402,6 +404,8 @@ describe( 'StyleBookRecommender', () => {
 					scopeKey: 'style_book:17:core/paragraph',
 					globalStylesId: '17',
 					entityId: 'core/paragraph',
+					templateSlug: 'theme//home',
+					templateType: 'home',
 					blockName: 'core/paragraph',
 					blockTitle: 'Paragraph',
 				} ),
@@ -411,6 +415,7 @@ describe( 'StyleBookRecommender', () => {
 					styleBookTarget: {
 						blockName: 'core/paragraph',
 						blockTitle: 'Paragraph',
+						description: 'Primary intro copy block.',
 						currentStyles: {
 							color: {
 								text: 'var:preset|color|contrast',
@@ -432,6 +437,7 @@ describe( 'StyleBookRecommender', () => {
 				prompt: 'Make the paragraph example feel more editorial.',
 			} )
 		);
+		expect( requestInput.styleContext.availableVariations ).toBeUndefined();
 	} );
 
 	test( 'shows a selection notice and disables the request button when no style-book target is selected', () => {

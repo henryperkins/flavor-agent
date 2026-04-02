@@ -7,7 +7,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\FormatsDocsGuidance;
+
 final class TemplatePartPrompt {
+
+	use FormatsDocsGuidance;
 
 	/**
 	 * Build the system prompt for template-part recommendations.
@@ -126,6 +130,25 @@ SYSTEM;
 
 		if ( array_key_exists( 'isNearlyEmpty', $structure_stats ) ) {
 			$structure_lines[] = 'Nearly empty: ' . ( $structure_stats['isNearlyEmpty'] ? 'yes' : 'no' );
+		}
+
+		foreach (
+			[
+				'hasNavigation',
+				'containsLogo',
+				'containsSiteTitle',
+				'containsSearch',
+				'containsSocialLinks',
+				'containsQuery',
+				'containsColumns',
+				'containsButtons',
+				'containsSpacer',
+				'containsSeparator',
+			] as $flag
+		) {
+			if ( array_key_exists( $flag, $structure_stats ) ) {
+				$structure_lines[] = $flag . ': ' . ( $structure_stats[ $flag ] ? 'yes' : 'no' );
+			}
 		}
 
 		if ( ! empty( $block_counts ) ) {
@@ -298,25 +321,6 @@ SYSTEM;
 			'suggestions' => $suggestions,
 			'explanation' => sanitize_text_field( (string) ( $data['explanation'] ?? '' ) ),
 		];
-	}
-
-	/**
-	 * @param array<string, mixed> $guidance
-	 */
-	private static function format_guidance_line( array $guidance ): string {
-		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
-
-		if ( $prefix === '' ) {
-			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
-		}
-
-		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
-
-		if ( $excerpt === '' ) {
-			return '';
-		}
-
-		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
 	}
 
 	/**

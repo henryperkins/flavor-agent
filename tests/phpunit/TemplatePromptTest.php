@@ -9,6 +9,40 @@ use PHPUnit\Framework\TestCase;
 
 final class TemplatePromptTest extends TestCase {
 
+	public function test_build_user_includes_structure_summary(): void {
+		$prompt = TemplatePrompt::build_user(
+			[
+				'templateType'   => 'home',
+				'title'          => 'Home',
+				'assignedParts'  => [],
+				'emptyAreas'     => [],
+				'availableParts' => [],
+				'patterns'       => [],
+				'structureStats' => [
+					'blockCount'         => 6,
+					'maxDepth'           => 3,
+					'topLevelBlockCount' => 2,
+					'hasNavigation'      => true,
+					'hasQuery'           => true,
+					'hasTemplateParts'   => true,
+					'firstTopLevelBlock' => 'core/template-part',
+					'lastTopLevelBlock'  => 'core/query',
+				],
+				'themeTokens'    => [],
+			]
+		);
+
+		$this->assertStringContainsString( '## Structure Summary', $prompt );
+		$this->assertStringContainsString( 'Block count: 6', $prompt );
+		$this->assertStringContainsString( 'Max depth: 3', $prompt );
+		$this->assertStringContainsString( 'Top-level block count: 2', $prompt );
+		$this->assertStringContainsString( 'hasNavigation: yes', $prompt );
+		$this->assertStringContainsString( 'hasQuery: yes', $prompt );
+		$this->assertStringContainsString( 'hasTemplateParts: yes', $prompt );
+		$this->assertStringContainsString( 'First top-level block: core/template-part', $prompt );
+		$this->assertStringContainsString( 'Last top-level block: core/query', $prompt );
+	}
+
 	public function test_parse_response_keeps_only_valid_structured_template_operations(): void {
 		$context = [
 			'assignedParts'  => [
@@ -698,16 +732,16 @@ final class TemplatePromptTest extends TestCase {
 
 	public function test_parse_response_rejects_legacy_template_insertions_that_include_target_paths_without_placement(): void {
 		$context = [
-			'assignedParts'      => [],
-			'availableParts'     => [],
-			'allowedAreas'       => [],
-			'emptyAreas'         => [],
-			'patterns'           => [
+			'assignedParts'     => [],
+			'availableParts'    => [],
+			'allowedAreas'      => [],
+			'emptyAreas'        => [],
+			'patterns'          => [
 				[
 					'name' => 'theme/hero',
 				],
 			],
-			'topLevelBlockTree'  => [
+			'topLevelBlockTree' => [
 				[
 					'path' => [ 0 ],
 					'name' => 'core/group',

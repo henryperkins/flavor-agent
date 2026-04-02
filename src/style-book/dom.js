@@ -153,12 +153,15 @@ export function subscribeToStyleBookUi( root = document, onChange ) {
 		notify();
 	} );
 
-	documentObserver.observe( documentRoot.body || documentRoot.documentElement, {
-		childList: true,
-		subtree: true,
-		attributes: true,
-		attributeFilter: [ 'class', 'aria-expanded', 'aria-pressed' ],
-	} );
+	documentObserver.observe(
+		documentRoot.body || documentRoot.documentElement,
+		{
+			childList: true,
+			subtree: true,
+			attributes: true,
+			attributeFilter: [ 'class', 'aria-expanded', 'aria-pressed' ],
+		}
+	);
 
 	observeIframe();
 	notify();

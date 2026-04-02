@@ -66,6 +66,33 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
+	public function test_register_abilities_marks_ai_recommendations_public_for_mcp(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		foreach ( [
+			'flavor-agent/recommend-block',
+			'flavor-agent/recommend-patterns',
+			'flavor-agent/recommend-template',
+			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-navigation',
+			'flavor-agent/recommend-style',
+		] as $ability_id ) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+
+			$this->assertIsArray( $ability, "Expected registered ability {$ability_id}." );
+			$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ), "{$ability_id} should remain REST-visible." );
+			$this->assertTrue( (bool) ( $ability['meta']['mcp']['public'] ?? false ), "{$ability_id} should opt into the default MCP server." );
+		}
+
+		$this->assertFalse(
+			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/introspect-block']['meta']['mcp']['public'] ?? false )
+		);
+		$this->assertFalse(
+			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/check-status']['meta']['mcp']['public'] ?? false )
+		);
+	}
+
 	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {
 		Registration::register_category();
 		Registration::register_abilities();

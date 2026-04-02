@@ -27,34 +27,9 @@ const DEFAULT_EXECUTION_CONTRACT = {
 	},
 };
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, disabled, onClick, ...props } ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					disabled,
-					onClick,
-					...props,
-				},
-				children
-			),
-		TextareaControl: ( { label, value, onChange } ) =>
-			createElement(
-				'label',
-				{},
-				label,
-				createElement( 'textarea', {
-					value,
-					onInput: ( event ) => onChange( event.target.value ),
-					onChange: ( event ) => onChange( event.target.value ),
-				} )
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
@@ -127,7 +102,9 @@ jest.mock( '../../style-book/dom', () => ( {
 		const resolvedRoot = root || global.document;
 
 		return (
-			resolvedRoot.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+			resolvedRoot.querySelector(
+				'.editor-global-styles-sidebar__panel'
+			) ||
 			resolvedRoot.querySelector( '.editor-global-styles-sidebar' ) ||
 			resolvedRoot.querySelector( '[role="region"][aria-label="Styles"]' )
 		);
@@ -176,6 +153,8 @@ let currentBlockEditorSettings = null;
 let currentGlobalStylesData = null;
 let currentStoreState = null;
 let currentStyleBookUiState = null;
+let currentEditedTemplateId = null;
+let currentEditedBlocks = null;
 
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -220,6 +199,42 @@ function createGlobalStylesData( globalStylesId = '17' ) {
 	};
 }
 
+function createEditedBlocks() {
+	return [
+		{
+			name: 'core/template-part',
+			innerBlocks: [
+				{
+					name: 'core/site-title',
+					innerBlocks: [],
+				},
+			],
+		},
+		{
+			name: 'core/group',
+			innerBlocks: [
+				{
+					name: 'core/query-title',
+					innerBlocks: [],
+				},
+			],
+		},
+	];
+}
+
+function buildExpectedTemplateStructure() {
+	return [
+		{
+			name: 'core/template-part',
+			innerBlocks: [ { name: 'core/site-title' } ],
+		},
+		{
+			name: 'core/group',
+			innerBlocks: [ { name: 'core/query-title' } ],
+		},
+	];
+}
+
 function getCurrentThemeTokenDiagnostics() {
 	return (
 		currentBlockEditorSettings?.__diagnostics || {
@@ -241,10 +256,13 @@ function buildContextSignature(
 			scopeKey: `global_styles:${ globalStylesData.globalStylesId }`,
 			globalStylesId: globalStylesData.globalStylesId,
 			stylesheet: '',
+			templateSlug: currentEditedTemplateId,
+			templateType: 'home',
 		},
 		currentConfig: globalStylesData.userConfig,
 		mergedConfig: globalStylesData.mergedConfig,
 		availableVariations: globalStylesData.variations,
+		templateStructure: buildExpectedTemplateStructure(),
 		themeTokenDiagnostics,
 		executionContract,
 	} );
@@ -261,6 +279,8 @@ beforeEach( () => {
 		__executionContract: DEFAULT_EXECUTION_CONTRACT,
 	};
 	currentGlobalStylesData = createGlobalStylesData();
+	currentEditedTemplateId = 'theme//home';
+	currentEditedBlocks = createEditedBlocks();
 	currentStoreState = {
 		activityLog: [],
 		recommendations: [],
@@ -289,7 +309,7 @@ beforeEach( () => {
 		error: null,
 	} );
 	mockGetStyleBookUiState.mockImplementation( () => currentStyleBookUiState );
-	mockSubscribeToStyleBookUi.mockImplementation( ( root, onChange ) => {
+	mockSubscribeToStyleBookUi.mockImplementation( ( _root, onChange ) => {
 		onChange( currentStyleBookUiState );
 		return () => {};
 	} );
@@ -299,6 +319,7 @@ beforeEach( () => {
 			if ( storeName === 'core/block-editor' ) {
 				return {
 					getSettings: () => currentBlockEditorSettings,
+					getBlocks: () => currentEditedBlocks,
 				};
 			}
 
@@ -311,6 +332,7 @@ beforeEach( () => {
 			if ( storeName === 'core/edit-site' ) {
 				return {
 					getEditedPostType: () => 'wp_template',
+					getEditedPostId: () => currentEditedTemplateId,
 				};
 			}
 
@@ -482,6 +504,8 @@ describe( 'GlobalStylesRecommender', () => {
 					surface: 'global-styles',
 					scopeKey: 'global_styles:17',
 					globalStylesId: '17',
+					templateSlug: 'theme//home',
+					templateType: 'home',
 				} ),
 				styleContext: expect.objectContaining( {
 					mergedConfig: {
@@ -495,6 +519,7 @@ describe( 'GlobalStylesRecommender', () => {
 						_links: {},
 					},
 					availableVariations: expect.any( Array ),
+					templateStructure: buildExpectedTemplateStructure(),
 					themeTokenDiagnostics: {
 						source: 'stable',
 						settingsKey: 'features',
@@ -525,9 +550,12 @@ describe( 'GlobalStylesRecommender', () => {
 					surface: 'global-styles',
 					scopeKey: 'global_styles:17',
 					globalStylesId: '17',
+					templateSlug: 'theme//home',
+					templateType: 'home',
 				} ),
 				styleContext: expect.objectContaining( {
 					availableVariations: expect.any( Array ),
+					templateStructure: buildExpectedTemplateStructure(),
 					themeTokenDiagnostics: {
 						source: 'stable',
 						settingsKey: 'features',

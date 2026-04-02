@@ -243,13 +243,13 @@ final class Repository {
 	 * }
 	 */
 	public static function query_admin( array $filters ): array {
-		$page              = self::normalize_page( $filters['page'] ?? 1 );
-		$per_page          = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
-		$sort_field        = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
-		$sort_direction    = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
-		$timezone          = self::resolve_activity_timezone();
-		$candidate_rows    = self::query_candidate_rows( $filters );
-		$resolved_records  = self::resolve_admin_records(
+		$page             = self::normalize_page( $filters['page'] ?? 1 );
+		$per_page         = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
+		$sort_field       = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
+		$sort_direction   = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
+		$timezone         = self::resolve_activity_timezone();
+		$candidate_rows   = self::query_candidate_rows( $filters );
+		$resolved_records = self::resolve_admin_records(
 			$candidate_rows,
 			$timezone
 		);
@@ -265,8 +265,8 @@ final class Repository {
 			$sort_direction
 		);
 
-		$total_items = count( $filtered_records );
-		$total_pages = $total_items > 0
+		$total_items  = count( $filtered_records );
+		$total_pages  = $total_items > 0
 			? (int) ceil( $total_items / $per_page )
 			: 0;
 		$page         = min( $page, $total_pages > 0 ? $total_pages : 1 );
@@ -274,7 +274,7 @@ final class Repository {
 		$page_records = array_slice( $filtered_records, $offset, $per_page );
 
 		return [
-			'entries'         => array_values(
+			'entries'        => array_values(
 				array_map(
 					static fn ( array $record ): array => self::hydrate_admin_page_entry( $record ),
 					$page_records
@@ -695,9 +695,12 @@ final class Repository {
 		}
 
 		$sql .= ' ORDER BY created_at ASC, id ASC';
-		$prepared_sql = [] !== $args ? $wpdb->prepare( $sql, $args ) : $sql;
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
-		$rows = $wpdb->get_results( $prepared_sql, ARRAY_A );
+		if ( [] !== $args ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql built from allow-listed column names and %s/%d placeholders only.
+			$sql = $wpdb->prepare( $sql, $args );
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- When no args, query has no user input; when args present, prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		return array_values( is_array( $rows ) ? $rows : [] );
 	}
@@ -743,12 +746,12 @@ final class Repository {
 
 				if ( 'failed' === $undo_status ) {
 					$resolved_statuses[ $entry_index ] = 'failed';
-					$has_active_newer_entry           = true;
+					$has_active_newer_entry            = true;
 					continue;
 				}
 
 				$resolved_statuses[ $entry_index ] = 'applied';
-				$has_active_newer_entry           = true;
+				$has_active_newer_entry            = true;
 			}
 		}
 
@@ -813,8 +816,8 @@ final class Repository {
 		);
 
 		return [
-			'row'   => $row,
-			'meta'  => [
+			'row'  => $row,
+			'meta' => [
 				'status'             => $resolved_status,
 				'statusLabel'        => $status_label,
 				'surface'            => $surface,
@@ -1007,11 +1010,11 @@ final class Repository {
 		usort(
 			$records,
 			static function ( array $left, array $right ) use ( $sort_field, $sort_direction ): int {
-				$left_meta   = is_array( $left['meta'] ?? null ) ? $left['meta'] : [];
-				$right_meta  = is_array( $right['meta'] ?? null ) ? $right['meta'] : [];
-				$left_row    = is_array( $left['row'] ?? null ) ? $left['row'] : [];
-				$right_row   = is_array( $right['row'] ?? null ) ? $right['row'] : [];
-				$result      = 0;
+				$left_meta  = is_array( $left['meta'] ?? null ) ? $left['meta'] : [];
+				$right_meta = is_array( $right['meta'] ?? null ) ? $right['meta'] : [];
+				$left_row   = is_array( $left['row'] ?? null ) ? $left['row'] : [];
+				$right_row  = is_array( $right['row'] ?? null ) ? $right['row'] : [];
+				$result     = 0;
 
 				switch ( $sort_field ) {
 					case 'status':
@@ -1098,8 +1101,8 @@ final class Repository {
 	 * @param array{row: array<string, mixed>, meta: array<string, mixed>} $record
 	 */
 	private static function hydrate_admin_page_entry( array $record ): array {
-		$row   = is_array( $record['row'] ?? null ) ? $record['row'] : [];
-		$entry = Serializer::hydrate_row( $row );
+		$row             = is_array( $record['row'] ?? null ) ? $record['row'] : [];
+		$entry           = Serializer::hydrate_row( $row );
 		$entry['status'] = (string) ( $record['meta']['status'] ?? 'applied' );
 
 		return $entry;
@@ -1521,7 +1524,7 @@ final class Repository {
 		\DateTimeZone $timezone
 	): array {
 		try {
-			$date = new \DateTimeImmutable( $timestamp ?: 'now' );
+			$date = new \DateTimeImmutable( $timestamp !== '' ? $timestamp : 'now' );
 		} catch ( \Exception $exception ) {
 			$date = new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) );
 		}
@@ -1833,7 +1836,8 @@ final class Repository {
 			return '';
 		}
 
-		$parts = preg_split( '/[\s\/_-]+/', $normalized ) ?: [];
+		$parts = preg_split( '/[\s\/_-]+/', $normalized );
+		$parts = is_array( $parts ) ? $parts : [];
 		$parts = array_map(
 			static fn ( string $part ): string => ucfirst( strtolower( $part ) ),
 			array_values( array_filter( $parts, static fn ( string $part ): bool => '' !== $part ) )

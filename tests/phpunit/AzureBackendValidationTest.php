@@ -135,6 +135,54 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 90, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
 	}
 
+	public function test_rank_retries_once_after_rate_limit(): void {
+		WordPressTestState::$options               = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+		];
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 429,
+				],
+				'headers'  => [
+					'retry-after' => '0',
+				],
+				'body'     => wp_json_encode(
+					[
+						'error' => [
+							'message' => 'Rate limited',
+						],
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'output_text' => 'ranked output',
+					]
+				),
+			],
+		];
+
+		$result = ResponsesClient::rank( 'system prompt', 'user prompt' );
+
+		$this->assertSame( 'ranked output', $result );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'https://example.openai.azure.com/openai/v1/responses',
+			WordPressTestState::$remote_post_calls[0]['url'] ?? null
+		);
+		$this->assertSame(
+			90,
+			WordPressTestState::$remote_post_calls[1]['args']['timeout'] ?? null
+		);
+	}
+
 	public function test_rank_extracts_text_from_later_output_item(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
@@ -171,6 +219,67 @@ final class AzureBackendValidationTest extends TestCase {
 		$result = ResponsesClient::rank( 'system prompt', 'user prompt' );
 
 		$this->assertSame( 'ranked output', $result );
+	}
+
+	public function test_embed_batch_retries_once_after_rate_limit(): void {
+		WordPressTestState::$options               = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+		];
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 429,
+				],
+				'headers'  => [
+					'retry-after' => '0',
+				],
+				'body'     => wp_json_encode(
+					[
+						'error' => [
+							'message' => 'Rate limited',
+						],
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'data' => [
+							[
+								'embedding' => [ 0.1, 0.2 ],
+							],
+							[
+								'embedding' => [ 0.3, 0.4 ],
+							],
+						],
+					]
+				),
+			],
+		];
+
+		$result = EmbeddingClient::embed_batch( [ 'alpha', 'beta' ] );
+
+		$this->assertSame(
+			[
+				[ 0.1, 0.2 ],
+				[ 0.3, 0.4 ],
+			],
+			$result
+		);
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'https://example.openai.azure.com/openai/v1/embeddings',
+			WordPressTestState::$remote_post_calls[0]['url'] ?? null
+		);
+		$this->assertSame(
+			60,
+			WordPressTestState::$remote_post_calls[1]['args']['timeout'] ?? null
+		);
 	}
 
 	public function test_openai_native_embedding_validation_uses_openai_endpoint_and_bearer_auth(): void {

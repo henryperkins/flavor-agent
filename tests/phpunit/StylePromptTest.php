@@ -17,7 +17,13 @@ final class StylePromptTest extends TestCase {
 			'scope'        => [
 				'scopeKey'       => 'global_styles:17',
 				'globalStylesId' => '17',
+				'postType'       => 'wp_global_styles',
+				'entityId'       => '17',
+				'entityKind'     => 'root',
+				'entityName'     => 'globalStyles',
 				'stylesheet'     => 'theme-slug',
+				'templateSlug'   => 'theme-slug//home',
+				'templateType'   => 'home',
 			],
 			'styleContext' => [
 				'currentConfig'         => [
@@ -32,15 +38,41 @@ final class StylePromptTest extends TestCase {
 					'reason'      => 'stable-parity',
 				],
 				'themeTokens'           => [
-					'colors'          => [ 'accent: #ff5500' ],
-					'fontSizes'       => [ 'body: 1rem' ],
-					'fontFamilies'    => [ 'display: Georgia, serif' ],
-					'spacing'         => [ 's: 0.5rem' ],
-					'shadows'         => [ 'soft: 0 10px 30px rgba(0,0,0,0.1)' ],
-					'enabledFeatures' => [
+					'colors'            => [ 'accent: #ff5500' ],
+					'gradients'         => [ 'sunset: linear-gradient(135deg,#f60,#fc0)' ],
+					'fontSizes'         => [ 'body: 1rem' ],
+					'fontFamilies'      => [ 'display: Georgia, serif' ],
+					'spacing'           => [ 's: 0.5rem' ],
+					'shadows'           => [ 'soft: 0 10px 30px rgba(0,0,0,0.1)' ],
+					'duotone'           => [ 'midnight: #111111 / #f5f5f5' ],
+					'duotonePresets'    => [
+						[
+							'slug'   => 'midnight',
+							'colors' => [ '#111111', '#f5f5f5' ],
+						],
+					],
+					'layout'            => [
+						'content'      => '680px',
+						'wide'         => '1200px',
+						'allowEditing' => false,
+					],
+					'diagnostics'       => [
+						'source' => 'server',
+						'reason' => 'server-global-settings',
+					],
+					'enabledFeatures'   => [
 						'customColors' => true,
 					],
-					'elementStyles'   => [],
+					'elementStyles'     => [],
+					'blockPseudoStyles' => [
+						'core/button' => [
+							':hover' => [
+								'color' => [
+									'text' => 'var(--wp--preset--color--accent)',
+								],
+							],
+						],
+					],
 				],
 				'supportedStylePaths'   => [
 					[
@@ -74,7 +106,23 @@ final class StylePromptTest extends TestCase {
 						'title'       => 'Midnight',
 						'description' => 'Dark editorial palette',
 						'settings'    => [],
-						'styles'      => [],
+						'styles'      => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
+						],
+					],
+				],
+				'activeVariationIndex'  => 0,
+				'activeVariationTitle'  => 'Default',
+				'templateStructure'     => [
+					[
+						'name'        => 'core/template-part',
+						'innerBlocks' => [
+							[
+								'name' => 'core/site-title',
+							],
+						],
 					],
 				],
 			],
@@ -88,17 +136,39 @@ final class StylePromptTest extends TestCase {
 		);
 
 		$this->assertStringContainsString( 'global_styles:17', $prompt );
+		$this->assertStringContainsString( 'Post type: wp_global_styles', $prompt );
+		$this->assertStringContainsString( 'Entity kind: root', $prompt );
+		$this->assertStringContainsString( 'Entity name: globalStyles', $prompt );
+		$this->assertStringContainsString( 'Template slug: theme-slug//home', $prompt );
+		$this->assertStringContainsString( 'Template type: home', $prompt );
 		$this->assertStringContainsString( 'stable-parity', $prompt );
+		$this->assertStringContainsString( 'server-global-settings', $prompt );
 		$this->assertStringContainsString( 'color.background', $prompt );
+		$this->assertStringContainsString( 'Gradients: sunset: linear-gradient(135deg,#f60,#fc0)', $prompt );
+		$this->assertStringContainsString( 'Duotone presets: midnight: #111111 / #f5f5f5', $prompt );
+		$this->assertStringContainsString( 'Block pseudo-class styles:', $prompt );
+		$this->assertStringContainsString( 'Active variation: #0 Default', $prompt );
 		$this->assertStringContainsString( '#1 Midnight - Dark editorial palette', $prompt );
+		$this->assertStringContainsString( 'styles: {"color":{"background":"var:preset|color|accent"}}', $prompt );
+		$this->assertStringContainsString( '## Current template structure', $prompt );
 	}
 
 	public function test_build_user_includes_style_book_target_context(): void {
-		$context = $this->build_context();
-		$context['scope']['surface'] = 'style-book';
-		$context['scope']['scopeKey'] = 'style_book:17:core/paragraph';
-		$context['scope']['blockName'] = 'core/paragraph';
-		$context['scope']['blockTitle'] = 'Paragraph';
+		$context                                    = $this->build_context();
+		$context['scope']['surface']                = 'style-book';
+		$context['scope']['scopeKey']               = 'style_book:17:core/paragraph';
+		$context['scope']['blockName']              = 'core/paragraph';
+		$context['scope']['blockTitle']             = 'Paragraph';
+		$context['styleContext']['blockManifest']   = [
+			'supports'        => [
+				'color' => [
+					'text' => true,
+				],
+			],
+			'inspectorPanels' => [
+				'color' => true,
+			],
+		];
 		$context['styleContext']['styleBookTarget'] = [
 			'blockName'     => 'core/paragraph',
 			'blockTitle'    => 'Paragraph',
@@ -123,7 +193,27 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( 'Surface: style-book', $prompt );
 		$this->assertStringContainsString( 'Block name: core/paragraph', $prompt );
 		$this->assertStringContainsString( 'Primary intro copy block.', $prompt );
+		$this->assertStringContainsString( '## Target block supports', $prompt );
+		$this->assertStringContainsString( 'Inspector panels: {"color":true}', $prompt );
 		$this->assertStringContainsString( '"fontSize":"var:preset|font-size|body"', $prompt );
+		$this->assertStringNotContainsString( '## Available theme style variations', $prompt );
+		$this->assertStringNotContainsString( 'Active variation:', $prompt );
+	}
+
+	public function test_build_user_includes_docs_guidance_when_available(): void {
+		$prompt = StylePrompt::build_user(
+			$this->build_context(),
+			'Make the site feel warmer.',
+			[
+				[
+					'title'   => 'Global styles reference',
+					'excerpt' => 'Use theme.json preset families for color and typography changes.',
+				],
+			]
+		);
+
+		$this->assertStringContainsString( '## WordPress Developer Guidance', $prompt );
+		$this->assertStringContainsString( 'Global styles reference: Use theme.json preset families for color and typography changes.', $prompt );
 	}
 
 	public function test_parse_response_filters_unsafe_style_operations(): void {
@@ -321,10 +411,10 @@ final class StylePromptTest extends TestCase {
 	}
 
 	public function test_parse_response_accepts_valid_block_style_operations_for_style_book_scope(): void {
-		$context = $this->build_context();
-		$context['scope']['surface'] = 'style-book';
-		$context['scope']['blockName'] = 'core/paragraph';
-		$context['styleContext']['styleBookTarget'] = [
+		$context                                        = $this->build_context();
+		$context['scope']['surface']                    = 'style-book';
+		$context['scope']['blockName']                  = 'core/paragraph';
+		$context['styleContext']['styleBookTarget']     = [
 			'blockName' => 'core/paragraph',
 		];
 		$context['styleContext']['supportedStylePaths'] = [
@@ -375,10 +465,10 @@ final class StylePromptTest extends TestCase {
 	}
 
 	public function test_parse_response_rejects_site_level_style_operations_inside_style_book_scope(): void {
-		$context = $this->build_context();
-		$context['scope']['surface'] = 'style-book';
-		$context['scope']['blockName'] = 'core/paragraph';
-		$context['styleContext']['styleBookTarget'] = [
+		$context                                        = $this->build_context();
+		$context['scope']['surface']                    = 'style-book';
+		$context['scope']['blockName']                  = 'core/paragraph';
+		$context['styleContext']['styleBookTarget']     = [
 			'blockName' => 'core/paragraph',
 		];
 		$context['styleContext']['supportedStylePaths'] = [
@@ -410,6 +500,43 @@ final class StylePromptTest extends TestCase {
 						],
 					],
 					'explanation' => 'Style Book scope must stay block-relative.',
+				]
+			),
+			$context
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [], $result['suggestions'][0]['operations'] );
+	}
+
+	public function test_parse_response_rejects_theme_variation_operations_inside_style_book_scope(): void {
+		$context                                    = $this->build_context();
+		$context['scope']['surface']                = 'style-book';
+		$context['scope']['blockName']              = 'core/paragraph';
+		$context['styleContext']['styleBookTarget'] = [
+			'blockName' => 'core/paragraph',
+		];
+
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Switch to Midnight',
+							'description' => 'This should stay advisory inside Style Book.',
+							'category'    => 'variation',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'           => 'set_theme_variation',
+									'variationIndex' => 1,
+									'variationTitle' => 'Midnight',
+								],
+							],
+						],
+					],
+					'explanation' => 'Theme variations are site-wide changes.',
 				]
 			),
 			$context

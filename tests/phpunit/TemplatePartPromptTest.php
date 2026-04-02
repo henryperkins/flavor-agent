@@ -9,6 +9,44 @@ use PHPUnit\Framework\TestCase;
 
 final class TemplatePartPromptTest extends TestCase {
 
+	public function test_build_user_includes_structural_presence_flags(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef' => 'theme//header',
+				'slug'            => 'header',
+				'title'           => 'Header',
+				'area'            => 'header',
+				'blockTree'       => [],
+				'blockCounts'     => [],
+				'structureStats'  => [
+					'blockCount'          => 4,
+					'maxDepth'            => 2,
+					'hasNavigation'       => true,
+					'containsLogo'        => true,
+					'containsSiteTitle'   => false,
+					'containsSearch'      => true,
+					'containsSocialLinks' => false,
+					'containsQuery'       => false,
+					'containsColumns'     => true,
+					'containsButtons'     => false,
+					'containsSpacer'      => true,
+					'containsSeparator'   => false,
+				],
+				'patterns'        => [],
+				'themeTokens'     => [],
+			]
+		);
+
+		$this->assertStringContainsString( '## Structure Summary', $prompt );
+		$this->assertStringContainsString( 'hasNavigation: yes', $prompt );
+		$this->assertStringContainsString( 'containsLogo: yes', $prompt );
+		$this->assertStringContainsString( 'containsSiteTitle: no', $prompt );
+		$this->assertStringContainsString( 'containsSearch: yes', $prompt );
+		$this->assertStringContainsString( 'containsSocialLinks: no', $prompt );
+		$this->assertStringContainsString( 'containsColumns: yes', $prompt );
+		$this->assertStringContainsString( 'containsSpacer: yes', $prompt );
+	}
+
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {
 		$context = [
 			'blockTree'        => [

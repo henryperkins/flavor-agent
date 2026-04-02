@@ -130,18 +130,20 @@ describe( 'activity history helpers', () => {
 
 		expect(
 			getCurrentActivityScope( {
-				select: ( storeName ) =>
-					storeName === 'core/interface'
-						? {
-								getActiveComplementaryArea: () =>
-									'edit-site/global-styles',
-						  }
-						: storeName === 'core'
-							? {
-									__experimentalGetCurrentGlobalStylesId:
-										() => '17',
-							  }
-							: {},
+				select: ( storeName ) => {
+					if ( storeName === 'core/interface' ) {
+						return {
+							getActiveComplementaryArea: () =>
+								'edit-site/global-styles',
+						};
+					}
+					if ( storeName === 'core' ) {
+						return {
+							__experimentalGetCurrentGlobalStylesId: () => '17',
+						};
+					}
+					return {};
+				},
 			} )
 		).toEqual(
 			expect.objectContaining( {

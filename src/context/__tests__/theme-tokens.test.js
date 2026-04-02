@@ -161,8 +161,22 @@ describe( 'summarizeTokens', () => {
 	test( 'includes compact duotone preset summaries keyed by slug', () => {
 		const summary = summarizeTokens( {
 			color: {
-				palette: [],
-				gradients: [],
+				palette: [
+					{
+						name: 'Accent',
+						slug: 'accent',
+						color: '#ff5500',
+						cssVar: 'var(--wp--preset--color--accent)',
+					},
+				],
+				gradients: [
+					{
+						name: 'Sunset',
+						slug: 'sunset',
+						gradient: 'linear-gradient(135deg,#f60,#fc0)',
+						cssVar: 'var(--wp--preset--gradient--sunset)',
+					},
+				],
 				duotone: [
 					{
 						slug: 'midnight',
@@ -181,19 +195,47 @@ describe( 'summarizeTokens', () => {
 				backgroundSize: false,
 			},
 			typography: {
-				fontSizes: [],
-				fontFamilies: [],
+				fontSizes: [
+					{
+						name: 'Body',
+						slug: 'body',
+						size: '1rem',
+						cssVar: 'var(--wp--preset--font-size--body)',
+					},
+				],
+				fontFamilies: [
+					{
+						name: 'Display',
+						slug: 'display',
+						fontFamily: 'Georgia, serif',
+						cssVar: 'var(--wp--preset--font-family--display)',
+					},
+				],
 				lineHeight: false,
 				dropCap: true,
 				fluidTypography: false,
 			},
 			spacing: {
-				spacingSizes: [],
+				spacingSizes: [
+					{
+						name: 'Small',
+						slug: 's',
+						size: '0.5rem',
+						cssVar: 'var(--wp--preset--spacing--s)',
+					},
+				],
 				margin: false,
 				padding: false,
 			},
 			shadow: {
-				presets: [],
+				presets: [
+					{
+						name: 'Soft',
+						slug: 'soft',
+						shadow: '0 10px 30px rgba(0,0,0,0.1)',
+						cssVar: 'var(--wp--preset--shadow--soft)',
+					},
+				],
 			},
 			layout: {
 				contentSize: '680px',
@@ -220,6 +262,55 @@ describe( 'summarizeTokens', () => {
 		expect( summary.duotone ).toEqual( [
 			'midnight: #111111 / #f5f5f5',
 			'sepia',
+		] );
+		expect( summary.colorPresets ).toEqual( [
+			{
+				name: 'Accent',
+				slug: 'accent',
+				color: '#ff5500',
+				cssVar: 'var(--wp--preset--color--accent)',
+			},
+		] );
+		expect( summary.gradientPresets ).toEqual( [
+			{
+				name: 'Sunset',
+				slug: 'sunset',
+				gradient: 'linear-gradient(135deg,#f60,#fc0)',
+				cssVar: 'var(--wp--preset--gradient--sunset)',
+			},
+		] );
+		expect( summary.fontSizePresets ).toEqual( [
+			{
+				name: 'Body',
+				slug: 'body',
+				size: '1rem',
+				fluidSize: null,
+				cssVar: 'var(--wp--preset--font-size--body)',
+			},
+		] );
+		expect( summary.fontFamilyPresets ).toEqual( [
+			{
+				name: 'Display',
+				slug: 'display',
+				fontFamily: 'Georgia, serif',
+				cssVar: 'var(--wp--preset--font-family--display)',
+			},
+		] );
+		expect( summary.spacingPresets ).toEqual( [
+			{
+				name: 'Small',
+				slug: 's',
+				size: '0.5rem',
+				cssVar: 'var(--wp--preset--spacing--s)',
+			},
+		] );
+		expect( summary.shadowPresets ).toEqual( [
+			{
+				name: 'Soft',
+				slug: 'soft',
+				shadow: '0 10px 30px rgba(0,0,0,0.1)',
+				cssVar: 'var(--wp--preset--shadow--soft)',
+			},
 		] );
 		expect( summary.duotonePresets ).toEqual( [
 			{

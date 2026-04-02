@@ -104,12 +104,15 @@ export default function PatternRecommender() {
 				?.rootClientId ?? null
 		);
 	}, [] );
-	const visiblePatternNames = useSelect( ( select ) => {
-		return getVisiblePatternNames(
-			inserterRootClientId,
-			select( blockEditorStore )
-		);
-	}, [ inserterRootClientId ] );
+	const visiblePatternNames = useSelect(
+		( select ) => {
+			return getVisiblePatternNames(
+				inserterRootClientId,
+				select( blockEditorStore )
+			);
+		},
+		[ inserterRootClientId ]
+	);
 	const patternRegistryVersion = useSelect( ( select ) => {
 		const settings = select( blockEditorStore ).getSettings?.() || {};
 

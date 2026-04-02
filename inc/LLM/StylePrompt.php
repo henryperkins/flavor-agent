@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\FormatsDocsGuidance;
+
 final class StylePrompt {
+
+	use FormatsDocsGuidance;
 
 	public static function build_system(): string {
 		return <<<'SYSTEM'
@@ -65,27 +69,35 @@ Return ONLY a JSON object with this exact shape:
 	  border.width = zero or positive CSS length.
 	  border.style = one of none, solid, dashed, dotted, double, groove, ridge, inset, outset, hidden.
 	- Do not emit customCSS, background images, arbitrary hex values, or arbitrary pixel spacing when a preset-backed path exists.
+	- set_theme_variation is allowed only for the global-styles surface. Never emit it for style-book.
 	- If set_theme_variation is present, emit at most one and place it before any set_styles or set_block_styles overrides.
 	- set_theme_variation MUST reference an Available variation by index and title.
 	- If a request cannot be executed safely, return an advisory suggestion with tone=advisory and an empty operations array.
+	- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented WordPress Global Styles capabilities or theme.json standards.
 	- Prefer 1-4 suggestions.
 	- Keep labels under 60 characters and descriptions under 180 characters.
 SYSTEM;
 	}
 
-	public static function build_user( array $context, string $prompt = '' ): string {
-		$scope             = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
-		$style_context     = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$theme_tokens      = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
-		$supported_paths   = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$style_book_target = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
-		$surface           = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
-		$sections          = [];
+	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
+		$scope              = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
+		$style_context      = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$theme_tokens       = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
+		$supported_paths    = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
+		$style_book_target  = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
+		$block_manifest     = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
+		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$surface            = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
+		$sections           = [];
 
 		$sections[] = '## Scope';
 		$sections[] = 'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' );
 		$sections[] = 'Scope key: ' . (string) ( $scope['scopeKey'] ?? '' );
 		$sections[] = 'Global styles id: ' . (string) ( $scope['globalStylesId'] ?? '' );
+		$sections[] = 'Post type: ' . (string) ( $scope['postType'] ?? '' );
+		$sections[] = 'Entity id: ' . (string) ( $scope['entityId'] ?? '' );
+		$sections[] = 'Entity kind: ' . (string) ( $scope['entityKind'] ?? '' );
+		$sections[] = 'Entity name: ' . (string) ( $scope['entityName'] ?? '' );
 
 		if ( 'style-book' === $surface ) {
 			if ( ! empty( $scope['blockName'] ) ) {
@@ -99,6 +111,14 @@ SYSTEM;
 
 		if ( ! empty( $scope['stylesheet'] ) ) {
 			$sections[] = 'Stylesheet: ' . (string) $scope['stylesheet'];
+		}
+
+		if ( ! empty( $scope['templateSlug'] ) ) {
+			$sections[] = 'Template slug: ' . (string) $scope['templateSlug'];
+		}
+
+		if ( ! empty( $scope['templateType'] ) ) {
+			$sections[] = 'Template type: ' . (string) $scope['templateType'];
 		}
 
 		$sections[] = '';
@@ -133,21 +153,39 @@ SYSTEM;
 			}
 		}
 
+		if ( 'style-book' === $surface && [] !== $block_manifest ) {
+			$sections[] = '';
+			$sections[] = '## Target block supports';
+			$sections[] = 'Supports: ' . wp_json_encode( $block_manifest['supports'] ?? [] );
+			$sections[] = 'Inspector panels: ' . wp_json_encode( $block_manifest['inspectorPanels'] ?? [] );
+		}
+
 		if ( ! empty( $style_context['themeTokenDiagnostics'] ) ) {
 			$sections[] = '';
 			$sections[] = '## Theme token diagnostics';
 			$sections[] = wp_json_encode( $style_context['themeTokenDiagnostics'] );
 		}
 
+		if ( ! empty( $theme_tokens['diagnostics'] ) ) {
+			$sections[] = '';
+			$sections[] = '## Server theme token diagnostics';
+			$sections[] = wp_json_encode( $theme_tokens['diagnostics'] );
+		}
+
 		$sections[] = '';
 		$sections[] = '## Theme tokens';
 		$sections[] = 'Colors: ' . implode( ', ', (array) ( $theme_tokens['colors'] ?? [] ) );
+		$sections[] = 'Gradients: ' . implode( ', ', (array) ( $theme_tokens['gradients'] ?? [] ) );
 		$sections[] = 'Font sizes: ' . implode( ', ', (array) ( $theme_tokens['fontSizes'] ?? [] ) );
 		$sections[] = 'Font families: ' . implode( ', ', (array) ( $theme_tokens['fontFamilies'] ?? [] ) );
 		$sections[] = 'Spacing: ' . implode( ', ', (array) ( $theme_tokens['spacing'] ?? [] ) );
 		$sections[] = 'Shadows: ' . implode( ', ', (array) ( $theme_tokens['shadows'] ?? [] ) );
+		$sections[] = 'Duotone presets: ' . implode( ', ', (array) ( $theme_tokens['duotone'] ?? [] ) );
+		$sections[] = 'Duotone preset details: ' . wp_json_encode( $theme_tokens['duotonePresets'] ?? [] );
+		$sections[] = 'Layout: ' . wp_json_encode( $theme_tokens['layout'] ?? [] );
 		$sections[] = 'Enabled features: ' . wp_json_encode( $theme_tokens['enabledFeatures'] ?? [] );
 		$sections[] = 'Element styles: ' . wp_json_encode( $theme_tokens['elementStyles'] ?? [] );
+		$sections[] = 'Block pseudo-class styles: ' . wp_json_encode( $theme_tokens['blockPseudoStyles'] ?? [] );
 
 		$sections[] = '';
 		$sections[] = '## Supported style paths';
@@ -171,15 +209,24 @@ SYSTEM;
 		}
 
 		$variations = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
-		if ( [] !== $variations ) {
+		if ( 'style-book' !== $surface && [] !== $variations ) {
 			$sections[] = '';
 			$sections[] = '## Available theme style variations';
+
+			if ( '' !== (string) ( $style_context['activeVariationTitle'] ?? '' ) ) {
+				$sections[] = sprintf(
+					'Active variation: #%d %s',
+					(int) ( $style_context['activeVariationIndex'] ?? -1 ),
+					(string) $style_context['activeVariationTitle']
+				);
+			}
+
 			foreach ( $variations as $index => $variation ) {
 				if ( ! is_array( $variation ) ) {
 					continue;
 				}
 
-				$sections[] = sprintf(
+				$variation_summary = sprintf(
 					'- #%d %s%s',
 					(int) $index,
 					(string) ( $variation['title'] ?? 'Untitled' ),
@@ -187,6 +234,64 @@ SYSTEM;
 						? ' - ' . (string) $variation['description']
 						: ''
 				);
+
+				if (
+					isset( $style_context['activeVariationIndex'] )
+					&& (int) $style_context['activeVariationIndex'] === (int) $index
+				) {
+					$variation_summary .= ' [active]';
+				}
+
+				$diff_summary = self::describe_variation_diff(
+					is_array( $style_context['currentConfig']['styles'] ?? null )
+						? $style_context['currentConfig']['styles']
+						: [],
+					is_array( $variation['styles'] ?? null ) ? $variation['styles'] : []
+				);
+
+				if ( $diff_summary !== '' ) {
+					$variation_summary .= ' - differs: ' . $diff_summary;
+				}
+
+				$sections[] = $variation_summary;
+
+				if ( ! empty( $variation['settings'] ) ) {
+					$sections[] = '  settings: ' . wp_json_encode( $variation['settings'] );
+				}
+
+				if ( ! empty( $variation['styles'] ) ) {
+					$sections[] = '  styles: ' . wp_json_encode( $variation['styles'] );
+				}
+			}
+		}
+
+		if ( [] !== $template_structure ) {
+			$sections[] = '';
+			$sections[] = '## Current template structure';
+			$sections[] = wp_json_encode( $template_structure );
+		}
+
+		if ( [] !== $docs_guidance ) {
+			$guidance_lines = [];
+
+			foreach ( array_slice( $docs_guidance, 0, 3 ) as $guidance ) {
+				if ( ! is_array( $guidance ) ) {
+					continue;
+				}
+
+				$summary = self::format_guidance_line( $guidance );
+
+				if ( $summary !== '' ) {
+					$guidance_lines[] = '- ' . $summary;
+				}
+			}
+
+			if ( [] !== $guidance_lines ) {
+				$sections[] = '';
+				$sections[] = '## WordPress Developer Guidance';
+				foreach ( $guidance_lines as $guidance_line ) {
+					$sections[] = $guidance_line;
+				}
 			}
 		}
 
@@ -389,6 +494,10 @@ SYSTEM;
 			}
 
 			if ( 'set_theme_variation' === $type ) {
+				if ( 'style-book' === $surface ) {
+					continue;
+				}
+
 				$variation_index = isset( $operation['variationIndex'] ) ? (int) $operation['variationIndex'] : -1;
 				$variation_title = sanitize_text_field( (string) ( $operation['variationTitle'] ?? '' ) );
 				$variation       = $variations[ $variation_index ] ?? null;
@@ -697,5 +806,34 @@ SYSTEM;
 		$sanitized = preg_replace( '/[^A-Za-z0-9_:-]/', '', $segment );
 
 		return is_string( $sanitized ) ? $sanitized : '';
+	}
+
+	/**
+	 * @param array<string, mixed> $current_styles
+	 * @param array<string, mixed> $variation_styles
+	 */
+	private static function describe_variation_diff( array $current_styles, array $variation_styles ): string {
+		$diff_keys = [];
+		$top_keys  = array_values(
+			array_unique(
+				array_merge(
+					array_keys( $current_styles ),
+					array_keys( $variation_styles )
+				)
+			)
+		);
+
+		foreach ( $top_keys as $top_key ) {
+			$current_value   = $current_styles[ $top_key ] ?? null;
+			$variation_value = $variation_styles[ $top_key ] ?? null;
+
+			if ( wp_json_encode( $current_value ) === wp_json_encode( $variation_value ) ) {
+				continue;
+			}
+
+			$diff_keys[] = sanitize_key( (string) $top_key );
+		}
+
+		return implode( ', ', array_slice( array_filter( $diff_keys ), 0, 4 ) );
 	}
 }

@@ -85,6 +85,7 @@ final class NavigationAbilitiesTest extends TestCase {
 
 	public function test_prompt_build_user_includes_menu_structure(): void {
 		$context = [
+			'menuId'               => 42,
 			'location'             => 'header',
 			'locationDetails'      => [
 				'area'   => 'header',
@@ -125,6 +126,8 @@ final class NavigationAbilitiesTest extends TestCase {
 				'submenuCount'   => 1,
 				'topLevelLabels' => [ 'Home', 'About' ],
 			],
+			'menuItemCount'        => 3,
+			'maxDepth'             => 2,
 			'overlayContext'       => [
 				'usesOverlay'              => true,
 				'overlayMode'              => 'mobile',
@@ -139,6 +142,9 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$this->assertStringContainsString( '## Navigation', $prompt );
 		$this->assertStringContainsString( 'Location: header', $prompt );
+		$this->assertStringContainsString( 'Menu id: 42', $prompt );
+		$this->assertStringContainsString( 'Menu item count: 3', $prompt );
+		$this->assertStringContainsString( 'Max depth: 2', $prompt );
 		$this->assertStringContainsString( '## Location Context', $prompt );
 		$this->assertStringContainsString( '`source`: template-part-scan', $prompt );
 		$this->assertStringContainsString( '## Current Attributes', $prompt );

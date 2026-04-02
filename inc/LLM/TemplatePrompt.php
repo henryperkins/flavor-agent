@@ -7,7 +7,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\FormatsDocsGuidance;
+
 final class TemplatePrompt {
+
+	use FormatsDocsGuidance;
 
 	private const TEMPLATE_OPERATION_ASSIGN         = 'assign_template_part';
 	private const TEMPLATE_OPERATION_REPLACE        = 'replace_template_part';
@@ -186,6 +190,39 @@ SYSTEM;
 		}
 
 		$top_level_block_tree = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
+		$structure_stats      = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$structure_lines      = [];
+
+		if ( isset( $structure_stats['blockCount'] ) ) {
+			$structure_lines[] = 'Block count: ' . (int) $structure_stats['blockCount'];
+		}
+
+		if ( isset( $structure_stats['maxDepth'] ) ) {
+			$structure_lines[] = 'Max depth: ' . (int) $structure_stats['maxDepth'];
+		}
+
+		if ( isset( $structure_stats['topLevelBlockCount'] ) ) {
+			$structure_lines[] = 'Top-level block count: ' . (int) $structure_stats['topLevelBlockCount'];
+		}
+
+		foreach ( [ 'hasNavigation', 'hasQuery', 'hasTemplateParts' ] as $flag ) {
+			if ( array_key_exists( $flag, $structure_stats ) ) {
+				$structure_lines[] = $flag . ': ' . ( $structure_stats[ $flag ] ? 'yes' : 'no' );
+			}
+		}
+
+		if ( ! empty( $structure_stats['firstTopLevelBlock'] ) ) {
+			$structure_lines[] = 'First top-level block: ' . (string) $structure_stats['firstTopLevelBlock'];
+		}
+
+		if ( ! empty( $structure_stats['lastTopLevelBlock'] ) ) {
+			$structure_lines[] = 'Last top-level block: ' . (string) $structure_stats['lastTopLevelBlock'];
+		}
+
+		if ( count( $structure_lines ) > 0 ) {
+			$sections[] = "## Structure Summary\n" . implode( "\n", $structure_lines );
+		}
+
 		if ( count( $top_level_block_tree ) > 0 ) {
 			$sections[] = "## Current Top-Level Template Structure\n" . self::format_template_block_tree( $top_level_block_tree );
 		}
@@ -241,25 +278,6 @@ SYSTEM;
 		$sections[]  = "## User Instruction\n{$instruction}";
 
 		return implode( "\n\n", $sections );
-	}
-
-	/**
-	 * @param array<string, mixed> $guidance
-	 */
-	private static function format_guidance_line( array $guidance ): string {
-		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
-
-		if ( $prefix === '' ) {
-			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
-		}
-
-		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
-
-		if ( $excerpt === '' ) {
-			return '';
-		}
-
-		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
 	}
 
 	/**
@@ -844,12 +862,12 @@ SYSTEM;
 					break;
 
 				case self::TEMPLATE_OPERATION_INSERT_PATTERN:
-					$pattern_name = sanitize_text_field(
+					$pattern_name    = sanitize_text_field(
 						(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
 					);
 					$has_target_path = array_key_exists( 'targetPath', $operation );
-					$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
-					$target_path  = self::sanitize_block_path( $operation['targetPath'] ?? null );
+					$placement       = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
+					$target_path     = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
 					if (
 						$pattern_name === ''

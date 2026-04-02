@@ -2,13 +2,9 @@ const mockUseSelect = jest.fn();
 const mockFindInserterToggle = jest.fn();
 const mockGetInserterBadgeState = jest.fn();
 
-jest.mock( '@wordpress/components', () => {
-	const { Fragment, createElement } = require( '@wordpress/element' );
-
-	return {
-		Tooltip: ( { children } ) => createElement( Fragment, null, children ),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: ( ...args ) => mockUseSelect( ...args ),

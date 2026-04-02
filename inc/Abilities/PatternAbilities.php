@@ -11,9 +11,15 @@ use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
+use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\StringArray;
 
 final class PatternAbilities {
+
+	use FormatsDocsGuidance;
+	use NormalizesInput;
 
 	private const DEFAULT_SEMANTIC_LIMIT    = 8;
 	private const DEFAULT_STRUCTURAL_LIMIT  = 6;
@@ -349,11 +355,13 @@ SYSTEM;
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query          = self::build_wordpress_docs_query( $context, $prompt );
-		$entity_key     = self::build_wordpress_docs_entity_key( $context );
-		$family_context = self::build_wordpress_docs_family_context( $context, $entity_key );
-
-		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
+		return CollectsDocsGuidance::collect(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context, string $request_prompt, string $entity_key ): array => self::build_wordpress_docs_family_context( $request_context, $entity_key ),
+			$context,
+			$prompt
+		);
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
@@ -493,38 +501,5 @@ SYSTEM;
 		}
 
 		return "\n## WordPress Developer Guidance\n" . implode( "\n", $lines ) . "\n";
-	}
-
-	/**
-	 * @param array<string, mixed> $guidance
-	 */
-	private static function format_guidance_line( array $guidance ): string {
-		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
-
-		if ( $prefix === '' ) {
-			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
-		}
-
-		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
-
-		if ( $excerpt === '' ) {
-			return '';
-		}
-
-		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
-	}
-
-	/**
-	 * Normalize Abilities API object inputs to the array shape used internally.
-	 *
-	 * @param mixed $input Raw ability input.
-	 * @return array<string, mixed>
-	 */
-	private static function normalize_input( mixed $input ): array {
-		if ( is_object( $input ) ) {
-			$input = get_object_vars( $input );
-		}
-
-		return is_array( $input ) ? $input : [];
 	}
 }

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Support\NormalizesInput;
 
 final class WordPressDocsAbilities {
+	use NormalizesInput;
 
 	public const REQUIRED_CAPABILITY = 'manage_options';
 
@@ -39,16 +41,5 @@ final class WordPressDocsAbilities {
 		}
 
 		return AISearchClient::search( $query, $max_results );
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private static function normalize_input( mixed $input ): array {
-		if ( is_object( $input ) ) {
-			$input = get_object_vars( $input );
-		}
-
-		return is_array( $input ) ? $input : [];
 	}
 }

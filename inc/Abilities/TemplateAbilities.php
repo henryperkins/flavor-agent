@@ -9,9 +9,12 @@ use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
+use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\StringArray;
 
 final class TemplateAbilities {
+	use NormalizesInput;
 
 	public static function list_template_parts( mixed $input ): array {
 		$input = self::normalize_input( $input );
@@ -138,20 +141,6 @@ final class TemplateAbilities {
 		}
 
 		return TemplatePartPrompt::parse_response( $result, $context );
-	}
-
-	/**
-	 * Normalize Abilities API object inputs to the array shape used internally.
-	 *
-	 * @param mixed $input Raw ability input.
-	 * @return array<string, mixed>
-	 */
-	private static function normalize_input( mixed $input ): array {
-		if ( is_object( $input ) ) {
-			$input = get_object_vars( $input );
-		}
-
-		return is_array( $input ) ? $input : [];
 	}
 
 	/**
@@ -449,22 +438,26 @@ final class TemplateAbilities {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query          = self::build_wordpress_docs_query( $context, $prompt );
-		$entity_key     = self::build_wordpress_docs_entity_key( $context );
-		$family_context = self::build_wordpress_docs_family_context( $context );
-
-		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
+		return CollectsDocsGuidance::collect(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt
+		);
 	}
 
 	/**
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_template_part_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query          = self::build_template_part_wordpress_docs_query( $context, $prompt );
-		$entity_key     = AISearchClient::resolve_entity_key( 'core/template-part', $query );
-		$family_context = self::build_template_part_wordpress_docs_family_context( $context );
-
-		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
+		return CollectsDocsGuidance::collect(
+			static fn( array $request_context, string $request_prompt ): string => self::build_template_part_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context, string $query ): string => AISearchClient::resolve_entity_key( 'core/template-part', $query ),
+			static fn( array $request_context ): array => self::build_template_part_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt
+		);
 	}
 
 	private static function build_wordpress_docs_entity_key( array $context ): string {

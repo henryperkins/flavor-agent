@@ -7,7 +7,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\FormatsDocsGuidance;
+
 final class NavigationPrompt {
+
+	use FormatsDocsGuidance;
 
 	/**
 	 * Build the system prompt for navigation recommendations.
@@ -63,6 +67,18 @@ SYSTEM;
 		// Navigation identity.
 		$location   = (string) ( $context['location'] ?? 'unknown' );
 		$sections[] = "## Navigation\nLocation: {$location}";
+
+		if ( array_key_exists( 'menuId', $context ) && null !== $context['menuId'] ) {
+			$sections[] = 'Menu id: ' . (int) $context['menuId'];
+		}
+
+		if ( array_key_exists( 'menuItemCount', $context ) ) {
+			$sections[] = 'Menu item count: ' . (int) $context['menuItemCount'];
+		}
+
+		if ( array_key_exists( 'maxDepth', $context ) ) {
+			$sections[] = 'Max depth: ' . (int) $context['maxDepth'];
+		}
 
 		$location_details = is_array( $context['locationDetails'] ?? null ) ? $context['locationDetails'] : [];
 		if ( count( $location_details ) > 0 ) {
@@ -176,16 +192,23 @@ SYSTEM;
 
 		// WordPress docs guidance.
 		if ( count( $docs_guidance ) > 0 ) {
-			$guidance_lines = array_map(
-				static function ( array $chunk ): string {
-					$title   = (string) ( $chunk['title'] ?? '' );
-					$excerpt = (string) ( $chunk['excerpt'] ?? '' );
-					$prefix  = $title !== '' ? "{$title}: " : '';
-					return "- {$prefix}{$excerpt}";
-				},
-				$docs_guidance
-			);
-			$sections[]     = "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines );
+			$guidance_lines = [];
+
+			foreach ( array_slice( $docs_guidance, 0, 3 ) as $chunk ) {
+				if ( ! is_array( $chunk ) ) {
+					continue;
+				}
+
+				$summary = self::format_guidance_line( $chunk );
+
+				if ( $summary !== '' ) {
+					$guidance_lines[] = '- ' . $summary;
+				}
+			}
+
+			if ( count( $guidance_lines ) > 0 ) {
+				$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines );
+			}
 		}
 
 		// User prompt.

@@ -7,20 +7,9 @@ const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, href = '', className = '' } ) =>
-			createElement(
-				href ? 'a' : 'button',
-				{ className, href },
-				children
-			),
-		Notice: ( { children, className = '' } ) =>
-			createElement( 'div', { className }, children ),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',

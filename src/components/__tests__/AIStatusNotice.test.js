@@ -1,36 +1,6 @@
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, disabled, onClick } ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					disabled,
-					onClick,
-				},
-				children
-			),
-		Notice: ( { children, onDismiss } ) =>
-			createElement(
-				'div',
-				{ role: 'alert' },
-				children,
-				onDismiss
-					? createElement(
-							'button',
-							{
-								type: 'button',
-								'data-dismiss': 'true',
-								onClick: onDismiss,
-							},
-							'Dismiss'
-					  )
-					: null
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );

@@ -5,20 +5,9 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
 } ) );
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		PanelBody: ( { children, title } ) =>
-			createElement( 'div', { 'data-panel': title }, children ),
-		Button: ( { children, className, disabled, onClick } ) =>
-			createElement(
-				'button',
-				{ type: 'button', className, disabled, onClick },
-				children
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/icons', () => ( {
 	Icon: () => null,
@@ -130,5 +119,24 @@ describe( 'SettingsRecommendations', () => {
 	test( 'returns null for empty suggestions', () => {
 		renderComponent( [] );
 		expect( container.innerHTML ).toBe( '' );
+	} );
+
+	test( 'marks a settings suggestion as applied after a successful apply', async () => {
+		const suggestion = makeSuggestion( 'general', 'Enable sticky header' );
+
+		renderComponent( [ suggestion ] );
+
+		const applyButton = container.querySelector( 'button' );
+
+		await act( async () => {
+			applyButton.click();
+			await Promise.resolve();
+		} );
+
+		expect( mockApplySuggestion ).toHaveBeenCalledWith(
+			'block-1',
+			suggestion
+		);
+		expect( applyButton.disabled ).toBe( true );
 	} );
 } );

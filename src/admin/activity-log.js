@@ -166,7 +166,9 @@ function appendExplicitFilter( params, fieldName, filter ) {
 		return;
 	}
 
-	const value = Array.isArray( filter.value ) ? filter.value[ 0 ] : filter.value;
+	const value = Array.isArray( filter.value )
+		? filter.value[ 0 ]
+		: filter.value;
 
 	if ( value === undefined || value === null || value === '' ) {
 		return;
@@ -203,7 +205,10 @@ function appendDayFilter( params, filter ) {
 		filter.value &&
 		typeof filter.value === 'object'
 	) {
-		if ( Number.isInteger( filter.value.value ) && filter.value.value > 0 ) {
+		if (
+			Number.isInteger( filter.value.value ) &&
+			filter.value.value > 0
+		) {
 			params.set( 'dayRelativeValue', String( filter.value.value ) );
 		}
 
@@ -237,14 +242,22 @@ function getActivityRequestUrl( bootData, view ) {
 
 	appendExplicitFilter( params, 'surface', getViewFilter( view, 'surface' ) );
 	appendExplicitFilter( params, 'status', getViewFilter( view, 'status' ) );
-	appendExplicitFilter( params, 'postType', getViewFilter( view, 'postType' ) );
+	appendExplicitFilter(
+		params,
+		'postType',
+		getViewFilter( view, 'postType' )
+	);
 	appendExplicitFilter( params, 'userId', getViewFilter( view, 'userId' ) );
 	appendExplicitFilter(
 		params,
 		'operationType',
 		getViewFilter( view, 'operationType' )
 	);
-	appendExplicitFilter( params, 'entityId', getViewFilter( view, 'entityId' ) );
+	appendExplicitFilter(
+		params,
+		'entityId',
+		getViewFilter( view, 'entityId' )
+	);
 	appendExplicitFilter(
 		params,
 		'blockPath',
@@ -252,14 +265,19 @@ function getActivityRequestUrl( bootData, view ) {
 	);
 	appendDayFilter( params, getViewFilter( view, 'day' ) );
 
-	return `${ bootData.restUrl }flavor-agent/v1/activity?${ params.toString() }`;
+	return `${
+		bootData.restUrl
+	}flavor-agent/v1/activity?${ params.toString() }`;
 }
 
 function getPerPageSizes( defaultPerPage, maxPerPage ) {
 	return Array.from(
 		new Set(
 			[ 10, 20, 50, 100, defaultPerPage ].filter(
-				( value ) => Number.isInteger( value ) && value > 0 && value <= maxPerPage
+				( value ) =>
+					Number.isInteger( value ) &&
+					value > 0 &&
+					value <= maxPerPage
 			)
 		)
 	).sort( ( left, right ) => left - right );
@@ -506,7 +524,10 @@ function getDetailFields() {
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
-				<DetailLink href={ item.targetUrl } label={ item.targetLinkLabel } />
+				<DetailLink
+					href={ item.targetUrl }
+					label={ item.targetLinkLabel }
+				/>
 			),
 		},
 		{
@@ -757,9 +778,12 @@ export function ActivityLogApp( { bootData } ) {
 					entries: normalizedEntries,
 					filterOptions: response?.filterOptions || null,
 					paginationInfo: {
-						page: response?.paginationInfo?.page || requestedView.page,
+						page:
+							response?.paginationInfo?.page ||
+							requestedView.page,
 						perPage:
-							response?.paginationInfo?.perPage || requestedView.perPage,
+							response?.paginationInfo?.perPage ||
+							requestedView.perPage,
 						totalItems: response?.paginationInfo?.totalItems || 0,
 						totalPages: response?.paginationInfo?.totalPages || 0,
 					},
@@ -807,7 +831,13 @@ export function ActivityLogApp( { bootData } ) {
 		return () => {
 			isCurrent = false;
 		};
-	}, [ bootData, requestUrl, reloadToken, requestedView.page, requestedView.perPage ] );
+	}, [
+		bootData,
+		requestUrl,
+		reloadToken,
+		requestedView.page,
+		requestedView.perPage,
+	] );
 
 	const fields = useMemo( () => {
 		const surfaceElements =
@@ -1012,8 +1042,9 @@ export function ActivityLogApp( { bootData } ) {
 	}, [ responseData ] );
 
 	const selectedEntry =
-		responseData.entries.find( ( entry ) => entry.id === selectedEntryId ) ||
-		null;
+		responseData.entries.find(
+			( entry ) => entry.id === selectedEntryId
+		) || null;
 
 	useEffect( () => {
 		writePersistedActivityView( effectiveView, undefined, viewOptions );
@@ -1140,7 +1171,9 @@ export function ActivityLogApp( { bootData } ) {
 				config={ {
 					perPageSizes,
 				} }
-				onReset={ isViewModified ? () => setView( defaultView ) : false }
+				onReset={
+					isViewModified ? () => setView( defaultView ) : false
+				}
 				isLoading={ isLoading }
 				empty={ <EmptyState view={ effectiveView } /> }
 			>

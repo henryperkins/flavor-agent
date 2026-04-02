@@ -1,10 +1,7 @@
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
-import {
-	getStyleBookUiState,
-	subscribeToStyleBookUi,
-} from '../style-book/dom';
+import { getStyleBookUiState, subscribeToStyleBookUi } from '../style-book/dom';
 import { STORE_NAME } from '../store';
 import {
 	resolveActivityScope,
@@ -42,11 +39,14 @@ export default function ActivitySessionBootstrap() {
 				'',
 		};
 	}, [] );
-	const scope =
+	const fallbackScope = { key: null, hint: '', postType: '', entityId: '' };
+	let scope;
+	if (
 		editorState.activeComplementaryArea === 'edit-site/global-styles' &&
 		editorState.globalStylesId
-			? styleBookUiState?.isActive &&
-			  styleBookUiState?.target?.blockName
+	) {
+		scope =
+			styleBookUiState?.isActive && styleBookUiState?.target?.blockName
 				? resolveStyleBookScope(
 						editorState.globalStylesId,
 						styleBookUiState.target.blockName,
@@ -54,24 +54,14 @@ export default function ActivitySessionBootstrap() {
 							blockTitle:
 								styleBookUiState.target.blockTitle || '',
 						}
-				  ) || {
-						key: null,
-						hint: '',
-						postType: '',
-						entityId: '',
-				  }
-				: resolveGlobalStylesScope( editorState.globalStylesId ) || {
-						key: null,
-						hint: '',
-						postType: '',
-						entityId: '',
-				  }
-			: resolveActivityScope( editorState.postType, editorState.postId ) || {
-					key: null,
-					hint: '',
-					postType: '',
-					entityId: '',
-			  };
+				  ) || fallbackScope
+				: resolveGlobalStylesScope( editorState.globalStylesId ) ||
+				  fallbackScope;
+	} else {
+		scope =
+			resolveActivityScope( editorState.postType, editorState.postId ) ||
+			fallbackScope;
+	}
 
 	useEffect( () => {
 		if ( typeof document === 'undefined' ) {

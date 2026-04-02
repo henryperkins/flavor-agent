@@ -37,6 +37,7 @@ describe( 'store action thunks', () => {
 		actions._patternAbort = null;
 		actions._templateAbort = null;
 		actions._templatePartAbort = null;
+		actions._globalStylesAbort = null;
 		actions._styleBookAbort = null;
 		getTemplateActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
@@ -163,6 +164,52 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network blew up.' ) );
+
+		const dispatch = jest.fn();
+		const select = {
+			getNavigationRequestToken: jest.fn().mockReturnValue( 3 ),
+		};
+		const input = {
+			blockClientId: 'nav-2',
+			menuId: 84,
+			prompt: 'Tighten the utility links.',
+		};
+
+		await actions.fetchNavigationRecommendations( input )( {
+			dispatch,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setNavigationStatus( 'loading', null, 4, 'nav-2' )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setNavigationRecommendations(
+				'nav-2',
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'Tighten the utility links.',
+				4
+			)
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			3,
+			actions.setNavigationStatus(
+				'error',
+				'Network blew up.',
+				4,
+				'nav-2'
+			)
+		);
+		expect( actions._navigationAbort ).toBeNull();
+	} );
+
 	test( 'fetchTemplateRecommendations reads request token from thunk selectors', async () => {
 		apiFetch.mockResolvedValue( {
 			suggestions: [ { label: 'Refresh template hierarchy' } ],
@@ -275,6 +322,29 @@ describe( 'store action thunks', () => {
 				input.contextSignature
 			)
 		);
+	} );
+
+	test( 'fetchPatternRecommendations aborts the previous request and ignores abort errors', async () => {
+		const previousAbort = jest.fn();
+		actions._patternAbort = { abort: previousAbort };
+		apiFetch.mockRejectedValue( { name: 'AbortError' } );
+
+		const dispatch = jest.fn();
+
+		await actions.fetchPatternRecommendations( {
+			postType: 'page',
+			prompt: 'Find cleaner pattern options.',
+		} )( {
+			dispatch,
+			select: {},
+		} );
+
+		expect( previousAbort ).toHaveBeenCalledTimes( 1 );
+		expect( dispatch ).toHaveBeenCalledTimes( 1 );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setPatternStatus( 'loading' )
+		);
+		expect( actions._patternAbort ).toBeNull();
 	} );
 
 	test( 'fetchStyleBookRecommendations stores block-scoped request metadata without posting the context signature', async () => {

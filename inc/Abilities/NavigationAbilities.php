@@ -8,8 +8,11 @@ use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\NavigationPrompt;
+use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\NormalizesInput;
 
 final class NavigationAbilities {
+	use NormalizesInput;
 
 	/**
 	 * Recommend navigation structure, overlay behavior, and organization.
@@ -67,23 +70,18 @@ final class NavigationAbilities {
 	 * @param mixed $input Raw ability input.
 	 * @return array<string, mixed>
 	 */
-	private static function normalize_input( mixed $input ): array {
-		if ( is_object( $input ) ) {
-			$input = get_object_vars( $input );
-		}
-
-		return is_array( $input ) ? $input : [];
-	}
 
 	/**
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query          = self::build_wordpress_docs_query( $context, $prompt );
-		$entity_key     = 'core/navigation';
-		$family_context = self::build_wordpress_docs_family_context( $context );
-
-		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
+		return CollectsDocsGuidance::collect(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn(): string => 'core/navigation',
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt
+		);
 	}
 
 	/**

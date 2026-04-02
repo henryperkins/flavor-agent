@@ -1,5 +1,6 @@
 import { validateTemplateOperationSequence } from '../utils/template-operation-sequence';
 import { inferTemplatePartArea } from '../utils/template-part-areas';
+export { formatCount } from '../utils/format-count';
 
 export const ENTITY_PART = 'part';
 export const ENTITY_AREA = 'area';
@@ -57,10 +58,6 @@ export function getTemplateOperationKey( operation = {} ) {
 		default:
 			return `${ operation?.type || 'operation' }`;
 	}
-}
-
-export function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
 }
 
 export function formatTemplateTypeLabel( templateType ) {

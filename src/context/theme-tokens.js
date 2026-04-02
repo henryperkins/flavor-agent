@@ -278,7 +278,9 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 
 	if (
 		hasFontSizePresets &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'typography', 'fontSize' ] ] )
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'typography', 'fontSize' ],
+		] )
 	) {
 		supportedPaths.push( {
 			path: [ 'typography', 'fontSize' ],
@@ -396,7 +398,10 @@ export function buildGlobalStylesExecutionContract( tokens = {} ) {
 	};
 }
 
-export function buildBlockStyleExecutionContract( tokens = {}, blockType = {} ) {
+export function buildBlockStyleExecutionContract(
+	tokens = {},
+	blockType = {}
+) {
 	return {
 		supportedStylePaths: getBlockStyleSupportedStylePathsFromTokens(
 			tokens,
@@ -635,24 +640,61 @@ export function summarizeTokens( tokens ) {
 		colors: tokens.color.palette.map(
 			( c ) => `${ c.slug }: ${ c.color }`
 		),
+		colorPresets: tokens.color.palette.map( ( preset ) => ( {
+			name: preset.name,
+			slug: preset.slug,
+			color: preset.color,
+			cssVar: preset.cssVar,
+		} ) ),
 		gradients: tokens.color.gradients.map( ( g ) =>
 			g.gradient ? `${ g.slug }: ${ g.gradient }` : g.slug
 		),
+		gradientPresets: tokens.color.gradients.map( ( preset ) => ( {
+			name: preset.name,
+			slug: preset.slug,
+			gradient: preset.gradient,
+			cssVar: preset.cssVar,
+		} ) ),
 		fontSizes: tokens.typography.fontSizes.map( ( fs ) => {
 			const fluid = fs.fluidSize
 				? ` (fluid: ${ JSON.stringify( fs.fluidSize ) })`
 				: '';
 			return `${ fs.slug }: ${ fs.size }${ fluid }`;
 		} ),
+		fontSizePresets: tokens.typography.fontSizes.map( ( preset ) => ( {
+			name: preset.name,
+			slug: preset.slug,
+			size: preset.size,
+			fluidSize: preset.fluidSize || null,
+			cssVar: preset.cssVar,
+		} ) ),
 		fontFamilies: tokens.typography.fontFamilies.map(
 			( ff ) => `${ ff.slug }: ${ ff.fontFamily }`
 		),
+		fontFamilyPresets: tokens.typography.fontFamilies.map( ( preset ) => ( {
+			name: preset.name,
+			slug: preset.slug,
+			fontFamily: preset.fontFamily,
+			cssVar: preset.cssVar,
+		} ) ),
 		spacing: tokens.spacing.spacingSizes.map(
 			( s ) => `${ s.slug }: ${ s.size }`
 		),
+		spacingPresets: tokens.spacing.spacingSizes.map( ( preset ) => ( {
+			name: preset.name,
+			slug: preset.slug,
+			size: preset.size,
+			cssVar: preset.cssVar,
+		} ) ),
 		shadows: tokens.shadow.presets.map(
 			( s ) => `${ s.slug }: ${ s.shadow }`
 		),
+		shadowPresets: tokens.shadow.presets.map( ( preset ) => ( {
+			name: preset.name,
+			slug: preset.slug,
+			shadow: preset.shadow,
+			cssVar: preset.cssVar,
+		} ) ),
 		duotone: tokens.color.duotone.map( ( preset ) => {
 			const colors = Array.isArray( preset.colors )
 				? preset.colors.slice( 0, 2 ).join( ' / ' )

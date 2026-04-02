@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\StyleAbilities;
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 
 final class StyleAbilitiesTest extends TestCase {
 
@@ -106,7 +108,18 @@ final class StyleAbilitiesTest extends TestCase {
 				'styleContext' => [
 					'currentConfig'         => [ 'styles' => [] ],
 					'mergedConfig'          => [ 'styles' => [] ],
-					'availableVariations'   => [],
+					'availableVariations'   => [
+						[
+							'title'       => 'Midnight',
+							'description' => 'Dark editorial palette',
+							'settings'    => [],
+							'styles'      => [
+								'color' => [
+									'background' => 'var:preset|color|accent',
+								],
+							],
+						],
+					],
 					'themeTokenDiagnostics' => [
 						'source'      => 'stable',
 						'settingsKey' => 'features',
@@ -446,17 +459,107 @@ final class StyleAbilitiesTest extends TestCase {
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringNotContainsString(
-			'customCSS',
+			'- customCSS',
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringNotContainsString(
-			'background.backgroundImage',
+			'- background.backgroundImage',
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'Primary intro copy block.',
 			(string) ( $request_body['input'] ?? '' )
 		);
+		$this->assertStringNotContainsString(
+			'## Available theme style variations',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_recommend_style_includes_docs_guidance_template_identity_and_structure_in_prompt(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id']  = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']   = 'token-xyz';
+		WordPressTestState::$remote_post_response                                     = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'Use documented Global Styles controls.',
+						]
+					),
+				]
+			),
+		];
+
+		$recommendation_input = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+				'templateSlug'   => 'theme-slug//home',
+				'templateType'   => 'home',
+			],
+			'styleContext' => [
+				'currentConfig'         => [ 'styles' => [] ],
+				'mergedConfig'          => [ 'styles' => [] ],
+				'availableVariations'   => [],
+				'templateStructure'     => [
+					[
+						'name'        => 'core/template-part',
+						'innerBlocks' => [
+							[
+								'name' => 'core/site-title',
+							],
+						],
+					],
+				],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			],
+			'prompt'       => 'Keep the palette restrained.',
+		];
+		$built_context        = $this->invoke_private_array_method(
+			StyleAbilities::class,
+			'build_global_styles_context',
+			[
+				$recommendation_input['scope'],
+				$recommendation_input['styleContext'],
+			]
+		);
+		$query                = $this->invoke_private_string_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_query',
+			[ $built_context, 'Keep the palette restrained.' ]
+		);
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
+			[
+				'id'        => 'chunk-1',
+				'title'     => 'Global styles reference',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
+				'excerpt'   => 'Use theme.json preset families for color and typography changes.',
+				'score'     => 0.91,
+			],
+		];
+
+		StyleAbilities::recommend_style( $recommendation_input );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString( '## WordPress Developer Guidance', (string) ( $request_body['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Template slug: theme-slug//home', (string) ( $request_body['input'] ?? '' ) );
+		$this->assertStringContainsString( '## Current template structure', (string) ( $request_body['input'] ?? '' ) );
 	}
 
 	public function test_supported_block_style_paths_follow_registered_block_supports(): void {
@@ -578,5 +681,44 @@ final class StyleAbilitiesTest extends TestCase {
 			],
 			$paths
 		);
+	}
+
+	private function build_cache_key( string $query, int $max_results ): string {
+		$method = new ReflectionMethod( AISearchClient::class, 'build_cache_key' );
+		$method->setAccessible( true );
+
+		$result = $method->invoke( null, $query, $max_results );
+
+		$this->assertIsString( $result );
+
+		return $result;
+	}
+
+	/**
+	 * @param array<int, mixed> $arguments
+	 */
+	private function invoke_private_array_method( string $class_name, string $method_name, array $arguments ): array {
+		$method = new ReflectionMethod( $class_name, $method_name );
+		$method->setAccessible( true );
+
+		$result = $method->invokeArgs( null, $arguments );
+
+		$this->assertIsArray( $result );
+
+		return $result;
+	}
+
+	/**
+	 * @param array<int, mixed> $arguments
+	 */
+	private function invoke_private_string_method( string $class_name, string $method_name, array $arguments ): string {
+		$method = new ReflectionMethod( $class_name, $method_name );
+		$method->setAccessible( true );
+
+		$result = $method->invokeArgs( null, $arguments );
+
+		$this->assertIsString( $result );
+
+		return $result;
 	}
 }

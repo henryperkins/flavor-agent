@@ -6,7 +6,7 @@ namespace FlavorAgent\AzureOpenAI;
 
 use FlavorAgent\OpenAI\Provider;
 
-final class EmbeddingClient {
+final class EmbeddingClient extends BaseHttpClient {
 
 	private const REQUEST_TIMEOUT = 60;
 
@@ -100,43 +100,28 @@ final class EmbeddingClient {
 	/**
 	 * @return array|\WP_Error Decoded response body.
 	 */
-	private static function request( string $url, array $headers, string $body, string $label, bool $is_retry = false ): array|\WP_Error {
-		$response = wp_remote_post(
+	private static function request( string $url, array $headers, string $body, string $label ): array|\WP_Error {
+		$response = self::post_json_with_retry(
 			$url,
-			[
-				'timeout' => self::REQUEST_TIMEOUT,
-				'headers' => $headers,
-				'body'    => $body,
-			]
+			$headers,
+			$body,
+			$label,
+			self::REQUEST_TIMEOUT
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return ConfigurationValidator::normalize_transport_error(
-				$response,
-				$label,
-				$url,
-				self::REQUEST_TIMEOUT
-			);
+			return $response;
 		}
 
-		$status = wp_remote_retrieve_response_code( $response );
-
-		if ( $status === 429 && ! $is_retry ) {
-			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
-			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
-			sleep( min( $retry_after, 10 ) );
-			return self::request( $url, $headers, $body, $label, true );
-		}
-
-		$response_body = wp_remote_retrieve_body( $response );
-		$data          = json_decode( $response_body, true );
+		$status = $response['status'];
+		$data   = $response['data'];
 
 		if ( $status !== 200 ) {
-			$msg = $data['error']['message'] ?? "{$label} returned HTTP {$status}";
+			$msg = is_array( $data ) ? ( $data['error']['message'] ?? "{$label} returned HTTP {$status}" ) : "{$label} returned HTTP {$status}";
 			return new \WP_Error( 'embedding_error', $msg, [ 'status' => 502 ] );
 		}
 
-		if ( json_last_error() !== JSON_ERROR_NONE || empty( $data['data'] ) ) {
+		if ( JSON_ERROR_NONE !== $response['json_error'] || ! is_array( $data ) || empty( $data['data'] ) ) {
 			return new \WP_Error( 'embedding_parse_error', 'Failed to parse embedding response.', [ 'status' => 502 ] );
 		}
 

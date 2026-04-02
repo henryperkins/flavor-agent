@@ -10,6 +10,7 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { formatCount } from '../utils/format-count';
 import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -35,6 +36,7 @@ import {
 	getGlobalStylesActivityUndoState,
 	getGlobalStylesUserConfig,
 } from '../utils/style-operations';
+import { normalizeTemplateType } from '../utils/template-types';
 
 function getSuggestionKey( suggestion, index ) {
 	if (
@@ -88,12 +90,49 @@ function formatOperation( operation = {} ) {
 	return 'Review this change before applying it.';
 }
 
+function buildTemplateStructureSnapshot( blocks = [], depth = 0 ) {
+	if ( ! Array.isArray( blocks ) ) {
+		return [];
+	}
+
+	return blocks
+		.map( ( block ) => {
+			if ( ! block || typeof block !== 'object' ) {
+				return null;
+			}
+
+			const name =
+				typeof block?.name === 'string' ? block.name.trim() : '';
+
+			if ( ! name ) {
+				return null;
+			}
+
+			const snapshot = { name };
+
+			if ( depth < 1 ) {
+				const innerBlocks = buildTemplateStructureSnapshot(
+					block?.innerBlocks,
+					depth + 1
+				);
+
+				if ( innerBlocks.length > 0 ) {
+					snapshot.innerBlocks = innerBlocks;
+				}
+			}
+
+			return snapshot;
+		} )
+		.filter( Boolean );
+}
+
 function buildRequestInput( {
 	scope,
 	prompt,
 	currentConfig,
 	mergedConfig,
 	availableVariations,
+	templateStructure,
 	contextSignature,
 	themeTokenDiagnostics,
 } ) {
@@ -109,11 +148,14 @@ function buildRequestInput( {
 			entityKind: scope?.entityKind || 'root',
 			entityName: scope?.entityName || 'globalStyles',
 			stylesheet: scope?.stylesheet || '',
+			templateSlug: scope?.templateSlug || '',
+			templateType: scope?.templateType || '',
 		},
 		styleContext: {
 			currentConfig,
 			mergedConfig,
 			availableVariations,
+			templateStructure,
 			themeTokenDiagnostics,
 		},
 		contextSignature,
@@ -135,11 +177,11 @@ function getToneLabel( suggestion ) {
 	return suggestion?.tone === 'executable' ? 'Review to apply' : 'Advisory';
 }
 
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
-}
-
-function OperationList( { operations = [], compact = false, suggestionKey = '' } ) {
+function OperationList( {
+	operations = [],
+	compact = false,
+	suggestionKey = '',
+} ) {
 	if ( operations.length === 0 ) {
 		return null;
 	}
@@ -185,14 +227,18 @@ function GlobalStylesPanel( {
 		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
 			<CapabilityNotice surface="global-styles" />
 			<div className="flavor-agent-panel__intro flavor-agent-style-surface__intro">
-				<p className="flavor-agent-panel__eyebrow">Site Editor Styles</p>
+				<p className="flavor-agent-panel__eyebrow">
+					Site Editor Styles
+				</p>
 				<p className="flavor-agent-panel__intro-copy">
 					Global Styles suggestions stay theme-backed and keep the
 					review-before-apply contract intact.
 				</p>
 				<div className="flavor-agent-style-surface__meta">
 					<span className="flavor-agent-pill">Global Styles</span>
-					<span className="flavor-agent-pill">Review before apply</span>
+					<span className="flavor-agent-pill">
+						Review before apply
+					</span>
 					{ suggestions.length > 0 && (
 						<span className="flavor-agent-pill">
 							{ formatCount( suggestions.length, 'suggestion' ) }
@@ -200,7 +246,10 @@ function GlobalStylesPanel( {
 					) }
 				</div>
 			</div>
-			<AIStatusNotice notice={ panelNotice } onAction={ onNoticeAction } />
+			<AIStatusNotice
+				notice={ panelNotice }
+				onAction={ onNoticeAction }
+			/>
 
 			<div className="flavor-agent-panel__group">
 				<div className="flavor-agent-panel__group-header">
@@ -420,6 +469,7 @@ export default function GlobalStylesRecommender() {
 		currentConfig,
 		mergedConfig,
 		availableVariations,
+		templateStructure,
 		rawSuggestions,
 		currentExplanation,
 		currentResultContextSignature,
@@ -437,9 +487,18 @@ export default function GlobalStylesRecommender() {
 	} = useSelect( ( select ) => {
 		const interfaceStore = select( 'core/interface' );
 		const editSite = select( 'core/edit-site' );
+		const blockEditor = select( 'core/block-editor' );
 		const store = select( STORE_NAME );
 		const activeComplementaryArea =
 			interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
+		const editedPostType = editSite?.getEditedPostType?.() || '';
+		const editedTemplateRef =
+			editedPostType === 'wp_template'
+				? editSite?.getEditedPostId?.() || ''
+				: '';
+		const templateSlug =
+			typeof editedTemplateRef === 'string' ? editedTemplateRef : '';
+		const templateType = normalizeTemplateType( templateSlug ) || '';
 		const globalStylesData = getGlobalStylesUserConfig( {
 			select: ( storeName ) => select( storeName ),
 		} );
@@ -485,6 +544,8 @@ export default function GlobalStylesRecommender() {
 						entityId: globalStylesData.globalStylesId,
 						entityKind: 'root',
 						entityName: 'globalStyles',
+						templateSlug,
+						templateType,
 				  }
 				: null,
 			currentConfig: globalStylesData?.userConfig || {
@@ -500,6 +561,9 @@ export default function GlobalStylesRecommender() {
 			availableVariations: Array.isArray( globalStylesData?.variations )
 				? globalStylesData.variations
 				: [],
+			templateStructure: buildTemplateStructureSnapshot(
+				blockEditor?.getBlocks?.() || []
+			),
 			rawSuggestions: mappedSuggestions,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
 			currentResultContextSignature:
@@ -528,6 +592,7 @@ export default function GlobalStylesRecommender() {
 			currentConfig,
 			mergedConfig,
 			availableVariations,
+			templateStructure,
 			themeTokenDiagnostics,
 			executionContract,
 		} );
@@ -737,6 +802,7 @@ export default function GlobalStylesRecommender() {
 				currentConfig,
 				mergedConfig,
 				availableVariations,
+				templateStructure,
 				contextSignature: recommendationContextSignature,
 				themeTokenDiagnostics,
 			} )
@@ -749,6 +815,7 @@ export default function GlobalStylesRecommender() {
 		prompt,
 		recommendationContextSignature,
 		scope,
+		templateStructure,
 		themeTokenDiagnostics,
 	] );
 

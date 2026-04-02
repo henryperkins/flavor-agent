@@ -20,9 +20,11 @@ function hashFingerprint( input ) {
 	let hash = 5381;
 
 	for ( let index = 0; index < input.length; index++ ) {
+		// eslint-disable-next-line no-bitwise
 		hash = ( ( hash << 5 ) + hash ) ^ input.charCodeAt( index );
 	}
 
+	// eslint-disable-next-line no-bitwise
 	return ( hash >>> 0 ).toString( 36 );
 }
 

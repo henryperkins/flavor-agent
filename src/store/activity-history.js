@@ -425,7 +425,10 @@ export function getCurrentActivityScope( registry ) {
 		if ( typeof document !== 'undefined' ) {
 			const styleBookUiState = getStyleBookUiState( document );
 
-			if ( styleBookUiState?.isActive && styleBookUiState?.target?.blockName ) {
+			if (
+				styleBookUiState?.isActive &&
+				styleBookUiState?.target?.blockName
+			) {
 				return resolveStyleBookScope(
 					globalStylesId,
 					styleBookUiState.target.blockName,
@@ -596,10 +599,7 @@ export function getActivityEntityKey( entry ) {
 	return `block:${ documentScopeKey }:${ blockIdentity }:${ blockName }`;
 }
 
-export function getBlockActivityUndoState(
-	entry,
-	blockEditorSelect = {}
-) {
+export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 	const existingUndo = entry?.undo || {};
 
 	if ( entry?.surface !== 'block' ) {
@@ -683,7 +683,7 @@ export function getResolvedActivityUndoState(
 		return buildUndoState( new Date().toISOString(), {
 			status: 'failed',
 			error: 'The activity entry is unavailable.',
-			} );
+		} );
 	}
 
 	const baseUndo = getPreliminaryUndoState( entry, runtimeUndoState );

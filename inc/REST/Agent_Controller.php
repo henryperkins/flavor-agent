@@ -190,6 +190,12 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
+					'editorStructure'     => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 				],
 			]
 		);
@@ -232,115 +238,115 @@ final class Agent_Controller {
 					'callback'            => [ __CLASS__, 'handle_get_activity' ],
 					'permission_callback' => [ ActivityPermissions::class, 'can_access_activity_request' ],
 					'args'                => [
-						'scopeKey'   => [
+						'scopeKey'              => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'global'     => [
+						'global'                => [
 							'required'          => false,
 							'type'              => 'boolean',
 							'default'           => false,
 							'sanitize_callback' => static fn( $value ): bool => in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
 						],
-						'surface'    => [
+						'surface'               => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'entityType' => [
+						'entityType'            => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'entityRef'  => [
+						'entityRef'             => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'userId'     => [
+						'userId'                => [
 							'required'          => false,
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 						],
-						'postType'   => [
+						'postType'              => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'entityId'   => [
+						'entityId'              => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'blockPath'  => [
+						'blockPath'             => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'operationType' => [
+						'operationType'         => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'status'     => [
+						'status'                => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'page'       => [
+						'page'                  => [
 							'required'          => false,
 							'type'              => 'integer',
 							'default'           => 1,
 							'sanitize_callback' => 'absint',
 						],
-						'perPage'    => [
+						'perPage'               => [
 							'required'          => false,
 							'type'              => 'integer',
 							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
 							'sanitize_callback' => 'absint',
 						],
-						'search'     => [
+						'search'                => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'sortField'  => [
+						'sortField'             => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'sortDirection' => [
+						'sortDirection'         => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'surfaceOperator' => [
+						'surfaceOperator'       => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'statusOperator' => [
+						'statusOperator'        => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'postTypeOperator' => [
+						'postTypeOperator'      => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'entityIdOperator' => [
+						'entityIdOperator'      => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'blockPathOperator' => [
+						'blockPathOperator'     => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'userIdOperator' => [
+						'userIdOperator'        => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
@@ -350,32 +356,32 @@ final class Agent_Controller {
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'day'        => [
+						'day'                   => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'dayEnd'     => [
+						'dayEnd'                => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'dayOperator' => [
+						'dayOperator'           => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'dayRelativeValue' => [
+						'dayRelativeValue'      => [
 							'required'          => false,
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 						],
-						'dayRelativeUnit' => [
+						'dayRelativeUnit'       => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'limit'      => [
+						'limit'                 => [
 							'required'          => false,
 							'type'              => 'integer',
 							'default'           => ActivityRepository::DEFAULT_PER_PAGE,

@@ -6,75 +6,28 @@
 import { PanelBody, Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { Icon, check, arrowRight } from '@wordpress/icons';
-import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 
 import { STORE_NAME } from '../store';
+import { formatCount } from '../utils/format-count';
+import groupByPanel from './group-by-panel';
 import { DELEGATED_SETTINGS_PANELS } from './panel-delegation';
-import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
-
-const FEEDBACK_MS = 1200;
+import { getSuggestionKey } from './suggestion-keys';
+import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
 export default function SettingsRecommendations( { clientId, suggestions } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
-	const [ appliedKey, setAppliedKey ] = useState( null );
-	const resetTimerRef = useRef( null );
-
-	useEffect( () => {
-		return () => {
-			if ( resetTimerRef.current ) {
-				window.clearTimeout( resetTimerRef.current );
-			}
-		};
-	}, [] );
-
-	useEffect( () => {
-		if ( resetTimerRef.current ) {
-			window.clearTimeout( resetTimerRef.current );
-			resetTimerRef.current = null;
-		}
-
-		setAppliedKey( null );
-	}, [ suggestions ] );
-
-	const handleApply = useCallback(
-		async ( suggestion ) => {
-			const didApply = await applySuggestion( clientId, suggestion );
-
-			if ( ! didApply ) {
-				return;
-			}
-
-			const key = getSuggestionKey( suggestion );
-
-			if ( resetTimerRef.current ) {
-				window.clearTimeout( resetTimerRef.current );
-			}
-
-			setAppliedKey( key );
-
-			resetTimerRef.current = window.setTimeout( () => {
-				setAppliedKey( null );
-				resetTimerRef.current = null;
-			}, FEEDBACK_MS );
-		},
-		[ clientId, applySuggestion ]
-	);
+	const { appliedKey, handleApply } = useSuggestionApplyFeedback( {
+		applySuggestion,
+		clientId,
+		getKey: getSuggestionKey,
+		suggestions,
+	} );
 
 	if ( ! suggestions.length ) {
 		return null;
 	}
 
-	const grouped = {};
-	for ( const s of suggestions ) {
-		const key = getSuggestionPanel( s );
-		if ( DELEGATED_SETTINGS_PANELS.has( key ) ) {
-			continue;
-		}
-		if ( ! grouped[ key ] ) {
-			grouped[ key ] = [];
-		}
-		grouped[ key ].push( s );
-	}
+	const grouped = groupByPanel( suggestions, DELEGATED_SETTINGS_PANELS );
 
 	if ( ! Object.keys( grouped ).length ) {
 		return null;
@@ -218,10 +171,6 @@ function panelLabel( panel ) {
 		'list-view': 'List View',
 	};
 	return labels[ panel ] || panel;
-}
-
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
 }
 
 function formatConfidenceLabel( confidence ) {

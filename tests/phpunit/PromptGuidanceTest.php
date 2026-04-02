@@ -162,6 +162,20 @@ final class PromptGuidanceTest extends TestCase {
 			[
 				'block'       => [
 					'name'               => 'core/image',
+					'variations'         => [
+						[
+							'name'        => 'rounded',
+							'title'       => 'Rounded',
+							'description' => 'Rounded image treatment.',
+						],
+					],
+					'configAttributes'   => [
+						'sizeSlug' => [
+							'type'    => 'string',
+							'default' => 'large',
+							'role'    => null,
+						],
+					],
 					'currentAttributes'  => [
 						'metadata' => [
 							'bindings' => [
@@ -174,12 +188,32 @@ final class PromptGuidanceTest extends TestCase {
 					'bindableAttributes' => [ 'content', 'url', 'linkTarget' ],
 				],
 				'themeTokens' => [
+					'colors'          => [ 'accent: #ff5500' ],
+					'colorPresets'    => [
+						[
+							'slug'   => 'accent',
+							'color'  => '#ff5500',
+							'cssVar' => 'var(--wp--preset--color--accent)',
+						],
+					],
+					'gradients'       => [ 'sunset: linear-gradient(135deg,#f60,#fc0)' ],
+					'gradientPresets' => [
+						[
+							'slug'     => 'sunset',
+							'gradient' => 'linear-gradient(135deg,#f60,#fc0)',
+							'cssVar'   => 'var(--wp--preset--gradient--sunset)',
+						],
+					],
 					'duotone'         => [ 'midnight: #111111 / #f5f5f5' ],
 					'duotonePresets'  => [
 						[
 							'slug'   => 'midnight',
 							'colors' => [ '#111111', '#f5f5f5' ],
 						],
+					],
+					'diagnostics'     => [
+						'source' => 'server',
+						'reason' => 'server-global-settings',
 					],
 					'enabledFeatures' => [
 						'backgroundImage' => true,
@@ -195,6 +229,14 @@ final class PromptGuidanceTest extends TestCase {
 			]
 		);
 
+		$this->assertStringContainsString(
+			'Color preset details:',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Gradient preset details:',
+			$prompt
+		);
 		$this->assertStringContainsString(
 			'Duotone presets: midnight: #111111 / #f5f5f5',
 			$prompt
@@ -212,7 +254,19 @@ final class PromptGuidanceTest extends TestCase {
 				$prompt
 			);
 		$this->assertStringContainsString(
+			'Block variations:',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Config attribute schema:',
+			$prompt
+		);
+		$this->assertStringContainsString(
 			'Theme feature flags:',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Theme token diagnostics:',
 			$prompt
 		);
 		$this->assertStringContainsString(

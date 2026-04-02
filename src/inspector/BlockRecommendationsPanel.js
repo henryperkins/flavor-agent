@@ -60,20 +60,17 @@ function getCanRecommendBlocks() {
 
 function useBlockRecommendationState( clientId ) {
 	const canRecommendBlocks = getCanRecommendBlocks();
-	const blockEditorSelection = useSelect(
-		( select ) => {
-			const blockEditor = select( blockEditorStore );
+	const blockEditorSelection = useSelect( ( select ) => {
+		const blockEditor = select( blockEditorStore );
 
-			return {
-				getBlock: ( targetClientId ) =>
-					blockEditor.getBlock?.( targetClientId ) || null,
-				getBlockAttributes: ( targetClientId ) =>
-					blockEditor.getBlockAttributes?.( targetClientId ) || null,
-				getBlocks: () => blockEditor.getBlocks?.() || [],
-			};
-		},
-		[]
-	);
+		return {
+			getBlock: ( targetClientId ) =>
+				blockEditor.getBlock?.( targetClientId ) || null,
+			getBlockAttributes: ( targetClientId ) =>
+				blockEditor.getBlockAttributes?.( targetClientId ) || null,
+			getBlocks: () => blockEditor.getBlocks?.() || [],
+		};
+	}, [] );
 
 	const {
 		recommendations,
@@ -126,10 +123,8 @@ function useBlockRecommendationState( clientId ) {
 	);
 	const resolvedBlockActivities = useMemo(
 		() =>
-			getResolvedActivityEntries(
-				blockActivityLog,
-				( entry ) =>
-					getBlockActivityUndoState( entry, blockEditorSelection )
+			getResolvedActivityEntries( blockActivityLog, ( entry ) =>
+				getBlockActivityUndoState( entry, blockEditorSelection )
 			),
 		[ blockActivityLog, blockEditorSelection ]
 	);

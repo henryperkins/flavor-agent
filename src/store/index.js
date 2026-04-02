@@ -250,10 +250,7 @@ function getNormalizedInteractionState( surface, options = {} ) {
 		return 'loading';
 	}
 
-	if (
-		hasUndoSuccess ||
-		hasSuccess
-	) {
+	if ( hasUndoSuccess || hasSuccess ) {
 		return 'success';
 	}
 
@@ -1218,6 +1215,70 @@ function getNextLastUndoneActivityId( currentValue, action ) {
 	return currentValue;
 }
 
+function getEmptySuggestionResponse() {
+	return {
+		suggestions: [],
+		explanation: '',
+	};
+}
+
+async function runAbortableRecommendationRequest( {
+	abortKey,
+	buildRequest = () => ( {} ),
+	dispatch,
+	endpoint,
+	input,
+	onError,
+	onLoading,
+	onSuccess,
+	select,
+} ) {
+	if ( actions[ abortKey ] ) {
+		actions[ abortKey ].abort();
+	}
+
+	const controller = new AbortController();
+	actions[ abortKey ] = controller;
+	const request = {
+		...( buildRequest( { input, select } ) || {} ),
+	};
+	const requestData = request.requestData ?? input;
+
+	request.requestData = requestData;
+	onLoading?.( { dispatch, input, ...request } );
+
+	try {
+		const result = await apiFetch( {
+			path: endpoint,
+			method: 'POST',
+			data: requestData,
+			signal: controller.signal,
+		} );
+
+		onSuccess( {
+			dispatch,
+			input,
+			result,
+			...request,
+		} );
+	} catch ( err ) {
+		if ( err?.name === 'AbortError' ) {
+			return;
+		}
+
+		onError( {
+			dispatch,
+			err,
+			input,
+			...request,
+		} );
+	} finally {
+		if ( actions[ abortKey ] === controller ) {
+			actions[ abortKey ] = null;
+		}
+	}
+}
+
 const actions = {
 	setBlockRequestState(
 		clientId,
@@ -1556,118 +1617,117 @@ const actions = {
 	},
 
 	fetchPatternRecommendations( input ) {
-		return async ( { dispatch } ) => {
-			if ( actions._patternAbort ) {
-				actions._patternAbort.abort();
-			}
-
-			const controller = new AbortController();
-			actions._patternAbort = controller;
-
-			dispatch( actions.setPatternStatus( 'loading' ) );
-
-			try {
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-patterns',
-					method: 'POST',
-					data: input,
-					signal: controller.signal,
-				} );
-
-				dispatch(
-					actions.setPatternRecommendations(
-						result.recommendations || []
-					)
-				);
-				dispatch( actions.setPatternStatus( 'ready' ) );
-			} catch ( err ) {
-				if ( err.name === 'AbortError' ) {
-					return;
-				}
-
-				dispatch( actions.setPatternRecommendations( [] ) );
-				dispatch(
-					actions.setPatternStatus(
-						'error',
-						err?.message || 'Pattern recommendation request failed.'
-					)
-				);
-			} finally {
-				if ( actions._patternAbort === controller ) {
-					actions._patternAbort = null;
-				}
-			}
-		};
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_patternAbort',
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-patterns',
+				input,
+				onError: ( { dispatch: localDispatch, err } ) => {
+					localDispatch( actions.setPatternRecommendations( [] ) );
+					localDispatch(
+						actions.setPatternStatus(
+							'error',
+							err?.message ||
+								'Pattern recommendation request failed.'
+						)
+					);
+				},
+				onLoading: ( { dispatch: localDispatch } ) => {
+					localDispatch( actions.setPatternStatus( 'loading' ) );
+				},
+				onSuccess: ( { dispatch: localDispatch, result } ) => {
+					localDispatch(
+						actions.setPatternRecommendations(
+							result.recommendations || []
+						)
+					);
+					localDispatch( actions.setPatternStatus( 'ready' ) );
+				},
+				select,
+			} );
 	},
 
 	fetchNavigationRecommendations( input ) {
-		return async ( { dispatch, select } ) => {
-			if ( actions._navigationAbort ) {
-				actions._navigationAbort.abort();
-			}
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_navigationAbort',
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => {
+					const requestToken =
+						( registrySelect.getNavigationRequestToken?.() || 0 ) +
+						1;
+					const { blockClientId = null, ...requestData } =
+						requestInput || {};
 
-			const controller = new AbortController();
-			actions._navigationAbort = controller;
-			const requestToken =
-				( select.getNavigationRequestToken?.() || 0 ) + 1;
-			const { blockClientId = null, ...requestData } = input || {};
-
-			dispatch(
-				actions.setNavigationStatus(
-					'loading',
-					null,
-					requestToken,
-					blockClientId
-				)
-			);
-
-			try {
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-navigation',
-					method: 'POST',
-					data: requestData,
-					signal: controller.signal,
-				} );
-
-				dispatch(
-					actions.setNavigationRecommendations(
+					return {
 						blockClientId,
-						result,
-						requestData.prompt || '',
-						requestToken
-					)
-				);
-			} catch ( err ) {
-				if ( err.name === 'AbortError' ) {
-					return;
-				}
-
-				dispatch(
-					actions.setNavigationRecommendations(
-						blockClientId,
-						{
-							suggestions: [],
-							explanation: '',
-						},
-						requestData.prompt || '',
-						requestToken
-					)
-				);
-				dispatch(
-					actions.setNavigationStatus(
-						'error',
-						err?.message ||
-							'Navigation recommendation request failed.',
+						requestData,
 						requestToken,
-						blockClientId
-					)
-				);
-			} finally {
-				if ( actions._navigationAbort === controller ) {
-					actions._navigationAbort = null;
-				}
-			}
-		};
+					};
+				},
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-navigation',
+				input,
+				onError: ( {
+					blockClientId,
+					dispatch: localDispatch,
+					err,
+					requestData,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setNavigationRecommendations(
+							blockClientId,
+							getEmptySuggestionResponse(),
+							requestData.prompt || '',
+							requestToken
+						)
+					);
+					localDispatch(
+						actions.setNavigationStatus(
+							'error',
+							err?.message ||
+								'Navigation recommendation request failed.',
+							requestToken,
+							blockClientId
+						)
+					);
+				},
+				onLoading: ( {
+					blockClientId,
+					dispatch: localDispatch,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setNavigationStatus(
+							'loading',
+							null,
+							requestToken,
+							blockClientId
+						)
+					);
+				},
+				onSuccess: ( {
+					blockClientId,
+					dispatch: localDispatch,
+					requestData,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setNavigationRecommendations(
+							blockClientId,
+							result,
+							requestData.prompt || '',
+							requestToken
+						)
+					);
+				},
+				select,
+			} );
 	},
 
 	setTemplateStatus( status, error = null, requestToken = null ) {
@@ -2347,7 +2407,8 @@ const actions = {
 
 			const result = applyGlobalStyleSuggestionOperations(
 				suggestion,
-				registry
+				registry,
+				{ surface: 'global-styles' }
 			);
 
 			if ( ! result.ok ) {
@@ -2399,7 +2460,8 @@ const actions = {
 
 			const result = applyGlobalStyleSuggestionOperations(
 				suggestion,
-				registry
+				registry,
+				{ surface: 'style-book' }
 			);
 
 			if ( ! result.ok ) {
@@ -2443,261 +2505,282 @@ const actions = {
 	},
 
 	fetchTemplateRecommendations( input ) {
-		return async ( { dispatch, select } ) => {
-			if ( actions._templateAbort ) {
-				actions._templateAbort.abort();
-			}
-
-			const controller = new AbortController();
-			actions._templateAbort = controller;
-			const requestToken =
-				( select.getTemplateRequestToken?.() || 0 ) + 1;
-
-			dispatch(
-				actions.setTemplateStatus( 'loading', null, requestToken )
-			);
-
-			try {
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-template',
-					method: 'POST',
-					data: input,
-					signal: controller.signal,
-				} );
-
-				dispatch(
-					actions.setTemplateRecommendations(
-						input.templateRef,
-						result,
-						input.prompt || '',
-						requestToken
-					)
-				);
-			} catch ( err ) {
-				if ( err.name === 'AbortError' ) {
-					return;
-				}
-
-				dispatch(
-					actions.setTemplateRecommendations(
-						input.templateRef,
-						{
-							suggestions: [],
-							explanation: '',
-						},
-						input.prompt || '',
-						requestToken
-					)
-				);
-				dispatch(
-					actions.setTemplateStatus(
-						'error',
-						err?.message ||
-							'Template recommendation request failed.',
-						requestToken
-					)
-				);
-			} finally {
-				if ( actions._templateAbort === controller ) {
-					actions._templateAbort = null;
-				}
-			}
-		};
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_templateAbort',
+				buildRequest: ( { select: registrySelect } ) => ( {
+					requestToken:
+						( registrySelect.getTemplateRequestToken?.() || 0 ) + 1,
+				} ),
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-template',
+				input,
+				onError: ( {
+					dispatch: localDispatch,
+					err,
+					input: requestInput,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setTemplateRecommendations(
+							requestInput.templateRef,
+							getEmptySuggestionResponse(),
+							requestInput.prompt || '',
+							requestToken
+						)
+					);
+					localDispatch(
+						actions.setTemplateStatus(
+							'error',
+							err?.message ||
+								'Template recommendation request failed.',
+							requestToken
+						)
+					);
+				},
+				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+					localDispatch(
+						actions.setTemplateStatus(
+							'loading',
+							null,
+							requestToken
+						)
+					);
+				},
+				onSuccess: ( {
+					dispatch: localDispatch,
+					input: requestInput,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setTemplateRecommendations(
+							requestInput.templateRef,
+							result,
+							requestInput.prompt || '',
+							requestToken
+						)
+					);
+				},
+				select,
+			} );
 	},
 
 	fetchTemplatePartRecommendations( input ) {
-		return async ( { dispatch, select } ) => {
-			if ( actions._templatePartAbort ) {
-				actions._templatePartAbort.abort();
-			}
-
-			const controller = new AbortController();
-			actions._templatePartAbort = controller;
-			const requestToken =
-				( select.getTemplatePartRequestToken?.() || 0 ) + 1;
-
-			dispatch(
-				actions.setTemplatePartStatus( 'loading', null, requestToken )
-			);
-
-			try {
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-template-part',
-					method: 'POST',
-					data: input,
-					signal: controller.signal,
-				} );
-
-				dispatch(
-					actions.setTemplatePartRecommendations(
-						input.templatePartRef,
-						result,
-						input.prompt || '',
-						requestToken
-					)
-				);
-			} catch ( err ) {
-				if ( err.name === 'AbortError' ) {
-					return;
-				}
-
-				dispatch(
-					actions.setTemplatePartRecommendations(
-						input.templatePartRef,
-						{
-							suggestions: [],
-							explanation: '',
-						},
-						input.prompt || '',
-						requestToken
-					)
-				);
-				dispatch(
-					actions.setTemplatePartStatus(
-						'error',
-						err?.message ||
-							'Template-part recommendation request failed.',
-						requestToken
-					)
-				);
-			} finally {
-				if ( actions._templatePartAbort === controller ) {
-					actions._templatePartAbort = null;
-				}
-			}
-		};
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_templatePartAbort',
+				buildRequest: ( { select: registrySelect } ) => ( {
+					requestToken:
+						( registrySelect.getTemplatePartRequestToken?.() ||
+							0 ) + 1,
+				} ),
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-template-part',
+				input,
+				onError: ( {
+					dispatch: localDispatch,
+					err,
+					input: requestInput,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setTemplatePartRecommendations(
+							requestInput.templatePartRef,
+							getEmptySuggestionResponse(),
+							requestInput.prompt || '',
+							requestToken
+						)
+					);
+					localDispatch(
+						actions.setTemplatePartStatus(
+							'error',
+							err?.message ||
+								'Template-part recommendation request failed.',
+							requestToken
+						)
+					);
+				},
+				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+					localDispatch(
+						actions.setTemplatePartStatus(
+							'loading',
+							null,
+							requestToken
+						)
+					);
+				},
+				onSuccess: ( {
+					dispatch: localDispatch,
+					input: requestInput,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setTemplatePartRecommendations(
+							requestInput.templatePartRef,
+							result,
+							requestInput.prompt || '',
+							requestToken
+						)
+					);
+				},
+				select,
+			} );
 	},
 
 	fetchGlobalStylesRecommendations( input ) {
-		return async ( { dispatch, select } ) => {
-			if ( actions._globalStylesAbort ) {
-				actions._globalStylesAbort.abort();
-			}
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_globalStylesAbort',
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => {
+					const { contextSignature = null, ...requestData } =
+						requestInput;
 
-			const controller = new AbortController();
-			actions._globalStylesAbort = controller;
-			const requestToken =
-				( select.getGlobalStylesRequestToken?.() || 0 ) + 1;
-
-			dispatch(
-				actions.setGlobalStylesStatus( 'loading', null, requestToken )
-			);
-
-			try {
-				const { contextSignature = null, ...requestData } = input;
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-style',
-					method: 'POST',
-					data: requestData,
-					signal: controller.signal,
-				} );
-
-				dispatch(
-					actions.setGlobalStylesRecommendations(
-						input.scope,
-						result,
-						input.prompt || '',
-						requestToken,
-						contextSignature
-					)
-				);
-			} catch ( err ) {
-				if ( err.name === 'AbortError' ) {
-					return;
-				}
-
-				dispatch(
-					actions.setGlobalStylesRecommendations(
-						input.scope,
-						{
-							suggestions: [],
-							explanation: '',
-						},
-						input.prompt || '',
-						requestToken,
-						input.contextSignature || null
-					)
-				);
-				dispatch(
-					actions.setGlobalStylesStatus(
-						'error',
-						err?.message ||
-							'Global Styles recommendation request failed.',
-						requestToken
-					)
-				);
-			} finally {
-				if ( actions._globalStylesAbort === controller ) {
-					actions._globalStylesAbort = null;
-				}
-			}
-		};
+					return {
+						contextSignature,
+						requestData,
+						requestToken:
+							( registrySelect.getGlobalStylesRequestToken?.() ||
+								0 ) + 1,
+					};
+				},
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-style',
+				input,
+				onError: ( {
+					contextSignature,
+					dispatch: localDispatch,
+					err,
+					input: requestInput,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setGlobalStylesRecommendations(
+							requestInput.scope,
+							getEmptySuggestionResponse(),
+							requestInput.prompt || '',
+							requestToken,
+							contextSignature
+						)
+					);
+					localDispatch(
+						actions.setGlobalStylesStatus(
+							'error',
+							err?.message ||
+								'Global Styles recommendation request failed.',
+							requestToken
+						)
+					);
+				},
+				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+					localDispatch(
+						actions.setGlobalStylesStatus(
+							'loading',
+							null,
+							requestToken
+						)
+					);
+				},
+				onSuccess: ( {
+					contextSignature,
+					dispatch: localDispatch,
+					input: requestInput,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setGlobalStylesRecommendations(
+							requestInput.scope,
+							result,
+							requestInput.prompt || '',
+							requestToken,
+							contextSignature
+						)
+					);
+				},
+				select,
+			} );
 	},
 
 	fetchStyleBookRecommendations( input ) {
-		return async ( { dispatch, select } ) => {
-			if ( actions._styleBookAbort ) {
-				actions._styleBookAbort.abort();
-			}
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_styleBookAbort',
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => {
+					const { contextSignature = null, ...requestData } =
+						requestInput;
 
-			const controller = new AbortController();
-			actions._styleBookAbort = controller;
-			const requestToken =
-				( select.getStyleBookRequestToken?.() || 0 ) + 1;
-
-			dispatch(
-				actions.setStyleBookStatus( 'loading', null, requestToken )
-			);
-
-			try {
-				const { contextSignature = null, ...requestData } = input;
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-style',
-					method: 'POST',
-					data: requestData,
-					signal: controller.signal,
-				} );
-
-				dispatch(
-					actions.setStyleBookRecommendations(
-						input.scope,
-						result,
-						input.prompt || '',
-						requestToken,
-						contextSignature
-					)
-				);
-			} catch ( err ) {
-				if ( err.name === 'AbortError' ) {
-					return;
-				}
-
-				dispatch(
-					actions.setStyleBookRecommendations(
-						input.scope,
-						{
-							suggestions: [],
-							explanation: '',
-						},
-						input.prompt || '',
-						requestToken,
-						input.contextSignature || null
-					)
-				);
-				dispatch(
-					actions.setStyleBookStatus(
-						'error',
-						err?.message ||
-							'Style Book recommendation request failed.',
-						requestToken
-					)
-				);
-			} finally {
-				if ( actions._styleBookAbort === controller ) {
-					actions._styleBookAbort = null;
-				}
-			}
-		};
+					return {
+						contextSignature,
+						requestData,
+						requestToken:
+							( registrySelect.getStyleBookRequestToken?.() ||
+								0 ) + 1,
+					};
+				},
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-style',
+				input,
+				onError: ( {
+					contextSignature,
+					dispatch: localDispatch,
+					err,
+					input: requestInput,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setStyleBookRecommendations(
+							requestInput.scope,
+							getEmptySuggestionResponse(),
+							requestInput.prompt || '',
+							requestToken,
+							contextSignature
+						)
+					);
+					localDispatch(
+						actions.setStyleBookStatus(
+							'error',
+							err?.message ||
+								'Style Book recommendation request failed.',
+							requestToken
+						)
+					);
+				},
+				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+					localDispatch(
+						actions.setStyleBookStatus(
+							'loading',
+							null,
+							requestToken
+						)
+					);
+				},
+				onSuccess: ( {
+					contextSignature,
+					dispatch: localDispatch,
+					input: requestInput,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setStyleBookRecommendations(
+							requestInput.scope,
+							result,
+							requestInput.prompt || '',
+							requestToken,
+							contextSignature
+						)
+					);
+				},
+				select,
+			} );
 	},
 };
 

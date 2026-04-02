@@ -4,78 +4,9 @@ function getDataViewsMockState() {
 	return global.__flavorAgentActivityLogDataViewsState;
 }
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	function Button( { children, href, onClick, size, variant, ...props } ) {
-		void size;
-		void variant;
-
-		if ( href ) {
-			return createElement(
-				'a',
-				{
-					href,
-					onClick,
-					...props,
-				},
-				children
-			);
-		}
-
-		return createElement(
-			'button',
-			{
-				type: 'button',
-				onClick,
-				...props,
-			},
-			children
-		);
-	}
-
-	return {
-		Button,
-		Card: ( { children, className = '' } ) =>
-			createElement( 'div', { className }, children ),
-		CardBody: ( { children, className = '' } ) =>
-			createElement(
-				'div',
-				{
-					className: [ 'components-card__body', className ]
-						.filter( Boolean )
-						.join( ' ' ),
-				},
-				children
-			),
-		CardHeader: ( { children, className = '' } ) =>
-			createElement(
-				'div',
-				{
-					className: [ 'components-card__header', className ]
-						.filter( Boolean )
-						.join( ' ' ),
-				},
-				children
-			),
-		Icon: ( { icon, ...props } ) => {
-			void icon;
-
-			return createElement( 'span', {
-				'aria-hidden': 'true',
-				'data-icon': 'true',
-				...props,
-			} );
-		},
-		Notice: ( { children, status } ) =>
-			createElement(
-				'div',
-				{ 'data-status': status, role: 'alert' },
-				children
-			),
-		Spinner: () => createElement( 'div', null, 'Loading…' ),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/dataviews/wp', () => {
 	global.__flavorAgentActivityLogDataViewsState =
@@ -549,30 +480,30 @@ describe( 'ActivityLogApp', () => {
 
 		const fields = getDataViewsMockState().latestProps.fields;
 
-		expect( fields.find( ( field ) => field.id === 'surface' ).elements ).toEqual(
-			[
-				{ value: 'block', label: 'Block' },
-				{ value: 'template', label: 'Template' },
-			]
-		);
+		expect(
+			fields.find( ( field ) => field.id === 'surface' ).elements
+		).toEqual( [
+			{ value: 'block', label: 'Block' },
+			{ value: 'template', label: 'Template' },
+		] );
 		expect(
 			fields.find( ( field ) => field.id === 'operationType' ).elements
 		).toEqual( [
 			{ value: 'insert', label: 'Insert pattern' },
 			{ value: 'modify-attributes', label: 'Modify attributes' },
 		] );
-		expect( fields.find( ( field ) => field.id === 'postType' ).elements ).toEqual(
-			[
-				{ value: 'post', label: 'post' },
-				{ value: 'wp_template', label: 'wp_template' },
-			]
-		);
-		expect( fields.find( ( field ) => field.id === 'userId' ).elements ).toEqual(
-			[
-				{ value: '11', label: 'User #11' },
-				{ value: '7', label: 'User #7' },
-			]
-		);
+		expect(
+			fields.find( ( field ) => field.id === 'postType' ).elements
+		).toEqual( [
+			{ value: 'post', label: 'post' },
+			{ value: 'wp_template', label: 'wp_template' },
+		] );
+		expect(
+			fields.find( ( field ) => field.id === 'userId' ).elements
+		).toEqual( [
+			{ value: '11', label: 'User #11' },
+			{ value: '7', label: 'User #7' },
+		] );
 	} );
 
 	test( 'adds an accessible name to the icon-only settings control', async () => {

@@ -341,7 +341,7 @@ final class AgentControllerTest extends TestCase {
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(
-			'Midnight',
+			'## Available theme style variations',
 			(string) ( $request_body['input'] ?? '' )
 		);
 	}
@@ -419,7 +419,23 @@ final class AgentControllerTest extends TestCase {
 				'mergedConfig'          => [
 					'styles' => [],
 				],
-				'availableVariations'   => [],
+				'availableVariations'   => [
+					[
+						'title'    => 'Default',
+						'settings' => [],
+						'styles'   => [],
+					],
+					[
+						'title'       => 'Midnight',
+						'description' => 'Dark editorial palette',
+						'settings'    => [],
+						'styles'      => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
+						],
+					],
+				],
 				'themeTokenDiagnostics' => [
 					'source'      => 'stable',
 					'settingsKey' => 'features',
@@ -448,6 +464,10 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertStringContainsString(
 			'Primary intro copy block.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'## Available theme style variations',
 			(string) ( $request_body['input'] ?? '' )
 		);
 	}
@@ -949,8 +969,14 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertSame(
 			[
-				[ 'value' => 'block', 'label' => 'Block' ],
-				[ 'value' => 'template', 'label' => 'Template' ],
+				[
+					'value' => 'block',
+					'label' => 'Block',
+				],
+				[
+					'value' => 'template',
+					'label' => 'Template',
+				],
 			],
 			$data['filterOptions']['surface'] ?? null
 		);

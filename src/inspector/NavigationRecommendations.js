@@ -10,26 +10,15 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { formatCount, humanizeString } from '../utils/format-count';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
-}
-
-function humanizeValue( value ) {
-	return String( value || '' )
-		.split( /[-_]/ )
-		.filter( Boolean )
-		.map( ( part ) => part.charAt( 0 ).toUpperCase() + part.slice( 1 ) )
-		.join( ' ' );
-}
-
 function formatChangeType( type ) {
-	return humanizeValue( type || 'change' );
+	return humanizeString( type || 'change' );
 }
 
 function formatCategoryLabel( category ) {

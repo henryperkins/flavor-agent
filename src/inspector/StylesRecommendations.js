@@ -5,73 +5,37 @@
  */
 import { PanelBody, Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
-import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
+import { formatCount } from '../utils/format-count';
+import groupByPanel from './group-by-panel';
 import {
 	DELEGATED_STYLE_PANELS,
 	STYLE_PANEL_DELEGATIONS,
 } from './panel-delegation';
 import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
+import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
-const FEEDBACK_MS = 1200;
+function buildStyleFeedback( suggestion, key ) {
+	return {
+		key,
+		panel: getSuggestionPanel( suggestion ),
+		label: suggestion?.label || 'Suggestion',
+		type:
+			suggestion?.type === 'style_variation' ? 'variation' : 'attribute',
+	};
+}
 
 export default function StylesRecommendations( { clientId, suggestions } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
-	const [ appliedKey, setAppliedKey ] = useState( null );
-	const [ feedback, setFeedback ] = useState( null );
-	const resetTimerRef = useRef( null );
-
-	useEffect( () => {
-		return () => {
-			if ( resetTimerRef.current ) {
-				window.clearTimeout( resetTimerRef.current );
-			}
-		};
-	}, [] );
-
-	useEffect( () => {
-		if ( resetTimerRef.current ) {
-			window.clearTimeout( resetTimerRef.current );
-			resetTimerRef.current = null;
-		}
-
-		setAppliedKey( null );
-		setFeedback( null );
-	}, [ suggestions ] );
-
-	const handleApply = useCallback(
-		async ( suggestion, key ) => {
-			const didApply = await applySuggestion( clientId, suggestion );
-
-			if ( ! didApply ) {
-				return;
-			}
-
-			if ( resetTimerRef.current ) {
-				window.clearTimeout( resetTimerRef.current );
-			}
-
-			setAppliedKey( key );
-			setFeedback( {
-				key,
-				panel: getSuggestionPanel( suggestion ),
-				label: suggestion?.label || 'Suggestion',
-				type:
-					suggestion?.type === 'style_variation'
-						? 'variation'
-						: 'attribute',
-			} );
-
-			resetTimerRef.current = window.setTimeout( () => {
-				setAppliedKey( null );
-				setFeedback( null );
-				resetTimerRef.current = null;
-			}, FEEDBACK_MS );
-		},
-		[ clientId, applySuggestion ]
-	);
+	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
+		applySuggestion,
+		buildFeedback: buildStyleFeedback,
+		clientId,
+		getKey: getSuggestionKey,
+		suggestions,
+	} );
 
 	if ( ! suggestions.length ) {
 		return null;
@@ -91,18 +55,10 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 			( suggestion ) => suggestion.panel === config.panel
 		)
 	).map( ( config ) => config.title );
-
-	const byPanel = {};
-	for ( const s of attributeSuggestions ) {
-		if ( DELEGATED_STYLE_PANELS.has( s.panel ) ) {
-			continue;
-		}
-		const key = getSuggestionPanel( s );
-		if ( ! byPanel[ key ] ) {
-			byPanel[ key ] = [];
-		}
-		byPanel[ key ].push( s );
-	}
+	const byPanel = groupByPanel(
+		attributeSuggestions,
+		DELEGATED_STYLE_PANELS
+	);
 
 	return (
 		<PanelBody title="AI Style Suggestions" initialOpen icon={ stylesIcon }>
@@ -111,8 +67,8 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 					<p className="flavor-agent-panel__eyebrow">Block Styles</p>
 					<p className="flavor-agent-panel__intro-copy">
 						One-click apply stays available for safe block-level
-						style changes. Suggestions stay grouped beside the native
-						controls they map to.
+						style changes. Suggestions stay grouped beside the
+						native controls they map to.
 					</p>
 					<div className="flavor-agent-style-surface__meta">
 						<span className="flavor-agent-pill">
@@ -246,7 +202,10 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 						</p>
 						<div className="flavor-agent-style-surface__meta">
 							{ delegatedPanelTitles.map( ( title ) => (
-								<span key={ title } className="flavor-agent-pill">
+								<span
+									key={ title }
+									className="flavor-agent-pill"
+								>
 									{ title }
 								</span>
 							) ) }
@@ -316,7 +275,7 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 				/>
 			</div>
 
-			{ applied && <InlineApplyFeedback message={ `${ label }.` } />}
+			{ applied && <InlineApplyFeedback message={ `${ label }.` } /> }
 		</div>
 	);
 }
@@ -340,10 +299,6 @@ function InlineApplyFeedback( { message } ) {
 
 function isColor( str ) {
 	return /^(#|rgb|hsl|oklch|lab|lch|var\()/.test( str );
-}
-
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
 }
 
 function panelLabel( panel ) {

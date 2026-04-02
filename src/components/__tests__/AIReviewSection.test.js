@@ -1,19 +1,6 @@
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, disabled, onClick } ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					disabled,
-					onClick,
-				},
-				children
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );

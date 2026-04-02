@@ -1,21 +1,9 @@
 const mockUseDispatch = jest.fn();
 const mockApplySuggestion = jest.fn();
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, ...props } ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					...props,
-				},
-				children
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
@@ -105,7 +93,8 @@ describe( 'SuggestionChips', () => {
 			panel: 'color',
 		} );
 		expect(
-			container.querySelector( '.flavor-agent-inline-feedback' )?.textContent
+			container.querySelector( '.flavor-agent-inline-feedback' )
+				?.textContent
 		).toBe( 'AppliedUse accent color' );
 	} );
 } );

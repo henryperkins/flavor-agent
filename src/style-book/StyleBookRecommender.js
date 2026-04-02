@@ -10,6 +10,7 @@ import {
 	useState,
 } from '@wordpress/element';
 
+import { formatCount } from '../utils/format-count';
 import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -30,6 +31,7 @@ import {
 	getGlobalStylesActivityUndoState,
 	getGlobalStylesUserConfig,
 } from '../utils/style-operations';
+import { normalizeTemplateType } from '../utils/template-types';
 import {
 	findStylesSidebarMountNode,
 	getStyleBookUiState,
@@ -98,6 +100,7 @@ function buildRequestInput( {
 	currentConfig,
 	mergedConfig,
 	themeTokenDiagnostics,
+	blockDescription,
 	currentStyles,
 	mergedStyles,
 	contextSignature,
@@ -114,17 +117,19 @@ function buildRequestInput( {
 			entityKind: scope?.entityKind || 'block',
 			entityName: scope?.entityName || 'styleBook',
 			stylesheet: scope?.stylesheet || '',
+			templateSlug: scope?.templateSlug || '',
+			templateType: scope?.templateType || '',
 			blockName: scope?.blockName || '',
 			blockTitle: scope?.blockTitle || '',
 		},
 		styleContext: {
 			currentConfig,
 			mergedConfig,
-			availableVariations: [],
 			themeTokenDiagnostics,
 			styleBookTarget: {
 				blockName: scope?.blockName || '',
 				blockTitle: scope?.blockTitle || '',
+				description: blockDescription || '',
 				currentStyles,
 				mergedStyles,
 			},
@@ -148,11 +153,11 @@ function getToneLabel( suggestion ) {
 	return suggestion?.tone === 'executable' ? 'Review to apply' : 'Advisory';
 }
 
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
-}
-
-function OperationList( { operations = [], compact = false, suggestionKey = '' } ) {
+function OperationList( {
+	operations = [],
+	compact = false,
+	suggestionKey = '',
+} ) {
 	if ( operations.length === 0 ) {
 		return null;
 	}
@@ -212,7 +217,9 @@ function StyleBookPanel( {
 							{ blockTitle }
 						</span>
 					) }
-					<span className="flavor-agent-pill">Review before apply</span>
+					<span className="flavor-agent-pill">
+						Review before apply
+					</span>
 					{ suggestions.length > 0 && (
 						<span className="flavor-agent-pill">
 							{ formatCount( suggestions.length, 'suggestion' ) }
@@ -220,7 +227,10 @@ function StyleBookPanel( {
 					) }
 				</div>
 			</div>
-			<AIStatusNotice notice={ panelNotice } onAction={ onNoticeAction } />
+			<AIStatusNotice
+				notice={ panelNotice }
+				onAction={ onNoticeAction }
+			/>
 
 			<div className="flavor-agent-panel__group">
 				<div className="flavor-agent-panel__group-header">
@@ -340,7 +350,10 @@ function StyleBookPanel( {
 								<div className="flavor-agent-style-card__footer">
 									<span className="flavor-agent-panel__intro-copy">
 										{ suggestion.tone === 'executable'
-											? `Preview the exact operations before applying them to ${ blockTitle || 'the active block example' }.`
+											? `Preview the exact operations before applying them to ${
+													blockTitle ||
+													'the active block example'
+											  }.`
 											: 'This stays advisory until the backend can express it as a safe theme-backed block style operation set.' }
 									</span>
 
@@ -464,6 +477,14 @@ export default function StyleBookRecommender() {
 			const store = select( STORE_NAME );
 			const activeComplementaryArea =
 				interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
+			const editedPostType = editSite?.getEditedPostType?.() || '';
+			const editedTemplateRef =
+				editedPostType === 'wp_template'
+					? editSite?.getEditedPostId?.() || ''
+					: '';
+			const templateSlug =
+				typeof editedTemplateRef === 'string' ? editedTemplateRef : '';
+			const templateType = normalizeTemplateType( templateSlug ) || '';
 			const globalStylesData = getGlobalStylesUserConfig( {
 				select: ( storeName ) => select( storeName ),
 			} );
@@ -479,6 +500,8 @@ export default function StyleBookRecommender() {
 							entityId: blockName,
 							entityKind: 'block',
 							entityName: 'styleBook',
+							templateSlug,
+							templateType,
 							blockName,
 							blockTitle,
 					  }
@@ -578,7 +601,6 @@ export default function StyleBookRecommender() {
 			scope,
 			currentConfig,
 			mergedConfig,
-			availableVariations: [],
 			themeTokenDiagnostics,
 			executionContract,
 		} );
@@ -810,6 +832,7 @@ export default function StyleBookRecommender() {
 				currentConfig,
 				mergedConfig,
 				themeTokenDiagnostics,
+				blockDescription: blockType?.description || '',
 				currentStyles,
 				mergedStyles,
 				contextSignature: recommendationContextSignature,

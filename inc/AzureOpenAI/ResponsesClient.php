@@ -6,7 +6,7 @@ namespace FlavorAgent\AzureOpenAI;
 
 use FlavorAgent\OpenAI\Provider;
 
-final class ResponsesClient {
+final class ResponsesClient extends BaseHttpClient {
 
 	private const REASONING_EFFORT = 'high';
 	private const REQUEST_TIMEOUT  = 90;
@@ -90,43 +90,28 @@ final class ResponsesClient {
 	/**
 	 * @return string|\WP_Error The text content from the response.
 	 */
-	private static function request( string $url, array $headers, string $body, string $label, bool $is_retry = false ): string|\WP_Error {
-		$response = wp_remote_post(
+	private static function request( string $url, array $headers, string $body, string $label ): string|\WP_Error {
+		$response = self::post_json_with_retry(
 			$url,
-			[
-				'timeout' => self::REQUEST_TIMEOUT,
-				'headers' => $headers,
-				'body'    => $body,
-			]
+			$headers,
+			$body,
+			$label,
+			self::REQUEST_TIMEOUT
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return ConfigurationValidator::normalize_transport_error(
-				$response,
-				$label,
-				$url,
-				self::REQUEST_TIMEOUT
-			);
+			return $response;
 		}
 
-		$status = wp_remote_retrieve_response_code( $response );
-
-		if ( $status === 429 && ! $is_retry ) {
-			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
-			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
-			sleep( min( $retry_after, 10 ) );
-			return self::request( $url, $headers, $body, $label, true );
-		}
-
-		$response_body = wp_remote_retrieve_body( $response );
-		$data          = json_decode( $response_body, true );
+		$status = $response['status'];
+		$data   = $response['data'];
 
 		if ( $status !== 200 ) {
-			$msg = $data['error']['message'] ?? "{$label} returned HTTP {$status}";
+			$msg = is_array( $data ) ? ( $data['error']['message'] ?? "{$label} returned HTTP {$status}" ) : "{$label} returned HTTP {$status}";
 			return new \WP_Error( 'responses_error', $msg, [ 'status' => 502 ] );
 		}
 
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
+		if ( JSON_ERROR_NONE !== $response['json_error'] ) {
 			return new \WP_Error( 'responses_parse_error', 'Failed to parse Responses API response.', [ 'status' => 502 ] );
 		}
 

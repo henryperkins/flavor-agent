@@ -5,35 +5,9 @@ jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
 } ) );
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		PanelBody: ( { children, title } ) =>
-			createElement( 'div', { 'data-panel': title }, children ),
-		Button: ( {
-			children,
-			className,
-			disabled,
-			label,
-			onClick,
-			title: btnTitle,
-		} ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					className,
-					disabled,
-					onClick,
-					title: btnTitle,
-				},
-				children || label || ''
-			),
-		ButtonGroup: ( { children, className } ) =>
-			createElement( 'div', { className }, children ),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/icons', () => ( {
 	arrowRight: 'arrow-right',
@@ -146,9 +120,7 @@ describe( 'StylesRecommendations', () => {
 	test( 'does not show hint when no delegated panels have suggestions', () => {
 		renderComponent( [ makeSuggestion( 'shadow' ) ] );
 
-		expect( container.textContent ).not.toContain(
-			'Native Style Panels'
-		);
+		expect( container.textContent ).not.toContain( 'Native Style Panels' );
 	} );
 
 	test( 'renders style variations separately', () => {
@@ -187,9 +159,13 @@ describe( 'StylesRecommendations', () => {
 			await Promise.resolve();
 		} );
 
-		expect( mockApplySuggestion ).toHaveBeenCalledWith( 'block-1', suggestion );
+		expect( mockApplySuggestion ).toHaveBeenCalledWith(
+			'block-1',
+			suggestion
+		);
 		expect(
-			container.querySelector( '.flavor-agent-inline-feedback' )?.textContent
+			container.querySelector( '.flavor-agent-inline-feedback' )
+				?.textContent
 		).toBe( 'AppliedUse softer shadow.' );
 	} );
 } );

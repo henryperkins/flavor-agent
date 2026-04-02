@@ -8,6 +8,7 @@ use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
+use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
@@ -267,13 +268,20 @@ final class BlockAbilities {
 
 		return [
 			'colors'            => StringArray::sanitize( $tokens['colors'] ?? [] ),
+			'colorPresets'      => self::normalize_list( $tokens['colorPresets'] ?? [] ),
 			'gradients'         => StringArray::sanitize( $tokens['gradients'] ?? [] ),
+			'gradientPresets'   => self::normalize_list( $tokens['gradientPresets'] ?? [] ),
 			'fontSizes'         => StringArray::sanitize( $tokens['fontSizes'] ?? [] ),
+			'fontSizePresets'   => self::normalize_list( $tokens['fontSizePresets'] ?? [] ),
 			'fontFamilies'      => StringArray::sanitize( $tokens['fontFamilies'] ?? [] ),
+			'fontFamilyPresets' => self::normalize_list( $tokens['fontFamilyPresets'] ?? [] ),
 			'spacing'           => StringArray::sanitize( $tokens['spacing'] ?? [] ),
+			'spacingPresets'    => self::normalize_list( $tokens['spacingPresets'] ?? [] ),
 			'shadows'           => StringArray::sanitize( $tokens['shadows'] ?? [] ),
+			'shadowPresets'     => self::normalize_list( $tokens['shadowPresets'] ?? [] ),
 			'duotone'           => StringArray::sanitize( $tokens['duotone'] ?? [] ),
 			'duotonePresets'    => self::normalize_list( $tokens['duotonePresets'] ?? [] ),
+			'diagnostics'       => self::normalize_map( $tokens['diagnostics'] ?? [] ),
 			'layout'            => self::normalize_map( $tokens['layout'] ?? [] ),
 			'enabledFeatures'   => self::normalize_map( $tokens['enabledFeatures'] ?? [] ),
 			'elementStyles'     => self::normalize_map( $tokens['elementStyles'] ?? [] ),
@@ -285,11 +293,13 @@ final class BlockAbilities {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function collect_wordpress_docs_guidance( array $context, string $prompt ): array {
-		$query          = self::build_wordpress_docs_query( $context, $prompt );
-		$entity_key     = self::build_wordpress_docs_entity_key( $context );
-		$family_context = self::build_wordpress_docs_family_context( $context );
-
-		return AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
+		return CollectsDocsGuidance::collect(
+			static fn( array $request_context, string $request_prompt ): string => self::build_wordpress_docs_query( $request_context, $request_prompt ),
+			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
+			static fn( array $request_context ): array => self::build_wordpress_docs_family_context( $request_context ),
+			$context,
+			$prompt
+		);
 	}
 
 	private static function build_wordpress_docs_entity_key( array $context ): string {

@@ -16,6 +16,7 @@ const { store: blocksStore } = require( '@wordpress/blocks' );
 const { store: blockEditorStore } = require( '@wordpress/block-editor' );
 const {
 	applyGlobalStyleSuggestionOperations,
+	buildGlobalStylesRecommendationContextSignature,
 	getGlobalStylesActivityUndoState,
 	getGlobalStylesUserConfig,
 	undoGlobalStyleSuggestionOperations,
@@ -478,6 +479,30 @@ describe( 'style-operations', () => {
 		);
 	} );
 
+	test( 'applyGlobalStyleSuggestionOperations rejects theme variations for style-book scope', () => {
+		const result = applyGlobalStyleSuggestionOperations(
+			{
+				operations: [
+					{
+						type: 'set_theme_variation',
+						variationIndex: 1,
+						variationTitle: 'Midnight',
+					},
+				],
+			},
+			undefined,
+			{ surface: 'style-book' }
+		);
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: 'Style Book suggestions cannot switch the active site theme variation.',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
 	test( 'applyGlobalStyleSuggestionOperations updates block-scoped preset-backed style paths', () => {
 		const result = applyGlobalStyleSuggestionOperations( {
 			operations: [
@@ -573,6 +598,88 @@ describe( 'style-operations', () => {
 			background: 'var:preset|color|accent',
 			text: 'var:preset|color|contrast',
 		} );
+	} );
+
+	test( 'buildGlobalStylesRecommendationContextSignature ignores variations for style-book scope', () => {
+		const baseArgs = {
+			scope: {
+				surface: 'style-book',
+				scopeKey: 'style_book:17:core/paragraph',
+				globalStylesId: '17',
+				stylesheet: 'theme-slug',
+				templateSlug: 'theme-slug//home',
+				templateType: 'home',
+			},
+			currentConfig: {
+				settings: {},
+				styles: {
+					blocks: {
+						'core/paragraph': {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
+					},
+				},
+			},
+			mergedConfig: {
+				settings: {},
+				styles: {
+					blocks: {
+						'core/paragraph': {
+							color: {
+								text: 'var:preset|color|contrast',
+							},
+						},
+					},
+				},
+			},
+			themeTokenDiagnostics: {
+				source: 'stable',
+			},
+			executionContract: {
+				supportedStylePaths: [
+					{
+						path: [ 'color', 'text' ],
+						valueSource: 'color',
+					},
+				],
+				presetSlugs: {
+					color: [ 'accent', 'contrast' ],
+				},
+			},
+		};
+
+		const firstSignature = buildGlobalStylesRecommendationContextSignature(
+			{
+				...baseArgs,
+				availableVariations: [
+					{
+						title: 'Default',
+						settings: {},
+						styles: {},
+					},
+				],
+			}
+		);
+		const secondSignature = buildGlobalStylesRecommendationContextSignature(
+			{
+				...baseArgs,
+				availableVariations: [
+					{
+						title: 'Midnight',
+						settings: {},
+						styles: {
+							color: {
+								background: 'var:preset|color|accent',
+							},
+						},
+					},
+				],
+			}
+		);
+
+		expect( firstSignature ).toBe( secondSignature );
 	} );
 
 	test( 'undo helpers require the current config to still match the applied state', () => {

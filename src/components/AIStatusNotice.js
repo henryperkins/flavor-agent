@@ -1,8 +1,6 @@
 import { Button, Notice } from '@wordpress/components';
 
-function joinClassNames( ...values ) {
-	return values.filter( Boolean ).join( ' ' );
-}
+import { joinClassNames } from '../utils/format-count';
 
 export default function AIStatusNotice( {
 	notice = null,

@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Support\FormatsDocsGuidance;
+
 final class Prompt {
+
+	use FormatsDocsGuidance;
 
 	/**
 	 * Build the system prompt that instructs the LLM how to respond.
@@ -119,8 +123,16 @@ SYSTEM;
 			$parts[] = 'Style variations: ' . wp_json_encode( $block['styles'] );
 		}
 
+		if ( ! empty( $block['variations'] ) ) {
+			$parts[] = 'Block variations: ' . wp_json_encode( $block['variations'] );
+		}
+
 		if ( ! empty( $block['activeStyle'] ) ) {
 			$parts[] = 'Active style: ' . $block['activeStyle'];
+		}
+
+		if ( ! empty( $block['configAttributes'] ) ) {
+			$parts[] = 'Config attribute schema: ' . wp_json_encode( $block['configAttributes'] );
 		}
 
 		if ( ! empty( $block['childCount'] ) ) {
@@ -194,20 +206,48 @@ SYSTEM;
 			$parts[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 20 ) );
 		}
 
+		if ( ! empty( $tokens['colorPresets'] ) ) {
+			$parts[] = 'Color preset details: ' . wp_json_encode( array_slice( (array) $tokens['colorPresets'], 0, 20 ) );
+		}
+
+		if ( ! empty( $tokens['gradients'] ) ) {
+			$parts[] = 'Gradients: ' . implode( ', ', array_slice( (array) $tokens['gradients'], 0, 20 ) );
+		}
+
+		if ( ! empty( $tokens['gradientPresets'] ) ) {
+			$parts[] = 'Gradient preset details: ' . wp_json_encode( array_slice( (array) $tokens['gradientPresets'], 0, 20 ) );
+		}
+
 		if ( ! empty( $tokens['fontSizes'] ) ) {
 			$parts[] = 'Font sizes: ' . implode( ', ', (array) $tokens['fontSizes'] );
+		}
+
+		if ( ! empty( $tokens['fontSizePresets'] ) ) {
+			$parts[] = 'Font size preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontSizePresets'], 0, 20 ) );
 		}
 
 		if ( ! empty( $tokens['fontFamilies'] ) ) {
 			$parts[] = 'Font families: ' . implode( ', ', (array) $tokens['fontFamilies'] );
 		}
 
+		if ( ! empty( $tokens['fontFamilyPresets'] ) ) {
+			$parts[] = 'Font family preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontFamilyPresets'], 0, 20 ) );
+		}
+
 		if ( ! empty( $tokens['spacing'] ) ) {
 			$parts[] = 'Spacing: ' . implode( ', ', (array) $tokens['spacing'] );
 		}
 
+		if ( ! empty( $tokens['spacingPresets'] ) ) {
+			$parts[] = 'Spacing preset details: ' . wp_json_encode( array_slice( (array) $tokens['spacingPresets'], 0, 20 ) );
+		}
+
 		if ( ! empty( $tokens['shadows'] ) ) {
 			$parts[] = 'Shadows: ' . implode( ', ', (array) $tokens['shadows'] );
+		}
+
+		if ( ! empty( $tokens['shadowPresets'] ) ) {
+			$parts[] = 'Shadow preset details: ' . wp_json_encode( array_slice( (array) $tokens['shadowPresets'], 0, 20 ) );
 		}
 
 		if ( ! empty( $tokens['duotone'] ) ) {
@@ -216,6 +256,10 @@ SYSTEM;
 
 		if ( ! empty( $tokens['duotonePresets'] ) ) {
 			$parts[] = 'Duotone preset details: ' . wp_json_encode( $tokens['duotonePresets'] );
+		}
+
+		if ( ! empty( $tokens['diagnostics'] ) ) {
+			$parts[] = 'Theme token diagnostics: ' . wp_json_encode( $tokens['diagnostics'] );
 		}
 
 		if ( ! empty( $tokens['layout'] ) ) {
@@ -281,25 +325,6 @@ SYSTEM;
 		}
 
 		return implode( "\n", $parts );
-	}
-
-	/**
-	 * @param array<string, mixed> $guidance
-	 */
-	private static function format_guidance_line( array $guidance ): string {
-		$prefix = sanitize_text_field( (string) ( $guidance['title'] ?? '' ) );
-
-		if ( $prefix === '' ) {
-			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
-		}
-
-		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
-
-		if ( $excerpt === '' ) {
-			return '';
-		}
-
-		return $prefix !== '' ? "{$prefix}: {$excerpt}" : $excerpt;
 	}
 
 	/**

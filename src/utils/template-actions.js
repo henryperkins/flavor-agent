@@ -269,7 +269,10 @@ function snapshotAttributesMatchBlockDefaults(
 
 	for ( const key of attributeKeys ) {
 		const hasCurrent = Object.prototype.hasOwnProperty.call( current, key );
-		const hasExpected = Object.prototype.hasOwnProperty.call( expected, key );
+		const hasExpected = Object.prototype.hasOwnProperty.call(
+			expected,
+			key
+		);
 
 		if ( hasCurrent && hasExpected ) {
 			if ( ! snapshotValuesEqual( current[ key ], expected[ key ] ) ) {

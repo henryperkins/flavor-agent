@@ -13,38 +13,9 @@ jest.mock( '@wordpress/blocks', () => ( {
 	serialize: ( ...args ) => mockSerialize( ...args ),
 } ) );
 
-jest.mock( '@wordpress/components', () => {
-	const { createElement } = require( '@wordpress/element' );
-
-	return {
-		Button: ( { children, className, disabled, onClick } ) =>
-			createElement(
-				'button',
-				{
-					type: 'button',
-					className,
-					disabled,
-					onClick,
-				},
-				children
-			),
-		Notice: ( { children } ) =>
-			createElement( 'div', { role: 'alert' }, children ),
-		TextareaControl: ( { label, onChange, placeholder, rows, value } ) =>
-			createElement(
-				'label',
-				null,
-				createElement( 'span', null, label ),
-				createElement( 'textarea', {
-					'aria-label': label,
-					rows,
-					placeholder,
-					value,
-					onChange: ( event ) => onChange( event.target.value ),
-				} )
-			),
-	};
-} );
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
+);
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),

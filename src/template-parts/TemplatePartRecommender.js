@@ -38,10 +38,7 @@ import {
 } from '../utils/template-operation-sequence';
 import { getTemplatePartAreaLookup } from '../utils/template-part-areas';
 import { getSurfaceCapability } from '../utils/capability-flags';
-
-function formatCount( count, noun ) {
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
-}
+import { formatCount } from '../utils/format-count';
 
 function normalizeTemplatePartSlug( templatePartRef ) {
 	if ( typeof templatePartRef !== 'string' || templatePartRef === '' ) {

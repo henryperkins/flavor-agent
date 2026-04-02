@@ -703,6 +703,17 @@ final class ServerCollectorTest extends TestCase {
 			[ 'sunset: linear-gradient(135deg,#f60,#fc0)' ],
 			$tokens['gradients']
 		);
+		$this->assertSame(
+			[
+				[
+					'name'     => '',
+					'slug'     => 'sunset',
+					'gradient' => 'linear-gradient(135deg,#f60,#fc0)',
+					'cssVar'   => 'var(--wp--preset--gradient--sunset)',
+				],
+			],
+			$tokens['gradientPresets']
+		);
 		$this->assertFalse( $tokens['layout']['allowEditing'] );
 		$this->assertTrue( $tokens['enabledFeatures']['blockGap'] );
 		$this->assertTrue( $tokens['enabledFeatures']['backgroundImage'] );
@@ -720,5 +731,29 @@ final class ServerCollectorTest extends TestCase {
 			],
 			$tokens['elementStyles']
 		);
+	}
+
+	public function test_for_block_uses_inner_blocks_for_child_count(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/container',
+			[
+				'title' => 'Container',
+			]
+		);
+
+		$result = ServerCollector::for_block(
+			'plugin/container',
+			[],
+			[
+				[
+					'blockName' => 'core/paragraph',
+				],
+				[
+					'blockName' => 'core/image',
+				],
+			]
+		);
+
+		$this->assertSame( 2, $result['block']['childCount'] ?? null );
 	}
 }

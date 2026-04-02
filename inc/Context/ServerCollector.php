@@ -188,13 +188,35 @@ final class ServerCollector {
 		$settings      = wp_get_global_settings();
 		$global_styles = wp_get_global_styles();
 
-		$colors = [];
-		foreach ( self::merge_presets( $settings['color']['palette'] ?? [] ) as $c ) {
+		$color_presets = array_map(
+			static fn( array $preset ): array => [
+				'name'   => (string) ( $preset['name'] ?? '' ),
+				'slug'   => (string) ( $preset['slug'] ?? '' ),
+				'color'  => (string) ( $preset['color'] ?? '' ),
+				'cssVar' => isset( $preset['slug'] ) && (string) $preset['slug'] !== ''
+					? 'var(--wp--preset--color--' . (string) $preset['slug'] . ')'
+					: '',
+			],
+			self::merge_presets( $settings['color']['palette'] ?? [] )
+		);
+		$colors        = [];
+		foreach ( $color_presets as $c ) {
 			$colors[] = ( $c['slug'] ?? '' ) . ': ' . ( $c['color'] ?? '' );
 		}
 
-		$gradients = [];
-		foreach ( self::merge_presets( $settings['color']['gradients'] ?? [] ) as $g ) {
+		$gradient_presets = array_map(
+			static fn( array $preset ): array => [
+				'name'     => (string) ( $preset['name'] ?? '' ),
+				'slug'     => (string) ( $preset['slug'] ?? '' ),
+				'gradient' => (string) ( $preset['gradient'] ?? '' ),
+				'cssVar'   => isset( $preset['slug'] ) && (string) $preset['slug'] !== ''
+					? 'var(--wp--preset--gradient--' . (string) $preset['slug'] . ')'
+					: '',
+			],
+			self::merge_presets( $settings['color']['gradients'] ?? [] )
+		);
+		$gradients        = [];
+		foreach ( $gradient_presets as $g ) {
 			$slug        = (string) ( $g['slug'] ?? '' );
 			$gradient    = (string) ( $g['gradient'] ?? '' );
 			$gradients[] = $gradient !== ''
@@ -202,23 +224,68 @@ final class ServerCollector {
 				: $slug;
 		}
 
-		$font_sizes = [];
-		foreach ( self::merge_presets( $settings['typography']['fontSizes'] ?? [] ) as $fs ) {
+		$font_size_presets = array_map(
+			static fn( array $preset ): array => [
+				'name'   => (string) ( $preset['name'] ?? '' ),
+				'slug'   => (string) ( $preset['slug'] ?? '' ),
+				'size'   => (string) ( $preset['size'] ?? '' ),
+				'fluid'  => isset( $preset['fluid'] ) ? $preset['fluid'] : null,
+				'cssVar' => isset( $preset['slug'] ) && (string) $preset['slug'] !== ''
+					? 'var(--wp--preset--font-size--' . (string) $preset['slug'] . ')'
+					: '',
+			],
+			self::merge_presets( $settings['typography']['fontSizes'] ?? [] )
+		);
+		$font_sizes        = [];
+		foreach ( $font_size_presets as $fs ) {
 			$font_sizes[] = ( $fs['slug'] ?? '' ) . ': ' . ( $fs['size'] ?? '' );
 		}
 
-		$font_families = [];
-		foreach ( self::merge_presets( $settings['typography']['fontFamilies'] ?? [] ) as $ff ) {
+		$font_family_presets = array_map(
+			static fn( array $preset ): array => [
+				'name'       => (string) ( $preset['name'] ?? '' ),
+				'slug'       => (string) ( $preset['slug'] ?? '' ),
+				'fontFamily' => (string) ( $preset['fontFamily'] ?? '' ),
+				'cssVar'     => isset( $preset['slug'] ) && (string) $preset['slug'] !== ''
+					? 'var(--wp--preset--font-family--' . (string) $preset['slug'] . ')'
+					: '',
+			],
+			self::merge_presets( $settings['typography']['fontFamilies'] ?? [] )
+		);
+		$font_families       = [];
+		foreach ( $font_family_presets as $ff ) {
 			$font_families[] = ( $ff['slug'] ?? '' ) . ': ' . ( $ff['fontFamily'] ?? '' );
 		}
 
-		$spacing = [];
-		foreach ( self::merge_presets( $settings['spacing']['spacingSizes'] ?? [] ) as $s ) {
+		$spacing_presets = array_map(
+			static fn( array $preset ): array => [
+				'name'   => (string) ( $preset['name'] ?? '' ),
+				'slug'   => (string) ( $preset['slug'] ?? '' ),
+				'size'   => (string) ( $preset['size'] ?? '' ),
+				'cssVar' => isset( $preset['slug'] ) && (string) $preset['slug'] !== ''
+					? 'var(--wp--preset--spacing--' . (string) $preset['slug'] . ')'
+					: '',
+			],
+			self::merge_presets( $settings['spacing']['spacingSizes'] ?? [] )
+		);
+		$spacing         = [];
+		foreach ( $spacing_presets as $s ) {
 			$spacing[] = ( $s['slug'] ?? '' ) . ': ' . ( $s['size'] ?? '' );
 		}
 
-		$shadows = [];
-		foreach ( self::merge_presets( $settings['shadow']['presets'] ?? [] ) as $s ) {
+		$shadow_presets = array_map(
+			static fn( array $preset ): array => [
+				'name'   => (string) ( $preset['name'] ?? '' ),
+				'slug'   => (string) ( $preset['slug'] ?? '' ),
+				'shadow' => (string) ( $preset['shadow'] ?? '' ),
+				'cssVar' => isset( $preset['slug'] ) && (string) $preset['slug'] !== ''
+					? 'var(--wp--preset--shadow--' . (string) $preset['slug'] . ')'
+					: '',
+			],
+			self::merge_presets( $settings['shadow']['presets'] ?? [] )
+		);
+		$shadows        = [];
+		foreach ( $shadow_presets as $s ) {
 			$shadows[] = ( $s['slug'] ?? '' ) . ': ' . ( $s['shadow'] ?? '' );
 		}
 
@@ -239,11 +306,17 @@ final class ServerCollector {
 
 		return [
 			'colors'            => $colors,
+			'colorPresets'      => $color_presets,
 			'gradients'         => $gradients,
+			'gradientPresets'   => $gradient_presets,
 			'fontSizes'         => $font_sizes,
+			'fontSizePresets'   => $font_size_presets,
 			'fontFamilies'      => $font_families,
+			'fontFamilyPresets' => $font_family_presets,
 			'spacing'           => $spacing,
+			'spacingPresets'    => $spacing_presets,
 			'shadows'           => $shadows,
+			'shadowPresets'     => $shadow_presets,
 			'duotone'           => $duotone,
 			'diagnostics'       => [
 				'source'      => 'server',
@@ -310,6 +383,7 @@ final class ServerCollector {
 				'editingMode'         => 'default',
 				'isInsideContentOnly' => $is_inside_content_only,
 				'blockVisibility'     => $attributes['metadata']['blockVisibility'] ?? null,
+				'childCount'          => count( $inner_blocks ),
 			],
 			'siblingsBefore' => [],
 			'siblingsAfter'  => [],

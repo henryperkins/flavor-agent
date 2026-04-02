@@ -47,7 +47,7 @@ final class Registration {
 					'required'   => [ 'selectedBlock' ],
 				],
 				'output_schema'       => self::suggestion_output_schema(),
-				'meta'                => [ 'show_in_rest' => true ],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 
@@ -86,10 +86,7 @@ final class Registration {
 						'allowedBlocks'       => [ 'type' => [ 'array', 'null' ] ],
 					],
 				],
-				'meta'                => [
-					'show_in_rest' => true,
-					'readonly'     => true,
-				],
+				'meta'                => self::readonly_rest_meta(),
 			]
 		);
 	}
@@ -145,7 +142,7 @@ final class Registration {
 						],
 					],
 				],
-				'meta'                => [ 'show_in_rest' => true ],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 
@@ -194,10 +191,7 @@ final class Registration {
 						],
 					],
 				],
-				'meta'                => [
-					'show_in_rest' => true,
-					'readonly'     => true,
-				],
+				'meta'                => self::readonly_rest_meta(),
 			]
 		);
 	}
@@ -348,7 +342,7 @@ final class Registration {
 						'explanation' => [ 'type' => 'string' ],
 					],
 				],
-				'meta'                => [ 'show_in_rest' => true ],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 
@@ -426,7 +420,7 @@ final class Registration {
 						'explanation' => [ 'type' => 'string' ],
 					],
 				],
-				'meta'                => [ 'show_in_rest' => true ],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 
@@ -464,10 +458,7 @@ final class Registration {
 						],
 					],
 				],
-				'meta'                => [
-					'show_in_rest' => true,
-					'readonly'     => true,
-				],
+				'meta'                => self::readonly_rest_meta(),
 			]
 		);
 	}
@@ -502,7 +493,7 @@ final class Registration {
 						'explanation' => [ 'type' => 'string' ],
 					],
 				],
-				'meta'                => [ 'show_in_rest' => true ],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 	}
@@ -569,7 +560,7 @@ final class Registration {
 					'required'   => [ 'scope', 'styleContext' ],
 				],
 				'output_schema'       => self::style_recommendation_output_schema(),
-				'meta'                => [ 'show_in_rest' => true ],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 	}
@@ -741,6 +732,22 @@ final class Registration {
 				],
 			]
 		);
+	}
+
+	private static function public_recommendation_meta(): array {
+		return [
+			'show_in_rest' => true,
+			'mcp'          => [
+				'public' => true,
+			],
+		];
+	}
+
+	private static function readonly_rest_meta(): array {
+		return [
+			'show_in_rest' => true,
+			'readonly'     => true,
+		];
 	}
 
 	private static function selected_block_input_schema(): array {

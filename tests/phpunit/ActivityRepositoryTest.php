@@ -206,7 +206,7 @@ final class ActivityRepositoryTest extends TestCase {
 			);
 		}
 
-		$page_two = Repository::query_admin(
+		$page_two   = Repository::query_admin(
 			[
 				'page'    => 2,
 				'perPage' => 100,
@@ -333,29 +333,53 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertCount( 1, $result['entries'] ?? [] );
 		$this->assertSame(
 			[
-				[ 'value' => 'block', 'label' => 'Block' ],
-				[ 'value' => 'template', 'label' => 'Template' ],
+				[
+					'value' => 'block',
+					'label' => 'Block',
+				],
+				[
+					'value' => 'template',
+					'label' => 'Template',
+				],
 			],
 			$result['filterOptions']['surface'] ?? []
 		);
 		$this->assertSame(
 			[
-				[ 'value' => 'insert', 'label' => 'Insert pattern' ],
-				[ 'value' => 'modify-attributes', 'label' => 'Modify attributes' ],
+				[
+					'value' => 'insert',
+					'label' => 'Insert pattern',
+				],
+				[
+					'value' => 'modify-attributes',
+					'label' => 'Modify attributes',
+				],
 			],
 			$result['filterOptions']['operationType'] ?? []
 		);
 		$this->assertSame(
 			[
-				[ 'value' => 'post', 'label' => 'post' ],
-				[ 'value' => 'wp_template', 'label' => 'wp_template' ],
+				[
+					'value' => 'post',
+					'label' => 'post',
+				],
+				[
+					'value' => 'wp_template',
+					'label' => 'wp_template',
+				],
 			],
 			$result['filterOptions']['postType'] ?? []
 		);
 		$this->assertSame(
 			[
-				[ 'value' => '7', 'label' => 'User #7' ],
-				[ 'value' => '11', 'label' => 'User #11' ],
+				[
+					'value' => '7',
+					'label' => 'User #7',
+				],
+				[
+					'value' => '11',
+					'label' => 'User #11',
+				],
 			],
 			$result['filterOptions']['userId'] ?? []
 		);
@@ -422,14 +446,14 @@ final class ActivityRepositoryTest extends TestCase {
 			)
 		);
 
-		$recent_result = Repository::query_admin(
+		$recent_result  = Repository::query_admin(
 			[
 				'dayOperator'      => 'inThePast',
 				'dayRelativeValue' => 7,
 				'dayRelativeUnit'  => 'days',
 			]
 		);
-		$older_result  = Repository::query_admin(
+		$older_result   = Repository::query_admin(
 			[
 				'dayOperator'      => 'over',
 				'dayRelativeValue' => 7,
@@ -479,7 +503,7 @@ final class ActivityRepositoryTest extends TestCase {
 			)
 		);
 
-		$sorted_result = Repository::query_admin(
+		$sorted_result   = Repository::query_admin(
 			[
 				'userId'         => 20,
 				'userIdOperator' => 'isNot',

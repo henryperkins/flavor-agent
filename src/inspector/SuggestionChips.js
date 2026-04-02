@@ -4,66 +4,28 @@
  */
 import { Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
-import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
 import { check } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 import { getSuggestionKey } from './suggestion-keys';
+import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
-const FEEDBACK_MS = 1200;
+function buildChipFeedback( suggestion, key ) {
+	return {
+		key,
+		label: suggestion?.label || 'Suggestion',
+	};
+}
 
 export default function SuggestionChips( { clientId, suggestions, label } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
-	const [ appliedKey, setAppliedKey ] = useState( null );
-	const [ feedback, setFeedback ] = useState( null );
-	const resetTimerRef = useRef( null );
-
-	useEffect( () => {
-		return () => {
-			if ( resetTimerRef.current ) {
-				window.clearTimeout( resetTimerRef.current );
-			}
-		};
-	}, [] );
-
-	useEffect( () => {
-		if ( resetTimerRef.current ) {
-			window.clearTimeout( resetTimerRef.current );
-			resetTimerRef.current = null;
-		}
-
-		setAppliedKey( null );
-		setFeedback( null );
-	}, [ suggestions ] );
-
-	const handleApply = useCallback(
-		async ( suggestion ) => {
-			const didApply = await applySuggestion( clientId, suggestion );
-
-			if ( ! didApply ) {
-				return;
-			}
-
-			const key = getSuggestionKey( suggestion );
-
-			if ( resetTimerRef.current ) {
-				window.clearTimeout( resetTimerRef.current );
-			}
-
-			setAppliedKey( key );
-			setFeedback( {
-				key,
-				label: suggestion?.label || 'Suggestion',
-			} );
-
-			resetTimerRef.current = window.setTimeout( () => {
-				setAppliedKey( null );
-				setFeedback( null );
-				resetTimerRef.current = null;
-			}, FEEDBACK_MS );
-		},
-		[ clientId, applySuggestion ]
-	);
+	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
+		applySuggestion,
+		buildFeedback: buildChipFeedback,
+		clientId,
+		getKey: getSuggestionKey,
+		suggestions,
+	} );
 
 	return (
 		<div className="flavor-agent-chip-surface">

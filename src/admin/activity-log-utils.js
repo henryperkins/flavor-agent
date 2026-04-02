@@ -786,9 +786,7 @@ export function getActivityStatus( entry, allEntries = [] ) {
 		typeof entry?.status === 'string' ? entry.status.trim() : '';
 
 	if (
-		[ 'applied', 'undone', 'blocked', 'failed' ].includes(
-			explicitStatus
-		)
+		[ 'applied', 'undone', 'blocked', 'failed' ].includes( explicitStatus )
 	) {
 		return explicitStatus;
 	}
@@ -809,7 +807,9 @@ export function getActivityStatus( entry, allEntries = [] ) {
 
 export function getActivityStatusLabel( entry, allEntries = [] ) {
 	const status =
-		typeof entry === 'string' ? entry : getActivityStatus( entry, allEntries );
+		typeof entry === 'string'
+			? entry
+			: getActivityStatus( entry, allEntries );
 
 	switch ( status ) {
 		case 'undone':
@@ -1000,15 +1000,10 @@ export function normalizeStoredActivityView( view, options = {} ) {
 		perPage: normalizePositiveInteger(
 			view.perPage,
 			defaultView.perPage,
-			normalizePositiveInteger(
-				options.maxPerPage,
-				defaultView.perPage
-			)
+			normalizePositiveInteger( options.maxPerPage, defaultView.perPage )
 		),
 		filters: Array.isArray( view.filters ) ? view.filters : [],
-		fields: Array.isArray( view.fields )
-			? view.fields
-			: defaultView.fields,
+		fields: Array.isArray( view.fields ) ? view.fields : defaultView.fields,
 		sort,
 		groupBy,
 		layout: isPlainObject( view.layout )
@@ -1173,12 +1168,17 @@ export function normalizeActivityEntry(
 			status === 'applied' && resolvedUndo?.status === 'available'
 				? 'Undo available'
 				: getActivityStatusLabel( status ),
-		undoError:
-			typeof resolvedUndo?.error === 'string' && resolvedUndo.error.trim()
-				? resolvedUndo.error.trim()
-				: status === 'blocked'
-					? ORDERED_UNDO_BLOCKED_ERROR
-					: EMPTY_VALUE,
+		undoError: ( () => {
+			if (
+				typeof resolvedUndo?.error === 'string' &&
+				resolvedUndo.error.trim()
+			) {
+				return resolvedUndo.error.trim();
+			}
+			return status === 'blocked'
+				? ORDERED_UNDO_BLOCKED_ERROR
+				: EMPTY_VALUE;
+		} )(),
 		provider: diagnostics.provider,
 		model: diagnostics.model,
 		tokenUsage: diagnostics.tokenUsageLabel,

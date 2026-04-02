@@ -1,14 +1,4 @@
-function formatCountLabel( count, noun ) {
-	if ( ! Number.isFinite( count ) || count < 0 || ! noun ) {
-		return '';
-	}
-
-	return `${ count } ${ count === 1 ? noun : `${ noun }s` }`;
-}
-
-function joinClassNames( ...values ) {
-	return values.filter( Boolean ).join( ' ' );
-}
+import { formatCount, joinClassNames } from '../utils/format-count';
 
 export default function AIAdvisorySection( {
 	title = 'Advisory Guidance',
@@ -21,8 +11,7 @@ export default function AIAdvisorySection( {
 	children = null,
 	className = '',
 } ) {
-	const resolvedCountLabel =
-		countLabel || formatCountLabel( count, countNoun );
+	const resolvedCountLabel = countLabel || formatCount( count, countNoun );
 
 	return (
 		<div

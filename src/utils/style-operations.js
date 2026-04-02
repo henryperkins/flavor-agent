@@ -290,6 +290,33 @@ function normalizeComparableVariation( variation = {} ) {
 	} );
 }
 
+function normalizeComparableTemplateStructure( nodes = [] ) {
+	if ( ! Array.isArray( nodes ) ) {
+		return [];
+	}
+
+	return nodes
+		.map( ( node ) => {
+			if ( ! node || typeof node !== 'object' ) {
+				return null;
+			}
+
+			const normalizedNode = {
+				name: typeof node?.name === 'string' ? node.name : '',
+			};
+			const innerBlocks = normalizeComparableTemplateStructure(
+				node?.innerBlocks
+			);
+
+			if ( innerBlocks.length > 0 ) {
+				normalizedNode.innerBlocks = innerBlocks;
+			}
+
+			return normalizedNode.name ? normalizedNode : null;
+		} )
+		.filter( Boolean );
+}
+
 function normalizeComparableExecutionContract( executionContract = {} ) {
 	const supportedStylePaths = Array.isArray(
 		executionContract?.supportedStylePaths
@@ -372,17 +399,25 @@ export function buildGlobalStylesRecommendationContextSignature( {
 	availableVariations,
 	themeTokenDiagnostics,
 	executionContract,
+	templateStructure,
 } ) {
+	const includeVariations = scope?.surface !== 'style-book';
+
 	return JSON.stringify(
 		sortObjectKeysDeep( {
 			scopeKey: scope?.scopeKey || '',
 			globalStylesId: scope?.globalStylesId || '',
 			stylesheet: scope?.stylesheet || '',
+			templateSlug: scope?.templateSlug || '',
+			templateType: scope?.templateType || '',
 			currentConfig: getComparableGlobalStylesConfig( currentConfig ),
 			mergedConfig: getComparableGlobalStylesConfig( mergedConfig ),
-			availableVariations: Array.isArray( availableVariations )
-				? availableVariations.map( normalizeComparableVariation )
-				: [],
+			availableVariations:
+				includeVariations && Array.isArray( availableVariations )
+					? availableVariations.map( normalizeComparableVariation )
+					: [],
+			templateStructure:
+				normalizeComparableTemplateStructure( templateStructure ),
 			themeTokenDiagnostics: sortObjectKeysDeep(
 				normalizeOperationValue( themeTokenDiagnostics || {} )
 			),
@@ -772,12 +807,6 @@ function applyPathBasedStyleOperation( {
 	}
 
 	const fullPath = [ 'styles', ...configPath ];
-	const beforeValue = normalizeOperationValue( readPath( beforeConfig, fullPath ) );
-	let nextValue = normalizeOperationValue( operation.value );
-	let appliedOperation = {
-		...operation,
-		beforeValue,
-	};
 	const expectedValueSource = normalizePresetType(
 		pathEntry?.valueSource || 'freeform'
 	);
@@ -797,7 +826,7 @@ function applyPathBasedStyleOperation( {
 
 		const validatedFreeformValue = validateFreeformStyleValue(
 			operation.path,
-			nextValue
+			normalizeOperationValue( operation.value )
 		);
 
 		if ( ! validatedFreeformValue.valid ) {
@@ -811,45 +840,60 @@ function applyPathBasedStyleOperation( {
 			};
 		}
 
-		nextValue = validatedFreeformValue.value;
-		appliedOperation = {
-			...appliedOperation,
-			value: nextValue,
-			valueType: 'freeform',
-			presetType: '',
-			presetSlug: '',
-			cssVar: '',
-		};
-	} else {
-		const validatedPreset = validatePresetStyleOperation(
-			operation,
-			pathEntry,
-			executionContract,
-			surfaceLabel
-		);
+		const nextValue = validatedFreeformValue.value;
 
-		if ( ! validatedPreset.ok ) {
-			return validatedPreset;
-		}
-
-		nextValue = validatedPreset.value;
-		appliedOperation = {
-			...appliedOperation,
-			value: validatedPreset.value,
-			valueType: 'preset',
-			presetType: validatedPreset.presetType,
-			presetSlug: validatedPreset.presetSlug,
-			cssVar: validatedPreset.cssVar,
+		return {
+			ok: true,
+			afterConfig: {
+				...afterConfig,
+				styles: writePath( afterConfig.styles, configPath, nextValue ),
+			},
+			appliedOperation: {
+				...operation,
+				beforeValue: normalizeOperationValue(
+					readPath( beforeConfig, fullPath )
+				),
+				value: nextValue,
+				valueType: 'freeform',
+				presetType: '',
+				presetSlug: '',
+				cssVar: '',
+			},
 		};
+	}
+
+	const validatedPreset = validatePresetStyleOperation(
+		operation,
+		pathEntry,
+		executionContract,
+		surfaceLabel
+	);
+
+	if ( ! validatedPreset.ok ) {
+		return validatedPreset;
 	}
 
 	return {
 		ok: true,
 		afterConfig: {
 			...afterConfig,
-			styles: writePath( afterConfig.styles, configPath, nextValue ),
+			styles: writePath(
+				afterConfig.styles,
+				configPath,
+				validatedPreset.value
+			),
 		},
-		appliedOperation,
+		appliedOperation: {
+			...operation,
+			beforeValue: normalizeOperationValue(
+				readPath( beforeConfig, fullPath )
+			),
+			value: validatedPreset.value,
+			valueType: 'preset',
+			presetType: validatedPreset.presetType,
+			presetSlug: validatedPreset.presetSlug,
+			cssVar: validatedPreset.cssVar,
+		},
 	};
 }
 
@@ -857,6 +901,7 @@ function applyOperationToConfig( {
 	beforeConfig,
 	afterConfig,
 	operation,
+	surface,
 	availableVariations,
 	executionContract,
 	blockEditorSettings,
@@ -915,6 +960,13 @@ function applyOperationToConfig( {
 	}
 
 	if ( operation?.type === 'set_theme_variation' ) {
+		if ( surface === 'style-book' ) {
+			return {
+				ok: false,
+				error: 'Style Book suggestions cannot switch the active site theme variation.',
+			};
+		}
+
 		const variation = resolveVariation( operation, availableVariations );
 
 		if ( ! variation ) {
@@ -967,8 +1019,16 @@ export function getGlobalStylesUserConfig( registry ) {
 	};
 }
 
-export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
+export function applyGlobalStyleSuggestionOperations(
+	suggestion,
+	registry,
+	options = {}
+) {
 	const runtime = getGlobalStylesRuntime( registry );
+	const surface =
+		typeof options?.surface === 'string'
+			? options.surface
+			: 'global-styles';
 
 	if ( ! runtime.ok ) {
 		return runtime;
@@ -981,10 +1041,6 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 		return executionContractRuntime;
 	}
 
-	const blockEditorSettings =
-		getBlockEditorSelect( registry )?.getSettings?.() || {};
-	const blocksSelect = getBlocksSelect( registry );
-
 	const operations = normalizeOperations( suggestion?.operations );
 
 	if ( operations.length === 0 ) {
@@ -993,6 +1049,14 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 			error: 'This Global Styles suggestion does not include executable operations.',
 		};
 	}
+
+	const blockEditorSettings =
+		getBlockEditorSelect( registry )?.getSettings?.() || {};
+	const blocksSelect = operations.some(
+		( operation ) => operation?.type === 'set_block_styles'
+	)
+		? getBlocksSelect( registry )
+		: null;
 
 	const availableVariations =
 		runtime.coreSelect?.__experimentalGetCurrentThemeGlobalStylesVariations?.() ||
@@ -1006,6 +1070,7 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 			beforeConfig,
 			afterConfig,
 			operation,
+			surface,
 			availableVariations,
 			executionContract: executionContractRuntime.executionContract,
 			blockEditorSettings,
@@ -1114,10 +1179,9 @@ export function getGlobalStylesActivityUndoState( activity, registry ) {
 		return {
 			canUndo: false,
 			status: 'failed',
-			error:
-				isStyleBookActivity
-					? 'Style Book target styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.'
-					: 'Global Styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+			error: isStyleBookActivity
+				? 'Style Book target styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.'
+				: 'Global Styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
 		};
 	}
 
@@ -1158,7 +1222,9 @@ export function undoGlobalStyleSuggestionOperations( activity, registry ) {
 			};
 		}
 
-		const beforeConfig = normalizeConfig( activity?.before?.userConfig || {} );
+		const beforeConfig = normalizeConfig(
+			activity?.before?.userConfig || {}
+		);
 		const currentConfig = normalizeConfig( runtime.userConfig || {} );
 		const previousBranch = readPath( beforeConfig, styleBookBranchPath );
 		const blockBranchPath = styleBookBranchPath.slice( 1 );

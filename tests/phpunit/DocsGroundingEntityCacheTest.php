@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\BlockAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
+use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
 use FlavorAgent\Abilities\WordPressDocsAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
@@ -166,6 +167,119 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 			$this->invoke_private_array_method(
 				PatternAbilities::class,
 				'collect_wordpress_docs_guidance',
+				[ $context, $prompt ]
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_style_book_docs_guidance_uses_query_cache_before_entity_cache(): void {
+		$query_guidance  = [
+			[
+				'id'        => 'query-chunk',
+				'title'     => 'Paragraph block styling guidance',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+				'excerpt'   => 'Paragraph styles should stay inside theme.json-backed typography and color controls.',
+				'score'     => 0.93,
+			],
+		];
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Paragraph block reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+				'excerpt'   => 'Generic paragraph block guidance.',
+				'score'     => 0.82,
+			],
+		];
+		$context         = [
+			'scope'        => [
+				'surface'    => 'style-book',
+				'blockName'  => 'core/paragraph',
+				'blockTitle' => 'Paragraph',
+			],
+			'styleContext' => [
+				'styleBookTarget'     => [
+					'blockName'   => 'core/paragraph',
+					'blockTitle'  => 'Paragraph',
+					'description' => 'Primary intro copy block.',
+				],
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'text' ],
+						'valueSource' => 'color',
+					],
+				],
+			],
+		];
+		$prompt          = 'Tune the intro typography.';
+		$query           = $this->invoke_private_string_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_query',
+			[ $context, $prompt ]
+		);
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ]               = $query_guidance;
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/paragraph' ) ] = $entity_guidance;
+
+		$this->assertSame(
+			$query_guidance,
+			$this->invoke_private_array_method(
+				StyleAbilities::class,
+				'collect_wordpress_docs_guidance',
+				[ $context, $prompt ]
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_template_part_docs_guidance_uses_query_cache_before_entity_cache(): void {
+		$query_guidance  = [
+			[
+				'id'        => 'query-chunk',
+				'title'     => 'Template part guidance',
+				'sourceKey' => 'developer.wordpress.org/themes/templates/template-parts',
+				'url'       => 'https://developer.wordpress.org/themes/templates/template-parts/',
+				'excerpt'   => 'Header template parts should keep top-level blocks concise and purposeful.',
+				'score'     => 0.92,
+			],
+		];
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Template part reference',
+				'sourceKey' => 'developer.wordpress.org/themes/templates/template-parts',
+				'url'       => 'https://developer.wordpress.org/themes/templates/template-parts/',
+				'excerpt'   => 'Generic template part guidance.',
+				'score'     => 0.83,
+			],
+		];
+		$context         = [
+			'area'           => 'header',
+			'slug'           => 'site-header',
+			'topLevelBlocks' => [ 'core/group', 'core/navigation' ],
+			'blockCounts'    => [
+				'core/group'      => 1,
+				'core/navigation' => 1,
+			],
+		];
+		$prompt          = 'Keep the header compact.';
+		$query           = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_part_wordpress_docs_query',
+			[ $context, $prompt ]
+		);
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ]                   = $query_guidance;
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/template-part' ) ] = $entity_guidance;
+
+		$this->assertSame(
+			$query_guidance,
+			$this->invoke_private_array_method(
+				TemplateAbilities::class,
+				'collect_template_part_wordpress_docs_guidance',
 				[ $context, $prompt ]
 			)
 		);
