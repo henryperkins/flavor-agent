@@ -1,5 +1,6 @@
 import {
 	buildEntityMap,
+	buildEditorTemplateTopLevelStructureSnapshot,
 	buildEditorTemplateSlotSnapshot,
 	buildTemplateFetchInput,
 	buildTemplateRecommendationContextSignature,
@@ -27,6 +28,14 @@ describe( 'template recommender helpers', () => {
 					emptyAreas: [ 'footer' ],
 					allowedAreas: [ 'header', 'footer' ],
 				},
+				editorStructure: {
+					topLevelBlockTree: [
+						{
+							path: [ 0 ],
+							name: 'core/group',
+						},
+					],
+				},
 				visiblePatternNames: [
 					'theme/hero',
 					'theme/footer',
@@ -41,6 +50,14 @@ describe( 'template recommender helpers', () => {
 				assignedParts: [ { slug: 'site-header', area: 'header' } ],
 				emptyAreas: [ 'footer' ],
 				allowedAreas: [ 'header', 'footer' ],
+			},
+			editorStructure: {
+				topLevelBlockTree: [
+					{
+						path: [ 0 ],
+						name: 'core/group',
+					},
+				],
 			},
 			visiblePatternNames: [ 'theme/hero', 'theme/footer' ],
 		} );
@@ -88,6 +105,7 @@ describe( 'template recommender helpers', () => {
 				editorSlots: {
 					assignedParts: [ { slug: 'site-header', area: 'header' } ],
 				},
+				topLevelBlockTree: null,
 				visiblePatternNames: [ 'theme/footer', 'theme/hero' ],
 			} )
 		);
@@ -108,6 +126,54 @@ describe( 'template recommender helpers', () => {
 		} );
 
 		expect( firstSignature ).toBe( secondSignature );
+	} );
+
+	test( 'buildTemplateRecommendationContextSignature includes top-level template structure', () => {
+		expect(
+			buildTemplateRecommendationContextSignature( {
+				editorStructure: {
+					topLevelBlockTree: [
+						{
+							path: [ 0 ],
+							name: 'core/group',
+							label: 'Group',
+						},
+						{
+							path: [ 1 ],
+							name: 'core/template-part',
+							label: 'site-header template part (header)',
+							slot: {
+								slug: 'site-header',
+								area: 'header',
+								isEmpty: false,
+							},
+						},
+					],
+				},
+			} )
+		).toBe(
+			JSON.stringify( {
+				editorSlots: null,
+				topLevelBlockTree: [
+					{
+						path: [ 0 ],
+						name: 'core/group',
+						label: 'Group',
+					},
+					{
+						path: [ 1 ],
+						name: 'core/template-part',
+						label: 'site-header template part (header)',
+						slot: {
+							slug: 'site-header',
+							area: 'header',
+							isEmpty: false,
+						},
+					},
+				],
+				visiblePatternNames: null,
+			} )
+		);
 	} );
 
 	test( 'buildEditorTemplateSlotSnapshot mirrors live template-part slots from the editor tree', () => {
@@ -146,6 +212,58 @@ describe( 'template recommender helpers', () => {
 		} );
 	} );
 
+	test( 'buildEditorTemplateTopLevelStructureSnapshot mirrors live top-level template blocks', () => {
+		expect(
+			buildEditorTemplateTopLevelStructureSnapshot(
+				[
+					{
+						name: 'core/group',
+						attributes: {
+							tagName: 'main',
+						},
+						innerBlocks: [ { name: 'core/paragraph' } ],
+					},
+					{
+						name: 'core/template-part',
+						attributes: {
+							slug: 'site-header',
+						},
+						innerBlocks: [],
+					},
+				],
+				{
+					'site-header': 'header',
+				}
+			)
+		).toEqual( {
+			topLevelBlockTree: [
+				{
+					path: [ 0 ],
+					name: 'core/group',
+					label: 'Group',
+					attributes: {
+						tagName: 'main',
+					},
+					childCount: 1,
+				},
+				{
+					path: [ 1 ],
+					name: 'core/template-part',
+					label: 'site-header template part (header)',
+					attributes: {
+						slug: 'site-header',
+					},
+					childCount: 0,
+					slot: {
+						slug: 'site-header',
+						area: 'header',
+						isEmpty: false,
+					},
+				},
+			],
+		} );
+	} );
+
 	test( 'buildTemplateOperationViewModel normalizes supported operation types', () => {
 		expect(
 			buildTemplateOperationViewModel( {
@@ -166,6 +284,28 @@ describe( 'template recommender helpers', () => {
 		} );
 	} );
 
+	test( 'buildTemplateOperationViewModel keeps anchored template insert metadata', () => {
+		expect(
+			buildTemplateOperationViewModel( {
+				type: TEMPLATE_OPERATION_INSERT_PATTERN,
+				patternName: 'theme/social-links',
+				placement: 'before_block_path',
+				targetPath: [ 1 ],
+			} )
+		).toEqual( {
+			key: 'insert_pattern|theme/social-links|before_block_path|1',
+			type: TEMPLATE_OPERATION_INSERT_PATTERN,
+			slug: '',
+			area: '',
+			currentSlug: '',
+			patternName: 'theme/social-links',
+			patternTitle: 'theme/social-links',
+			placement: 'before_block_path',
+			targetPath: [ 1 ],
+			badgeLabel: 'Insert',
+		} );
+	} );
+
 	test( 'buildTemplateSuggestionViewModel derives review and apply data from executable operations', () => {
 		const model = buildTemplateSuggestionViewModel( {
 			label: 'Strengthen the footer',
@@ -180,6 +320,8 @@ describe( 'template recommender helpers', () => {
 				{
 					type: TEMPLATE_OPERATION_INSERT_PATTERN,
 					patternName: 'theme/social-links',
+					placement: 'before_block_path',
+					targetPath: [ 1 ],
 				},
 			],
 			templateParts: [
@@ -214,17 +356,42 @@ describe( 'template recommender helpers', () => {
 				badgeLabel: 'Assign',
 			},
 			{
-				key: 'insert_pattern|theme/social-links',
+				key: 'insert_pattern|theme/social-links|before_block_path|1',
 				type: TEMPLATE_OPERATION_INSERT_PATTERN,
 				slug: '',
 				area: '',
 				currentSlug: '',
 				patternName: 'theme/social-links',
 				patternTitle: 'theme/social-links',
+				placement: 'before_block_path',
+				targetPath: [ 1 ],
 				badgeLabel: 'Insert',
 			},
 		] );
 		expect( model.canApply ).toBe( true );
+	} );
+
+	test( 'buildTemplateSuggestionViewModel keeps pattern-only template suggestions advisory', () => {
+		const model = buildTemplateSuggestionViewModel(
+			{
+				patternSuggestions: [ 'theme/social-links' ],
+			},
+			{
+				'theme/social-links': 'Social Links',
+			}
+		);
+
+		expect( model.operations ).toEqual( [] );
+		expect( model.patternSuggestions ).toEqual( [
+			{
+				name: 'theme/social-links',
+				title: 'Social Links',
+				actionType: PATTERN_BROWSE_ACTION,
+				ctaLabel: 'Browse pattern',
+			},
+		] );
+		expect( model.executionError ).toBe( '' );
+		expect( model.canApply ).toBe( false );
 	} );
 
 	test( 'buildTemplateSuggestionViewModel resolves pattern titles from insert operations', () => {
@@ -234,6 +401,7 @@ describe( 'template recommender helpers', () => {
 					{
 						type: TEMPLATE_OPERATION_INSERT_PATTERN,
 						patternName: 'theme/social-links',
+						placement: 'start',
 					},
 				],
 			},

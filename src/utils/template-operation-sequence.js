@@ -36,6 +36,57 @@ function normalizeBlockPath( value ) {
 	return path;
 }
 
+function normalizeExpectedTarget( value ) {
+	if ( ! value || typeof value !== 'object' || Array.isArray( value ) ) {
+		return null;
+	}
+
+	const expectedTarget = {
+		name:
+			typeof value.name === 'string' && value.name.trim() !== ''
+				? value.name.trim()
+				: '',
+		label:
+			typeof value.label === 'string' && value.label.trim() !== ''
+				? value.label.trim()
+				: '',
+		childCount: Number.isInteger( Number( value.childCount ) )
+			? Number( value.childCount )
+			: 0,
+	};
+
+	if ( value.attributes && typeof value.attributes === 'object' ) {
+		expectedTarget.attributes = Object.fromEntries(
+			Object.entries( value.attributes ).filter(
+				( [ , attributeValue ] ) =>
+					typeof attributeValue === 'string' ||
+					typeof attributeValue === 'number' ||
+					typeof attributeValue === 'boolean'
+			)
+		);
+	}
+
+	if ( value.slot && typeof value.slot === 'object' && ! Array.isArray( value.slot ) ) {
+		expectedTarget.slot = {
+			slug:
+				typeof value.slot.slug === 'string'
+					? value.slot.slug.trim()
+					: '',
+			area:
+				typeof value.slot.area === 'string'
+					? value.slot.area.trim()
+					: '',
+			isEmpty: Boolean( value.slot.isEmpty ),
+		};
+	}
+
+	if ( ! expectedTarget.name ) {
+		return null;
+	}
+
+	return expectedTarget;
+}
+
 export function validateTemplateOperationSequence( operations = [] ) {
 	if ( ! Array.isArray( operations ) || operations.length === 0 ) {
 		return {
@@ -46,6 +97,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 
 	const normalizedOperations = [];
 	const mutatedAreas = new Set();
+	const anchoredPlacements = new Set( [
+		TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH,
+		TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH,
+	] );
 	let hasPatternInsert = false;
 
 	for ( const rawOperation of operations ) {
@@ -114,6 +169,13 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				const patternName = toNonEmptyString(
 					rawOperation?.patternName ?? rawOperation?.name
 				);
+				const placement = toNonEmptyString( rawOperation?.placement );
+				const targetPath = normalizeBlockPath(
+					rawOperation?.targetPath
+				);
+				const expectedTarget = normalizeExpectedTarget(
+					rawOperation?.expectedTarget
+				);
 
 				if ( ! patternName ) {
 					return {
@@ -130,10 +192,50 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				}
 
 				hasPatternInsert = true;
-				normalizedOperations.push( {
+				if ( ! placement ) {
+					return {
+						ok: false,
+						error: 'Template pattern insertions must include a placement.',
+					};
+				}
+
+				if (
+					placement !== TEMPLATE_PART_PLACEMENT_START &&
+					placement !== TEMPLATE_PART_PLACEMENT_END &&
+					placement !== TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH &&
+					placement !== TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+				) {
+					return {
+						ok: false,
+						error: 'Template pattern insertions must use start, end, before_block_path, or after_block_path.',
+					};
+				}
+
+				if ( anchoredPlacements.has( placement ) && ! targetPath ) {
+					return {
+						ok: false,
+						error: 'Anchored template pattern insertions must include a targetPath.',
+					};
+				}
+
+				const normalizedOperation = {
 					type,
 					patternName,
-				} );
+				};
+
+				if ( placement ) {
+					normalizedOperation.placement = placement;
+				}
+
+				if ( targetPath && anchoredPlacements.has( placement ) ) {
+					normalizedOperation.targetPath = targetPath;
+				}
+
+				if ( expectedTarget && anchoredPlacements.has( placement ) ) {
+					normalizedOperation.expectedTarget = expectedTarget;
+				}
+
+				normalizedOperations.push( normalizedOperation );
 				break;
 			}
 

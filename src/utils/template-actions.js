@@ -554,6 +554,87 @@ function resolveTemplatePartInsertionPoint(
 	};
 }
 
+function resolveTemplateInsertionPoint(
+	placement,
+	targetPath = null,
+	blocks = getBlocks()
+) {
+	if ( ! placement ) {
+		return resolveInsertionPoint();
+	}
+
+	return resolveTemplatePartInsertionPoint( placement, targetPath, blocks );
+}
+
+function matchesExpectedTemplateTarget( block, expectedTarget = {} ) {
+	if ( ! block || ! expectedTarget?.name ) {
+		return false;
+	}
+
+	if ( block.name !== expectedTarget.name ) {
+		return false;
+	}
+
+	if (
+		Number.isInteger( expectedTarget.childCount ) &&
+		( Array.isArray( block.innerBlocks ) ? block.innerBlocks.length : 0 ) !==
+			expectedTarget.childCount
+	) {
+		return false;
+	}
+
+	const expectedAttributes =
+		expectedTarget.attributes && typeof expectedTarget.attributes === 'object'
+			? expectedTarget.attributes
+			: {};
+	const blockAttributes =
+		block && typeof block.attributes === 'object' ? block.attributes : {};
+
+	for ( const [ key, expectedValue ] of Object.entries( expectedAttributes ) ) {
+		if ( blockAttributes?.[ key ] !== expectedValue ) {
+			return false;
+		}
+	}
+
+	if ( expectedTarget.slot && typeof expectedTarget.slot === 'object' ) {
+		const liveSlug =
+			typeof blockAttributes?.slug === 'string'
+				? blockAttributes.slug.trim()
+				: '';
+		const liveArea = inferTemplatePartArea( blockAttributes );
+		const liveIsEmpty = ! liveSlug;
+
+		if ( liveSlug !== ( expectedTarget.slot.slug || '' ) ) {
+			return false;
+		}
+
+		if ( liveArea !== ( expectedTarget.slot.area || '' ) ) {
+			return false;
+		}
+
+		if ( liveIsEmpty !== Boolean( expectedTarget.slot.isEmpty ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+function isTemplateStructureLocked( block ) {
+	const attributes =
+		block && typeof block.attributes === 'object' ? block.attributes : {};
+	const templateLock =
+		typeof attributes?.templateLock === 'string'
+			? attributes.templateLock.trim()
+			: '';
+	const lock =
+		attributes?.lock && typeof attributes.lock === 'object'
+			? attributes.lock
+			: {};
+
+	return templateLock !== '' || Object.keys( lock ).length > 0;
+}
+
 function resolvePatternByName( patternName, rootClientId = null ) {
 	return (
 		getPatternRegistry( rootClientId ).find(
@@ -641,12 +722,84 @@ function prepareTemplatePartOperation(
 	return preparedOperation;
 }
 
-function prepareInsertPatternOperation( operation ) {
+function prepareInsertPatternOperation(
+	operation,
+	workingBlocks = getBlocks(),
+	blockEditorSelect = select( blockEditorStore )
+) {
 	const patternName = operation?.patternName || '';
-	const insertionPoint = resolveInsertionPoint();
+	const placement = operation?.placement || '';
+	const targetPath = Array.isArray( operation?.targetPath )
+		? operation.targetPath
+		: null;
+	const expectedTarget =
+		operation?.expectedTarget &&
+		typeof operation.expectedTarget === 'object' &&
+		! Array.isArray( operation.expectedTarget )
+			? operation.expectedTarget
+			: null;
+	const insertionPoint = resolveTemplateInsertionPoint(
+		placement,
+		targetPath,
+		workingBlocks
+	);
+
+	if ( ! insertionPoint ) {
+		return {
+			error:
+				placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
+				placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+					? 'Flavor Agent could not resolve the targetPath for this template insertion.'
+					: `Flavor Agent could not resolve the ${ placement } insertion point for this template.`,
+		};
+	}
+
+	if ( targetPath && expectedTarget ) {
+		const liveTarget = getBlockByPath( workingBlocks, targetPath );
+
+		if ( ! matchesExpectedTemplateTarget( liveTarget, expectedTarget ) ) {
+			const expectedLabel =
+				expectedTarget.label || expectedTarget.name || 'target block';
+
+			return {
+				error: `The anchored insertion target at path ${ targetPath.join(
+					' > '
+				) } no longer matches the expected ${ expectedLabel }. Regenerate recommendations and try again.`,
+			};
+		}
+	}
+
+	const resolvedRoot =
+		placement !== ''
+			? resolveInsertionRootClientId(
+					insertionPoint.rootLocator,
+					blockEditorSelect
+			  )
+			: {
+					ok: true,
+					rootClientId: insertionPoint.rootClientId ?? null,
+			  };
+
+	if ( ! resolvedRoot.ok ) {
+		return {
+			error: resolvedRoot.error,
+		};
+	}
+
+	const rootLocator =
+		placement !== ''
+			? insertionPoint.rootLocator
+			: buildRootLocator( resolvedRoot.rootClientId );
+
+	if ( ! rootLocator ) {
+		return {
+			error: 'Flavor Agent could not resolve the current insertion container for this pattern.',
+		};
+	}
+
 	const pattern = resolvePatternByName(
 		patternName,
-		insertionPoint.rootClientId
+		resolvedRoot.rootClientId
 	);
 
 	if (
@@ -671,41 +824,61 @@ function prepareInsertPatternOperation( operation ) {
 		};
 	}
 
-	const blockEditor = select( blockEditorStore );
 	const canInsertAll = blocks.every(
 		( block ) =>
 			! block?.name ||
-			blockEditor?.canInsertBlockType?.(
+			blockEditorSelect?.canInsertBlockType?.(
 				block.name,
-				insertionPoint.rootClientId
+				resolvedRoot.rootClientId
 			) !== false
 	);
 
 	if ( ! canInsertAll ) {
+		let placementLabel = 'current insertion point';
+
+		if (
+			placement === TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH ||
+			placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
+		) {
+			placementLabel = `${ placement.replaceAll( '_', ' ' ) } target`;
+		} else if ( placement ) {
+			placementLabel = `${ placement } of the template`;
+		}
+
 		return {
 			error: `Pattern “${
 				pattern.title || patternName
-			}” cannot be inserted at the current insertion point.`,
+			}” cannot be inserted at the ${ placementLabel }.`,
 		};
 	}
 
-	const rootLocator = buildRootLocator( insertionPoint.rootClientId );
-
-	if ( ! rootLocator ) {
-		return {
-			error: 'Flavor Agent could not resolve the current insertion container for this pattern.',
-		};
-	}
-
-	return {
+	const preparedOperation = {
 		type: TEMPLATE_OPERATION_INSERT_PATTERN,
 		patternName,
 		patternTitle: pattern.title || patternName,
 		blocks,
-		rootClientId: insertionPoint.rootClientId,
+		rootClientId: resolvedRoot.rootClientId,
 		rootLocator,
 		index: insertionPoint.index,
 	};
+
+	if ( placement ) {
+		preparedOperation.placement = placement;
+	}
+
+	if ( targetPath ) {
+		preparedOperation.targetPath = targetPath;
+	}
+
+	if ( expectedTarget ) {
+		preparedOperation.expectedTarget = expectedTarget;
+	}
+
+	if ( insertionPoint.targetBlockName ) {
+		preparedOperation.targetBlockName = insertionPoint.targetBlockName;
+	}
+
+	return preparedOperation;
 }
 
 function prepareTemplatePartInsertPatternOperation(
@@ -1000,6 +1173,14 @@ function prepareTemplatePartReplaceBlockOperation(
 		};
 	}
 
+	if ( isTemplateStructureLocked( resolvedTarget.targetBlock ) ) {
+		return {
+			error: `The target block at path ${ targetPath.join(
+				' > '
+			) } is locked and cannot be replaced automatically.`,
+		};
+	}
+
 	const resolvedRoot = resolveInsertionRootClientId(
 		resolvedTarget.rootLocator,
 		blockEditorSelect
@@ -1094,6 +1275,14 @@ function prepareTemplatePartRemoveBlockOperation(
 		};
 	}
 
+	if ( isTemplateStructureLocked( resolvedTarget.targetBlock ) ) {
+		return {
+			error: `The target block at path ${ targetPath.join(
+				' > '
+			) } is locked and cannot be removed automatically.`,
+		};
+	}
+
 	return {
 		type: TEMPLATE_OPERATION_REMOVE_BLOCK,
 		expectedBlockName,
@@ -1115,7 +1304,6 @@ export function prepareTemplateSuggestionOperations( suggestion ) {
 	const preparedOperations = [];
 	const areaLookup = getTemplatePartAreaLookup();
 	const workingState = buildTemplatePartWorkingState( areaLookup );
-
 	for ( const operation of sequence.operations ) {
 		switch ( operation?.type ) {
 			case TEMPLATE_OPERATION_ASSIGN:
@@ -1135,7 +1323,12 @@ export function prepareTemplateSuggestionOperations( suggestion ) {
 			}
 
 			case TEMPLATE_OPERATION_INSERT_PATTERN: {
-				const prepared = prepareInsertPatternOperation( operation );
+				const blockEditorSelect = select( blockEditorStore );
+				const prepared = prepareInsertPatternOperation(
+					operation,
+					blockEditorSelect?.getBlocks?.() || [],
+					blockEditorSelect
+				);
 
 				if ( prepared?.error ) {
 					return { ok: false, error: prepared.error };
@@ -1363,6 +1556,10 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 					type: operation.type,
 					patternName: operation.patternName,
 					patternTitle: operation.patternTitle,
+					placement: operation.placement || '',
+					targetPath: operation.targetPath || null,
+					expectedTarget: operation.expectedTarget || null,
+					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator,
 					index: operation.index,
 					insertedBlocksSnapshot: normalizeBlockSnapshots(

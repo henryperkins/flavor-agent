@@ -103,6 +103,15 @@ final class NavigationAbilities {
 			$parts[] = 'overlay responsive menu';
 		}
 
+		$max_depth = isset( $context['maxDepth'] ) ? (int) $context['maxDepth'] : 0;
+		if ( $max_depth > 1 ) {
+			$parts[] = 'nested navigation depth';
+		}
+
+		if ( ! empty( $context['structureSummary']['hasPageList'] ) ) {
+			$parts[] = 'page list navigation';
+		}
+
 		if ( $prompt !== '' ) {
 			$parts[] = $prompt;
 		}

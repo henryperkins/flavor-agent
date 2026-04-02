@@ -117,6 +117,18 @@ final class RegistrationTest extends TestCase {
 			$suggestion['properties']['operations']['items']['properties']['patternName']['type'] ?? null
 		);
 		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['placement']['type'] ?? null
+		);
+		$this->assertSame(
+			'array',
+			$suggestion['properties']['operations']['items']['properties']['targetPath']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$suggestion['properties']['operations']['items']['properties']['targetPath']['items']['type'] ?? null
+		);
+		$this->assertSame(
 			'array',
 			$ability['input_schema']['properties']['visiblePatternNames']['type'] ?? null
 		);
@@ -131,6 +143,22 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$ability['input_schema']['properties']['editorSlots']['properties']['assignedParts']['items']['properties']['slug']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['editorStructure']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['topLevelBlockTree']['items']['properties']['path']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$suggestion['properties']['operations']['items']['properties']['expectedTarget']['properties']['name']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$suggestion['properties']['operations']['items']['properties']['expectedTarget']['properties']['slot']['properties']['isEmpty']['type'] ?? null
 		);
 	}
 

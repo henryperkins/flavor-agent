@@ -106,11 +106,12 @@ const TEMPLATE_REF = 'theme//home';
 const NEXT_TEMPLATE_REF = 'theme//single';
 const SUGGESTION = {
 	label: 'Add hero intro',
-	description: 'Insert a hero pattern near the current insertion point.',
+	description: 'Insert a hero pattern at the start of the template.',
 	operations: [
 		{
 			type: TEMPLATE_OPERATION_INSERT_PATTERN,
 			patternName: 'theme/hero',
+			placement: 'start',
 		},
 	],
 };
@@ -290,6 +291,7 @@ function createState( overrides = {} ) {
 		},
 		blockEditor: {
 			allowedPatternsByRoot: {
+				null: [ { name: 'theme/hero' }, { name: 'theme/footer' } ],
 				'root-a': [ { name: 'theme/hero' }, { name: 'theme/footer' } ],
 				'root-b': [ { name: 'theme/footer' } ],
 			},
@@ -492,7 +494,7 @@ afterEach( async () => {
 } );
 
 describe( 'TemplateRecommender', () => {
-	test( 'clears stale recommendations on insertion-root drift without resetting the prompt', async () => {
+	test( 'clears stale recommendations when template-global visible patterns change without resetting the prompt', async () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 		expect( hasText( 'Confirm Apply' ) ).toBe( true );
 		expect( hasText( 'The previous apply state should be cleared.' ) ).toBe(
@@ -506,9 +508,9 @@ describe( 'TemplateRecommender', () => {
 			...getState(),
 			blockEditor: {
 				...getState().blockEditor,
-				insertionPoint: {
-					rootClientId: 'root-b',
-					index: 0,
+				allowedPatternsByRoot: {
+					...getState().blockEditor.allowedPatternsByRoot,
+					null: [ { name: 'theme/footer' } ],
 				},
 			},
 		};
@@ -532,15 +534,11 @@ describe( 'TemplateRecommender', () => {
 				...getState().blockEditor,
 				allowedPatternsByRoot: {
 					...getState().blockEditor.allowedPatternsByRoot,
-					'root-b': [
+					null: [
 						{ name: 'theme/footer' },
 						{ name: 'theme/hero' },
 						{ name: 'theme/footer' },
 					],
-				},
-				insertionPoint: {
-					rootClientId: 'root-b',
-					index: 0,
 				},
 			},
 		};
@@ -549,6 +547,35 @@ describe( 'TemplateRecommender', () => {
 
 		expect( mockClearTemplateRecommendations ).not.toHaveBeenCalled();
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
+	} );
+
+	test( 'clears stale recommendations when the top-level template structure changes without changing slots', async () => {
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+
+		currentState = {
+			...getState(),
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [
+					{
+						clientId: 'cover-1',
+						name: 'core/cover',
+						attributes: {
+							align: 'full',
+						},
+						innerBlocks: [],
+					},
+					...getState().blockEditor.blocks,
+				],
+			},
+		};
+
+		await renderPanel();
+		await renderPanel();
+
+		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( hasText( 'Add hero intro' ) ).toBe( false );
+		expect( hasText( 'Confirm Apply' ) ).toBe( false );
 	} );
 
 	test( 'clears recommendations and resets the prompt when the template changes', async () => {
@@ -597,9 +624,9 @@ describe( 'TemplateRecommender', () => {
 			...getState(),
 			blockEditor: {
 				...getState().blockEditor,
-				insertionPoint: {
-					rootClientId: 'root-b',
-					index: 0,
+				allowedPatternsByRoot: {
+					...getState().blockEditor.allowedPatternsByRoot,
+					null: [ { name: 'theme/footer' } ],
 				},
 			},
 		};
@@ -824,5 +851,31 @@ describe( 'TemplateRecommender', () => {
 				'.flavor-agent-template-preview .flavor-agent-action-link'
 			)
 		).toBeNull();
+	} );
+
+	test( 'renders anchored template insertion previews against the current block tree', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [
+					{
+						...SUGGESTION,
+						operations: [
+							{
+								type: TEMPLATE_OPERATION_INSERT_PATTERN,
+								patternName: 'theme/hero',
+								placement: 'before_block_path',
+								targetPath: [ 1 ],
+							},
+						],
+					},
+				],
+				templateSelectedSuggestionKey: SUGGESTION_KEY,
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Before target block (Path 2)' ) ).toBe( true );
+		expect( hasText( 'before footer at Path 2.' ) ).toBe( true );
 	} );
 } );

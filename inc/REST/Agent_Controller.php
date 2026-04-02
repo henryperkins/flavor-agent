@@ -470,6 +470,11 @@ final class Agent_Controller {
 			$input['editorSlots'] = self::sanitize_structured_value( $editor_slots );
 		}
 
+		$editor_structure = $request->get_param( 'editorStructure' );
+		if ( is_array( $editor_structure ) || is_object( $editor_structure ) ) {
+			$input['editorStructure'] = self::sanitize_structured_value( $editor_structure );
+		}
+
 		$result = TemplateAbilities::recommend_template( $input );
 
 		if ( is_wp_error( $result ) ) {

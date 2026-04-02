@@ -12,6 +12,10 @@ final class TemplatePrompt {
 	private const TEMPLATE_OPERATION_ASSIGN         = 'assign_template_part';
 	private const TEMPLATE_OPERATION_REPLACE        = 'replace_template_part';
 	private const TEMPLATE_OPERATION_INSERT_PATTERN = 'insert_pattern';
+	private const TEMPLATE_PLACEMENT_START          = 'start';
+	private const TEMPLATE_PLACEMENT_END            = 'end';
+	private const TEMPLATE_PLACEMENT_BEFORE_PATH    = 'before_block_path';
+	private const TEMPLATE_PLACEMENT_AFTER_PATH     = 'after_block_path';
 
 	/**
 	 * Build the system prompt for template recommendations.
@@ -41,7 +45,9 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
         },
         {
           "type": "insert_pattern",
-          "patternName": "pattern/name-from-patterns-list"
+          "patternName": "pattern/name-from-patterns-list",
+          "placement": "before_block_path",
+          "targetPath": [1]
         }
       ],
       "templateParts": [
@@ -63,7 +69,10 @@ Rules:
 - assign_template_part MUST include slug and area.
 - assign_template_part MUST target an area from the Explicitly Empty Areas list and must not replace an already assigned template part.
 - replace_template_part MUST include currentSlug, slug, and area.
-- insert_pattern MUST include patternName.
+- insert_pattern MUST include patternName and placement.
+- insert_pattern placement MUST be one of: start, end, before_block_path, after_block_path.
+- before_block_path and after_block_path MUST include targetPath.
+- Any targetPath used by insert_pattern MUST match a real path from the Current Top-Level Template Structure list.
 - replace_template_part.currentSlug MUST be a slug already present in the Assigned Template Parts list.
 - templateParts[].slug MUST be a slug that appears in the Available Template Parts list.
 - templateParts[].area MUST be an area already present in the assigned template parts or Explicitly Empty Areas list.
@@ -176,6 +185,16 @@ SYSTEM;
 			$sections[] = "## Available Patterns\nNo patterns available for this template type.";
 		}
 
+		$top_level_block_tree = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
+		if ( count( $top_level_block_tree ) > 0 ) {
+			$sections[] = "## Current Top-Level Template Structure\n" . self::format_template_block_tree( $top_level_block_tree );
+		}
+
+		$insertion_anchors = is_array( $context['topLevelInsertionAnchors'] ?? null ) ? $context['topLevelInsertionAnchors'] : [];
+		if ( count( $insertion_anchors ) > 0 ) {
+			$sections[] = "## Executable Pattern Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors );
+		}
+
 		$tokens = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
 		if ( ! empty( $tokens ) ) {
 			$token_lines = [];
@@ -278,6 +297,7 @@ SYSTEM;
 		$allowed_area_lookup  = self::build_allowed_area_lookup( $context );
 		$empty_area_lookup    = self::build_empty_area_lookup( $context );
 		$pattern_lookup       = self::build_pattern_lookup( $context );
+		$template_block_lookup = self::build_template_block_lookup( $context );
 
 		$suggestions = self::validate_template_suggestions(
 			$data['suggestions'],
@@ -285,7 +305,8 @@ SYSTEM;
 			$assigned_part_lookup,
 			$allowed_area_lookup,
 			$empty_area_lookup,
-			$pattern_lookup
+			$pattern_lookup,
+			$template_block_lookup
 		);
 
 		if ( count( $suggestions ) === 0 ) {
@@ -312,6 +333,7 @@ SYSTEM;
 	 * @param array $allowed_area_lookup Allowed area lookup.
 	 * @param array $empty_area_lookup Explicitly empty area lookup.
 	 * @param array $pattern_lookup Candidate pattern lookup.
+	 * @param array<string, array<string, mixed>> $template_block_lookup Template top-level block lookup keyed by path.
 	 * @return array Sanitized suggestions.
 	 */
 	private static function validate_template_suggestions(
@@ -320,7 +342,8 @@ SYSTEM;
 		array $assigned_part_lookup,
 		array $allowed_area_lookup,
 		array $empty_area_lookup,
-		array $pattern_lookup
+		array $pattern_lookup,
+		array $template_block_lookup
 	): array {
 		$valid = [];
 
@@ -354,7 +377,8 @@ SYSTEM;
 				$assigned_part_lookup,
 				$allowed_area_lookup,
 				$empty_area_lookup,
-				$pattern_lookup
+				$pattern_lookup,
+				$template_block_lookup
 			);
 			$validated_operations          = $validated_operations_result['operations'];
 
@@ -377,18 +401,23 @@ SYSTEM;
 				$validated_operations = $derived_operations['operations'];
 			}
 
-			$entry['operations']         = $validated_operations;
-			$entry['templateParts']      = self::summarize_template_parts_from_operations(
-				$validated_operations,
-				$validated_template_parts
-			);
-			$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
-				$validated_operations
-			);
+				$entry['operations']         = $validated_operations;
+				$entry['templateParts']      = self::summarize_template_parts_from_operations(
+					$validated_operations,
+					$validated_template_parts
+				);
+				$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
+					$validated_operations,
+					$validated_pattern_suggestions
+				);
 
-			if ( count( $entry['operations'] ) === 0 ) {
-				continue;
-			}
+				if (
+					count( $entry['operations'] ) === 0
+					&& count( $entry['templateParts'] ) === 0
+					&& count( $entry['patternSuggestions'] ) === 0
+				) {
+					continue;
+				}
 
 			$valid[] = $entry;
 		}
@@ -554,6 +583,61 @@ SYSTEM;
 	}
 
 	/**
+	 * @param array $context Template context used to build the prompt.
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_template_block_lookup( array $context ): array {
+		$lookup = [];
+
+		foreach ( is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [] as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $node['path'] ?? null );
+
+			if ( $path === null ) {
+				continue;
+			}
+
+			$lookup[ self::block_path_key( $path ) ] = [
+				'name'       => sanitize_text_field( (string) ( $node['name'] ?? '' ) ),
+				'label'      => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
+				'path'       => $path,
+				'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
+				'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
+				'slot'       => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
+			];
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array<string, mixed> $target_node
+	 * @return array<string, mixed>
+	 */
+	private static function build_expected_target( array $target_node ): array {
+		$expected = [
+			'name'       => sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ),
+			'label'      => sanitize_text_field( (string) ( $target_node['label'] ?? '' ) ),
+			'attributes' => is_array( $target_node['attributes'] ?? null ) ? $target_node['attributes'] : [],
+			'childCount' => isset( $target_node['childCount'] ) ? (int) $target_node['childCount'] : 0,
+		];
+
+		$slot = is_array( $target_node['slot'] ?? null ) ? $target_node['slot'] : [];
+		if ( count( $slot ) > 0 ) {
+			$expected['slot'] = [
+				'slug'    => sanitize_key( (string) ( $slot['slug'] ?? '' ) ),
+				'area'    => sanitize_key( (string) ( $slot['area'] ?? '' ) ),
+				'isEmpty' => ! empty( $slot['isEmpty'] ),
+			];
+		}
+
+		return $expected;
+	}
+
+	/**
 	 * @param array $template_parts Raw template-part summaries.
 	 * @param array $unused_part_lookup Unused template-part lookup.
 	 * @param array $assigned_part_lookup Assigned template-part lookup.
@@ -639,7 +723,8 @@ SYSTEM;
 	 * @param array $allowed_area_lookup Allowed area lookup.
 	 * @param array $empty_area_lookup Explicitly empty area lookup.
 	 * @param array $pattern_lookup Candidate pattern lookup.
-	 * @return array{operations: array<int, array<string, string>>, invalid: bool}
+	 * @param array<string, array<string, mixed>> $template_block_lookup Template top-level block lookup.
+	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool}
 	 */
 	private static function validate_template_operations(
 		array $operations,
@@ -647,7 +732,8 @@ SYSTEM;
 		array $assigned_part_lookup,
 		array $allowed_area_lookup,
 		array $empty_area_lookup,
-		array $pattern_lookup
+		array $pattern_lookup,
+		array $template_block_lookup
 	): array {
 		$valid = [];
 		$state = self::build_template_operation_state( $assigned_part_lookup, $empty_area_lookup );
@@ -761,8 +847,35 @@ SYSTEM;
 					$pattern_name = sanitize_text_field(
 						(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
 					);
+					$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
+					$target_path  = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
-					if ( $pattern_name === '' || ! isset( $pattern_lookup[ $pattern_name ] ) ) {
+					if (
+						$pattern_name === ''
+						|| $placement === ''
+						|| ! isset( $pattern_lookup[ $pattern_name ] )
+					) {
+						continue 2;
+					}
+
+					$allowed_placements = [
+						self::TEMPLATE_PLACEMENT_START       => true,
+						self::TEMPLATE_PLACEMENT_END         => true,
+						self::TEMPLATE_PLACEMENT_BEFORE_PATH => true,
+						self::TEMPLATE_PLACEMENT_AFTER_PATH  => true,
+					];
+
+					if ( ! isset( $allowed_placements[ $placement ] ) ) {
+						continue 2;
+					}
+
+					if (
+						in_array( $placement, [ self::TEMPLATE_PLACEMENT_BEFORE_PATH, self::TEMPLATE_PLACEMENT_AFTER_PATH ], true ) &&
+						(
+							$target_path === null ||
+							! isset( $template_block_lookup[ self::block_path_key( $target_path ) ] )
+						)
+					) {
 						continue 2;
 					}
 
@@ -773,10 +886,26 @@ SYSTEM;
 						];
 					}
 
-					$valid[] = [
+					$normalized = [
 						'type'        => $type,
 						'patternName' => $pattern_name,
 					];
+
+					if ( $placement !== '' ) {
+						$normalized['placement'] = $placement;
+					}
+
+					if (
+						$target_path !== null &&
+						in_array( $placement, [ self::TEMPLATE_PLACEMENT_BEFORE_PATH, self::TEMPLATE_PLACEMENT_AFTER_PATH ], true )
+					) {
+						$normalized['targetPath'] = $target_path;
+						$normalized['expectedTarget'] = self::build_expected_target(
+							$template_block_lookup[ self::block_path_key( $target_path ) ]
+						);
+					}
+
+					$valid[] = $normalized;
 					++$state['patternInsertCount'];
 					break;
 			}
@@ -801,15 +930,10 @@ SYSTEM;
 		array $assigned_part_lookup,
 		array $empty_area_lookup
 	): array {
+		unset( $pattern_suggestions );
+
 		$operations = [];
 		$seen_areas = [];
-
-		if ( count( $pattern_suggestions ) > 1 ) {
-			return [
-				'operations' => [],
-				'invalid'    => true,
-			];
-		}
 
 		foreach ( $template_parts as $template_part ) {
 			$area          = sanitize_key( (string) ( $template_part['area'] ?? '' ) );
@@ -847,13 +971,6 @@ SYSTEM;
 					'area' => $area,
 				];
 			}
-		}
-
-		foreach ( $pattern_suggestions as $pattern_name ) {
-			$operations[] = [
-				'type'        => self::TEMPLATE_OPERATION_INSERT_PATTERN,
-				'patternName' => $pattern_name,
-			];
 		}
 
 		return [
@@ -917,9 +1034,10 @@ SYSTEM;
 
 	/**
 	 * @param array<int, array<string, string>> $operations
+	 * @param string[] $pattern_suggestions
 	 * @return string[]
 	 */
-	private static function summarize_pattern_suggestions_from_operations( array $operations ): array {
+	private static function summarize_pattern_suggestions_from_operations( array $operations, array $pattern_suggestions = [] ): array {
 		$summaries = [];
 
 		foreach ( $operations as $operation ) {
@@ -938,7 +1056,121 @@ SYSTEM;
 			}
 		}
 
+		foreach ( $pattern_suggestions as $pattern_name ) {
+			$pattern_name = sanitize_text_field( (string) $pattern_name );
+
+			if ( '' !== $pattern_name ) {
+				$summaries[ $pattern_name ] = $pattern_name;
+			}
+		}
+
 		return array_values( $summaries );
+	}
+
+	/**
+	 * @param mixed $path
+	 * @return int[]|null
+	 */
+	private static function sanitize_block_path( mixed $path ): ?array {
+		if ( ! is_array( $path ) || count( $path ) === 0 ) {
+			return null;
+		}
+
+		$normalized = [];
+
+		foreach ( $path as $segment ) {
+			if ( ! is_int( $segment ) && ! is_numeric( $segment ) ) {
+				return null;
+			}
+
+			$segment = (int) $segment;
+
+			if ( $segment < 0 ) {
+				return null;
+			}
+
+			$normalized[] = $segment;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param int[] $path
+	 */
+	private static function block_path_key( array $path ): string {
+		return implode( '.', $path );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $tree
+	 */
+	private static function format_template_block_tree( array $tree ): string {
+		$lines = [];
+
+		foreach ( $tree as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path        = self::sanitize_block_path( $node['path'] ?? null ) ?? [];
+			$path_string = '[' . implode( ', ', $path ) . ']';
+			$name        = sanitize_text_field( (string) ( $node['name'] ?? 'unknown' ) );
+			$label       = sanitize_text_field( (string) ( $node['label'] ?? '' ) );
+			$attributes  = is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [];
+			$attr_suffix = '';
+
+			if ( count( $attributes ) > 0 ) {
+				$pairs = [];
+
+				foreach ( $attributes as $key => $value ) {
+					$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
+					$pairs[] = "{$key}={$display}";
+				}
+
+				$attr_suffix = ' {' . implode( ', ', $pairs ) . '}';
+			}
+
+			$line = "- {$path_string} {$name}{$attr_suffix}";
+
+			if ( $label !== '' ) {
+				$line .= " - {$label}";
+			}
+
+			$lines[] = $line;
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $anchors
+	 */
+	private static function format_insertion_anchors( array $anchors ): string {
+		$lines = [];
+
+		foreach ( $anchors as $anchor ) {
+			if ( ! is_array( $anchor ) ) {
+				continue;
+			}
+
+			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+			$label     = sanitize_text_field( (string) ( $anchor['label'] ?? '' ) );
+			$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+			$line      = '- ' . ( $label !== '' ? $label : $placement );
+
+			if ( $placement !== '' ) {
+				$line .= " (`{$placement}`)";
+			}
+
+			if ( $path !== null ) {
+				$line .= ' -> [' . implode( ', ', $path ) . ']';
+			}
+
+			$lines[] = $line;
+		}
+
+		return implode( "\n", $lines );
 	}
 
 	/**

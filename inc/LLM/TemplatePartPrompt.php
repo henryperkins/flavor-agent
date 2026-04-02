@@ -63,8 +63,9 @@ Rules:
 - `before_block_path` and `after_block_path` MUST include `targetPath`.
 - `replace_block_with_pattern` MUST include `targetPath`, `expectedBlockName`, and `patternName`.
 - `remove_block` MUST include `targetPath` and `expectedBlockName`.
-- Every `targetPath` MUST resolve to a real block from the Current Block Tree.
+- Every executable `targetPath` MUST resolve to a real path from the Executable Operation Targets or Executable Insertion Anchors lists.
 - `expectedBlockName` MUST match the real block at `targetPath`.
+- If Structural Constraints mention `contentOnly` or locked paths, keep those ideas advisory unless the path is explicitly listed as executable.
 - Keep patternSuggestions aligned with any executable operations you return.
 - Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
@@ -146,6 +147,22 @@ SYSTEM;
 			$sections[] = "## Current Block Tree\n" . self::format_block_tree( $block_tree );
 		} else {
 			$sections[] = "## Current Block Tree\nThis template part is empty.";
+		}
+
+		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
+		if ( count( $operation_targets ) > 0 ) {
+			$sections[] = "## Executable Operation Targets\n" . self::format_operation_targets( $operation_targets );
+		}
+
+		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
+		if ( count( $insertion_anchors ) > 0 ) {
+			$sections[] = "## Executable Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors );
+		}
+
+		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
+		$formatted_constraints  = self::format_structural_constraints( $structural_constraints );
+		if ( $formatted_constraints !== '' ) {
+			$sections[] = "## Structural Constraints\n{$formatted_constraints}";
 		}
 
 		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
@@ -255,11 +272,15 @@ SYSTEM;
 		$block_lookup   = self::build_block_lookup(
 			is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : []
 		);
+		$operation_target_lookup = self::build_operation_target_lookup( $context );
+		$insertion_anchor_lookup = self::build_insertion_anchor_lookup( $context );
 		$pattern_lookup = self::build_pattern_lookup( $context );
 		$suggestions    = self::validate_suggestions(
 			$data['suggestions'],
 			$block_lookup,
-			$pattern_lookup
+			$pattern_lookup,
+			$operation_target_lookup,
+			$insertion_anchor_lookup
 		);
 
 		if ( count( $suggestions ) === 0 ) {
@@ -348,12 +369,83 @@ SYSTEM;
 	}
 
 	/**
+	 * @param array $context Template-part context used to build the prompt.
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_operation_target_lookup( array $context ): array {
+		$lookup = [];
+
+		foreach ( is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [] as $target ) {
+			if ( ! is_array( $target ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $target['path'] ?? null );
+
+			if ( $path === null ) {
+				continue;
+			}
+
+			$lookup[ self::block_path_key( $path ) ] = [
+				'name'              => sanitize_text_field( (string) ( $target['name'] ?? '' ) ),
+				'allowedOperations' => is_array( $target['allowedOperations'] ?? null ) ? array_map( 'sanitize_key', $target['allowedOperations'] ) : [],
+				'allowedInsertions' => is_array( $target['allowedInsertions'] ?? null ) ? array_map( 'sanitize_key', $target['allowedInsertions'] ) : [],
+			];
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array $context Template-part context used to build the prompt.
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_insertion_anchor_lookup( array $context ): array {
+		$lookup = [];
+
+		foreach ( is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [] as $anchor ) {
+			if ( ! is_array( $anchor ) ) {
+				continue;
+			}
+
+			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+			$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+
+			if ( $placement === '' ) {
+				continue;
+			}
+
+			if ( $path === null ) {
+				$lookup[ $placement ] = [
+					'placement' => $placement,
+				];
+				continue;
+			}
+
+			$lookup[ $placement . '|' . self::block_path_key( $path ) ] = [
+				'placement'  => $placement,
+				'targetPath' => $path,
+			];
+		}
+
+		return $lookup;
+	}
+
+	/**
 	 * @param array<int, mixed>                   $suggestions
 	 * @param array<string, array<string, mixed>> $block_lookup
 	 * @param array<string, true>                 $pattern_lookup
+	 * @param array<string, array<string, mixed>> $operation_target_lookup
+	 * @param array<string, array<string, mixed>> $insertion_anchor_lookup
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function validate_suggestions( array $suggestions, array $block_lookup, array $pattern_lookup ): array {
+	private static function validate_suggestions(
+		array $suggestions,
+		array $block_lookup,
+		array $pattern_lookup,
+		array $operation_target_lookup,
+		array $insertion_anchor_lookup
+	): array {
 		$valid = [];
 
 		foreach ( $suggestions as $suggestion ) {
@@ -385,7 +477,9 @@ SYSTEM;
 			$operations          = self::validate_operations(
 				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
 				$block_lookup,
-				$pattern_lookup
+				$pattern_lookup,
+				$operation_target_lookup,
+				$insertion_anchor_lookup
 			);
 
 			if ( count( $operations ) > 0 ) {
@@ -430,9 +524,17 @@ SYSTEM;
 	 * @param array<int, mixed>                   $operations
 	 * @param array<string, array<string, mixed>> $block_lookup
 	 * @param array<string, true>                 $pattern_lookup
+	 * @param array<string, array<string, mixed>> $operation_target_lookup
+	 * @param array<string, array<string, mixed>> $insertion_anchor_lookup
 	 * @return array<int, array<string, string>>
 	 */
-	private static function validate_operations( array $operations, array $block_lookup, array $pattern_lookup ): array {
+	private static function validate_operations(
+		array $operations,
+		array $block_lookup,
+		array $pattern_lookup,
+		array $operation_target_lookup,
+		array $insertion_anchor_lookup
+	): array {
 		if ( count( $operations ) > 3 ) {
 			return [];
 		}
@@ -472,7 +574,11 @@ SYSTEM;
 						in_array( $placement, [ 'before_block_path', 'after_block_path' ], true )
 						&& (
 							null === $target_path ||
-							! isset( $block_lookup[ self::block_path_key( $target_path ) ] )
+							! isset(
+								$insertion_anchor_lookup[
+									$placement . '|' . self::block_path_key( $target_path )
+								]
+							)
 						)
 					) {
 						continue 2;
@@ -509,9 +615,12 @@ SYSTEM;
 
 					$path_key    = self::block_path_key( $target_path );
 					$target_node = $block_lookup[ $path_key ] ?? null;
+					$target_meta = $operation_target_lookup[ $path_key ] ?? null;
 
 					if (
 						! is_array( $target_node ) ||
+						! is_array( $target_meta ) ||
+						! in_array( 'replace_block_with_pattern', $target_meta['allowedOperations'] ?? [], true ) ||
 						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
 					) {
 						continue 2;
@@ -535,9 +644,12 @@ SYSTEM;
 
 					$path_key    = self::block_path_key( $target_path );
 					$target_node = $block_lookup[ $path_key ] ?? null;
+					$target_meta = $operation_target_lookup[ $path_key ] ?? null;
 
 					if (
 						! is_array( $target_node ) ||
+						! is_array( $target_meta ) ||
+						! in_array( 'remove_block', $target_meta['allowedOperations'] ?? [], true ) ||
 						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
 					) {
 						continue 2;
@@ -699,6 +811,94 @@ SYSTEM;
 			if ( count( $children ) > 0 ) {
 				$lines[] = self::format_block_tree( $children, $depth + 1 );
 			}
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $targets
+	 */
+	private static function format_operation_targets( array $targets ): string {
+		$lines = [];
+
+		foreach ( $targets as $target ) {
+			if ( ! is_array( $target ) ) {
+				continue;
+			}
+
+			$path               = self::sanitize_block_path( $target['path'] ?? null ) ?? [];
+			$path_string        = '[' . implode( ', ', $path ) . ']';
+			$name               = sanitize_text_field( (string) ( $target['name'] ?? 'unknown' ) );
+			$label              = sanitize_text_field( (string) ( $target['label'] ?? self::humanize_block_name( $name ) ) );
+			$allowed_operations = is_array( $target['allowedOperations'] ?? null ) ? array_filter( array_map( 'sanitize_key', $target['allowedOperations'] ) ) : [];
+			$allowed_insertions = is_array( $target['allowedInsertions'] ?? null ) ? array_filter( array_map( 'sanitize_key', $target['allowedInsertions'] ) ) : [];
+
+			$capabilities = array_merge( $allowed_operations, $allowed_insertions );
+			$lines[]      = sprintf(
+				'- %s %s (%s)',
+				$path_string,
+				$label !== '' ? $label : $name,
+				implode( ', ', $capabilities )
+			);
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $anchors
+	 */
+	private static function format_insertion_anchors( array $anchors ): string {
+		$lines = [];
+
+		foreach ( $anchors as $anchor ) {
+			if ( ! is_array( $anchor ) ) {
+				continue;
+			}
+
+			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+			$label     = sanitize_text_field( (string) ( $anchor['label'] ?? '' ) );
+			$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+			$line      = '- ' . ( $label !== '' ? $label : $placement );
+
+			if ( $placement !== '' ) {
+				$line .= " (`{$placement}`)";
+			}
+
+			if ( $path !== null ) {
+				$line .= ' -> [' . implode( ', ', $path ) . ']';
+			}
+
+			$lines[] = $line;
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	private static function format_structural_constraints( array $constraints ): string {
+		$lines = [];
+
+		$content_only_paths = is_array( $constraints['contentOnlyPaths'] ?? null ) ? $constraints['contentOnlyPaths'] : [];
+		if ( count( $content_only_paths ) > 0 ) {
+			$lines[] = 'contentOnly paths: ' . implode(
+				', ',
+				array_map(
+					static fn( array $path ): string => '[' . implode( ', ', $path ) . ']',
+					array_filter( $content_only_paths, 'is_array' )
+				)
+			);
+		}
+
+		$locked_paths = is_array( $constraints['lockedPaths'] ?? null ) ? $constraints['lockedPaths'] : [];
+		if ( count( $locked_paths ) > 0 ) {
+			$lines[] = 'Locked paths: ' . implode(
+				', ',
+				array_map(
+					static fn( array $path ): string => '[' . implode( ', ', $path ) . ']',
+					array_filter( $locked_paths, 'is_array' )
+				)
+			);
 		}
 
 		return implode( "\n", $lines );

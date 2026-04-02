@@ -258,6 +258,85 @@ final class ServerCollectorTest extends TestCase {
 		}
 	}
 
+	public function test_for_template_returns_top_level_structure_and_insertion_anchors(): void {
+		WordPressTestState::$block_templates['wp_template'][0]->content =
+			'<!-- wp:group {"tagName":"main"} --><div>Hero</div><!-- /wp:group -->'
+			. '<!-- wp:template-part {"slug":"header","area":"header"} /-->';
+
+		$result = ServerCollector::for_template( 'theme//home', 'home' );
+
+		$this->assertSame(
+			[
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Group',
+					'attributes' => [
+						'tagName' => 'main',
+					],
+					'childCount' => 0,
+				],
+				[
+					'path'       => [ 1 ],
+					'name'       => 'core/template-part',
+					'label'      => 'header template part (header)',
+					'attributes' => [
+						'slug' => 'header',
+						'area' => 'header',
+					],
+					'childCount' => 0,
+					'slot'       => [
+						'slug'    => 'header',
+						'area'    => 'header',
+						'isEmpty' => false,
+					],
+				],
+			],
+			$result['topLevelBlockTree']
+		);
+		$this->assertSame(
+			[
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0 ],
+					'blockName'  => 'core/group',
+					'label'      => 'Before Group',
+				],
+				[
+					'placement'  => 'after_block_path',
+					'targetPath' => [ 0 ],
+					'blockName'  => 'core/group',
+					'label'      => 'After Group',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 1 ],
+					'blockName'  => 'core/template-part',
+					'label'      => 'Before header template part (header)',
+				],
+				[
+					'placement'  => 'after_block_path',
+					'targetPath' => [ 1 ],
+					'blockName'  => 'core/template-part',
+					'label'      => 'After header template part (header)',
+				],
+				[
+					'placement' => 'end',
+					'label'     => 'End of template',
+				],
+			],
+			$result['topLevelInsertionAnchors']
+		);
+		$this->assertSame( 2, $result['structureStats']['topLevelBlockCount'] );
+		$this->assertSame( 'core/group', $result['structureStats']['firstTopLevelBlock'] );
+		$this->assertSame( 'core/template-part', $result['structureStats']['lastTopLevelBlock'] );
+		$this->assertTrue( $result['structureStats']['hasTemplateParts'] );
+	}
+
 	public function test_for_template_part_returns_summarized_block_tree_and_area_ranked_patterns(): void {
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:group {"tagName":"header","align":"wide"} -->'
@@ -345,11 +424,141 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertTrue( $result['structureStats']['hasNavigation'] );
 		$this->assertTrue( $result['structureStats']['containsLogo'] );
 		$this->assertTrue( $result['structureStats']['hasSingleWrapperGroup'] );
+		$this->assertSame(
+			[
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/group',
+					'label'             => 'Group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+					'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+				],
+				[
+					'path'              => [ 0, 0 ],
+					'name'              => 'core/site-logo',
+					'label'             => 'Site Logo',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+					'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+				],
+				[
+					'path'              => [ 0, 1 ],
+					'name'              => 'core/navigation',
+					'label'             => 'Navigation',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+					'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+				],
+			],
+			$result['operationTargets']
+		);
+		$this->assertSame(
+			[
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template part',
+				],
+				[
+					'placement' => 'end',
+					'label'     => 'End of template part',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0 ],
+					'blockName'  => 'core/group',
+					'label'      => 'Before Group',
+				],
+				[
+					'placement'  => 'after_block_path',
+					'targetPath' => [ 0 ],
+					'blockName'  => 'core/group',
+					'label'      => 'After Group',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0, 0 ],
+					'blockName'  => 'core/site-logo',
+					'label'      => 'Before Site Logo',
+				],
+				[
+					'placement'  => 'after_block_path',
+					'targetPath' => [ 0, 0 ],
+					'blockName'  => 'core/site-logo',
+					'label'      => 'After Site Logo',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0, 1 ],
+					'blockName'  => 'core/navigation',
+					'label'      => 'Before Navigation',
+				],
+				[
+					'placement'  => 'after_block_path',
+					'targetPath' => [ 0, 1 ],
+					'blockName'  => 'core/navigation',
+					'label'      => 'After Navigation',
+				],
+			],
+			$result['insertionAnchors']
+		);
+		$this->assertSame(
+			[
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => false,
+			],
+			$result['structuralConstraints']
+		);
 		$this->assertSame( 'theme/header-utility', $result['patterns'][0]['name'] );
 		$this->assertSame( 'area', $result['patterns'][0]['matchType'] );
 		$this->assertArrayNotHasKey( 'content', $result['patterns'][0] );
 		$this->assertContains( 'theme/generic-stack', $pattern_names );
 		$this->assertNotContains( 'theme/home-hero', $pattern_names );
+	}
+
+	public function test_for_template_part_marks_locked_blocks_as_non_destructive_targets(): void {
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:group -->'
+			. '<!-- wp:paragraph --><p>Keep</p><!-- /wp:paragraph -->'
+			. '<!-- wp:paragraph {"lock":{"remove":true}} --><p>Locked</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:group -->';
+
+		$result = ServerCollector::for_template_part( 'theme//header' );
+
+		$this->assertSame(
+			[
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/group',
+					'label'             => 'Group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+					'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+				],
+				[
+					'path'              => [ 0, 0 ],
+					'name'              => 'core/paragraph',
+					'label'             => 'Paragraph',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+					'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+				],
+				[
+					'path'              => [ 0, 1 ],
+					'name'              => 'core/paragraph',
+					'label'             => 'Paragraph',
+					'allowedOperations' => [],
+					'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+				],
+			],
+			$result['operationTargets']
+		);
+		$this->assertSame(
+			[
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [ [ 0, 1 ] ],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => true,
+			],
+			$result['structuralConstraints']
+		);
 	}
 
 	public function test_for_navigation_uses_live_block_attributes_with_saved_menu_structure(): void {
@@ -377,6 +586,33 @@ final class ServerCollectorTest extends TestCase {
 			(bool) ( $result['attributes']['openSubmenusOnClick'] ?? false )
 		);
 		$this->assertSame( 2, $result['menuItemCount'] ?? null );
+		$this->assertSame(
+			[
+				'area'   => 'header',
+				'source' => 'template-part-scan',
+			],
+			$result['locationDetails'] ?? null
+		);
+		$this->assertSame(
+			[
+				'topLevelCount' => 2,
+				'submenuCount'  => 0,
+				'hasPageList'   => false,
+				'nonLinkTypes'  => [],
+				'topLevelLabels' => [ 'Home', 'Contact' ],
+			],
+			$result['structureSummary'] ?? null
+		);
+		$this->assertSame(
+			[
+				'usesOverlay'              => true,
+				'overlayMode'              => 'always',
+				'hasDedicatedOverlayParts' => false,
+				'overlayTemplatePartCount' => 0,
+				'overlayTemplatePartSlugs' => [],
+			],
+			$result['overlayContext'] ?? null
+		);
 		$this->assertSame(
 			[ 'Home', 'Contact' ],
 			array_column( $result['menuItems'] ?? [], 'label' )

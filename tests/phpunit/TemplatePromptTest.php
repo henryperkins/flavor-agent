@@ -59,6 +59,7 @@ final class TemplatePromptTest extends TestCase {
 							[
 								'type'        => 'insert_pattern',
 								'patternName' => 'theme/hero',
+								'placement'   => 'start',
 							],
 							[
 								'type'        => 'replace_template_part',
@@ -97,6 +98,7 @@ final class TemplatePromptTest extends TestCase {
 						[
 							'type'        => 'insert_pattern',
 							'patternName' => 'theme/hero',
+							'placement'   => 'start',
 						],
 					],
 					'templateParts'      => [
@@ -118,7 +120,7 @@ final class TemplatePromptTest extends TestCase {
 		);
 	}
 
-	public function test_parse_response_derives_operations_from_legacy_template_fields(): void {
+	public function test_parse_response_derives_template_part_operations_from_legacy_template_fields_and_keeps_pattern_summaries_advisory(): void {
 		$context = [
 			'assignedParts'  => [
 				[
@@ -188,10 +190,6 @@ final class TemplatePromptTest extends TestCase {
 					'slug' => 'footer-main',
 					'area' => 'footer',
 				],
-				[
-					'type'        => 'insert_pattern',
-					'patternName' => 'theme/hero',
-				],
 			],
 			$result['suggestions'][0]['operations']
 		);
@@ -209,6 +207,10 @@ final class TemplatePromptTest extends TestCase {
 				],
 			],
 			$result['suggestions'][0]['templateParts']
+		);
+		$this->assertSame(
+			[ 'theme/hero' ],
+			$result['suggestions'][0]['patternSuggestions']
 		);
 	}
 
@@ -443,7 +445,7 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
 
-	public function test_parse_response_rejects_multiple_implicit_pattern_inserts(): void {
+	public function test_parse_response_keeps_legacy_pattern_summaries_as_advisory_only(): void {
 		$context = [
 			'assignedParts'  => [],
 			'availableParts' => [],
@@ -467,6 +469,222 @@ final class TemplatePromptTest extends TestCase {
 						'description'        => 'Legacy summaries should not imply multiple inserts.',
 						'templateParts'      => [],
 						'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Too many pattern inserts',
+					'description'        => 'Legacy summaries should not imply multiple inserts.',
+					'operations'         => [],
+					'templateParts'      => [],
+					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+				],
+			],
+			$result['suggestions']
+		);
+	}
+
+	public function test_parse_response_accepts_anchored_pattern_insertions_against_top_level_template_paths_and_records_expected_targets(): void {
+		$context = [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [],
+			'emptyAreas'               => [],
+			'patterns'                 => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelBlockTree'        => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Group',
+					'attributes' => [
+						'tagName' => 'main',
+					],
+					'childCount' => 0,
+				],
+				[
+					'path'       => [ 1 ],
+					'name'       => 'core/template-part',
+					'label'      => 'header template part (header)',
+					'attributes' => [
+						'slug' => 'header',
+						'area' => 'header',
+					],
+					'childCount' => 0,
+					'slot'       => [
+						'slug'    => 'header',
+						'area'    => 'header',
+						'isEmpty' => false,
+					],
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 1 ],
+					'label'      => 'Before Header',
+				],
+				[
+					'placement' => 'end',
+					'label'     => 'End of template',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Anchor the hero ahead of the header',
+						'description' => 'Insert the hero before the header slot.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'before_block_path',
+								'targetPath'  => [ 1 ],
+								'expectedTarget' => [
+									'name'       => 'core/template-part',
+									'label'      => 'header template part (header)',
+									'attributes' => [
+										'slug' => 'header',
+										'area' => 'header',
+									],
+									'childCount' => 0,
+									'slot'       => [
+										'slug'    => 'header',
+										'area'    => 'header',
+										'isEmpty' => false,
+									],
+								],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Anchor the hero ahead of the header',
+					'description'        => 'Insert the hero before the header slot.',
+					'operations'         => [
+						[
+							'type'        => 'insert_pattern',
+							'patternName' => 'theme/hero',
+							'placement'   => 'before_block_path',
+							'targetPath'  => [ 1 ],
+							'expectedTarget' => [
+								'name'       => 'core/template-part',
+								'label'      => 'header template part (header)',
+								'attributes' => [
+									'slug' => 'header',
+									'area' => 'header',
+								],
+								'childCount' => 0,
+								'slot'       => [
+									'slug'    => 'header',
+									'area'    => 'header',
+									'isEmpty' => false,
+								],
+							],
+						],
+					],
+					'templateParts'      => [],
+					'patternSuggestions' => [ 'theme/hero' ],
+				],
+			],
+			$result['suggestions']
+		);
+	}
+
+	public function test_parse_response_rejects_anchored_pattern_insertions_for_unknown_top_level_paths(): void {
+		$context = [
+			'assignedParts'     => [],
+			'availableParts'    => [],
+			'allowedAreas'      => [],
+			'emptyAreas'        => [],
+			'patterns'          => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelBlockTree' => [
+				[
+					'path' => [ 0 ],
+					'name' => 'core/group',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Bad anchor',
+						'description' => 'This should fail validation.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'before_block_path',
+								'targetPath'  => [ 9 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_rejects_template_pattern_insertions_without_explicit_placement(): void {
+		$context = [
+			'assignedParts'  => [],
+			'availableParts' => [],
+			'allowedAreas'   => [],
+			'emptyAreas'     => [],
+			'patterns'       => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Legacy insert',
+						'description' => 'This should fail validation now.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+							],
+						],
 					],
 				],
 			]

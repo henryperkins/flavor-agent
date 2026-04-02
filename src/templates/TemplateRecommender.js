@@ -48,6 +48,7 @@ import {
 } from '../utils/template-actions';
 import {
 	buildEntityMap,
+	buildEditorTemplateTopLevelStructureSnapshot,
 	buildEditorTemplateSlotSnapshot,
 	buildTemplateRecommendationContextSignature,
 	buildTemplateFetchInput,
@@ -184,6 +185,105 @@ function formatBlockLabel( block ) {
 	return block.name
 		? block.name.replace( 'core/', '' ).replaceAll( '-', ' ' )
 		: 'the current block';
+}
+
+function getBlockByPath( blocks, path = [] ) {
+	let currentBlocks = blocks;
+	let block = null;
+
+	for ( const index of path ) {
+		if ( ! Array.isArray( currentBlocks ) ) {
+			return null;
+		}
+
+		block = currentBlocks[ index ] || null;
+
+		if ( ! block ) {
+			return null;
+		}
+
+		currentBlocks = block.innerBlocks || [];
+	}
+
+	return block;
+}
+
+function formatBlockPath( path = [] ) {
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
+		return '';
+	}
+
+	return `Path ${ path
+		.map( ( value ) => Number( value ) + 1 )
+		.join( ' > ' ) }`;
+}
+
+function formatPlacementLabel( placement = '' ) {
+	switch ( placement ) {
+		case 'start':
+			return 'Start of template';
+		case 'end':
+			return 'End of template';
+		case 'before_block_path':
+			return 'Before target block';
+		case 'after_block_path':
+			return 'After target block';
+		default:
+			return '';
+	}
+}
+
+function describeTemplatePatternPlacement(
+	operation,
+	templateBlocks,
+	insertionPointLabel
+) {
+	const placement = operation?.placement || '';
+	const targetPath = Array.isArray( operation?.targetPath )
+		? operation.targetPath
+		: null;
+	const targetBlock = targetPath
+		? getBlockByPath( templateBlocks, targetPath )
+		: null;
+
+	if ( placement === 'start' ) {
+		return {
+			mappingLabel: formatPlacementLabel( placement ),
+			reason: 'at the start of the template.',
+		};
+	}
+
+	if ( placement === 'end' ) {
+		return {
+			mappingLabel: formatPlacementLabel( placement ),
+			reason: 'at the end of the template.',
+		};
+	}
+
+	if (
+		placement === 'before_block_path' ||
+		placement === 'after_block_path'
+	) {
+		const relation = placement === 'before_block_path' ? 'before' : 'after';
+		const blockLabel = targetBlock
+			? formatBlockLabel( targetBlock )
+			: 'target block';
+		const pathLabel = targetPath
+			? formatBlockPath( targetPath )
+			: 'target path';
+
+		return {
+			mappingLabel: `${ formatPlacementLabel(
+				placement
+			) } (${ pathLabel })`,
+			reason: `${ relation } ${ blockLabel } at ${ pathLabel }.`,
+		};
+	}
+
+	return {
+		mappingLabel: '',
+		reason: `${ insertionPointLabel }.`,
+	};
 }
 
 function describeInsertionPoint( {
@@ -379,11 +479,8 @@ export default function TemplateRecommender() {
 	}, [] );
 	const visiblePatternNames = useSelect( ( select ) => {
 		const blockEditorStoreSelect = select( blockEditorStore );
-		const insertionPoint =
-			blockEditorStoreSelect?.getBlockInsertionPoint?.() || null;
-		const rootClientId = insertionPoint?.rootClientId || null;
 
-		return getVisiblePatternNames( rootClientId, blockEditorStoreSelect );
+		return getVisiblePatternNames( null, blockEditorStoreSelect );
 	}, [] );
 	const {
 		applyTemplateSuggestion,
@@ -402,13 +499,21 @@ export default function TemplateRecommender() {
 				: null,
 		[ templateBlocks ]
 	);
+	const editorStructure = useMemo(
+		() =>
+			Array.isArray( templateBlocks ) && templateBlocks.length > 0
+				? buildEditorTemplateTopLevelStructureSnapshot( templateBlocks )
+				: null,
+		[ templateBlocks ]
+	);
 	const recommendationContextSignature = useMemo(
 		() =>
 			buildTemplateRecommendationContextSignature( {
 				editorSlots,
+				editorStructure,
 				visiblePatternNames,
 			} ),
-		[ editorSlots, visiblePatternNames ]
+		[ editorSlots, editorStructure, visiblePatternNames ]
 	);
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature
@@ -550,20 +655,22 @@ export default function TemplateRecommender() {
 		}
 
 		fetchTemplateRecommendations(
-			buildTemplateFetchInput( {
-				templateRef,
-				templateType,
-				prompt,
-				editorSlots,
-				visiblePatternNames,
-			} )
-		);
-	}, [
-		canRecommend,
-		editorSlots,
-		fetchTemplateRecommendations,
-		prompt,
-		templateRef,
+				buildTemplateFetchInput( {
+					templateRef,
+					templateType,
+					prompt,
+					editorSlots,
+					editorStructure,
+					visiblePatternNames,
+				} )
+			);
+		}, [
+			canRecommend,
+			editorSlots,
+			editorStructure,
+			fetchTemplateRecommendations,
+			prompt,
+			templateRef,
 		templateType,
 		visiblePatternNames,
 	] );
@@ -724,6 +831,7 @@ export default function TemplateRecommender() {
 										insertionPointLabel={
 											insertionPointLabel
 										}
+										templateBlocks={ templateBlocks }
 										isApplied={
 											lastAppliedSuggestionKey ===
 											suggestion.suggestionKey
@@ -767,6 +875,7 @@ export default function TemplateRecommender() {
 									suggestion={ suggestion }
 									entityMap={ entityMap }
 									insertionPointLabel={ insertionPointLabel }
+									templateBlocks={ templateBlocks }
 									isApplied={
 										lastAppliedSuggestionKey ===
 										suggestion.suggestionKey
@@ -796,6 +905,7 @@ function TemplateSuggestionCard( {
 	suggestion,
 	entityMap = [],
 	insertionPointLabel,
+	templateBlocks = [],
 	isApplied = false,
 	isApplying = false,
 	isSelected = false,
@@ -1005,7 +1115,7 @@ function TemplateSuggestionCard( {
 					count={ suggestion.operations.length }
 					countNoun="operation"
 					summary="Review the validated structural operations below before Flavor Agent mutates the template."
-					hint="Pattern insertions use the current insertion point. Select a different block in the canvas before confirming if you want the insertion to land elsewhere."
+					hint="Pattern insertions use the validated template structure shown below, and Flavor Agent will refuse to apply them if that target has drifted."
 					confirmLabel={ isApplying ? 'Applying…' : 'Confirm Apply' }
 					confirmDisabled={ isApplying }
 					onConfirm={ () => onApplySuggestion( suggestion ) }
@@ -1016,6 +1126,7 @@ function TemplateSuggestionCard( {
 							key={ operation.key }
 							insertionPointLabel={ insertionPointLabel }
 							operation={ operation }
+							templateBlocks={ templateBlocks }
 						/>
 					) ) }
 				</AIReviewSection>
@@ -1024,7 +1135,11 @@ function TemplateSuggestionCard( {
 	);
 }
 
-function TemplateOperationPreviewRow( { operation, insertionPointLabel } ) {
+function TemplateOperationPreviewRow( {
+	operation,
+	insertionPointLabel,
+	templateBlocks = [],
+} ) {
 	switch ( operation.type ) {
 		case TEMPLATE_OPERATION_ASSIGN:
 			return (
@@ -1072,23 +1187,40 @@ function TemplateOperationPreviewRow( { operation, insertionPointLabel } ) {
 				</div>
 			);
 
-		case TEMPLATE_OPERATION_INSERT_PATTERN:
+		case TEMPLATE_OPERATION_INSERT_PATTERN: {
+			const placementDetails = describeTemplatePatternPlacement(
+				operation,
+				templateBlocks,
+				insertionPointLabel
+			);
+
 			return (
 				<div className="flavor-agent-tpl-row">
 					<span className="flavor-agent-tpl-row__mapping">
 						<span className="flavor-agent-preview-token flavor-agent-preview-token--pattern">
 							{ operation.patternTitle }
 						</span>
+						{ placementDetails.mappingLabel && (
+							<>
+								<span className="flavor-agent-tpl-row__arrow">
+									→
+								</span>
+								<span className="flavor-agent-preview-token flavor-agent-preview-token--area">
+									{ placementDetails.mappingLabel }
+								</span>
+							</>
+						) }
 					</span>
 					<span className="flavor-agent-pill">
 						{ operation.badgeLabel }
 					</span>
 					<div className="flavor-agent-tpl-row__reason">
 						Insert <code>{ operation.patternTitle }</code>{ ' ' }
-						{ insertionPointLabel }.
+						{ placementDetails.reason }
 					</div>
 				</div>
 			);
+		}
 	}
 
 	return null;

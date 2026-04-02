@@ -250,6 +250,35 @@ final class Registration {
 								],
 							],
 						],
+						'editorStructure'     => [
+							'type'       => 'object',
+							'properties' => [
+								'topLevelBlockTree' => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'path'       => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'name'       => [ 'type' => 'string' ],
+											'label'      => [ 'type' => 'string' ],
+											'attributes' => [ 'type' => 'object' ],
+											'childCount' => [ 'type' => 'integer' ],
+											'slot'       => [
+												'type'       => 'object',
+												'properties' => [
+													'slug'    => [ 'type' => 'string' ],
+													'area'    => [ 'type' => 'string' ],
+													'isEmpty' => [ 'type' => 'boolean' ],
+												],
+											],
+										],
+									],
+								],
+							],
+						],
 					],
 					'required'   => [ 'templateRef' ],
 				],
@@ -273,6 +302,28 @@ final class Registration {
 												'area' => [ 'type' => 'string' ],
 												'currentSlug' => [ 'type' => 'string' ],
 												'patternName' => [ 'type' => 'string' ],
+												'placement' => [ 'type' => 'string' ],
+												'targetPath' => [
+													'type'  => 'array',
+													'items' => [ 'type' => 'integer' ],
+												],
+												'expectedTarget' => [
+													'type'       => 'object',
+													'properties' => [
+														'name'       => [ 'type' => 'string' ],
+														'label'      => [ 'type' => 'string' ],
+														'attributes' => [ 'type' => 'object' ],
+														'childCount' => [ 'type' => 'integer' ],
+														'slot'       => [
+															'type'       => 'object',
+															'properties' => [
+																'slug'    => [ 'type' => 'string' ],
+																'area'    => [ 'type' => 'string' ],
+																'isEmpty' => [ 'type' => 'boolean' ],
+															],
+														],
+													],
+												],
 											],
 										],
 									],

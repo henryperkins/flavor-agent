@@ -61,9 +61,35 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertSame( 'missing_navigation_input', $result->get_error_code() );
 	}
 
+	public function test_build_wordpress_docs_query_includes_nested_navigation_guidance_for_deep_menus(): void {
+		$method = new \ReflectionMethod( NavigationAbilities::class, 'build_wordpress_docs_query' );
+		$method->setAccessible( true );
+
+		$query = $method->invoke(
+			null,
+			[
+				'location'             => 'header',
+				'maxDepth'             => 3,
+				'attributes'           => [],
+				'overlayTemplateParts' => [],
+				'structureSummary'     => [
+					'hasPageList' => false,
+				],
+			],
+			'Simplify the menu.'
+		);
+
+		$this->assertIsString( $query );
+		$this->assertStringContainsString( 'nested navigation depth', $query );
+	}
+
 	public function test_prompt_build_user_includes_menu_structure(): void {
 		$context = [
 			'location'             => 'header',
+			'locationDetails'      => [
+				'area'   => 'header',
+				'source' => 'template-part-scan',
+			],
 			'attributes'           => [
 				'overlayMenu'         => 'mobile',
 				'hasIcon'             => true,
@@ -94,6 +120,16 @@ final class NavigationAbilitiesTest extends TestCase {
 					'title' => 'Mobile Overlay',
 				],
 			],
+			'structureSummary'     => [
+				'topLevelCount' => 2,
+				'submenuCount'  => 1,
+				'topLevelLabels' => [ 'Home', 'About' ],
+			],
+			'overlayContext'       => [
+				'usesOverlay'              => true,
+				'overlayMode'              => 'mobile',
+				'hasDedicatedOverlayParts' => true,
+			],
 			'themeTokens'          => [
 				'colors' => [ 'primary: #0073aa' ],
 			],
@@ -103,14 +139,20 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$this->assertStringContainsString( '## Navigation', $prompt );
 		$this->assertStringContainsString( 'Location: header', $prompt );
+		$this->assertStringContainsString( '## Location Context', $prompt );
+		$this->assertStringContainsString( '`source`: template-part-scan', $prompt );
 		$this->assertStringContainsString( '## Current Attributes', $prompt );
 		$this->assertStringContainsString( '`overlayMenu`: mobile', $prompt );
 		$this->assertStringContainsString( '## Menu Structure', $prompt );
 		$this->assertStringContainsString( '"Home"', $prompt );
 		$this->assertStringContainsString( '"About"', $prompt );
 		$this->assertStringContainsString( '"Team"', $prompt );
+		$this->assertStringContainsString( '## Structure Summary', $prompt );
+		$this->assertStringContainsString( '`topLevelCount`: 2', $prompt );
 		$this->assertStringContainsString( '## Navigation Overlay Template Parts', $prompt );
 		$this->assertStringContainsString( 'mobile-overlay', $prompt );
+		$this->assertStringContainsString( '## Overlay Context', $prompt );
+		$this->assertStringContainsString( '`hasDedicatedOverlayParts`: true', $prompt );
 		$this->assertStringContainsString( '## User Instruction', $prompt );
 		$this->assertStringContainsString( 'Simplify the header nav.', $prompt );
 	}
@@ -243,6 +285,46 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertSame( 'Mixed changes', $result['suggestions'][0]['label'] );
 		$this->assertCount( 1, $result['suggestions'][0]['changes'] );
 		$this->assertSame( 'set-attribute', $result['suggestions'][0]['changes'][0]['type'] );
+	}
+
+	public function test_parse_response_rejects_unknown_set_attribute_targets(): void {
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Keep valid overlay changes only',
+						'description' => 'Ignore unsupported set-attribute targets.',
+						'category'    => 'overlay',
+						'changes'     => [
+							[
+								'type'   => 'set-attribute',
+								'target' => 'className',
+								'detail' => 'This should be dropped.',
+							],
+							[
+								'type'   => 'set-attribute',
+								'target' => 'overlayMenu',
+								'detail' => 'Use mobile overlay mode.',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = NavigationPrompt::parse_response( $raw, [] );
+
+		$this->assertCount( 1, $result['suggestions'] );
+		$this->assertSame(
+			[
+				[
+					'type'   => 'set-attribute',
+					'target' => 'overlayMenu',
+					'detail' => 'Use mobile overlay mode.',
+				],
+			],
+			$result['suggestions'][0]['changes']
+		);
 	}
 
 	public function test_parse_response_handles_malformed_json(): void {

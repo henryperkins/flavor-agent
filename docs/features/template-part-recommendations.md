@@ -28,7 +28,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. The component builds the request through `buildTemplatePartFetchInput()`, including `visiblePatternNames`
 3. `fetchTemplatePartRecommendations()` in the store posts the request to `POST /flavor-agent/v1/recommend-template-part`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template_part()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template_part()`
-5. `TemplateAbilities::recommend_template_part()` gathers template-part context through `ServerCollector::for_template_part()`, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
+5. `TemplateAbilities::recommend_template_part()` gathers template-part context through `ServerCollector::for_template_part()`, including executable targets, insertion anchors, and structural constraints, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
 6. The parsed response returns explanation text, advisory `blockHints`, advisory `patternSuggestions`, and optional structured `operations`
 7. `buildTemplatePartSuggestionViewModel()` validates the operation sequence before the UI offers preview or apply controls
 8. The user can jump to focus blocks through path-based selection links, browse suggested patterns in the inserter, preview the validated operations, and confirm apply
@@ -108,7 +108,7 @@ Review Before Apply
 
 - Suggest focus blocks inside the current template part
 - Suggest relevant patterns to browse in the inserter
-- Offer preview-confirm-apply only for operation sets that survive deterministic validation
+- Offer preview-confirm-apply only for operation sets that survive deterministic validation against executable paths and anchors
 - Record template-part apply actions in the shared activity system and expose inline undo
 
 ## Supported Executable Operations
@@ -123,6 +123,8 @@ Supported placement modes today:
 - `end`
 - `before_block_path`
 - `after_block_path`
+
+Replace and remove operations only stay executable when their `targetPath` is listed in the prompt's executable operation targets. Insert operations only stay executable when their placement and `targetPath` match the prompt's executable insertion anchors.
 
 ## Guardrails And Failure Modes
 

@@ -940,6 +940,15 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 					patternName: operation.patternName || '',
 					patternTitle: operation.patternTitle || '',
 					placement: operation.placement || '',
+					targetPath: Array.isArray( operation.targetPath )
+						? operation.targetPath
+						: null,
+					expectedTarget:
+						operation.expectedTarget &&
+						typeof operation.expectedTarget === 'object'
+							? operation.expectedTarget
+							: null,
+					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator || null,
 					index: Number.isInteger( operation.index )
 						? operation.index

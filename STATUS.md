@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-01
+> Last updated: 2026-04-02
 
 ## Working
 
@@ -42,10 +42,10 @@
 - Shared capability notices now keep block, navigation, template, template-part, and Global Styles surfaces visible when they are otherwise in scope but unavailable, and the pattern inserter now prepends the same why-unavailable guidance inside the native inserter, with explicit links back to `Settings > Connectors` or `Settings > Flavor Agent`
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
 - Pattern recommendation and indexing backends now have direct PHPUnit coverage for backend gating, runtime-state handling, Qdrant retrieval/reranking, fingerprinting, scheduling, full/incremental sync, deletion, lock contention, and remote failure persistence
-- Site Editor template recommendation panel for `wp_template` documents with review-confirm-apply support for validated template-part assignment/replacement and pattern insertion operations
-- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, and review-confirm-apply support for validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with start/end and before/after-block-path placement where applicable
+- Site Editor template recommendation panel for `wp_template` documents with richer top-level structural context, validated template-part assignment/replacement, and bounded pattern insertion operations that can target `start`, `end`, `before_block_path`, or `after_block_path` anchors
+- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, executable-target and structural-constraint aware prompt context, and review-confirm-apply support for validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with start/end and before/after-block-path placement where applicable
 - Site Editor Global Styles recommendation panel for the native Styles sidebar, with a document-panel fallback, review-confirm-apply support for bounded `set_styles` and `set_theme_variation` operations, and shared capability/status messaging when the style backend is unavailable
-- Inspector-panel navigation recommendations for selected `core/navigation` blocks with advisory structure, overlay, and accessibility guidance
+- Inspector-panel navigation recommendations for selected `core/navigation` blocks with richer advisory structure, overlay, location, and accessibility guidance
 - Epic 2 shared review model: block, navigation, template, template-part, and Global Styles surfaces now share normalized interaction states (`idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`), shared advisory/review/status components, and aligned activity/undo presentation
 - Block, template, template-part, and Global Styles apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template, template-part, and Global Styles undo still rely on stable locators or recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable

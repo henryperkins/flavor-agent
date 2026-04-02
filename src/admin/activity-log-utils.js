@@ -258,6 +258,34 @@ function getOperationEntries( state = {} ) {
 function summarizeOperation( operation = {} ) {
 	const typeLabel = humanizeValueLabel( operation?.type || 'operation' );
 
+	if ( operation?.type === 'insert_pattern' ) {
+		const patternLabel =
+			operation?.patternTitle || operation?.patternName || typeLabel;
+		const placementLabel = humanizeValueLabel( operation?.placement || '' );
+		const targetBlockLabel = humanizeValueLabel(
+			operation?.targetBlockName || ''
+		);
+		const targetPathLabel = formatBlockPath( operation?.targetPath || [] );
+
+		if ( placementLabel ) {
+			const locationParts = [ placementLabel ];
+
+			if ( targetBlockLabel ) {
+				locationParts.push( targetBlockLabel );
+			}
+
+			if ( targetPathLabel ) {
+				locationParts.push( `(${ targetPathLabel })` );
+			}
+
+			return `${ typeLabel }: ${ patternLabel } -> ${ locationParts.join(
+				' '
+			) }`;
+		}
+
+		return `${ typeLabel }: ${ patternLabel }`;
+	}
+
 	if ( operation?.patternTitle ) {
 		return `${ typeLabel }: ${ operation.patternTitle }`;
 	}

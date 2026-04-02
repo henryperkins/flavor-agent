@@ -143,6 +143,7 @@ final class AgentControllerTest extends TestCase {
 										[
 											'type'        => 'insert_pattern',
 											'patternName' => 'theme/hero',
+											'placement'   => 'start',
 										],
 									],
 									'templateParts'      => [],
@@ -177,6 +178,14 @@ final class AgentControllerTest extends TestCase {
 		$this->assertIsArray( $request_body );
 		$this->assertStringContainsString(
 			'theme/hero',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Current Top-Level Template Structure',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Executable Pattern Insertion Anchors',
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringNotContainsString(
@@ -393,6 +402,7 @@ final class AgentControllerTest extends TestCase {
 										[
 											'type'        => 'insert_pattern',
 											'patternName' => 'theme/footer-callout',
+											'placement'   => 'start',
 										],
 									],
 									'templateParts'      => [],
@@ -436,6 +446,86 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertStringContainsString(
 			'## Explicitly Empty Areas' . "\n" . 'None detected.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_recommend_template_prefers_live_editor_structure_over_saved_template_structure(): void {
+		WordPressTestState::$block_templates['wp_template'][0]->content =
+			'<!-- wp:paragraph --><p>Saved intro</p><!-- /wp:paragraph -->'
+			. '<!-- wp:template-part {"slug":"header","area":"header"} /-->';
+		WordPressTestState::$remote_post_response                       = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'Use the live editor structure.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//home' );
+		$request->set_param(
+			'editorStructure',
+			[
+				'topLevelBlockTree' => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/cover',
+						'label'      => 'Hero wrapper',
+						'attributes' => [
+							'align' => 'full',
+						],
+						'childCount' => 1,
+					],
+					[
+						'path'       => [ 1 ],
+						'name'       => 'core/template-part',
+						'label'      => 'site-header template part (header)',
+						'attributes' => [
+							'slug' => 'site-header',
+							'area' => 'header',
+						],
+						'childCount' => 0,
+						'slot'       => [
+							'slug'    => 'site-header',
+							'area'    => 'header',
+							'isEmpty' => false,
+						],
+					],
+				],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_template( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'- [0] core/cover {align=full} - Hero wrapper',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'- Before Hero wrapper (`before_block_path`) -> [0]',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'- [1] core/template-part {slug=site-header, area=header} - site-header template part (header)',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'- [0] core/paragraph',
 			(string) ( $request_body['input'] ?? '' )
 		);
 	}
@@ -517,6 +607,14 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertStringContainsString(
 			'[0, 1] core/navigation',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Executable Operation Targets',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Executable Insertion Anchors',
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(
@@ -638,6 +736,14 @@ final class AgentControllerTest extends TestCase {
 		);
 		$this->assertStringContainsString(
 			'"Contact"',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Structure Summary',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Overlay Context',
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(

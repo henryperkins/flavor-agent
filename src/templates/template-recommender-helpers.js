@@ -15,6 +15,19 @@ export const TEMPLATE_OPERATION_ASSIGN = 'assign_template_part';
 export const TEMPLATE_OPERATION_REPLACE = 'replace_template_part';
 export const TEMPLATE_OPERATION_INSERT_PATTERN = 'insert_pattern';
 
+const TEMPLATE_TOP_LEVEL_ATTRIBUTE_FIELDS = [
+	'tagName',
+	'align',
+	'overlayMenu',
+	'maxNestingLevel',
+	'showSubmenuIcon',
+	'placeholder',
+	'slug',
+	'area',
+	'ref',
+	'templateLock',
+];
+
 export function getSuggestionCardKey( suggestion = {}, index ) {
 	return `${ suggestion.label || 'suggestion' }-${ index }`;
 }
@@ -34,7 +47,13 @@ export function getTemplateOperationKey( operation = {} ) {
 				operation.slug || ''
 			}|${ operation.area || '' }`;
 		case TEMPLATE_OPERATION_INSERT_PATTERN:
-			return `${ operation.type }|${ operation.patternName || '' }`;
+			return `${ operation.type }|${ operation.patternName || '' }|${
+				operation.placement || ''
+			}|${
+				Array.isArray( operation.targetPath )
+					? operation.targetPath.join( '.' )
+					: ''
+			}`;
 		default:
 			return `${ operation?.type || 'operation' }`;
 	}
@@ -63,15 +82,119 @@ export function normalizeVisiblePatternNames( visiblePatternNames ) {
 	return Array.from( new Set( visiblePatternNames.filter( Boolean ) ) );
 }
 
+function describeTemplateBlockLabel( blockName = '', slug = '', area = '' ) {
+	if ( blockName === 'core/template-part' ) {
+		if ( slug && area ) {
+			return `${ slug } template part (${ area })`;
+		}
+
+		if ( slug ) {
+			return `${ slug } template part`;
+		}
+
+		if ( area ) {
+			return `Empty ${ area } template-part slot`;
+		}
+
+		return 'Template-part slot';
+	}
+
+	const normalizedName = blockName.startsWith( 'core/' )
+		? blockName.slice( 5 )
+		: blockName;
+
+	return normalizedName
+		.split( '-' )
+		.map( ( segment ) =>
+			segment ? segment.charAt( 0 ).toUpperCase() + segment.slice( 1 ) : ''
+		)
+		.join( ' ' );
+}
+
+function summarizeTemplateBlockAttributes( attributes = {} ) {
+	const summary = {};
+
+	for ( const field of TEMPLATE_TOP_LEVEL_ATTRIBUTE_FIELDS ) {
+		const value = attributes?.[ field ];
+
+		if (
+			typeof value === 'string' ||
+			typeof value === 'number' ||
+			typeof value === 'boolean'
+		) {
+			summary[ field ] = value;
+		}
+	}
+
+	return summary;
+}
+
+export function buildEditorTemplateTopLevelStructureSnapshot(
+	blocks = [],
+	areaLookup
+) {
+	if ( ! Array.isArray( blocks ) ) {
+		return {
+			topLevelBlockTree: [],
+		};
+	}
+
+	return {
+		topLevelBlockTree: blocks
+			.map( ( block, index ) => {
+				if ( ! block?.name ) {
+					return null;
+				}
+
+				const attributes =
+					block && typeof block.attributes === 'object'
+						? block.attributes
+						: {};
+				const slug =
+					typeof attributes?.slug === 'string'
+						? attributes.slug.trim()
+						: '';
+				const area =
+					block.name === 'core/template-part'
+						? inferTemplatePartArea( attributes, areaLookup )
+						: '';
+				const entry = {
+					path: [ index ],
+					name: block.name,
+					label: describeTemplateBlockLabel( block.name, slug, area ),
+					attributes: summarizeTemplateBlockAttributes( attributes ),
+					childCount: Array.isArray( block.innerBlocks )
+						? block.innerBlocks.length
+						: 0,
+				};
+
+				if ( block.name === 'core/template-part' ) {
+					entry.slot = {
+						slug,
+						area,
+						isEmpty: ! slug,
+					};
+				}
+
+				return entry;
+			} )
+			.filter( Boolean ),
+	};
+}
+
 export function buildTemplateRecommendationContextSignature( {
 	editorSlots,
 	visiblePatternNames,
+	editorStructure,
 } = {} ) {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
 
 	return JSON.stringify( {
 		editorSlots: editorSlots || null,
+		topLevelBlockTree: Array.isArray( editorStructure?.topLevelBlockTree )
+			? editorStructure.topLevelBlockTree
+			: null,
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
 			? [ ...normalizedVisiblePatternNames ].sort()
 			: null,
@@ -84,6 +207,7 @@ export function buildTemplateFetchInput( {
 	prompt,
 	editorSlots,
 	visiblePatternNames,
+	editorStructure,
 } ) {
 	const input = { templateRef };
 	const trimmedPrompt = prompt.trim();
@@ -100,6 +224,10 @@ export function buildTemplateFetchInput( {
 
 	if ( editorSlots ) {
 		input.editorSlots = editorSlots;
+	}
+
+	if ( editorStructure ) {
+		input.editorStructure = editorStructure;
 	}
 
 	if ( Array.isArray( normalizedVisiblePatternNames ) ) {
@@ -296,6 +424,10 @@ export function buildTemplateOperationViewModel(
 					patternTitleMap[ operation?.patternName ] ||
 					operation?.patternName ||
 					'',
+				placement: operation?.placement || '',
+				targetPath: Array.isArray( operation?.targetPath )
+					? operation.targetPath
+					: null,
 				badgeLabel: 'Insert',
 			};
 		default:
@@ -310,8 +442,14 @@ export function buildTemplateSuggestionViewModel(
 	const templateParts = Array.isArray( suggestion?.templateParts )
 		? suggestion.templateParts
 		: [];
+	const rawOperations = Array.isArray( suggestion?.operations )
+		? suggestion.operations
+		: [];
+	const rawPatternSuggestions = Array.isArray( suggestion?.patternSuggestions )
+		? suggestion.patternSuggestions
+		: [];
 	const executableOperations = validateTemplateOperationSequence(
-		suggestion?.operations
+		rawOperations
 	);
 	const partReasonLookup = templateParts.reduce( ( acc, part ) => {
 		const key = getTemplatePartKey( part?.slug || '', part?.area || '' );
@@ -321,10 +459,7 @@ export function buildTemplateSuggestionViewModel(
 	const operations = executableOperations.ok
 		? executableOperations.operations
 				.map( ( operation ) =>
-					buildTemplateOperationViewModel(
-						operation,
-						patternTitleMap
-					)
+					buildTemplateOperationViewModel( operation, patternTitleMap )
 				)
 				.filter( Boolean )
 		: [];
@@ -332,16 +467,46 @@ export function buildTemplateSuggestionViewModel(
 		( operation ) =>
 			operation.type === TEMPLATE_OPERATION_ASSIGN ||
 			operation.type === TEMPLATE_OPERATION_REPLACE
-	);
+		);
 	const patternOperations = operations.filter(
 		( operation ) => operation.type === TEMPLATE_OPERATION_INSERT_PATTERN
 	);
+	const seenPatternNames = new Set();
+	const patternSuggestions = [];
+
+	for ( const operation of patternOperations ) {
+		if ( ! operation.patternName || seenPatternNames.has( operation.patternName ) ) {
+			continue;
+		}
+
+		seenPatternNames.add( operation.patternName );
+		patternSuggestions.push( {
+			name: operation.patternName,
+			title: operation.patternTitle,
+			actionType: PATTERN_BROWSE_ACTION,
+			ctaLabel: 'Browse pattern',
+		} );
+	}
+
+	for ( const name of rawPatternSuggestions ) {
+		if ( ! name || seenPatternNames.has( name ) ) {
+			continue;
+		}
+
+		seenPatternNames.add( name );
+		patternSuggestions.push( {
+			name,
+			title: patternTitleMap[ name ] || name,
+			actionType: PATTERN_BROWSE_ACTION,
+			ctaLabel: 'Browse pattern',
+		} );
+	}
 
 	return {
 		suggestionKey: suggestion?.suggestionKey || '',
 		label: suggestion?.label || '',
 		description: suggestion?.description || '',
-		executionError: executableOperations.ok
+		executionError: rawOperations.length === 0 || executableOperations.ok
 			? ''
 			: executableOperations.error || '',
 		operations,
@@ -353,15 +518,11 @@ export function buildTemplateSuggestionViewModel(
 				partReasonLookup[
 					getTemplatePartKey( operation.slug, operation.area )
 				] || '',
-			actionType: TEMPLATE_PART_REVIEW_ACTION,
-			ctaLabel: 'Review in editor',
-		} ) ),
-		patternSuggestions: patternOperations.map( ( operation ) => ( {
-			name: operation.patternName,
-			title: operation.patternTitle,
-			actionType: PATTERN_BROWSE_ACTION,
-			ctaLabel: 'Browse pattern',
-		} ) ),
-		canApply: executableOperations.ok && operations.length > 0,
+				actionType: TEMPLATE_PART_REVIEW_ACTION,
+				ctaLabel: 'Review in editor',
+			} ) ),
+		patternSuggestions,
+		canApply:
+			rawOperations.length > 0 && executableOperations.ok && operations.length > 0,
 	};
 }

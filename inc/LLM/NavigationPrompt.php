@@ -42,6 +42,7 @@ Rules:
 - set-attribute changes should reference real core/navigation block attributes (overlayMenu, openSubmenusOnClick, hasIcon, icon, maxNestingLevel, showSubmenuIcon).
 - In WordPress 7.0+, navigation overlays are a first-class template-part area (navigation-overlay). When overlay template parts exist, prefer referencing them over suggesting inline overlay configuration.
 - Do not suggest adding menu items that do not exist in the current structure. Suggest reorganization of what is already there.
+- Use the provided location, overlay, and structure summaries to explain why a suggestion fits this navigation's current role.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented navigation block practices.
 - Respect the theme's design tokens when suggesting visual changes.
 - Return 1-3 suggestions. Each should be distinct and actionable.
@@ -63,6 +64,23 @@ SYSTEM;
 		$location   = (string) ( $context['location'] ?? 'unknown' );
 		$sections[] = "## Navigation\nLocation: {$location}";
 
+		$location_details = is_array( $context['locationDetails'] ?? null ) ? $context['locationDetails'] : [];
+		if ( count( $location_details ) > 0 ) {
+			$lines = [];
+			foreach ( $location_details as $key => $value ) {
+				if ( ! is_scalar( $value ) ) {
+					continue;
+				}
+
+				$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
+				$lines[] = "- `{$key}`: {$display}";
+			}
+
+			if ( count( $lines ) > 0 ) {
+				$sections[] = "## Location Context\n" . implode( "\n", $lines );
+			}
+		}
+
 		// Current attributes.
 		$attrs = is_array( $context['attributes'] ?? null ) ? $context['attributes'] : [];
 		if ( count( $attrs ) > 0 ) {
@@ -82,6 +100,33 @@ SYSTEM;
 			$sections[] = "## Menu Structure\nNo menu items found. The navigation block may use a Page List or be empty.";
 		}
 
+		$structure_summary = is_array( $context['structureSummary'] ?? null ) ? $context['structureSummary'] : [];
+		if ( count( $structure_summary ) > 0 ) {
+			$lines = [];
+
+			foreach ( $structure_summary as $key => $value ) {
+				if ( is_array( $value ) ) {
+					if ( count( $value ) === 0 ) {
+						continue;
+					}
+
+					$lines[] = '- `' . $key . '`: ' . implode( ', ', array_map( 'strval', $value ) );
+					continue;
+				}
+
+				if ( ! is_scalar( $value ) ) {
+					continue;
+				}
+
+				$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
+				$lines[] = "- `{$key}`: {$display}";
+			}
+
+			if ( count( $lines ) > 0 ) {
+				$sections[] = "## Structure Summary\n" . implode( "\n", $lines );
+			}
+		}
+
 		// Overlay template parts (WP 7.0+).
 		$overlay_parts = is_array( $context['overlayTemplateParts'] ?? null ) ? $context['overlayTemplateParts'] : [];
 		if ( count( $overlay_parts ) > 0 ) {
@@ -94,6 +139,32 @@ SYSTEM;
 				$overlay_parts
 			);
 			$sections[] = "## Navigation Overlay Template Parts (WP 7.0+)\n" . implode( "\n", $lines );
+		}
+
+		$overlay_context = is_array( $context['overlayContext'] ?? null ) ? $context['overlayContext'] : [];
+		if ( count( $overlay_context ) > 0 ) {
+			$lines = [];
+			foreach ( $overlay_context as $key => $value ) {
+				if ( is_array( $value ) ) {
+					if ( count( $value ) === 0 ) {
+						continue;
+					}
+
+					$lines[] = '- `' . $key . '`: ' . implode( ', ', array_map( 'strval', $value ) );
+					continue;
+				}
+
+				if ( ! is_scalar( $value ) ) {
+					continue;
+				}
+
+				$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
+				$lines[] = "- `{$key}`: {$display}";
+			}
+
+			if ( count( $lines ) > 0 ) {
+				$sections[] = "## Overlay Context\n" . implode( "\n", $lines );
+			}
 		}
 
 		// Theme tokens.
@@ -168,6 +239,14 @@ SYSTEM;
 	private static function validate_suggestions( array $suggestions ): array {
 		$allowed_categories = [ 'structure', 'overlay', 'accessibility' ];
 		$allowed_types      = [ 'reorder', 'group', 'ungroup', 'add-submenu', 'flatten', 'set-attribute' ];
+		$allowed_attributes = [
+			'overlayMenu'         => true,
+			'openSubmenusOnClick' => true,
+			'hasIcon'             => true,
+			'icon'                => true,
+			'maxNestingLevel'     => true,
+			'showSubmenuIcon'     => true,
+		];
 		$valid              = [];
 
 		foreach ( $suggestions as $suggestion ) {
@@ -205,14 +284,19 @@ SYSTEM;
 					$type = isset( $change['type'] ) && is_string( $change['type'] )
 						? sanitize_key( $change['type'] )
 						: '';
+					$target = sanitize_text_field( (string) ( $change['target'] ?? '' ) );
 
 					if ( ! in_array( $type, $allowed_types, true ) ) {
 						continue;
 					}
 
+					if ( $type === 'set-attribute' && ! isset( $allowed_attributes[ $target ] ) ) {
+						continue;
+					}
+
 					$changes[] = [
 						'type'   => $type,
-						'target' => sanitize_text_field( (string) ( $change['target'] ?? '' ) ),
+						'target' => $target,
 						'detail' => sanitize_text_field( (string) ( $change['detail'] ?? '' ) ),
 					];
 				}

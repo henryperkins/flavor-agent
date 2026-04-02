@@ -71,6 +71,15 @@ final class TemplateAbilities {
 			$context['allowedAreas'] = $editor_slots['allowedAreas'];
 		}
 
+		$editor_structure = self::normalize_editor_structure( $input['editorStructure'] ?? null );
+
+		if ( array_key_exists( 'topLevelBlockTree', $editor_structure ) ) {
+			$context['topLevelBlockTree']        = $editor_structure['topLevelBlockTree'];
+			$context['topLevelInsertionAnchors'] = self::build_top_level_insertion_anchors(
+				$editor_structure['topLevelBlockTree']
+			);
+		}
+
 		$system = TemplatePrompt::build_system();
 		$user   = TemplatePrompt::build_user(
 			$context,
@@ -210,6 +219,230 @@ final class TemplateAbilities {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_editor_structure( mixed $input ): array {
+		if ( is_object( $input ) ) {
+			$input = get_object_vars( $input );
+		}
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$result = [];
+
+		if ( array_key_exists( 'topLevelBlockTree', $input ) ) {
+			$top_level_block_tree = [];
+
+			foreach ( is_array( $input['topLevelBlockTree'] ) ? $input['topLevelBlockTree'] : [] as $node ) {
+				if ( is_object( $node ) ) {
+					$node = get_object_vars( $node );
+				}
+
+				if ( ! is_array( $node ) ) {
+					continue;
+				}
+
+				$path = self::sanitize_block_path( $node['path'] ?? null );
+				$name = sanitize_text_field( (string) ( $node['name'] ?? '' ) );
+
+				if ( null === $path || '' === $name ) {
+					continue;
+				}
+
+				$entry = [
+					'path'  => $path,
+					'name'  => $name,
+					'label' => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
+				];
+
+				$attributes = self::normalize_template_block_attributes( $node['attributes'] ?? null );
+				if ( [] !== $attributes ) {
+					$entry['attributes'] = $attributes;
+				}
+
+				if ( isset( $node['childCount'] ) && is_numeric( $node['childCount'] ) ) {
+					$entry['childCount'] = max( 0, (int) $node['childCount'] );
+				}
+
+				$slot = self::normalize_template_slot_summary( $node['slot'] ?? null );
+				if ( [] !== $slot ) {
+					$entry['slot'] = $slot;
+				}
+
+				$top_level_block_tree[] = $entry;
+			}
+
+			$result['topLevelBlockTree'] = $top_level_block_tree;
+		}
+
+		return $result;
+	}
+
+	/**
+	 * @return array<string, scalar>
+	 */
+	private static function normalize_template_block_attributes( mixed $input ): array {
+		if ( is_object( $input ) ) {
+			$input = get_object_vars( $input );
+		}
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$result         = [];
+		$allowed_fields = [
+			'tagName'         => 'text',
+			'align'           => 'text',
+			'overlayMenu'     => 'text',
+			'maxNestingLevel' => 'int',
+			'showSubmenuIcon' => 'bool',
+			'placeholder'     => 'text',
+			'slug'            => 'key',
+			'area'            => 'key',
+			'ref'             => 'int',
+			'templateLock'    => 'text',
+		];
+
+		foreach ( $allowed_fields as $field => $type ) {
+			if ( ! array_key_exists( $field, $input ) ) {
+				continue;
+			}
+
+			$value = $input[ $field ];
+
+			switch ( $type ) {
+				case 'bool':
+					$result[ $field ] = (bool) $value;
+					break;
+				case 'int':
+					if ( is_numeric( $value ) ) {
+						$result[ $field ] = (int) $value;
+					}
+					break;
+				case 'key':
+					$sanitized = sanitize_key( (string) $value );
+					if ( '' !== $sanitized ) {
+						$result[ $field ] = $sanitized;
+					}
+					break;
+				default:
+					$sanitized = sanitize_text_field( (string) $value );
+					if ( '' !== $sanitized ) {
+						$result[ $field ] = $sanitized;
+					}
+					break;
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_template_slot_summary( mixed $input ): array {
+		if ( is_object( $input ) ) {
+			$input = get_object_vars( $input );
+		}
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		return [
+			'slug'    => sanitize_key( (string) ( $input['slug'] ?? '' ) ),
+			'area'    => sanitize_key( (string) ( $input['area'] ?? '' ) ),
+			'isEmpty' => ! empty( $input['isEmpty'] ),
+		];
+	}
+
+	/**
+	 * @param mixed $path
+	 * @return int[]|null
+	 */
+	private static function sanitize_block_path( mixed $path ): ?array {
+		if ( ! is_array( $path ) || count( $path ) === 0 ) {
+			return null;
+		}
+
+		$normalized = [];
+
+		foreach ( $path as $segment ) {
+			if ( ! is_int( $segment ) && ! is_numeric( $segment ) ) {
+				return null;
+			}
+
+			$segment = (int) $segment;
+
+			if ( $segment < 0 ) {
+				return null;
+			}
+
+			$normalized[] = $segment;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param int[] $path
+	 */
+	private static function block_path_key( array $path ): string {
+		return implode( '.', $path );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $top_level_block_tree
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function build_top_level_insertion_anchors( array $top_level_block_tree ): array {
+		$anchors = [
+			[
+				'placement' => 'start',
+				'label'     => 'Start of template',
+			],
+		];
+
+		foreach ( $top_level_block_tree as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path       = self::sanitize_block_path( $node['path'] ?? null );
+			$block_name = sanitize_text_field( (string) ( $node['name'] ?? '' ) );
+			$label      = sanitize_text_field( (string) ( $node['label'] ?? $block_name ) );
+
+			if ( null === $path || 1 !== count( $path ) || '' === $block_name || '' === $label ) {
+				continue;
+			}
+
+			$path_key = self::block_path_key( $path );
+			$anchors[ "before:{$path_key}" ] = [
+				'placement'  => 'before_block_path',
+				'targetPath' => $path,
+				'blockName'  => $block_name,
+				'label'      => 'Before ' . $label,
+			];
+			$anchors[ "after:{$path_key}" ]  = [
+				'placement'  => 'after_block_path',
+				'targetPath' => $path,
+				'blockName'  => $block_name,
+				'label'      => 'After ' . $label,
+			];
+		}
+
+		$anchors[] = [
+			'placement' => 'end',
+			'label'     => 'End of template',
+		];
+
+		return array_values( $anchors );
 	}
 
 	/**

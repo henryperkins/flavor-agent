@@ -47,6 +47,17 @@ final class TemplatePartPromptTest extends TestCase {
 					'name' => 'theme/header-minimal',
 				],
 			],
+			'insertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template part',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0, 1 ],
+					'label'      => 'Before Navigation block',
+				],
+			],
 		];
 
 		$raw = wp_json_encode(
@@ -140,6 +151,40 @@ final class TemplatePartPromptTest extends TestCase {
 					'name' => 'theme/header-minimal',
 				],
 			],
+			'insertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template part',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0, 1 ],
+					'label'      => 'Before Navigation block',
+				],
+			],
+			'operationTargets' => [
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+				[
+					'path'              => [ 0, 0 ],
+					'name'              => 'core/site-logo',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+				[
+					'path'              => [ 0, 1 ],
+					'name'              => 'core/navigation',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+			],
+			'structuralConstraints' => [
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => false,
+			],
 		];
 
 		$raw = wp_json_encode(
@@ -222,6 +267,24 @@ final class TemplatePartPromptTest extends TestCase {
 				[
 					'name' => 'theme/header-utility',
 				],
+			],
+			'operationTargets' => [
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+				[
+					'path'              => [ 0, 0 ],
+					'name'              => 'core/site-logo',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+			],
+			'structuralConstraints' => [
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => false,
 			],
 		];
 

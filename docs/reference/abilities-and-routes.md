@@ -23,8 +23,8 @@ Use it when you need to answer:
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-patterns` | `edit_posts` | Active provider embeddings + chat, Qdrant configured, usable pattern index | Ranked registered patterns for the current editing context | Pattern inserter recommendations |
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional filters | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-template` | `edit_theme_options` | Active provider chat configured | Template suggestions plus validated template-part and pattern operations | Site Editor template panel |
-| `flavor-agent/recommend-template-part` | `edit_theme_options` | Active provider chat configured | Template-part suggestions, focus blocks, patterns, and validated bounded operations | Site Editor template-part panel |
+| `flavor-agent/recommend-template` | `edit_theme_options` | Active provider chat configured | Template suggestions plus validated template-part operations and bounded pattern insertions with optional anchor metadata | Site Editor template panel |
+| `flavor-agent/recommend-template-part` | `edit_theme_options` | Active provider chat configured | Template-part suggestions, focus blocks, patterns, and validated bounded operations constrained by executable paths and anchors | Site Editor template-part panel |
 | `flavor-agent/recommend-style` | `edit_theme_options` | Active provider chat configured | Global Styles suggestions constrained to supported site-level style paths, theme variations, and preset-backed values | Site Editor Global Styles panel |
 | `flavor-agent/list-template-parts` | `edit_theme_options` | None beyond capability | Registered template parts, optionally filtered by area | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Active provider chat configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
@@ -100,6 +100,30 @@ Use it when you need to answer:
     "emptyAreas": ["sidebar"],
     "allowedAreas": ["header", "sidebar"]
   }
+}
+```
+
+### Template Ability Response Shape
+
+```json
+{
+  "suggestions": [
+    {
+      "label": "Lead with the hero before the header",
+      "description": "Use the validated top-level anchor so the intro lands ahead of the current header slot.",
+      "operations": [
+        {
+          "type": "insert_pattern",
+          "patternName": "core/post-meta-two-column",
+          "placement": "before_block_path",
+          "targetPath": [1]
+        }
+      ],
+      "templateParts": [],
+      "patternSuggestions": ["core/post-meta-two-column"]
+    }
+  ],
+  "explanation": "The top-level template structure exposes a safe anchor before the existing header block."
 }
 ```
 
@@ -240,6 +264,7 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 ## Route Notes
 
 - The recommendation routes sanitize and normalize structured inputs before handing them to the ability layer
+- Template recommendation requests now carry server-collected top-level block anchors; template-part requests now carry server-collected executable targets, insertion anchors, and structural constraints before any apply affordance is shown
 - Activity permissions are contextual: post-like scopes use `edit_posts` or `edit_post`, while template and template-part scopes use `edit_theme_options`
 - Manual sync is intentionally admin-only because it mutates shared vector-index state
 

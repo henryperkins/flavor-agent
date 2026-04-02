@@ -83,7 +83,7 @@ Any new executable structural operation must:
 4. persist activity metadata sufficient for refresh-safe undo,
 5. be presented through the existing shared review/status/history model,
 6. ship with its minimal activity/admin normalization in the same PR as the new executable path,
-7. be non-mergeable until its preview/apply/undo/browser proof is in place for that operation family.
+7. be non-mergeable until its focused preview/apply/undo/browser proof is in place for that operation family in the same PR.
 
 - [ ] **Step 3: Record explicit deferrals before implementation**
 
@@ -208,10 +208,11 @@ Run:
 
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
+vendor/bin/phpunit --filter 'TemplatePromptTest'
 source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js
 ```
 
-Expected: PASS after the widened template contract, executor, and preview behavior are stable.
+Expected: PASS after the widened template prompt contract, executor, and preview behavior are stable.
 
 ---
 
@@ -261,10 +262,11 @@ Run:
 
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
+vendor/bin/phpunit --filter 'TemplatePartPromptTest'
 source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js
 ```
 
-Expected: PASS after the widened template-part contract and UI behavior are stable.
+Expected: PASS after the widened template-part prompt contract and UI behavior are stable.
 
 ---
 
@@ -427,6 +429,9 @@ The required WP 7.0 browser coverage should prove:
 - one navigation recommendation flow with stronger advisory context,
 - undo/history behavior where the new structural path is executable.
 
+The first focused browser proof for a new executable template or template-part operation family must ship in the same PR that introduces that operation family.
+Task 7 reruns and broadens milestone coverage; it is not the place to add the first browser proof for a new executable structural path.
+
 If a navigation executor ships in this milestone, browser coverage must also include a dedicated navigation preview/apply/undo case. A template or template-part executable case does **not** satisfy navigation executor proof.
 
 - [ ] **Step 2: Run the Epic 4 acceptance commands from the roadmap**
@@ -434,7 +439,7 @@ If a navigation executor ships in this milestone, browser coverage must also inc
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
 vendor/bin/phpunit --filter '(Template|Navigation|AgentController|ServerCollector)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/context/__tests__/block-inspector.test.js
+source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/context/__tests__/block-inspector.test.js
 source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line
 ```
 
@@ -485,10 +490,12 @@ The docs should make clear:
 **PR 2: Template operation expansion**
 - Task 3
 - the minimum Task 6 activity/admin changes required by the new template operations
+- the focused browser proof for the new executable template operation family in the same PR
 
 **PR 3: Template-part operation expansion**
 - Task 4
 - the minimum Task 6 activity/admin changes required by the new template-part operations
+- the focused browser proof for the new executable template-part operation family in the same PR
 
 **PR 4: Navigation advisory deepening**
 - Task 5 advisory work only
@@ -501,6 +508,7 @@ The docs should make clear:
 **PR 6: Shared activity/admin cleanup plus docs/browser closeout**
 - any remaining shared Task 6 cleanup that was not specific to one executable op family
 - Task 7
+- rerun milestone browser coverage and docs closeout, but do not rely on PR 6 for the first browser proof of a new executable op family
 
 Do not mix widened executable template/template-part contracts with speculative navigation execution unless the dependency is unavoidable.
 Do not defer the minimum activity/undo/admin wiring for a new executable path to PR 6.

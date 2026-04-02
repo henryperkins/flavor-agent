@@ -12,7 +12,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `TemplateRecommender()` must resolve a current template reference through `core/editor` or `core/edit-site`
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by `Provider::chat_configured()`
-- The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the visible pattern set
+- The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the template-global visible pattern set
 
 ## Shared Interaction Model
 
@@ -25,7 +25,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## End-To-End Flow
 
 1. `TemplateRecommender()` resolves the current `wp_template` reference and template type
-2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()` and captures the current `visiblePatternNames` from the insertion root
+2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()`, captures the template-global `visiblePatternNames`, and sends the current top-level template structure plus executable insertion anchors through the server-side collector
 3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` posts it to `POST /flavor-agent/v1/recommend-template`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
 5. `TemplateAbilities::recommend_template()` gathers template context through `ServerCollector::for_template()`, folds in editor slot overrides, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
@@ -96,7 +96,9 @@ User prompt in wp_template editor
         },
         {
           "type": "insert_pattern",
-          "patternName": "core/post-meta-two-column"
+          "patternName": "core/post-meta-two-column",
+          "placement": "before_block_path",
+          "targetPath": [1]
         }
       ],
       "templateParts": [
@@ -118,13 +120,13 @@ User prompt in wp_template editor
 ```text
 Review Before Apply
   1 operation: assign `single-sidebar` -> `sidebar`
-  1 operation: insert `core/post-meta-two-column`
+  1 operation: insert `core/post-meta-two-column` -> `Before target block (Path 2)`
 ```
 
 ## What This Surface Can Do
 
 - Recommend template-part assignment and replacement
-- Recommend pattern insertion into the current template
+- Recommend bounded pattern insertion into the current template at validated top-level anchors
 - Turn mentioned template parts, areas, and patterns into clickable editor actions
 - Preview the exact operation list before any mutation happens
 - Record template apply actions in the shared activity system and expose inline undo
@@ -135,7 +137,14 @@ Review Before Apply
 - `replace_template_part`
 - `insert_pattern`
 
-Pattern insertion uses the current editor insertion point. The preview UI tells the user to change block selection before confirmation if they want the insertion to land somewhere else.
+`insert_pattern` now supports these bounded placement modes:
+
+- `start`
+- `end`
+- `before_block_path`
+- `after_block_path`
+
+Anchored template insertion is limited to validated top-level template paths gathered by `ServerCollector::for_template()`. Legacy insert operations without explicit placement still use the current editor insertion point.
 
 ## Guardrails And Failure Modes
 
