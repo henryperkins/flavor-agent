@@ -13,13 +13,13 @@
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | Provider-selected embeddings + Qdrant retrieval + LLM reranking |
 | `flavor-agent/recommend-template` | `TemplateAbilities` | Provider-selected template composition suggestions for Site Editor templates |
 | `flavor-agent/recommend-template-part` | `TemplateAbilities` | Template-part composition suggestions with validated bounded composition operations for Site Editor template parts |
-| `flavor-agent/recommend-style` | `StyleAbilities` | Global Styles suggestions constrained to supported site-level style paths, theme variations, and preset-backed values |
+| `flavor-agent/recommend-style` | `StyleAbilities` | Shared Global Styles and Style Book suggestions constrained to validated `theme.json` paths, theme variations, and theme-backed values |
 | `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
 | `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
 | `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
 | `flavor-agent/get-theme-tokens` | `InfraAbilities` | Theme preset and global style token extraction |
 | `flavor-agent/recommend-navigation` | `NavigationAbilities` | Navigation structure, overlay behavior, and organization recommendations |
-| `flavor-agent/check-status` | `InfraAbilities` | Backend inventory, OpenAI Native credential metadata, available ability list, and per-surface readiness including Global Styles |
+| `flavor-agent/check-status` | `InfraAbilities` | Backend inventory, OpenAI Native credential metadata, available ability list, and per-surface readiness including Global Styles and Style Book |
 
 ### REST API
 
@@ -30,7 +30,7 @@
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | Advisory navigation recommendations for selected `core/navigation` blocks |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | Template composition recommendations for the Site Editor |
 | `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | Template-part composition recommendations for the Site Editor |
-| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | Global Styles recommendations for the Site Editor Styles surface |
+| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | Shared Global Styles and Style Book recommendations for the Site Editor Styles surface |
 | `GET/POST /flavor-agent/v1/activity` | contextual editor/theme capability; sitewide GET requires `manage_options` | Activity query and persistence for AI actions |
 | `POST /flavor-agent/v1/activity/{id}/undo` | contextual editor/theme capability | Persisted undo status transition for an activity entry |
 | `POST /flavor-agent/v1/sync-patterns` | `manage_options` | Manual pattern index sync |
@@ -44,7 +44,7 @@
 - Pattern recommendation and indexing backends now have direct PHPUnit coverage for backend gating, runtime-state handling, Qdrant retrieval/reranking, fingerprinting, scheduling, full/incremental sync, deletion, lock contention, and remote failure persistence
 - Site Editor template recommendation panel for `wp_template` documents with richer top-level structural context, validated template-part assignment/replacement, and bounded pattern insertion operations that can target `start`, `end`, `before_block_path`, or `after_block_path` anchors
 - Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, executable-target and structural-constraint aware prompt context, and review-confirm-apply support for validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with start/end and before/after-block-path placement where applicable
-- Site Editor Global Styles recommendation panel for the native Styles sidebar, with a document-panel fallback, review-confirm-apply support for bounded `set_styles` and `set_theme_variation` operations, and shared capability/status messaging when the style backend is unavailable
+- Site Editor style recommendation panels for the native Styles sidebar, with document-panel fallbacks, review-confirm-apply support for bounded `set_styles`, `set_block_styles`, and `set_theme_variation` operations, shared capability/status messaging when the style backend is unavailable, and explicit `theme.json`-safe guardrails that keep raw CSS and `customCSS` out of scope
 - Inspector-panel navigation recommendations for selected `core/navigation` blocks with richer advisory structure, overlay, location, and accessibility guidance
 - Epic 2 shared review model: block, navigation, template, template-part, and Global Styles surfaces now share normalized interaction states (`idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`), shared advisory/review/status components, and aligned activity/undo presentation
 - Block, template, template-part, and Global Styles apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
@@ -154,7 +154,7 @@
 - **`docs/SOURCE_OF_TRUTH.md`** -- Definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - **`docs/FEATURE_SURFACE_MATRIX.md`** -- Fast matrix for every shipped surface: location, surfacing conditions, gating, and apply/undo support
 - **`docs/features/README.md`** -- Entry point for the detailed surface docs in `docs/features/`
-- **`docs/features/style-and-theme-intelligence.md`** -- Detailed Global Styles surface doc: scope contract, prompt/apply flow, guardrails, and undo
+- **`docs/features/style-and-theme-intelligence.md`** -- Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo
 - **`docs/reference/abilities-and-routes.md`** -- Canonical mapping of Abilities API contracts, REST routes, permissions, and first-party callers
 - **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference
 - **`docs/2026-03-25-roadmap-aligned-execution-plan.md`** -- Active forward plan aligned to WordPress 7.0, Gutenberg, and official AI plugin roadmaps

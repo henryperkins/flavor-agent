@@ -1,3 +1,10 @@
+jest.mock( '../../style-book/dom', () => ( {
+	getStyleBookUiState: jest.fn( () => ( {
+		isActive: false,
+		target: null,
+	} ) ),
+} ) );
+
 import {
 	createActivityEntry,
 	getCurrentActivityScope,
@@ -6,12 +13,18 @@ import {
 	readPersistedActivityLog,
 	resolveActivityScope,
 	resolveGlobalStylesScope,
+	resolveStyleBookScope,
 	writePersistedActivityLog,
 } from '../activity-history';
+import { getStyleBookUiState } from '../../style-book/dom';
 
 describe( 'activity history helpers', () => {
 	beforeEach( () => {
 		window.sessionStorage.clear();
+		getStyleBookUiState.mockReturnValue( {
+			isActive: false,
+			target: null,
+		} );
 	} );
 
 	test( 'getCurrentActivityScope resolves the current edited entity from registry selectors', () => {
@@ -84,6 +97,58 @@ describe( 'activity history helpers', () => {
 			entityName: 'globalStyles',
 			stylesheet: '',
 		} );
+	} );
+
+	test( 'resolveStyleBookScope returns a stable block-scoped session key', () => {
+		expect(
+			resolveStyleBookScope( '17', 'core/paragraph', {
+				blockTitle: 'Paragraph',
+			} )
+		).toEqual( {
+			key: 'style_book:17:core/paragraph',
+			hint: 'style_book:17:core/paragraph',
+			postType: 'global_styles',
+			entityId: '17',
+			entityKind: 'block',
+			entityName: 'styleBook',
+			globalStylesId: '17',
+			blockName: 'core/paragraph',
+			blockTitle: 'Paragraph',
+			stylesheet: '',
+		} );
+	} );
+
+	test( 'getCurrentActivityScope resolves Style Book targets before falling back to Global Styles', () => {
+		getStyleBookUiState.mockReturnValue( {
+			isActive: true,
+			target: {
+				blockName: 'core/paragraph',
+				blockTitle: 'Paragraph',
+			},
+		} );
+
+		expect(
+			getCurrentActivityScope( {
+				select: ( storeName ) =>
+					storeName === 'core/interface'
+						? {
+								getActiveComplementaryArea: () =>
+									'edit-site/global-styles',
+						  }
+						: storeName === 'core'
+							? {
+									__experimentalGetCurrentGlobalStylesId:
+										() => '17',
+							  }
+							: {},
+			} )
+		).toEqual(
+			expect.objectContaining( {
+				key: 'style_book:17:core/paragraph',
+				globalStylesId: '17',
+				blockName: 'core/paragraph',
+			} )
+		);
 	} );
 
 	test( 'legacy persisted template activity entries load as non-undoable', () => {

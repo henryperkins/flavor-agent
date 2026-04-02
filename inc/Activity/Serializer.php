@@ -75,6 +75,21 @@ final class Serializer {
 			];
 		}
 
+		if ( 'style-book' === $surface ) {
+			$global_styles_ref = self::normalize_string( $target['globalStylesId'] ?? '' );
+			$block_name        = self::normalize_string( $target['blockName'] ?? '' );
+			$ref               = '' !== $global_styles_ref ? $global_styles_ref : $document_key;
+
+			if ( '' !== $block_name ) {
+				$ref .= ':block:' . $block_name;
+			}
+
+			return [
+				'type' => 'style-book',
+				'ref'  => $ref,
+			];
+		}
+
 		$block_name = self::normalize_string( $target['blockName'] ?? '' );
 		$block_path = '';
 

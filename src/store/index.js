@@ -111,6 +111,23 @@ const DEFAULT_STATE = {
 	globalStylesApplyError: null,
 	globalStylesLastAppliedSuggestionKey: null,
 	globalStylesLastAppliedOperations: [],
+	styleBookSuggestions: [],
+	styleBookExplanation: '',
+	styleBookStatus: 'idle',
+	styleBookError: null,
+	styleBookRequestPrompt: '',
+	styleBookScopeKey: null,
+	styleBookGlobalStylesId: null,
+	styleBookBlockName: null,
+	styleBookBlockTitle: '',
+	styleBookContextSignature: null,
+	styleBookRequestToken: 0,
+	styleBookResultToken: 0,
+	styleBookSelectedSuggestionKey: null,
+	styleBookApplyStatus: 'idle',
+	styleBookApplyError: null,
+	styleBookLastAppliedSuggestionKey: null,
+	styleBookLastAppliedOperations: [],
 };
 
 const SHARED_PANEL_SEQUENCE = Object.freeze( [
@@ -157,6 +174,14 @@ const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
 	} ),
 	'global-styles': Object.freeze( {
 		surface: 'global-styles',
+		advisoryOnly: false,
+		allowsInlineApply: false,
+		previewRequired: true,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+	'style-book': Object.freeze( {
+		surface: 'style-book',
 		advisoryOnly: false,
 		allowsInlineApply: false,
 		previewRequired: true,
@@ -300,6 +325,14 @@ function getGlobalStylesHasResult( state ) {
 		state.globalStylesEntityId &&
 			( state.globalStylesSuggestions.length > 0 ||
 				normalizeStringMessage( state.globalStylesExplanation ) )
+	);
+}
+
+function getStyleBookHasResult( state ) {
+	return Boolean(
+		state.styleBookScopeKey &&
+			( state.styleBookSuggestions.length > 0 ||
+				normalizeStringMessage( state.styleBookExplanation ) )
 	);
 }
 
@@ -460,6 +493,14 @@ function isStaleGlobalStylesRequest( state, requestToken ) {
 	}
 
 	return requestToken < ( state.globalStylesRequestToken || 0 );
+}
+
+function isStaleStyleBookRequest( state, requestToken ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	return requestToken < ( state.styleBookRequestToken || 0 );
 }
 
 function buildActivityDocument( scope ) {
@@ -1050,6 +1091,43 @@ function buildGlobalStylesActivityEntry( {
 	} );
 }
 
+function buildStyleBookActivityEntry( {
+	operations,
+	beforeConfig,
+	afterConfig,
+	requestPrompt = '',
+	requestToken = 0,
+	scope = null,
+	suggestion,
+	globalStylesId,
+	blockName,
+	blockTitle = '',
+} ) {
+	return createActivityEntry( {
+		type: 'apply_style_book_suggestion',
+		surface: 'style-book',
+		target: {
+			globalStylesId,
+			blockName,
+			blockTitle,
+		},
+		suggestion: suggestion?.label || '',
+		suggestionKey: suggestion?.suggestionKey || null,
+		before: {
+			userConfig: beforeConfig,
+		},
+		after: {
+			userConfig: afterConfig,
+			operations,
+		},
+		prompt: requestPrompt,
+		requestRef: `style-book:${ globalStylesId || 'unknown' }:${
+			blockName || 'unknown'
+		}:${ requestToken }`,
+		document: buildActivityDocument( scope ),
+	} );
+}
+
 function undoBlockActivity( activity, registry ) {
 	const target = activity?.target || {};
 	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
@@ -1324,6 +1402,8 @@ const actions = {
 	applySuggestion( clientId, suggestion ) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
+			const applyErrorMessage =
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
 
 			syncActivitySession( localDispatch, select, scope );
 
@@ -1367,6 +1447,14 @@ const actions = {
 			}
 
 			if ( ! didApply ) {
+				localDispatch(
+					actions.setBlockRequestState(
+						clientId,
+						'error',
+						applyErrorMessage,
+						select.getBlockRequestToken( clientId ) || 0
+					)
+				);
 				return false;
 			}
 
@@ -1696,6 +1784,54 @@ const actions = {
 		};
 	},
 
+	setStyleBookStatus( status, error = null, requestToken = null ) {
+		return {
+			type: 'SET_STYLE_BOOK_STATUS',
+			status,
+			error,
+			requestToken,
+		};
+	},
+
+	setStyleBookRecommendations(
+		scope,
+		payload,
+		prompt = '',
+		requestToken = null,
+		contextSignature = null
+	) {
+		return {
+			type: 'SET_STYLE_BOOK_RECS',
+			scope,
+			payload,
+			prompt,
+			requestToken,
+			contextSignature,
+		};
+	},
+
+	setStyleBookSelectedSuggestion( suggestionKey = null ) {
+		return {
+			type: 'SET_STYLE_BOOK_SELECTED_SUGGESTION',
+			suggestionKey,
+		};
+	},
+
+	setStyleBookApplyState(
+		status,
+		error = null,
+		suggestionKey = null,
+		operations = []
+	) {
+		return {
+			type: 'SET_STYLE_BOOK_APPLY_STATE',
+			status,
+			error,
+			suggestionKey,
+			operations,
+		};
+	},
+
 	clearTemplateRecommendations() {
 		return ( { dispatch } ) => {
 			if ( actions._templateAbort ) {
@@ -1726,6 +1862,17 @@ const actions = {
 			}
 
 			dispatch( { type: 'CLEAR_GLOBAL_STYLES_RECS' } );
+		};
+	},
+
+	clearStyleBookRecommendations() {
+		return ( { dispatch } ) => {
+			if ( actions._styleBookAbort ) {
+				actions._styleBookAbort.abort();
+				actions._styleBookAbort = null;
+			}
+
+			dispatch( { type: 'CLEAR_STYLE_BOOK_RECS' } );
 		};
 	},
 
@@ -1940,7 +2087,8 @@ const actions = {
 			if (
 				activity.surface === 'template' ||
 				activity.surface === 'template-part' ||
-				activity.surface === 'global-styles'
+				activity.surface === 'global-styles' ||
+				activity.surface === 'style-book'
 			) {
 				let runtimeUndo;
 
@@ -2007,7 +2155,10 @@ const actions = {
 				result = undoTemplateSuggestionOperations( activity );
 			} else if ( activity.surface === 'template-part' ) {
 				result = undoTemplatePartSuggestionOperations( activity );
-			} else if ( activity.surface === 'global-styles' ) {
+			} else if (
+				activity.surface === 'global-styles' ||
+				activity.surface === 'style-book'
+			) {
 				result = undoGlobalStyleSuggestionOperations(
 					activity,
 					registry
@@ -2242,6 +2393,59 @@ const actions = {
 		};
 	},
 
+	applyStyleBookSuggestion( suggestion ) {
+		return async ( { dispatch: localDispatch, registry, select } ) => {
+			const scope = getCurrentActivityScope( registry );
+
+			syncActivitySession( localDispatch, select, scope );
+
+			localDispatch( actions.setStyleBookApplyState( 'applying' ) );
+
+			const result = applyGlobalStyleSuggestionOperations(
+				suggestion,
+				registry
+			);
+
+			if ( ! result.ok ) {
+				localDispatch(
+					actions.setStyleBookApplyState(
+						'error',
+						result.error || 'Style Book apply failed.'
+					)
+				);
+
+				return result;
+			}
+
+			await recordActivityEntry(
+				localDispatch,
+				select,
+				buildStyleBookActivityEntry( {
+					operations: result.operations,
+					beforeConfig: result.beforeConfig,
+					afterConfig: result.afterConfig,
+					requestPrompt: select.getStyleBookRequestPrompt?.() || '',
+					requestToken: select.getStyleBookResultToken?.() || 0,
+					scope,
+					suggestion,
+					globalStylesId: result.globalStylesId,
+					blockName: scope?.blockName || '',
+					blockTitle: scope?.blockTitle || '',
+				} )
+			);
+			localDispatch(
+				actions.setStyleBookApplyState(
+					'success',
+					null,
+					suggestion?.suggestionKey || null,
+					result.operations
+				)
+			);
+
+			return result;
+		};
+	},
+
 	fetchTemplateRecommendations( input ) {
 		return async ( { dispatch, select } ) => {
 			if ( actions._templateAbort ) {
@@ -2433,6 +2637,72 @@ const actions = {
 			}
 		};
 	},
+
+	fetchStyleBookRecommendations( input ) {
+		return async ( { dispatch, select } ) => {
+			if ( actions._styleBookAbort ) {
+				actions._styleBookAbort.abort();
+			}
+
+			const controller = new AbortController();
+			actions._styleBookAbort = controller;
+			const requestToken =
+				( select.getStyleBookRequestToken?.() || 0 ) + 1;
+
+			dispatch(
+				actions.setStyleBookStatus( 'loading', null, requestToken )
+			);
+
+			try {
+				const { contextSignature = null, ...requestData } = input;
+				const result = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-style',
+					method: 'POST',
+					data: requestData,
+					signal: controller.signal,
+				} );
+
+				dispatch(
+					actions.setStyleBookRecommendations(
+						input.scope,
+						result,
+						input.prompt || '',
+						requestToken,
+						contextSignature
+					)
+				);
+			} catch ( err ) {
+				if ( err.name === 'AbortError' ) {
+					return;
+				}
+
+				dispatch(
+					actions.setStyleBookRecommendations(
+						input.scope,
+						{
+							suggestions: [],
+							explanation: '',
+						},
+						input.prompt || '',
+						requestToken,
+						input.contextSignature || null
+					)
+				);
+				dispatch(
+					actions.setStyleBookStatus(
+						'error',
+						err?.message ||
+							'Style Book recommendation request failed.',
+						requestToken
+					)
+				);
+			} finally {
+				if ( actions._styleBookAbort === controller ) {
+					actions._styleBookAbort = null;
+				}
+			}
+		};
+	},
 };
 
 function reducer( state = DEFAULT_STATE, action ) {
@@ -2574,6 +2844,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 			const isGlobalStylesUndone =
 				action.status === 'undone' &&
 				matchedEntry?.surface === 'global-styles';
+			const isStyleBookUndone =
+				action.status === 'undone' &&
+				matchedEntry?.surface === 'style-book';
 
 			return {
 				...state,
@@ -2649,6 +2922,18 @@ function reducer( state = DEFAULT_STATE, action ) {
 				globalStylesLastAppliedOperations: isGlobalStylesUndone
 					? []
 					: state.globalStylesLastAppliedOperations,
+				styleBookApplyStatus: isStyleBookUndone
+					? 'idle'
+					: state.styleBookApplyStatus,
+				styleBookApplyError: isStyleBookUndone
+					? null
+					: state.styleBookApplyError,
+				styleBookLastAppliedSuggestionKey: isStyleBookUndone
+					? null
+					: state.styleBookLastAppliedSuggestionKey,
+				styleBookLastAppliedOperations: isStyleBookUndone
+					? []
+					: state.styleBookLastAppliedOperations,
 			};
 		}
 		case 'SET_PATTERN_STATUS':
@@ -2900,6 +3185,91 @@ function reducer( state = DEFAULT_STATE, action ) {
 						? action.operations ?? []
 						: state.globalStylesLastAppliedOperations,
 			};
+		case 'SET_STYLE_BOOK_STATUS':
+			if ( isStaleStyleBookRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				styleBookStatus: action.status,
+				styleBookError: action.error ?? null,
+				styleBookRequestToken:
+					action.requestToken ?? state.styleBookRequestToken,
+				styleBookSelectedSuggestionKey:
+					action.status === 'loading'
+						? null
+						: state.styleBookSelectedSuggestionKey,
+				styleBookApplyStatus:
+					action.status === 'loading'
+						? 'idle'
+						: state.styleBookApplyStatus,
+				styleBookApplyError:
+					action.status === 'loading'
+						? null
+						: state.styleBookApplyError,
+				styleBookLastAppliedSuggestionKey:
+					action.status === 'loading'
+						? null
+						: state.styleBookLastAppliedSuggestionKey,
+				styleBookLastAppliedOperations:
+					action.status === 'loading'
+						? []
+						: state.styleBookLastAppliedOperations,
+			};
+		case 'SET_STYLE_BOOK_RECS':
+			if ( isStaleStyleBookRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				styleBookSuggestions: action.payload?.suggestions ?? [],
+				styleBookExplanation: action.payload?.explanation ?? '',
+				styleBookRequestPrompt: action.prompt ?? '',
+				styleBookScopeKey: action.scope?.scopeKey || null,
+				styleBookGlobalStylesId: action.scope?.globalStylesId || null,
+				styleBookBlockName: action.scope?.blockName || null,
+				styleBookBlockTitle: action.scope?.blockTitle || '',
+				styleBookContextSignature: action.contextSignature ?? null,
+				styleBookRequestToken:
+					action.requestToken ?? state.styleBookRequestToken,
+				styleBookResultToken: state.styleBookResultToken + 1,
+				styleBookStatus: 'ready',
+				styleBookError: null,
+				styleBookSelectedSuggestionKey: null,
+				styleBookApplyStatus: 'idle',
+				styleBookApplyError: null,
+				styleBookLastAppliedSuggestionKey: null,
+				styleBookLastAppliedOperations: [],
+			};
+		case 'SET_STYLE_BOOK_SELECTED_SUGGESTION':
+			return {
+				...state,
+				styleBookSelectedSuggestionKey: action.suggestionKey ?? null,
+				styleBookApplyStatus:
+					state.styleBookApplyStatus === 'error'
+						? 'idle'
+						: state.styleBookApplyStatus,
+				styleBookApplyError:
+					state.styleBookApplyStatus === 'error'
+						? null
+						: state.styleBookApplyError,
+			};
+		case 'SET_STYLE_BOOK_APPLY_STATE':
+			return {
+				...state,
+				styleBookApplyStatus: action.status,
+				styleBookApplyError: action.error ?? null,
+				styleBookLastAppliedSuggestionKey:
+					action.status === 'success'
+						? action.suggestionKey ?? null
+						: state.styleBookLastAppliedSuggestionKey,
+				styleBookLastAppliedOperations:
+					action.status === 'success'
+						? action.operations ?? []
+						: state.styleBookLastAppliedOperations,
+			};
 		case 'SET_TEMPLATE_PART_STATUS':
 			if ( isStaleTemplatePartRequest( state, action.requestToken ) ) {
 				return state;
@@ -3016,6 +3386,27 @@ function reducer( state = DEFAULT_STATE, action ) {
 				globalStylesApplyError: null,
 				globalStylesLastAppliedSuggestionKey: null,
 				globalStylesLastAppliedOperations: [],
+			};
+		case 'CLEAR_STYLE_BOOK_RECS':
+			return {
+				...state,
+				styleBookSuggestions: [],
+				styleBookExplanation: '',
+				styleBookStatus: 'idle',
+				styleBookError: null,
+				styleBookRequestPrompt: '',
+				styleBookScopeKey: null,
+				styleBookGlobalStylesId: null,
+				styleBookBlockName: null,
+				styleBookBlockTitle: '',
+				styleBookContextSignature: null,
+				styleBookRequestToken: state.styleBookRequestToken + 1,
+				styleBookResultToken: state.styleBookResultToken + 1,
+				styleBookSelectedSuggestionKey: null,
+				styleBookApplyStatus: 'idle',
+				styleBookApplyError: null,
+				styleBookLastAppliedSuggestionKey: null,
+				styleBookLastAppliedOperations: [],
 			};
 		default:
 			return state;
@@ -3152,6 +3543,29 @@ const selectors = {
 		state.globalStylesLastAppliedSuggestionKey,
 	getGlobalStylesLastAppliedOperations: ( state ) =>
 		state.globalStylesLastAppliedOperations,
+	getStyleBookRecommendations: ( state ) => state.styleBookSuggestions,
+	getStyleBookExplanation: ( state ) => state.styleBookExplanation,
+	getStyleBookError: ( state ) => state.styleBookError,
+	getStyleBookRequestPrompt: ( state ) => state.styleBookRequestPrompt,
+	getStyleBookResultRef: ( state ) => state.styleBookScopeKey,
+	getStyleBookScopeKey: ( state ) => state.styleBookScopeKey,
+	getStyleBookGlobalStylesId: ( state ) => state.styleBookGlobalStylesId,
+	getStyleBookBlockName: ( state ) => state.styleBookBlockName,
+	getStyleBookBlockTitle: ( state ) => state.styleBookBlockTitle,
+	getStyleBookContextSignature: ( state ) => state.styleBookContextSignature,
+	getStyleBookRequestToken: ( state ) => state.styleBookRequestToken,
+	getStyleBookResultToken: ( state ) => state.styleBookResultToken,
+	isStyleBookLoading: ( state ) => state.styleBookStatus === 'loading',
+	getStyleBookStatus: ( state ) => state.styleBookStatus,
+	getStyleBookSelectedSuggestionKey: ( state ) =>
+		state.styleBookSelectedSuggestionKey,
+	getStyleBookApplyStatus: ( state ) => state.styleBookApplyStatus,
+	getStyleBookApplyError: ( state ) => state.styleBookApplyError,
+	isStyleBookApplying: ( state ) => state.styleBookApplyStatus === 'applying',
+	getStyleBookLastAppliedSuggestionKey: ( state ) =>
+		state.styleBookLastAppliedSuggestionKey,
+	getStyleBookLastAppliedOperations: ( state ) =>
+		state.styleBookLastAppliedOperations,
 	getSurfaceInteractionContract: ( state, surface ) => {
 		void state;
 
@@ -3260,6 +3674,22 @@ const selectors = {
 			hasResult: getGlobalStylesHasResult( state ),
 			hasPreview: Boolean(
 				options.hasPreview ?? state.globalStylesSelectedSuggestionKey
+			),
+			hasSuccess: Boolean( options.hasSuccess ),
+			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			...options,
+		} ),
+	getStyleBookInteractionState: ( state, options = {} ) =>
+		getNormalizedInteractionState( 'style-book', {
+			requestStatus: state.styleBookStatus,
+			requestError: normalizeStringMessage( state.styleBookError ),
+			applyStatus: state.styleBookApplyStatus,
+			applyError: normalizeStringMessage( state.styleBookApplyError ),
+			undoStatus: state.undoStatus,
+			undoError: normalizeStringMessage( options.undoError ),
+			hasResult: getStyleBookHasResult( state ),
+			hasPreview: Boolean(
+				options.hasPreview ?? state.styleBookSelectedSuggestionKey
 			),
 			hasSuccess: Boolean( options.hasSuccess ),
 			hasUndoSuccess: Boolean( options.hasUndoSuccess ),

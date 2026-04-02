@@ -78,6 +78,15 @@ final class SurfaceCapabilities {
 				'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
 				'flavor-agent'
 			);
+		$style_book_message    = $can_manage_settings
+			? __(
+				'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+				'flavor-agent'
+			)
+			: __(
+				'Style Book recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+				'flavor-agent'
+			);
 
 		return [
 			'block'        => self::build_surface(
@@ -199,6 +208,30 @@ final class SurfaceCapabilities {
 				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Flavor Agent' : '',
 				( $can_manage_settings && $can_edit_theme ) ? $settings_url : ''
 			),
+			'styleBook'    => self::build_surface(
+				$chat_available && $can_edit_theme,
+				! $can_edit_theme
+					? 'missing_theme_capability'
+					: ( $chat_available ? 'ready' : 'plugin_provider_unconfigured' ),
+				'plugin_settings',
+				! $can_edit_theme
+					? __(
+						'Style Book recommendations require the edit_theme_options capability.',
+						'flavor-agent'
+					)
+					: $style_book_message,
+				self::build_actions(
+					$can_manage_settings && $can_edit_theme,
+					[
+						[
+							'label' => 'Settings > Flavor Agent',
+							'href'  => $settings_url,
+						],
+					]
+				),
+				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Flavor Agent' : '',
+				( $can_manage_settings && $can_edit_theme ) ? $settings_url : ''
+			),
 		];
 	}
 
@@ -237,6 +270,7 @@ final class SurfaceCapabilities {
 				'templatePart' => self::output_schema(),
 				'navigation'   => self::output_schema(),
 				'globalStyles' => self::output_schema(),
+				'styleBook'    => self::output_schema(),
 			],
 		];
 	}

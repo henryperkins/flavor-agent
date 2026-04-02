@@ -187,6 +187,7 @@ function flavor_agent_enqueue_editor(): void {
 			'canRecommendTemplateParts'    => $surface_capabilities['templatePart']['available'],
 			'canRecommendNavigation'       => $surface_capabilities['navigation']['available'],
 			'canRecommendGlobalStyles'     => $surface_capabilities['globalStyles']['available'],
+			'canRecommendStyleBook'        => $surface_capabilities['styleBook']['available'],
 			'templatePartAreas'            => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
 		]
 	);

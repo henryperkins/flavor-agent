@@ -42,6 +42,12 @@ function describeActivity( entry ) {
 		return 'Global Styles action';
 	}
 
+	if ( entry?.surface === 'style-book' ) {
+		return entry?.target?.blockTitle
+			? `Style Book action · ${ entry.target.blockTitle }`
+			: 'Style Book action';
+	}
+
 	if ( entry?.target?.blockName ) {
 		return entry.target.blockName.replace( 'core/', '' );
 	}

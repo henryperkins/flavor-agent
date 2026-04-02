@@ -45,6 +45,9 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame( '', $capabilities['navigation']['configurationLabel'] );
 		$this->assertSame( [], $capabilities['globalStyles']['actions'] );
 		$this->assertSame( '', $capabilities['globalStyles']['configurationLabel'] );
+		$this->assertFalse( $capabilities['styleBook']['available'] );
+		$this->assertSame( [], $capabilities['styleBook']['actions'] );
+		$this->assertSame( '', $capabilities['styleBook']['configurationLabel'] );
 		$this->assertSame(
 			'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
 			$capabilities['navigation']['message']
@@ -52,6 +55,10 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame(
 			'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
 			$capabilities['globalStyles']['message']
+		);
+		$this->assertSame(
+			'Style Book recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			$capabilities['styleBook']['message']
 		);
 	}
 
@@ -112,6 +119,21 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 				],
 			],
 			$capabilities['globalStyles']['actions']
+		);
+		$this->assertFalse( $capabilities['styleBook']['available'] );
+		$this->assertSame(
+			[
+				[
+					'label' => 'Settings > Flavor Agent',
+					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+				],
+			],
+			$capabilities['styleBook']['actions']
+		);
+		$this->assertSame( 'Settings > Flavor Agent', $capabilities['styleBook']['configurationLabel'] );
+		$this->assertSame(
+			'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+			$capabilities['styleBook']['message']
 		);
 	}
 }

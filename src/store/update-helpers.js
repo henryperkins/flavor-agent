@@ -1,4 +1,5 @@
 const NESTED_MERGE_KEYS = new Set( [ 'metadata', 'style' ] );
+const BANNED_TOP_LEVEL_ATTRIBUTE_KEYS = new Set( [ 'customCSS' ] );
 
 /**
  * @param {unknown} value Candidate value.
@@ -31,6 +32,156 @@ function deepMergeObjects( currentValue, nextValue ) {
 	}
 
 	return merged;
+}
+
+/**
+ * @param {string} value Candidate string.
+ * @return {boolean} Whether the value looks like raw CSS.
+ */
+function looksLikeCssPayload( value ) {
+	if ( typeof value !== 'string' ) {
+		return false;
+	}
+
+	const trimmed = value.trim();
+
+	if ( ! trimmed ) {
+		return false;
+	}
+
+	if ( /[{};]/.test( trimmed ) ) {
+		return true;
+	}
+
+	if ( /!\s*important\b/i.test( trimmed ) ) {
+		return true;
+	}
+
+	if (
+		/^@(container|font-face|import|keyframes|layer|media|supports)\b/i.test(
+			trimmed
+		)
+	) {
+		return true;
+	}
+
+	return (
+		/^[a-z-]+\s*:\s*.+$/i.test( trimmed ) &&
+		! /^var:preset\|/i.test( trimmed ) &&
+		! /^var\(--/i.test( trimmed )
+	);
+}
+
+/**
+ * @param {string[]} path Current attribute path.
+ * @return {boolean} Whether the path is a banned CSS channel.
+ */
+function isBannedAttributeUpdatePath( path ) {
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
+		return false;
+	}
+
+	if ( BANNED_TOP_LEVEL_ATTRIBUTE_KEYS.has( path[ 0 ] ) ) {
+		return true;
+	}
+
+	for ( let index = 0; index < path.length - 1; index++ ) {
+		if ( path[ index ] === 'style' && path[ index + 1 ] === 'css' ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * @param {string[]} path Current attribute path.
+ * @return {boolean} Whether the path is style-adjacent.
+ */
+function isStyleAdjacentPath( path ) {
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
+		return false;
+	}
+
+	return (
+		BANNED_TOP_LEVEL_ATTRIBUTE_KEYS.has( path[ 0 ] ) ||
+		path.includes( 'style' ) ||
+		path[ path.length - 1 ] === 'css'
+	);
+}
+
+/**
+ * @param {unknown}  attributeUpdates Candidate attribute update tree.
+ * @param {string[]} path             Current traversal path.
+ * @return {{ kept: boolean, value: unknown }} Filtered update payload.
+ */
+function filterThemeSafeAttributeUpdatesResult( attributeUpdates, path = [] ) {
+	if ( Array.isArray( attributeUpdates ) ) {
+		const values = attributeUpdates
+			.map( ( value, index ) =>
+				filterThemeSafeAttributeUpdatesResult( value, [
+					...path,
+					String( index ),
+				] )
+			)
+			.filter( ( entry ) => entry.kept )
+			.map( ( entry ) => entry.value );
+
+		return {
+			kept: values.length > 0 || path.length === 0,
+			value: values,
+		};
+	}
+
+	if ( ! isPlainObject( attributeUpdates ) ) {
+		if (
+			typeof attributeUpdates === 'string' &&
+			isStyleAdjacentPath( path ) &&
+			looksLikeCssPayload( attributeUpdates )
+		) {
+			return { kept: false, value: undefined };
+		}
+
+		return { kept: true, value: attributeUpdates };
+	}
+
+	const values = {};
+
+	for ( const [ key, value ] of Object.entries( attributeUpdates ) ) {
+		const nextPath = [ ...path, key ];
+
+		if ( isBannedAttributeUpdatePath( nextPath ) ) {
+			continue;
+		}
+
+		const filtered = filterThemeSafeAttributeUpdatesResult(
+			value,
+			nextPath
+		);
+
+		if ( filtered.kept ) {
+			values[ key ] = filtered.value;
+		}
+	}
+
+	return {
+		kept: Object.keys( values ).length > 0 || path.length === 0,
+		value: values,
+	};
+}
+
+/**
+ * @param {Object} attributeUpdates Candidate attribute updates.
+ * @return {Object} Theme-safe attribute updates.
+ */
+function filterThemeSafeAttributeUpdates( attributeUpdates ) {
+	if ( ! isPlainObject( attributeUpdates ) ) {
+		return {};
+	}
+
+	const filtered = filterThemeSafeAttributeUpdatesResult( attributeUpdates );
+
+	return isPlainObject( filtered.value ) ? filtered.value : {};
 }
 
 /**
@@ -147,13 +298,16 @@ export function buildSafeAttributeUpdates(
 	currentAttributes = {},
 	suggestedUpdates = {}
 ) {
-	if ( ! isPlainObject( suggestedUpdates ) ) {
+	const themeSafeUpdates =
+		filterThemeSafeAttributeUpdates( suggestedUpdates );
+
+	if ( ! isPlainObject( themeSafeUpdates ) ) {
 		return {};
 	}
 
 	const safeUpdates = {};
 
-	for ( const [ key, value ] of Object.entries( suggestedUpdates ) ) {
+	for ( const [ key, value ] of Object.entries( themeSafeUpdates ) ) {
 		if (
 			NESTED_MERGE_KEYS.has( key ) &&
 			isPlainObject( value ) &&
@@ -350,6 +504,39 @@ function sanitizeSuggestionGroupForBindableAttributes(
 }
 
 /**
+ * @param {Object} suggestion Suggestion candidate.
+ * @return {object|null} Theme-safe suggestion or null when no safe updates remain.
+ */
+function sanitizeSuggestionForThemeSafety( suggestion ) {
+	if ( ! isPlainObject( suggestion?.attributeUpdates ) ) {
+		return suggestion;
+	}
+
+	const filteredUpdates = filterThemeSafeAttributeUpdates(
+		suggestion.attributeUpdates
+	);
+
+	if ( Object.keys( filteredUpdates ).length === 0 ) {
+		return null;
+	}
+
+	return {
+		...suggestion,
+		attributeUpdates: filteredUpdates,
+	};
+}
+
+/**
+ * @param {Array} suggestions Suggestion group.
+ * @return {Array} Theme-safe suggestion group.
+ */
+function sanitizeSuggestionGroupForThemeSafety( suggestions ) {
+	return suggestions
+		.map( ( suggestion ) => sanitizeSuggestionForThemeSafety( suggestion ) )
+		.filter( Boolean );
+}
+
+/**
  * @param {Object} recommendations   Raw recommendations payload.
  * @param {Object} [blockContext={}] Block context used to enforce locking rules.
  * @return {Object} Normalized and filtered recommendation payload.
@@ -361,18 +548,24 @@ export function sanitizeRecommendationsForContext(
 	const normalized = normalizeSuggestionGroups( recommendations );
 	const restrictions = getEditingRestrictions( blockContext );
 	const bindableAttributeKeys = getBindableAttributeKeys( blockContext );
-	const bindingSafeRecommendations = {
+	const themeSafeRecommendations = {
 		...normalized,
+		settings: sanitizeSuggestionGroupForThemeSafety( normalized.settings ),
+		styles: sanitizeSuggestionGroupForThemeSafety( normalized.styles ),
+		block: sanitizeSuggestionGroupForThemeSafety( normalized.block ),
+	};
+	const bindingSafeRecommendations = {
+		...themeSafeRecommendations,
 		settings: sanitizeSuggestionGroupForBindableAttributes(
-			normalized.settings,
+			themeSafeRecommendations.settings,
 			bindableAttributeKeys
 		),
 		styles: sanitizeSuggestionGroupForBindableAttributes(
-			normalized.styles,
+			themeSafeRecommendations.styles,
 			bindableAttributeKeys
 		),
 		block: sanitizeSuggestionGroupForBindableAttributes(
-			normalized.block,
+			themeSafeRecommendations.block,
 			bindableAttributeKeys
 		),
 	};
@@ -432,8 +625,16 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 		return {};
 	}
 
+	const themeSafeUpdates = filterThemeSafeAttributeUpdates(
+		suggestion.attributeUpdates
+	);
+
+	if ( Object.keys( themeSafeUpdates ).length === 0 ) {
+		return {};
+	}
+
 	const bindingSafeUpdates = filterAttributeUpdatesForBindableAttributes(
-		suggestion.attributeUpdates,
+		themeSafeUpdates,
 		getBindableAttributeKeys( blockContext )
 	);
 

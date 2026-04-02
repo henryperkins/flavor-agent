@@ -5,6 +5,7 @@ const LEGACY_FLAG_KEYS = Object.freeze( {
 	'template-part': 'canRecommendTemplateParts',
 	navigation: 'canRecommendNavigation',
 	'global-styles': 'canRecommendGlobalStyles',
+	'style-book': 'canRecommendStyleBook',
 } );
 
 const STRUCTURED_SURFACE_KEYS = Object.freeze( {
@@ -14,6 +15,7 @@ const STRUCTURED_SURFACE_KEYS = Object.freeze( {
 	'template-part': 'templatePart',
 	navigation: 'navigation',
 	'global-styles': 'globalStyles',
+	'style-book': 'styleBook',
 } );
 
 function getFlavorAgentData( input = null ) {
@@ -86,6 +88,10 @@ function getDefaultActions( surface, data, reason ) {
 		return [];
 	}
 
+	if ( surface === 'style-book' ) {
+		return [];
+	}
+
 	return [
 		data?.settingsUrl
 			? {
@@ -116,6 +122,16 @@ function getDefaultMessage( surface, reason ) {
 			}
 
 			return "Global Styles recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+		case 'style-book':
+			if ( reason === 'surface_not_implemented' ) {
+				return 'Style Book recommendations are not available in this plugin build yet.';
+			}
+
+			if ( reason === 'missing_theme_capability' ) {
+				return 'Style Book recommendations require the edit_theme_options capability.';
+			}
+
+			return "Style Book recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
 		case 'pattern':
 			return "Pattern recommendations rely on Flavor Agent's chat and embedding backends plus Qdrant in Settings > Flavor Agent.";
 		default:

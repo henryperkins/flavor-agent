@@ -29,6 +29,46 @@ function getSortedUniqueSlugs( entries = [] ) {
 	].sort( ( left, right ) => left.localeCompare( right ) );
 }
 
+function readNestedValue( value, path = [] ) {
+	let current = value;
+
+	for ( const segment of path ) {
+		if ( ! current || typeof current !== 'object' ) {
+			return undefined;
+		}
+
+		current = current[ segment ];
+	}
+
+	return current;
+}
+
+function isTruthySupportValue( value ) {
+	if ( value === true ) {
+		return true;
+	}
+
+	if ( value === false || value === null || value === undefined ) {
+		return false;
+	}
+
+	if ( Array.isArray( value ) ) {
+		return value.length > 0;
+	}
+
+	if ( typeof value === 'object' ) {
+		return Object.keys( value ).length > 0;
+	}
+
+	return !! value;
+}
+
+function hasAnyBlockSupportPath( blockSupports = {}, supportPaths = [] ) {
+	return supportPaths.some( ( supportPath ) =>
+		isTruthySupportValue( readNestedValue( blockSupports, supportPath ) )
+	);
+}
+
 export function collectThemeTokenDiagnosticsFromSettings( settings = {} ) {
 	const sourceDetails = getThemeTokenSourceDetails( settings );
 
@@ -191,10 +231,177 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 	return supportedPaths;
 }
 
+export function getBlockStyleSupportedStylePathsFromTokens(
+	tokens = {},
+	blockSupports = {}
+) {
+	const supportedPaths = [];
+	const hasColorPresets = Array.isArray( tokens?.color?.palette )
+		? tokens.color.palette.length > 0
+		: false;
+	const hasFontSizePresets = Array.isArray( tokens?.typography?.fontSizes )
+		? tokens.typography.fontSizes.length > 0
+		: false;
+	const hasFontFamilyPresets = Array.isArray(
+		tokens?.typography?.fontFamilies
+	)
+		? tokens.typography.fontFamilies.length > 0
+		: false;
+	const hasSpacingPresets = Array.isArray( tokens?.spacing?.spacingSizes )
+		? tokens.spacing.spacingSizes.length > 0
+		: false;
+	const hasShadowPresets = Array.isArray( tokens?.shadow?.presets )
+		? tokens.shadow.presets.length > 0
+		: false;
+
+	if (
+		hasColorPresets &&
+		tokens?.color?.backgroundEnabled &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'color', 'background' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'color', 'background' ],
+			valueSource: 'color',
+		} );
+	}
+
+	if (
+		hasColorPresets &&
+		tokens?.color?.textEnabled &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'color', 'text' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'color', 'text' ],
+			valueSource: 'color',
+		} );
+	}
+
+	if (
+		hasFontSizePresets &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'typography', 'fontSize' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'typography', 'fontSize' ],
+			valueSource: 'font-size',
+		} );
+	}
+
+	if (
+		hasFontFamilyPresets &&
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'typography', 'fontFamily' ],
+			[ 'typography', '__experimentalFontFamily' ],
+		] )
+	) {
+		supportedPaths.push( {
+			path: [ 'typography', 'fontFamily' ],
+			valueSource: 'font-family',
+		} );
+	}
+
+	if (
+		tokens?.typography?.lineHeight &&
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'typography', 'lineHeight' ],
+		] )
+	) {
+		supportedPaths.push( {
+			path: [ 'typography', 'lineHeight' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if (
+		tokens?.spacing?.blockGap &&
+		hasSpacingPresets &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'spacing', 'blockGap' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'spacing', 'blockGap' ],
+			valueSource: 'spacing',
+		} );
+	}
+
+	if (
+		tokens?.border?.color &&
+		hasColorPresets &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'color' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'border', 'color' ],
+			valueSource: 'color',
+		} );
+	}
+
+	if (
+		tokens?.border?.radius &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'radius' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'border', 'radius' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if (
+		tokens?.border?.style &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'style' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'border', 'style' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if (
+		tokens?.border?.width &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'width' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'border', 'width' ],
+			valueSource: 'freeform',
+		} );
+	}
+
+	if (
+		hasShadowPresets &&
+		hasAnyBlockSupportPath( blockSupports, [ [ 'shadow' ] ] )
+	) {
+		supportedPaths.push( {
+			path: [ 'shadow' ],
+			valueSource: 'shadow',
+		} );
+	}
+
+	return supportedPaths;
+}
+
 export function buildGlobalStylesExecutionContract( tokens = {} ) {
 	return {
 		supportedStylePaths:
 			getGlobalStylesSupportedStylePathsFromTokens( tokens ),
+		presetSlugs: {
+			color: getSortedUniqueSlugs( tokens?.color?.palette || [] ),
+			fontsize: getSortedUniqueSlugs(
+				tokens?.typography?.fontSizes || []
+			),
+			fontfamily: getSortedUniqueSlugs(
+				tokens?.typography?.fontFamilies || []
+			),
+			spacing: getSortedUniqueSlugs(
+				tokens?.spacing?.spacingSizes || []
+			),
+			shadow: getSortedUniqueSlugs( tokens?.shadow?.presets || [] ),
+		},
+	};
+}
+
+export function buildBlockStyleExecutionContract( tokens = {}, blockType = {} ) {
+	return {
+		supportedStylePaths: getBlockStyleSupportedStylePathsFromTokens(
+			tokens,
+			blockType?.supports || {}
+		),
 		presetSlugs: {
 			color: getSortedUniqueSlugs( tokens?.color?.palette || [] ),
 			fontsize: getSortedUniqueSlugs(
@@ -216,6 +423,16 @@ export function buildGlobalStylesExecutionContractFromSettings(
 ) {
 	return buildGlobalStylesExecutionContract(
 		collectThemeTokensFromSettings( settings )
+	);
+}
+
+export function buildBlockStyleExecutionContractFromSettings(
+	settings = {},
+	blockType = {}
+) {
+	return buildBlockStyleExecutionContract(
+		collectThemeTokensFromSettings( settings ),
+		blockType
 	);
 }
 

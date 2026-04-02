@@ -237,4 +237,102 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( [], $result['settings'] );
 		$this->assertSame( 'Unsupported bindings should not degrade into renames.', $result['explanation'] );
 	}
+
+	public function test_parse_response_drops_suggestions_that_only_set_custom_css(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'styles'      => [
+						[
+							'label'            => 'Inject custom CSS',
+							'attributeUpdates' => [
+								'customCSS' => '.wp-block-paragraph { color: red; }',
+							],
+						],
+					],
+					'explanation' => 'Unsafe CSS should not survive parsing.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['styles'] );
+		$this->assertSame( 'Unsafe CSS should not survive parsing.', $result['explanation'] );
+	}
+
+	public function test_parse_response_strips_nested_style_css_but_keeps_safe_theme_json_values(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'styles'      => [
+						[
+							'label'            => 'Use the accent preset instead',
+							'attributeUpdates' => [
+								'style' => [
+									'css'   => '.wp-block-group { color: red; }',
+									'color' => [
+										'background' => 'var:preset|color|accent',
+									],
+								],
+							],
+						],
+					],
+					'explanation' => 'Safe theme-backed changes should remain.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Use the accent preset instead',
+					'description'      => '',
+					'panel'            => 'general',
+					'type'             => null,
+					'attributeUpdates' => [
+						'style' => [
+							'color' => [
+								'background' => 'var:preset|color|accent',
+							],
+						],
+					],
+					'currentValue'     => null,
+					'suggestedValue'   => null,
+					'isCurrentStyle'   => null,
+					'isRecommended'    => null,
+					'confidence'       => null,
+					'preview'          => null,
+					'presetSlug'       => null,
+					'cssVar'           => null,
+				],
+			],
+			$result['styles']
+		);
+	}
+
+	public function test_parse_response_drops_raw_css_strings_from_style_updates(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'styles'      => [
+						[
+							'label'            => 'Replace the text color',
+							'attributeUpdates' => [
+								'style' => [
+									'color' => [
+										'text' => 'color: red;',
+									],
+								],
+							],
+						],
+					],
+					'explanation' => 'Raw CSS declarations should not survive parsing.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['styles'] );
+	}
 }

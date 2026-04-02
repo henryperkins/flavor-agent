@@ -512,7 +512,7 @@ final class Registration {
 			'flavor-agent/recommend-style',
 			[
 				'label'               => __( 'Recommend site styles', 'flavor-agent' ),
-				'description'         => __( 'Suggest theme-safe Global Styles changes and theme style variations for the Site Editor.', 'flavor-agent' ),
+				'description'         => __( 'Suggest theme-safe style changes and theme style variations for supported Site Editor style surfaces.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ StyleAbilities::class, 'recommend_style' ],
 				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
@@ -529,8 +529,10 @@ final class Registration {
 								'entityKind'     => [ 'type' => 'string' ],
 								'entityName'     => [ 'type' => 'string' ],
 								'stylesheet'     => [ 'type' => 'string' ],
+								'blockName'      => [ 'type' => 'string' ],
+								'blockTitle'     => [ 'type' => 'string' ],
 							],
-							'Resolved Global Styles scope descriptor from the Site Editor.'
+							'Resolved style surface scope descriptor from the Site Editor.'
 						),
 						'styleContext' => self::open_object_schema(
 							[
@@ -547,8 +549,17 @@ final class Registration {
 										'reason'      => [ 'type' => 'string' ],
 									]
 								),
+								'styleBookTarget'       => self::open_object_schema(
+									[
+										'blockName'     => [ 'type' => 'string' ],
+										'blockTitle'    => [ 'type' => 'string' ],
+										'description'   => [ 'type' => 'string' ],
+										'currentStyles' => self::open_object_schema(),
+										'mergedStyles'  => self::open_object_schema(),
+									]
+								),
 							],
-							'Current Global Styles editor context needed for style recommendations.'
+							'Current style surface editor context needed for style recommendations.'
 						),
 						'prompt'       => [
 							'type'        => 'string',
@@ -907,6 +918,7 @@ final class Registration {
 									'type'       => 'object',
 									'properties' => [
 										'type'           => [ 'type' => 'string' ],
+										'blockName'      => [ 'type' => 'string' ],
 										'path'           => [
 											'type'  => 'array',
 											'items' => [ 'type' => 'string' ],

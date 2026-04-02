@@ -47,6 +47,22 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertSame( 'invalid_style_scope', $result->get_error_code() );
 	}
 
+	public function test_recommend_style_requires_style_book_block_name(): void {
+		$result = StyleAbilities::recommend_style(
+			[
+				'scope'        => [
+					'surface'        => 'style-book',
+					'scopeKey'       => 'style_book:17',
+					'globalStylesId' => '17',
+				],
+				'styleContext' => [],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_style_scope', $result->get_error_code() );
+	}
+
 	public function test_recommend_style_returns_validated_style_suggestions(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
@@ -341,6 +357,226 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertStringNotContainsString(
 			'_links',
 			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_recommend_style_accepts_style_book_scope_with_target_context(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'core/paragraph',
+			[
+				'title'    => 'Paragraph',
+				'supports' => [
+					'color'      => [
+						'text' => true,
+					],
+					'customCSS'  => true,
+					'background' => [
+						'backgroundImage' => true,
+					],
+				],
+			]
+		);
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'Style Book target acknowledged.',
+						]
+					),
+				]
+			),
+		];
+
+		$result = StyleAbilities::recommend_style(
+			[
+				'scope'        => [
+					'surface'        => 'style-book',
+					'scopeKey'       => 'style_book:17:core/paragraph',
+					'globalStylesId' => '17',
+					'blockName'      => 'core/paragraph',
+					'blockTitle'     => 'Paragraph',
+				],
+				'styleContext' => [
+					'currentConfig'         => [ 'styles' => [] ],
+					'mergedConfig'          => [ 'styles' => [] ],
+					'availableVariations'   => [],
+					'themeTokenDiagnostics' => [
+						'source'      => 'stable',
+						'settingsKey' => 'features',
+						'reason'      => 'stable-parity',
+					],
+					'styleBookTarget'       => [
+						'description'   => 'Primary intro copy block.',
+						'currentStyles' => [
+							'color' => [
+								'text' => 'var:preset|color|accent',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'Surface: style-book',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Block name: core/paragraph',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'- color.text (color)',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'- color.background (color)',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'customCSS',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'background.backgroundImage',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Primary intro copy block.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_supported_block_style_paths_follow_registered_block_supports(): void {
+		WordPressTestState::$global_settings = [
+			'color'      => [
+				'palette' => [
+					[
+						'slug'  => 'accent',
+						'color' => '#ff5500',
+					],
+				],
+			],
+			'typography' => [
+				'fontSizes'    => [
+					[
+						'slug' => 'body',
+						'size' => '1rem',
+					],
+				],
+				'fontFamilies' => [
+					[
+						'slug'       => 'display',
+						'fontFamily' => 'Georgia, serif',
+					],
+				],
+				'lineHeight'   => true,
+			],
+			'spacing'    => [
+				'spacingSizes' => [
+					[
+						'slug' => 's',
+						'size' => '0.5rem',
+					],
+				],
+				'blockGap'     => true,
+			],
+			'border'     => [
+				'color'  => true,
+				'radius' => true,
+				'style'  => true,
+				'width'  => true,
+			],
+			'shadow'     => [
+				'presets' => [
+					[
+						'slug'   => 'soft',
+						'shadow' => '0 10px 30px rgba(0,0,0,0.1)',
+					],
+				],
+			],
+		];
+
+		\WP_Block_Type_Registry::get_instance()->register(
+			'core/paragraph',
+			[
+				'title'    => 'Paragraph',
+				'supports' => [
+					'color'      => [
+						'background' => true,
+						'text'       => true,
+					],
+					'typography' => [
+						'fontSize'   => true,
+						'fontFamily' => true,
+						'lineHeight' => true,
+					],
+					'spacing'    => [
+						'blockGap' => true,
+					],
+					'border'     => [
+						'color'  => true,
+						'radius' => true,
+						'style'  => true,
+						'width'  => true,
+					],
+					'shadow'     => true,
+					'customCSS'  => true,
+					'background' => [
+						'backgroundImage' => true,
+					],
+				],
+			]
+		);
+
+		$paths = StyleAbilities::supported_block_style_paths( 'core/paragraph' );
+
+		$this->assertContains(
+			[
+				'path'        => [ 'color', 'background' ],
+				'valueSource' => 'color',
+			],
+			$paths
+		);
+		$this->assertContains(
+			[
+				'path'        => [ 'typography', 'fontFamily' ],
+				'valueSource' => 'font-family',
+			],
+			$paths
+		);
+		$this->assertContains(
+			[
+				'path'        => [ 'shadow' ],
+				'valueSource' => 'shadow',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'customCSS' ],
+				'valueSource' => 'freeform',
+			],
+			$paths
+		);
+		$this->assertNotContains(
+			[
+				'path'        => [ 'background', 'backgroundImage' ],
+				'valueSource' => 'freeform',
+			],
+			$paths
 		);
 	}
 }

@@ -3,11 +3,17 @@ jest.mock( '@wordpress/data', () => ( {
 	dispatch: jest.fn(),
 } ) );
 
+jest.mock( '@wordpress/blocks', () => ( {
+	store: {},
+} ) );
+
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: {},
 } ) );
 
 const { select, dispatch } = require( '@wordpress/data' );
+const { store: blocksStore } = require( '@wordpress/blocks' );
+const { store: blockEditorStore } = require( '@wordpress/block-editor' );
 const {
 	applyGlobalStyleSuggestionOperations,
 	getGlobalStylesActivityUndoState,
@@ -19,10 +25,12 @@ describe( 'style-operations', () => {
 	let coreSelect;
 	let coreDispatch;
 	let blockEditorSelect;
+	let blocksSelect;
 	let blockEditorSettings;
 	let currentRecord;
 	let baseConfig;
 	let variations;
+	let registeredBlockTypes;
 
 	beforeEach( () => {
 		blockEditorSettings = {
@@ -60,7 +68,71 @@ describe( 'style-operations', () => {
 							},
 						],
 					},
+					fontFamilies: {
+						theme: [
+							{
+								name: 'Display',
+								slug: 'display',
+								fontFamily: 'Georgia, serif',
+							},
+						],
+					},
 					lineHeight: true,
+				},
+				spacing: {
+					spacingSizes: {
+						theme: [
+							{
+								name: 'Small',
+								slug: 's',
+								size: '0.5rem',
+							},
+						],
+					},
+					blockGap: true,
+				},
+				border: {
+					color: true,
+					radius: true,
+					style: true,
+					width: true,
+				},
+				shadow: {
+					presets: {
+						theme: [
+							{
+								name: 'Soft',
+								slug: 'soft',
+								shadow: '0 10px 30px rgba(0,0,0,0.1)',
+							},
+						],
+					},
+				},
+			},
+		};
+		registeredBlockTypes = {
+			'core/paragraph': {
+				name: 'core/paragraph',
+				supports: {
+					color: {
+						background: true,
+						text: true,
+					},
+					typography: {
+						fontSize: true,
+						fontFamily: true,
+						lineHeight: true,
+					},
+					spacing: {
+						blockGap: true,
+					},
+					border: {
+						color: true,
+						radius: true,
+						style: true,
+						width: true,
+					},
+					shadow: true,
 				},
 			},
 		};
@@ -131,14 +203,26 @@ describe( 'style-operations', () => {
 		blockEditorSelect = {
 			getSettings: jest.fn( () => blockEditorSettings ),
 		};
+		blocksSelect = {
+			getBlockType: jest.fn(
+				( blockName ) => registeredBlockTypes[ blockName ] || null
+			),
+		};
 
 		select.mockImplementation( ( storeName ) => {
 			if ( storeName === 'core' ) {
 				return coreSelect;
 			}
 
-			if ( storeName === 'core/block-editor' ) {
+			if (
+				storeName === 'core/block-editor' ||
+				storeName === blockEditorStore
+			) {
 				return blockEditorSelect;
+			}
+
+			if ( storeName === blocksStore ) {
+				return blocksSelect;
 			}
 
 			return {};
@@ -392,6 +476,74 @@ describe( 'style-operations', () => {
 		expect( result.afterConfig.styles.color.background ).toBe(
 			'var:preset|color|accent'
 		);
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations updates block-scoped preset-backed style paths', () => {
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_block_styles',
+					blockName: 'core/paragraph',
+					path: [ 'color', 'text' ],
+					value: 'var:preset|color|accent',
+					valueType: 'preset',
+					presetSlug: 'accent',
+					presetType: 'color',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect(
+			result.afterConfig.styles.blocks[ 'core/paragraph' ].color.text
+		).toBe( 'var:preset|color|accent' );
+		expect( coreDispatch.editEntityRecord ).toHaveBeenCalledWith(
+			'root',
+			'globalStyles',
+			'17',
+			expect.objectContaining( {
+				styles: expect.objectContaining( {
+					blocks: {
+						'core/paragraph': {
+							color: {
+								text: 'var:preset|color|accent',
+							},
+						},
+					},
+				} ),
+			} )
+		);
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations rejects unsupported block-scoped style paths', () => {
+		registeredBlockTypes[ 'core/paragraph' ] = {
+			...registeredBlockTypes[ 'core/paragraph' ],
+			supports: {
+				color: {
+					text: true,
+				},
+			},
+		};
+
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_block_styles',
+					blockName: 'core/paragraph',
+					path: [ 'border', 'radius' ],
+					value: '12px',
+					valueType: 'freeform',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'border.radius' ),
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 	} );
 
 	test( 'applyGlobalStyleSuggestionOperations applies a theme variation before later style overrides', () => {

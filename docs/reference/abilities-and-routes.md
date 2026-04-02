@@ -25,7 +25,7 @@ Use it when you need to answer:
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional filters | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-template` | `edit_theme_options` | Active provider chat configured | Template suggestions plus validated template-part operations and bounded pattern insertions with optional anchor metadata | Site Editor template panel |
 | `flavor-agent/recommend-template-part` | `edit_theme_options` | Active provider chat configured | Template-part suggestions, focus blocks, patterns, and validated bounded operations constrained by executable paths and anchors | Site Editor template-part panel |
-| `flavor-agent/recommend-style` | `edit_theme_options` | Active provider chat configured | Global Styles suggestions constrained to supported site-level style paths, theme variations, and preset-backed values | Site Editor Global Styles panel |
+| `flavor-agent/recommend-style` | `edit_theme_options` | Active provider chat configured | Shared style suggestions for Global Styles and Style Book, constrained to validated `theme.json` paths, theme variations, and theme-backed values | Site Editor Global Styles and Style Book panels |
 | `flavor-agent/list-template-parts` | `edit_theme_options` | None beyond capability | Registered template parts, optionally filtered by area | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Active provider chat configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
 | `flavor-agent/search-wordpress-docs` | `manage_options` | Cloudflare AI Search configured | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
@@ -36,7 +36,7 @@ Use it when you need to answer:
 
 - All twelve abilities are registered in `inc/Abilities/Registration.php`
 - On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
-- `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, and Global Styles UIs
+- `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
 
 ## REST Routes
 
@@ -47,7 +47,7 @@ Use it when you need to answer:
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | `fetchNavigationRecommendations()` | `NavigationAbilities::recommend_navigation()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | `fetchTemplatePartRecommendations()` | `TemplateAbilities::recommend_template_part()` | Thin REST adapter over the ability |
-| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` | `StyleAbilities::recommend_style()` | Thin REST adapter over the ability |
+| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` and `fetchStyleBookRecommendations()` | `StyleAbilities::recommend_style()` | Thin REST adapter over the shared style ability |
 | `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` | Scoped queries for editor use; global queries for the admin audit page |
 | `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
@@ -164,6 +164,40 @@ Use it when you need to answer:
 }
 ```
 
+### Style Book Ability Request
+
+```json
+{
+  "scope": {
+    "surface": "style-book",
+    "scopeKey": "style_book:17:core/group",
+    "globalStylesId": "17",
+    "entityKind": "block",
+    "entityName": "styleBook",
+    "entityId": "core/group",
+    "blockName": "core/group",
+    "blockTitle": "Group"
+  },
+  "styleContext": {
+    "currentConfig": {
+      "settings": {},
+      "styles": {}
+    },
+    "mergedConfig": {
+      "settings": {},
+      "styles": {}
+    },
+    "styleBookTarget": {
+      "blockName": "core/group",
+      "blockTitle": "Group",
+      "currentStyles": {},
+      "mergedStyles": {}
+    }
+  },
+  "prompt": "Make this block feel more editorial."
+}
+```
+
 ### Template-Part Ability Response Shape
 
 ```json
@@ -257,7 +291,7 @@ Pattern UI -> store -> /recommend-patterns -> PatternAbilities -> Qdrant + Respo
 Navigation UI -> store -> /recommend-navigation -> NavigationAbilities -> NavigationPrompt -> advisory UI
 Template UI -> store -> /recommend-template -> TemplateAbilities -> TemplatePrompt -> preview/apply/undo
 Template-part UI -> store -> /recommend-template-part -> TemplateAbilities -> TemplatePartPrompt -> preview/apply/undo
-Global Styles UI -> store -> /recommend-style -> StyleAbilities -> StylePrompt -> preview/apply/undo
+Global Styles / Style Book UI -> store -> /recommend-style -> StyleAbilities -> StylePrompt -> preview/apply/undo
 Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/undo
 ```
 

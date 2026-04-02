@@ -7,8 +7,10 @@ jest.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 const {
+	buildBlockStyleExecutionContractFromSettings,
 	buildGlobalStylesExecutionContractFromSettings,
 	collectThemeTokensFromSettings,
+	getBlockStyleSupportedStylePathsFromTokens,
 	getGlobalStylesSupportedStylePathsFromTokens,
 	summarizeTokens,
 } = require( '../theme-tokens' );
@@ -339,6 +341,103 @@ describe( 'global styles execution contract', () => {
 				},
 			] )
 		);
+	} );
+} );
+
+describe( 'block style execution contract', () => {
+	test( 'derives supported block style paths from theme tokens and block supports', () => {
+		const contract = buildBlockStyleExecutionContractFromSettings(
+			{
+				features: COMPLETE_FEATURES,
+			},
+			{
+				supports: {
+					color: {
+						background: true,
+						text: true,
+					},
+					typography: {
+						fontSize: true,
+						fontFamily: true,
+						lineHeight: true,
+					},
+					spacing: {
+						blockGap: true,
+					},
+					border: {
+						color: true,
+						radius: true,
+						style: true,
+						width: true,
+					},
+					shadow: true,
+					customCSS: true,
+					background: {
+						backgroundImage: true,
+					},
+				},
+			}
+		);
+
+		expect( contract.supportedStylePaths ).toEqual(
+			expect.arrayContaining( [
+				{
+					path: [ 'color', 'background' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'color', 'text' ],
+					valueSource: 'color',
+				},
+				{
+					path: [ 'typography', 'fontSize' ],
+					valueSource: 'font-size',
+				},
+				{
+					path: [ 'typography', 'fontFamily' ],
+					valueSource: 'font-family',
+				},
+				{
+					path: [ 'spacing', 'blockGap' ],
+					valueSource: 'spacing',
+				},
+				{
+					path: [ 'shadow' ],
+					valueSource: 'shadow',
+				},
+			] )
+		);
+		expect( contract.supportedStylePaths ).toEqual(
+			expect.not.arrayContaining( [
+				{
+					path: [ 'customCSS' ],
+					valueSource: 'freeform',
+				},
+				{
+					path: [ 'background', 'backgroundImage' ],
+					valueSource: 'freeform',
+				},
+			] )
+		);
+	} );
+
+	test( 'omits block paths that are missing block support even when the theme enables them', () => {
+		const tokens = collectThemeTokensFromSettings( {
+			features: COMPLETE_FEATURES,
+		} );
+
+		expect(
+			getBlockStyleSupportedStylePathsFromTokens( tokens, {
+				color: {
+					text: true,
+				},
+			} )
+		).toEqual( [
+			{
+				path: [ 'color', 'text' ],
+				valueSource: 'color',
+			},
+		] );
 	} );
 } );
 

@@ -9,6 +9,8 @@ const mockGetGlobalStylesUserConfig = jest.fn();
 const mockGetGlobalStylesActivityUndoState = jest.fn();
 const mockRenderAIStatusNotice = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
+const mockGetStyleBookUiState = jest.fn();
+const mockSubscribeToStyleBookUi = jest.fn();
 const DEFAULT_EXECUTION_CONTRACT = {
 	supportedStylePaths: [
 		{
@@ -57,6 +59,10 @@ jest.mock( '@wordpress/components', () => {
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
+} ) );
+
+jest.mock( '@wordpress/blocks', () => ( {
+	store: 'core/blocks',
 } ) );
 
 jest.mock( '@wordpress/editor', () => ( {
@@ -116,6 +122,21 @@ jest.mock( '../../utils/capability-flags', () => ( {
 	} ),
 } ) );
 
+jest.mock( '../../style-book/dom', () => ( {
+	findStylesSidebarMountNode: ( root ) => {
+		const resolvedRoot = root || global.document;
+
+		return (
+			resolvedRoot.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+			resolvedRoot.querySelector( '.editor-global-styles-sidebar' ) ||
+			resolvedRoot.querySelector( '[role="region"][aria-label="Styles"]' )
+		);
+	},
+	getStyleBookUiState: ( ...args ) => mockGetStyleBookUiState( ...args ),
+	subscribeToStyleBookUi: ( ...args ) =>
+		mockSubscribeToStyleBookUi( ...args ),
+} ) );
+
 jest.mock( '../../context/theme-tokens', () => ( {
 	collectThemeTokenDiagnosticsFromSettings: ( settings = {} ) =>
 		settings?.__diagnostics || {
@@ -154,6 +175,7 @@ let sidebar = null;
 let currentBlockEditorSettings = null;
 let currentGlobalStylesData = null;
 let currentStoreState = null;
+let currentStyleBookUiState = null;
 
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -253,6 +275,10 @@ beforeEach( () => {
 		undoError: null,
 		lastUndoneActivityId: null,
 	};
+	currentStyleBookUiState = {
+		isActive: false,
+		target: null,
+	};
 
 	mockGetGlobalStylesUserConfig.mockImplementation(
 		() => currentGlobalStylesData
@@ -261,6 +287,11 @@ beforeEach( () => {
 		canUndo: true,
 		status: 'available',
 		error: null,
+	} );
+	mockGetStyleBookUiState.mockImplementation( () => currentStyleBookUiState );
+	mockSubscribeToStyleBookUi.mockImplementation( ( root, onChange ) => {
+		onChange( currentStyleBookUiState );
+		return () => {};
 	} );
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
@@ -395,6 +426,25 @@ afterEach( () => {
 } );
 
 describe( 'GlobalStylesRecommender', () => {
+	test( 'stays hidden while the Style Book surface is active', () => {
+		currentStyleBookUiState = {
+			isActive: true,
+			target: {
+				blockName: 'core/paragraph',
+				blockTitle: 'Paragraph',
+			},
+		};
+
+		act( () => {
+			root.render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( container.textContent ).toBe( '' );
+		expect(
+			sidebar.querySelector( '.flavor-agent-global-styles-sidebar-slot' )
+		).toBeNull();
+	} );
+
 	test( 'submits a scoped style recommendation request from the Styles sidebar', () => {
 		act( () => {
 			root.render( <GlobalStylesRecommender /> );

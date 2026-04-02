@@ -8,7 +8,7 @@ final class StylePrompt {
 
 	public static function build_system(): string {
 		return <<<'SYSTEM'
-You are a WordPress Global Styles advisor for the Site Editor.
+You are a WordPress style surface advisor for the Site Editor.
 
 Recommend only theme-safe changes that stay inside native WordPress style systems. Never output raw CSS, custom CSS, unsupported controls, or values outside the provided theme presets unless the supported path explicitly allows a freeform value.
 
@@ -35,6 +35,16 @@ Return ONLY a JSON object with this exact shape:
 	          "presetType": "color",
 	          "presetSlug": "accent",
 	          "cssVar": "var(--wp--preset--color--accent)"
+	        },
+	        {
+	          "type": "set_block_styles",
+	          "blockName": "core/paragraph",
+	          "path": ["typography", "fontSize"],
+	          "value": "var:preset|font-size|body",
+	          "valueType": "preset",
+	          "presetType": "font-size",
+	          "presetSlug": "body",
+	          "cssVar": "var(--wp--preset--font-size--body)"
 	        }
 	      ]
 	    }
@@ -43,16 +53,19 @@ Return ONLY a JSON object with this exact shape:
 }
 
 	Rules:
-	- Supported operation types are ONLY set_styles and set_theme_variation.
-	- set_styles.path MUST match one of the Supported style paths.
-	- set_styles MUST use preset-backed values when the path's value source is a preset family.
-	- Freeform set_styles values MUST stay scalar and follow the supported path contract:
+	- Supported operation types are ONLY set_styles, set_block_styles, and set_theme_variation.
+	- Use set_styles only for the global-styles surface.
+	- Use set_block_styles only for the style-book surface.
+	- set_block_styles.blockName MUST exactly match the target block in scope.
+	- set_styles.path and set_block_styles.path MUST match one of the Supported style paths.
+	- set_styles and set_block_styles MUST use preset-backed values when the path's value source is a preset family.
+	- Freeform set_styles and set_block_styles values MUST stay scalar and follow the supported path contract:
 	  typography.lineHeight = positive unitless number or positive CSS length/percentage.
 	  border.radius = zero or positive CSS length/percentage.
 	  border.width = zero or positive CSS length.
 	  border.style = one of none, solid, dashed, dotted, double, groove, ridge, inset, outset, hidden.
 	- Do not emit customCSS, background images, arbitrary hex values, or arbitrary pixel spacing when a preset-backed path exists.
-	- If set_theme_variation is present, emit at most one and place it before any set_styles overrides.
+	- If set_theme_variation is present, emit at most one and place it before any set_styles or set_block_styles overrides.
 	- set_theme_variation MUST reference an Available variation by index and title.
 	- If a request cannot be executed safely, return an advisory suggestion with tone=advisory and an empty operations array.
 	- Prefer 1-4 suggestions.
@@ -61,16 +74,28 @@ SYSTEM;
 	}
 
 	public static function build_user( array $context, string $prompt = '' ): string {
-		$scope           = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
-		$style_context   = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$theme_tokens    = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
-		$supported_paths = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$sections        = [];
+		$scope             = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
+		$style_context     = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$theme_tokens      = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
+		$supported_paths   = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
+		$style_book_target = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
+		$surface           = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
+		$sections          = [];
 
 		$sections[] = '## Scope';
-		$sections[] = 'Surface: global-styles';
+		$sections[] = 'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' );
 		$sections[] = 'Scope key: ' . (string) ( $scope['scopeKey'] ?? '' );
 		$sections[] = 'Global styles id: ' . (string) ( $scope['globalStylesId'] ?? '' );
+
+		if ( 'style-book' === $surface ) {
+			if ( ! empty( $scope['blockName'] ) ) {
+				$sections[] = 'Block name: ' . (string) $scope['blockName'];
+			}
+
+			if ( ! empty( $scope['blockTitle'] ) ) {
+				$sections[] = 'Block title: ' . (string) $scope['blockTitle'];
+			}
+		}
 
 		if ( ! empty( $scope['stylesheet'] ) ) {
 			$sections[] = 'Stylesheet: ' . (string) $scope['stylesheet'];
@@ -82,6 +107,31 @@ SYSTEM;
 		$sections[] = '';
 		$sections[] = '## Current merged style config';
 		$sections[] = wp_json_encode( $style_context['mergedConfig'] ?? [] );
+
+		if ( 'style-book' === $surface && [] !== $style_book_target ) {
+			$sections[] = '';
+			$sections[] = '## Style Book target';
+
+			if ( ! empty( $style_book_target['blockName'] ) ) {
+				$sections[] = 'Target block name: ' . (string) $style_book_target['blockName'];
+			}
+
+			if ( ! empty( $style_book_target['blockTitle'] ) ) {
+				$sections[] = 'Target block title: ' . (string) $style_book_target['blockTitle'];
+			}
+
+			if ( ! empty( $style_book_target['description'] ) ) {
+				$sections[] = 'Target description: ' . (string) $style_book_target['description'];
+			}
+
+			if ( ! empty( $style_book_target['currentStyles'] ) ) {
+				$sections[] = 'Current target styles: ' . wp_json_encode( $style_book_target['currentStyles'] );
+			}
+
+			if ( ! empty( $style_book_target['mergedStyles'] ) ) {
+				$sections[] = 'Merged target styles: ' . wp_json_encode( $style_book_target['mergedStyles'] );
+			}
+		}
 
 		if ( ! empty( $style_context['themeTokenDiagnostics'] ) ) {
 			$sections[] = '';
@@ -101,6 +151,10 @@ SYSTEM;
 
 		$sections[] = '';
 		$sections[] = '## Supported style paths';
+		if ( 'style-book' === $surface ) {
+			$sections[] = 'These paths apply relative to styles.blocks.<target-block>.';
+		}
+
 		foreach ( $supported_paths as $path_entry ) {
 			if ( ! is_array( $path_entry ) ) {
 				continue;
@@ -140,7 +194,11 @@ SYSTEM;
 		$sections[] = '## User instruction';
 		$sections[] = '' !== trim( $prompt )
 			? trim( $prompt )
-			: 'Recommend one or two safe Global Styles improvements.';
+			: (
+				'style-book' === $surface
+					? 'Recommend one or two safe Style Book improvements.'
+					: 'Recommend one or two safe Global Styles improvements.'
+			);
 
 		return implode( "\n", $sections );
 	}
@@ -209,11 +267,17 @@ SYSTEM;
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function validate_operations( array $operations, array $context ): array {
-		$validated_styles    = [];
-		$validated_variation = [];
-		$style_context       = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$supported_paths     = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$variations          = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
+		$validated_styles      = [];
+		$validated_variation   = [];
+		$scope                 = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
+		$style_context         = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$supported_paths       = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
+		$variations            = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
+		$surface               = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
+		$style_book_target     = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
+		$target_style_book_key = sanitize_text_field(
+			(string) ( $scope['blockName'] ?? ( $style_book_target['blockName'] ?? '' ) )
+		);
 
 		foreach ( $operations as $operation ) {
 			if ( ! is_array( $operation ) ) {
@@ -222,7 +286,23 @@ SYSTEM;
 
 			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
 
-			if ( 'set_styles' === $type ) {
+			if ( 'set_styles' === $type || 'set_block_styles' === $type ) {
+				if ( 'set_styles' === $type && 'style-book' === $surface ) {
+					continue;
+				}
+
+				if ( 'set_block_styles' === $type ) {
+					if ( 'style-book' !== $surface ) {
+						continue;
+					}
+
+					$block_name = sanitize_text_field( (string) ( $operation['blockName'] ?? '' ) );
+
+					if ( '' === $block_name || '' === $target_style_book_key || $block_name !== $target_style_book_key ) {
+						continue;
+					}
+				}
+
 				$path       = is_array( $operation['path'] ?? null )
 					? array_values(
 						array_filter(
@@ -252,7 +332,8 @@ SYSTEM;
 					}
 
 					$validated_styles[] = [
-						'type'       => 'set_styles',
+						'type'       => $type,
+						'blockName'  => 'set_block_styles' === $type ? $block_name : '',
 						'path'       => $path,
 						'value'      => $validated_freeform['value'],
 						'valueType'  => 'freeform',
@@ -295,7 +376,8 @@ SYSTEM;
 				}
 
 				$validated_styles[] = [
-					'type'       => 'set_styles',
+					'type'       => $type,
+					'blockName'  => 'set_block_styles' === $type ? $block_name : '',
 					'path'       => $path,
 					'value'      => self::build_preset_value( $normalized_preset_type, $preset_slug ),
 					'valueType'  => 'preset',

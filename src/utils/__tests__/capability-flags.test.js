@@ -144,4 +144,33 @@ describe( 'capability-flags', () => {
 			'Settings > Flavor Agent'
 		);
 	} );
+
+	test( 'uses structured style-book metadata when the surface is not shipped yet', () => {
+		window.flavorAgentData = {
+			capabilities: {
+				surfaces: {
+					styleBook: {
+						available: false,
+						reason: 'surface_not_implemented',
+						message:
+							'Style Book recommendations are not available in this plugin build yet.',
+						actions: [],
+					},
+				},
+			},
+		};
+
+		expect( getSurfaceCapability( 'style-book' ) ).toMatchObject( {
+			available: false,
+			reason: 'surface_not_implemented',
+			actionHref: '',
+			actions: [],
+		} );
+		expect( getCapabilityNotice( 'style-book' ) ).toMatchObject( {
+			status: 'warning',
+			message:
+				'Style Book recommendations are not available in this plugin build yet.',
+			actions: [],
+		} );
+	} );
 } );

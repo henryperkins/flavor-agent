@@ -557,6 +557,8 @@ export function formatSurfaceLabel( surface = '' ) {
 			return 'Template part';
 		case 'global-styles':
 			return 'Global Styles';
+		case 'style-book':
+			return 'Style Book';
 		case 'block':
 			return 'Block';
 		default:
@@ -673,6 +675,10 @@ function getActivityTitle( entry ) {
 		return 'Global Styles suggestion applied';
 	}
 
+	if ( entry?.surface === 'style-book' ) {
+		return 'Style Book suggestion applied';
+	}
+
 	if ( entry?.target?.blockName ) {
 		return `${ formatBlockName(
 			entry.target.blockName
@@ -697,6 +703,13 @@ function getActivityEntityLabel( entry ) {
 		return `Global Styles ${
 			entry?.target?.globalStylesId || EMPTY_VALUE
 		}`;
+	}
+
+	if ( entry?.surface === 'style-book' ) {
+		const blockTitle =
+			String( entry?.target?.blockTitle || '' ) || EMPTY_VALUE;
+
+		return `Style Book ${ blockTitle }`;
 	}
 
 	if ( entry?.target?.blockName ) {
@@ -771,6 +784,13 @@ export function buildActivityTargetUrl( entry, adminBaseUrl = '' ) {
 	}
 
 	if ( postType === 'global_styles' || entry?.surface === 'global-styles' ) {
+		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
+			canvas: 'edit',
+			path: '/wp_global_styles',
+		} );
+	}
+
+	if ( entry?.surface === 'style-book' ) {
 		return buildAdminUrl( adminBaseUrl, 'site-editor.php', {
 			canvas: 'edit',
 			path: '/wp_global_styles',

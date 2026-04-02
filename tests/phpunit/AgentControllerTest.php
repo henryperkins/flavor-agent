@@ -383,6 +383,75 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_recommend_style_forwards_style_book_context(): void {
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$remote_post_response               = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'Style Book context forwarded.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-style' );
+		$request->set_param(
+			'scope',
+			[
+				'surface'        => 'style-book',
+				'scopeKey'       => 'style_book:17:core/paragraph',
+				'globalStylesId' => '17',
+				'blockName'      => 'core/paragraph',
+				'blockTitle'     => 'Paragraph',
+			]
+		);
+		$request->set_param(
+			'styleContext',
+			[
+				'currentConfig'         => [
+					'styles' => [],
+				],
+				'mergedConfig'          => [
+					'styles' => [],
+				],
+				'availableVariations'   => [],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+				'styleBookTarget'       => [
+					'description' => 'Primary intro copy block.',
+				],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_style( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'Surface: style-book',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Primary intro copy block.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
 	public function test_handle_recommend_template_prefers_live_editor_slots_over_saved_template_slots(): void {
 		WordPressTestState::$block_templates['wp_template'][0]->content =
 			'<!-- wp:template-part {"area":"header"} /-->';

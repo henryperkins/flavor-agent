@@ -1,52 +1,84 @@
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useEffect, useRef } from '@wordpress/element';
+import { useEffect, useRef, useState } from '@wordpress/element';
 
+import {
+	getStyleBookUiState,
+	subscribeToStyleBookUi,
+} from '../style-book/dom';
 import { STORE_NAME } from '../store';
 import {
 	resolveActivityScope,
 	resolveGlobalStylesScope,
+	resolveStyleBookScope,
 } from '../store/activity-history';
 
 export default function ActivitySessionBootstrap() {
-	const scope = useSelect( ( select ) => {
+	const [ styleBookUiState, setStyleBookUiState ] = useState( () =>
+		typeof document === 'undefined'
+			? {
+					isActive: false,
+					target: null,
+			  }
+			: getStyleBookUiState( document )
+	);
+	const editorState = useSelect( ( select ) => {
 		const interfaceStore = select( 'core/interface' );
 		const coreStore = select( 'core' );
-		const activeComplementaryArea =
-			interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
-		const globalStylesId =
-			coreStore?.__experimentalGetCurrentGlobalStylesId?.() || '';
+		const editor = select( 'core/editor' );
+		const editSite = select( 'core/edit-site' );
 
-		if (
-			activeComplementaryArea === 'edit-site/global-styles' &&
-			globalStylesId
-		) {
-			return (
-				resolveGlobalStylesScope( globalStylesId ) || {
+		return {
+			activeComplementaryArea:
+				interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '',
+			globalStylesId:
+				coreStore?.__experimentalGetCurrentGlobalStylesId?.() || '',
+			postType:
+				editor?.getCurrentPostType?.() ||
+				editSite?.getEditedPostType?.() ||
+				'',
+			postId:
+				editor?.getCurrentPostId?.() ||
+				editSite?.getEditedPostId?.() ||
+				'',
+		};
+	}, [] );
+	const scope =
+		editorState.activeComplementaryArea === 'edit-site/global-styles' &&
+		editorState.globalStylesId
+			? styleBookUiState?.isActive &&
+			  styleBookUiState?.target?.blockName
+				? resolveStyleBookScope(
+						editorState.globalStylesId,
+						styleBookUiState.target.blockName,
+						{
+							blockTitle:
+								styleBookUiState.target.blockTitle || '',
+						}
+				  ) || {
+						key: null,
+						hint: '',
+						postType: '',
+						entityId: '',
+				  }
+				: resolveGlobalStylesScope( editorState.globalStylesId ) || {
+						key: null,
+						hint: '',
+						postType: '',
+						entityId: '',
+				  }
+			: resolveActivityScope( editorState.postType, editorState.postId ) || {
 					key: null,
 					hint: '',
 					postType: '',
 					entityId: '',
-				}
-			);
+			  };
+
+	useEffect( () => {
+		if ( typeof document === 'undefined' ) {
+			return undefined;
 		}
 
-		const editor = select( 'core/editor' );
-		const editSite = select( 'core/edit-site' );
-		const postType =
-			editor?.getCurrentPostType?.() ||
-			editSite?.getEditedPostType?.() ||
-			'';
-		const postId =
-			editor?.getCurrentPostId?.() || editSite?.getEditedPostId?.() || '';
-
-		return (
-			resolveActivityScope( postType, postId ) || {
-				key: null,
-				hint: '',
-				postType: '',
-				entityId: '',
-			}
-		);
+		return subscribeToStyleBookUi( document, setStyleBookUiState );
 	}, [] );
 	const { loadActivitySession } = useDispatch( STORE_NAME );
 	const previousScope = useRef( scope );

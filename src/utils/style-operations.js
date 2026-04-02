@@ -1,6 +1,10 @@
 import { dispatch, select } from '@wordpress/data';
+import { store as blocksStore } from '@wordpress/blocks';
 
-import { buildGlobalStylesExecutionContractFromSettings } from '../context/theme-tokens';
+import {
+	buildBlockStyleExecutionContractFromSettings,
+	buildGlobalStylesExecutionContractFromSettings,
+} from '../context/theme-tokens';
 
 function getCoreSelect( registry ) {
 	return registry?.select?.( 'core' ) || select( 'core' ) || {};
@@ -12,6 +16,10 @@ function getBlockEditorSelect( registry ) {
 		select( 'core/block-editor' ) ||
 		{}
 	);
+}
+
+function getBlocksSelect( registry ) {
+	return registry?.select?.( blocksStore ) || select( blocksStore ) || {};
 }
 
 function getCoreDispatch( registry ) {
@@ -439,6 +447,45 @@ function writePath( value, path = [], nextValue ) {
 	return next;
 }
 
+function removePath( value, path = [] ) {
+	if ( path.length === 0 ) {
+		return undefined;
+	}
+
+	if ( ! value || typeof value !== 'object' || Array.isArray( value ) ) {
+		return value;
+	}
+
+	const [ head, ...rest ] = path;
+
+	if ( ! Object.hasOwn( value, head ) ) {
+		return value;
+	}
+
+	const next = Array.isArray( value ) ? [ ...value ] : { ...value };
+
+	if ( rest.length === 0 ) {
+		delete next[ head ];
+		return next;
+	}
+
+	const nextBranch = removePath( next[ head ], rest );
+
+	if (
+		nextBranch === undefined ||
+		( nextBranch &&
+			typeof nextBranch === 'object' &&
+			! Array.isArray( nextBranch ) &&
+			Object.keys( nextBranch ).length === 0 )
+	) {
+		delete next[ head ];
+	} else {
+		next[ head ] = nextBranch;
+	}
+
+	return next;
+}
+
 function getCurrentGlobalStylesId( coreSelect ) {
 	const id = coreSelect?.__experimentalGetCurrentGlobalStylesId?.();
 
@@ -528,6 +575,10 @@ function normalizeOperations( operations = [] ) {
 	const normalized = Array.isArray( operations )
 		? operations.filter( Boolean ).map( ( operation ) => ( {
 				...operation,
+				blockName:
+					typeof operation?.blockName === 'string'
+						? operation.blockName.trim()
+						: '',
 				path: Array.isArray( operation?.path ) ? operation.path : [],
 				value: normalizeOperationValue( operation?.value ),
 		  } ) )
@@ -615,10 +666,24 @@ function configsMatch( left, right ) {
 	);
 }
 
+function getStyleBookBranchPath( activity = {} ) {
+	const blockName =
+		typeof activity?.target?.blockName === 'string'
+			? activity.target.blockName.trim()
+			: '';
+
+	return blockName ? [ 'styles', 'blocks', blockName ] : null;
+}
+
+function getComparableConfigBranchAtPath( config = {}, path = [] ) {
+	return normalizeComparableConfigBranch( readPath( config, path ) );
+}
+
 function validatePresetStyleOperation(
 	operation = {},
 	pathEntry = {},
-	executionContract = {}
+	executionContract = {},
+	surfaceLabel = 'Global Styles'
 ) {
 	const pathKey = getStylePathKey( operation?.path );
 	const valueType = sanitizeKey( operation?.valueType );
@@ -626,7 +691,7 @@ function validatePresetStyleOperation(
 	if ( valueType !== 'preset' ) {
 		return {
 			ok: false,
-			error: `The suggested Global Styles value for ${ pathKey } must use a theme preset. Global Styles changed; regenerate suggestions.`,
+			error: `The suggested ${ surfaceLabel } value for ${ pathKey } must use a theme preset. ${ surfaceLabel } changed; regenerate suggestions.`,
 		};
 	}
 
@@ -637,7 +702,7 @@ function validatePresetStyleOperation(
 	if ( presetType !== expectedPresetType || ! presetSlug ) {
 		return {
 			ok: false,
-			error: `The suggested Global Styles preset metadata for ${ pathKey } no longer matches the live theme contract. Global Styles changed; regenerate suggestions.`,
+			error: `The suggested ${ surfaceLabel } preset metadata for ${ pathKey } no longer matches the live theme contract. ${ surfaceLabel } changed; regenerate suggestions.`,
 		};
 	}
 
@@ -650,7 +715,7 @@ function validatePresetStyleOperation(
 	) {
 		return {
 			ok: false,
-			error: `The suggested Global Styles preset reference for ${ pathKey } no longer matches its metadata. Global Styles changed; regenerate suggestions.`,
+			error: `The suggested ${ surfaceLabel } preset reference for ${ pathKey } no longer matches its metadata. ${ surfaceLabel } changed; regenerate suggestions.`,
 		};
 	}
 
@@ -664,7 +729,7 @@ function validatePresetStyleOperation(
 			ok: false,
 			error: `The ${ displayPresetType(
 				expectedPresetType
-			) } preset "${ presetSlug }" is no longer available. Global Styles changed; regenerate suggestions.`,
+			) } preset "${ presetSlug }" is no longer available. ${ surfaceLabel } changed; regenerate suggestions.`,
 		};
 	}
 
@@ -677,123 +742,176 @@ function validatePresetStyleOperation(
 	};
 }
 
+function applyPathBasedStyleOperation( {
+	beforeConfig,
+	afterConfig,
+	operation,
+	executionContract,
+	configPath,
+	surfaceLabel,
+} ) {
+	if ( ! Array.isArray( operation?.path ) || operation.path.length === 0 ) {
+		return {
+			ok: false,
+			error: `A ${ surfaceLabel } operation is missing its style path.`,
+		};
+	}
+
+	const pathEntry = findSupportedStylePathEntry(
+		operation.path,
+		executionContract
+	);
+
+	if ( ! pathEntry ) {
+		return {
+			ok: false,
+			error: `The ${ surfaceLabel } path ${ getStylePathKey(
+				operation.path
+			) } is no longer supported. ${ surfaceLabel } changed; regenerate suggestions.`,
+		};
+	}
+
+	const fullPath = [ 'styles', ...configPath ];
+	const beforeValue = normalizeOperationValue( readPath( beforeConfig, fullPath ) );
+	let nextValue = normalizeOperationValue( operation.value );
+	let appliedOperation = {
+		...operation,
+		beforeValue,
+	};
+	const expectedValueSource = normalizePresetType(
+		pathEntry?.valueSource || 'freeform'
+	);
+
+	if ( expectedValueSource === 'freeform' ) {
+		if (
+			operation?.valueType &&
+			sanitizeKey( operation.valueType ) !== 'freeform'
+		) {
+			return {
+				ok: false,
+				error: `The suggested ${ surfaceLabel } value for ${ getStylePathKey(
+					operation.path
+				) } must stay freeform. ${ surfaceLabel } changed; regenerate suggestions.`,
+			};
+		}
+
+		const validatedFreeformValue = validateFreeformStyleValue(
+			operation.path,
+			nextValue
+		);
+
+		if ( ! validatedFreeformValue.valid ) {
+			return {
+				ok: false,
+				error:
+					validatedFreeformValue.error ||
+					`The suggested ${ surfaceLabel } value for ${ getStylePathKey(
+						operation.path
+					) } is invalid.`,
+			};
+		}
+
+		nextValue = validatedFreeformValue.value;
+		appliedOperation = {
+			...appliedOperation,
+			value: nextValue,
+			valueType: 'freeform',
+			presetType: '',
+			presetSlug: '',
+			cssVar: '',
+		};
+	} else {
+		const validatedPreset = validatePresetStyleOperation(
+			operation,
+			pathEntry,
+			executionContract,
+			surfaceLabel
+		);
+
+		if ( ! validatedPreset.ok ) {
+			return validatedPreset;
+		}
+
+		nextValue = validatedPreset.value;
+		appliedOperation = {
+			...appliedOperation,
+			value: validatedPreset.value,
+			valueType: 'preset',
+			presetType: validatedPreset.presetType,
+			presetSlug: validatedPreset.presetSlug,
+			cssVar: validatedPreset.cssVar,
+		};
+	}
+
+	return {
+		ok: true,
+		afterConfig: {
+			...afterConfig,
+			styles: writePath( afterConfig.styles, configPath, nextValue ),
+		},
+		appliedOperation,
+	};
+}
+
 function applyOperationToConfig( {
 	beforeConfig,
 	afterConfig,
 	operation,
 	availableVariations,
 	executionContract,
+	blockEditorSettings,
+	blocksSelect,
 } ) {
 	if ( operation?.type === 'set_styles' ) {
-		if (
-			! Array.isArray( operation.path ) ||
-			operation.path.length === 0
-		) {
+		return applyPathBasedStyleOperation( {
+			beforeConfig,
+			afterConfig,
+			operation,
+			executionContract,
+			configPath: operation.path,
+			surfaceLabel: 'Global Styles',
+		} );
+	}
+
+	if ( operation?.type === 'set_block_styles' ) {
+		const blockName =
+			typeof operation?.blockName === 'string'
+				? operation.blockName.trim()
+				: '';
+
+		if ( ! blockName ) {
 			return {
 				ok: false,
-				error: 'A Global Styles operation is missing its style path.',
+				error: 'A Style Book operation is missing its target block name.',
 			};
 		}
 
-		const pathEntry = findSupportedStylePathEntry(
-			operation.path,
-			executionContract
-		);
+		const blockType = blocksSelect?.getBlockType?.( blockName );
 
-		if ( ! pathEntry ) {
+		if ( ! blockType ) {
 			return {
 				ok: false,
-				error: `The Global Styles path ${ getStylePathKey(
-					operation.path
-				) } is no longer supported. Global Styles changed; regenerate suggestions.`,
+				error: `The Style Book target block "${ blockName }" is no longer registered in the editor.`,
 			};
 		}
 
-		const fullPath = [ 'styles', ...operation.path ];
-		const beforeValue = normalizeOperationValue(
-			readPath( beforeConfig, fullPath )
-		);
-		let nextValue = normalizeOperationValue( operation.value );
-		let appliedOperation = {
-			...operation,
-			beforeValue,
-		};
-		const expectedValueSource = normalizePresetType(
-			pathEntry?.valueSource || 'freeform'
-		);
-
-		if ( expectedValueSource === 'freeform' ) {
-			if (
-				operation?.valueType &&
-				sanitizeKey( operation.valueType ) !== 'freeform'
-			) {
-				return {
-					ok: false,
-					error: `The suggested Global Styles value for ${ getStylePathKey(
-						operation.path
-					) } must stay freeform. Global Styles changed; regenerate suggestions.`,
-				};
-			}
-
-			const validatedFreeformValue = validateFreeformStyleValue(
-				operation.path,
-				nextValue
+		const blockExecutionContract =
+			buildBlockStyleExecutionContractFromSettings(
+				blockEditorSettings || {},
+				blockType
 			);
 
-			if ( ! validatedFreeformValue.valid ) {
-				return {
-					ok: false,
-					error:
-						validatedFreeformValue.error ||
-						`The suggested Global Styles value for ${ getStylePathKey(
-							operation.path
-						) } is invalid.`,
-				};
-			}
-
-			nextValue = validatedFreeformValue.value;
-			appliedOperation = {
-				...appliedOperation,
-				value: nextValue,
-				valueType: 'freeform',
-				presetType: '',
-				presetSlug: '',
-				cssVar: '',
-			};
-		} else {
-			const validatedPreset = validatePresetStyleOperation(
-				operation,
-				pathEntry,
-				executionContract
-			);
-
-			if ( ! validatedPreset.ok ) {
-				return validatedPreset;
-			}
-
-			nextValue = validatedPreset.value;
-			appliedOperation = {
-				...appliedOperation,
-				value: validatedPreset.value,
-				valueType: 'preset',
-				presetType: validatedPreset.presetType,
-				presetSlug: validatedPreset.presetSlug,
-				cssVar: validatedPreset.cssVar,
-			};
-		}
-
-		return {
-			ok: true,
-			afterConfig: {
-				...afterConfig,
-				styles: writePath(
-					afterConfig.styles,
-					operation.path,
-					nextValue
-				),
+		return applyPathBasedStyleOperation( {
+			beforeConfig,
+			afterConfig,
+			operation: {
+				...operation,
+				blockName,
 			},
-			appliedOperation,
-		};
+			executionContract: blockExecutionContract,
+			configPath: [ 'blocks', blockName, ...( operation.path || [] ) ],
+			surfaceLabel: 'Style Book',
+		} );
 	}
 
 	if ( operation?.type === 'set_theme_variation' ) {
@@ -863,6 +981,10 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 		return executionContractRuntime;
 	}
 
+	const blockEditorSettings =
+		getBlockEditorSelect( registry )?.getSettings?.() || {};
+	const blocksSelect = getBlocksSelect( registry );
+
 	const operations = normalizeOperations( suggestion?.operations );
 
 	if ( operations.length === 0 ) {
@@ -886,6 +1008,8 @@ export function applyGlobalStyleSuggestionOperations( suggestion, registry ) {
 			operation,
 			availableVariations,
 			executionContract: executionContractRuntime.executionContract,
+			blockEditorSettings,
+			blocksSelect,
 		} );
 
 		if ( ! nextState.ok ) {
@@ -934,13 +1058,40 @@ export function getGlobalStylesActivityUndoState( activity, registry ) {
 		};
 	}
 
-	if (
-		! configsMatch( runtime.userConfig, activity?.after?.userConfig || {} )
-	) {
+	const isStyleBookActivity = activity?.surface === 'style-book';
+	const styleBookBranchPath = getStyleBookBranchPath( activity );
+
+	if ( isStyleBookActivity && ! styleBookBranchPath ) {
 		return {
 			canUndo: false,
 			status: 'failed',
-			error: 'Global Styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+			error: 'The Style Book target block for this AI action is missing.',
+		};
+	}
+
+	const configsStillMatch = isStyleBookActivity
+		? JSON.stringify(
+				getComparableConfigBranchAtPath(
+					runtime.userConfig,
+					styleBookBranchPath
+				)
+		  ) ===
+		  JSON.stringify(
+				getComparableConfigBranchAtPath(
+					activity?.after?.userConfig || {},
+					styleBookBranchPath
+				)
+		  )
+		: configsMatch( runtime.userConfig, activity?.after?.userConfig || {} );
+
+	if ( ! configsStillMatch ) {
+		return {
+			canUndo: false,
+			status: 'failed',
+			error:
+				isStyleBookActivity
+					? 'Style Book target styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.'
+					: 'Global Styles changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
 		};
 	}
 
@@ -968,6 +1119,43 @@ export function undoGlobalStyleSuggestionOperations( activity, registry ) {
 
 	if ( ! runtime.ok ) {
 		return runtime;
+	}
+
+	const isStyleBookActivity = activity?.surface === 'style-book';
+	const styleBookBranchPath = getStyleBookBranchPath( activity );
+
+	if ( isStyleBookActivity ) {
+		if ( ! styleBookBranchPath ) {
+			return {
+				ok: false,
+				error: 'The Style Book target block for this AI action is missing.',
+			};
+		}
+
+		const beforeConfig = normalizeConfig( activity?.before?.userConfig || {} );
+		const currentConfig = normalizeConfig( runtime.userConfig || {} );
+		const previousBranch = readPath( beforeConfig, styleBookBranchPath );
+		const blockBranchPath = styleBookBranchPath.slice( 1 );
+		const nextStyles =
+			previousBranch === undefined
+				? removePath( currentConfig.styles, blockBranchPath )
+				: writePath(
+						currentConfig.styles,
+						blockBranchPath,
+						normalizeOperationValue( previousBranch )
+				  );
+
+		runtime.coreDispatch.editEntityRecord(
+			'root',
+			'globalStyles',
+			runtime.globalStylesId,
+			{
+				...currentConfig,
+				styles: nextStyles,
+			}
+		);
+
+		return { ok: true };
 	}
 
 	runtime.coreDispatch.editEntityRecord(

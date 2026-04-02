@@ -93,6 +93,39 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( '#1 Midnight - Dark editorial palette', $prompt );
 	}
 
+	public function test_build_user_includes_style_book_target_context(): void {
+		$context = $this->build_context();
+		$context['scope']['surface'] = 'style-book';
+		$context['scope']['scopeKey'] = 'style_book:17:core/paragraph';
+		$context['scope']['blockName'] = 'core/paragraph';
+		$context['scope']['blockTitle'] = 'Paragraph';
+		$context['styleContext']['styleBookTarget'] = [
+			'blockName'     => 'core/paragraph',
+			'blockTitle'    => 'Paragraph',
+			'description'   => 'Primary intro copy block.',
+			'currentStyles' => [
+				'color' => [
+					'text' => 'var:preset|color|accent',
+				],
+			],
+			'mergedStyles'  => [
+				'typography' => [
+					'fontSize' => 'var:preset|font-size|body',
+				],
+			],
+		];
+
+		$prompt = StylePrompt::build_user(
+			$context,
+			'Tune this intro block.'
+		);
+
+		$this->assertStringContainsString( 'Surface: style-book', $prompt );
+		$this->assertStringContainsString( 'Block name: core/paragraph', $prompt );
+		$this->assertStringContainsString( 'Primary intro copy block.', $prompt );
+		$this->assertStringContainsString( '"fontSize":"var:preset|font-size|body"', $prompt );
+	}
+
 	public function test_parse_response_filters_unsafe_style_operations(): void {
 		$result = StylePrompt::parse_response(
 			wp_json_encode(
@@ -285,6 +318,106 @@ final class StylePromptTest extends TestCase {
 			'Midnight',
 			$result['suggestions'][0]['operations'][0]['variationTitle'] ?? null
 		);
+	}
+
+	public function test_parse_response_accepts_valid_block_style_operations_for_style_book_scope(): void {
+		$context = $this->build_context();
+		$context['scope']['surface'] = 'style-book';
+		$context['scope']['blockName'] = 'core/paragraph';
+		$context['styleContext']['styleBookTarget'] = [
+			'blockName' => 'core/paragraph',
+		];
+		$context['styleContext']['supportedStylePaths'] = [
+			[
+				'path'        => [ 'color', 'text' ],
+				'valueSource' => 'color',
+			],
+		];
+
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Warm the intro copy',
+							'description' => 'Use the accent preset on the target block text.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_block_styles',
+									'blockName'  => 'core/paragraph',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|accent',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'accent',
+								],
+							],
+						],
+					],
+					'explanation' => 'Use a preset-backed block text color.',
+				]
+			),
+			$context
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'executable', $result['suggestions'][0]['tone'] );
+		$this->assertSame(
+			'set_block_styles',
+			$result['suggestions'][0]['operations'][0]['type'] ?? null
+		);
+		$this->assertSame(
+			'core/paragraph',
+			$result['suggestions'][0]['operations'][0]['blockName'] ?? null
+		);
+	}
+
+	public function test_parse_response_rejects_site_level_style_operations_inside_style_book_scope(): void {
+		$context = $this->build_context();
+		$context['scope']['surface'] = 'style-book';
+		$context['scope']['blockName'] = 'core/paragraph';
+		$context['styleContext']['styleBookTarget'] = [
+			'blockName' => 'core/paragraph',
+		];
+		$context['styleContext']['supportedStylePaths'] = [
+			[
+				'path'        => [ 'color', 'text' ],
+				'valueSource' => 'color',
+			],
+		];
+
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Unsafe scope mismatch',
+							'description' => 'This should be downgraded because it targets site styles.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|accent',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'accent',
+								],
+							],
+						],
+					],
+					'explanation' => 'Style Book scope must stay block-relative.',
+				]
+			),
+			$context
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [], $result['suggestions'][0]['operations'] );
 	}
 
 	public function test_parse_response_rejects_invalid_freeform_style_values(): void {

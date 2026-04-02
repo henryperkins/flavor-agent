@@ -37,6 +37,7 @@ describe( 'store action thunks', () => {
 		actions._patternAbort = null;
 		actions._templateAbort = null;
 		actions._templatePartAbort = null;
+		actions._styleBookAbort = null;
 		getTemplateActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
 		);
@@ -271,6 +272,80 @@ describe( 'store action thunks', () => {
 				},
 				'Make the site feel more editorial.',
 				3,
+				input.contextSignature
+			)
+		);
+	} );
+
+	test( 'fetchStyleBookRecommendations stores block-scoped request metadata without posting the context signature', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Tighten paragraph rhythm' } ],
+			explanation: 'Mocked Style Book response',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getStyleBookRequestToken: jest.fn().mockReturnValue( 1 ),
+		};
+		const input = {
+			scope: {
+				surface: 'style-book',
+				scopeKey: 'style_book:17:core/paragraph',
+				globalStylesId: '17',
+				entityId: 'core/paragraph',
+				blockName: 'core/paragraph',
+				blockTitle: 'Paragraph',
+			},
+			styleContext: {
+				currentConfig: { styles: {} },
+				mergedConfig: { styles: {} },
+				availableVariations: [],
+				themeTokenDiagnostics: {
+					source: 'stable',
+				},
+				styleBookTarget: {
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+					currentStyles: {},
+					mergedStyles: {},
+				},
+			},
+			prompt: 'Make the paragraph example feel more editorial.',
+			contextSignature:
+				'{"scopeKey":"style_book:17:core/paragraph","globalStylesId":"17"}',
+		};
+
+		await actions.fetchStyleBookRecommendations( input )( {
+			dispatch,
+			select,
+		} );
+
+		expect( select.getStyleBookRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-style',
+				method: 'POST',
+				data: {
+					scope: input.scope,
+					styleContext: input.styleContext,
+					prompt: input.prompt,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setStyleBookStatus( 'loading', null, 2 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setStyleBookRecommendations(
+				input.scope,
+				{
+					suggestions: [ { label: 'Tighten paragraph rhythm' } ],
+					explanation: 'Mocked Style Book response',
+				},
+				input.prompt,
+				2,
 				input.contextSignature
 			)
 		);
@@ -894,6 +969,56 @@ describe( 'store action thunks', () => {
 			} )
 		);
 		expect( result ).toBe( true );
+	} );
+
+	test( 'applySuggestion surfaces a deterministic error when no safe attribute updates remain', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: { name: 'core/paragraph' },
+				prompt: 'Tighten the copy.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Old copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion( 'block-1', {
+			label: 'Inject CSS',
+			attributeUpdates: {
+				customCSS: '.wp-block-paragraph { color: red; }',
+			},
+		} )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockRequestState(
+				'block-1',
+				'error',
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.',
+				4
+			)
+		);
+		expect( result ).toBe( false );
 	} );
 
 	test( 'applyTemplateSuggestion records success with thunk selector methods', async () => {

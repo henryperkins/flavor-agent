@@ -228,6 +228,29 @@ describe( 'activity log utils', () => {
 		);
 	} );
 
+	test( 'normalizeActivityEntries labels Style Book activity against the selected block target', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				surface: 'style-book',
+				target: {
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				document: {
+					scopeKey: 'style_book:17:core/paragraph',
+					postType: 'global_styles',
+					entityId: '17',
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			surfaceLabel: 'Style Book',
+		} );
+		expect( entries[ 0 ].description ).toContain( 'Style Book' );
+	} );
+
 	test( 'persisted views round-trip through storage', () => {
 		const storage = createStorage();
 		const nextView = {

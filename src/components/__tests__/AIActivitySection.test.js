@@ -116,6 +116,21 @@ describe( 'AIActivitySection', () => {
 								error: 'Global Styles changed after apply.',
 							},
 						},
+						{
+							id: 'activity-6',
+							suggestion: 'Refine paragraph spacing',
+							surface: 'style-book',
+							target: {
+								globalStylesId: '17',
+								blockName: 'core/paragraph',
+								blockTitle: 'Paragraph',
+							},
+							undo: {
+								canUndo: false,
+								status: 'failed',
+								error: 'Style Book block styles changed after apply.',
+							},
+						},
 					] }
 				/>
 			);
@@ -135,6 +150,9 @@ describe( 'AIActivitySection', () => {
 			'Activity audit sync pending.'
 		);
 		expect( container.textContent ).toContain( 'Global Styles action' );
+		expect( container.textContent ).toContain(
+			'Style Book action · Paragraph'
+		);
 		expect( container.querySelectorAll( 'button' ) ).toHaveLength( 1 );
 
 		container.querySelector( 'button' ).click();

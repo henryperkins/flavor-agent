@@ -15,14 +15,9 @@ import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import {
-	buildGlobalStylesExecutionContractFromSettings,
+	buildBlockStyleExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
 } from '../context/theme-tokens';
-import {
-	findStylesSidebarMountNode,
-	getStyleBookUiState,
-	subscribeToStyleBookUi,
-} from '../style-book/dom';
 import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
@@ -35,6 +30,11 @@ import {
 	getGlobalStylesActivityUndoState,
 	getGlobalStylesUserConfig,
 } from '../utils/style-operations';
+import {
+	findStylesSidebarMountNode,
+	getStyleBookUiState,
+	subscribeToStyleBookUi,
+} from './dom';
 
 function getSuggestionKey( suggestion, index ) {
 	if (
@@ -44,7 +44,7 @@ function getSuggestionKey( suggestion, index ) {
 		return suggestion.suggestionKey;
 	}
 
-	return `global-styles-${ index }-${
+	return `style-book-${ index }-${
 		suggestion?.label || 'suggestion'
 	}-${ JSON.stringify( suggestion?.operations || [] ) }`;
 }
@@ -70,11 +70,7 @@ function getCanonicalPresetSlug( operation = {} ) {
 }
 
 function formatOperation( operation = {} ) {
-	if ( operation?.type === 'set_theme_variation' ) {
-		return `Switch to variation: ${ operation.variationTitle }`;
-	}
-
-	if ( operation?.type === 'set_styles' ) {
+	if ( operation?.type === 'set_block_styles' ) {
 		const pathLabel = formatPath( operation.path );
 		const presetSlug = getCanonicalPresetSlug( operation );
 
@@ -88,40 +84,57 @@ function formatOperation( operation = {} ) {
 	return 'Review this change before applying it.';
 }
 
+function getBlockStyleBranch( config = {}, blockName = '' ) {
+	if ( ! blockName ) {
+		return {};
+	}
+
+	return config?.styles?.blocks?.[ blockName ] || {};
+}
+
 function buildRequestInput( {
 	scope,
 	prompt,
 	currentConfig,
 	mergedConfig,
-	availableVariations,
-	contextSignature,
 	themeTokenDiagnostics,
+	currentStyles,
+	mergedStyles,
+	contextSignature,
 } ) {
 	const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
 
 	return {
 		scope: {
-			surface: 'global-styles',
+			surface: 'style-book',
 			scopeKey: scope?.scopeKey || '',
 			globalStylesId: scope?.globalStylesId || '',
 			postType: scope?.postType || 'global_styles',
-			entityId: scope?.entityId || scope?.globalStylesId || '',
-			entityKind: scope?.entityKind || 'root',
-			entityName: scope?.entityName || 'globalStyles',
+			entityId: scope?.entityId || scope?.blockName || '',
+			entityKind: scope?.entityKind || 'block',
+			entityName: scope?.entityName || 'styleBook',
 			stylesheet: scope?.stylesheet || '',
+			blockName: scope?.blockName || '',
+			blockTitle: scope?.blockTitle || '',
 		},
 		styleContext: {
 			currentConfig,
 			mergedConfig,
-			availableVariations,
+			availableVariations: [],
 			themeTokenDiagnostics,
+			styleBookTarget: {
+				blockName: scope?.blockName || '',
+				blockTitle: scope?.blockTitle || '',
+				currentStyles,
+				mergedStyles,
+			},
 		},
 		contextSignature,
 		...( normalizedPrompt ? { prompt: normalizedPrompt } : {} ),
 	};
 }
 
-function GlobalStylesPanel( {
+function StyleBookPanel( {
 	prompt,
 	setPrompt,
 	capabilityAvailable,
@@ -133,6 +146,7 @@ function GlobalStylesPanel( {
 	explanation,
 	notice,
 	activityEntries,
+	blockTitle,
 	onNoticeAction,
 	onRequest,
 	onReview,
@@ -141,8 +155,8 @@ function GlobalStylesPanel( {
 	onUndo,
 } ) {
 	return (
-		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
-			<CapabilityNotice surface="global-styles" />
+		<div className="flavor-agent-panel flavor-agent-style-book-panel">
+			<CapabilityNotice surface="style-book" />
 			<AIStatusNotice notice={ notice } onAction={ onNoticeAction } />
 
 			<div className="flavor-agent-panel__group">
@@ -153,8 +167,12 @@ function GlobalStylesPanel( {
 				</div>
 				<div className="flavor-agent-panel__group-body">
 					<TextareaControl
-						label="Describe the style direction"
-						help="Optional. Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope."
+						label="Describe the block style direction"
+						help={
+							blockTitle
+								? `Flavor Agent will keep changes inside the theme-backed Style Book controls for ${ blockTitle }. Raw CSS and custom CSS are out of scope.`
+								: 'Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope.'
+						}
 						value={ prompt }
 						onChange={ setPrompt }
 						rows={ 4 }
@@ -273,14 +291,14 @@ function GlobalStylesPanel( {
 				entries={ activityEntries }
 				isUndoing={ isUndoing }
 				onUndo={ onUndo }
-				title="Recent AI Style Actions"
-				description="Undo is only available while the current Global Styles state still matches the applied AI change."
+				title="Recent AI Style Book Actions"
+				description="Undo is only available while the current Style Book block styles still match the applied AI change."
 			/>
 		</div>
 	);
 }
 
-export default function GlobalStylesRecommender() {
+export default function StyleBookRecommender() {
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ portalNode, setPortalNode ] = useState( null );
 	const [ styleBookUiState, setStyleBookUiState ] = useState( () =>
@@ -299,21 +317,19 @@ export default function GlobalStylesRecommender() {
 		() => collectThemeTokenDiagnosticsFromSettings( blockEditorSettings ),
 		[ blockEditorSettings ]
 	);
-	const executionContract = useMemo(
-		() =>
-			buildGlobalStylesExecutionContractFromSettings(
-				blockEditorSettings
-			),
-		[ blockEditorSettings ]
-	);
-
+	const isStyleBookUiActive = Boolean( styleBookUiState?.isActive );
+	const styleBookTargetBlockName = styleBookUiState?.target?.blockName || '';
+	const styleBookTargetBlockTitle =
+		styleBookUiState?.target?.blockTitle || '';
 	const {
 		isGlobalStylesActive,
 		isSiteEditor,
 		scope,
+		blockType,
 		currentConfig,
 		mergedConfig,
-		availableVariations,
+		currentStyles,
+		mergedStyles,
 		rawSuggestions,
 		currentExplanation,
 		currentResultContextSignature,
@@ -328,104 +344,133 @@ export default function GlobalStylesRecommender() {
 		currentUndoError,
 		hasUndoSuccess,
 		buildNotice,
-	} = useSelect( ( select ) => {
-		const interfaceStore = select( 'core/interface' );
-		const editSite = select( 'core/edit-site' );
-		const store = select( STORE_NAME );
-		const activeComplementaryArea =
-			interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
-		const globalStylesData = getGlobalStylesUserConfig( {
-			select: ( storeName ) => select( storeName ),
-		} );
-		const scopedEntries = ( store?.getActivityLog?.() || [] ).filter(
-			( entry ) =>
-				entry?.surface === 'global-styles' &&
-				String( entry?.target?.globalStylesId || '' ) ===
-					String( globalStylesData?.globalStylesId || '' )
-		);
-		const resolvedActivityEntries = getResolvedActivityEntries(
-			scopedEntries,
-			( entry ) =>
-				getGlobalStylesActivityUndoState( entry, {
-					select: ( storeName ) => select( storeName ),
-				} )
-		);
-		const selectorLastUndoneActivityId =
-			store?.getLastUndoneActivityId?.() || null;
-		const hasUndoSuccessForScope =
-			typeof selectorLastUndoneActivityId === 'string' &&
-			resolvedActivityEntries.some(
-				( entry ) => entry?.id === selectorLastUndoneActivityId
+	} = useSelect(
+		( select ) => {
+			const interfaceStore = select( 'core/interface' );
+			const editSite = select( 'core/edit-site' );
+			const blocksStore = select( 'core/blocks' );
+			const store = select( STORE_NAME );
+			const activeComplementaryArea =
+				interfaceStore?.getActiveComplementaryArea?.( 'core' ) || '';
+			const globalStylesData = getGlobalStylesUserConfig( {
+				select: ( storeName ) => select( storeName ),
+			} );
+			const blockName = styleBookTargetBlockName;
+			const blockTitle = styleBookTargetBlockTitle;
+			const styleScope =
+				globalStylesData?.globalStylesId && blockName
+					? {
+							surface: 'style-book',
+							scopeKey: `style_book:${ globalStylesData.globalStylesId }:${ blockName }`,
+							globalStylesId: globalStylesData.globalStylesId,
+							postType: 'global_styles',
+							entityId: blockName,
+							entityKind: 'block',
+							entityName: 'styleBook',
+							blockName,
+							blockTitle,
+					  }
+					: null;
+			const scopedEntries = ( store?.getActivityLog?.() || [] ).filter(
+				( entry ) =>
+					entry?.surface === 'style-book' &&
+					String( entry?.target?.globalStylesId || '' ) ===
+						String( globalStylesData?.globalStylesId || '' ) &&
+					String( entry?.target?.blockName || '' ) === blockName
 			);
-		const mappedSuggestions = (
-			store?.getGlobalStylesRecommendations?.() || []
-		).map( ( suggestion, index ) => ( {
-			...suggestion,
-			suggestionKey: getSuggestionKey( suggestion, index ),
-		} ) );
+			const resolvedActivityEntries = getResolvedActivityEntries(
+				scopedEntries,
+				( entry ) =>
+					getGlobalStylesActivityUndoState( entry, {
+						select: ( storeName ) => select( storeName ),
+					} )
+			);
+			const selectorLastUndoneActivityId =
+				store?.getLastUndoneActivityId?.() || null;
+			const hasUndoSuccessForScope =
+				typeof selectorLastUndoneActivityId === 'string' &&
+				resolvedActivityEntries.some(
+					( entry ) => entry?.id === selectorLastUndoneActivityId
+				);
+			const mappedSuggestions = (
+				store?.getStyleBookRecommendations?.() || []
+			).map( ( suggestion, index ) => ( {
+				...suggestion,
+				suggestionKey: getSuggestionKey( suggestion, index ),
+			} ) );
 
-		return {
-			isGlobalStylesActive:
-				activeComplementaryArea === 'edit-site/global-styles',
-			isSiteEditor: Boolean( editSite ),
-			scope: globalStylesData
-				? {
-						surface: 'global-styles',
-						scopeKey: `global_styles:${ globalStylesData.globalStylesId }`,
-						globalStylesId: globalStylesData.globalStylesId,
-						postType: 'global_styles',
-						entityId: globalStylesData.globalStylesId,
-						entityKind: 'root',
-						entityName: 'globalStyles',
-				  }
-				: null,
-			currentConfig: globalStylesData?.userConfig || {
-				settings: {},
-				styles: {},
-				_links: {},
-			},
-			mergedConfig: globalStylesData?.mergedConfig || {
-				settings: {},
-				styles: {},
-				_links: {},
-			},
-			availableVariations: Array.isArray( globalStylesData?.variations )
-				? globalStylesData.variations
-				: [],
-			rawSuggestions: mappedSuggestions,
-			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
-			currentResultContextSignature:
-				store?.getGlobalStylesContextSignature?.() || null,
-			currentResultRef: store?.getGlobalStylesResultRef?.() || null,
-			status: store?.getGlobalStylesStatus?.() || 'idle',
-			selectedSuggestionKey:
-				store?.getGlobalStylesSelectedSuggestionKey?.() || null,
-			applyStatus: store?.getGlobalStylesApplyStatus?.() || 'idle',
-			undoStatus: store?.getUndoStatus?.() || 'idle',
-			activityEntries: resolvedActivityEntries,
-			currentError: store?.getGlobalStylesError?.() || null,
-			currentApplyError: store?.getGlobalStylesApplyError?.() || null,
-			currentUndoError: store?.getUndoError?.() || null,
-			hasUndoSuccess: hasUndoSuccessForScope,
-			buildNotice: store?.getSurfaceStatusNotice
-				? ( options ) =>
-						store.getSurfaceStatusNotice( 'global-styles', options )
-				: null,
-		};
-	}, [] );
-
+			return {
+				isGlobalStylesActive:
+					activeComplementaryArea === 'edit-site/global-styles',
+				isSiteEditor: Boolean( editSite ),
+				scope: styleScope,
+				blockType: blockName
+					? blocksStore?.getBlockType?.( blockName ) || null
+					: null,
+				currentConfig: globalStylesData?.userConfig || {
+					settings: {},
+					styles: {},
+					_links: {},
+				},
+				mergedConfig: globalStylesData?.mergedConfig || {
+					settings: {},
+					styles: {},
+					_links: {},
+				},
+				currentStyles: getBlockStyleBranch(
+					globalStylesData?.userConfig || {},
+					blockName
+				),
+				mergedStyles: getBlockStyleBranch(
+					globalStylesData?.mergedConfig || {},
+					blockName
+				),
+				rawSuggestions: mappedSuggestions,
+				currentExplanation: store?.getStyleBookExplanation?.() || '',
+				currentResultContextSignature:
+					store?.getStyleBookContextSignature?.() || null,
+				currentResultRef: store?.getStyleBookResultRef?.() || null,
+				status: store?.getStyleBookStatus?.() || 'idle',
+				selectedSuggestionKey:
+					store?.getStyleBookSelectedSuggestionKey?.() || null,
+				applyStatus: store?.getStyleBookApplyStatus?.() || 'idle',
+				undoStatus: store?.getUndoStatus?.() || 'idle',
+				activityEntries: resolvedActivityEntries,
+				currentError: store?.getStyleBookError?.() || null,
+				currentApplyError: store?.getStyleBookApplyError?.() || null,
+				currentUndoError: store?.getUndoError?.() || null,
+				hasUndoSuccess: hasUndoSuccessForScope,
+				buildNotice: store?.getSurfaceStatusNotice
+					? ( options ) =>
+							store.getSurfaceStatusNotice(
+								'style-book',
+								options
+							)
+					: null,
+			};
+		},
+		[ styleBookTargetBlockName, styleBookTargetBlockTitle ]
+	);
+	const executionContract = useMemo(
+		() =>
+			buildBlockStyleExecutionContractFromSettings(
+				blockEditorSettings,
+				blockType || {}
+			),
+		[ blockEditorSettings, blockType ]
+	);
 	const recommendationContextSignature =
 		buildGlobalStylesRecommendationContextSignature( {
 			scope,
 			currentConfig,
 			mergedConfig,
-			availableVariations,
+			availableVariations: [],
 			themeTokenDiagnostics,
 			executionContract,
 		} );
 	const hasMatchingResult = Boolean(
-		scope?.globalStylesId &&
-			currentResultRef === scope.globalStylesId &&
+		scope?.scopeKey &&
+			currentResultRef === scope.scopeKey &&
 			currentResultContextSignature &&
 			currentResultContextSignature === recommendationContextSignature
 	);
@@ -442,7 +487,7 @@ export default function GlobalStylesRecommender() {
 			) || null,
 		[ selectedSuggestionKey, suggestions ]
 	);
-	const latestGlobalStylesActivity = useMemo(
+	const latestStyleBookActivity = useMemo(
 		() => getLatestAppliedActivity( activityEntries ),
 		[ activityEntries ]
 	);
@@ -452,29 +497,27 @@ export default function GlobalStylesRecommender() {
 	);
 	const hasApplySuccess =
 		applyStatus === 'success' &&
-		Boolean( latestGlobalStylesActivity ) &&
-		latestGlobalStylesActivity?.id === latestUndoableActivityId;
-
+		Boolean( latestStyleBookActivity ) &&
+		latestStyleBookActivity?.id === latestUndoableActivityId;
 	const {
-		applyGlobalStylesSuggestion,
-		clearGlobalStylesRecommendations,
-		fetchGlobalStylesRecommendations,
-		setGlobalStylesSelectedSuggestion,
+		applyStyleBookSuggestion,
+		clearStyleBookRecommendations,
+		fetchStyleBookRecommendations,
+		setStyleBookSelectedSuggestion,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
-
 	const isLoading = status === 'loading';
 	const isApplying = applyStatus === 'applying' || undoStatus === 'undoing';
-	const notice = buildNotice
+	const baseNotice = buildNotice
 		? buildNotice( {
 				requestError: currentError,
 				applyError: currentApplyError,
 				undoError: hasUndoSuccess ? '' : currentUndoError,
 				undoSuccessMessage: hasUndoSuccess
-					? 'Flavor Agent restored the previous Global Styles config.'
+					? 'Flavor Agent restored the previous Style Book block styles.'
 					: '',
 				applySuccessMessage: hasApplySuccess
-					? 'Flavor Agent applied the selected Global Styles change.'
+					? 'Flavor Agent applied the selected Style Book change.'
 					: '',
 				hasResult: suggestions.length > 0 || Boolean( explanation ),
 				hasSuggestions: suggestions.length > 0,
@@ -484,12 +527,38 @@ export default function GlobalStylesRecommender() {
 				applyStatus,
 				undoStatus,
 				emptyMessage:
-					'No safe Global Styles changes were returned for this prompt.',
+					'No safe Style Book changes were returned for this prompt.',
 				advisoryMessage:
-					'Review a theme-backed change before applying it.',
+					'Review a theme-backed block style change before applying it.',
 		  } )
 		: null;
-	const isStyleBookActive = Boolean( styleBookUiState?.isActive );
+	let fallbackNotice = null;
+
+	if ( ! scope ) {
+		fallbackNotice = {
+			source: 'scope',
+			tone: 'info',
+			message:
+				'Select a block example in Style Book to request recommendations.',
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	} else if ( ! blockType ) {
+		fallbackNotice = {
+			source: 'scope',
+			tone: 'error',
+			message:
+				'The selected Style Book example is not backed by a registered block.',
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const notice = baseNotice || fallbackNotice;
 
 	useEffect( () => {
 		if ( typeof document === 'undefined' ) {
@@ -502,7 +571,7 @@ export default function GlobalStylesRecommender() {
 	useEffect( () => {
 		if (
 			! isGlobalStylesActive ||
-			isStyleBookActive ||
+			! isStyleBookUiActive ||
 			typeof document === 'undefined'
 		) {
 			setPortalNode( null );
@@ -541,8 +610,7 @@ export default function GlobalStylesRecommender() {
 			}
 
 			nextPortalNode = document.createElement( 'div' );
-			nextPortalNode.className =
-				'flavor-agent-global-styles-sidebar-slot';
+			nextPortalNode.className = 'flavor-agent-style-book-sidebar-slot';
 			panel.appendChild( nextPortalNode );
 			setPortalNode( nextPortalNode );
 		};
@@ -566,17 +634,16 @@ export default function GlobalStylesRecommender() {
 
 			setPortalNode( null );
 		};
-	}, [ isGlobalStylesActive, isStyleBookActive ] );
+	}, [ isGlobalStylesActive, isStyleBookUiActive ] );
 
-	const previousGlobalStylesId = useRef( scope?.globalStylesId || null );
+	const previousScopeKey = useRef( scope?.scopeKey || null );
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature
 	);
 
 	useEffect( () => {
-		const currentGlobalStylesId = scope?.globalStylesId || null;
-		const entityChanged =
-			previousGlobalStylesId.current !== currentGlobalStylesId;
+		const currentScopeKey = scope?.scopeKey || null;
+		const entityChanged = previousScopeKey.current !== currentScopeKey;
 		const recommendationContextChanged =
 			previousRecommendationContextSignature.current !==
 			recommendationContextSignature;
@@ -586,8 +653,8 @@ export default function GlobalStylesRecommender() {
 		}
 
 		const hasStoredResultForScope = Boolean(
-			currentGlobalStylesId &&
-				currentResultRef === currentGlobalStylesId &&
+			currentScopeKey &&
+				currentResultRef === currentScopeKey &&
 				currentResultContextSignature
 		);
 		const shouldClearRecommendations =
@@ -595,7 +662,7 @@ export default function GlobalStylesRecommender() {
 			( recommendationContextChanged &&
 				( hasStoredResultForScope || isLoading ) );
 
-		previousGlobalStylesId.current = currentGlobalStylesId;
+		previousScopeKey.current = currentScopeKey;
 		previousRecommendationContextSignature.current =
 			recommendationContextSignature;
 
@@ -603,41 +670,44 @@ export default function GlobalStylesRecommender() {
 			return;
 		}
 
-		clearGlobalStylesRecommendations();
+		clearStyleBookRecommendations();
 
 		if ( entityChanged ) {
 			setPrompt( '' );
 		}
 	}, [
-		clearGlobalStylesRecommendations,
+		clearStyleBookRecommendations,
 		currentResultContextSignature,
 		currentResultRef,
 		isLoading,
 		recommendationContextSignature,
-		scope?.globalStylesId,
+		scope?.scopeKey,
 	] );
 
 	const handleRequest = useCallback( () => {
-		if ( ! scope ) {
+		if ( ! scope || ! blockType ) {
 			return;
 		}
 
-		fetchGlobalStylesRecommendations(
+		fetchStyleBookRecommendations(
 			buildRequestInput( {
 				scope,
 				prompt,
 				currentConfig,
 				mergedConfig,
-				availableVariations,
-				contextSignature: recommendationContextSignature,
 				themeTokenDiagnostics,
+				currentStyles,
+				mergedStyles,
+				contextSignature: recommendationContextSignature,
 			} )
 		);
 	}, [
-		availableVariations,
+		blockType,
 		currentConfig,
-		fetchGlobalStylesRecommendations,
+		currentStyles,
+		fetchStyleBookRecommendations,
 		mergedConfig,
+		mergedStyles,
 		prompt,
 		recommendationContextSignature,
 		scope,
@@ -646,9 +716,9 @@ export default function GlobalStylesRecommender() {
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
-			applyGlobalStylesSuggestion( selectedSuggestion );
+			applyStyleBookSuggestion( selectedSuggestion );
 		}
-	}, [ applyGlobalStylesSuggestion, selectedSuggestion ] );
+	}, [ applyStyleBookSuggestion, selectedSuggestion ] );
 
 	const handleUndo = useCallback(
 		( activityId ) => {
@@ -657,16 +727,18 @@ export default function GlobalStylesRecommender() {
 		[ undoActivity ]
 	);
 
-	if ( ! isSiteEditor || ! isGlobalStylesActive || isStyleBookActive ) {
+	if ( ! isSiteEditor || ! isGlobalStylesActive || ! isStyleBookUiActive ) {
 		return null;
 	}
 
-	const capability = getSurfaceCapability( 'global-styles' );
+	const capability = getSurfaceCapability( 'style-book' );
 	const panel = (
-		<GlobalStylesPanel
+		<StyleBookPanel
 			prompt={ prompt }
 			setPrompt={ setPrompt }
-			capabilityAvailable={ capability.available && Boolean( scope ) }
+			capabilityAvailable={
+				capability.available && Boolean( scope ) && Boolean( blockType )
+			}
 			isLoading={ isLoading }
 			isApplying={ isApplying }
 			isUndoing={ undoStatus === 'undoing' }
@@ -675,14 +747,15 @@ export default function GlobalStylesRecommender() {
 			explanation={ explanation }
 			notice={ notice }
 			activityEntries={ activityEntries }
+			blockTitle={ scope?.blockTitle || '' }
 			onNoticeAction={
-				notice?.actionType === 'undo' && latestGlobalStylesActivity
-					? () => handleUndo( latestGlobalStylesActivity.id )
+				notice?.actionType === 'undo' && latestStyleBookActivity
+					? () => handleUndo( latestStyleBookActivity.id )
 					: undefined
 			}
 			onRequest={ handleRequest }
-			onReview={ setGlobalStylesSelectedSuggestion }
-			onCancelReview={ () => setGlobalStylesSelectedSuggestion( null ) }
+			onReview={ setStyleBookSelectedSuggestion }
+			onCancelReview={ () => setStyleBookSelectedSuggestion( null ) }
 			onApply={ handleApply }
 			onUndo={ handleUndo }
 		/>
@@ -694,8 +767,8 @@ export default function GlobalStylesRecommender() {
 
 	return (
 		<PluginDocumentSettingPanel
-			name="flavor-agent-global-styles"
-			title="AI Style Suggestions"
+			name="flavor-agent-style-book"
+			title="AI Style Book Suggestions"
 		>
 			{ panel }
 		</PluginDocumentSettingPanel>

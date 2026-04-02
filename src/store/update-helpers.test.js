@@ -65,6 +65,36 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'buildSafeAttributeUpdates strips custom CSS channels before merging', () => {
+		const currentAttributes = {
+			style: {
+				color: {
+					text: 'var(--wp--preset--color--contrast)',
+				},
+			},
+		};
+		const suggestedUpdates = {
+			customCSS: '.wp-block-paragraph { color: red; }',
+			style: {
+				css: '.wp-block-paragraph { color: red; }',
+				color: {
+					background: 'var(--wp--preset--color--accent)',
+				},
+			},
+		};
+
+		expect(
+			buildSafeAttributeUpdates( currentAttributes, suggestedUpdates )
+		).toEqual( {
+			style: {
+				color: {
+					text: 'var(--wp--preset--color--contrast)',
+					background: 'var(--wp--preset--color--accent)',
+				},
+			},
+		} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext drops locked settings and non-content updates', () => {
 		const recommendations = {
 			settings: [
@@ -128,6 +158,81 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'sanitizeRecommendationsForContext drops suggestions that only contain CSS channels', () => {
+		const recommendations = {
+			styles: [
+				{
+					label: 'Inject CSS',
+					attributeUpdates: {
+						customCSS: '.wp-block-group { color: red; }',
+					},
+				},
+			],
+			block: [
+				{
+					label: 'Add inline CSS',
+					attributeUpdates: {
+						style: {
+							css: '.wp-block-group { color: red; }',
+						},
+					},
+				},
+			],
+			explanation: 'Unsafe CSS should be removed before the UI renders.',
+		};
+
+		expect( sanitizeRecommendationsForContext( recommendations ) ).toEqual(
+			{
+				settings: [],
+				styles: [],
+				block: [],
+				explanation:
+					'Unsafe CSS should be removed before the UI renders.',
+			}
+		);
+	} );
+
+	test( 'sanitizeRecommendationsForContext strips nested style.css and raw CSS strings while keeping safe style updates', () => {
+		const recommendations = {
+			styles: [
+				{
+					label: 'Use accent background',
+					attributeUpdates: {
+						style: {
+							css: '.wp-block-group { color: red; }',
+							color: {
+								background: 'var(--wp--preset--color--accent)',
+								text: 'color: red;',
+							},
+						},
+					},
+				},
+			],
+			explanation: 'Only theme-backed updates should remain.',
+		};
+
+		expect( sanitizeRecommendationsForContext( recommendations ) ).toEqual(
+			{
+				settings: [],
+				styles: [
+					{
+						label: 'Use accent background',
+						attributeUpdates: {
+							style: {
+								color: {
+									background:
+										'var(--wp--preset--color--accent)',
+								},
+							},
+						},
+					},
+				],
+				block: [],
+				explanation: 'Only theme-backed updates should remain.',
+			}
+		);
+	} );
+
 	test( 'getSuggestionAttributeUpdates blocks non-content updates in contentOnly mode', () => {
 		const blockContext = {
 			isInsideContentOnly: true,
@@ -154,6 +259,29 @@ describe( 'update helpers', () => {
 				blockContext
 			)
 		).toEqual( {} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates strips unsafe CSS channels before apply', () => {
+		expect(
+			getSuggestionAttributeUpdates( {
+				attributeUpdates: {
+					customCSS: '.wp-block-paragraph { color: red; }',
+					style: {
+						css: '.wp-block-paragraph { color: red; }',
+						color: {
+							background: 'var(--wp--preset--color--accent)',
+							text: 'color: red;',
+						},
+					},
+				},
+			} )
+		).toEqual( {
+			style: {
+				color: {
+					background: 'var(--wp--preset--color--accent)',
+				},
+			},
+		} );
 	} );
 
 	test( 'sanitizeRecommendationsForContext restricts when block itself is contentOnly', () => {

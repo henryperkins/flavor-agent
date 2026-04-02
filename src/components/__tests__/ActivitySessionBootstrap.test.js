@@ -1,6 +1,8 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockLoadActivitySession = jest.fn();
+const mockGetStyleBookUiState = jest.fn();
+const mockSubscribeToStyleBookUi = jest.fn();
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
@@ -9,6 +11,12 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
+} ) );
+
+jest.mock( '../../style-book/dom', () => ( {
+	getStyleBookUiState: ( ...args ) => mockGetStyleBookUiState( ...args ),
+	subscribeToStyleBookUi: ( ...args ) =>
+		mockSubscribeToStyleBookUi( ...args ),
 } ) );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -37,6 +45,11 @@ beforeEach( () => {
 	currentCoreState = {
 		globalStylesId: null,
 	};
+	mockGetStyleBookUiState.mockReturnValue( {
+		isActive: false,
+		target: null,
+	} );
+	mockSubscribeToStyleBookUi.mockImplementation( () => () => {} );
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( ( storeName ) => {
@@ -124,6 +137,30 @@ describe( 'ActivitySessionBootstrap', () => {
 		currentCoreState = {
 			globalStylesId: '17',
 		};
+
+		act( () => {
+			root.render( <ActivitySessionBootstrap /> );
+		} );
+
+		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
+			allowUnsavedMigration: false,
+		} );
+	} );
+
+	test( 'switches to a style-book scoped session when the Style Book target is active', () => {
+		currentInterfaceState = {
+			activeComplementaryArea: 'edit-site/global-styles',
+		};
+		currentCoreState = {
+			globalStylesId: '17',
+		};
+		mockGetStyleBookUiState.mockReturnValue( {
+			isActive: true,
+			target: {
+				blockName: 'core/paragraph',
+				blockTitle: 'Paragraph',
+			},
+		} );
 
 		act( () => {
 			root.render( <ActivitySessionBootstrap /> );

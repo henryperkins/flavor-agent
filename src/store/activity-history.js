@@ -1,3 +1,5 @@
+import { getStyleBookUiState } from '../style-book/dom';
+
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
 const ACTIVITY_STORAGE_VERSION = 3;
 const MAX_ACTIVITY_HISTORY = 20;
@@ -288,6 +290,32 @@ export function resolveGlobalStylesScope(
 	};
 }
 
+export function resolveStyleBookScope(
+	globalStylesId,
+	blockName,
+	{ blockTitle = '', stylesheet = '' } = {}
+) {
+	const normalizedGlobalStylesId = normalizeScopeValue( globalStylesId );
+	const normalizedBlockName = normalizeScopeValue( blockName );
+
+	if ( ! normalizedGlobalStylesId || ! normalizedBlockName ) {
+		return null;
+	}
+
+	return {
+		key: `style_book:${ normalizedGlobalStylesId }:${ normalizedBlockName }`,
+		hint: `style_book:${ normalizedGlobalStylesId }:${ normalizedBlockName }`,
+		postType: 'global_styles',
+		entityId: normalizedGlobalStylesId,
+		entityKind: 'block',
+		entityName: 'styleBook',
+		globalStylesId: normalizedGlobalStylesId,
+		blockName: normalizedBlockName,
+		blockTitle: normalizeScopeValue( blockTitle ),
+		stylesheet: normalizeScopeValue( stylesheet ),
+	};
+}
+
 export function sortActivityEntries( entries = [] ) {
 	return Array.isArray( entries )
 		? [ ...entries ].filter( Boolean ).sort( compareActivityEntries )
@@ -314,6 +342,20 @@ export function getCurrentActivityScope( registry ) {
 		globalStylesId !== undefined &&
 		globalStylesId !== ''
 	) {
+		if ( typeof document !== 'undefined' ) {
+			const styleBookUiState = getStyleBookUiState( document );
+
+			if ( styleBookUiState?.isActive && styleBookUiState?.target?.blockName ) {
+				return resolveStyleBookScope(
+					globalStylesId,
+					styleBookUiState.target.blockName,
+					{
+						blockTitle: styleBookUiState.target.blockTitle || '',
+					}
+				);
+			}
+		}
+
 		return resolveGlobalStylesScope( globalStylesId );
 	}
 
@@ -455,6 +497,12 @@ export function getActivityEntityKey( entry ) {
 		return `global-styles:${ String(
 			entry?.target?.globalStylesId || entry?.document?.entityId || ''
 		) }`;
+	}
+
+	if ( surface === 'style-book' ) {
+		return `style-book:${ String(
+			entry?.target?.globalStylesId || entry?.document?.entityId || ''
+		) }:${ String( entry?.target?.blockName || '' ) }`;
 	}
 
 	const documentScopeKey = String( entry?.document?.scopeKey || '' );

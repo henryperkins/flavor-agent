@@ -412,12 +412,21 @@ SYSTEM;
 			if ( ! is_array( $s ) || empty( $s['label'] ) ) {
 				continue;
 			}
+
+			$has_executable_updates = is_array( $s['attributeUpdates'] ?? null ) && [] !== $s['attributeUpdates'];
+			$attribute_updates      = self::sanitize_attribute_updates( $s['attributeUpdates'] ?? [] );
+			$attribute_updates      = self::filter_unsafe_attribute_updates( $attribute_updates )['value'];
+
+			if ( $has_executable_updates && ( ! is_array( $attribute_updates ) || [] === $attribute_updates ) ) {
+				continue;
+			}
+
 			$valid[] = [
 				'label'            => sanitize_text_field( $s['label'] ),
 				'description'      => sanitize_text_field( $s['description'] ?? '' ),
 				'panel'            => self::normalize_panel_key( $s['panel'] ?? 'general' ),
 				'type'             => isset( $s['type'] ) ? sanitize_key( $s['type'] ) : null,
-				'attributeUpdates' => self::sanitize_attribute_updates( $s['attributeUpdates'] ?? [] ),
+				'attributeUpdates' => is_array( $attribute_updates ) ? $attribute_updates : [],
 				'currentValue'     => self::sanitize_display_value( $s['currentValue'] ?? null ),
 				'suggestedValue'   => self::sanitize_display_value( $s['suggestedValue'] ?? null ),
 				'isCurrentStyle'   => isset( $s['isCurrentStyle'] ) ? (bool) $s['isCurrentStyle'] : null,
@@ -593,6 +602,144 @@ SYSTEM;
 			return $data;
 		}
 		return null;
+	}
+
+	/**
+	 * Remove unsafe CSS channels from attribute updates after shape sanitization.
+	 *
+	 * @param string[] $path
+	 * @return array{kept: bool, value: mixed}
+	 */
+	private static function filter_unsafe_attribute_updates( mixed $data, array $path = [] ): array {
+		if ( is_string( $data ) ) {
+			if ( self::is_style_adjacent_attribute_path( $path ) && self::looks_like_css_payload( $data ) ) {
+				return [
+					'kept'  => false,
+					'value' => null,
+				];
+			}
+
+			return [
+				'kept'  => true,
+				'value' => $data,
+			];
+		}
+
+		if ( ! is_array( $data ) ) {
+			return [
+				'kept'  => true,
+				'value' => $data,
+			];
+		}
+
+		if ( self::is_list_array( $data ) ) {
+			$values = [];
+
+			foreach ( $data as $index => $value ) {
+				$filtered = self::filter_unsafe_attribute_updates(
+					$value,
+					array_merge( $path, [ (string) $index ] )
+				);
+
+				if ( $filtered['kept'] ) {
+					$values[] = $filtered['value'];
+				}
+			}
+
+			return [
+				'kept'  => [] !== $values || [] === $path,
+				'value' => $values,
+			];
+		}
+
+		$values = [];
+
+		foreach ( $data as $key => $value ) {
+			$next_path = array_merge( $path, [ (string) $key ] );
+
+			if ( self::is_banned_attribute_update_path( $next_path ) ) {
+				continue;
+			}
+
+			$filtered = self::filter_unsafe_attribute_updates( $value, $next_path );
+
+			if ( ! $filtered['kept'] ) {
+				continue;
+			}
+
+			$values[ $key ] = $filtered['value'];
+		}
+
+		return [
+			'kept'  => [] !== $values || [] === $path,
+			'value' => $values,
+		];
+	}
+
+	/**
+	 * @param string[] $path
+	 */
+	private static function is_banned_attribute_update_path( array $path ): bool {
+		if ( [] === $path ) {
+			return false;
+		}
+
+		if ( 'customCSS' === $path[0] ) {
+			return true;
+		}
+
+		for ( $index = 0; $index < count( $path ) - 1; $index++ ) {
+			if ( 'style' === $path[ $index ] && 'css' === $path[ $index + 1 ] ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * @param string[] $path
+	 */
+	private static function is_style_adjacent_attribute_path( array $path ): bool {
+		if ( [] === $path ) {
+			return false;
+		}
+
+		if ( 'customCSS' === $path[0] ) {
+			return true;
+		}
+
+		return in_array( 'style', $path, true ) || 'css' === end( $path );
+	}
+
+	private static function looks_like_css_payload( string $value ): bool {
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed ) {
+			return false;
+		}
+
+		if ( preg_match( '/[{};]/', $trimmed ) ) {
+			return true;
+		}
+
+		if ( preg_match( '/!\s*important\b/i', $trimmed ) ) {
+			return true;
+		}
+
+		if ( preg_match( '/^@(?:container|font-face|import|keyframes|layer|media|supports)\b/i', $trimmed ) ) {
+			return true;
+		}
+
+		if (
+			preg_match( '/^[a-z-]+\s*:\s*.+$/i', $trimmed ) &&
+			! preg_match( '/^var:preset\|/i', $trimmed ) &&
+			! preg_match( '/^var\(--/i', $trimmed )
+		) {
+			return true;
+		}
+
+		return false;
 	}
 
 	private static function sanitize_display_value( mixed $data ): mixed {
