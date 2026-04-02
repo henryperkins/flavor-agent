@@ -455,6 +455,42 @@ describe( 'GlobalStylesRecommender', () => {
 		);
 	} );
 
+	test( 'submits a scoped style recommendation request when the prompt is empty', () => {
+		act( () => {
+			root.render( <GlobalStylesRecommender /> );
+		} );
+
+		const button = sidebar.querySelector( 'button' );
+
+		expect( button ).not.toBeNull();
+		expect( button.disabled ).toBe( false );
+
+		act( () => {
+			button.click();
+		} );
+
+		expect( mockFetchGlobalStylesRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				scope: expect.objectContaining( {
+					surface: 'global-styles',
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
+				} ),
+				styleContext: expect.objectContaining( {
+					availableVariations: expect.any( Array ),
+					themeTokenDiagnostics: {
+						source: 'stable',
+						settingsKey: 'features',
+						reason: 'stable-parity',
+					},
+				} ),
+			} )
+		);
+		expect(
+			mockFetchGlobalStylesRecommendations.mock.calls[ 0 ][ 0 ]
+		).not.toHaveProperty( 'prompt' );
+	} );
+
 	test( 'mounts into the Styles sidebar after it appears later', async () => {
 		sidebar.remove();
 
@@ -482,7 +518,23 @@ describe( 'GlobalStylesRecommender', () => {
 		).not.toBeNull();
 	} );
 
-	test( 'mounts into the WP 7.0 Styles region when the legacy sidebar class is absent', () => {
+	test( 'mounts into the Styles sidebar wrapper when the panel class is absent', () => {
+		sidebar.remove();
+		sidebar = document.createElement( 'div' );
+		sidebar.className = 'editor-global-styles-sidebar';
+		document.body.appendChild( sidebar );
+
+		act( () => {
+			root.render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.querySelector( 'textarea' ) ).not.toBeNull();
+		expect(
+			sidebar.querySelector( '.flavor-agent-global-styles-sidebar-slot' )
+		).not.toBeNull();
+	} );
+
+	test( 'mounts into the legacy Styles region as a last-resort fallback', () => {
 		sidebar.remove();
 		sidebar = document.createElement( 'div' );
 		sidebar.setAttribute( 'role', 'region' );

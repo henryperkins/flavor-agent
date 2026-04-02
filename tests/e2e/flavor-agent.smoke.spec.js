@@ -31,6 +31,38 @@ const GLOBAL_STYLES_PROMPT =
 	'Warm the canvas slightly and tighten the site-wide vertical rhythm.';
 const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|signal';
 const GLOBAL_STYLES_LINE_HEIGHT_VALUE = 1.73;
+const GLOBAL_STYLES_SIDEBAR_SELECTOR =
+	'.editor-global-styles-sidebar__panel, .editor-global-styles-sidebar, [role="region"][aria-label="Styles"]';
+const GLOBAL_STYLES_RESPONSE = {
+	explanation:
+		'Use the theme signal preset for the canvas and tighten line height slightly.',
+	suggestions: [
+		{
+			label: 'Adjust canvas tone and rhythm',
+			description:
+				'Apply the signal canvas preset and tighten the global line height.',
+			category: 'color',
+			tone: 'executable',
+			operations: [
+				{
+					type: 'set_styles',
+					path: ['color', 'background'],
+					value: GLOBAL_STYLES_BACKGROUND_VALUE,
+					valueType: 'preset',
+					presetType: 'color',
+					presetSlug: 'signal',
+					cssVar: 'var(--wp--preset--color--signal)',
+				},
+				{
+					type: 'set_styles',
+					path: ['typography', 'lineHeight'],
+					value: GLOBAL_STYLES_LINE_HEIGHT_VALUE,
+					valueType: 'freeform',
+				},
+			],
+		},
+	],
+};
 
 async function dismissWelcomeGuide(page) {
 	const welcomeOverlay = page.locator('.components-modal__screen-overlay');
@@ -85,6 +117,17 @@ async function dismissWelcomeGuide(page) {
 
 async function dismissSiteEditorWelcomeGuide(page) {
 	await dismissWelcomeGuide(page);
+}
+
+async function mockGlobalStylesRecommendations(page, styleRequests) {
+	await page.route('**/*recommend-style*', async (route) => {
+		styleRequests.push(route.request().postDataJSON());
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(GLOBAL_STYLES_RESPONSE),
+		});
+	});
 }
 
 async function waitForWordPressReady(page) {
@@ -480,26 +523,22 @@ async function enableSiteEditorGlobalStylesSidebar(page) {
 			?.dispatch('core/interface')
 			?.enableComplementaryArea?.('core/edit-site', 'edit-site/global-styles');
 	});
-	await page.waitForFunction(() => {
-		const activeArea = window.wp?.data
-			?.select('core/interface')
-			?.getActiveComplementaryArea?.('core');
+	await page.waitForFunction(
+		(selector) => {
+			const activeArea = window.wp?.data
+				?.select('core/interface')
+				?.getActiveComplementaryArea?.('core');
 
-		return (
-			activeArea === 'edit-site/global-styles' ||
-			Boolean(
-				document.querySelector(
-					'.editor-global-styles-sidebar__panel, [role="region"][aria-label="Styles"]',
-				),
-			)
-		);
-	});
-	await page.waitForFunction(() =>
-		Boolean(
-			document.querySelector(
-				'.editor-global-styles-sidebar__panel, [role="region"][aria-label="Styles"]',
-			),
-		),
+			return (
+				activeArea === 'edit-site/global-styles' ||
+				Boolean(document.querySelector(selector))
+			);
+		},
+		GLOBAL_STYLES_SIDEBAR_SELECTOR,
+	);
+	await page.waitForFunction(
+		(selector) => Boolean(document.querySelector(selector)),
+		GLOBAL_STYLES_SIDEBAR_SELECTOR,
 	);
 }
 
@@ -1255,43 +1294,7 @@ test('@wp70-site-editor global styles surface previews, applies, and undoes exec
 }) => {
 	const styleRequests = [];
 
-	await page.route('**/*recommend-style*', async (route) => {
-		styleRequests.push(route.request().postDataJSON());
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				explanation:
-					'Use the theme signal preset for the canvas and tighten line height slightly.',
-				suggestions: [
-					{
-						label: 'Adjust canvas tone and rhythm',
-						description:
-							'Apply the signal canvas preset and tighten the global line height.',
-						category: 'color',
-						tone: 'executable',
-						operations: [
-							{
-								type: 'set_styles',
-								path: ['color', 'background'],
-								value: GLOBAL_STYLES_BACKGROUND_VALUE,
-								valueType: 'preset',
-								presetType: 'color',
-								presetSlug: 'signal',
-								cssVar: 'var(--wp--preset--color--signal)',
-							},
-							{
-								type: 'set_styles',
-								path: ['typography', 'lineHeight'],
-								value: GLOBAL_STYLES_LINE_HEIGHT_VALUE,
-								valueType: 'freeform',
-							},
-						],
-					},
-				],
-			}),
-		});
-	});
+	await mockGlobalStylesRecommendations(page, styleRequests);
 
 	await page.goto('/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -1363,8 +1366,53 @@ test('@wp70-site-editor global styles surface previews, applies, and undoes exec
 				settings: initialState.settings,
 				styles: initialState.styles,
 				undoStatus: 'success',
-			}),
-		);
+				}),
+			);
+});
+
+test('@wp70-site-editor global styles surface requests defaults when the prompt is empty', async ({
+	page,
+}) => {
+	const styleRequests = [];
+
+	await mockGlobalStylesRecommendations(page, styleRequests);
+
+	await page.goto('/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	});
+	await waitForWordPressReady(page);
+	await waitForFlavorAgent(page);
+	await dismissWelcomeGuide(page);
+	await dismissSiteEditorWelcomeGuide(page);
+	await page.waitForFunction(() =>
+		Boolean(window.flavorAgentData?.canRecommendGlobalStyles),
+	);
+	await page.waitForFunction(() =>
+		Boolean(
+			window.wp?.data
+				?.select('core')
+				?.__experimentalGetCurrentGlobalStylesId?.(),
+		),
+	);
+	await enableSiteEditorGlobalStylesSidebar(page);
+
+	const initialState = await getGlobalStylesState(page);
+	const promptInput = page.getByLabel('Describe the style direction');
+
+	await expect(promptInput).toBeVisible();
+	await page.getByRole('button', { name: 'Get Style Suggestions' }).click();
+
+	await expect.poll(() => styleRequests.length).toBe(1);
+	expect(styleRequests[0].scope.surface).toBe('global-styles');
+	expect(styleRequests[0].scope.globalStylesId).toBe(
+		initialState.globalStylesId,
+	);
+	expect(styleRequests[0].styleContext).toHaveProperty(
+		'themeTokenDiagnostics',
+	);
+	expect(styleRequests[0]).not.toHaveProperty('prompt');
+
+	await expect(page.getByText('Adjust canvas tone and rhythm')).toBeVisible();
 });
 
 test('template surface smoke previews and applies executable template recommendations', async ({

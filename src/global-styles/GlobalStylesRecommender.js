@@ -83,9 +83,10 @@ function formatOperation( operation = {} ) {
 	return 'Review this change before applying it.';
 }
 
-function findGlobalStylesSidebarPanel( root = document ) {
+function findGlobalStylesSidebarMountNode( root = document ) {
 	return (
 		root.querySelector( '.editor-global-styles-sidebar__panel' ) ||
+		root.querySelector( '.editor-global-styles-sidebar' ) ||
 		root.querySelector( '[role="region"][aria-label="Styles"]' )
 	);
 }
@@ -99,6 +100,9 @@ function buildRequestInput( {
 	contextSignature,
 	themeTokenDiagnostics,
 } ) {
+	const normalizedPrompt =
+		typeof prompt === 'string' ? prompt.trim() : '';
+
 	return {
 		scope: {
 			surface: 'global-styles',
@@ -117,7 +121,7 @@ function buildRequestInput( {
 			themeTokenDiagnostics,
 		},
 		contextSignature,
-		prompt,
+		...( normalizedPrompt ? { prompt: normalizedPrompt } : {} ),
 	};
 }
 
@@ -154,7 +158,7 @@ function GlobalStylesPanel( {
 				<div className="flavor-agent-panel__group-body">
 					<TextareaControl
 						label="Describe the style direction"
-						help="Flavor Agent will keep recommendations inside preset-backed Global Styles changes."
+						help="Optional. Flavor Agent will keep recommendations inside preset-backed Global Styles changes."
 						value={ prompt }
 						onChange={ setPrompt }
 						rows={ 4 }
@@ -162,11 +166,7 @@ function GlobalStylesPanel( {
 					<Button
 						variant="primary"
 						onClick={ onRequest }
-						disabled={
-							! capabilityAvailable ||
-							isLoading ||
-							! prompt.trim()
-						}
+						disabled={ ! capabilityAvailable || isLoading }
 						className="flavor-agent-card__apply"
 					>
 						{ isLoading ? 'Thinking…' : 'Get Style Suggestions' }
@@ -499,7 +499,7 @@ export default function GlobalStylesRecommender() {
 
 		let nextPortalNode = null;
 		const ensurePortalNode = () => {
-			const panel = findGlobalStylesSidebarPanel( document );
+			const panel = findGlobalStylesSidebarMountNode( document );
 
 			if ( ! panel ) {
 				if ( nextPortalNode ) {
@@ -601,14 +601,14 @@ export default function GlobalStylesRecommender() {
 	] );
 
 	const handleRequest = useCallback( () => {
-		if ( ! scope || ! prompt.trim() ) {
+		if ( ! scope ) {
 			return;
 		}
 
 		fetchGlobalStylesRecommendations(
 			buildRequestInput( {
 				scope,
-				prompt: prompt.trim(),
+				prompt,
 				currentConfig,
 				mergedConfig,
 				availableVariations,
