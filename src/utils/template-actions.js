@@ -8,10 +8,11 @@
  *     Patterns tab, pre-filtered to the exact pattern so the user sees
  *     a live preview and can choose an insertion point).
  */
-import { createBlock, rawHandler } from '@wordpress/blocks';
+import { createBlock, getBlockType, rawHandler } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { dispatch, select } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
+import { toHTMLString } from '@wordpress/rich-text';
 import { getAllowedPatterns } from '../patterns/pattern-settings';
 import {
 	TEMPLATE_OPERATION_ASSIGN,
@@ -105,14 +106,44 @@ function getPatternRegistry( rootClientId = null ) {
 	return getAllowedPatterns( rootClientId );
 }
 
+function normalizeRichTextValue( value ) {
+	if ( value === null || value === undefined ) {
+		return null;
+	}
+
+	try {
+		if ( typeof value?.toHTMLString === 'function' ) {
+			return value.toHTMLString();
+		}
+	} catch {}
+
+	try {
+		return toHTMLString( { value } );
+	} catch {}
+
+	return null;
+}
+
 function normalizeSerializableValue( value ) {
 	if ( Array.isArray( value ) ) {
+		const richTextValue = normalizeRichTextValue( value );
+
+		if ( richTextValue !== null ) {
+			return richTextValue;
+		}
+
 		return value.map( ( item ) =>
 			normalizeSerializableValue( item === undefined ? null : item )
 		);
 	}
 
 	if ( value && typeof value === 'object' ) {
+		const richTextValue = normalizeRichTextValue( value );
+
+		if ( richTextValue !== null ) {
+			return richTextValue;
+		}
+
 		return Object.fromEntries(
 			Object.entries( value )
 				.filter( ( [ , entryValue ] ) => entryValue !== undefined )
@@ -153,6 +184,167 @@ function normalizeBlockSnapshots( blocks = [] ) {
 				.filter( Boolean )
 				.map( ( block ) => normalizeBlockSnapshot( block ) )
 		: [];
+}
+
+function snapshotValuesEqual( currentValue, expectedValue ) {
+	if ( Array.isArray( currentValue ) || Array.isArray( expectedValue ) ) {
+		if (
+			! Array.isArray( currentValue ) ||
+			! Array.isArray( expectedValue ) ||
+			currentValue.length !== expectedValue.length
+		) {
+			return false;
+		}
+
+		return currentValue.every( ( entry, index ) =>
+			snapshotValuesEqual( entry, expectedValue[ index ] )
+		);
+	}
+
+	if (
+		currentValue &&
+		typeof currentValue === 'object' &&
+		expectedValue &&
+		typeof expectedValue === 'object'
+	) {
+		const currentKeys = Object.keys( currentValue );
+		const expectedKeys = Object.keys( expectedValue );
+
+		if ( currentKeys.length !== expectedKeys.length ) {
+			return false;
+		}
+
+		return currentKeys.every(
+			( key ) =>
+				Object.prototype.hasOwnProperty.call( expectedValue, key ) &&
+				snapshotValuesEqual( currentValue[ key ], expectedValue[ key ] )
+		);
+	}
+
+	return currentValue === expectedValue;
+}
+
+function isDefaultBlockAttributeValue( blockName, attributeKey, value ) {
+	const definition = getBlockType( blockName )?.attributes?.[ attributeKey ];
+
+	if ( ! definition ) {
+		return value === undefined;
+	}
+
+	if ( Object.prototype.hasOwnProperty.call( definition, 'default' ) ) {
+		return snapshotValuesEqual(
+			value,
+			normalizeSerializableValue( definition.default )
+		);
+	}
+
+	if ( definition.type === 'rich-text' ) {
+		return value === undefined || value === null || value === '';
+	}
+
+	return value === undefined;
+}
+
+function snapshotAttributesMatchBlockDefaults(
+	currentAttributes,
+	expectedAttributes,
+	blockName
+) {
+	const current =
+		currentAttributes &&
+		typeof currentAttributes === 'object' &&
+		! Array.isArray( currentAttributes )
+			? currentAttributes
+			: {};
+	const expected =
+		expectedAttributes &&
+		typeof expectedAttributes === 'object' &&
+		! Array.isArray( expectedAttributes )
+			? expectedAttributes
+			: {};
+	const attributeKeys = new Set( [
+		...Object.keys( current ),
+		...Object.keys( expected ),
+	] );
+
+	for ( const key of attributeKeys ) {
+		const hasCurrent = Object.prototype.hasOwnProperty.call( current, key );
+		const hasExpected = Object.prototype.hasOwnProperty.call( expected, key );
+
+		if ( hasCurrent && hasExpected ) {
+			if ( ! snapshotValuesEqual( current[ key ], expected[ key ] ) ) {
+				return false;
+			}
+
+			continue;
+		}
+
+		const value = hasCurrent ? current[ key ] : expected[ key ];
+
+		if ( ! isDefaultBlockAttributeValue( blockName, key, value ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+function snapshotMatchesExpectedBlock( currentBlock, expectedBlock ) {
+	if (
+		! currentBlock ||
+		! expectedBlock ||
+		currentBlock.name !== expectedBlock.name
+	) {
+		return false;
+	}
+
+	return (
+		snapshotAttributesMatchBlockDefaults(
+			currentBlock.attributes || {},
+			expectedBlock.attributes || {},
+			currentBlock.name
+		) &&
+		snapshotMatchesExpectedBlocks(
+			currentBlock.innerBlocks || [],
+			expectedBlock.innerBlocks || []
+		)
+	);
+}
+
+function snapshotMatchesExpectedBlocks(
+	currentBlocks = [],
+	expectedBlocks = []
+) {
+	return (
+		Array.isArray( currentBlocks ) &&
+		Array.isArray( expectedBlocks ) &&
+		currentBlocks.length === expectedBlocks.length &&
+		expectedBlocks.every( ( expectedBlock, index ) =>
+			snapshotMatchesExpectedBlock(
+				currentBlocks[ index ],
+				expectedBlock
+			)
+		)
+	);
+}
+
+function resolveRecordedInsertedBlocksSnapshot(
+	insertedSlice,
+	expectedBlocks = []
+) {
+	const expectedSnapshot = normalizeBlockSnapshots( expectedBlocks );
+	const currentSnapshot = normalizeBlockSnapshots(
+		insertedSlice?.blocks || []
+	);
+
+	if (
+		currentSnapshot.length > 0 &&
+		snapshotMatchesExpectedBlocks( currentSnapshot, expectedSnapshot )
+	) {
+		return currentSnapshot;
+	}
+
+	return expectedSnapshot;
 }
 
 function cloneBlockTree( blocks = [] ) {
@@ -497,6 +689,8 @@ function resolveTemplatePartInsertionPoint(
 	targetPath = null,
 	blocks = getBlocks()
 ) {
+	const rootBlocks = Array.isArray( blocks ) ? blocks : [];
+
 	if ( placement === TEMPLATE_PART_PLACEMENT_START ) {
 		return {
 			rootLocator: {
@@ -515,7 +709,7 @@ function resolveTemplatePartInsertionPoint(
 				type: 'root',
 				path: [],
 			},
-			index: Array.isArray( blocks ) ? blocks.length : 0,
+			index: rootBlocks.length,
 			targetPath: null,
 			targetBlockName: '',
 		};
@@ -563,7 +757,46 @@ function resolveTemplateInsertionPoint(
 		return resolveInsertionPoint();
 	}
 
+	if ( placement === TEMPLATE_PART_PLACEMENT_START ) {
+		return {
+			rootLocator: {
+				type: 'root',
+				path: [],
+			},
+			index: 0,
+			targetPath: null,
+			targetBlockName: '',
+		};
+	}
+
+	if ( placement === TEMPLATE_PART_PLACEMENT_END ) {
+		return {
+			rootLocator: {
+				type: 'root',
+				path: [],
+			},
+			index: Array.isArray( blocks ) ? blocks.length : 0,
+			targetPath: null,
+			targetBlockName: '',
+		};
+	}
+
 	return resolveTemplatePartInsertionPoint( placement, targetPath, blocks );
+}
+
+function isTemplateStructureLocked( block ) {
+	const attributes =
+		block && typeof block.attributes === 'object' ? block.attributes : {};
+	const templateLock =
+		typeof attributes?.templateLock === 'string'
+			? attributes.templateLock.trim()
+			: '';
+	const lock =
+		attributes?.lock && typeof attributes.lock === 'object'
+			? attributes.lock
+			: {};
+
+	return templateLock !== '' || Object.keys( lock ).length > 0;
 }
 
 function matchesExpectedTemplateTarget( block, expectedTarget = {} ) {
@@ -622,21 +855,6 @@ function matchesExpectedTemplateTarget( block, expectedTarget = {} ) {
 	}
 
 	return true;
-}
-
-function isTemplateStructureLocked( block ) {
-	const attributes =
-		block && typeof block.attributes === 'object' ? block.attributes : {};
-	const templateLock =
-		typeof attributes?.templateLock === 'string'
-			? attributes.templateLock.trim()
-			: '';
-	const lock =
-		attributes?.lock && typeof attributes.lock === 'object'
-			? attributes.lock
-			: {};
-
-	return templateLock !== '' || Object.keys( lock ).length > 0;
 }
 
 function resolvePatternByName( patternName, rootClientId = null ) {
@@ -1566,9 +1784,11 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator,
 					index: operation.index,
-					insertedBlocksSnapshot: normalizeBlockSnapshots(
-						insertedSlice?.blocks || operation.blocks
-					),
+					insertedBlocksSnapshot:
+						resolveRecordedInsertedBlocksSnapshot(
+							insertedSlice,
+							operation.blocks
+						),
 				} );
 				break;
 		}
@@ -1640,9 +1860,11 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator,
 					index: operation.index,
-					insertedBlocksSnapshot: normalizeBlockSnapshots(
-						insertedSlice?.blocks || operation.blocks
-					),
+					insertedBlocksSnapshot:
+						resolveRecordedInsertedBlocksSnapshot(
+							insertedSlice,
+							operation.blocks
+						),
 				} );
 				break;
 			}
@@ -1715,9 +1937,11 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					rootLocator: operation.rootLocator,
 					index: operation.index,
 					removedBlocksSnapshot,
-					insertedBlocksSnapshot: normalizeBlockSnapshots(
-						insertedSlice?.blocks || operation.blocks
-					),
+					insertedBlocksSnapshot:
+						resolveRecordedInsertedBlocksSnapshot(
+							insertedSlice,
+							operation.blocks
+						),
 				} );
 				break;
 			}
@@ -1930,7 +2154,11 @@ export function resolveInsertedPatternSlice(
 
 	if (
 		JSON.stringify( currentSnapshot ) !==
-		JSON.stringify( insertedBlocksSnapshot )
+			JSON.stringify( insertedBlocksSnapshot ) &&
+		! snapshotMatchesExpectedBlocks(
+			currentSnapshot,
+			insertedBlocksSnapshot
+		)
 	) {
 		return {
 			ok: false,
@@ -2190,10 +2418,6 @@ export function getTemplateActivityUndoState(
 		return existingUndo;
 	}
 
-	if ( existingUndo.status === 'failed' && existingUndo.canUndo === false ) {
-		return existingUndo;
-	}
-
 	const prepared = prepareTemplateUndoOperations(
 		activity,
 		blockEditorSelect
@@ -2230,10 +2454,6 @@ export function getTemplatePartActivityUndoState(
 	}
 
 	if ( existingUndo.status === 'undone' ) {
-		return existingUndo;
-	}
-
-	if ( existingUndo.status === 'failed' && existingUndo.canUndo === false ) {
 		return existingUndo;
 	}
 

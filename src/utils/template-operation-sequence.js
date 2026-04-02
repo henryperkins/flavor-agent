@@ -170,6 +170,10 @@ export function validateTemplateOperationSequence( operations = [] ) {
 			}
 
 			case TEMPLATE_OPERATION_INSERT_PATTERN: {
+				const hasTargetPath = Object.prototype.hasOwnProperty.call(
+					rawOperation ?? {},
+					'targetPath'
+				);
 				const patternName = toNonEmptyString(
 					rawOperation?.patternName ?? rawOperation?.name
 				);
@@ -196,6 +200,13 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				}
 
 				hasPatternInsert = true;
+				if ( hasTargetPath && ! targetPath ) {
+					return {
+						ok: false,
+						error: 'Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes.',
+					};
+				}
+
 				if ( ! placement ) {
 					return {
 						ok: false,
@@ -204,6 +215,7 @@ export function validateTemplateOperationSequence( operations = [] ) {
 				}
 
 				if (
+					placement &&
 					placement !== TEMPLATE_PART_PLACEMENT_START &&
 					placement !== TEMPLATE_PART_PLACEMENT_END &&
 					placement !== TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH &&

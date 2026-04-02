@@ -22,6 +22,11 @@ const TEMPLATE_PROMPT =
 const TEMPLATE_INSERTED_CONTENT = 'Inserted by Flavor Agent';
 const TEMPLATE_PATTERN_NAME = 'flavor-agent/editorial-banner';
 const TEMPLATE_PATTERN_TITLE = 'Editorial Banner';
+const TEMPLATE_MAIN_CONTENT_TARGET_PATH = [1, 0];
+const TEMPLATE_MAIN_CONTENT_TARGET = {
+	name: 'core/heading',
+	label: 'Heading',
+};
 const TEMPLATE_PART_PROMPT = 'Add a compact utility row before the navigation.';
 const TEMPLATE_PART_INSERTED_CONTENT =
 	'Inserted into the template part by Flavor Agent';
@@ -465,7 +470,30 @@ function buildTemplatePartRefFromTemplateTarget(templateTarget) {
 	return `${themePrefix}//${slug}`;
 }
 
+function formatTemplatePartTitle(templatePartRef) {
+	const slug = templatePartRef.includes('//')
+		? templatePartRef.slice(templatePartRef.indexOf('//') + 2)
+		: templatePartRef;
+
+	return slug
+		.split(/[-_]/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(' ');
+}
+
 async function openTemplatePartEditor(page, templatePartRef) {
+	const waitForTemplatePartEditor = async () =>
+		page.waitForFunction(
+			(nextTemplatePartRef) =>
+				window.wp?.data?.select('core/edit-site')?.getEditedPostType?.() ===
+					'wp_template_part' &&
+				window.wp?.data?.select('core/edit-site')?.getEditedPostId?.() ===
+					nextTemplatePartRef,
+			templatePartRef,
+			{ timeout: 10000 },
+		);
+
 	await page.goto(
 		`/wp-admin/site-editor.php?postType=wp_template_part&postId=${encodeURIComponent(
 			templatePartRef,
@@ -478,14 +506,30 @@ async function openTemplatePartEditor(page, templatePartRef) {
 	await waitForFlavorAgent(page);
 	await dismissWelcomeGuide(page);
 	await dismissSiteEditorWelcomeGuide(page);
-	await page.waitForFunction(
-		(nextTemplatePartRef) =>
-			window.wp?.data?.select('core/edit-site')?.getEditedPostType?.() ===
-				'wp_template_part' &&
-			window.wp?.data?.select('core/edit-site')?.getEditedPostId?.() ===
-				nextTemplatePartRef,
-		templatePartRef,
-	);
+
+	const openedDirectly = await waitForTemplatePartEditor()
+		.then(() => true)
+		.catch(() => false);
+
+	if (openedDirectly) {
+		return;
+	}
+
+	const title = formatTemplatePartTitle(templatePartRef);
+	const templatePartCard = page
+		.getByRole('button', {
+			name: title,
+			exact: true,
+		})
+		.first();
+
+	await expect(templatePartCard).toBeVisible();
+	await templatePartCard.click();
+	await waitForWordPressReady(page);
+	await waitForFlavorAgent(page);
+	await dismissWelcomeGuide(page);
+	await dismissSiteEditorWelcomeGuide(page);
+	await waitForTemplatePartEditor();
 }
 
 async function enableTemplateDocumentSidebar(page) {
@@ -1679,6 +1723,8 @@ test('@wp70-site-editor template-part surface smoke previews, applies, and undoe
 			undoStatus: 'available',
 		});
 
+	await page.getByRole('tab', { name: 'Template Part', exact: true }).click();
+	await openTemplatePartRecommendationsPanel(page);
 	await expect(page.getByText('Recent AI Actions')).toBeVisible();
 	await page
 		.locator('.flavor-agent-activity-row')
@@ -1712,6 +1758,9 @@ test('@wp70-site-editor template undo survives a Site Editor refresh when the te
 							{
 								type: 'insert_pattern',
 								patternName: TEMPLATE_PATTERN_NAME,
+								placement: 'before_block_path',
+								targetPath: TEMPLATE_MAIN_CONTENT_TARGET_PATH,
+								expectedTarget: TEMPLATE_MAIN_CONTENT_TARGET,
 							},
 						],
 						templateParts: [],
@@ -1767,6 +1816,7 @@ test('@wp70-site-editor template undo survives a Site Editor refresh when the te
 					.undoStatus,
 		)
 		.toBe('available');
+	await saveCurrentPost(page);
 
 	await page.goto('/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
@@ -1826,6 +1876,9 @@ test('@wp70-site-editor template undo is disabled after inserted pattern content
 							{
 								type: 'insert_pattern',
 								patternName: TEMPLATE_PATTERN_NAME,
+								placement: 'before_block_path',
+								targetPath: TEMPLATE_MAIN_CONTENT_TARGET_PATH,
+								expectedTarget: TEMPLATE_MAIN_CONTENT_TARGET,
 							},
 						],
 						templateParts: [],
@@ -1930,6 +1983,43 @@ test('@wp70-site-editor template undo is disabled after inserted pattern content
 				return null;
 			}
 
+			function getBlockByPath(blocks, path = []) {
+				let currentBlocks = blocks;
+				let block = null;
+
+				for (const index of path) {
+					if (!Array.isArray(currentBlocks)) {
+						return null;
+					}
+
+					block = currentBlocks[index] || null;
+
+					if (!block) {
+						return null;
+					}
+
+					currentBlocks = block.innerBlocks || [];
+				}
+
+				return block;
+			}
+
+			function resolveRootBlocks(blocks, rootLocator) {
+				if (
+					!rootLocator ||
+					rootLocator.type === 'root' ||
+					(Array.isArray(rootLocator.path) && rootLocator.path.length === 0)
+				) {
+					return blocks;
+				}
+
+				const rootBlock = getBlockByPath(blocks, rootLocator.path || []);
+
+				return Array.isArray(rootBlock?.innerBlocks)
+					? rootBlock.innerBlocks
+					: [];
+			}
+
 			function findMatchingInsertedSlice(blocks, snapshot) {
 				const sliceLength = Array.isArray(snapshot) ? snapshot.length : 0;
 
@@ -1970,10 +2060,28 @@ test('@wp70-site-editor template undo is disabled after inserted pattern content
 					(operation) => operation?.type === 'insert_pattern',
 				) || null;
 			const blockEditor = window.wp.data.select('core/block-editor');
-			const insertedBlockSlice = findMatchingInsertedSlice(
-				blockEditor.getBlocks?.() || [],
-				insertOperation?.insertedBlocksSnapshot || [],
+			const blockTree = blockEditor.getBlocks?.() || [];
+			const rootBlocks = resolveRootBlocks(
+				blockTree,
+				insertOperation?.rootLocator || null,
 			);
+			const expectedSliceLength = Array.isArray(
+				insertOperation?.insertedBlocksSnapshot,
+			)
+				? insertOperation.insertedBlocksSnapshot.length
+				: 0;
+			const insertedBlockSlice =
+				insertOperation?.rootLocator &&
+				Number.isInteger(insertOperation?.index) &&
+				expectedSliceLength > 0
+					? rootBlocks.slice(
+							insertOperation.index,
+							insertOperation.index + expectedSliceLength,
+					  )
+					: findMatchingInsertedSlice(
+							blockTree,
+							insertOperation?.insertedBlocksSnapshot || [],
+					  );
 			const insertedBlock = Array.isArray(insertedBlockSlice)
 				? findParagraphBlock(insertedBlockSlice)
 				: null;
@@ -2039,9 +2147,11 @@ test('@wp70-site-editor template undo is disabled after inserted pattern content
 	});
 
 	await expect(
-		page.getByText(
-			'Inserted pattern content changed after apply and cannot be undone automatically.',
-		),
+		page
+			.locator('.flavor-agent-activity-row')
+			.getByText(
+				'Inserted pattern content changed after apply and cannot be undone automatically.',
+			),
 	).toBeVisible();
 	await expect(
 		page

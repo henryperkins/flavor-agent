@@ -695,4 +695,90 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
+
+	public function test_parse_response_rejects_legacy_template_insertions_that_include_target_paths_without_placement(): void {
+		$context = [
+			'assignedParts'      => [],
+			'availableParts'     => [],
+			'allowedAreas'       => [],
+			'emptyAreas'         => [],
+			'patterns'           => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelBlockTree'  => [
+				[
+					'path' => [ 0 ],
+					'name' => 'core/group',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Invalid legacy insert',
+						'description' => 'This path-targeted insert should be rejected.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'targetPath'  => [ 0 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_rejects_legacy_template_insertions_with_malformed_target_paths(): void {
+		$context = [
+			'assignedParts'     => [],
+			'availableParts'    => [],
+			'allowedAreas'      => [],
+			'emptyAreas'        => [],
+			'patterns'          => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelBlockTree' => [
+				[
+					'path' => [ 0 ],
+					'name' => 'core/group',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Malformed legacy insert',
+						'description' => 'This empty path should be rejected instead of falling back to the insertion point.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'targetPath'  => [],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
 }

@@ -847,6 +847,7 @@ SYSTEM;
 					$pattern_name = sanitize_text_field(
 						(string) ( $operation['patternName'] ?? $operation['name'] ?? '' )
 					);
+					$has_target_path = array_key_exists( 'targetPath', $operation );
 					$placement    = sanitize_key( (string) ( $operation['placement'] ?? '' ) );
 					$target_path  = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
@@ -865,7 +866,11 @@ SYSTEM;
 						self::TEMPLATE_PLACEMENT_AFTER_PATH => true,
 					];
 
-					if ( ! isset( $allowed_placements[ $placement ] ) ) {
+					if ( $placement !== '' && ! isset( $allowed_placements[ $placement ] ) ) {
+						continue 2;
+					}
+
+					if ( $has_target_path && $target_path === null ) {
 						continue 2;
 					}
 

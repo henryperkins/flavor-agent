@@ -78,12 +78,13 @@ Record that the first required Epic 4 deliverable is:
 
 Any new executable structural operation must:
 1. be represented in ability/prompt contracts,
-2. be validated in `src/utils/template-operation-sequence.js`,
-3. execute through deterministic helpers in `src/utils/template-actions.js`,
-4. persist activity metadata sufficient for refresh-safe undo,
-5. be presented through the existing shared review/status/history model,
-6. ship with its minimal activity/admin normalization in the same PR as the new executable path,
-7. be non-mergeable until its focused preview/apply/undo/browser proof is in place for that operation family in the same PR.
+2. keep `inc/Abilities/Registration.php` and `tests/phpunit/RegistrationTest.php` aligned whenever Epic 4 changes structural request or response schemas,
+3. be validated in `src/utils/template-operation-sequence.js`,
+4. execute through deterministic helpers in `src/utils/template-actions.js`,
+5. persist activity metadata sufficient for refresh-safe undo,
+6. be presented through the existing shared review/status/history model,
+7. ship with its minimal activity/admin normalization in the same PR as the new executable path,
+8. be non-mergeable until its focused preview/apply/undo/browser proof is in place for that operation family in the same PR.
 
 - [ ] **Step 3: Record explicit deferrals before implementation**
 
@@ -167,14 +168,18 @@ Expected: PASS after structural context and route normalization are stable.
 **Why:** Template recommendations are already executable, so Epic 4 should widen them through the existing validator/executor rails instead of inventing a new structural surface.
 
 **Files:**
+- Modify: `inc/Abilities/Registration.php`
 - Modify: `inc/LLM/TemplatePrompt.php`
 - Modify: `src/utils/template-operation-sequence.js`
 - Modify: `src/utils/template-actions.js`
 - Modify: `src/templates/template-recommender-helpers.js`
 - Modify: `src/templates/TemplateRecommender.js`
 - Modify: `src/store/index.js`
+- Modify: `tests/phpunit/RegistrationTest.php`
 - Modify: `src/utils/__tests__/template-actions.test.js`
 - Modify: `src/templates/__tests__/TemplateRecommender.test.js`
+- Modify: `src/templates/__tests__/template-recommender-helpers.test.js`
+- Modify: `src/store/__tests__/template-apply-state.test.js` when template preview/apply state semantics change
 - Modify: `docs/features/template-recommendations.md`
 
 - [ ] **Step 1: Add one bounded template-operation increment at a time**
@@ -188,7 +193,7 @@ Do not mix multiple unrelated structural op families in the first patch.
 
 - [ ] **Step 2: Extend the allowlist before the UI can render new executable states**
 
-Add any new operation types or placement modes to `src/utils/template-operation-sequence.js` first. If an operation cannot be described and validated cleanly there, keep it advisory-only.
+Add any new operation types or placement modes to `src/utils/template-operation-sequence.js` first. Update `inc/Abilities/Registration.php` and `tests/phpunit/RegistrationTest.php` in the same slice whenever the widened template contract changes request or response schema shape. If an operation cannot be described and validated cleanly there, keep it advisory-only.
 
 - [ ] **Step 3: Add deterministic prepare/apply/undo support together**
 
@@ -208,8 +213,8 @@ Run:
 
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
-vendor/bin/phpunit --filter 'TemplatePromptTest'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js
+vendor/bin/phpunit --filter '(TemplatePromptTest|RegistrationTest)'
+source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/templates/__tests__/template-recommender-helpers.test.js src/store/__tests__/template-apply-state.test.js
 ```
 
 Expected: PASS after the widened template prompt contract, executor, and preview behavior are stable.
@@ -221,12 +226,14 @@ Expected: PASS after the widened template prompt contract, executor, and preview
 **Why:** Template parts are the safest place to broaden local structural mutations without drifting into free-form composition.
 
 **Files:**
+- Modify: `inc/Abilities/Registration.php`
 - Modify: `inc/LLM/TemplatePartPrompt.php`
 - Modify: `src/utils/template-operation-sequence.js`
 - Modify: `src/utils/template-actions.js`
 - Modify: `src/template-parts/TemplatePartRecommender.js`
 - Modify: `src/store/index.js`
 - Modify: `src/utils/template-part-areas.js`
+- Modify: `tests/phpunit/RegistrationTest.php`
 - Modify: `src/utils/__tests__/template-actions.test.js`
 - Modify: `src/template-parts/__tests__/TemplatePartRecommender.test.js`
 - Modify: `docs/features/template-part-recommendations.md`
@@ -247,6 +254,8 @@ Good first candidates are:
 - one limited within-root move/reposition contract if it can be made deterministic,
 - stronger targeted replacement flows for clearly identified block anchors.
 
+Keep `inc/Abilities/Registration.php` and `tests/phpunit/RegistrationTest.php` in lockstep with any template-part contract changes so the Abilities API schema matches the REST-backed implementation surface.
+
 - [ ] **Step 3: Preserve advisory visibility for suggestions that fail deterministic validation**
 
 If a suggestion remains useful but cannot be executed safely, keep it visible through the shared advisory shell instead of dropping it entirely.
@@ -262,7 +271,7 @@ Run:
 
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
-vendor/bin/phpunit --filter 'TemplatePartPromptTest'
+vendor/bin/phpunit --filter '(TemplatePartPromptTest|RegistrationTest)'
 source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js
 ```
 
@@ -275,6 +284,7 @@ Expected: PASS after the widened template-part prompt contract and UI behavior a
 **Why:** Navigation is the biggest structural seam without an executor. Epic 4 should improve its advisory output first and only consider execution if a tiny safe contract emerges.
 
 **Files:**
+- Modify: `inc/Abilities/Registration.php`
 - Modify: `inc/LLM/NavigationPrompt.php`
 - Modify: `inc/Abilities/NavigationAbilities.php`
 - Modify: `inc/Context/ServerCollector.php`
@@ -291,11 +301,14 @@ Expected: PASS after the widened template-part prompt contract and UI behavior a
 - Modify: `src/admin/activity-log.js` if and only if a navigation executor is adopted
 - Modify: `src/admin/activity-log-utils.js` if and only if a navigation executor is adopted
 - Modify: `tests/phpunit/NavigationAbilitiesTest.php`
+- Modify: `tests/phpunit/RegistrationTest.php`
 - Modify: `src/inspector/__tests__/NavigationRecommendations.test.js`
+- Modify: `src/store/__tests__/navigation-request-state.test.js`
 - Modify: `src/utils/__tests__/template-actions.test.js` if and only if a navigation executor is adopted
 - Modify: `src/store/__tests__/activity-history.test.js` if and only if a navigation executor is adopted
 - Modify: `src/store/__tests__/activity-history-state.test.js` if and only if a navigation executor is adopted
 - Modify: `src/store/__tests__/store-actions.test.js` if and only if a navigation executor is adopted
+- Modify: `src/components/__tests__/ActivitySessionBootstrap.test.js` if and only if a navigation executor is adopted
 - Modify: `src/components/__tests__/AIActivitySection.test.js` if and only if a navigation executor is adopted
 - Modify: `src/admin/__tests__/activity-log.test.js` if and only if a navigation executor is adopted
 - Modify: `src/admin/__tests__/activity-log-utils.test.js` if and only if a navigation executor is adopted
@@ -311,7 +324,7 @@ Deepen grouped navigation suggestions around:
 - accessibility-oriented organization,
 - stronger page/location reasoning.
 
-Keep the UI advisory-only while these richer contracts settle.
+Keep the UI advisory-only while these richer contracts settle, and update `inc/Abilities/Registration.php` plus `tests/phpunit/RegistrationTest.php` whenever Epic 4 changes navigation input or response schema shape.
 
 - [ ] **Step 2: Explicitly decide whether a first navigation executor is viable**
 
@@ -340,11 +353,11 @@ Run:
 
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
-vendor/bin/phpunit --filter '(Navigation|AgentController|ServerCollector)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/inspector/__tests__/NavigationRecommendations.test.js
+vendor/bin/phpunit --filter '(Navigation|AgentController|ServerCollector|RegistrationTest)'
+source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/inspector/__tests__/NavigationRecommendations.test.js src/store/__tests__/navigation-request-state.test.js
 ```
 
-Expected: PASS for advisory improvements; add executor-specific tests only if the executor slice is actually adopted.
+Expected: PASS for advisory improvements; add executor-specific tests, including `src/components/__tests__/ActivitySessionBootstrap.test.js`, only if the executor slice is actually adopted.
 
 ---
 
@@ -367,6 +380,7 @@ Expected: PASS for advisory improvements; add executor-specific tests only if th
 - Modify: `src/store/__tests__/activity-history.test.js`
 - Modify: `src/store/__tests__/activity-history-state.test.js`
 - Modify: `src/store/__tests__/store-actions.test.js`
+- Modify: `src/components/__tests__/ActivitySessionBootstrap.test.js`
 - Modify: `src/components/__tests__/AIActivitySection.test.js`
 - Modify: `src/admin/__tests__/activity-log.test.js`
 - Modify: `src/admin/__tests__/activity-log-utils.test.js`
@@ -400,7 +414,7 @@ Run:
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
 vendor/bin/phpunit --filter '(ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js
+source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js
 ```
 
 Expected: PASS after activity/undo/admin normalization stays aligned with any new executable structural work.
@@ -413,6 +427,7 @@ Expected: PASS after activity/undo/admin normalization stays aligned with any ne
 
 **Files:**
 - Modify: `tests/e2e/flavor-agent.smoke.spec.js`
+- Modify: `tests/e2e/wp70-theme/**` when deterministic WP 7.0 structural fixtures need updates
 - Modify: `STATUS.md`
 - Modify: `docs/SOURCE_OF_TRUTH.md`
 - Modify: `docs/FEATURE_SURFACE_MATRIX.md`
@@ -438,14 +453,14 @@ If a navigation executor ships in this milestone, browser coverage must also inc
 
 ```bash
 cd /home/hperkins-wp/htdocs/wp.hperkins.com/wp-content/plugins/flavor-agent
-vendor/bin/phpunit --filter '(Template|Navigation|AgentController|ServerCollector)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/context/__tests__/block-inspector.test.js
+vendor/bin/phpunit --filter '(Template|Navigation|AgentController|ServerCollector|RegistrationTest)'
+source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/templates/__tests__/template-recommender-helpers.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/store/__tests__/template-apply-state.test.js src/store/__tests__/navigation-request-state.test.js src/context/__tests__/block-inspector.test.js
 source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line
 ```
 
 Expected: PASS, with any host-level Docker limitation called out explicitly if it blocks the WP 7.0 browser run.
 
-If a navigation executor is adopted, add its focused JS and browser tests to this step rather than relying on the generic suite alone.
+If a navigation executor is adopted, add its focused JS and browser tests, including `src/components/__tests__/ActivitySessionBootstrap.test.js`, to this step rather than relying on the generic suite alone.
 
 - [ ] **Step 3: Rerun the repo-level completion gates before marking Epic 4 complete**
 

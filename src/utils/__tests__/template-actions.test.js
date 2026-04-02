@@ -6,6 +6,7 @@ const mockRegistrySelect = jest.fn();
 const mockRegistryDispatch = jest.fn();
 const mockRawHandler = jest.fn();
 const mockCreateBlock = jest.fn();
+const mockGetBlockType = jest.fn();
 let generatedBlockId = 0;
 
 jest.mock( '@wordpress/data', () => ( {
@@ -20,11 +21,28 @@ jest.mock( '@wordpress/editor', () => ( {
 jest.mock( '@wordpress/blocks', () => ( {
 	rawHandler: ( ...args ) => mockRawHandler( ...args ),
 	createBlock: ( ...args ) => mockCreateBlock( ...args ),
+	getBlockType: ( ...args ) => mockGetBlockType( ...args ),
+} ) );
+
+jest.mock( '@wordpress/rich-text', () => ( {
+	toHTMLString: ( { value } ) => {
+		if ( typeof value?.toHTMLString === 'function' ) {
+			return value.toHTMLString();
+		}
+
+		if ( typeof value === 'string' ) {
+			return value;
+		}
+
+		throw new Error( 'Unsupported rich text test value.' );
+	},
 } ) );
 
 import {
 	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
+	getTemplateActivityUndoState,
+	getTemplatePartActivityUndoState,
 	normalizeBlockSnapshot,
 	prepareTemplatePartSuggestionOperations,
 	prepareTemplatePartUndoOperations,
@@ -101,7 +119,35 @@ function setupBlockEditor( {
 	insertionPoint = { rootClientId: null, index: 0 },
 	canInsertBlockType = () => true,
 	allowedPatterns,
+	blockTypes = {},
 } = {} ) {
+	const resolvedBlockTypes = {
+		'core/group': {
+			attributes: {},
+		},
+		'core/paragraph': {
+			attributes: {
+				content: {
+					type: 'rich-text',
+				},
+				dropCap: {
+					type: 'boolean',
+					default: false,
+				},
+			},
+		},
+		'core/template-part': {
+			attributes: {
+				area: {
+					type: 'string',
+				},
+				slug: {
+					type: 'string',
+				},
+			},
+		},
+		...cloneValue( blockTypes ),
+	};
 	const state = {
 		blocks: cloneValue( blocks ),
 		insertionPoint: cloneValue( insertionPoint ),
@@ -156,6 +202,9 @@ function setupBlockEditor( {
 	mockRegistryDispatch.mockImplementation( ( storeName ) =>
 		storeName === 'core/block-editor' ? blockEditorDispatch : {}
 	);
+	mockGetBlockType.mockImplementation(
+		( name ) => resolvedBlockTypes[ name ] || undefined
+	);
 
 	return {
 		state,
@@ -170,6 +219,7 @@ describe( 'template-actions', () => {
 		mockRegistryDispatch.mockReset();
 		mockRawHandler.mockReset();
 		mockCreateBlock.mockReset();
+		mockGetBlockType.mockReset();
 		generatedBlockId = 0;
 		mockCreateBlock.mockImplementation(
 			( name, attributes = {}, innerBlocks = [] ) => ( {
@@ -361,6 +411,60 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'prepareTemplateSuggestionOperations rejects template inserts that include a targetPath without explicit placement', () => {
+		setupBlockEditor( {
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph /-->',
+				},
+			],
+		} );
+
+		const result = prepareTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					targetPath: [ 0 ],
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Template pattern insertions must include a placement.',
+		} );
+	} );
+
+	test( 'prepareTemplateSuggestionOperations rejects legacy template inserts with malformed target paths', () => {
+		setupBlockEditor( {
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph /-->',
+				},
+			],
+		} );
+
+		const result = prepareTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					targetPath: [],
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Template pattern insertions that include a targetPath must provide a non-empty array of non-negative indexes.',
+		} );
+	} );
+
 	test( 'prepareTemplateSuggestionOperations surfaces a stale live-template error when the target area no longer exists', () => {
 		setupBlockEditor( {
 			blocks: [
@@ -488,6 +592,27 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'normalizeBlockSnapshot serializes rich text attribute values to stable HTML strings', () => {
+		const snapshot = normalizeBlockSnapshot( {
+			clientId: 'rich-1',
+			name: 'core/paragraph',
+			attributes: {
+				content: {
+					toHTMLString: () => 'Inserted by Flavor Agent',
+				},
+			},
+			innerBlocks: [],
+		} );
+
+		expect( snapshot ).toEqual( {
+			name: 'core/paragraph',
+			attributes: {
+				content: 'Inserted by Flavor Agent',
+			},
+			innerBlocks: [],
+		} );
+	} );
+
 	test( 'applyTemplateSuggestionOperations anchors template start insertions at the root container', () => {
 		const { blockEditorDispatch } = setupBlockEditor( {
 			blocks: [
@@ -540,6 +665,55 @@ describe( 'template-actions', () => {
 					path: [],
 				},
 				index: 0,
+			} ),
+		] );
+	} );
+
+	test( 'applyTemplateSuggestionOperations records the intended snapshot when the inserted slice is stale', () => {
+		const { blockEditorDispatch } = setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'tp-1',
+					name: 'core/template-part',
+					attributes: {
+						slug: 'header',
+						area: 'header',
+					},
+					innerBlocks: [],
+				},
+			],
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
+				},
+			],
+		} );
+		blockEditorDispatch.insertBlocks.mockImplementation( () => {} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Inserted' ),
+		] );
+
+		const result = applyTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					placement: 'start',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				insertedBlocksSnapshot: [
+					normalizeBlockSnapshot(
+						createParagraphBlock( 'pattern-1', 'Inserted' )
+					),
+				],
 			} ),
 		] );
 	} );
@@ -809,6 +983,56 @@ describe( 'template-actions', () => {
 				patternName: 'theme/header-utility',
 				placement: 'start',
 				index: 0,
+				rootLocator: {
+					type: 'root',
+					path: [],
+				},
+			} ),
+		] );
+	} );
+
+	test( 'prepareTemplatePartSuggestionOperations keeps start and end at the template-part root when a single group exists', () => {
+		setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'group-1',
+					name: 'core/group',
+					attributes: {},
+					innerBlocks: [
+						createParagraphBlock( 'existing-1', 'Existing' ),
+						createParagraphBlock( 'existing-2', 'Target' ),
+					],
+				},
+			],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'end',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				patternName: 'theme/header-utility',
+				placement: 'end',
+				index: 1,
 				rootLocator: {
 					type: 'root',
 					path: [],
@@ -1109,6 +1333,45 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'applyTemplatePartSuggestionOperations records the intended snapshot when the inserted slice is not readable immediately', () => {
+		const { blockEditorDispatch } = setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Existing' ) ],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		blockEditorDispatch.insertBlocks.mockImplementation( () => {} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'end',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				insertedBlocksSnapshot: [
+					normalizeBlockSnapshot(
+						createParagraphBlock( 'pattern-1', 'Utility' )
+					),
+				],
+			} ),
+		] );
+	} );
+
 	test( 'prepareTemplatePartSuggestionOperations rejects removing a locked block', () => {
 		setupBlockEditor( {
 			blocks: [
@@ -1285,6 +1548,107 @@ describe( 'template-actions', () => {
 					patternTitle: 'Header Utility',
 				},
 			],
+		} );
+	} );
+
+	test( 'prepareTemplatePartUndoOperations tolerates editor-added default attributes on inserted blocks', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				{
+					clientId: 'pattern-reloaded',
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Utility',
+						dropCap: false,
+					},
+					innerBlocks: [],
+				},
+			],
+		} );
+
+		const result = prepareTemplatePartUndoOperations( {
+			after: {
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						placement: 'end',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						insertedBlocksSnapshot: [
+							{
+								name: 'core/paragraph',
+								attributes: {
+									content: 'Utility',
+								},
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations[ 0 ] ).toEqual(
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				insertedClientIds: [ 'pattern-reloaded' ],
+			} )
+		);
+	} );
+
+	test( 'prepareTemplatePartUndoOperations rejects editor-added non-default attributes on inserted blocks', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				{
+					clientId: 'pattern-reloaded',
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Utility',
+						dropCap: true,
+					},
+					innerBlocks: [],
+				},
+			],
+		} );
+
+		const result = prepareTemplatePartUndoOperations( {
+			after: {
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						placement: 'end',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						insertedBlocksSnapshot: [
+							{
+								name: 'core/paragraph',
+								attributes: {
+									content: 'Utility',
+								},
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
 		} );
 	} );
 
@@ -1795,6 +2159,95 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+		} );
+	} );
+
+	test( 'getTemplateActivityUndoState recomputes availability after a transient failed state', () => {
+		setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'pattern-reloaded', 'Inserted' ) ],
+		} );
+
+		const result = getTemplateActivityUndoState( {
+			surface: 'template',
+			undo: {
+				canUndo: false,
+				status: 'failed',
+				error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+			},
+			after: {
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+						patternTitle: 'Hero Banner',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 0,
+						insertedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock(
+									'pattern-before-refresh',
+									'Inserted'
+								)
+							),
+						],
+					},
+				],
+			},
+		} );
+
+		expect( result ).toEqual( {
+			canUndo: true,
+			status: 'available',
+			error: null,
+		} );
+	} );
+
+	test( 'getTemplatePartActivityUndoState recomputes availability after a transient failed state', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				createParagraphBlock( 'pattern-reloaded', 'Utility' ),
+			],
+		} );
+
+		const result = getTemplatePartActivityUndoState( {
+			surface: 'template-part',
+			undo: {
+				canUndo: false,
+				status: 'failed',
+				error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+			},
+			after: {
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						patternTitle: 'Header Utility',
+						rootLocator: {
+							type: 'root',
+							path: [],
+						},
+						index: 1,
+						insertedBlocksSnapshot: [
+							normalizeBlockSnapshot(
+								createParagraphBlock(
+									'pattern-before-refresh',
+									'Utility'
+								)
+							),
+						],
+					},
+				],
+			},
+		} );
+
+		expect( result ).toEqual( {
+			canUndo: true,
+			status: 'available',
+			error: null,
 		} );
 	} );
 } );
