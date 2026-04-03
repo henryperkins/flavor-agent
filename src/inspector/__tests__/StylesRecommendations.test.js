@@ -22,14 +22,11 @@ jest.mock( '../../store', () => ( {
 import { createElement } from '@wordpress/element';
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import StylesRecommendations from '../StylesRecommendations';
 
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
+const { getContainer, getRoot } = setupReactTest();
 
 beforeEach( () => {
 	jest.clearAllMocks();
@@ -37,21 +34,12 @@ beforeEach( () => {
 	mockUseDispatch.mockReturnValue( {
 		applySuggestion: mockApplySuggestion,
 	} );
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 } );
 
-afterEach( () => {
-	act( () => root.unmount() );
-	container.remove();
-	container = null;
-	root = null;
-} );
 
 function renderComponent( suggestions ) {
 	act( () => {
-		root.render(
+		getRoot().render(
 			createElement( StylesRecommendations, {
 				clientId: 'block-1',
 				suggestions,
@@ -85,7 +73,7 @@ describe( 'StylesRecommendations', () => {
 
 		renderComponent( [ ...delegated, ...kept ] );
 
-		const text = container.textContent;
+		const text = getContainer().textContent;
 
 		expect( text ).not.toContain( 'Suggestion for color' );
 		expect( text ).not.toContain( 'Suggestion for typography' );
@@ -102,7 +90,7 @@ describe( 'StylesRecommendations', () => {
 			makeSuggestion( 'general' ),
 		] );
 
-		const text = container.textContent;
+		const text = getContainer().textContent;
 		expect( text ).toContain( 'Suggestion for shadow' );
 		expect( text ).toContain( 'Suggestion for general' );
 	} );
@@ -113,14 +101,14 @@ describe( 'StylesRecommendations', () => {
 			makeSuggestion( 'shadow' ),
 		] );
 
-		expect( container.textContent ).toContain( 'Native Style Panels' );
-		expect( container.textContent ).toContain( 'Filter' );
+		expect( getContainer().textContent ).toContain( 'Native Style Panels' );
+		expect( getContainer().textContent ).toContain( 'Filter' );
 	} );
 
 	test( 'does not show hint when no delegated panels have suggestions', () => {
 		renderComponent( [ makeSuggestion( 'shadow' ) ] );
 
-		expect( container.textContent ).not.toContain( 'Native Style Panels' );
+		expect( getContainer().textContent ).not.toContain( 'Native Style Panels' );
 	} );
 
 	test( 'renders style variations separately', () => {
@@ -136,13 +124,13 @@ describe( 'StylesRecommendations', () => {
 
 		renderComponent( [ variation ] );
 
-		expect( container.textContent ).toContain( 'Outline' );
-		expect( container.textContent ).toContain( 'Style Variations' );
+		expect( getContainer().textContent ).toContain( 'Outline' );
+		expect( getContainer().textContent ).toContain( 'Style Variations' );
 	} );
 
 	test( 'returns null for empty suggestions', () => {
 		renderComponent( [] );
-		expect( container.innerHTML ).toBe( '' );
+		expect( getContainer().innerHTML ).toBe( '' );
 	} );
 
 	test( 'shows inline apply feedback after a style row is applied', async () => {
@@ -151,7 +139,7 @@ describe( 'StylesRecommendations', () => {
 		renderComponent( [ suggestion ] );
 
 		const applyButton = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( button ) => button.textContent === 'Apply' );
 
 		await act( async () => {
@@ -164,7 +152,7 @@ describe( 'StylesRecommendations', () => {
 			suggestion
 		);
 		expect(
-			container.querySelector( '.flavor-agent-inline-feedback' )
+			getContainer().querySelector( '.flavor-agent-inline-feedback' )
 				?.textContent
 		).toBe( 'AppliedUse softer shadow.' );
 	} );
@@ -184,7 +172,7 @@ describe( 'color preview swatch', () => {
 
 		renderComponent( [ suggestion ] );
 
-		const swatch = container.querySelector(
+		const swatch = getContainer().querySelector(
 			'.flavor-agent-style-row__preview'
 		);
 		expect( swatch ).not.toBeNull();
@@ -203,7 +191,7 @@ describe( 'color preview swatch', () => {
 
 		renderComponent( [ suggestion ] );
 
-		const swatch = container.querySelector(
+		const swatch = getContainer().querySelector(
 			'.flavor-agent-style-row__preview'
 		);
 		expect( swatch ).not.toBeNull();
@@ -222,7 +210,7 @@ describe( 'color preview swatch', () => {
 
 		renderComponent( [ suggestion ] );
 
-		const swatch = container.querySelector(
+		const swatch = getContainer().querySelector(
 			'.flavor-agent-style-row__preview'
 		);
 		expect( swatch ).toBeNull();

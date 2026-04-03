@@ -72,7 +72,7 @@
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - JS tooling now expects Node `20.x` with npm `10.x`; on this host, the global Node `24.14.0` / npm `11.9.0` pair fails `npm ci` immediately via `engine-strict` (`EBADENGINE`), so the repo now pins the supported toolchain instead of assuming the global default.
 - Browser coverage is intentionally split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for refresh/drift-sensitive flows that Playground cannot hold open reliably. The default `npm run test:e2e` command now aggregates both harnesses, and the checked-in smoke suite now covers block, navigation, pattern, template, `wp_template_part`, and Global Styles surfaces. The remaining operational prerequisite is Docker on PATH for the WP 7.0 half.
-- WordPress `7.0` is still pre-release as of 2026-03-26, with general release scheduled for 2026-04-09. The Docker-backed Site Editor harness still pins `wordpress:beta-7.0-beta4-php8.2-apache`; swap that override once the official stable image exists.
+- WordPress `7.0` is still pre-release, and the cycle was extended on 2026-03-31 with a revised final release date still pending. The Docker-backed Site Editor harness still pins `wordpress:beta-7.0-beta4-php8.2-apache`; swap that override once the official stable image exists and Core publishes the final 7.0 timeline.
 - `recommend-navigation` now has a first-party inspector surface, plugin REST route, and checked-in browser smoke, and it is intentionally advisory-only through v1.0. There is still no validated navigation apply contract.
 - AI activity now has a first admin audit screen in wp-admin, but the feature is still not a full observability product: there is no diff-oriented inspection view, no abilities-backed row-action layer yet, and no cross-device/operator workflows beyond the recent-activity timeline.
 - Live recommendation execution with valid LLM credentials was not rerun in this pass.
@@ -158,6 +158,8 @@
 - **`docs/reference/abilities-and-routes.md`** -- Canonical mapping of Abilities API contracts, REST routes, permissions, and first-party callers
 - **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference
 - **`docs/2026-03-25-roadmap-aligned-execution-plan.md`** -- Active forward plan aligned to WordPress 7.0, Gutenberg, and official AI plugin roadmaps
+- **`docs/2026-04-03-wordpress-direction-review.md`** -- Supplemental dated direction review incorporating the 2026-03-31 Core decision to extend the WordPress 7.0 cycle
+- **`docs/2026-04-03-three-phase-roadmap.md`** -- Supplemental dated three-phase roadmap translating the direction review into concrete execution phases, file targets, and acceptance checks
 - **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
 - **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 reference snapshot for compatibility and API research
 - **`docs/wordpress-7.0-developer-docs-index.md`** -- Discovery snapshot of official WordPress 7.0 developer documentation sources

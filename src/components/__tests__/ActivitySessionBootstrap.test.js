@@ -21,17 +21,15 @@ jest.mock( '../../style-book/dom', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import ActivitySessionBootstrap from '../ActivitySessionBootstrap';
 
-let container = null;
-let root = null;
+const { getContainer, getRoot } = setupReactTest();
+
 let currentEditorState = null;
 let currentInterfaceState = null;
 let currentCoreState = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
 
 beforeEach( () => {
 	jest.clearAllMocks();
@@ -81,22 +79,13 @@ beforeEach( () => {
 		loadActivitySession: mockLoadActivitySession,
 	} ) );
 
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 } );
 
-afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-} );
 
 describe( 'ActivitySessionBootstrap', () => {
 	test( 'only enables unsaved activity migration on an in-place unsaved-to-saved transition', () => {
 		act( () => {
-			root.render( <ActivitySessionBootstrap /> );
+			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
 		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
@@ -109,7 +98,7 @@ describe( 'ActivitySessionBootstrap', () => {
 		};
 
 		act( () => {
-			root.render( <ActivitySessionBootstrap /> );
+			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
 		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith( {
@@ -122,7 +111,7 @@ describe( 'ActivitySessionBootstrap', () => {
 		};
 
 		act( () => {
-			root.render( <ActivitySessionBootstrap /> );
+			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
 		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith( {
@@ -139,7 +128,7 @@ describe( 'ActivitySessionBootstrap', () => {
 		};
 
 		act( () => {
-			root.render( <ActivitySessionBootstrap /> );
+			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
 		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
@@ -163,7 +152,7 @@ describe( 'ActivitySessionBootstrap', () => {
 		} );
 
 		act( () => {
-			root.render( <ActivitySessionBootstrap /> );
+			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
 		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {

@@ -29,6 +29,15 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
 	}
 
+	public function test_is_supported_can_target_a_specific_provider(): void {
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+
+		$this->assertTrue( WordPressAIClient::is_supported( 'anthropic' ) );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+	}
+
 	public function test_chat_returns_setup_error_when_no_text_generation_provider_is_available(): void {
 		WordPressTestState::$ai_client_supported = false;
 
@@ -57,5 +66,21 @@ final class WordPressAIClientTest extends TestCase {
 			'WordPress Gutenberg block styling and configuration assistant.',
 			WordPressTestState::$last_ai_client_prompt['system'] ?? null
 		);
+	}
+
+	public function test_chat_locks_the_prompt_to_the_requested_provider(): void {
+		WordPressTestState::$ai_client_provider_support    = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			'anthropic'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 	}
 }

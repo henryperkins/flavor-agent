@@ -69,6 +69,9 @@ namespace FlavorAgent\Tests\Support {
 
 		public static bool $ai_client_supported = false;
 
+		/** @var array<string, bool> */
+		public static array $ai_client_provider_support = [];
+
 		public static mixed $ai_client_generate_text_result = '';
 
 		public static function reset(): void {
@@ -100,6 +103,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_post_response        = [];
 			self::$remote_get_response         = [];
 			self::$ai_client_supported         = false;
+			self::$ai_client_provider_support  = [];
 			self::$ai_client_generate_text_result = '';
 
 			\WP_Block_Type_Registry::get_instance()->reset();
@@ -132,7 +136,23 @@ namespace WordPress\AI_Client {
 			return $this;
 		}
 
+		public function using_provider( string $provider ): self {
+			WordPressTestState::$last_ai_client_prompt['provider'] = $provider;
+
+			return $this;
+		}
+
 		public function is_supported_for_text_generation(): bool {
+			$provider = WordPressTestState::$last_ai_client_prompt['provider'] ?? '';
+
+			if (
+				is_string( $provider )
+				&& '' !== $provider
+				&& array_key_exists( $provider, WordPressTestState::$ai_client_provider_support )
+			) {
+				return (bool) WordPressTestState::$ai_client_provider_support[ $provider ];
+			}
+
 			return WordPressTestState::$ai_client_supported;
 		}
 
@@ -155,7 +175,21 @@ namespace {
 						WordPressTestState::$last_ai_client_prompt['system'] = (string) ( $arguments[0] ?? '' );
 
 						return $this;
+					case 'using_provider':
+						WordPressTestState::$last_ai_client_prompt['provider'] = (string) ( $arguments[0] ?? '' );
+
+						return $this;
 					case 'is_supported_for_text_generation':
+						$provider = WordPressTestState::$last_ai_client_prompt['provider'] ?? '';
+
+						if (
+							is_string( $provider )
+							&& '' !== $provider
+							&& array_key_exists( $provider, WordPressTestState::$ai_client_provider_support )
+						) {
+							return WordPressTestState::$ai_client_provider_support[ $provider ];
+						}
+
 						return WordPressTestState::$ai_client_supported;
 					case 'generate_text':
 						return WordPressTestState::$ai_client_generate_text_result;
@@ -754,9 +788,27 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'esc_attr' ) ) {
+		function esc_attr( string $text ): string {
+			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+		}
+	}
+
 	if ( ! function_exists( 'esc_html__' ) ) {
 		function esc_html__( string $text, string $domain = 'default' ): string {
 			return esc_html( __( $text, $domain ) );
+		}
+	}
+
+	if ( ! function_exists( 'selected' ) ) {
+		function selected( $selected, $current = true, bool $display = true ): string {
+			$result = (string) $selected === (string) $current ? 'selected="selected"' : '';
+
+			if ( $display ) {
+				echo $result;
+			}
+
+			return $result;
 		}
 	}
 

@@ -4,34 +4,18 @@ jest.mock( '@wordpress/components', () =>
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import AIActivitySection from '../AIActivitySection';
 
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
-beforeEach( () => {
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
-} );
-
-afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-} );
+const { getContainer, getRoot } = setupReactTest();
 
 describe( 'AIActivitySection', () => {
 	test( 'renders ordered undo labels and only shows undo buttons for available rows', () => {
 		const onUndo = jest.fn();
 
 		act( () => {
-			root.render(
+			getRoot().render(
 				<AIActivitySection
 					onUndo={ onUndo }
 					entries={ [
@@ -123,26 +107,26 @@ describe( 'AIActivitySection', () => {
 			);
 		} );
 
-		expect( container.textContent ).toContain( 'Undo available' );
-		expect( container.textContent ).toContain( 'Undo blocked' );
-		expect( container.textContent ).toContain( 'Undo unavailable' );
-		expect( container.textContent ).toContain( 'Undo pending sync' );
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain( 'Undo available' );
+		expect( getContainer().textContent ).toContain( 'Undo blocked' );
+		expect( getContainer().textContent ).toContain( 'Undo unavailable' );
+		expect( getContainer().textContent ).toContain( 'Undo pending sync' );
+		expect( getContainer().textContent ).toContain(
 			'Undo blocked by newer AI actions.'
 		);
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain(
 			'Undo unavailable because content drifted.'
 		);
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain(
 			'Activity audit sync pending.'
 		);
-		expect( container.textContent ).toContain( 'Global Styles action' );
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain( 'Global Styles action' );
+		expect( getContainer().textContent ).toContain(
 			'Style Book action · Paragraph'
 		);
-		expect( container.querySelectorAll( 'button' ) ).toHaveLength( 1 );
+		expect( getContainer().querySelectorAll( 'button' ) ).toHaveLength( 1 );
 
-		container.querySelector( 'button' ).click();
+		getContainer().querySelector( 'button' ).click();
 
 		expect( onUndo ).toHaveBeenCalledWith( 'activity-1' );
 	} );

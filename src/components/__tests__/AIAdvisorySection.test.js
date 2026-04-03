@@ -1,31 +1,15 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import AIAdvisorySection from '../AIAdvisorySection';
 
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
-beforeEach( () => {
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
-} );
-
-afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-} );
+const { getContainer, getRoot } = setupReactTest();
 
 describe( 'AIAdvisorySection', () => {
 	test( 'renders the shared advisory framing with description and count', () => {
 		act( () => {
-			root.render(
+			getRoot().render(
 				<AIAdvisorySection
 					title="Navigation ideas"
 					count={ 2 }
@@ -38,13 +22,13 @@ describe( 'AIAdvisorySection', () => {
 			);
 		} );
 
-		expect( container.textContent ).toContain( 'Navigation ideas' );
-		expect( container.textContent ).toContain( 'Advisory only' );
-		expect( container.textContent ).toContain( '2 ideas' );
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain( 'Navigation ideas' );
+		expect( getContainer().textContent ).toContain( 'Advisory only' );
+		expect( getContainer().textContent ).toContain( '2 ideas' );
+		expect( getContainer().textContent ).toContain(
 			'These suggestions stay advisory-only.'
 		);
-		expect( container.textContent ).toContain( 'First advisory idea' );
-		expect( container.textContent ).toContain( 'Second advisory idea' );
+		expect( getContainer().textContent ).toContain( 'First advisory idea' );
+		expect( getContainer().textContent ).toContain( 'Second advisory idea' );
 	} );
 } );

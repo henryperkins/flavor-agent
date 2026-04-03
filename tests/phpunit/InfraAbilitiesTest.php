@@ -184,6 +184,45 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'database', $status['backends']['openai_native']['connectorKeySource'] );
 	}
 
+	public function test_check_status_uses_provider_managed_model_for_selected_connector_provider(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$options      = [
+			'flavor_agent_openai_provider' => 'anthropic',
+			'flavor_agent_qdrant_url'      => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'      => 'qdrant-key',
+		];
+		WordPressTestState::$connectors   = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
+		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['navigation']['available'] );
+		$this->assertFalse( $status['surfaces']['pattern']['available'] );
+		$this->assertSame( 'pattern_backend_unconfigured', $status['surfaces']['pattern']['reason'] );
+		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertNotContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+	}
+
 	public function test_check_status_marks_navigation_surface_unavailable_without_theme_capability(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,

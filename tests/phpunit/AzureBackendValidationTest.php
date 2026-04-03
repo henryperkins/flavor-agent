@@ -221,6 +221,34 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 'ranked output', $result );
 	}
 
+	public function test_rank_delegates_to_the_wordpress_ai_client_for_selected_connector_providers(): void {
+		WordPressTestState::$options                   = [
+			'flavor_agent_openai_provider' => 'anthropic',
+		];
+		WordPressTestState::$connectors                = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
+
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
+
+		$this->assertSame( 'connector ranked output', $result );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_embed_batch_retries_once_after_rate_limit(): void {
 		WordPressTestState::$options               = [
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',

@@ -2,7 +2,7 @@
 
 > Created: 2026-03-25
 > Scope: repo-specific execution plan for the current 5-epic roadmap
-> External alignment snapshot verified: 2026-03-27
+> External alignment snapshot verified: 2026-04-03
 > Support target: WordPress 7.0 RC -> stable, PHP 8.0+, Node 20 / npm 10
 > Scope anchor: Gutenberg 22.8.x (`22.8.0` released 2026-03-25; `22.8.1` released 2026-03-26)
 > Baseline: current repo already ships block, pattern, template, template-part, navigation, global styles, and activity surfaces
@@ -21,9 +21,9 @@ It intentionally does **not** align with an Elementor-style AI code generator or
 
 ## Alignment Snapshot
 
-These are the external constraints this repo should treat as current on 2026-03-27:
+These are the external constraints this repo should treat as current on 2026-04-03:
 
-1. WordPress 7.0 is still in release-candidate phase and is scheduled for general release on **April 9, 2026**. Build for the 7.0 API surface now, but keep experimental integrations adapter-backed until after the stable release.
+1. WordPress 7.0 is still in release-candidate phase, but the cycle was formally extended on **March 31, 2026** and the final release date is now pending an updated Core timeline. Build for the 7.0 API surface now, but keep experimental integrations adapter-backed until after the stable release and avoid coupling new work to unresolved collaboration internals.
 2. The WordPress 7.0 planning thread highlighted and later refined:
    - Abilities and Workflows API, with the client-side Abilities work landing more concretely than the broader Workflows ambition during the 7.0 cycle
    - WP client AI API
@@ -402,7 +402,7 @@ Optional follow-up files only if later bounded work justifies them:
 
 1. Refresh stale milestone docs so Epic 3 is no longer described as pending implementation in planning/verification documents.
 2. Re-run the focused WP 7.0 Global Styles browser smoke on a Docker-capable host and record the result in `STATUS.md`.
-3. After WordPress 7.0 stable images exist, swap the beta-tagged WP 7.0 harness image and re-audit the style surface against the stable runtime.
+3. After WordPress 7.0 stable images exist and Core announces the final release timeline, swap the beta-tagged WP 7.0 harness image and re-audit the style surface against the stable runtime.
 4. Keep width/height preset transforms, pseudo-element-aware extraction, and broader Style Book expansion as bounded follow-ups rather than treating them as missing pieces of the shipped slice.
 5. Keep `customCSS` recommendation generation explicitly out of scope for v1 unless the product thesis changes.
 
@@ -659,12 +659,13 @@ Do not mix more than one epic's contract expansion in a single PR unless the dep
 
 The external alignment in this plan is based on these primary sources:
 
-1. WordPress 7.0 release schedule (scheduled release: April 9, 2026)
-2. Planning for WordPress 7.0
-3. Gutenberg 22.8.0 and 22.8.1 release notes
-4. AI team weekly summary, 2026-03-11
-5. Official `AI` plugin page and roadmap
-6. WordPress AI GitHub repository overview
-7. Abilities API documentation
+1. WordPress 7.0 release page and current milestone timeline
+2. Extending the 7.0 cycle (2026-03-31)
+3. Planning for WordPress 7.0
+4. Gutenberg 22.8.0 and 22.8.1 release notes
+5. AI team weekly summary, 2026-03-11
+6. Official `AI` plugin page and roadmap
+7. WordPress AI GitHub repository overview
+8. Abilities API documentation
 
 Keep this document focused on execution. If the external roadmap moves, update the alignment snapshot first, then revise epic order only if the change materially affects Flavor Agent's architecture.

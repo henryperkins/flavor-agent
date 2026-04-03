@@ -78,4 +78,34 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
 		$this->assertSame( ChatClient::get_setup_message(), $result->get_error_message() );
 	}
+
+	public function test_selected_connector_provider_routes_block_recommendations_through_the_wordpress_ai_client(): void {
+		WordPressTestState::$options                   = [
+			'flavor_agent_openai_provider' => 'anthropic',
+		];
+		WordPressTestState::$connectors                = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		$result = ChatClient::chat( 'system prompt', 'user prompt' );
+
+		$this->assertSame(
+			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+			$result
+		);
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
 }

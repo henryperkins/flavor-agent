@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Settings;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -246,6 +247,25 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_openai_provider_accepts_a_registered_connector_provider(): void {
+		WordPressTestState::$connectors                = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+
+		$this->assertSame( 'anthropic', Settings::sanitize_openai_provider( 'anthropic' ) );
 	}
 
 	public function test_sanitize_openai_native_settings_accept_verified_values_and_validate_once_per_save(): void {
@@ -770,6 +790,49 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_select_field_lists_configured_connector_providers(): void {
+		WordPressTestState::$options                   = [
+			Provider::OPTION_NAME => 'anthropic',
+		];
+		WordPressTestState::$connectors                = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+			'google'    => [
+				'name'           => 'Google',
+				'description'    => 'Google connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_google_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+			'google'    => false,
+		];
+
+		ob_start();
+		Settings::render_select_field(
+			[
+				'option'  => Provider::OPTION_NAME,
+				'choices' => Provider::choices( 'anthropic' ),
+			]
+		);
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Anthropic (Settings &gt; Connectors)', $output );
+		$this->assertStringContainsString( 'value="anthropic" selected=', $output );
+		$this->assertStringNotContainsString( 'Google (Settings &gt; Connectors)', $output );
+	}
+
 	public function test_render_page_explains_core_and_plugin_managed_settings_boundaries(): void {
 		ob_start();
 		Settings::render_page();
@@ -780,11 +843,11 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'Settings &gt; Flavor Agent remains the plugin-managed home',
+			'Settings &gt; Flavor Agent now selects the active provider',
 			$output
 		);
 		$this->assertStringContainsString(
-			'Block recommendations can use either the direct chat backend configured here or the WordPress AI Client path in Settings &gt; Connectors',
+			'configured provider selected here from Settings &gt; Connectors',
 			$output
 		);
 	}

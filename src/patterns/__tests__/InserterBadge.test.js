@@ -24,26 +24,20 @@ jest.mock( '../../store', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import InserterBadge from '../InserterBadge';
 
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
-let container = null;
-let root = null;
+const { getContainer, getRoot } = setupReactTest();
 
 function renderComponent() {
 	act( () => {
-		root.render( <InserterBadge /> );
+		getRoot().render( <InserterBadge /> );
 	} );
 }
 
 describe( 'InserterBadge', () => {
 	beforeEach( () => {
-		container = document.createElement( 'div' );
-		document.body.appendChild( container );
-		root = createRoot( container );
 		mockUseSelect.mockReset();
 		mockFindInserterToggle.mockReset();
 		mockGetInserterBadgeState.mockReset();
@@ -63,20 +57,10 @@ describe( 'InserterBadge', () => {
 			tooltip: '2 recommendations',
 		} );
 		document.body.innerHTML = '';
-		document.body.appendChild( container );
+		document.body.appendChild( getContainer() );
 	} );
 
 	afterEach( () => {
-		if ( root ) {
-			act( () => {
-				root.unmount();
-			} );
-		}
-		if ( container?.parentNode ) {
-			container.parentNode.removeChild( container );
-		}
-		root = null;
-		container = null;
 		document.body.innerHTML = '';
 	} );
 
@@ -114,12 +98,11 @@ describe( 'InserterBadge', () => {
 		).not.toBeNull();
 
 		act( () => {
-			root.unmount();
+			getRoot().unmount();
 		} );
 
 		expect(
 			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
 		).toBe( false );
-		root = null;
-	} );
+		} );
 } );

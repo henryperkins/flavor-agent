@@ -10,25 +10,27 @@ Use it when you need to answer:
 
 ## Provider Selection
 
-The `flavor_agent_openai_provider` option selects the active provider. Valid values:
+The `flavor_agent_openai_provider` option selects the active provider. Valid values include the built-in direct backends plus any registered Connectors API AI provider:
 
 | Value | Label | Default |
 |---|---|---|
 | `azure_openai` | Azure OpenAI | Yes |
 | `openai_native` | OpenAI Native | No |
+| `<connector-id>` | Configured WordPress AI Client provider surfaced from `Settings > Connectors` | No |
 
-If the option is missing or invalid, the provider defaults to `azure_openai`.
+If the option is missing or invalid, the provider defaults to `azure_openai`. The settings UI only lists connector-backed providers when they are currently usable for text generation, but the stored option may still retain a registered connector ID that later becomes unavailable.
 
 ## Chat Fallback Chain
 
-`ChatClient::chat()` is the only entry point for block recommendations. It checks two tiers:
+`ChatClient::chat()` is the only entry point for block recommendations.
 
-1. **Plugin-managed provider** (`Provider::chat_configured()`) — uses the selected provider's chat configuration via `ResponsesClient::rank()`
-2. **WordPress AI Client** (`WordPressAIClient::is_supported()`) — falls back to `wp_ai_client_prompt()` when the plugin-managed provider is not configured
+1. If the selected provider is a connector-backed provider, requests are sent through `wp_ai_client_prompt()->using_provider( $provider_id )`.
+2. Otherwise, if the selected direct provider is configured, requests use `ResponsesClient::rank()`.
+3. Otherwise, block recommendations fall back to the generic WordPress AI Client path (`WordPressAIClient::is_supported()`) when any connector-backed text provider is available.
 
 `ChatClient::is_supported()` returns `true` if either tier is available. This is the gate for the `flavor-agent/recommend-block` ability.
 
-All other recommendation surfaces (patterns, templates, template-parts, navigation, styles) use `ResponsesClient::rank()` directly and do not fall through to the WordPress AI Client.
+Template, template-part, navigation, Global Styles, and Style Book recommendations also use the selected provider. When the selected provider is connector-backed, `ResponsesClient::rank()` delegates to `wp_ai_client_prompt()->using_provider( $provider_id )`. Pattern recommendations remain direct-backend only because Flavor Agent still owns embedding generation and Qdrant indexing itself.
 
 ## Azure OpenAI Configuration
 
@@ -66,6 +68,15 @@ When the plugin-specific key (`flavor_agent_openai_native_api_key`) is blank, th
 The resolved source is tracked as `plugin_override`, `env`, `constant`, `connector_database`, or `none`.
 
 Authentication uses the `Authorization: Bearer` header.
+
+## Connector-Backed Provider Configuration
+
+Connector-backed providers do not use the plugin's direct endpoint settings. Flavor Agent treats them as chat-only providers backed by the WordPress AI Client:
+
+- availability is determined via `wp_ai_client_prompt()->using_provider( $provider_id )->is_supported_for_text_generation()`
+- requests are routed via `wp_ai_client_prompt()->using_provider( $provider_id )`
+- the active chat model is reported as `provider-managed`
+- embedding generation remains unavailable, so pattern recommendations still require `azure_openai` or `openai_native`
 
 ## Backend-to-Surface Map
 

@@ -61,16 +61,13 @@ jest.mock( '../SuggestionChips', () => () => null );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import { BlockRecommendationsDocumentPanel } from '../BlockRecommendationsPanel';
 
+const { getContainer, getRoot } = setupReactTest();
+
 let currentState = null;
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
 function getState() {
 	return currentState;
 }
@@ -203,12 +200,12 @@ function selectStore( storeName ) {
 
 function renderPanel() {
 	act( () => {
-		root.render( <BlockRecommendationsDocumentPanel /> );
+		getRoot().render( <BlockRecommendationsDocumentPanel /> );
 	} );
 }
 
 function getTextarea() {
-	return container.querySelector( 'textarea' );
+	return getContainer().querySelector( 'textarea' );
 }
 
 beforeEach( () => {
@@ -246,26 +243,17 @@ beforeEach( () => {
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( selectStore )
 	);
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 } );
 
 afterEach( () => {
 	delete window.flavorAgentData;
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-	root = null;
-	container = null;
 	currentState = null;
 } );
 
 describe( 'BlockRecommendationsDocumentPanel', () => {
 	test( 'renders the last selected block panel after selection clears', () => {
 		renderPanel();
-		expect( container.textContent ).toBe( '' );
+		expect( getContainer().textContent ).toBe( '' );
 
 		currentState = createState( {
 			blockEditor: {
@@ -275,10 +263,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( container.textContent ).toContain( 'Last Selected Block' );
-		expect( container.textContent ).toContain( 'Get Suggestions' );
+		expect( getContainer().textContent ).toContain( 'Last Selected Block' );
+		expect( getContainer().textContent ).toContain( 'Get Suggestions' );
 		expect(
-			container.querySelector( '[data-panel-title="AI Recommendations"]' )
+			getContainer().querySelector( '[data-panel-title="AI Recommendations"]' )
 		).not.toBeNull();
 	} );
 
@@ -307,7 +295,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 
 		const button = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( element ) => element.textContent === 'Get Suggestions' );
 
 		act( () => {
@@ -339,7 +327,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( container.textContent ).toBe( '' );
+		expect( getContainer().textContent ).toBe( '' );
 	} );
 
 	test( 'shows the shared capability notice when block recommendations are unavailable', () => {
@@ -361,9 +349,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( container.textContent ).toContain( 'Settings > Flavor Agent' );
-		expect( container.textContent ).toContain( 'Settings > Connectors' );
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain( 'Settings > Flavor Agent' );
+		expect( getContainer().textContent ).toContain( 'Settings > Connectors' );
+		expect( getContainer().textContent ).toContain(
 			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
 		);
 	} );
@@ -414,12 +402,12 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 		renderPanel();
 
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain(
 			'Applied Refresh hero copy.'
 		);
 
 		const undoButton = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( element ) => element.textContent === 'Undo' );
 
 		expect( undoButton ).toBeDefined();
@@ -458,11 +446,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( container.textContent ).not.toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Undid Refresh hero copy.'
 		);
 		expect(
-			container.querySelector( '[data-status-notice="true"]' )
+			getContainer().querySelector( '[data-status-notice="true"]' )
 		).toBeNull();
 	} );
 } );

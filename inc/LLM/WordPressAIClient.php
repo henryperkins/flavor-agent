@@ -10,8 +10,14 @@ final class WordPressAIClient {
 
 	private const SETUP_MESSAGE = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
 
-	public static function is_supported(): bool {
+	public static function is_supported( ?string $provider = null ): bool {
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
+
+		if ( is_wp_error( $prompt ) ) {
+			return false;
+		}
+
+		$prompt = self::apply_provider_selection( $prompt, $provider );
 
 		if ( is_wp_error( $prompt ) ) {
 			return false;
@@ -22,8 +28,14 @@ final class WordPressAIClient {
 		return ! is_wp_error( $supported ) && (bool) $supported;
 	}
 
-	public static function chat( string $system_prompt, string $user_prompt ): string|\WP_Error {
+	public static function chat( string $system_prompt, string $user_prompt, ?string $provider = null ): string|\WP_Error {
 		$prompt = self::make_prompt( $user_prompt );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		$prompt = self::apply_provider_selection( $prompt, $provider );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -97,6 +109,33 @@ final class WordPressAIClient {
 		}
 
 		return $prompt;
+	}
+
+	/**
+	 * @return object|\WP_Error
+	 */
+	private static function apply_provider_selection( object $prompt, ?string $provider ) {
+		$provider = is_string( $provider ) ? sanitize_key( $provider ) : '';
+
+		if ( '' === $provider ) {
+			return $prompt;
+		}
+
+		$updated_prompt = self::call_prompt_method( $prompt, 'using_provider', [ $provider ] );
+
+		if ( is_wp_error( $updated_prompt ) ) {
+			return $updated_prompt;
+		}
+
+		if ( ! is_object( $updated_prompt ) ) {
+			return new \WP_Error(
+				'wp_ai_client_invalid_prompt',
+				'WordPress AI Client did not return a prompt builder.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		return $updated_prompt;
 	}
 
 	/**

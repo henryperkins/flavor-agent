@@ -4,35 +4,20 @@ jest.mock( '@wordpress/components', () =>
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import AIStatusNotice from '../AIStatusNotice';
 
-let container = null;
-let root = null;
+const { getContainer, getRoot } = setupReactTest();
 
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
-beforeEach( () => {
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
-} );
-
-afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-} );
 
 describe( 'AIStatusNotice', () => {
 	test( 'renders nothing without a notice payload', () => {
 		act( () => {
-			root.render( <AIStatusNotice notice={ null } /> );
+			getRoot().render( <AIStatusNotice notice={ null } /> );
 		} );
 
-		expect( container.textContent ).toBe( '' );
+		expect( getContainer().textContent ).toBe( '' );
 	} );
 
 	test( 'renders message, action, and dismiss affordances from one shared notice shape', () => {
@@ -40,7 +25,7 @@ describe( 'AIStatusNotice', () => {
 		const onDismiss = jest.fn();
 
 		act( () => {
-			root.render(
+			getRoot().render(
 				<AIStatusNotice
 					notice={ {
 						tone: 'success',
@@ -54,10 +39,10 @@ describe( 'AIStatusNotice', () => {
 			);
 		} );
 
-		expect( container.textContent ).toContain( 'Applied Refresh hero.' );
-		expect( container.textContent ).toContain( 'Undo' );
+		expect( getContainer().textContent ).toContain( 'Applied Refresh hero.' );
+		expect( getContainer().textContent ).toContain( 'Undo' );
 
-		const buttons = container.querySelectorAll( 'button' );
+		const buttons = getContainer().querySelectorAll( 'button' );
 		buttons[ 0 ].click();
 		buttons[ 1 ].click();
 

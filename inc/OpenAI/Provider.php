@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\OpenAI;
 
+use FlavorAgent\LLM\WordPressAIClient;
+
 final class Provider {
 
 	public const OPTION_NAME = 'flavor_agent_openai_provider';
@@ -18,17 +20,24 @@ final class Provider {
 	/**
 	 * @return array<string, string>
 	 */
-	public static function choices(): array {
+	public static function direct_choices(): array {
 		return [
 			self::AZURE  => 'Azure OpenAI',
 			self::NATIVE => 'OpenAI Native',
 		];
 	}
 
+	/**
+	 * @return array<string, string>
+	 */
+	public static function choices( ?string $selected_provider = null ): array {
+		return self::direct_choices() + self::selectable_connector_choices( $selected_provider );
+	}
+
 	public static function get(): string {
 		$provider = sanitize_key( (string) get_option( self::OPTION_NAME, self::AZURE ) );
 
-		if ( isset( self::choices()[ $provider ] ) ) {
+		if ( isset( self::all_choices()[ $provider ] ) ) {
 			return $provider;
 		}
 
@@ -36,10 +45,10 @@ final class Provider {
 	}
 
 	public static function label( ?string $provider = null ): string {
-		$provider = $provider ?? self::get();
-		$choices  = self::choices();
+		$provider = sanitize_key( (string) ( $provider ?? self::get() ) );
+		$choices  = self::all_choices();
 
-		return $choices[ $provider ] ?? $choices[ self::AZURE ];
+		return $choices[ $provider ] ?? self::direct_choices()[ self::AZURE ];
 	}
 
 	public static function is_azure( ?string $provider = null ): bool {
@@ -48,6 +57,12 @@ final class Provider {
 
 	public static function is_native( ?string $provider = null ): bool {
 		return ( $provider ?? self::get() ) === self::NATIVE;
+	}
+
+	public static function is_connector( ?string $provider = null ): bool {
+		$provider = sanitize_key( (string) ( $provider ?? self::get() ) );
+
+		return isset( self::registered_connector_choices()[ $provider ] );
 	}
 
 	public static function native_base_url(): string {
@@ -178,6 +193,21 @@ final class Provider {
 	public static function chat_configuration( ?string $provider = null, array $overrides = [] ): array {
 		$provider = self::normalize_provider( $provider ?? self::get() );
 
+		if ( self::is_connector( $provider ) ) {
+			$configured = WordPressAIClient::is_supported( $provider );
+
+			return [
+				'provider'   => $provider,
+				'endpoint'   => '',
+				'api_key'    => '',
+				'model'      => $configured ? 'provider-managed' : '',
+				'configured' => $configured,
+				'headers'    => [],
+				'url'        => '',
+				'label'      => self::label( $provider ),
+			];
+		}
+
 		if ( self::is_native( $provider ) ) {
 			$api_key = self::native_effective_api_key( $overrides );
 			$model   = self::option_value( $overrides, 'flavor_agent_openai_native_chat_model' );
@@ -216,6 +246,19 @@ final class Provider {
 	 */
 	public static function embedding_configuration( ?string $provider = null, array $overrides = [] ): array {
 		$provider = self::normalize_provider( $provider ?? self::get() );
+
+		if ( self::is_connector( $provider ) ) {
+			return [
+				'provider'   => $provider,
+				'endpoint'   => '',
+				'api_key'    => '',
+				'model'      => '',
+				'configured' => false,
+				'headers'    => [],
+				'url'        => '',
+				'label'      => self::label( $provider ),
+			];
+		}
 
 		if ( self::is_native( $provider ) ) {
 			$api_key = self::native_effective_api_key( $overrides );
@@ -272,11 +315,85 @@ final class Provider {
 	public static function normalize_provider( string $provider ): string {
 		$provider = sanitize_key( $provider );
 
-		if ( isset( self::choices()[ $provider ] ) ) {
+		if ( isset( self::all_choices()[ $provider ] ) ) {
 			return $provider;
 		}
 
 		return self::AZURE;
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function all_choices(): array {
+		return self::direct_choices() + self::registered_connector_choices();
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function registered_connector_choices(): array {
+		if ( ! function_exists( 'wp_get_connectors' ) ) {
+			return [];
+		}
+
+		$choices = [];
+
+		foreach ( wp_get_connectors() as $provider => $connector ) {
+			if ( ! is_string( $provider ) || ! is_array( $connector ) ) {
+				continue;
+			}
+
+			if ( 'ai_provider' !== (string) ( $connector['type'] ?? '' ) ) {
+				continue;
+			}
+
+			$provider = sanitize_key( $provider );
+			if ( '' === $provider ) {
+				continue;
+			}
+
+			$label = is_string( $connector['name'] ?? null ) && '' !== $connector['name']
+				? $connector['name']
+				: ucwords( str_replace( [ '-', '_' ], ' ', $provider ) );
+
+			$choices[ $provider ] = $label;
+		}
+
+		return $choices;
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function selectable_connector_choices( ?string $selected_provider = null ): array {
+		$selected_provider = sanitize_key(
+			(string) (
+				$selected_provider
+				?? get_option( self::OPTION_NAME, self::AZURE )
+			)
+		);
+		$registered        = self::registered_connector_choices();
+		$choices           = [];
+
+		foreach ( $registered as $provider => $label ) {
+			if ( WordPressAIClient::is_supported( $provider ) ) {
+				$choices[ $provider ] = sprintf( '%s (Settings > Connectors)', $label );
+			}
+		}
+
+		if (
+			'' !== $selected_provider
+			&& isset( $registered[ $selected_provider ] )
+			&& ! isset( $choices[ $selected_provider ] )
+		) {
+			$choices[ $selected_provider ] = sprintf(
+				'%s (Settings > Connectors, currently unavailable)',
+				$registered[ $selected_provider ]
+			);
+		}
+
+		return $choices;
 	}
 
 	/**

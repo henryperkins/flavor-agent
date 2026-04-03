@@ -139,15 +139,15 @@ jest.mock( '../../store', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 const {
 	buildGlobalStylesRecommendationContextSignature,
 } = require( '../../utils/style-operations' );
 
 import GlobalStylesRecommender from '../GlobalStylesRecommender';
 
-let container = null;
-let root = null;
+const { getContainer, getRoot } = setupReactTest();
+
 let sidebar = null;
 let currentBlockEditorSettings = null;
 let currentGlobalStylesData = null;
@@ -155,8 +155,6 @@ let currentStoreState = null;
 let currentStyleBookUiState = null;
 let currentEditedTemplateId = null;
 let currentEditedBlocks = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
 
 function createGlobalStylesData( globalStylesId = '17' ) {
 	return {
@@ -430,9 +428,6 @@ beforeEach( () => {
 		undoActivity: mockUndoActivity,
 	} ) );
 
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 
 	sidebar = document.createElement( 'div' );
 	sidebar.className = 'editor-global-styles-sidebar__panel';
@@ -440,11 +435,7 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
 	sidebar.remove();
-	container.remove();
 } );
 
 describe( 'GlobalStylesRecommender', () => {
@@ -458,10 +449,10 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( container.textContent ).toBe( '' );
+		expect( getContainer().textContent ).toBe( '' );
 		expect(
 			sidebar.querySelector( '.flavor-agent-global-styles-sidebar-slot' )
 		).toBeNull();
@@ -469,7 +460,7 @@ describe( 'GlobalStylesRecommender', () => {
 
 	test( 'submits a scoped style recommendation request from the Styles sidebar', () => {
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		const textarea = sidebar.querySelector( 'textarea' );
@@ -532,7 +523,7 @@ describe( 'GlobalStylesRecommender', () => {
 
 	test( 'submits a scoped style recommendation request when the prompt is empty', () => {
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		const button = sidebar.querySelector( 'button' );
@@ -573,7 +564,7 @@ describe( 'GlobalStylesRecommender', () => {
 		sidebar.remove();
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect(
@@ -603,7 +594,7 @@ describe( 'GlobalStylesRecommender', () => {
 		document.body.appendChild( sidebar );
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.querySelector( 'textarea' ) ).not.toBeNull();
@@ -620,7 +611,7 @@ describe( 'GlobalStylesRecommender', () => {
 		document.body.appendChild( sidebar );
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.querySelector( 'textarea' ) ).not.toBeNull();
@@ -659,7 +650,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
@@ -693,7 +684,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
@@ -701,7 +692,7 @@ describe( 'GlobalStylesRecommender', () => {
 		currentGlobalStylesData = createGlobalStylesData( '18' );
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
@@ -731,7 +722,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
@@ -752,7 +743,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
@@ -786,7 +777,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
@@ -802,7 +793,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
@@ -836,7 +827,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
@@ -860,7 +851,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
@@ -891,7 +882,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
@@ -912,7 +903,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
@@ -952,7 +943,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain( 'Review to apply' );
@@ -983,7 +974,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		const undoButton = Array.from(
@@ -1022,7 +1013,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		const lastCall =
@@ -1059,7 +1050,7 @@ describe( 'GlobalStylesRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <GlobalStylesRecommender /> );
+			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).not.toContain(

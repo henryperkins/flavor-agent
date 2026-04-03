@@ -17,6 +17,18 @@ final class EmbeddingClient extends BaseHttpClient {
 		?string $provider = null
 	): true|\WP_Error {
 		$provider = Provider::normalize_provider( $provider ?? Provider::get() );
+
+		if ( Provider::is_connector( $provider ) ) {
+			return new \WP_Error(
+				'embedding_validation_error',
+				sprintf(
+					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI or OpenAI Native in Settings > Flavor Agent for pattern recommendations.',
+					Provider::label( $provider )
+				),
+				[ 'status' => 400 ]
+			);
+		}
+
 		$config   = Provider::embedding_configuration(
 			$provider,
 			Provider::is_native( $provider )
@@ -65,6 +77,17 @@ final class EmbeddingClient extends BaseHttpClient {
 	 */
 	public static function embed_batch( array $inputs ): array|\WP_Error {
 		$config = Provider::embedding_configuration();
+
+		if ( Provider::is_connector( $config['provider'] ) ) {
+			return new \WP_Error(
+				'embedding_unsupported',
+				sprintf(
+					'%s does not currently expose embedding generation through Settings > Connectors. Choose Azure OpenAI or OpenAI Native in Settings > Flavor Agent for pattern recommendations.',
+					Provider::label( $config['provider'] )
+				),
+				[ 'status' => 400 ]
+			);
+		}
 
 		if ( ! $config['configured'] ) {
 			return new \WP_Error(

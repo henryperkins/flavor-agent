@@ -22,14 +22,11 @@ jest.mock( '../../store', () => ( {
 import { createElement } from '@wordpress/element';
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import SettingsRecommendations from '../SettingsRecommendations';
 
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
+const { getContainer, getRoot } = setupReactTest();
 
 beforeEach( () => {
 	jest.clearAllMocks();
@@ -37,21 +34,12 @@ beforeEach( () => {
 	mockUseDispatch.mockReturnValue( {
 		applySuggestion: mockApplySuggestion,
 	} );
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 } );
 
-afterEach( () => {
-	act( () => root.unmount() );
-	container.remove();
-	container = null;
-	root = null;
-} );
 
 function renderComponent( suggestions ) {
 	act( () => {
-		root.render(
+		getRoot().render(
 			createElement( SettingsRecommendations, {
 				clientId: 'block-1',
 				suggestions,
@@ -85,7 +73,7 @@ describe( 'SettingsRecommendations', () => {
 
 		renderComponent( [ ...delegated, ...kept ] );
 
-		const text = container.textContent;
+		const text = getContainer().textContent;
 
 		expect( text ).not.toContain( 'Suggestion for position' );
 		expect( text ).not.toContain( 'Suggestion for advanced' );
@@ -101,7 +89,7 @@ describe( 'SettingsRecommendations', () => {
 			makeSuggestion( 'alignment' ),
 		] );
 
-		const text = container.textContent;
+		const text = getContainer().textContent;
 		expect( text ).toContain( 'Suggestion for general' );
 		expect( text ).toContain( 'Suggestion for layout' );
 		expect( text ).toContain( 'Suggestion for alignment' );
@@ -113,12 +101,12 @@ describe( 'SettingsRecommendations', () => {
 			makeSuggestion( 'advanced' ),
 		] );
 
-		expect( container.innerHTML ).toBe( '' );
+		expect( getContainer().innerHTML ).toBe( '' );
 	} );
 
 	test( 'returns null for empty suggestions', () => {
 		renderComponent( [] );
-		expect( container.innerHTML ).toBe( '' );
+		expect( getContainer().innerHTML ).toBe( '' );
 	} );
 
 	test( 'marks a settings suggestion as applied after a successful apply', async () => {
@@ -126,7 +114,7 @@ describe( 'SettingsRecommendations', () => {
 
 		renderComponent( [ suggestion ] );
 
-		const applyButton = container.querySelector( 'button' );
+		const applyButton = getContainer().querySelector( 'button' );
 
 		await act( async () => {
 			applyButton.click();

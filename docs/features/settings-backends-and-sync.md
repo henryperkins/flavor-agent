@@ -15,7 +15,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## What The User Can Configure
 
-- Active OpenAI provider selection (`azure_openai` or `openai_native`)
+- Active AI provider selection (`azure_openai`, `openai_native`, or a configured Connectors-backed provider)
 - Azure OpenAI endpoint, API key, embedding deployment, and chat deployment
 - OpenAI Native API key override plus embedding and chat model IDs
 - Qdrant URL and API key
@@ -26,11 +26,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 | Surface | Primary gate |
 |---|---|
-| Block recommendations | `ChatClient::is_supported()`; selected provider when chat is configured here, otherwise WordPress AI Client / Connectors fallback |
-| Pattern recommendations | Active provider chat + embeddings, Qdrant configured, and a usable pattern index |
-| Template recommendations | Active provider chat configured |
-| Template-part recommendations | Active provider chat configured |
-| Navigation recommendations | Active provider chat configured and current user can edit theme options |
+| Block recommendations | `ChatClient::is_supported()`; honors the selected provider when it is a configured connector-backed provider, otherwise uses the selected direct provider when configured here, otherwise falls back to the generic WordPress AI Client / Connectors path |
+| Pattern recommendations | Active direct provider chat + embeddings, Qdrant configured, and a usable pattern index |
+| Template recommendations | Active provider chat configured (direct or connector-backed) |
+| Template-part recommendations | Active provider chat configured (direct or connector-backed) |
+| Navigation recommendations | Active provider chat configured (direct or connector-backed) and current user can edit theme options |
 | WordPress docs grounding | Optional Cloudflare AI Search configuration; recommendation-time use is cache-only and non-blocking |
 
 ## Save And Validation Flow
@@ -40,6 +40,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 3. Flavor Agent validates Azure, OpenAI Native, Qdrant, and Cloudflare settings only when those credential sets changed and enough data is present to run the validation
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
 5. If OpenAI Native is selected, the page also reports the current effective API key source and whether the core OpenAI connector is registered/configured
+6. Connector-backed providers appear in the dropdown only when the WordPress AI Client reports that they currently support text generation
 
 ## Pattern Sync Flow
 
@@ -64,7 +65,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Guardrails And Failure Modes
 
 - Block recommendations do not require plugin-managed chat credentials if the WordPress AI Client / Connectors path is available
-- Pattern recommendations fail closed when either the active provider or Qdrant is not configured
+- Pattern recommendations fail closed when either the active direct provider or Qdrant is not configured
+- Connector-backed providers currently apply only to chat surfaces; pattern embeddings remain plugin-managed
 - Cloudflare validation only accepts guidance sourced from `developer.wordpress.org`
 - Sync is admin-only and does not bypass pattern-index validation or locking rules
 

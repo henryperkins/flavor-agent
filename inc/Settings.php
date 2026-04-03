@@ -204,7 +204,7 @@ final class Settings {
 
 		add_settings_section(
 			'flavor_agent_openai_provider',
-			'OpenAI Provider (Pattern, Template, Navigation Recommendations)',
+			'AI Provider Selection',
 			[ __CLASS__, 'render_openai_provider_section' ],
 			self::PAGE_SLUG
 		);
@@ -245,8 +245,8 @@ final class Settings {
 			'flavor_agent_openai_provider',
 			[
 				'option'      => Provider::OPTION_NAME,
-				'choices'     => Provider::choices(),
-				'description' => 'Choose which plugin-managed backend Flavor Agent should use for pattern, template, template-part, and navigation recommendations. When chat credentials are configured here, block recommendations can use the same direct backend; otherwise they fall back to the WordPress AI Client path in Settings &gt; Connectors.',
+				'choices'     => Provider::choices( Provider::get() ),
+				'description' => 'Choose which provider Flavor Agent should use for recommendation surfaces. Direct Azure OpenAI and OpenAI Native backends are configured below. Any text-generation provider you have already configured in <code>Settings &gt; Connectors</code> also becomes selectable here for chat-backed surfaces. Pattern recommendations still require the plugin-managed embedding backends below plus Qdrant.',
 			]
 		);
 
@@ -434,7 +434,7 @@ final class Settings {
 			<p class="description">
 				<?php
 				echo esc_html__(
-					'Settings > Connectors remains the core-managed home for WordPress AI Client providers and inherited OpenAI connector credentials. Settings > Flavor Agent remains the plugin-managed home for direct Azure OpenAI / OpenAI Native model selection, Qdrant, Cloudflare grounding, and pattern sync.',
+					'Settings > Connectors remains the core-managed home for WordPress AI Client providers and connector credentials. Settings > Flavor Agent now selects the active provider for recommendation surfaces while still owning the direct Azure OpenAI / OpenAI Native settings, Qdrant, Cloudflare grounding, and pattern sync.',
 					'flavor-agent'
 				);
 				?>
@@ -442,7 +442,7 @@ final class Settings {
 			<p class="description">
 				<?php
 				echo esc_html__(
-					'Block recommendations can use either the direct chat backend configured here or the WordPress AI Client path in Settings > Connectors, while pattern, template, template-part, and navigation recommendations rely on the plugin-managed backends configured on this screen.',
+					'Block, template, template-part, navigation, Global Styles, and Style Book recommendations can use either the direct chat backends configured here or a configured provider selected here from Settings > Connectors. Pattern recommendations still rely on the plugin-managed embedding backends configured on this screen.',
 					'flavor-agent'
 				);
 				?>
@@ -511,7 +511,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Settings > Connectors remains the core-managed home for WordPress AI Client providers. This section is plugin-managed and controls Flavor Agent\'s direct Azure OpenAI / OpenAI Native backends for pattern, template, template-part, and navigation work. Block recommendations can use the same direct chat backend when it is configured here, or fall back to Settings > Connectors.',
+				'Settings > Connectors remains the core-managed home for provider plugins and credentials. This section chooses Flavor Agent\'s active recommendation provider: either the direct Azure OpenAI / OpenAI Native backends configured below, or any text-generation provider that is already configured in Settings > Connectors. Pattern recommendations still require the direct embedding backends below plus Qdrant.',
 				'flavor-agent'
 			)
 		);

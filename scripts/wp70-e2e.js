@@ -2,6 +2,8 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 const { spawnSync } = require( 'child_process' );
 
+// Keep the harness on the last verified pre-release image until the official
+// WordPress 7.0 stable image exists and the repo's 7.0 verification pass is rerun.
 const DEFAULT_BASE_IMAGE = 'wordpress:beta-7.0-beta4-php8.2-apache';
 const DEFAULT_WORDPRESS_PORT = '9404';
 const DEFAULT_PHPMYADMIN_PORT = '9405';

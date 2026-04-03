@@ -105,23 +105,23 @@ function getDefaultActions( surface, data, reason ) {
 function getDefaultMessage( surface, reason ) {
 	switch ( surface ) {
 		case 'block':
-			return 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.';
+			return 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.';
 		case 'template':
-			return "Template recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+			return "Template recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
 		case 'template-part':
-			return "Template-part recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+			return "Template-part recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
 		case 'navigation':
 			if ( reason === 'missing_theme_capability' ) {
 				return 'Navigation recommendations require the edit_theme_options capability.';
 			}
 
-			return "Navigation recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+			return "Navigation recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
 		case 'global-styles':
 			if ( reason === 'missing_theme_capability' ) {
 				return 'Global Styles recommendations require the edit_theme_options capability.';
 			}
 
-			return "Global Styles recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+			return "Global Styles recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
 		case 'style-book':
 			if ( reason === 'surface_not_implemented' ) {
 				return 'Style Book recommendations are not available in this plugin build yet.';
@@ -131,9 +131,9 @@ function getDefaultMessage( surface, reason ) {
 				return 'Style Book recommendations require the edit_theme_options capability.';
 			}
 
-			return "Style Book recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.";
+			return "Style Book recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
 		case 'pattern':
-			return "Pattern recommendations rely on Flavor Agent's chat and embedding backends plus Qdrant in Settings > Flavor Agent.";
+			return "Pattern recommendations rely on Flavor Agent's chat and embedding backends plus Qdrant in Settings > Flavor Agent. Connectors-backed providers currently apply only to chat surfaces.";
 		default:
 			return 'This Flavor Agent surface is not available right now.';
 	}

@@ -46,14 +46,12 @@ jest.mock( '../../utils/visible-patterns', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import PatternRecommender from '../PatternRecommender';
 
-window.IS_REACT_ACT_ENVIRONMENT = true;
+const { getContainer, getRoot } = setupReactTest();
 
-let container = null;
-let root = null;
 let state = null;
 let originalMutationObserver = null;
 
@@ -87,16 +85,13 @@ function createSelectMap() {
 
 function renderComponent() {
 	act( () => {
-		root.render( <PatternRecommender /> );
+		getRoot().render( <PatternRecommender /> );
 	} );
 }
 
 describe( 'PatternRecommender', () => {
 	beforeEach( () => {
 		jest.useFakeTimers();
-		container = document.createElement( 'div' );
-		document.body.appendChild( container );
-		root = createRoot( container );
 		state = {
 			postType: 'page',
 			isInserterOpen: true,
@@ -142,16 +137,6 @@ describe( 'PatternRecommender', () => {
 	} );
 
 	afterEach( () => {
-		if ( root ) {
-			act( () => {
-				root.unmount();
-			} );
-		}
-		if ( container?.parentNode ) {
-			container.parentNode.removeChild( container );
-		}
-		root = null;
-		container = null;
 		state = null;
 		delete window.flavorAgentData;
 		window.MutationObserver = originalMutationObserver;
@@ -187,12 +172,11 @@ describe( 'PatternRecommender', () => {
 		);
 
 		act( () => {
-			root.unmount();
+			getRoot().unmount();
 		} );
 
 		expect( observerInstances[ 0 ].disconnect ).toHaveBeenCalled();
-		root = null;
-	} );
+		} );
 
 	test( 'removes the input listener on unmount when a search field is found immediately', () => {
 		const searchInput = {
@@ -210,15 +194,14 @@ describe( 'PatternRecommender', () => {
 		);
 
 		act( () => {
-			root.unmount();
+			getRoot().unmount();
 		} );
 
 		expect( searchInput.removeEventListener ).toHaveBeenCalledWith(
 			'input',
 			searchInput.addEventListener.mock.calls[ 0 ][ 1 ]
 		);
-		root = null;
-	} );
+		} );
 
 	test( 'reapplies recommendations when the pattern registry becomes available after the initial fetch', () => {
 		state.store.patternRecommendations = [
@@ -315,7 +298,7 @@ describe( 'PatternRecommender', () => {
 		).not.toBeNull();
 
 		act( () => {
-			root.unmount();
+			getRoot().unmount();
 		} );
 
 		expect(
@@ -323,6 +306,5 @@ describe( 'PatternRecommender', () => {
 				'.flavor-agent-pattern-notice-slot'
 			)
 		).toBeNull();
-		root = null;
-	} );
+		} );
 } );

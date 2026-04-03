@@ -171,7 +171,7 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import apiFetch from '@wordpress/api-fetch';
 
@@ -181,6 +181,8 @@ import {
 	readPersistedActivityView,
 } from '../activity-log-utils';
 import { ActivityLogApp } from '../activity-log';
+
+const { getContainer, getRoot } = setupReactTest();
 
 const BOOT_DATA = {
 	adminUrl: 'https://example.test/wp-admin/',
@@ -194,11 +196,6 @@ const BOOT_DATA = {
 		'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 	timeZone: 'UTC',
 };
-
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
 
 function createEntry( overrides = {} ) {
 	return {
@@ -265,7 +262,7 @@ async function renderApp( response ) {
 	}
 
 	await act( async () => {
-		root.render( <ActivityLogApp bootData={ BOOT_DATA } /> );
+		getRoot().render( <ActivityLogApp bootData={ BOOT_DATA } /> );
 	} );
 
 	await flushEffects();
@@ -273,13 +270,13 @@ async function renderApp( response ) {
 
 function getVisibleTitles() {
 	return Array.from(
-		container.querySelectorAll( '.mock-dataviews-layout button' )
+		getContainer().querySelectorAll( '.mock-dataviews-layout button' )
 	).map( ( element ) => element.textContent );
 }
 
 function getSummaryCardValue( label ) {
 	const summaryCard = Array.from(
-		container.querySelectorAll( '.flavor-agent-activity-log__summary-card' )
+		getContainer().querySelectorAll( '.flavor-agent-activity-log__summary-card' )
 	).find( ( element ) => element.textContent.includes( label ) );
 
 	return summaryCard?.querySelector(
@@ -288,33 +285,15 @@ function getSummaryCardValue( label ) {
 }
 
 function getSidebarTitle() {
-	return container.querySelector(
+	return getContainer().querySelector(
 		'.flavor-agent-activity-log__sidebar-card .flavor-agent-activity-log__section-title'
 	);
 }
 
 beforeEach( () => {
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 	getDataViewsMockState().latestProps = null;
 	apiFetch.mockReset();
 	window.localStorage.clear();
-} );
-
-afterEach( async () => {
-	if ( root ) {
-		await act( async () => {
-			root.unmount();
-		} );
-	}
-
-	if ( container ) {
-		container.remove();
-	}
-
-	container = null;
-	root = null;
 } );
 
 describe( 'ActivityLogApp', () => {
@@ -335,7 +314,7 @@ describe( 'ActivityLogApp', () => {
 			} )
 		);
 		expect( getVisibleTitles() ).toEqual( [ 'First activity entry' ] );
-		expect( container.textContent ).not.toContain( 'No matching activity' );
+		expect( getContainer().textContent ).not.toContain( 'No matching activity' );
 	} );
 
 	test( 'renders summary cards from the server response instead of the visible page size', async () => {
@@ -388,7 +367,7 @@ describe( 'ActivityLogApp', () => {
 		await flushEffects();
 
 		expect( getVisibleTitles() ).toEqual( [ 'Beta entry', 'Alpha entry' ] );
-		expect( container.textContent ).not.toContain( 'No matching activity' );
+		expect( getContainer().textContent ).not.toContain( 'No matching activity' );
 		expect( readPersistedActivityView( window.localStorage ).page ).toBe(
 			1
 		);
@@ -509,7 +488,7 @@ describe( 'ActivityLogApp', () => {
 	test( 'adds an accessible name to the icon-only settings control', async () => {
 		await renderApp( [ createEntry() ] );
 
-		const settingsLink = container.querySelector(
+		const settingsLink = getContainer().querySelector(
 			'a[aria-label="Open Flavor Agent settings"]'
 		);
 
@@ -528,7 +507,7 @@ describe( 'ActivityLogApp', () => {
 			)
 		).toEqual( [ 'inspect' ] );
 
-		const targetLink = Array.from( container.querySelectorAll( 'a' ) ).find(
+		const targetLink = Array.from( getContainer().querySelectorAll( 'a' ) ).find(
 			( element ) => element.textContent === 'Open post'
 		);
 

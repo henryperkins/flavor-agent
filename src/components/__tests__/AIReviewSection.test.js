@@ -4,27 +4,11 @@ jest.mock( '@wordpress/components', () =>
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import AIReviewSection from '../AIReviewSection';
 
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
-beforeEach( () => {
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
-} );
-
-afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-} );
+const { getContainer, getRoot } = setupReactTest();
 
 describe( 'AIReviewSection', () => {
 	test( 'renders the shared preview frame and confirm/cancel actions', () => {
@@ -32,7 +16,7 @@ describe( 'AIReviewSection', () => {
 		const onCancel = jest.fn();
 
 		act( () => {
-			root.render(
+			getRoot().render(
 				<AIReviewSection
 					count={ 2 }
 					countNoun="operation"
@@ -47,17 +31,17 @@ describe( 'AIReviewSection', () => {
 			);
 		} );
 
-		expect( container.textContent ).toContain( 'Review Before Apply' );
-		expect( container.textContent ).toContain( 'Executable' );
-		expect( container.textContent ).toContain( '2 operations' );
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain( 'Review Before Apply' );
+		expect( getContainer().textContent ).toContain( 'Executable' );
+		expect( getContainer().textContent ).toContain( '2 operations' );
+		expect( getContainer().textContent ).toContain(
 			'Review the validated structural changes before mutating content.'
 		);
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain(
 			'Only the operations shown here will run.'
 		);
 
-		const buttons = container.querySelectorAll( 'button' );
+		const buttons = getContainer().querySelectorAll( 'button' );
 		buttons[ 0 ].click();
 		buttons[ 1 ].click();
 

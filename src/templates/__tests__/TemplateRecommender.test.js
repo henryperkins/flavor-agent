@@ -56,13 +56,15 @@ jest.mock( '../../utils/template-actions', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import TemplateRecommender from '../TemplateRecommender';
 import {
 	getSuggestionCardKey,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 } from '../template-recommender-helpers';
+
+const { getContainer, getRoot } = setupReactTest();
 
 const TEMPLATE_REF = 'theme//home';
 const NEXT_TEMPLATE_REF = 'theme//single';
@@ -80,11 +82,6 @@ const SUGGESTION = {
 const SUGGESTION_KEY = getSuggestionCardKey( SUGGESTION, 0 );
 
 let currentState = null;
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
 function getState() {
 	return currentState;
 }
@@ -347,11 +344,11 @@ function selectStore( storeName ) {
 }
 
 function hasText( value ) {
-	return container.textContent.includes( value );
+	return getContainer().textContent.includes( value );
 }
 
 function getTextarea() {
-	return container.querySelector( 'textarea' );
+	return getContainer().querySelector( 'textarea' );
 }
 
 async function setPromptValue( value ) {
@@ -372,7 +369,7 @@ async function setPromptValue( value ) {
 
 async function renderPanel() {
 	await act( async () => {
-		root.render( <TemplateRecommender /> );
+		getRoot().render( <TemplateRecommender /> );
 	} );
 }
 
@@ -431,27 +428,11 @@ beforeEach( async () => {
 			},
 		};
 	} );
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 	await renderPanel();
 } );
 
 afterEach( async () => {
 	delete window.flavorAgentData;
-
-	if ( root ) {
-		await act( async () => {
-			root.unmount();
-		} );
-	}
-
-	if ( container ) {
-		container.remove();
-	}
-
-	root = null;
-	container = null;
 	currentState = null;
 } );
 
@@ -666,7 +647,7 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Applied 1 template operation.' ) ).toBe( true );
 
 		const undoButton = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( element ) => element.textContent === 'Undo' );
 
 		expect( undoButton ).toBeDefined();
@@ -693,7 +674,7 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'[data-panel-title="AI Template Recommendations"]'
 			)
 		).toBeNull();
@@ -732,7 +713,7 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'[data-panel-title="AI Template Recommendations"]'
 			)
 		).not.toBeNull();
@@ -804,12 +785,12 @@ describe( 'TemplateRecommender', () => {
 
 	test( 'renders non-interactive preview tokens in the review overlay', () => {
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'.flavor-agent-template-preview .flavor-agent-preview-token--pattern'
 			)
 		).not.toBeNull();
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'.flavor-agent-template-preview .flavor-agent-action-link'
 			)
 		).toBeNull();

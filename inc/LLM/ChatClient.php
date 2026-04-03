@@ -12,10 +12,22 @@ final class ChatClient {
 	private const SETUP_MESSAGE = 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.';
 
 	public static function is_supported(): bool {
+		$provider = Provider::get();
+
+		if ( Provider::is_connector( $provider ) ) {
+			return WordPressAIClient::is_supported( $provider );
+		}
+
 		return Provider::chat_configured() || WordPressAIClient::is_supported();
 	}
 
 	public static function chat( string $system_prompt, string $user_prompt ): string|\WP_Error {
+		$provider = Provider::get();
+
+		if ( Provider::is_connector( $provider ) ) {
+			return WordPressAIClient::chat( $system_prompt, $user_prompt, $provider );
+		}
+
 		if ( Provider::chat_configured() ) {
 			return ResponsesClient::rank( $system_prompt, $user_prompt );
 		}

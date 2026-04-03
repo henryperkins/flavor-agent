@@ -116,15 +116,15 @@ jest.mock( '../../store', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 const {
 	buildGlobalStylesRecommendationContextSignature,
 } = require( '../../utils/style-operations' );
 
 import StyleBookRecommender from '../StyleBookRecommender';
 
-let container = null;
-let root = null;
+const { getContainer, getRoot } = setupReactTest();
+
 let sidebar = null;
 let currentBlockEditorSettings = null;
 let currentBlockType = null;
@@ -133,8 +133,6 @@ let currentStoreState = null;
 let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
 
 function createStyleVariations() {
 	return [
@@ -349,9 +347,6 @@ beforeEach( () => {
 		undoActivity: mockUndoActivity,
 	} ) );
 
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 
 	sidebar = document.createElement( 'div' );
 	sidebar.className = 'editor-global-styles-sidebar__panel';
@@ -359,17 +354,13 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
 	sidebar.remove();
-	container.remove();
 } );
 
 describe( 'StyleBookRecommender', () => {
 	test( 'submits a block-scoped style recommendation request from the Style Book sidebar', () => {
 		act( () => {
-			root.render( <StyleBookRecommender /> );
+			getRoot().render( <StyleBookRecommender /> );
 		} );
 
 		const textarea = sidebar.querySelector( 'textarea' );
@@ -447,7 +438,7 @@ describe( 'StyleBookRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <StyleBookRecommender /> );
+			getRoot().render( <StyleBookRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain(
@@ -486,7 +477,7 @@ describe( 'StyleBookRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <StyleBookRecommender /> );
+			getRoot().render( <StyleBookRecommender /> );
 		} );
 
 		expect( sidebar.textContent ).toContain( 'Style Book' );
@@ -508,7 +499,7 @@ describe( 'StyleBookRecommender', () => {
 		};
 
 		act( () => {
-			root.render( <StyleBookRecommender /> );
+			getRoot().render( <StyleBookRecommender /> );
 		} );
 
 		expect( mockClearStyleBookRecommendations ).not.toHaveBeenCalled();

@@ -67,16 +67,13 @@ jest.mock( '../../utils/template-operation-sequence', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import TemplatePartRecommender from '../TemplatePartRecommender';
 
+const { getContainer, getRoot } = setupReactTest();
+
 let currentState = null;
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
 function getState() {
 	return currentState;
 }
@@ -235,16 +232,16 @@ function selectStore( storeName ) {
 }
 
 function hasText( value ) {
-	return container.textContent.includes( value );
+	return getContainer().textContent.includes( value );
 }
 
 function getTextarea() {
-	return container.querySelector( 'textarea' );
+	return getContainer().querySelector( 'textarea' );
 }
 
 async function renderPanel() {
 	await act( async () => {
-		root.render( <TemplatePartRecommender /> );
+		getRoot().render( <TemplatePartRecommender /> );
 	} );
 }
 
@@ -266,27 +263,11 @@ beforeEach( async () => {
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( selectStore )
 	);
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 	await renderPanel();
 } );
 
 afterEach( async () => {
 	delete window.flavorAgentData;
-
-	if ( root ) {
-		await act( async () => {
-			root.unmount();
-		} );
-	}
-
-	if ( container ) {
-		container.remove();
-	}
-
-	root = null;
-	container = null;
 	currentState = null;
 } );
 
@@ -324,12 +305,12 @@ describe( 'TemplatePartRecommender', () => {
 		await renderPanel();
 
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'.flavor-agent-template-preview .flavor-agent-preview-token--pattern'
 			)
 		).not.toBeNull();
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'.flavor-agent-template-preview .flavor-agent-action-link'
 			)
 		).toBeNull();
@@ -372,7 +353,7 @@ describe( 'TemplatePartRecommender', () => {
 		expect( hasText( 'Applied 1 template-part operation.' ) ).toBe( true );
 
 		const undoButton = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find( ( element ) => element.textContent === 'Undo' );
 
 		expect( undoButton ).toBeDefined();
@@ -437,7 +418,7 @@ describe( 'TemplatePartRecommender', () => {
 		await renderPanel();
 
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'[data-panel-title="AI Template Part Recommendations"]'
 			)
 		).not.toBeNull();

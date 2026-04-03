@@ -28,18 +28,15 @@ jest.mock( '../../store', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import NavigationRecommendations, {
 	buildNavigationFetchInput,
 } from '../NavigationRecommendations';
 
+const { getContainer, getRoot } = setupReactTest();
+
 let currentState = null;
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
-
 function getState() {
 	return currentState;
 }
@@ -112,7 +109,7 @@ const selectors = createSelectors();
 
 function renderComponent( clientId = 'nav-1' ) {
 	act( () => {
-		root.render( <NavigationRecommendations clientId={ clientId } /> );
+		getRoot().render( <NavigationRecommendations clientId={ clientId } /> );
 	} );
 }
 
@@ -154,16 +151,9 @@ beforeEach( () => {
 		fetchNavigationRecommendations: mockFetchNavigationRecommendations,
 	} ) );
 
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 } );
 
 afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
 	delete window.flavorAgentData;
 } );
 
@@ -180,7 +170,7 @@ describe( 'NavigationRecommendations', () => {
 
 		renderComponent( 'block-1' );
 
-		expect( container.textContent ).toBe( '' );
+		expect( getContainer().textContent ).toBe( '' );
 	} );
 
 	test( 'shows a shared capability notice without a dead-end settings link when theme capability is missing', () => {
@@ -212,13 +202,13 @@ describe( 'NavigationRecommendations', () => {
 
 		renderComponent();
 
-		expect( container.textContent ).toContain(
+		expect( getContainer().textContent ).toContain(
 			'Navigation recommendations require the edit_theme_options capability.'
 		);
-		expect( container.textContent ).not.toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Settings > Flavor Agent'
 		);
-		expect( container.textContent ).not.toContain(
+		expect( getContainer().textContent ).not.toContain(
 			'Get Navigation Suggestions'
 		);
 	} );
@@ -252,7 +242,7 @@ describe( 'NavigationRecommendations', () => {
 		renderComponent();
 
 		const button = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find(
 			( element ) => element.textContent === 'Get Navigation Suggestions'
 		);
@@ -291,7 +281,7 @@ describe( 'NavigationRecommendations', () => {
 		renderComponent();
 
 		const button = Array.from(
-			container.querySelectorAll( 'button' )
+			getContainer().querySelectorAll( 'button' )
 		).find(
 			( element ) => element.textContent === 'Get Navigation Suggestions'
 		);

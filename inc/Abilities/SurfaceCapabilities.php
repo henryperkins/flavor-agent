@@ -26,7 +26,7 @@ final class SurfaceCapabilities {
 
 		$block_message         = $can_manage_settings
 			? __(
-				'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.',
+				'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.',
 				'flavor-agent'
 			)
 			: __(
@@ -35,7 +35,7 @@ final class SurfaceCapabilities {
 			);
 		$pattern_message       = $can_manage_settings
 			? __(
-				'Pattern recommendations rely on Flavor Agent\'s chat and embedding backends plus Qdrant in Settings > Flavor Agent.',
+				'Pattern recommendations rely on Flavor Agent\'s chat and embedding backends plus Qdrant in Settings > Flavor Agent. Connectors-backed providers currently apply only to chat surfaces.',
 				'flavor-agent'
 			)
 			: __(
@@ -44,7 +44,7 @@ final class SurfaceCapabilities {
 			);
 		$template_message      = $can_manage_settings
 			? __(
-				'Template recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+				'Template recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
 				'flavor-agent'
 			)
 			: __(
@@ -53,7 +53,7 @@ final class SurfaceCapabilities {
 			);
 		$template_part_message = $can_manage_settings
 			? __(
-				'Template-part recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+				'Template-part recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
 				'flavor-agent'
 			)
 			: __(
@@ -62,7 +62,7 @@ final class SurfaceCapabilities {
 			);
 		$navigation_message    = $can_manage_settings
 			? __(
-				'Navigation recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+				'Navigation recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
 				'flavor-agent'
 			)
 			: __(
@@ -71,7 +71,7 @@ final class SurfaceCapabilities {
 			);
 		$global_styles_message = $can_manage_settings
 			? __(
-				'Global Styles recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+				'Global Styles recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
 				'flavor-agent'
 			)
 			: __(
@@ -80,7 +80,7 @@ final class SurfaceCapabilities {
 			);
 		$style_book_message    = $can_manage_settings
 			? __(
-				'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+				'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
 				'flavor-agent'
 			)
 			: __(

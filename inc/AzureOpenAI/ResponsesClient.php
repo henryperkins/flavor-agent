@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\AzureOpenAI;
 
+use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\OpenAI\Provider;
 
 final class ResponsesClient extends BaseHttpClient {
@@ -18,6 +19,22 @@ final class ResponsesClient extends BaseHttpClient {
 		?string $provider = null
 	): true|\WP_Error {
 		$provider = Provider::normalize_provider( $provider ?? Provider::get() );
+
+		if ( Provider::is_connector( $provider ) ) {
+			if ( WordPressAIClient::is_supported( $provider ) ) {
+				return true;
+			}
+
+			return new \WP_Error(
+				'responses_validation_error',
+				sprintf(
+					'%s is not currently available through Settings > Connectors.',
+					Provider::label( $provider )
+				),
+				[ 'status' => 400 ]
+			);
+		}
+
 		$config   = Provider::chat_configuration(
 			$provider,
 			Provider::is_native( $provider )
@@ -53,7 +70,13 @@ final class ResponsesClient extends BaseHttpClient {
 	 * @return string|\WP_Error The assistant's text response.
 	 */
 	public static function rank( string $instructions, string $input ): string|\WP_Error {
-		$config = Provider::chat_configuration();
+		$provider = Provider::get();
+
+		if ( Provider::is_connector( $provider ) ) {
+			return WordPressAIClient::chat( $instructions, $input, $provider );
+		}
+
+		$config = Provider::chat_configuration( $provider );
 
 		if ( ! $config['configured'] ) {
 			return new \WP_Error(

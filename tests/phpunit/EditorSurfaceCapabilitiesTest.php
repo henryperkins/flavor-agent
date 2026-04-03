@@ -132,7 +132,7 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		);
 		$this->assertSame( 'Settings > Flavor Agent', $capabilities['styleBook']['configurationLabel'] );
 		$this->assertSame(
-			'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent.',
+			'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
 			$capabilities['styleBook']['message']
 		);
 	}

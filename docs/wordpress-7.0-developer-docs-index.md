@@ -1,6 +1,7 @@
 # WordPress 7.0 Developer Docs Index
 
 Generated: 2026-03-27 UTC
+Updated: 2026-04-03 UTC
 
 > Status: discovery snapshot for release-cycle research, not a live backlog or product-behavior document.
 > Use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current Flavor Agent truth.
@@ -22,7 +23,7 @@ Excluded on purpose:
 - recurring agendas, chat summaries, volunteer calls, and similar coordination posts
 - generic handbook or reference pages that only mention 7.0 in passing
 
-Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable on Make/Core's `field guide` tag or in Make/Core `WordPress 7.0` search results, even though the WordPress 7.0 release page still lists Field Guide publication as part of the March 19, 2026 RC1 milestone. Release timing also shifted; see the RC1 delay post below.
+Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable on Make/Core's `field guide` tag or in Make/Core `WordPress 7.0` search results, even though the WordPress 7.0 release page still lists Field Guide publication as part of the March 19, 2026 RC1 milestone. Release timing shifted twice during this cycle: first via the RC1 delay post, and again on 2026-03-31 when Core announced the 7.0 cycle extension and deferred the final release date.
 
 ## Discovery Sources
 
@@ -35,6 +36,7 @@ Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable 
 
 ## New Notes This Refresh
 
+- On 2026-03-31, Core published `Extending the 7.0 Cycle`, which supersedes earlier assumptions that WordPress 7.0 would release on 2026-04-09. The release is now delayed by a few weeks and the final date is pending a revised Core timeline.
 - The March 10, 2026 Developer Blog roundup says the "always-iframed post editor" work was punted to WordPress 7.1, so the WordPress 7.0 iframe note should be read as the inserted-block-version gate rather than a blanket always-iframed rollout.
 - The February 20, 2026 `Help Test WordPress 7.0` post expands the concrete release-test surface beyond the standalone dev notes: admin refresh, client-side media processing, Icon and Breadcrumbs blocks, Gallery lightbox, Cover external video, and Grid controls are all called out explicitly.
 - The March 11, 2026 Gutenberg 22.7 update shows Connectors work continuing after the standalone Connectors dev note: the Connectors screen and API landed, connector setting names gained the `_ai_` prefix, and providers are dynamically registered from the WP AI Client registry.
@@ -45,6 +47,7 @@ Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable 
 - 2025-12-02: [WordPress 7.0](https://make.wordpress.org/core/7-0/)
 - 2025-12-11: [Planning for 7.0](https://make.wordpress.org/core/2025/12/11/planning-for-7-0/)
 - 2026-03-19: [WordPress 7.0 Release Candidate 1 delayed](https://make.wordpress.org/core/2026/03/19/wordpress-7-0-release-candidate-1-delayed/)
+- 2026-03-31: [Extending the 7.0 Cycle](https://make.wordpress.org/core/2026/03/31/extending-the-7-0-cycle/)
 
 ## Core Dev Notes
 

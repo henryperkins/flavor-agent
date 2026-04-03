@@ -15,14 +15,11 @@ jest.mock( '../../store', () => ( {
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
-const { createRoot } = require( '@wordpress/element' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import SuggestionChips from '../SuggestionChips';
 
-let container = null;
-let root = null;
-
-window.IS_REACT_ACT_ENVIRONMENT = true;
+const { getContainer, getRoot } = setupReactTest();
 
 beforeEach( () => {
 	mockApplySuggestion.mockReset();
@@ -31,22 +28,13 @@ beforeEach( () => {
 		applySuggestion: mockApplySuggestion,
 	} ) );
 
-	container = document.createElement( 'div' );
-	document.body.appendChild( container );
-	root = createRoot( container );
 } );
 
-afterEach( () => {
-	act( () => {
-		root.unmount();
-	} );
-	container.remove();
-} );
 
 describe( 'SuggestionChips', () => {
 	test( 'renders named chip controls as an ARIA group', () => {
 		act( () => {
-			root.render(
+			getRoot().render(
 				<SuggestionChips
 					clientId="block-1"
 					label="AI color suggestions"
@@ -61,7 +49,7 @@ describe( 'SuggestionChips', () => {
 		} );
 
 		expect(
-			container.querySelector(
+			getContainer().querySelector(
 				'[role="group"][aria-label="AI color suggestions"]'
 			)
 		).not.toBeNull();
@@ -69,7 +57,7 @@ describe( 'SuggestionChips', () => {
 
 	test( 'renders inline feedback near the chip group after apply', async () => {
 		act( () => {
-			root.render(
+			getRoot().render(
 				<SuggestionChips
 					clientId="block-1"
 					label="AI color suggestions"
@@ -84,7 +72,7 @@ describe( 'SuggestionChips', () => {
 		} );
 
 		await act( async () => {
-			container.querySelector( 'button' ).click();
+			getContainer().querySelector( 'button' ).click();
 			await Promise.resolve();
 		} );
 
@@ -93,7 +81,7 @@ describe( 'SuggestionChips', () => {
 			panel: 'color',
 		} );
 		expect(
-			container.querySelector( '.flavor-agent-inline-feedback' )
+			getContainer().querySelector( '.flavor-agent-inline-feedback' )
 				?.textContent
 		).toBe( 'AppliedUse accent color' );
 	} );
