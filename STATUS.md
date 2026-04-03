@@ -9,6 +9,7 @@
 | Ability | Handler | Description |
 | --- | --- | --- |
 | `flavor-agent/recommend-block` | `BlockAbilities` | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client |
+| `flavor-agent/recommend-content` | `ContentAbilities` | Programmatic content drafting, editing, and critique scaffold using `WritingPrompt` and the shared chat backend |
 | `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | Provider-selected embeddings + Qdrant retrieval + LLM reranking |
 | `flavor-agent/recommend-template` | `TemplateAbilities` | Provider-selected template composition suggestions for Site Editor templates |
@@ -26,6 +27,7 @@
 | Route | Permission | Description |
 | --- | --- | --- |
 | `POST /flavor-agent/v1/recommend-block` | `edit_posts` | Block recommendations from client-provided editor context |
+| `POST /flavor-agent/v1/recommend-content` | `edit_posts` | Programmatic content-lane scaffold for draft, edit, and critique payloads |
 | `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | Pattern recommendations for the inserter |
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | Advisory navigation recommendations for selected `core/navigation` blocks |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | Template composition recommendations for the Site Editor |
@@ -38,6 +40,7 @@
 ### Editor UI
 
 - Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
+- Programmatic content lane scaffold via `flavor-agent/recommend-content` and `POST /flavor-agent/v1/recommend-content` for future post-editor integration; no first-party UI ships yet
 - Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
 - Shared capability notices now keep block, navigation, template, template-part, and Global Styles surfaces visible when they are otherwise in scope but unavailable, and the pattern inserter now prepends the same why-unavailable guidance inside the native inserter, with explicit links back to `Settings > Connectors` or `Settings > Flavor Agent`
 - Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place

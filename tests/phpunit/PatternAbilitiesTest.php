@@ -368,6 +368,7 @@ final class PatternAbilitiesTest extends TestCase {
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
+
 		WordPressTestState::$connectors = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
@@ -379,10 +380,13 @@ final class PatternAbilitiesTest extends TestCase {
 				],
 			],
 		];
+
 		WordPressTestState::$ai_client_supported = true;
+
 		WordPressTestState::$ai_client_provider_support = [
 			'anthropic' => true,
 		];
+
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
 				'recommendations' => [

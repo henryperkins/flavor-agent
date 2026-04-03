@@ -8,6 +8,7 @@ use FlavorAgent\Activity\Permissions as ActivityPermissions;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\Serializer;
 use FlavorAgent\Abilities\BlockAbilities;
+use FlavorAgent\Abilities\ContentAbilities;
 use FlavorAgent\Abilities\NavigationAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Abilities\StyleAbilities;
@@ -44,6 +45,39 @@ final class Agent_Controller {
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/recommend-content',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'handle_recommend_content' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'args'                => [
+					'mode'         => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_key',
+					],
+					'prompt'       => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => [ __CLASS__, 'sanitize_block_markup' ],
+					],
+					'voiceProfile' => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => [ __CLASS__, 'sanitize_block_markup' ],
+					],
+					'postContext'  => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
 				],
 			]
@@ -480,6 +514,41 @@ final class Agent_Controller {
 			],
 			200
 		);
+	}
+
+	/**
+	 * Handle POST /recommend-content with a thin ability adapter.
+	 */
+	public static function handle_recommend_content( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$input = [];
+
+		$mode = $request->get_param( 'mode' );
+		if ( is_string( $mode ) && $mode !== '' ) {
+			$input['mode'] = $mode;
+		}
+
+		$prompt = $request->get_param( 'prompt' );
+		if ( is_string( $prompt ) && $prompt !== '' ) {
+			$input['prompt'] = self::sanitize_block_markup( $prompt );
+		}
+
+		$voice_profile = $request->get_param( 'voiceProfile' );
+		if ( is_string( $voice_profile ) && $voice_profile !== '' ) {
+			$input['voiceProfile'] = self::sanitize_block_markup( $voice_profile );
+		}
+
+		$post_context = $request->get_param( 'postContext' );
+		if ( is_array( $post_context ) || is_object( $post_context ) ) {
+			$input['postContext'] = self::sanitize_structured_value( $post_context );
+		}
+
+		$result = ContentAbilities::recommend_content( $input );
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response( $result, 200 );
 	}
 
 	public static function handle_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {

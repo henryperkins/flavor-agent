@@ -42,6 +42,15 @@ final class SurfaceCapabilities {
 				'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 				'flavor-agent'
 			);
+		$content_message       = $can_manage_settings
+			? __(
+				'Content recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this lane.',
+				'flavor-agent'
+			)
+			: __(
+				'Content recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'flavor-agent'
+			);
 		$template_message      = $can_manage_settings
 			? __(
 				'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
@@ -113,6 +122,27 @@ final class SurfaceCapabilities {
 				$pattern_available ? 'ready' : 'pattern_backend_unconfigured',
 				'plugin_settings',
 				$pattern_message,
+				self::build_actions(
+					$can_manage_settings,
+					[
+						[
+							'label' => 'Settings > Flavor Agent',
+							'href'  => $settings_url,
+						],
+						[
+							'label' => 'Settings > Connectors',
+							'href'  => $connectors_url,
+						],
+					]
+				),
+				$can_manage_settings ? 'Settings > Flavor Agent' : '',
+				$can_manage_settings ? $settings_url : ''
+			),
+			'content'      => self::build_surface(
+				$chat_available,
+				$chat_available ? 'ready' : 'plugin_provider_unconfigured',
+				'plugin_or_core',
+				$content_message,
 				self::build_actions(
 					$can_manage_settings,
 					[
@@ -290,6 +320,7 @@ final class SurfaceCapabilities {
 			'properties' => [
 				'block'        => self::output_schema(),
 				'pattern'      => self::output_schema(),
+				'content'      => self::output_schema(),
 				'template'     => self::output_schema(),
 				'templatePart' => self::output_schema(),
 				'navigation'   => self::output_schema(),

@@ -18,6 +18,7 @@ final class Registration {
 
 	public static function register_abilities(): void {
 		self::register_block_abilities();
+		self::register_content_abilities();
 		self::register_pattern_abilities();
 		self::register_template_abilities();
 		self::register_navigation_abilities();
@@ -87,6 +88,83 @@ final class Registration {
 					],
 				],
 				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+	}
+
+	private static function register_content_abilities(): void {
+		wp_register_ability(
+			'flavor-agent/recommend-content',
+			[
+				'label'               => __( 'Recommend post content', 'flavor-agent' ),
+				'description'         => __( 'Draft, edit, or critique blog post content in Henry Perkins\'s voice.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ ContentAbilities::class, 'recommend_content' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'mode'         => [
+							'type'        => 'string',
+							'description' => 'Writing mode: draft, edit, or critique.',
+						],
+						'prompt'       => [
+							'type'        => 'string',
+							'description' => 'Optional user instruction for the content lane.',
+						],
+						'voiceProfile' => [
+							'type'        => 'string',
+							'description' => 'Optional extra voice guidance layered on top of the default Henry profile.',
+						],
+						'postContext'  => self::open_object_schema(
+							[
+								'postType'        => [ 'type' => 'string' ],
+								'title'           => [ 'type' => 'string' ],
+								'excerpt'         => [ 'type' => 'string' ],
+								'content'         => [ 'type' => 'string' ],
+								'slug'            => [ 'type' => 'string' ],
+								'status'          => [ 'type' => 'string' ],
+								'audience'        => [ 'type' => 'string' ],
+								'siteTitle'       => [ 'type' => 'string' ],
+								'siteDescription' => [ 'type' => 'string' ],
+								'categories'      => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+								'tags'            => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+							],
+							'Optional post-editor context for drafting, editing, or critique.'
+						),
+					],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => [
+						'mode'    => [ 'type' => 'string' ],
+						'title'   => [ 'type' => 'string' ],
+						'summary' => [ 'type' => 'string' ],
+						'content' => [ 'type' => 'string' ],
+						'notes'   => [
+							'type'  => 'array',
+							'items' => [ 'type' => 'string' ],
+						],
+						'issues'  => [
+							'type'  => 'array',
+							'items' => [
+								'type'       => 'object',
+								'properties' => [
+									'original' => [ 'type' => 'string' ],
+									'problem'  => [ 'type' => 'string' ],
+									'revision' => [ 'type' => 'string' ],
+								],
+							],
+						],
+					],
+				],
+				'meta'                => self::public_recommendation_meta(),
 			]
 		);
 	}

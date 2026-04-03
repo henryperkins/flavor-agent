@@ -222,10 +222,11 @@ final class AzureBackendValidationTest extends TestCase {
 	}
 
 	public function test_rank_delegates_to_the_wordpress_ai_client_for_selected_connector_providers(): void {
-		WordPressTestState::$options                   = [
+		WordPressTestState::$options = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
-		WordPressTestState::$connectors                = [
+
+		WordPressTestState::$connectors = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -236,9 +237,11 @@ final class AzureBackendValidationTest extends TestCase {
 				],
 			],
 		];
+
 		WordPressTestState::$ai_client_provider_support = [
 			'anthropic' => true,
 		];
+
 		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
 
 		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
@@ -428,11 +431,11 @@ final class AzureBackendValidationTest extends TestCase {
 
 	public function test_rank_falls_back_to_wordpress_ai_client_when_no_direct_provider_is_configured(): void {
 		WordPressTestState::$ai_client_supported            = true;
-		WordPressTestState::$ai_client_generate_text_result = 'wordpress ai client fallback output';
+		WordPressTestState::$ai_client_generate_text_result = 'WordPress AI client fallback output';
 
 		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
 
-		$this->assertSame( 'wordpress ai client fallback output', $result );
+		$this->assertSame( 'WordPress AI client fallback output', $result );
 		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}

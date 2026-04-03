@@ -330,6 +330,7 @@ All abilities registered with full JSON Schema input/output definitions:
 | Ability | Handler | Permission | Status |
 |---------|---------|-----------|--------|
 | `flavor-agent/recommend-block` | `BlockAbilities` | `edit_posts` | Working |
+| `flavor-agent/recommend-content` | `ContentAbilities` | `edit_posts` | Working |
 | `flavor-agent/introspect-block` | `BlockAbilities` | `edit_posts` | Working (readonly) |
 | `flavor-agent/recommend-patterns` | `PatternAbilities` | `edit_posts` | Working |
 | `flavor-agent/list-patterns` | `PatternAbilities` | `edit_posts` | Working (readonly) |
@@ -352,6 +353,7 @@ All abilities registered with full JSON Schema input/output definitions:
 | Route | Method | Permission | Handler |
 |-------|--------|-----------|---------|
 | `/flavor-agent/v1/recommend-block` | POST | `edit_posts` | `BlockAbilities::recommend_block` |
+| `/flavor-agent/v1/recommend-content` | POST | `edit_posts` | `ContentAbilities::recommend_content` |
 | `/flavor-agent/v1/recommend-patterns` | POST | `edit_posts` | `PatternAbilities::recommend_patterns` |
 | `/flavor-agent/v1/recommend-navigation` | POST | `edit_theme_options` | `NavigationAbilities::recommend_navigation` |
 | `/flavor-agent/v1/recommend-template` | POST | `edit_theme_options` | `TemplateAbilities::recommend_template` |

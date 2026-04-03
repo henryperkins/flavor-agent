@@ -427,37 +427,88 @@ final class Settings {
 	}
 
 	public static function render_page(): void {
+		$activity_url   = admin_url( 'options-general.php?page=flavor-agent-activity' );
+		$connectors_url = admin_url( 'options-connectors.php' );
 		?>
-		<div class="wrap">
-			<h1>Flavor Agent Settings</h1>
-			<?php self::render_settings_notices(); ?>
-			<p class="description">
-				<?php
-				echo esc_html__(
-					'Settings > Connectors remains the core-managed home for WordPress AI Client providers and connector credentials. Settings > Flavor Agent now selects the active provider for recommendation surfaces while still owning the direct Azure OpenAI / OpenAI Native settings, Qdrant, Cloudflare grounding, and pattern sync.',
-					'flavor-agent'
-				);
-				?>
-			</p>
-			<p class="description">
-				<?php
-				echo esc_html__(
-					'Block, template, template-part, navigation, Global Styles, and Style Book recommendations automatically use any compatible chat backend already configured here or in Settings > Connectors. Pattern recommendations still rely on a plugin-managed embedding backend configured on this screen plus Qdrant, but when chat comes from a Connectors provider Flavor Agent reuses any configured Azure OpenAI or OpenAI Native embedding backend automatically.',
-					'flavor-agent'
-				);
-				?>
-			</p>
-			<form method="post" action="options.php">
-				<?php
-				settings_fields( self::OPTION_GROUP );
-				do_settings_sections( self::PAGE_SLUG );
-				submit_button();
-				?>
-			</form>
+		<div class="wrap flavor-agent-settings-page">
+			<div class="flavor-agent-settings">
+				<section class="flavor-agent-admin-hero flavor-agent-settings__hero">
+					<div class="flavor-agent-admin-hero__content">
+						<p class="flavor-agent-brand-note">
+							<?php echo esc_html__( 'Lakefront Digital', 'flavor-agent' ); ?>
+						</p>
+						<p class="flavor-agent-wordmark">
+							<?php echo esc_html__( 'Flavor Agent', 'flavor-agent' ); ?>
+						</p>
+						<h1 class="flavor-agent-admin-hero__title">
+							<?php echo esc_html__( 'Orchestrate the provider stack behind every recommendation.', 'flavor-agent' ); ?>
+						</h1>
+						<p class="flavor-agent-admin-hero__copy">
+							<?php echo esc_html__( 'Configure chat, embeddings, grounding, and pattern sync for editor-side guidance without leaving the native WordPress workflow.', 'flavor-agent' ); ?>
+						</p>
+						<div class="flavor-agent-admin-hero__actions">
+							<a class="button button-primary" href="<?php echo esc_attr( self::sanitize_url_value( $activity_url ) ); ?>">
+								<?php echo esc_html__( 'Review Activity', 'flavor-agent' ); ?>
+							</a>
+							<a class="button button-secondary" href="<?php echo esc_attr( self::sanitize_url_value( $connectors_url ) ); ?>">
+								<?php echo esc_html__( 'Open Connectors', 'flavor-agent' ); ?>
+							</a>
+						</div>
+					</div>
+				</section>
 
-			<hr />
-			<h2>Sync Pattern Catalog</h2>
-			<?php self::render_sync_panel(); ?>
+				<?php self::render_settings_notices(); ?>
+
+				<div class="flavor-agent-settings__bridge">
+					<p>
+						<?php
+						echo esc_html__(
+							'Settings > Connectors remains the core-managed home for WordPress AI Client providers and connector credentials. Settings > Flavor Agent now selects the active provider for recommendation surfaces while still owning the direct Azure OpenAI / OpenAI Native settings, Qdrant, Cloudflare grounding, and pattern sync.',
+							'flavor-agent'
+						);
+						?>
+					</p>
+					<p>
+						<?php
+						echo esc_html__(
+							'Block, template, template-part, navigation, Global Styles, and Style Book recommendations automatically use any compatible chat backend already configured here or in Settings > Connectors. Pattern recommendations still rely on a plugin-managed embedding backend configured on this screen plus Qdrant, but when chat comes from a Connectors provider Flavor Agent reuses any configured Azure OpenAI or OpenAI Native embedding backend automatically.',
+							'flavor-agent'
+						);
+						?>
+					</p>
+				</div>
+
+				<form method="post" action="options.php" class="flavor-agent-settings__form">
+					<?php
+					settings_fields( self::OPTION_GROUP );
+					self::render_settings_sections();
+					?>
+					<div class="flavor-agent-settings__actions">
+						<?php
+						submit_button(
+							__( 'Save Flavor Agent Settings', 'flavor-agent' ),
+							'primary',
+							'submit',
+							false
+						);
+						?>
+					</div>
+				</form>
+
+				<section class="flavor-agent-settings-section">
+					<div class="flavor-agent-settings-section__header">
+						<h2 class="flavor-agent-settings-section__title">
+							<?php echo esc_html__( 'Sync Pattern Catalog', 'flavor-agent' ); ?>
+						</h2>
+						<p class="flavor-agent-settings__sync-copy">
+							<?php echo esc_html__( 'Refresh the Qdrant-backed pattern index that powers ranked recommendations and pattern retrieval.', 'flavor-agent' ); ?>
+						</p>
+					</div>
+					<div class="flavor-agent-settings-section__body">
+						<?php self::render_sync_panel(); ?>
+					</div>
+				</section>
+			</div>
 		</div>
 		<?php
 	}
@@ -470,6 +521,46 @@ final class Settings {
 		// Render all Settings API notices so core success messages and plugin-specific
 		// validation errors both survive the post-save redirect.
 		settings_errors();
+	}
+
+	private static function render_settings_sections(): void {
+		global $wp_settings_sections, $wp_settings_fields;
+
+		if (
+			empty( $wp_settings_sections[ self::PAGE_SLUG ] ) ||
+			! is_array( $wp_settings_sections[ self::PAGE_SLUG ] )
+		) {
+			return;
+		}
+
+		foreach ( $wp_settings_sections[ self::PAGE_SLUG ] as $section ) {
+			$section_id    = is_string( $section['id'] ?? null ) ? $section['id'] : '';
+			$section_title = is_string( $section['title'] ?? null ) ? $section['title'] : '';
+			?>
+			<section class="flavor-agent-settings-section" id="<?php echo esc_attr( $section_id ); ?>">
+				<div class="flavor-agent-settings-section__header">
+					<h2 class="flavor-agent-settings-section__title">
+						<?php echo esc_html( $section_title ); ?>
+					</h2>
+				</div>
+				<div class="flavor-agent-settings-section__body">
+					<?php
+					if ( ! empty( $section['callback'] ) && is_callable( $section['callback'] ) ) {
+						call_user_func( $section['callback'], $section );
+					}
+
+					if ( ! empty( $wp_settings_fields[ self::PAGE_SLUG ][ $section_id ] ) ) {
+						?>
+						<table class="form-table flavor-agent-settings-table" role="presentation">
+							<?php do_settings_fields( self::PAGE_SLUG, $section_id ); ?>
+						</table>
+						<?php
+					}
+					?>
+				</div>
+			</section>
+			<?php
+		}
 	}
 
 	/**
@@ -578,7 +669,7 @@ final class Settings {
 		$value       = (string) get_option( $option, '' );
 
 		printf(
-			'<input type="%s" name="%s" value="%s" class="regular-text" autocomplete="off" placeholder="%s" />',
+			'<input type="%s" name="%s" value="%s" class="regular-text flavor-agent-settings-field" autocomplete="off" placeholder="%s" />',
 			esc_attr( $type ),
 			esc_attr( $option ),
 			esc_attr( $value ),
@@ -599,7 +690,10 @@ final class Settings {
 			$option === Provider::OPTION_NAME ? Provider::AZURE : ''
 		);
 
-		printf( '<select name="%s">', esc_attr( $option ) );
+		printf(
+			'<select name="%s" class="flavor-agent-settings-field">',
+			esc_attr( $option )
+		);
 
 		foreach ( $choices as $choice_value => $choice_label ) {
 			printf(
@@ -1343,29 +1437,39 @@ final class Settings {
 
 		$label = $status_labels[ $state['status'] ] ?? $state['status'];
 		?>
-		<table class="form-table" role="presentation" style="margin-top:0">
-			<tr>
-				<th scope="row"><?php echo esc_html__( 'Docs Prewarm', 'flavor-agent' ); ?></th>
-				<td>
-					<strong><?php echo esc_html( $label ); ?></strong>
-					<?php if ( $state['timestamp'] !== '' ) : ?>
-						&mdash; <?php echo esc_html( $state['timestamp'] ); ?> UTC
-					<?php endif; ?>
-					<?php if ( $state['warmed'] > 0 || $state['failed'] > 0 ) : ?>
-						<br /><span class="description">
-							<?php
-							printf(
-								/* translators: 1: warmed count, 2: failed count */
-								esc_html__( '%1$d warmed, %2$d failed', 'flavor-agent' ),
-								$state['warmed'],
-								$state['failed']
-							);
-							?>
-						</span>
-					<?php endif; ?>
-				</td>
-			</tr>
-		</table>
+		<div class="flavor-agent-settings-diagnostic">
+			<div class="flavor-agent-settings-diagnostic__header">
+				<p class="flavor-agent-settings-diagnostic__title">
+					<?php echo esc_html__( 'Docs Prewarm', 'flavor-agent' ); ?>
+				</p>
+				<p class="flavor-agent-settings-diagnostic__status">
+					<?php echo esc_html( $label ); ?>
+				</p>
+			</div>
+			<?php if ( $state['timestamp'] !== '' ) : ?>
+				<p class="flavor-agent-settings-diagnostic__meta">
+					<?php
+					printf(
+						/* translators: %s: prewarm timestamp */
+						esc_html__( 'Last prewarm run: %s UTC', 'flavor-agent' ),
+						esc_html( $state['timestamp'] )
+					);
+					?>
+				</p>
+			<?php endif; ?>
+			<?php if ( $state['warmed'] > 0 || $state['failed'] > 0 ) : ?>
+				<p class="flavor-agent-settings-diagnostic__meta">
+					<?php
+					printf(
+						/* translators: 1: warmed count, 2: failed count */
+						esc_html__( '%1$d warmed, %2$d failed', 'flavor-agent' ),
+						$state['warmed'],
+						$state['failed']
+					);
+					?>
+				</p>
+			<?php endif; ?>
+		</div>
 		<?php
 	}
 
@@ -1386,43 +1490,62 @@ final class Settings {
 
 		$label = $status_labels[ $state['status'] ] ?? $state['status'];
 		?>
-		<table class="form-table">
-			<tr>
-				<th scope="row">Status</th>
-				<td><strong><?php echo esc_html( $label ); ?></strong></td>
-			</tr>
-			<?php if ( $state['indexed_count'] > 0 ) : ?>
-			<tr>
-				<th scope="row">Indexed Patterns</th>
-				<td><?php echo (int) $state['indexed_count']; ?></td>
-			</tr>
-			<?php endif; ?>
-			<?php if ( $state['last_synced_at'] ) : ?>
-			<tr>
-				<th scope="row">Last Synced</th>
-				<td><?php echo esc_html( $state['last_synced_at'] ); ?></td>
-			</tr>
-			<?php endif; ?>
-			<?php if ( $state['last_error'] ) : ?>
-			<tr>
-				<th scope="row">Last Error</th>
-				<td style="color:#d63638"><?php echo esc_html( $state['last_error'] ); ?></td>
-			</tr>
-			<?php endif; ?>
-			<tr>
-				<th scope="row">Qdrant Collection</th>
-				<td><code><?php echo esc_html( $state['qdrant_collection'] ? $state['qdrant_collection'] : QdrantClient::get_collection_name() ); ?></code></td>
-			</tr>
-		</table>
+		<div class="flavor-agent-sync-panel">
+			<div class="flavor-agent-sync-panel__metrics">
+				<?php
+				self::render_sync_metric(
+					__( 'Status', 'flavor-agent' ),
+					$label
+				);
+				self::render_sync_metric(
+					__( 'Indexed Patterns', 'flavor-agent' ),
+					(string) (int) $state['indexed_count']
+				);
+				self::render_sync_metric(
+					__( 'Last Synced', 'flavor-agent' ),
+					$state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' )
+				);
+				self::render_sync_metric(
+					__( 'Qdrant Collection', 'flavor-agent' ),
+					$state['qdrant_collection'] ? (string) $state['qdrant_collection'] : QdrantClient::get_collection_name()
+				);
 
-		<p>
-			<button type="button" id="flavor-agent-sync-button" class="button button-secondary">
-				Sync Pattern Catalog
-			</button>
-			<span id="flavor-agent-sync-spinner" class="spinner" aria-hidden="true"></span>
-			<span id="flavor-agent-sync-status" style="margin-left:10px"></span>
-		</p>
-		<div id="flavor-agent-sync-notice" aria-live="polite"></div>
+				if ( $state['last_error'] ) {
+					self::render_sync_metric(
+						__( 'Last Error', 'flavor-agent' ),
+						(string) $state['last_error'],
+						true
+					);
+				}
+				?>
+			</div>
+
+			<div class="flavor-agent-sync-panel__actions">
+				<button type="button" id="flavor-agent-sync-button" class="button button-secondary">
+					<?php echo esc_html__( 'Sync Pattern Catalog', 'flavor-agent' ); ?>
+				</button>
+				<span id="flavor-agent-sync-spinner" class="spinner" aria-hidden="true"></span>
+				<span id="flavor-agent-sync-status" class="flavor-agent-sync-panel__status"></span>
+			</div>
+			<div id="flavor-agent-sync-notice" class="flavor-agent-sync-panel__notice" aria-live="polite"></div>
+		</div>
+		<?php
+	}
+
+	private static function render_sync_metric(
+		string $label,
+		string $value,
+		bool $is_error = false
+	): void {
+		?>
+		<div class="flavor-agent-sync-panel__metric">
+			<p class="flavor-agent-sync-panel__metric-label">
+				<?php echo esc_html( $label ); ?>
+			</p>
+			<p class="flavor-agent-sync-panel__metric-value<?php echo $is_error ? ' flavor-agent-sync-panel__metric-value--error' : ''; ?>">
+				<?php echo esc_html( $value ); ?>
+			</p>
+		</div>
 		<?php
 	}
 
@@ -1436,7 +1559,8 @@ final class Settings {
 			return;
 		}
 
-		$asset = include $asset_path;
+		$asset    = include $asset_path;
+		$css_path = FLAVOR_AGENT_DIR . 'build/admin.css';
 
 		wp_enqueue_script(
 			'flavor-agent-admin',
@@ -1445,6 +1569,15 @@ final class Settings {
 			$asset['version'],
 			true
 		);
+
+		if ( file_exists( $css_path ) ) {
+			wp_enqueue_style(
+				'flavor-agent-admin',
+				FLAVOR_AGENT_URL . 'build/admin.css',
+				[],
+				$asset['version']
+			);
+		}
 
 		wp_localize_script(
 			'flavor-agent-admin',

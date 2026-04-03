@@ -20,6 +20,7 @@ Use it when you need to answer:
 | Ability | Permission | Extra gate | What it returns or does | First-party surface |
 |---|---|---|---|---|
 | `flavor-agent/recommend-block` | `edit_posts` | Meaningful output requires `ChatClient::is_supported()` | Block recommendation payload with `settings`, `styles`, `block`, and `explanation` | Block Inspector recommendations |
+| `flavor-agent/recommend-content` | `edit_posts` | Active provider chat configured | Draft, edit, or critique payload for post content in Henry Perkins's voice, with notes and line-level rewrites | No direct first-party UI yet; programmatic scaffold for a future post-editor lane |
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-patterns` | `edit_posts` | Active provider embeddings + chat, Qdrant configured, usable pattern index | Ranked registered patterns for the current editing context | Pattern inserter recommendations |
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional filters | No direct first-party UI; helper and external-agent surface |
@@ -34,9 +35,9 @@ Use it when you need to answer:
 
 ## Ability Notes
 
-- All twelve abilities are registered in `inc/Abilities/Registration.php`
+- All thirteen abilities are registered in `inc/Abilities/Registration.php`
 - On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
-- The six AI recommendation abilities (`recommend-block`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
+- The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
 - `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
 
@@ -45,6 +46,7 @@ Use it when you need to answer:
 | Route | Permission | First-party caller | Backend owner | Notes |
 |---|---|---|---|---|
 | `POST /flavor-agent/v1/recommend-block` | `edit_posts` | `fetchBlockRecommendations()` | `BlockAbilities::recommend_block()` | Wraps the response as `{ payload, clientId }` |
+| `POST /flavor-agent/v1/recommend-content` | `edit_posts` | No first-party caller yet | `ContentAbilities::recommend_content()` | Thin REST adapter over the content-lane scaffold |
 | `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | `fetchPatternRecommendations()` | `PatternAbilities::recommend_patterns()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | `fetchNavigationRecommendations()` | `NavigationAbilities::recommend_navigation()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Thin REST adapter over the ability |

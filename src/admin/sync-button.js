@@ -1,3 +1,6 @@
+import './brand.css';
+import './settings.css';
+
 ( function () {
 	const button = document.getElementById( 'flavor-agent-sync-button' );
 	const spinner = document.getElementById( 'flavor-agent-sync-spinner' );

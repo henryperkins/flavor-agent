@@ -29,6 +29,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, array<string, mixed>> */
 		public static array $connectors = [];
 
+		/** @var array<string, string> */
+		public static array $connector_api_errors = [];
+
 		public static array $capabilities = [];
 
 		public static array $block_templates = [];
@@ -74,6 +77,17 @@ namespace FlavorAgent\Tests\Support {
 
 		public static mixed $ai_client_generate_text_result = '';
 
+		/**
+		 * @param array<string, string> $errors
+		 */
+		public static function set_connector_api_errors( array $errors ): void {
+			self::$connector_api_errors = $errors;
+		}
+
+		public static function get_connector_api_error( string $function_name ): ?string {
+			return self::$connector_api_errors[ $function_name ] ?? null;
+		}
+
 		public static function reset(): void {
 			self::$global_settings             = [];
 			self::$global_styles               = [];
@@ -86,6 +100,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$last_ai_client_prompt       = [];
 			self::$options                     = [];
 			self::$connectors                  = [];
+			self::$connector_api_errors        = [];
 			self::$capabilities                = [];
 			self::$block_templates             = [];
 			self::$transients                  = [];
@@ -655,12 +670,22 @@ namespace {
 
 	if ( ! function_exists( 'wp_is_connector_registered' ) ) {
 		function wp_is_connector_registered( string $id ): bool {
+			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
+			if ( null !== $error_message ) {
+				throw new \RuntimeException( $error_message );
+			}
+
 			return array_key_exists( $id, WordPressTestState::$connectors );
 		}
 	}
 
 	if ( ! function_exists( 'wp_get_connector' ) ) {
 		function wp_get_connector( string $id ): ?array {
+			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
+			if ( null !== $error_message ) {
+				throw new \RuntimeException( $error_message );
+			}
+
 			$connector = WordPressTestState::$connectors[ $id ] ?? null;
 
 			return is_array( $connector ) ? $connector : null;
@@ -669,6 +694,11 @@ namespace {
 
 	if ( ! function_exists( 'wp_get_connectors' ) ) {
 		function wp_get_connectors(): array {
+			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
+			if ( null !== $error_message ) {
+				throw new \RuntimeException( $error_message );
+			}
+
 			return WordPressTestState::$connectors;
 		}
 	}

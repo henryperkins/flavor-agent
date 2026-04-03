@@ -52,6 +52,8 @@ Rules:
 - "styles" array: suggestions for the Appearance tab (color, filter, typography, dimensions, border, shadow, background, style variations).
 - "block" array: block-level suggestions (style variation changes, structural recommendations).
 - Only suggest changes for panels listed in the block's inspectorPanels.
+- If inspectorPanels is an empty object or array, treat that as an explicit signal that no mapped Inspector panels are available — not that the field was omitted. Do not say the panels were not provided.
+- You may still suggest a registered style variation as a block-level "style_variation" item when styles are provided and one is clearly beneficial, even if inspectorPanels is empty.
 - Use "list" for List View tab suggestions.
 - When bindableAttributes are provided, only suggest metadata.bindings changes for those attribute names.
 - Only suggest preset values that exist in the provided themeTokens.
@@ -87,8 +89,10 @@ SYSTEM;
 			$parts[] = 'Name: ' . ( $block['name'] ?? 'unknown' );
 			$parts[] = 'Title: ' . ( $block['title'] ?? '' );
 
-		if ( ! empty( $block['inspectorPanels'] ) ) {
-			$parts[] = 'Available panels: ' . wp_json_encode( $block['inspectorPanels'] );
+		if ( array_key_exists( 'inspectorPanels', $block ) ) {
+			$parts[] = 'Available panels: ' . wp_json_encode(
+				is_array( $block['inspectorPanels'] ) ? $block['inspectorPanels'] : []
+			);
 		}
 
 		if ( ! empty( $block['currentAttributes'] ) ) {

@@ -18,6 +18,7 @@ Use these docs when you need exact answers for:
 ## Surface Docs
 
 - `docs/features/block-recommendations.md` - per-block Inspector recommendations, apply, and undo
+- `docs/features/content-recommendations.md` - programmatic content-lane scaffold for drafting, editing, and critique
 - `docs/features/pattern-recommendations.md` - inserter recommendations, badge state, and pattern ranking pipeline
 - `docs/features/navigation-recommendations.md` - advisory guidance for selected `core/navigation` blocks
 - `docs/features/template-recommendations.md` - Site Editor template composition suggestions and validated apply flow

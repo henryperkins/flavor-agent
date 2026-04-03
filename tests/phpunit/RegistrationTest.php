@@ -72,6 +72,7 @@ final class RegistrationTest extends TestCase {
 
 		foreach ( [
 			'flavor-agent/recommend-block',
+			'flavor-agent/recommend-content',
 			'flavor-agent/recommend-patterns',
 			'flavor-agent/recommend-template',
 			'flavor-agent/recommend-template-part',
@@ -90,6 +91,37 @@ final class RegistrationTest extends TestCase {
 		);
 		$this->assertFalse(
 			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/check-status']['meta']['mcp']['public'] ?? false )
+		);
+	}
+
+	public function test_register_abilities_exposes_content_recommendation_schema(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-content'] ?? null;
+
+		$this->assertIsArray( $ability );
+		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
+		$this->assertTrue( (bool) ( $ability['meta']['mcp']['public'] ?? false ) );
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['mode']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['voiceProfile']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['postContext']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['input_schema']['properties']['postContext']['properties']['categories']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['issues']['items']['properties']['revision']['type'] ?? null
 		);
 	}
 
@@ -291,6 +323,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'object',
 			$status_ability['output_schema']['properties']['surfaces']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$status_ability['output_schema']['properties']['surfaces']['properties']['content']['properties']['available']['type'] ?? null
 		);
 		$this->assertSame(
 			'boolean',

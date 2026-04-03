@@ -35,7 +35,7 @@ final class ResponsesClient extends BaseHttpClient {
 			);
 		}
 
-		$config   = Provider::chat_configuration(
+		$config = Provider::chat_configuration(
 			$provider,
 			Provider::is_native( $provider )
 				? [

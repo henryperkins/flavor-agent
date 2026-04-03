@@ -15,33 +15,28 @@
 .flavor-agent-chip.components-button,
 .flavor-agent-action-link.components-button.is-link,
 .flavor-agent-inline-link.components-button.is-link {
-  --flavor-agent-accent: var(--wp-components-color-accent, #3858e9);
-  --flavor-agent-text: var(--wp-components-color-foreground, #1e1e1e);
-  --flavor-agent-muted: var(
-    --wp-components-color-foreground-secondary,
-    #757575
-  );
+  --flavor-agent-accent: #0b7b80;
+  --flavor-agent-accent-strong: #075c62;
+  --flavor-agent-warm: #cf7a45;
+  --flavor-agent-text: #1f2d34;
+  --flavor-agent-muted: #627078;
+  --flavor-agent-brand-serif: "Iowan Old Style", "Palatino Linotype",
+    "Book Antiqua", Georgia, serif;
+  --flavor-agent-brand-sans: "Aptos", "Segoe UI", "Helvetica Neue",
+    sans-serif;
   --flavor-agent-surface: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 3%,
-    var(--wp-components-color-background, #fff)
+    var(--flavor-agent-accent) 4%,
+    var(--wp-components-color-background, #fffdf8)
   );
   --flavor-agent-surface-strong: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 7%,
-    var(--wp-components-color-background, #fff)
+    var(--flavor-agent-accent) 8%,
+    var(--wp-components-color-background, #fffdf8)
   );
-  --flavor-agent-border: color-mix(
-    in srgb,
-    var(--flavor-agent-accent) 10%,
-    var(--wp-components-color-accent-inverted, #e0e0e0)
-  );
-  --flavor-agent-border-strong: color-mix(
-    in srgb,
-    var(--flavor-agent-accent) 22%,
-    var(--wp-components-color-accent-inverted, #e0e0e0)
-  );
-  --flavor-agent-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --flavor-agent-border: rgba(31, 45, 52, 0.12);
+  --flavor-agent-border-strong: rgba(31, 45, 52, 0.2);
+  --flavor-agent-shadow: 0 10px 24px rgba(17, 34, 41, 0.06);
 }
 
 /* ---------------------------------------------------------------
@@ -53,6 +48,7 @@
   flex-direction: column;
   gap: 12px;
   padding-top: 4px;
+  font-family: var(--flavor-agent-brand-sans);
 }
 
 .flavor-agent-panel__intro,
@@ -65,16 +61,58 @@
 }
 
 .flavor-agent-panel__intro {
+  position: relative;
+  overflow: hidden;
   padding: 12px;
+  border-radius: 16px;
   background: linear-gradient(
       135deg,
-      color-mix(in srgb, var(--flavor-agent-accent) 10%, transparent),
-      transparent 70%
+      color-mix(in srgb, var(--flavor-agent-accent) 14%, transparent),
+      color-mix(in srgb, var(--flavor-agent-warm) 10%, transparent) 52%,
+      transparent 82%
     ),
     var(--flavor-agent-surface);
 }
 
+.flavor-agent-panel__intro::before,
+.flavor-agent-panel__intro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.flavor-agent-panel__intro::before {
+  background-image:
+    linear-gradient(rgba(31, 45, 52, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 45, 52, 0.08) 1px, transparent 1px);
+  background-position: center;
+  background-size: 18px 18px;
+  mask-image: linear-gradient(
+    115deg,
+    rgba(0, 0, 0, 0.1),
+    rgba(0, 0, 0, 0.75) 45%,
+    rgba(0, 0, 0, 0.08)
+  );
+  opacity: 0.28;
+}
+
+.flavor-agent-panel__intro::after {
+  inset: auto -18% -48% 42%;
+  height: 120px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--flavor-agent-accent) 18%, white),
+    transparent 64%
+  );
+  filter: blur(10px);
+  opacity: 0.9;
+}
+
 .flavor-agent-panel__eyebrow {
+  position: relative;
+  z-index: 1;
   margin: 0 0 4px;
   font-size: 10px;
   font-weight: 700;
@@ -84,10 +122,13 @@
 }
 
 .flavor-agent-panel__intro-copy {
+  position: relative;
+  z-index: 1;
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--flavor-agent-muted);
+  max-width: 36ch;
 }
 
 .flavor-agent-panel__composer {
@@ -103,6 +144,7 @@
 
 .flavor-agent-panel__group {
   padding: 12px;
+  border-radius: 16px;
 }
 
 .flavor-agent-panel__group-header {
@@ -361,7 +403,7 @@
   padding: 12px;
   margin-bottom: 0;
   background: var(--wp-components-color-background, #fff);
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid var(--flavor-agent-border);
   box-shadow: var(--flavor-agent-shadow);
 }
@@ -640,14 +682,24 @@
 
 .flavor-agent-prompt textarea {
   min-height: 78px;
-  border-radius: 8px;
+  border-radius: 12px;
+  border-color: color-mix(in srgb, var(--flavor-agent-accent) 18%, white);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .flavor-agent-fetch-button {
   width: 100%;
   justify-content: center;
   min-height: 34px;
-  border-radius: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    135deg,
+    var(--flavor-agent-accent),
+    color-mix(in srgb, var(--flavor-agent-accent) 76%, var(--flavor-agent-warm))
+  );
+  border-color: var(--flavor-agent-accent);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(11, 123, 128, 0.18);
 }
 
 .flavor-agent-navigation-list {
@@ -776,7 +828,7 @@
 
 .flavor-agent-action-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
-    var(--wp-components-color-accent, #3858e9);
+    var(--flavor-agent-accent);
 }
 
 .flavor-agent-action-link.components-button.is-link[disabled] {
@@ -789,16 +841,16 @@
   font-family: monospace;
   background: color-mix(
     in srgb,
-    var(--wp-components-color-accent, #3858e9) 10%,
+    var(--flavor-agent-accent) 10%,
     transparent
   );
-  color: var(--wp-components-color-accent, #3858e9);
+  color: var(--flavor-agent-accent);
 }
 
 .flavor-agent-action-link--part.components-button.is-link:hover {
   background: color-mix(
     in srgb,
-    var(--wp-components-color-accent, #3858e9) 18%,
+    var(--flavor-agent-accent) 18%,
     transparent
   );
 }
@@ -874,32 +926,32 @@
 
 .flavor-agent-inline-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
-    var(--wp-components-color-accent, #3858e9);
+    var(--flavor-agent-accent);
 }
 
 /* Inline type: part — blue accent, highlights the slug in running text */
 .flavor-agent-inline-link--part.components-button.is-link {
-  color: var(--wp-components-color-accent, #3858e9);
+  color: var(--flavor-agent-accent);
 }
 
 .flavor-agent-inline-link--part.components-button.is-link:hover {
   background: color-mix(
     in srgb,
-    var(--wp-components-color-accent, #3858e9) 8%,
+    var(--flavor-agent-accent) 8%,
     transparent
   );
 }
 
 /* Inline type: area — same accent so "header" / "footer" stand out */
 .flavor-agent-inline-link--area.components-button.is-link {
-  color: var(--wp-components-color-accent, #3858e9);
+  color: var(--flavor-agent-accent);
   font-weight: 500;
 }
 
 .flavor-agent-inline-link--area.components-button.is-link:hover {
   background: color-mix(
     in srgb,
-    var(--wp-components-color-accent, #3858e9) 8%,
+    var(--flavor-agent-accent) 8%,
     transparent
   );
 }
@@ -949,10 +1001,10 @@
   font-family: monospace;
   background: color-mix(
     in srgb,
-    var(--wp-components-color-accent, #3858e9) 10%,
+    var(--flavor-agent-accent) 10%,
     transparent
   );
-  color: var(--wp-components-color-accent, #3858e9);
+  color: var(--flavor-agent-accent);
 }
 
 .flavor-agent-preview-token--area {
@@ -1006,7 +1058,7 @@
   padding: 0;
   box-sizing: border-box;
   border-radius: 999px;
-  background: var(--wp-components-color-accent, #3858e9);
+  background: var(--flavor-agent-accent);
   color: #fff;
   font-size: 11px;
   font-weight: 700;

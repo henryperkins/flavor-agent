@@ -88,4 +88,31 @@ describe( 'resolveInspectorPanels', () => {
 		expect( manifest.bindableAttributes ).toEqual( [ 'content' ] );
 		expect( manifest.inspectorPanels.bindings ).toEqual( [ 'content' ] );
 	} );
+
+	test( 'adds a general panel for meaningful config attributes when no mapped supports exist', () => {
+		blocksSelectors.getBlockType.mockReturnValue( {
+			title: 'Spacer',
+			category: 'design',
+			description: 'Spacer block',
+			supports: {},
+			attributes: {
+				height: {
+					type: 'string',
+				},
+				metadata: {
+					type: 'object',
+				},
+				className: {
+					type: 'string',
+				},
+				style: {
+					type: 'object',
+				},
+			},
+		} );
+
+		const manifest = introspectBlockType( 'core/spacer' );
+
+		expect( manifest.inspectorPanels.general ).toEqual( [ 'height' ] );
+	} );
 } );

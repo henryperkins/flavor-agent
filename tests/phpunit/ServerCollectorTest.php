@@ -203,6 +203,33 @@ final class ServerCollectorTest extends TestCase {
 		);
 	}
 
+	public function test_introspect_block_type_adds_general_panel_for_meaningful_config_attributes(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/configurable-block',
+			[
+				'title'      => 'Configurable Block',
+				'attributes' => [
+					'height'    => [
+						'type' => 'string',
+					],
+					'metadata'  => [
+						'type' => 'object',
+					],
+					'className' => [
+						'type' => 'string',
+					],
+					'style'     => [
+						'type' => 'object',
+					],
+				],
+			]
+		);
+
+		$manifest = ServerCollector::introspect_block_type( 'plugin/configurable-block' );
+
+		$this->assertSame( [ 'height' ], $manifest['inspectorPanels']['general'] );
+	}
+
 	public function test_for_template_limits_candidate_patterns_after_typed_then_generic_ordering(): void {
 		for ( $index = 1; $index <= 20; $index++ ) {
 			$this->register_pattern(

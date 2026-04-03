@@ -183,6 +183,7 @@ function flavor_agent_enqueue_editor(): void {
 			],
 			'canRecommendBlocks'           => $surface_capabilities['block']['available'],
 			'canRecommendPatterns'         => $surface_capabilities['pattern']['available'],
+			'canRecommendContent'          => $surface_capabilities['content']['available'],
 			'canRecommendTemplates'        => $surface_capabilities['template']['available'],
 			'canRecommendTemplateParts'    => $surface_capabilities['templatePart']['available'],
 			'canRecommendNavigation'       => $surface_capabilities['navigation']['available'],

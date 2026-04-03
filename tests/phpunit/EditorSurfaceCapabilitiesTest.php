@@ -39,6 +39,12 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 			$capabilities['pattern']['message']
 		);
+		$this->assertSame( [], $capabilities['content']['actions'] );
+		$this->assertSame( '', $capabilities['content']['configurationLabel'] );
+		$this->assertSame(
+			'Content recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			$capabilities['content']['message']
+		);
 		$this->assertSame( '', $capabilities['template']['configurationLabel'] );
 		$this->assertSame( '', $capabilities['templatePart']['configurationLabel'] );
 		$this->assertSame( [], $capabilities['navigation']['actions'] );
@@ -97,6 +103,24 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame(
 			'Settings > Flavor Agent',
 			$capabilities['pattern']['configurationLabel']
+		);
+		$this->assertSame(
+			[
+				[
+					'label' => 'Settings > Flavor Agent',
+					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+				],
+				[
+					'label' => 'Settings > Connectors',
+					'href'  => 'https://example.test/wp-admin/options-connectors.php',
+				],
+			],
+			$capabilities['content']['actions']
+		);
+		$this->assertSame( 'Settings > Flavor Agent', $capabilities['content']['configurationLabel'] );
+		$this->assertSame(
+			'Content recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this lane.',
+			$capabilities['content']['message']
 		);
 		$this->assertSame(
 			[

@@ -46,6 +46,13 @@ final class ServerCollector {
 		'listView'                   => 'list',
 	];
 
+	private const GENERAL_PANEL_EXCLUDED_ATTRIBUTES = [
+		'className' => true,
+		'metadata'  => true,
+		'style'     => true,
+		'lock'      => true,
+	];
+
 	private const DEFAULT_BINDABLE_ATTRIBUTES = [
 		'core/paragraph' => [ 'content' ],
 		'core/heading'   => [ 'content' ],
@@ -116,7 +123,10 @@ final class ServerCollector {
 			'supports'            => $supports,
 			'supportsContentRole' => $supports_content_role,
 			'inspectorPanels'     => self::merge_bindings_inspector_panel(
-				self::resolve_inspector_panels( $supports ),
+				self::merge_general_inspector_panel(
+					self::resolve_inspector_panels( $supports ),
+					$config_attrs
+				),
 				$bindable_attributes
 			),
 			'bindableAttributes'  => $bindable_attributes,
@@ -165,7 +175,7 @@ final class ServerCollector {
 	 */
 	private static function resolve_bindable_attributes( string $block_name ): array {
 		if ( function_exists( 'get_block_bindings_supported_attributes' ) ) {
-			return StringArray::sanitize( get_block_bindings_supported_attributes( $block_name ) );
+			return StringArray::sanitize( \get_block_bindings_supported_attributes( $block_name ) );
 		}
 
 		return StringArray::sanitize( self::DEFAULT_BINDABLE_ATTRIBUTES[ $block_name ] ?? [] );
@@ -180,6 +190,32 @@ final class ServerCollector {
 		}
 
 		$inspector_panels['bindings'] = $bindable_attributes;
+
+		return $inspector_panels;
+	}
+
+	private static function merge_general_inspector_panel( array $inspector_panels, array $config_attributes ): array {
+		$general_attributes = array_values(
+			array_filter(
+				array_keys( $config_attributes ),
+				static fn( $attribute_name ): bool =>
+					is_string( $attribute_name )
+					&& $attribute_name !== ''
+					&& ! isset( self::GENERAL_PANEL_EXCLUDED_ATTRIBUTES[ $attribute_name ] )
+			)
+		);
+
+		if ( [] === $general_attributes ) {
+			return $inspector_panels;
+		}
+
+		$existing_general = StringArray::sanitize( $inspector_panels['general'] ?? [] );
+
+		$inspector_panels['general'] = array_values(
+			array_unique(
+				array_merge( $existing_general, $general_attributes )
+			)
+		);
 
 		return $inspector_panels;
 	}

@@ -155,6 +155,24 @@ final class PromptGuidanceTest extends TestCase {
 			'Settings tab (layout, alignment, position, advanced, bindings, list, general config)',
 			$prompt
 		);
+		$this->assertStringContainsString(
+			'Do not say the panels were not provided.',
+			$prompt
+		);
+	}
+
+	public function test_block_prompt_reports_explicitly_empty_available_panels(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'       => [
+					'name'            => 'plugin/plain-block',
+					'inspectorPanels' => [],
+				],
+				'themeTokens' => [],
+			]
+		);
+
+		$this->assertStringContainsString( 'Available panels: []', $prompt );
 	}
 
 	public function test_block_prompt_includes_duotone_token_summary_when_available(): void {

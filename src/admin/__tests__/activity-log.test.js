@@ -276,7 +276,7 @@ function getVisibleTitles() {
 
 function getSummaryCardValue( label ) {
 	const summaryCard = Array.from(
-		getContainer().querySelectorAll( '.flavor-agent-activity-log__summary-card' )
+		getContainer().querySelectorAll( '.flavor-agent-activity-log__summary-item' )
 	).find( ( element ) => element.textContent.includes( label ) );
 
 	return summaryCard?.querySelector(
@@ -485,27 +485,32 @@ describe( 'ActivityLogApp', () => {
 		] );
 	} );
 
-	test( 'adds an accessible name to the icon-only settings control', async () => {
+	test( 'renders the global masthead actions', async () => {
 		await renderApp( [ createEntry() ] );
 
-		const settingsLink = getContainer().querySelector(
-			'a[aria-label="Open Flavor Agent settings"]'
+		const settingsLink = Array.from(
+			getContainer().querySelectorAll( 'a' )
+		).find(
+			( element ) => element.textContent === 'Flavor Agent settings'
 		);
+		const connectorsLink = Array.from(
+			getContainer().querySelectorAll( 'a' )
+		).find( ( element ) => element.textContent === 'Connectors' );
 
 		expect( settingsLink ).not.toBeNull();
 		expect( settingsLink.getAttribute( 'href' ) ).toBe(
 			BOOT_DATA.settingsUrl
 		);
+		expect( connectorsLink ).not.toBeNull();
+		expect( connectorsLink.getAttribute( 'href' ) ).toBe(
+			BOOT_DATA.connectorsUrl
+		);
 	} );
 
-	test( 'keeps target navigation on href-backed links instead of feed actions', async () => {
+	test( 'uses row selection instead of per-entry feed actions', async () => {
 		await renderApp( [ createEntry() ] );
 
-		expect(
-			getDataViewsMockState().latestProps.actions.map(
-				( action ) => action.id
-			)
-		).toEqual( [ 'inspect' ] );
+		expect( getDataViewsMockState().latestProps.actions ).toBeUndefined();
 
 		const targetLink = Array.from( getContainer().querySelectorAll( 'a' ) ).find(
 			( element ) => element.textContent === 'Open post'
@@ -535,9 +540,11 @@ describe( 'ActivityLogApp', () => {
 			( field ) => field.id === 'blockPath'
 		);
 
-		expect( getDataViewsMockState().latestProps.view.fields ).toEqual(
-			expect.arrayContaining( [ 'operationType', 'postType' ] )
-		);
+		expect( getDataViewsMockState().latestProps.view.fields ).toEqual( [
+			'timestampDisplay',
+			'status',
+			'surface',
+		] );
 		expect( actionTypeField.filterBy.operators ).toEqual( [
 			'is',
 			'isNot',

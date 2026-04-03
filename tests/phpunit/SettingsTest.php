@@ -250,7 +250,7 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_sanitize_openai_provider_accepts_a_registered_connector_provider(): void {
-		WordPressTestState::$connectors                = [
+		WordPressTestState::$connectors = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -261,6 +261,7 @@ final class SettingsTest extends TestCase {
 				],
 			],
 		];
+
 		WordPressTestState::$ai_client_provider_support = [
 			'anthropic' => true,
 		];
@@ -791,10 +792,11 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_render_select_field_lists_configured_connector_providers(): void {
-		WordPressTestState::$options                   = [
+		WordPressTestState::$options = [
 			Provider::OPTION_NAME => 'anthropic',
 		];
-		WordPressTestState::$connectors                = [
+
+		WordPressTestState::$connectors = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -814,6 +816,7 @@ final class SettingsTest extends TestCase {
 				],
 			],
 		];
+
 		WordPressTestState::$ai_client_provider_support = [
 			'anthropic' => true,
 			'google'    => false,

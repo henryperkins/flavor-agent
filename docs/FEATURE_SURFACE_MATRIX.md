@@ -27,12 +27,13 @@ Use this together with `docs/features/README.md` for per-surface flows and `docs
 
 | Surface | Where it lives | Gating model | What it provides | Reference |
 |---|---|---|---|---|
-| WordPress Abilities API | Server-registered abilities under the `flavor-agent` category; hydrated by core on supported WordPress 7.0+ admin screens | Each ability is gated by capability and, where relevant, backend availability | Twelve structured abilities for recommendations, listings, docs grounding, theme tokens, style intelligence, and backend status | `docs/reference/abilities-and-routes.md` |
+| WordPress Abilities API | Server-registered abilities under the `flavor-agent` category; hydrated by core on supported WordPress 7.0+ admin screens | Each ability is gated by capability and, where relevant, backend availability | Thirteen structured abilities for recommendations, content drafting/critique, listings, docs grounding, theme tokens, style intelligence, and backend status | `docs/reference/abilities-and-routes.md` |
 | Flavor Agent REST API | Routes under `flavor-agent/v1` consumed by the `flavor-agent` data store and admin scripts | Per-route capability callbacks plus route-specific validation and sanitization | First-party request/response path for recommendations, server-backed activity, and manual pattern sync | `docs/reference/abilities-and-routes.md` |
 
 ## Quick Mapping
 
 - Block Inspector -> `POST /flavor-agent/v1/recommend-block` -> `flavor-agent/recommend-block`
+- Programmatic content lane -> `POST /flavor-agent/v1/recommend-content` -> `flavor-agent/recommend-content`
 - Pattern Inserter -> `POST /flavor-agent/v1/recommend-patterns` -> `flavor-agent/recommend-patterns`
 - Navigation Inspector -> `POST /flavor-agent/v1/recommend-navigation` -> `flavor-agent/recommend-navigation`
 - Template panel -> `POST /flavor-agent/v1/recommend-template` -> `flavor-agent/recommend-template`
@@ -40,6 +41,8 @@ Use this together with `docs/features/README.md` for per-surface flows and `docs
 - Global Styles / Style Book panel -> `POST /flavor-agent/v1/recommend-style` -> `flavor-agent/recommend-style`
 - Inline and admin activity -> `GET/POST /flavor-agent/v1/activity` and `POST /flavor-agent/v1/activity/{id}/undo` (REST only)
 - Settings sync button -> `POST /flavor-agent/v1/sync-patterns` (REST only)
+
+Content recommendations are scaffolded programmatically today. There is no first-party post-editor panel yet.
 
 ## Update Rule
 

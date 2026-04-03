@@ -84,7 +84,9 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['model'] );
 		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-content', $status['availableAbilities'] );
 		$this->assertSame( 'plugin_or_core', $status['surfaces']['block']['owner'] );
+		$this->assertTrue( $status['surfaces']['content']['available'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
@@ -117,12 +119,14 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['configured'] );
 		$this->assertSame( 'gpt-5.4', $status['model'] );
 		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-content', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
 		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['content']['available'] );
 		$this->assertTrue( $status['surfaces']['navigation']['available'] );
 		$this->assertTrue( $status['surfaces']['globalStyles']['available'] );
 		$this->assertTrue( $status['backends']['openai_native']['configured'] );
@@ -189,7 +193,8 @@ final class InfraAbilitiesTest extends TestCase {
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$options      = [
+
+		WordPressTestState::$options = [
 			'flavor_agent_openai_provider'               => 'azure_openai',
 			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
@@ -220,14 +225,16 @@ final class InfraAbilitiesTest extends TestCase {
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$options      = [
+
+		WordPressTestState::$options = [
 			'flavor_agent_openai_provider'               => 'anthropic',
 			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
-		WordPressTestState::$connectors   = [
+
+		WordPressTestState::$connectors = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -238,7 +245,9 @@ final class InfraAbilitiesTest extends TestCase {
 				],
 			],
 		];
+
 		WordPressTestState::$ai_client_supported = true;
+
 		WordPressTestState::$ai_client_provider_support = [
 			'anthropic' => true,
 		];
@@ -265,12 +274,14 @@ final class InfraAbilitiesTest extends TestCase {
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$options      = [
+
+		WordPressTestState::$options = [
 			'flavor_agent_openai_provider' => 'anthropic',
 			'flavor_agent_qdrant_url'      => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'      => 'qdrant-key',
 		];
-		WordPressTestState::$connectors   = [
+
+		WordPressTestState::$connectors = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -281,7 +292,9 @@ final class InfraAbilitiesTest extends TestCase {
 				],
 			],
 		];
+
 		WordPressTestState::$ai_client_supported = true;
+
 		WordPressTestState::$ai_client_provider_support = [
 			'anthropic' => true,
 		];

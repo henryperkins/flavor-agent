@@ -52,6 +52,13 @@ const SUPPORT_TO_PANEL = {
 	listView: 'list',
 };
 
+const GENERAL_PANEL_EXCLUDED_ATTRIBUTES = new Set( [
+	'className',
+	'metadata',
+	'style',
+	'lock',
+] );
+
 /**
  * Flatten a nested supports object into dot-path -> value entries.
  *
@@ -173,6 +180,31 @@ function addBindingsPanel( blockName, inspectorPanels ) {
 	};
 }
 
+function addGeneralPanel( inspectorPanels, configAttributes ) {
+	const generalAttributes = Object.keys( configAttributes ).filter(
+		( attributeName ) =>
+			! GENERAL_PANEL_EXCLUDED_ATTRIBUTES.has( attributeName )
+	);
+
+	if ( ! generalAttributes.length ) {
+		return inspectorPanels;
+	}
+
+	const existingGeneralAttributes = Array.isArray( inspectorPanels.general )
+		? inspectorPanels.general
+		: [];
+
+	return {
+		...inspectorPanels,
+		general: [
+			...new Set( [
+				...existingGeneralAttributes,
+				...generalAttributes,
+			] ),
+		],
+	};
+}
+
 /**
  * Introspect a single block type by name.
  *
@@ -191,10 +223,6 @@ export function introspectBlockType( blockName ) {
 	const attributes = blockType.attributes || {};
 	const styles = store.getBlockStyles( blockName ) || [];
 	const variations = store.getBlockVariations( blockName, 'block' ) || [];
-	const { bindableAttributes, inspectorPanels } = addBindingsPanel(
-		blockName,
-		resolveInspectorPanels( supports )
-	);
 
 	const contentAttrs = {};
 	const configAttrs = {};
@@ -218,6 +246,11 @@ export function introspectBlockType( blockName ) {
 			configAttrs[ name ] = entry;
 		}
 	}
+
+	const { bindableAttributes, inspectorPanels } = addBindingsPanel(
+		blockName,
+		addGeneralPanel( resolveInspectorPanels( supports ), configAttrs )
+	);
 
 	return {
 		name: blockName,

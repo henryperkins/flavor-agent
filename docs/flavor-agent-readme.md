@@ -198,6 +198,7 @@ The same screen also includes a `Sync Pattern Catalog` action that calls `POST /
 Implemented abilities:
 
 - `flavor-agent/recommend-block`
+- `flavor-agent/recommend-content`
 - `flavor-agent/introspect-block`
 - `flavor-agent/recommend-patterns`
 - `flavor-agent/list-patterns`

@@ -194,6 +194,63 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_recommend_content_forwards_post_context(): void {
+		WordPressTestState::$options                        = [];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'mode'    => 'critique',
+				'title'   => 'Retail floors to agent workflows',
+				'summary' => 'Lead with the progression and cut the generic opener.',
+				'content' => "Retail floors.\nWordPress themes.\nCloud platforms.\nAgentic AI.",
+				'notes'   => [ 'The progression is the story.' ],
+				'issues'  => [
+					[
+						'original' => 'Technology is rapidly changing.',
+						'problem'  => 'This reads like boilerplate.',
+						'revision' => 'The tools changed. The instinct did not.',
+					],
+				],
+			]
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-content' );
+		$request->set_param( 'mode', 'critique' );
+		$request->set_param( 'prompt', 'Tighten the voice and call out the flat lines.' );
+		$request->set_param( 'voiceProfile', 'Keep the humor dry.' );
+		$request->set_param(
+			'postContext',
+			[
+				'postType' => 'post',
+				'title'    => 'Working draft',
+				'content'  => 'Technology is rapidly changing.',
+				'tags'     => [ 'ai', 'wordpress' ],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_content( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'critique', $response->get_data()['mode'] ?? null );
+		$this->assertSame(
+			'The tools changed. The instinct did not.',
+			$response->get_data()['issues'][0]['revision'] ?? null
+		);
+		$this->assertStringContainsString(
+			'Henry Perkins\'s voice',
+			WordPressTestState::$last_ai_client_prompt['system'] ?? ''
+		);
+		$this->assertStringContainsString(
+			'Technology is rapidly changing.',
+			WordPressTestState::$last_ai_client_prompt['text'] ?? ''
+		);
+		$this->assertStringContainsString(
+			'Tighten the voice and call out the flat lines.',
+			WordPressTestState::$last_ai_client_prompt['text'] ?? ''
+		);
+	}
+
 	public function test_handle_recommend_template_visible_filter_applies_before_candidate_cap(): void {
 		// Register 31 typed patterns so the 31st falls outside the
 		// TEMPLATE_PATTERN_CANDIDATE_CAP of 30 when unfiltered.

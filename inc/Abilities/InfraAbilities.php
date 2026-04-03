@@ -120,6 +120,7 @@ final class InfraAbilities {
 		$abilities = [];
 
 		self::maybe_add_ability( $abilities, 'flavor-agent/introspect-block', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-content', 'edit_posts', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-patterns', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-template-parts', 'edit_theme_options' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-tokens', 'edit_posts' );

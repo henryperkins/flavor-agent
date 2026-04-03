@@ -14,12 +14,12 @@ import {
 	check,
 	page,
 	plugins,
-	settings,
 	symbol,
 	undo,
 	warning,
 } from '@wordpress/icons';
 import '@wordpress/dataviews/build-style/style.css';
+import './brand.css';
 import './activity-log.css';
 import {
 	areActivityViewsEqual,
@@ -66,29 +66,25 @@ function getSummaryCards( entries ) {
 			id: 'total',
 			label: 'Recorded actions',
 			value: summary?.total || 0,
-			description:
-				'Filtered server-backed AI activity across Flavor Agent surfaces.',
+			description: '',
 		},
 		{
 			id: 'applied',
 			label: 'Still applied',
 			value: summary?.applied || 0,
-			description:
-				'Entries that still remain applied across the full filtered result set.',
+			description: '',
 		},
 		{
 			id: 'undone',
 			label: 'Undone',
 			value: summary?.undone || 0,
-			description:
-				'Entries already reversed and synced to the audit store.',
+			description: '',
 		},
 		{
 			id: 'review',
 			label: 'Needs review',
 			value: summary?.review || 0,
-			description:
-				'Entries with blocked or failed undo paths that need operator context.',
+			description: '',
 		},
 	];
 }
@@ -300,14 +296,6 @@ function EmptyState( { view } ) {
 	);
 }
 
-function DetailLink( { href, label } ) {
-	if ( ! href ) {
-		return <span>Not available</span>;
-	}
-
-	return <a href={ href }>{ label }</a>;
-}
-
 function getDetailFields() {
 	return [
 		{
@@ -345,13 +333,6 @@ function getDetailFields() {
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => <span>{ item.undoStatusLabel }</span>,
-		},
-		{
-			id: 'linksSummary',
-			label: 'Links summary',
-			type: 'text',
-			readOnly: true,
-			render: () => <span>Open target and settings</span>,
 		},
 		{
 			id: 'statusLabel',
@@ -518,39 +499,6 @@ function getDetailFields() {
 				</pre>
 			),
 		},
-		{
-			id: 'targetLink',
-			label: 'Affected target',
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<DetailLink
-					href={ item.targetUrl }
-					label={ item.targetLinkLabel }
-				/>
-			),
-		},
-		{
-			id: 'settingsLink',
-			label: 'Flavor Agent settings',
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<DetailLink href={ item.settingsUrl } label="Open settings" />
-			),
-		},
-		{
-			id: 'connectorsLink',
-			label: 'Connectors',
-			type: 'text',
-			readOnly: true,
-			render: ( { item } ) => (
-				<DetailLink
-					href={ item.connectorsUrl }
-					label="Open connectors"
-				/>
-			),
-		},
 	];
 }
 
@@ -614,15 +562,6 @@ function getDetailForm() {
 					type: 'details',
 				},
 			},
-			{
-				id: 'links',
-				label: 'Links',
-				children: [ 'targetLink', 'settingsLink', 'connectorsLink' ],
-				layout: {
-					type: 'details',
-					summary: 'linksSummary',
-				},
-			},
 		],
 	};
 }
@@ -656,23 +595,13 @@ function ActivityEntryDetails( { entry } ) {
 							{ entry.description }
 						</p>
 					</div>
-					<div className="flavor-agent-activity-log__sidebar-actions">
-						{ entry.targetUrl && (
-							<Button
-								href={ entry.targetUrl }
-								variant="secondary"
-							>
+					{ entry.targetUrl && (
+						<div className="flavor-agent-activity-log__sidebar-actions">
+							<Button href={ entry.targetUrl } variant="secondary">
 								{ entry.targetLinkLabel }
 							</Button>
-						) }
-						<Button
-							aria-label="Open Flavor Agent settings"
-							href={ entry.settingsUrl }
-							variant="tertiary"
-						>
-							<Icon aria-hidden="true" icon={ settings } />
-						</Button>
-					</div>
+						</div>
+					) }
 				</div>
 			</CardHeader>
 			<CardBody>
@@ -879,6 +808,15 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
+				render: ( { item } ) => (
+					<span
+						className={ `flavor-agent-activity-log__entry-title${
+							item.id === selectedEntryId ? ' is-current' : ''
+						}` }
+					>
+						{ item.title }
+					</span>
+				),
 			},
 			{
 				id: 'description',
@@ -886,6 +824,11 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
+				render: ( { item } ) => (
+					<span className="flavor-agent-activity-log__entry-description">
+						{ item.description }
+					</span>
+				),
 			},
 			{
 				id: 'day',
@@ -1039,7 +982,7 @@ export function ActivityLogApp( { bootData } ) {
 				enableGlobalSearch: true,
 			},
 		];
-	}, [ responseData ] );
+	}, [ responseData, selectedEntryId ] );
 
 	const selectedEntry =
 		responseData.entries.find(
@@ -1082,18 +1025,22 @@ export function ActivityLogApp( { bootData } ) {
 
 	return (
 		<div className="flavor-agent-activity-log">
-			<div className="flavor-agent-activity-log__intro">
-				<div>
-					<h1 className="flavor-agent-activity-log__page-title">
-						AI Activity Log
-					</h1>
+			<div className="flavor-agent-activity-log__masthead">
+				<div className="flavor-agent-activity-log__masthead-copy">
+					<p className="flavor-agent-activity-log__eyebrow">
+						Flavor Agent
+					</p>
+					<div className="flavor-agent-activity-log__title-row">
+						<h1 className="flavor-agent-activity-log__page-title">
+							AI Activity Log
+						</h1>
+					</div>
 					<p className="flavor-agent-activity-log__copy">
-						Review recent server-backed AI actions across the
-						editor, Site Editor, and admin-side Flavor Agent
-						workflows.
+						Review recent AI actions across editor, Site Editor, and
+						admin surfaces.
 					</p>
 				</div>
-				<div className="flavor-agent-activity-log__intro-actions">
+				<div className="flavor-agent-activity-log__masthead-actions">
 					<Button
 						variant="secondary"
 						onClick={ () =>
@@ -1107,38 +1054,10 @@ export function ActivityLogApp( { bootData } ) {
 						Flavor Agent settings
 					</Button>
 					<Button href={ bootData.connectorsUrl } variant="tertiary">
-						<Icon icon={ plugins } />
-						<span>Connectors</span>
+						Connectors
 					</Button>
 				</div>
 			</div>
-
-			<div className="flavor-agent-activity-log__summary">
-				{ summaryCards.map( ( card ) => (
-					<Card
-						key={ card.id }
-						className="flavor-agent-activity-log__summary-card"
-					>
-						<CardBody>
-							<div className="flavor-agent-activity-log__summary-label">
-								{ card.label }
-							</div>
-							<div className="flavor-agent-activity-log__summary-value">
-								{ card.value }
-							</div>
-							<p className="flavor-agent-activity-log__copy">
-								{ card.description }
-							</p>
-						</CardBody>
-					</Card>
-				) ) }
-			</div>
-
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			) }
 
 			<DataViews
 				data={ responseData.entries }
@@ -1156,46 +1075,56 @@ export function ActivityLogApp( { bootData } ) {
 				} }
 				isItemClickable={ () => true }
 				onClickItem={ ( item ) => setSelectedEntryId( item.id ) }
-				actions={ [
-					{
-						id: 'inspect',
-						label: 'Inspect entry',
-						isPrimary: true,
-						callback: ( items ) => {
-							if ( items[ 0 ] ) {
-								setSelectedEntryId( items[ 0 ].id );
-							}
-						},
-					},
-				] }
 				config={ {
 					perPageSizes,
 				} }
-				onReset={
-					isViewModified ? () => setView( defaultView ) : false
-				}
+				onReset={ isViewModified ? () => setView( defaultView ) : false }
 				isLoading={ isLoading }
 				empty={ <EmptyState view={ effectiveView } /> }
 			>
-				<div className="flavor-agent-activity-log__controls">
-					<div className="flavor-agent-activity-log__controls-main">
-						<DataViews.Search label="Search AI activity" />
-						<DataViews.FiltersToggle />
-						{ isLoading && <Spinner /> }
-					</div>
-					<div className="flavor-agent-activity-log__controls-actions">
-						<DataViews.ViewConfig />
-						{ isViewModified && (
-							<Button
-								variant="secondary"
-								onClick={ () => setView( defaultView ) }
+				<div className="flavor-agent-activity-log__overview">
+					<div className="flavor-agent-activity-log__summary">
+						{ summaryCards.map( ( card ) => (
+							<div
+								key={ card.id }
+								className="flavor-agent-activity-log__summary-item"
 							>
-								Reset view
-							</Button>
-						) }
+								<div className="flavor-agent-activity-log__summary-label">
+									{ card.label }
+								</div>
+								<div className="flavor-agent-activity-log__summary-value">
+									{ card.value }
+								</div>
+							</div>
+						) ) }
+					</div>
+					<div className="flavor-agent-activity-log__toolbar">
+						<div className="flavor-agent-activity-log__controls">
+							<div className="flavor-agent-activity-log__controls-main">
+								<div className="flavor-agent-activity-log__search">
+									<DataViews.Search label="Search AI activity" />
+								</div>
+								{ isLoading && <Spinner /> }
+							</div>
+							<div className="flavor-agent-activity-log__controls-actions">
+								<DataViews.FiltersToggle />
+								<DataViews.ViewConfig />
+								{ isViewModified && (
+									<Button
+										variant="secondary"
+										onClick={ () => setView( defaultView ) }
+									>
+										Reset view
+									</Button>
+								) }
+							</div>
+						</div>
+						<div className="flavor-agent-activity-log__filters">
+							<DataViews.FiltersToggled />
+						</div>
 					</div>
 				</div>
-				<DataViews.FiltersToggled />
+
 				<div className="flavor-agent-activity-log__content">
 					<div className="flavor-agent-activity-log__feed">
 						<Card className="flavor-agent-activity-log__feed-card">
@@ -1212,6 +1141,12 @@ export function ActivityLogApp( { bootData } ) {
 					</div>
 				</div>
 			</DataViews>
+
+			{ error && (
+				<Notice status="error" isDismissible={ false }>
+					{ error }
+				</Notice>
+			) }
 		</div>
 	);
 }

@@ -13,10 +13,10 @@ final class Provider {
 	public const NATIVE      = 'openai_native';
 
 	private const WORDPRESS_AI_CLIENT_PROVIDER = 'wordpress_ai_client';
-	private const OPENAI_CONNECTOR_ID     = 'openai';
-	private const CONNECTOR_OPENAI_OPTION = 'connectors_ai_openai_api_key';
-	private const NATIVE_API_KEY_ENV_VAR  = 'OPENAI_API_KEY';
-	private const NATIVE_BASE_URL         = 'https://api.openai.com';
+	private const OPENAI_CONNECTOR_ID          = 'openai';
+	private const CONNECTOR_OPENAI_OPTION      = 'connectors_ai_openai_api_key';
+	private const NATIVE_API_KEY_ENV_VAR       = 'OPENAI_API_KEY';
+	private const NATIVE_BASE_URL              = 'https://api.openai.com';
 
 	/**
 	 * @return array<string, string>
@@ -89,9 +89,7 @@ final class Provider {
 			? $authentication['setting_name']
 			: self::CONNECTOR_OPENAI_OPTION;
 		$key_source      = self::connector_api_key_source( self::OPENAI_CONNECTOR_ID, $setting_name );
-		$is_registered   = function_exists( 'wp_is_connector_registered' )
-			? wp_is_connector_registered( self::OPENAI_CONNECTOR_ID )
-			: null !== $connector;
+		$is_registered   = self::is_connector_registered( self::OPENAI_CONNECTOR_ID, $connector );
 		$credentials_url = is_string( $authentication['credentials_url'] ?? null ) && '' !== $authentication['credentials_url']
 			? $authentication['credentials_url']
 			: null;
@@ -409,13 +407,9 @@ final class Provider {
 	 * @return array<string, string>
 	 */
 	private static function registered_connector_choices(): array {
-		if ( ! function_exists( 'wp_get_connectors' ) ) {
-			return [];
-		}
-
 		$choices = [];
 
-		foreach ( wp_get_connectors() as $provider => $connector ) {
+		foreach ( self::registered_connectors() as $provider => $connector ) {
 			if ( ! is_string( $provider ) || ! is_array( $connector ) ) {
 				continue;
 			}
@@ -503,13 +497,54 @@ final class Provider {
 	 * }|null
 	 */
 	private static function openai_connector(): ?array {
-		if ( ! function_exists( 'wp_get_connector' ) ) {
-			return null;
+		if ( function_exists( 'wp_get_connector' ) ) {
+			try {
+				$connector = wp_get_connector( self::OPENAI_CONNECTOR_ID );
+
+				if ( is_array( $connector ) ) {
+					return $connector;
+				}
+			} catch ( \Throwable $throwable ) {
+				// Fall back to the bulk registry lookup below.
+			}
 		}
 
-		$connector = wp_get_connector( self::OPENAI_CONNECTOR_ID );
+		$connector = self::registered_connectors()[ self::OPENAI_CONNECTOR_ID ] ?? null;
 
 		return is_array( $connector ) ? $connector : null;
+	}
+
+	/**
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function registered_connectors(): array {
+		if ( ! function_exists( 'wp_get_connectors' ) ) {
+			return [];
+		}
+
+		try {
+			$connectors = wp_get_connectors();
+		} catch ( \Throwable $throwable ) {
+			return [];
+		}
+
+		return is_array( $connectors ) ? $connectors : [];
+	}
+
+	private static function is_connector_registered( string $connector_id, ?array $connector = null ): bool {
+		if ( function_exists( 'wp_is_connector_registered' ) ) {
+			try {
+				return wp_is_connector_registered( $connector_id );
+			} catch ( \Throwable $throwable ) {
+				// Fall back to any registry data we can still read below.
+			}
+		}
+
+		if ( null !== $connector ) {
+			return true;
+		}
+
+		return array_key_exists( $connector_id, self::registered_connectors() );
 	}
 
 	/**
