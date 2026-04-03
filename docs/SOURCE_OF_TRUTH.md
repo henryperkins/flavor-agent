@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-02
+> Last updated: 2026-04-03
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -740,7 +740,7 @@ npm run build                        # Production build -> build/index.js, build
 npm start                            # Dev build with watch
 npm run lint:js                      # ESLint on src/
 npm run test:unit -- --runInBand     # Jest unit tests
-npm run test:e2e                     # Default Playwright smoke coverage (currently Playground-only)
+npm run test:e2e                     # Default Playwright smoke coverage (Playground + WP 7.0 harness)
 npm run test:e2e:playground          # Fast 6.9.4 Playground smoke harness
 npm run test:e2e:wp70                # Docker-backed WP 7.0 Site Editor harness
 npm run wp:start                     # Local Docker stack up

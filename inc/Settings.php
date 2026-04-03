@@ -246,7 +246,7 @@ final class Settings {
 			[
 				'option'      => Provider::OPTION_NAME,
 				'choices'     => Provider::choices( Provider::get() ),
-				'description' => 'Choose which provider Flavor Agent should use for recommendation surfaces. Direct Azure OpenAI and OpenAI Native backends are configured below. Any text-generation provider you have already configured in <code>Settings &gt; Connectors</code> also becomes selectable here for chat-backed surfaces. Pattern recommendations still require the plugin-managed embedding backends below plus Qdrant.',
+				'description' => 'Choose which provider Flavor Agent should prefer for recommendation surfaces. Direct Azure OpenAI and OpenAI Native backends are configured below. Any text-generation provider you have already configured in <code>Settings &gt; Connectors</code> also becomes selectable here for chat-backed surfaces. When the selected provider is missing a required capability, Flavor Agent automatically falls back to another compatible configured backend. Pattern recommendations still require a plugin-managed embedding backend below plus Qdrant.',
 			]
 		);
 
@@ -442,7 +442,7 @@ final class Settings {
 			<p class="description">
 				<?php
 				echo esc_html__(
-					'Block, template, template-part, navigation, Global Styles, and Style Book recommendations can use either the direct chat backends configured here or a configured provider selected here from Settings > Connectors. Pattern recommendations still rely on the plugin-managed embedding backends configured on this screen.',
+					'Block, template, template-part, navigation, Global Styles, and Style Book recommendations automatically use any compatible chat backend already configured here or in Settings > Connectors. Pattern recommendations still rely on a plugin-managed embedding backend configured on this screen plus Qdrant, but when chat comes from a Connectors provider Flavor Agent reuses any configured Azure OpenAI or OpenAI Native embedding backend automatically.',
 					'flavor-agent'
 				);
 				?>
@@ -511,7 +511,7 @@ final class Settings {
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__(
-				'Settings > Connectors remains the core-managed home for provider plugins and credentials. This section chooses Flavor Agent\'s active recommendation provider: either the direct Azure OpenAI / OpenAI Native backends configured below, or any text-generation provider that is already configured in Settings > Connectors. Pattern recommendations still require the direct embedding backends below plus Qdrant.',
+				'Settings > Connectors remains the core-managed home for provider plugins and credentials. This section chooses the provider Flavor Agent should prefer first: either the direct Azure OpenAI / OpenAI Native backends configured below, or any text-generation provider that is already configured in Settings > Connectors. If the selected provider cannot satisfy a surface, Flavor Agent falls back to another compatible configured backend automatically. Pattern recommendations still require the direct embedding backends below plus Qdrant.',
 				'flavor-agent'
 			)
 		);

@@ -343,3 +343,11 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 - `inc/REST/Agent_Controller.php`
 - `inc/LLM/StylePrompt.php`
 - `src/store/index.js`
+
+## Contract Verification Checklist
+
+When updating any ability or REST contract, keep these sources aligned:
+
+1. Ability registrations and schemas in `inc/Abilities/Registration.php`
+2. REST route registrations, permission callbacks, and sanitization in `inc/REST/Agent_Controller.php`
+3. First-party callers and payload shaping in `src/store/index.js` and the relevant surface module

@@ -22,7 +22,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Navigation uses the same advisory/status shell as the executable surfaces but intentionally stops at `advisory-ready`
 - There is no preview or apply path here; the user reviews the grouped changes and edits navigation manually
-- Because navigation remains advisory-only through v1.0, it does not create activity entries and does not participate in inline undo
+- Because navigation remains advisory-only through v1.0, it does not create activity entries and does not participate in inline undo (see `docs/features/activity-and-audit.md` for the activity contract)
 
 ## End-To-End Flow
 

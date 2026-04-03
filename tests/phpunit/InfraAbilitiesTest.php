@@ -184,6 +184,82 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'database', $status['backends']['openai_native']['connectorKeySource'] );
 	}
 
+	public function test_check_status_uses_fallback_direct_provider_when_selected_provider_is_unconfigured(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$options      = [
+			'flavor_agent_openai_provider'               => 'azure_openai',
+			'flavor_agent_openai_native_api_key'         => 'native-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
+			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'gpt-5.4', $status['model'] );
+		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
+		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['pattern']['available'] );
+		$this->assertTrue( $status['surfaces']['navigation']['available'] );
+		$this->assertFalse( $status['backends']['azure_openai']['configured'] );
+		$this->assertTrue( $status['backends']['openai_native']['configured'] );
+	}
+
+	public function test_check_status_uses_connector_chat_and_direct_embeddings_for_patterns(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$options      = [
+			'flavor_agent_openai_provider'               => 'anthropic',
+			'flavor_agent_openai_native_api_key'         => 'native-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+		];
+		WordPressTestState::$connectors   = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
+		$this->assertTrue( $status['surfaces']['template']['available'] );
+		$this->assertTrue( $status['surfaces']['pattern']['available'] );
+		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
+		$this->assertFalse( $status['backends']['openai_native']['configured'] );
+		$this->assertSame(
+			'text-embedding-3-large',
+			$status['backends']['openai_native']['embeddingModel']
+		);
+	}
+
 	public function test_check_status_uses_provider_managed_model_for_selected_connector_provider(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts'         => true,

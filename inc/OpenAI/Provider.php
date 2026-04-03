@@ -12,6 +12,7 @@ final class Provider {
 	public const AZURE       = 'azure_openai';
 	public const NATIVE      = 'openai_native';
 
+	private const WORDPRESS_AI_CLIENT_PROVIDER = 'wordpress_ai_client';
 	private const OPENAI_CONNECTOR_ID     = 'openai';
 	private const CONNECTOR_OPENAI_OPTION = 'connectors_ai_openai_api_key';
 	private const NATIVE_API_KEY_ENV_VAR  = 'OPENAI_API_KEY';
@@ -191,6 +192,10 @@ final class Provider {
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	public static function chat_configuration( ?string $provider = null, array $overrides = [] ): array {
+		if ( null === $provider ) {
+			return self::runtime_chat_configuration( $overrides );
+		}
+
 		$provider = self::normalize_provider( $provider ?? self::get() );
 
 		if ( self::is_connector( $provider ) ) {
@@ -245,6 +250,10 @@ final class Provider {
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	public static function embedding_configuration( ?string $provider = null, array $overrides = [] ): array {
+		if ( null === $provider ) {
+			return self::runtime_embedding_configuration( $overrides );
+		}
+
 		$provider = self::normalize_provider( $provider ?? self::get() );
 
 		if ( self::is_connector( $provider ) ) {
@@ -327,6 +336,73 @@ final class Provider {
 	 */
 	private static function all_choices(): array {
 		return self::direct_choices() + self::registered_connector_choices();
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
+	 */
+	private static function runtime_chat_configuration( array $overrides = [] ): array {
+		$selected_provider = self::get();
+		$selected_config   = self::chat_configuration( $selected_provider, $overrides );
+
+		if ( $selected_config['configured'] ) {
+			return $selected_config;
+		}
+
+		foreach ( array_keys( self::direct_choices() ) as $candidate ) {
+			if ( $candidate === $selected_provider ) {
+				continue;
+			}
+
+			$candidate_config = self::chat_configuration( $candidate, $overrides );
+
+			if ( $candidate_config['configured'] ) {
+				return $candidate_config;
+			}
+		}
+
+		if ( WordPressAIClient::is_supported() ) {
+			return [
+				'provider'   => self::WORDPRESS_AI_CLIENT_PROVIDER,
+				'endpoint'   => '',
+				'api_key'    => '',
+				'model'      => 'provider-managed',
+				'configured' => true,
+				'headers'    => [],
+				'url'        => '',
+				'label'      => 'WordPress AI Client',
+			];
+		}
+
+		return $selected_config;
+	}
+
+	/**
+	 * @param array<string, string> $overrides
+	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
+	 */
+	private static function runtime_embedding_configuration( array $overrides = [] ): array {
+		$selected_provider = self::get();
+		$selected_config   = self::embedding_configuration( $selected_provider, $overrides );
+
+		if ( $selected_config['configured'] ) {
+			return $selected_config;
+		}
+
+		foreach ( array_keys( self::direct_choices() ) as $candidate ) {
+			if ( $candidate === $selected_provider ) {
+				continue;
+			}
+
+			$candidate_config = self::embedding_configuration( $candidate, $overrides );
+
+			if ( $candidate_config['configured'] ) {
+				return $candidate_config;
+			}
+		}
+
+		return $selected_config;
 	}
 
 	/**

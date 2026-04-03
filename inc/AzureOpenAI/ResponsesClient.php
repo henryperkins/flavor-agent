@@ -70,13 +70,15 @@ final class ResponsesClient extends BaseHttpClient {
 	 * @return string|\WP_Error The assistant's text response.
 	 */
 	public static function rank( string $instructions, string $input ): string|\WP_Error {
-		$provider = Provider::get();
+		$config = Provider::chat_configuration();
 
-		if ( Provider::is_connector( $provider ) ) {
-			return WordPressAIClient::chat( $instructions, $input, $provider );
+		if ( Provider::is_connector( $config['provider'] ) || 'wordpress_ai_client' === $config['provider'] ) {
+			return WordPressAIClient::chat(
+				$instructions,
+				$input,
+				Provider::is_connector( $config['provider'] ) ? $config['provider'] : null
+			);
 		}
-
-		$config = Provider::chat_configuration( $provider );
 
 		if ( ! $config['configured'] ) {
 			return new \WP_Error(

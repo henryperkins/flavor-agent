@@ -847,7 +847,7 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'configured provider selected here from Settings &gt; Connectors',
+			'automatically use any compatible chat backend already configured here or in Settings &gt; Connectors',
 			$output
 		);
 	}

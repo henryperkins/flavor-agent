@@ -36,7 +36,7 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame( '', $capabilities['pattern']['configurationLabel'] );
 		$this->assertSame( '', $capabilities['pattern']['configurationUrl'] );
 		$this->assertSame(
-			'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 			$capabilities['pattern']['message']
 		);
 		$this->assertSame( '', $capabilities['template']['configurationLabel'] );
@@ -49,15 +49,15 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame( [], $capabilities['styleBook']['actions'] );
 		$this->assertSame( '', $capabilities['styleBook']['configurationLabel'] );
 		$this->assertSame(
-			'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 			$capabilities['navigation']['message']
 		);
 		$this->assertSame(
-			'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 			$capabilities['globalStyles']['message']
 		);
 		$this->assertSame(
-			'Style Book recommendations are not configured yet. Ask an administrator to configure Flavor Agent for this site.',
+			'Style Book recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
 			$capabilities['styleBook']['message']
 		);
 	}
@@ -104,6 +104,10 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 					'label' => 'Settings > Flavor Agent',
 					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 				],
+				[
+					'label' => 'Settings > Connectors',
+					'href'  => 'https://example.test/wp-admin/options-connectors.php',
+				],
 			],
 			$capabilities['navigation']['actions']
 		);
@@ -117,6 +121,10 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 					'label' => 'Settings > Flavor Agent',
 					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 				],
+				[
+					'label' => 'Settings > Connectors',
+					'href'  => 'https://example.test/wp-admin/options-connectors.php',
+				],
 			],
 			$capabilities['globalStyles']['actions']
 		);
@@ -127,12 +135,16 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 					'label' => 'Settings > Flavor Agent',
 					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 				],
+				[
+					'label' => 'Settings > Connectors',
+					'href'  => 'https://example.test/wp-admin/options-connectors.php',
+				],
 			],
 			$capabilities['styleBook']['actions']
 		);
 		$this->assertSame( 'Settings > Flavor Agent', $capabilities['styleBook']['configurationLabel'] );
 		$this->assertSame(
-			'Style Book recommendations rely on Flavor Agent\'s configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.',
+			'Style Book recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
 			$capabilities['styleBook']['message']
 		);
 	}

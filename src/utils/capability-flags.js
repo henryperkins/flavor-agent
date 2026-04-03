@@ -67,7 +67,21 @@ function getDefaultActions( surface, data, reason ) {
 		return [];
 	}
 
-	if ( surface === 'block' ) {
+	if ( surface === 'navigation' && reason === 'missing_theme_capability' ) {
+		return [];
+	}
+
+	if (
+		[
+			'block',
+			'pattern',
+			'template',
+			'template-part',
+			'navigation',
+			'global-styles',
+			'style-book',
+		].includes( surface )
+	) {
 		return [
 			data?.settingsUrl
 				? {
@@ -82,14 +96,6 @@ function getDefaultActions( surface, data, reason ) {
 				  }
 				: null,
 		].filter( Boolean );
-	}
-
-	if ( surface === 'navigation' && reason === 'missing_theme_capability' ) {
-		return [];
-	}
-
-	if ( surface === 'style-book' ) {
-		return [];
 	}
 
 	return [
@@ -107,21 +113,21 @@ function getDefaultMessage( surface, reason ) {
 		case 'block':
 			return 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.';
 		case 'template':
-			return "Template recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
+			return 'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'template-part':
-			return "Template-part recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
+			return 'Template-part recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'navigation':
 			if ( reason === 'missing_theme_capability' ) {
 				return 'Navigation recommendations require the edit_theme_options capability.';
 			}
 
-			return "Navigation recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
+			return 'Navigation recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'global-styles':
 			if ( reason === 'missing_theme_capability' ) {
 				return 'Global Styles recommendations require the edit_theme_options capability.';
 			}
 
-			return "Global Styles recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
+			return 'Global Styles recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'style-book':
 			if ( reason === 'surface_not_implemented' ) {
 				return 'Style Book recommendations are not available in this plugin build yet.';
@@ -131,9 +137,9 @@ function getDefaultMessage( surface, reason ) {
 				return 'Style Book recommendations require the edit_theme_options capability.';
 			}
 
-			return "Style Book recommendations rely on Flavor Agent's configured chat provider. Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here.";
+			return 'Style Book recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'pattern':
-			return "Pattern recommendations rely on Flavor Agent's chat and embedding backends plus Qdrant in Settings > Flavor Agent. Connectors-backed providers currently apply only to chat surfaces.";
+			return 'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable chat provider from Settings > Flavor Agent or Settings > Connectors.';
 		default:
 			return 'This Flavor Agent surface is not available right now.';
 	}

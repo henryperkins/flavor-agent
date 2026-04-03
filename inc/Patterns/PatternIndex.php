@@ -53,7 +53,7 @@ final class PatternIndex {
 
 		$is_stale = $state['qdrant_url'] !== get_option( 'flavor_agent_qdrant_url', '' )
 			|| $state['qdrant_collection'] !== QdrantClient::get_collection_name()
-			|| $state['openai_provider'] !== Provider::get()
+			|| $state['openai_provider'] !== Provider::embedding_configuration()['provider']
 			|| $state['openai_endpoint'] !== Provider::embedding_configuration()['endpoint']
 			|| $state['embedding_model'] !== ( Provider::active_embedding_model() ?? '' );
 
@@ -241,7 +241,7 @@ final class PatternIndex {
 		$qdrant_url        = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_collection = QdrantClient::get_collection_name();
 		$embedding_config  = Provider::embedding_configuration();
-		$openai_provider   = Provider::get();
+		$openai_provider   = $embedding_config['provider'];
 		$openai_endpoint   = $embedding_config['endpoint'];
 		$embedding_model   = $embedding_config['model'];
 

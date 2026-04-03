@@ -399,6 +399,44 @@ final class AzureBackendValidationTest extends TestCase {
 		);
 	}
 
+	public function test_rank_falls_back_to_another_configured_direct_provider_when_selected_provider_is_unconfigured(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_openai_provider'          => Provider::AZURE,
+			'flavor_agent_openai_native_api_key'    => 'native-key',
+			'flavor_agent_openai_native_chat_model' => 'gpt-5.4',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => 'direct fallback output',
+				]
+			),
+		];
+
+		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+
+		$this->assertSame( 'direct fallback output', $result );
+		$this->assertSame( 'https://api.openai.com/v1/responses', WordPressTestState::$last_remote_post['url'] );
+		$this->assertSame(
+			'Bearer native-key',
+			WordPressTestState::$last_remote_post['args']['headers']['Authorization'] ?? null
+		);
+	}
+
+	public function test_rank_falls_back_to_wordpress_ai_client_when_no_direct_provider_is_configured(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = 'wordpress ai client fallback output';
+
+		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+
+		$this->assertSame( 'wordpress ai client fallback output', $result );
+		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_openai_native_rank_falls_back_to_openai_env_var(): void {
 		putenv( 'OPENAI_API_KEY=env-native-key' );
 
