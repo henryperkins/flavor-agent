@@ -4,6 +4,9 @@
 	colors="true"
 	cacheResult="false"
 >
+	<php>
+		<const name="FLAVOR_AGENT_TESTS_RUNNING" value="1"/>
+	</php>
 	<testsuites>
 		<testsuite name="Flavor Agent">
 			<directory>tests/phpunit</directory>

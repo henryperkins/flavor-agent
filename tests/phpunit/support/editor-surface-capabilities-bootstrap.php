@@ -7,6 +7,14 @@
 
 declare(strict_types=1);
 
+if ( ! defined( 'ABSPATH' ) ) {
+	if ( ! defined( 'FLAVOR_AGENT_TESTS_RUNNING' ) ) {
+		exit;
+	}
+
+	define( 'ABSPATH', dirname( __DIR__, 3 ) . '/' );
+}
+
 if ( ! function_exists( 'plugin_dir_path' ) ) {
 	function plugin_dir_path( string $file ): string {
 		return dirname( $file ) . '/';

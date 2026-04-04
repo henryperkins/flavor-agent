@@ -6,6 +6,10 @@ namespace FlavorAgent\Admin;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 final class ActivityPage {
 
 	private const PAGE_SLUG = 'flavor-agent-activity';

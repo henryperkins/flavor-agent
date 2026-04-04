@@ -8,6 +8,10 @@
 
 declare(strict_types=1);
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 add_action(
 	'init',
 	static function (): void {
@@ -20,17 +24,17 @@ add_action(
 			'flavor_agent_qdrant_key'                => 'playground-qdrant-key',
 		];
 
-		foreach ( $stubbed_options as $option_name => $value ) {
-			if ( get_option( $option_name ) !== $value ) {
-				update_option( $option_name, $value );
+		foreach ( $stubbed_options as $flavor_agent_option_name => $value ) {
+			if ( get_option( $flavor_agent_option_name ) !== $value ) {
+				update_option( $flavor_agent_option_name, $value );
 			}
 		}
 	},
 	0
 );
 
-$plugin_main = WP_CONTENT_DIR . '/plugins/flavor-agent/flavor-agent.php';
+$flavor_agent_plugin_main = WP_CONTENT_DIR . '/plugins/flavor-agent/flavor-agent.php';
 
-if ( file_exists( $plugin_main ) ) {
-	require_once $plugin_main;
+if ( file_exists( $flavor_agent_plugin_main ) ) {
+	require_once $flavor_agent_plugin_main;
 }

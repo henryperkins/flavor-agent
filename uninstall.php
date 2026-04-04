@@ -30,6 +30,6 @@ foreach ( [
 	'flavor_agent_pattern_index_state',
 	'flavor_agent_docs_prewarm_state',
 	'flavor_agent_docs_warm_queue',
-] as $option_name ) {
-	delete_option( $option_name );
+] as $flavor_agent_option_name ) {
+	delete_option( $flavor_agent_option_name );
 }

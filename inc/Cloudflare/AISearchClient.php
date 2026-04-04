@@ -1287,7 +1287,7 @@ final class AISearchClient {
 			return '';
 		}
 
-		$parts = parse_url( $url );
+		$parts = wp_parse_url( $url );
 
 		if ( ! is_array( $parts ) ) {
 			return '';
@@ -1473,7 +1473,7 @@ final class AISearchClient {
 			return '';
 		}
 
-		$path = parse_url( $normalized, PHP_URL_PATH );
+		$path = wp_parse_url( $normalized, PHP_URL_PATH );
 
 		if ( ! is_string( $path ) ) {
 			return '';

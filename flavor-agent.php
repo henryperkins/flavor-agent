@@ -5,6 +5,8 @@
  * Version: 0.1.0
  * Author: Lakefront Digital
  * Text Domain: flavor-agent
+ * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 7.0
  * Requires PHP: 8.0
  */
@@ -71,9 +73,9 @@ foreach ( [
 	'flavor_agent_qdrant_url',
 	'flavor_agent_qdrant_key',
 	'home',
-] as $option_name ) {
+] as $flavor_agent_option_name ) {
 	add_action(
-		"update_option_{$option_name}",
+		"update_option_{$flavor_agent_option_name}",
 		[ FlavorAgent\Patterns\PatternIndex::class, 'handle_dependency_change' ],
 		10,
 		3

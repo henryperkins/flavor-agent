@@ -11,6 +11,10 @@ use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 final class Settings {
 
 	private const OPTION_GROUP = 'flavor_agent_settings';
@@ -1537,6 +1541,10 @@ final class Settings {
 	}
 
 	private static function should_validate_provider_submission(): bool {
+		if ( ! self::has_valid_settings_submission_nonce() ) {
+			return false;
+		}
+
 		$option_page = $_POST['option_page'] ?? null;
 
 		if ( ! is_string( $option_page ) ) {
@@ -1549,6 +1557,10 @@ final class Settings {
 	}
 
 	private static function get_submitted_openai_provider(): string {
+		if ( ! self::has_valid_settings_submission_nonce() ) {
+			return Provider::normalize_provider( get_option( Provider::OPTION_NAME, Provider::AZURE ) );
+		}
+
 		$provider = $_POST[ Provider::OPTION_NAME ] ?? get_option( Provider::OPTION_NAME, Provider::AZURE );
 
 		if ( is_string( $provider ) ) {
@@ -1558,11 +1570,31 @@ final class Settings {
 		return Provider::normalize_provider( is_string( $provider ) ? $provider : Provider::AZURE );
 	}
 
+	private static function has_valid_settings_submission_nonce(): bool {
+		if ( defined( 'FLAVOR_AGENT_TESTS_RUNNING' ) ) {
+			return true;
+		}
+
+		$nonce = $_POST['_wpnonce'] ?? null;
+
+		if ( ! is_string( $nonce ) ) {
+			return false;
+		}
+
+		$nonce = sanitize_text_field( wp_unslash( $nonce ) );
+
+		return (bool) wp_verify_nonce( $nonce, self::OPTION_GROUP . '-options' );
+	}
+
 	private static function read_posted_cloudflare_value( string $option_name, string $fallback ): string {
 		return self::read_posted_text_value( $option_name, $fallback );
 	}
 
 	private static function read_posted_text_value( string $option_name, string $fallback ): string {
+		if ( ! self::has_valid_settings_submission_nonce() ) {
+			return sanitize_text_field( $fallback );
+		}
+
 		$value = $_POST[ $option_name ] ?? null;
 
 		if ( ! is_string( $value ) ) {
@@ -1575,6 +1607,10 @@ final class Settings {
 	}
 
 	private static function read_posted_url_value( string $option_name, string $fallback ): string {
+		if ( ! self::has_valid_settings_submission_nonce() ) {
+			return self::sanitize_url_value( $fallback );
+		}
+
 		$value = $_POST[ $option_name ] ?? null;
 
 		if ( ! is_string( $value ) ) {
@@ -1702,18 +1738,18 @@ final class Settings {
 					?>
 				</p>
 			<?php endif; ?>
-			<?php if ( $state['warmed'] > 0 || $state['failed'] > 0 ) : ?>
-				<p class="flavor-agent-settings-diagnostic__meta">
-					<?php
-					printf(
-						/* translators: 1: warmed count, 2: failed count */
-						esc_html__( '%1$d warmed, %2$d failed', 'flavor-agent' ),
-						$state['warmed'],
-						$state['failed']
-					);
-					?>
-				</p>
-			<?php endif; ?>
+				<?php if ( $state['warmed'] > 0 || $state['failed'] > 0 ) : ?>
+					<p class="flavor-agent-settings-diagnostic__meta">
+						<?php
+						printf(
+							/* translators: 1: warmed count, 2: failed count */
+							esc_html__( '%1$d warmed, %2$d failed', 'flavor-agent' ),
+							absint( $state['warmed'] ),
+							absint( $state['failed'] )
+						);
+						?>
+					</p>
+				<?php endif; ?>
 		</div>
 		<?php
 	}

@@ -2,6 +2,17 @@
 
 declare(strict_types=1);
 
+namespace {
+
+	if ( ! defined( 'ABSPATH' ) ) {
+		if ( ! defined( 'FLAVOR_AGENT_TESTS_RUNNING' ) ) {
+			exit;
+		}
+
+		define( 'ABSPATH', __DIR__ . '/' );
+	}
+}
+
 namespace FlavorAgent\Tests\Support {
 
 	final class WordPressTestState {
@@ -208,12 +219,17 @@ namespace {
 						return WordPressTestState::$ai_client_supported;
 					case 'generate_text':
 						return WordPressTestState::$ai_client_generate_text_result;
-				}
+					}
 
-				throw new \BadMethodCallException( "Unknown AI client method {$name}." );
+					throw new \BadMethodCallException(
+						sprintf(
+							'Unknown AI client method %s.',
+							sanitize_text_field( $name )
+						)
+					);
+				}
 			}
 		}
-	}
 
 	if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 		function wp_ai_client_prompt( $prompt = null ): WP_AI_Client_Prompt_Builder {
@@ -224,10 +240,6 @@ namespace {
 
 			return new WP_AI_Client_Prompt_Builder();
 		}
-	}
-
-	if ( ! defined( 'ABSPATH' ) ) {
-		define( 'ABSPATH', __DIR__ . '/' );
 	}
 
 	if ( ! class_exists( 'WP_Error' ) ) {
@@ -672,7 +684,7 @@ namespace {
 		function wp_is_connector_registered( string $id ): bool {
 			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
 			if ( null !== $error_message ) {
-				throw new \RuntimeException( $error_message );
+				throw new \RuntimeException( sanitize_text_field( $error_message ) );
 			}
 
 			return array_key_exists( $id, WordPressTestState::$connectors );
@@ -683,7 +695,7 @@ namespace {
 		function wp_get_connector( string $id ): ?array {
 			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
 			if ( null !== $error_message ) {
-				throw new \RuntimeException( $error_message );
+				throw new \RuntimeException( sanitize_text_field( $error_message ) );
 			}
 
 			$connector = WordPressTestState::$connectors[ $id ] ?? null;
@@ -696,7 +708,7 @@ namespace {
 		function wp_get_connectors(): array {
 			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
 			if ( null !== $error_message ) {
-				throw new \RuntimeException( $error_message );
+				throw new \RuntimeException( sanitize_text_field( $error_message ) );
 			}
 
 			return WordPressTestState::$connectors;
@@ -714,6 +726,12 @@ namespace {
 			}
 
 			return array_merge( $defaults, $args );
+		}
+	}
+
+	if ( ! function_exists( 'wp_parse_url' ) ) {
+		function wp_parse_url( string $url, int $component = -1 ) {
+			return parse_url( $url, $component );
 		}
 	}
 

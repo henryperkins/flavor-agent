@@ -116,7 +116,7 @@ final class ConfigurationValidator {
 			str_contains( $lower, 'curl error 28' )
 			|| str_contains( $lower, 'operation timed out' )
 		) {
-			$host = (string) parse_url( $url, PHP_URL_HOST );
+			$host = (string) wp_parse_url( $url, PHP_URL_HOST );
 			$host = '' !== $host ? $host : $url;
 
 			return new \WP_Error(
