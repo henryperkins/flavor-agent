@@ -104,9 +104,9 @@ Before expanding the roadmap into broader new surfaces, the clearest next steps 
 5. **Record the navigation contract explicitly.**
    - Navigation stays advisory-only through v1.0; do not add an apply contract in the current milestone.
    - Revisit only if a bounded previewable/undoable navigation executor becomes its own tracked follow-up.
-6. **Refresh live provider-backed verification.**
-   - Re-run end-to-end recommendation execution with valid credentials and capture the results in `STATUS.md`.
-   - Use that run to confirm the current Connectors/provider boundary, docs grounding, and recent Gutenberg trunk-alignment work under real credentials.
+6. **Refresh live provider-backed verification.** (Completed 2026-04-04)
+   - A fresh Azure-backed end-to-end recommendation execution was captured in `STATUS.md`.
+   - That run confirmed the current provider boundary and real request provenance path under live credentials.
 7. **Switch from RC/beta assumptions to stable WordPress 7.0 as soon as available.**
    - Update the WP 7.0 Docker/browser harness to the stable image tag.
    - Re-audit experimental adapters (`pattern-settings.js`, theme settings sources, and any remaining trunk-sensitive inspector modeling) against final 7.0 core.

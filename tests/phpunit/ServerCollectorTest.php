@@ -285,6 +285,76 @@ final class ServerCollectorTest extends TestCase {
 		}
 	}
 
+	public function test_for_patterns_collects_pattern_override_metadata_from_bindings(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/card',
+			[
+				'title' => 'Card',
+			]
+		);
+
+		$this->register_pattern(
+			'theme/override-card',
+			[
+				'title'   => 'Override Card',
+				'content' => '<!-- wp:plugin/card {"metadata":{"bindings":{"__default":{"source":"core/pattern-overrides"},"title":{"source":"core/pattern-overrides"},"eyebrow":{"source":"core/pattern-overrides"}}}} /-->',
+			]
+		);
+
+		$patterns          = ServerCollector::for_patterns();
+		$override_pattern  = $patterns[0];
+		$override_metadata = $override_pattern['patternOverrides'] ?? [];
+
+		$this->assertTrue( $override_metadata['hasOverrides'] ?? false );
+		$this->assertSame( 1, $override_metadata['blockCount'] ?? null );
+		$this->assertSame( [ 'plugin/card' ], $override_metadata['blockNames'] ?? null );
+		$this->assertSame(
+			[ 'plugin/card' => [] ],
+			$override_metadata['bindableAttributes'] ?? null
+		);
+		$this->assertSame(
+			[ 'plugin/card' => [ 'eyebrow', 'title' ] ],
+			$override_metadata['unsupportedAttributes'] ?? null
+		);
+		$this->assertTrue( $override_metadata['usesDefaultBinding'] ?? false );
+	}
+
+	public function test_for_patterns_marks_supported_override_attributes_for_bindable_blocks(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'core/paragraph',
+			[
+				'title'      => 'Paragraph',
+				'attributes' => [
+					'content' => [
+						'type' => 'string',
+						'role' => 'content',
+					],
+				],
+			]
+		);
+
+		$this->register_pattern(
+			'theme/override-paragraph',
+			[
+				'title'   => 'Override Paragraph',
+				'content' => '<!-- wp:paragraph {"metadata":{"bindings":{"content":{"source":"core/pattern-overrides"}}}} --><p>Hello</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$patterns          = ServerCollector::for_patterns();
+		$override_metadata = $patterns[0]['patternOverrides'] ?? [];
+
+		$this->assertSame(
+			[ 'core/paragraph' => [ 'content' ] ],
+			$override_metadata['bindableAttributes'] ?? null
+		);
+		$this->assertSame(
+			[ 'core/paragraph' => [ 'content' ] ],
+			$override_metadata['overrideAttributes'] ?? null
+		);
+		$this->assertSame( [], $override_metadata['unsupportedAttributes'] ?? null );
+	}
+
 	public function test_for_template_returns_top_level_structure_and_insertion_anchors(): void {
 		WordPressTestState::$block_templates['wp_template'][0]->content =
 			'<!-- wp:group {"tagName":"main"} --><div>Hero</div><!-- /wp:group -->'

@@ -1197,7 +1197,7 @@ namespace {
 	if ( ! function_exists( 'parse_blocks' ) ) {
 		function parse_blocks( string $content ): array {
 			$blocks  = [];
-			$pattern = '/<!--\s+wp:([a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)\s*(\{[^}]*\})?\s*(\/)?-->/';
+			$pattern = '/<!--\s+wp:([a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)\s*(\{.*?\})?\s*(\/)?-->/s';
 			$offset  = 0;
 
 			while ( preg_match( $pattern, $content, $match, PREG_OFFSET_CAPTURE, $offset ) ) {

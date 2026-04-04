@@ -125,6 +125,25 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
+	public function test_register_abilities_exposes_pattern_override_metadata_in_pattern_schemas(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$recommend_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-patterns'] ?? null;
+		$list_ability      = WordPressTestState::$registered_abilities['flavor-agent/list-patterns'] ?? null;
+
+		$this->assertIsArray( $recommend_ability );
+		$this->assertIsArray( $list_ability );
+		$this->assertSame(
+			'object',
+			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['patternOverrides']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$list_ability['output_schema']['properties']['patterns']['items']['properties']['patternOverrides']['type'] ?? null
+		);
+	}
+
 	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {
 		Registration::register_category();
 		Registration::register_abilities();

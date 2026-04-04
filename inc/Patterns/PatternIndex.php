@@ -20,7 +20,7 @@ final class PatternIndex {
 	private const BATCH_SIZE     = 100;
 
 	/** Increment when the embedding text template changes. */
-	public const EMBEDDING_RECIPE_VERSION = 1;
+	public const EMBEDDING_RECIPE_VERSION = 2;
 
 	/** Fixed UUID v5 namespace (DNS namespace from RFC 4122). */
 	private const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -161,6 +161,28 @@ final class PatternIndex {
 		$tt = $pattern['templateTypes'] ?? [];
 		if ( ! empty( $tt ) ) {
 			$parts[] = 'Template types: ' . implode( ', ', $tt );
+		}
+
+		$pattern_overrides = is_array( $pattern['patternOverrides'] ?? null )
+			? $pattern['patternOverrides']
+			: [];
+		if ( ! empty( $pattern_overrides['hasOverrides'] ) ) {
+			$parts[] = 'Pattern overrides: yes';
+
+			$override_attributes = is_array( $pattern_overrides['overrideAttributes'] ?? null )
+				? $pattern_overrides['overrideAttributes']
+				: [];
+			foreach ( $override_attributes as $block_name => $attributes ) {
+				if ( ! is_string( $block_name ) || ! is_array( $attributes ) || [] === $attributes ) {
+					continue;
+				}
+
+				$parts[] = sprintf(
+					'Override-ready %s: %s',
+					$block_name,
+					implode( ', ', array_map( 'strval', $attributes ) )
+				);
+			}
 		}
 
 		$content = $pattern['content'] ?? '';
@@ -415,6 +437,7 @@ final class PatternIndex {
 					'categories'    => $p['categories'] ?? [],
 					'blockTypes'    => $p['blockTypes'] ?? [],
 					'templateTypes' => $p['templateTypes'] ?? [],
+					'patternOverrides' => $p['patternOverrides'] ?? [],
 					'content'       => $p['content'] ?? '',
 				],
 			];
@@ -438,6 +461,7 @@ final class PatternIndex {
 			self::normalize_list( $pattern['categories'] ?? [] ),
 			self::normalize_list( $pattern['blockTypes'] ?? [] ),
 			self::normalize_list( $pattern['templateTypes'] ?? [] ),
+			self::normalize_pattern_overrides( $pattern['patternOverrides'] ?? [] ),
 			md5( $pattern['content'] ?? '' ),
 			(string) self::EMBEDDING_RECIPE_VERSION,
 		];
@@ -454,5 +478,38 @@ final class PatternIndex {
 		);
 		sort( $values );
 		return implode( ',', $values );
+	}
+
+	/**
+	 * @param array<string, mixed> $pattern_overrides
+	 */
+	private static function normalize_pattern_overrides( array $pattern_overrides ): string {
+		$parts = [];
+
+		$parts[] = ! empty( $pattern_overrides['hasOverrides'] ) ? '1' : '0';
+		$parts[] = ! empty( $pattern_overrides['usesDefaultBinding'] ) ? '1' : '0';
+		$parts[] = (string) (int) ( $pattern_overrides['blockCount'] ?? 0 );
+		$parts[] = self::normalize_list(
+			is_array( $pattern_overrides['blockNames'] ?? null )
+				? $pattern_overrides['blockNames']
+				: []
+		);
+
+		foreach ( [ 'bindableAttributes', 'overrideAttributes', 'unsupportedAttributes' ] as $map_key ) {
+			$map = is_array( $pattern_overrides[ $map_key ] ?? null )
+				? $pattern_overrides[ $map_key ]
+				: [];
+			ksort( $map );
+
+			foreach ( $map as $block_name => $attributes ) {
+				if ( ! is_string( $block_name ) || ! is_array( $attributes ) ) {
+					continue;
+				}
+
+				$parts[] = $map_key . ':' . $block_name . ':' . self::normalize_list( $attributes );
+			}
+		}
+
+		return implode( '|', $parts );
 	}
 }

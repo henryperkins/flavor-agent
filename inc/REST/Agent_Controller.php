@@ -21,6 +21,48 @@ final class Agent_Controller {
 
 	private const NAMESPACE = 'flavor-agent/v1';
 
+	private const REQUEST_META_ROUTES = [
+		'recommend-block'         => [
+			'ability'             => 'flavor-agent/recommend-block',
+			'route'               => 'POST /flavor-agent/v1/recommend-block',
+			'includeProviderMeta' => true,
+		],
+		'recommend-content'       => [
+			'ability'             => 'flavor-agent/recommend-content',
+			'route'               => 'POST /flavor-agent/v1/recommend-content',
+			'includeProviderMeta' => true,
+		],
+		'recommend-patterns'      => [
+			'ability'             => 'flavor-agent/recommend-patterns',
+			'route'               => 'POST /flavor-agent/v1/recommend-patterns',
+			'includeProviderMeta' => true,
+		],
+		'recommend-navigation'    => [
+			'ability'             => 'flavor-agent/recommend-navigation',
+			'route'               => 'POST /flavor-agent/v1/recommend-navigation',
+			'includeProviderMeta' => true,
+		],
+		'recommend-style'         => [
+			'ability'             => 'flavor-agent/recommend-style',
+			'route'               => 'POST /flavor-agent/v1/recommend-style',
+			'includeProviderMeta' => true,
+		],
+		'recommend-template'      => [
+			'ability'             => 'flavor-agent/recommend-template',
+			'route'               => 'POST /flavor-agent/v1/recommend-template',
+			'includeProviderMeta' => true,
+		],
+		'recommend-template-part' => [
+			'ability'             => 'flavor-agent/recommend-template-part',
+			'route'               => 'POST /flavor-agent/v1/recommend-template-part',
+			'includeProviderMeta' => true,
+		],
+		'sync-patterns'          => [
+			'route'               => 'POST /flavor-agent/v1/sync-patterns',
+			'includeProviderMeta' => false,
+		],
+	];
+
 	public static function register_routes(): void {
 		register_rest_route(
 			self::NAMESPACE,
@@ -510,11 +552,7 @@ final class Agent_Controller {
 
 		return new \WP_REST_Response(
 			[
-				'payload'  => self::append_request_meta(
-					$result,
-					'flavor-agent/recommend-block',
-					'POST /flavor-agent/v1/recommend-block'
-				),
+				'payload'  => self::append_request_meta_for_route( $result, 'recommend-block' ),
 				'clientId' => $client_id,
 			],
 			200
@@ -554,11 +592,7 @@ final class Agent_Controller {
 		}
 
 		return new \WP_REST_Response(
-			self::append_request_meta(
-				$result,
-				'flavor-agent/recommend-navigation',
-				'POST /flavor-agent/v1/recommend-navigation'
-			),
+			self::append_request_meta_for_route( $result, 'recommend-content' ),
 			200
 		);
 	}
@@ -571,11 +605,7 @@ final class Agent_Controller {
 		}
 
 		return new \WP_REST_Response(
-			self::append_request_meta(
-				$result,
-				'flavor-agent/recommend-style',
-				'POST /flavor-agent/v1/recommend-style'
-			),
+			self::append_request_meta_for_route( $result, 'sync-patterns' ),
 			200
 		);
 	}
@@ -613,11 +643,7 @@ final class Agent_Controller {
 		}
 
 		return new \WP_REST_Response(
-			self::append_request_meta(
-				$result,
-				'flavor-agent/recommend-template',
-				'POST /flavor-agent/v1/recommend-template'
-			),
+			self::append_request_meta_for_route( $result, 'recommend-patterns' ),
 			200
 		);
 	}
@@ -652,11 +678,7 @@ final class Agent_Controller {
 		}
 
 		return new \WP_REST_Response(
-			self::append_request_meta(
-				$result,
-				'flavor-agent/recommend-template-part',
-				'POST /flavor-agent/v1/recommend-template-part'
-			),
+			self::append_request_meta_for_route( $result, 'recommend-navigation' ),
 			200
 		);
 	}
@@ -665,14 +687,23 @@ final class Agent_Controller {
 	 * @param array<string, mixed> $payload
 	 * @return array<string, mixed>
 	 */
-	private static function append_request_meta( array $payload, string $ability, string $route ): array {
-		$payload['requestMeta'] = array_merge(
-			Provider::active_chat_request_meta(),
-			[
-				'ability' => $ability,
-				'route'   => $route,
-			]
-		);
+	private static function append_request_meta_for_route( array $payload, string $route_key ): array {
+		$route_definition = self::REQUEST_META_ROUTES[ $route_key ] ?? null;
+
+		if ( ! is_array( $route_definition ) ) {
+			return $payload;
+		}
+
+		$request_meta = ! empty( $route_definition['includeProviderMeta'] )
+			? Provider::active_chat_request_meta()
+			: [];
+
+		if ( ! empty( $route_definition['ability'] ) && is_string( $route_definition['ability'] ) ) {
+			$request_meta['ability'] = $route_definition['ability'];
+		}
+
+		$request_meta['route'] = $route_definition['route'];
+		$payload['requestMeta'] = $request_meta;
 
 		return $payload;
 	}
@@ -717,7 +748,10 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta_for_route( $result, 'recommend-template' ),
+			200
+		);
 	}
 
 	/**
@@ -744,7 +778,10 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta_for_route( $result, 'recommend-style' ),
+			200
+		);
 	}
 
 	/**
@@ -772,7 +809,10 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta_for_route( $result, 'recommend-template-part' ),
+			200
+		);
 	}
 
 	public static function handle_get_activity( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {

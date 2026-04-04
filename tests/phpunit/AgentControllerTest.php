@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\AzureOpenAI\QdrantClient;
+use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\REST\Agent_Controller;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -265,6 +269,55 @@ final class AgentControllerTest extends TestCase {
 			'Tighten the voice and call out the flat lines.',
 			WordPressTestState::$last_ai_client_prompt['text'] ?? ''
 		);
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-content',
+			'POST /flavor-agent/v1/recommend-content'
+		);
+	}
+
+	public function test_handle_recommend_patterns_appends_matching_request_meta(): void {
+		$this->configure_pattern_recommendation_backends();
+		$this->save_ready_pattern_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.71 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.82,
+								'reason' => 'Matches the current context.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
+		$request->set_param( 'postType', 'page' );
+
+		$response = Agent_Controller::handle_recommend_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[ 'theme/hero' ],
+			array_column( $response->get_data()['recommendations'] ?? [], 'name' )
+		);
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-patterns',
+			'POST /flavor-agent/v1/recommend-patterns'
+		);
 	}
 
 	public function test_handle_recommend_template_visible_filter_applies_before_candidate_cap(): void {
@@ -416,6 +469,11 @@ final class AgentControllerTest extends TestCase {
 		$this->assertStringContainsString(
 			'## Available theme style variations',
 			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-style',
+			'POST /flavor-agent/v1/recommend-style'
 		);
 	}
 
@@ -610,6 +668,11 @@ final class AgentControllerTest extends TestCase {
 			'## Explicitly Empty Areas' . "\n" . 'None detected.',
 			(string) ( $request_body['input'] ?? '' )
 		);
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-template',
+			'POST /flavor-agent/v1/recommend-template'
+		);
 	}
 
 	public function test_handle_recommend_template_prefers_live_editor_structure_over_saved_template_structure(): void {
@@ -801,6 +864,11 @@ final class AgentControllerTest extends TestCase {
 			'theme/hero',
 			(string) ( $request_body['input'] ?? '' )
 		);
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-template-part',
+			'POST /flavor-agent/v1/recommend-template-part'
+		);
 	}
 
 	public function test_handle_recommend_template_part_preserves_explicit_empty_visible_pattern_filter(): void {
@@ -925,6 +993,30 @@ final class AgentControllerTest extends TestCase {
 		$this->assertStringContainsString(
 			'Simplify the header navigation.',
 			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-navigation',
+			'POST /flavor-agent/v1/recommend-navigation'
+		);
+	}
+
+	public function test_handle_sync_patterns_appends_sync_route_metadata(): void {
+		$this->configure_pattern_recommendation_backends();
+		$this->save_ready_pattern_index_state();
+
+		$request  = new \WP_REST_Request( 'POST', '/flavor-agent/v1/sync-patterns' );
+		$response = Agent_Controller::handle_sync_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'POST /flavor-agent/v1/sync-patterns',
+			$response->get_data()['requestMeta']['route'] ?? null
+		);
+		$this->assertArrayNotHasKey(
+			'ability',
+			$response->get_data()['requestMeta'] ?? []
 		);
 	}
 
@@ -1141,6 +1233,48 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @param array<string, mixed> $response_data
+	 */
+	private function assertResponseRequestMeta( array $response_data, string $ability, string $route ): void {
+		$this->assertSame( $ability, $response_data['requestMeta']['ability'] ?? null );
+		$this->assertSame( $route, $response_data['requestMeta']['route'] ?? null );
+	}
+
+	private function configure_pattern_recommendation_backends(): void {
+		WordPressTestState::$options = [
+			Provider::OPTION_NAME                        => Provider::NATIVE,
+			'flavor_agent_openai_native_api_key'        => 'native-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_openai_native_chat_model'     => 'gpt-5.4',
+			'flavor_agent_qdrant_url'                   => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                   => 'qdrant-key',
+		];
+	}
+
+	private function save_ready_pattern_index_state(): void {
+		$patterns         = ServerCollector::for_patterns();
+		$embedding_config = Provider::embedding_configuration();
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'            => 'ready',
+					'fingerprint'       => PatternIndex::compute_fingerprint( $patterns ),
+					'qdrant_url'        => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection' => QdrantClient::get_collection_name(),
+					'openai_provider'   => $embedding_config['provider'],
+					'openai_endpoint'   => $embedding_config['endpoint'],
+					'embedding_model'   => $embedding_config['model'],
+					'last_synced_at'    => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'   => '2026-03-24T00:00:00+00:00',
+					'indexed_count'     => count( $patterns ),
+				]
+			)
+		);
+	}
+
 	private function stub_successful_llm_response(): void {
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
@@ -1150,6 +1284,75 @@ final class AgentControllerTest extends TestCase {
 				'explanation' => 'Use the accent color.',
 			]
 		);
+	}
+
+	/**
+	 * @param float[] $vector
+	 * @return array<string, mixed>
+	 */
+	private function embedding_response( array $vector ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'data' => [
+						[
+							'embedding' => $vector,
+						],
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $points
+	 * @return array<string, mixed>
+	 */
+	private function qdrant_points_response( array $points ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'status' => 'ok',
+					'result' => [
+						'points' => $points,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function ranking_response( string $output_text ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => $output_text,
+				]
+			),
+		];
+	}
+
+	/**
+	 * @return array{score: float, payload: array<string, mixed>}
+	 */
+	private function pattern_point( string $name, float $score ): array {
+		return [
+			'score'   => $score,
+			'payload' => [
+				'name'          => $name,
+				'title'         => ucwords( str_replace( [ 'theme/', '-' ], [ '', ' ' ], $name ) ),
+				'description'   => "Description for {$name}",
+				'categories'    => [ 'marketing' ],
+				'blockTypes'    => [ 'core/template-part/header' ],
+				'templateTypes' => [ 'home' ],
+				'content'       => "<!-- wp:paragraph --><p>{$name}</p><!-- /wp:paragraph -->",
+			],
+		];
 	}
 
 	/**

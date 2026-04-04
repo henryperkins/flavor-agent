@@ -44,7 +44,7 @@ Phase 1 is now primarily a re-verification and hardening phase. Epic 3 closeout 
 ### Main deliverables
 
 1. Keep Epic 3 closed by treating Global Styles and Style Book as shipped baseline in planning and verification docs.
-2. Replace all lingering April 9, 2026 assumptions with "7.0 final timeline pending".
+2. Replace all lingering fixed final-release assumptions with "7.0 final timeline pending".
 3. Swap the Docker-backed 7.0 harness from beta to stable as soon as the official image exists.
 4. Re-run provider-backed end-to-end verification and record the outcome.
 5. Improve `Settings > AI Activity` so operators can see what happened, why undo is or is not available, and which provider/model path was used.
@@ -156,7 +156,7 @@ source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --repo
 Required manual checks:
 
 1. Confirm planning docs and `STATUS.md` describe the shipped Global Styles and Style Book slice as implemented, with follow-up items still clearly marked as deferred or closeout-only.
-2. Confirm all docs and status pages stop implying April 9, 2026 is the final 7.0 release date.
+2. Confirm all docs and status pages stop implying a fixed WordPress 7.0 final release date.
 3. Confirm each unavailable surface points to the correct owner: `Settings > Connectors` or `Settings > Flavor Agent`.
 4. Confirm admin activity details show enough provenance to answer "what changed, by which backend path, and why undo is blocked".
 5. Run at least one live provider-backed recommendation flow and record the result in `STATUS.md`.

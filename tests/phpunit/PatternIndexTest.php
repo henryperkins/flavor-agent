@@ -52,6 +52,12 @@ final class PatternIndexTest extends TestCase {
 				'categories'    => [ 'marketing', 'featured' ],
 				'blockTypes'    => [ 'core/group', 'core/heading' ],
 				'templateTypes' => [ 'home', 'front-page' ],
+				'patternOverrides' => [
+					'hasOverrides'       => true,
+					'overrideAttributes' => [
+						'core/heading' => [ 'content' ],
+					],
+				],
 				'content'       => $content,
 			]
 		);
@@ -63,7 +69,28 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'Categories: marketing, featured', $lines[2] );
 		$this->assertSame( 'Block types: core/group, core/heading', $lines[3] );
 		$this->assertSame( 'Template types: home, front-page', $lines[4] );
-		$this->assertSame( str_repeat( 'x', 500 ), $lines[5] );
+		$this->assertSame( 'Pattern overrides: yes', $lines[5] );
+		$this->assertSame( 'Override-ready core/heading: content', $lines[6] );
+		$this->assertSame( str_repeat( 'x', 500 ), $lines[7] );
+	}
+
+	public function test_compute_fingerprint_changes_when_pattern_override_metadata_changes(): void {
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$baseline = PatternIndex::compute_fingerprint( [ $hero ] );
+
+		$override_ready                     = $hero;
+		$override_ready['patternOverrides'] = [
+			'hasOverrides'          => true,
+			'blockCount'            => 1,
+			'blockNames'            => [ 'core/heading' ],
+			'bindableAttributes'    => [ 'core/heading' => [ 'content' ] ],
+			'overrideAttributes'    => [ 'core/heading' => [ 'content' ] ],
+			'usesDefaultBinding'    => false,
+			'unsupportedAttributes' => [],
+		];
+
+		$this->assertNotSame( $baseline, PatternIndex::compute_fingerprint( [ $override_ready ] ) );
 	}
 
 	public function test_mark_dirty_uses_stale_when_a_usable_index_exists_and_uninitialized_otherwise(): void {
@@ -202,19 +229,24 @@ final class PatternIndexTest extends TestCase {
 
 		$this->register_pattern( 'theme/hero', $hero );
 		$this->register_pattern( 'theme/footer-callout', $footer );
+		$current_patterns = $this->current_patterns();
+		$patterns_by_name = [];
+		foreach ( $current_patterns as $pattern ) {
+			$patterns_by_name[ (string) $pattern['name'] ] = $pattern;
+		}
 
 		$hero_uuid    = PatternIndex::pattern_uuid( 'theme/hero' );
 		$footer_uuid  = PatternIndex::pattern_uuid( 'theme/footer-callout' );
 		$removed_uuid = PatternIndex::pattern_uuid( 'theme/retired-pattern' );
 
 		$this->save_ready_state_for_patterns(
-			$this->current_patterns(),
+			$current_patterns,
 			[
 				'fingerprint'          => 'outdated-fingerprint',
 				'indexed_count'        => 3,
 				'pattern_fingerprints' => [
 					$hero_uuid    => 'outdated-hero-fingerprint',
-					$footer_uuid  => $this->expected_pattern_fingerprint( $footer ),
+					$footer_uuid  => $this->expected_pattern_fingerprint( $patterns_by_name['theme/footer-callout'] ?? [] ),
 					$removed_uuid => 'removed-pattern-fingerprint',
 				],
 			]
@@ -308,17 +340,22 @@ final class PatternIndexTest extends TestCase {
 		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
 
 		$this->register_pattern( 'theme/hero', $hero );
+		$current_patterns = $this->current_patterns();
+		$patterns_by_name = [];
+		foreach ( $current_patterns as $pattern ) {
+			$patterns_by_name[ (string) $pattern['name'] ] = $pattern;
+		}
 
 		$hero_uuid    = PatternIndex::pattern_uuid( 'theme/hero' );
 		$removed_uuid = PatternIndex::pattern_uuid( 'theme/retired-pattern' );
 
 		$this->save_ready_state_for_patterns(
-			$this->current_patterns(),
+			$current_patterns,
 			[
 				'fingerprint'          => 'outdated-fingerprint',
 				'indexed_count'        => 2,
 				'pattern_fingerprints' => [
-					$hero_uuid    => $this->expected_pattern_fingerprint( $hero ),
+					$hero_uuid    => $this->expected_pattern_fingerprint( $patterns_by_name['theme/hero'] ?? [] ),
 					$removed_uuid => 'removed-pattern-fingerprint',
 				],
 			]
@@ -600,10 +637,46 @@ final class PatternIndexTest extends TestCase {
 					implode( ',', $categories ),
 					implode( ',', $block_types ),
 					implode( ',', $template_types ),
+					$this->expected_pattern_override_fingerprint( $pattern['patternOverrides'] ?? [] ),
 					md5( $pattern['content'] ?? '' ),
 					(string) PatternIndex::EMBEDDING_RECIPE_VERSION,
 				]
 			)
 		);
+	}
+
+	/**
+	 * @param array<string, mixed> $pattern_overrides
+	 */
+	private function expected_pattern_override_fingerprint( array $pattern_overrides ): string {
+		$parts = [];
+
+		$parts[] = ! empty( $pattern_overrides['hasOverrides'] ) ? '1' : '0';
+		$parts[] = ! empty( $pattern_overrides['usesDefaultBinding'] ) ? '1' : '0';
+		$parts[] = (string) (int) ( $pattern_overrides['blockCount'] ?? 0 );
+
+		$block_names = is_array( $pattern_overrides['blockNames'] ?? null )
+			? $pattern_overrides['blockNames']
+			: [];
+		sort( $block_names );
+		$parts[] = implode( ',', $block_names );
+
+		foreach ( [ 'bindableAttributes', 'overrideAttributes', 'unsupportedAttributes' ] as $map_key ) {
+			$map = is_array( $pattern_overrides[ $map_key ] ?? null )
+				? $pattern_overrides[ $map_key ]
+				: [];
+			ksort( $map );
+
+			foreach ( $map as $block_name => $attributes ) {
+				if ( ! is_string( $block_name ) || ! is_array( $attributes ) ) {
+					continue;
+				}
+
+				sort( $attributes );
+				$parts[] = $map_key . ':' . $block_name . ':' . implode( ',', $attributes );
+			}
+		}
+
+		return implode( '|', $parts );
 	}
 }

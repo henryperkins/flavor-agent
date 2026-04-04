@@ -25,6 +25,8 @@ final class PatternAbilities {
 	private const DEFAULT_STRUCTURAL_LIMIT  = 6;
 	private const FILTERED_SEMANTIC_LIMIT   = 24;
 	private const FILTERED_STRUCTURAL_LIMIT = 18;
+	private const CUSTOM_BLOCK_MATCHING_OVERRIDE_BONUS = 0.04;
+	private const CUSTOM_BLOCK_GENERIC_OVERRIDE_BONUS  = 0.02;
 	private const MAX_LLM_CANDIDATES        = 12;
 	private const MAX_RECOMMENDATIONS       = 8;
 
@@ -132,6 +134,7 @@ final class PatternAbilities {
 		$prompt           = isset( $input['prompt'] ) && is_string( $input['prompt'] )
 			? sanitize_textarea_field( $input['prompt'] )
 			: '';
+		$is_custom_block_context = self::is_custom_block_name( $block_name );
 		$visible_lookup   = is_array( $visible_pattern_names )
 			? array_fill_keys( $visible_pattern_names, true )
 			: null;
@@ -215,8 +218,32 @@ final class PatternAbilities {
 			}
 		}
 
+		foreach ( $candidates as &$candidate ) {
+			$ranking_hint = self::build_candidate_ranking_hint(
+				is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [],
+				$block_name,
+				$is_custom_block_context
+			);
+
+			$candidate['rankingHint']  = $ranking_hint;
+			$candidate['rankingScore'] = (float) $candidate['score']
+				+ (float) ( $ranking_hint['bonus'] ?? 0.0 );
+		}
+		unset( $candidate );
+
 		// Sort by score desc, take top 12.
-		uasort( $candidates, fn( $a, $b ) => $b['score'] <=> $a['score'] );
+		uasort(
+			$candidates,
+			static function ( array $left, array $right ): int {
+				$ranking_compare = ( $right['rankingScore'] ?? $right['score'] ) <=> ( $left['rankingScore'] ?? $left['score'] );
+
+				if ( 0 !== $ranking_compare ) {
+					return $ranking_compare;
+				}
+
+				return $right['score'] <=> $left['score'];
+			}
+		);
 		$candidates = array_slice( $candidates, 0, self::MAX_LLM_CANDIDATES, true );
 
 		if ( empty( $candidates ) ) {
@@ -233,6 +260,12 @@ final class PatternAbilities {
 				'categories'    => $c['payload']['categories'] ?? [],
 				'blockTypes'    => $c['payload']['blockTypes'] ?? [],
 				'templateTypes' => $c['payload']['templateTypes'] ?? [],
+				'patternOverrides' => $c['payload']['patternOverrides'] ?? [
+					'hasOverrides' => false,
+				],
+				'rankingHints'  => self::prepare_candidate_ranking_hint_for_llm(
+					is_array( $c['rankingHint'] ?? null ) ? $c['rankingHint'] : []
+				),
 				'content'       => substr( $c['payload']['content'] ?? '', 0, 500 ),
 			];
 		}
@@ -242,6 +275,7 @@ final class PatternAbilities {
 			. ( $block_name !== '' ? "Block context: {$block_name}\n" : '' )
 			. ( $template_type ? "Template type: {$template_type}\n" : '' )
 			. ( $prompt ? "User instruction: {$prompt}\n" : '' )
+			. self::build_custom_block_context_section( $block_name, $is_custom_block_context )
 			. self::build_wordpress_docs_guidance_section( $docs_guidance )
 			. "\n## Candidate Patterns\n"
 			. wp_json_encode( $candidates_for_llm, JSON_PRETTY_PRINT );
@@ -271,16 +305,26 @@ final class PatternAbilities {
 			}
 
 			$payload = $candidates[ $name ]['payload'];
+			$ranking_hint = is_array( $candidates[ $name ]['rankingHint'] ?? null )
+				? $candidates[ $name ]['rankingHint']
+				: [];
 			$score   = isset( $rec['score'] ) ? max( 0.0, min( 1.0, (float) $rec['score'] ) ) : 0.0;
 			if ( $score < 0.3 ) {
 				continue;
 			}
+			$reason = self::append_pattern_override_reason_hint(
+				sanitize_text_field( $rec['reason'] ?? '' ),
+				$ranking_hint
+			);
 			$recommendations[] = [
 				'name'       => $name,
 				'title'      => $payload['title'] ?? '',
 				'score'      => $score,
-				'reason'     => sanitize_text_field( $rec['reason'] ?? '' ),
+				'reason'     => $reason,
 				'categories' => $payload['categories'] ?? [],
+				'patternOverrides' => $payload['patternOverrides'] ?? [
+					'hasOverrides' => false,
+				],
 				'content'    => $payload['content'] ?? '',
 			];
 		}
@@ -340,12 +384,128 @@ Rules:
 - Order by score descending.
 - Consider: post type conventions, block proximity, template structure,
   category relevance, and the user's stated intent.
+- In custom block contexts, prefer patterns whose Pattern Overrides metadata
+  shows relevant support for the nearby custom block or other custom blocks
+  when that flexibility materially improves fit.
 - When WordPress Developer Guidance is provided, prefer recommendations that
   align with documented pattern, block, template, and theme.json guidance.
+- When Pattern Overrides metadata materially strengthens the recommendation,
+  mention that briefly in the reason.
 - Return only name, score, and reason per pattern. Title, categories,
   and content are attached from the source data.
 - Return at most 8 recommendations.
 SYSTEM;
+	}
+
+	private static function build_custom_block_context_section( string $block_name, bool $is_custom_block_context ): string {
+		if ( ! $is_custom_block_context ) {
+			return '';
+		}
+
+		return "Custom block context: {$block_name}\n"
+			. "Prefer patterns with relevant Pattern Overrides support when it materially improves flexibility around this custom block.\n";
+	}
+
+	private static function is_custom_block_name( string $block_name ): bool {
+		return $block_name !== '' && ! str_starts_with( $block_name, 'core/' );
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, mixed>
+	 */
+	private static function build_candidate_ranking_hint( array $payload, string $block_name, bool $is_custom_block_context ): array {
+		if ( ! $is_custom_block_context ) {
+			return [];
+		}
+
+		$pattern_overrides = is_array( $payload['patternOverrides'] ?? null )
+			? $payload['patternOverrides']
+			: [];
+		$override_block_names = StringArray::sanitize( $pattern_overrides['blockNames'] ?? [] );
+		$custom_override_block_names = array_values(
+			array_filter(
+				$override_block_names,
+				static fn( string $candidate_block_name ): bool => self::is_custom_block_name( $candidate_block_name )
+			)
+		);
+		$matches_nearby_custom_block = in_array( $block_name, $custom_override_block_names, true );
+		$supports_custom_blocks      = [] !== $custom_override_block_names;
+		$uses_default_binding        = ! empty( $pattern_overrides['usesDefaultBinding'] );
+		$bonus                       = 0.0;
+		$summary                     = '';
+
+		if ( $matches_nearby_custom_block ) {
+			$bonus   = self::CUSTOM_BLOCK_MATCHING_OVERRIDE_BONUS;
+			$summary = sprintf( 'Supports Pattern Overrides for %s.', $block_name );
+		} elseif ( $supports_custom_blocks ) {
+			$bonus   = self::CUSTOM_BLOCK_GENERIC_OVERRIDE_BONUS;
+			$summary = 'Supports Pattern Overrides for custom block fields.';
+		}
+
+		if ( $summary !== '' && $uses_default_binding ) {
+			$summary .= ' Uses default binding expansion.';
+		}
+
+		return [
+			'customBlockContext'        => true,
+			'matchesNearbyCustomBlock'  => $matches_nearby_custom_block,
+			'supportsCustomBlocks'      => $supports_custom_blocks,
+			'usesDefaultBinding'        => $uses_default_binding,
+			'customOverrideBlockNames'  => $custom_override_block_names,
+			'summary'                   => $summary,
+			'bonus'                     => $bonus,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $ranking_hint
+	 * @return array<string, mixed>
+	 */
+	private static function prepare_candidate_ranking_hint_for_llm( array $ranking_hint ): array {
+		$summary = isset( $ranking_hint['summary'] ) && is_string( $ranking_hint['summary'] )
+			? sanitize_text_field( $ranking_hint['summary'] )
+			: '';
+		$hint    = [
+			'matchesNearbyCustomBlock' => ! empty( $ranking_hint['matchesNearbyCustomBlock'] ),
+			'supportsCustomBlocks'     => ! empty( $ranking_hint['supportsCustomBlocks'] ),
+			'usesDefaultBinding'       => ! empty( $ranking_hint['usesDefaultBinding'] ),
+			'summary'                  => $summary,
+		];
+
+		if ( $summary === '' && ! $hint['matchesNearbyCustomBlock'] && ! $hint['supportsCustomBlocks'] && ! $hint['usesDefaultBinding'] ) {
+			return [];
+		}
+
+		return $hint;
+	}
+
+	/**
+	 * @param array<string, mixed> $ranking_hint
+	 */
+	private static function append_pattern_override_reason_hint( string $reason, array $ranking_hint ): string {
+		$hint = isset( $ranking_hint['summary'] ) && is_string( $ranking_hint['summary'] )
+			? sanitize_text_field( $ranking_hint['summary'] )
+			: '';
+
+		if ( $hint === '' ) {
+			return $reason;
+		}
+
+		$normalized_reason = strtolower( $reason );
+		if (
+			str_contains( $normalized_reason, 'pattern override' )
+			|| str_contains( $normalized_reason, 'custom block' )
+			|| str_contains( $normalized_reason, 'binding' )
+		) {
+			return $reason;
+		}
+
+		if ( $reason === '' ) {
+			return $hint;
+		}
+
+		return rtrim( $reason, ". \t\n\r\0\x0B" ) . '. ' . $hint;
 	}
 
 	/**

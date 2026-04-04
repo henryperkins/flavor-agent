@@ -459,11 +459,159 @@ final class ServerCollector {
 				'categories'    => $pattern['categories'] ?? [],
 				'blockTypes'    => $pattern['blockTypes'] ?? [],
 				'templateTypes' => $pattern['templateTypes'] ?? [],
+				'patternOverrides' => self::collect_pattern_override_metadata(
+					(string) ( $pattern['content'] ?? '' )
+				),
 				'content'       => $pattern['content'] ?? '',
 			];
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Summarize whether a pattern contains explicit Pattern Overrides bindings.
+	 *
+	 * This stays recommendation-oriented: we surface presence and affected block
+	 * attributes so ranking/explanations can prefer override-friendly patterns
+	 * without widening mutation behavior.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function collect_pattern_override_metadata( string $content ): array {
+		if ( $content === '' ) {
+			return self::empty_pattern_override_metadata();
+		}
+
+		$blocks = parse_blocks( $content );
+
+		if ( [] === $blocks ) {
+			return self::empty_pattern_override_metadata();
+		}
+
+		$summary = [
+			'hasOverrides'          => false,
+			'blockCount'            => 0,
+			'blockNames'            => [],
+			'bindableAttributes'    => [],
+			'overrideAttributes'    => [],
+			'usesDefaultBinding'    => false,
+			'unsupportedAttributes' => [],
+		];
+
+		self::walk_pattern_override_metadata( $blocks, $summary );
+
+		$summary['blockNames'] = array_values( array_keys( $summary['blockNames'] ) );
+		ksort( $summary['bindableAttributes'] );
+		ksort( $summary['overrideAttributes'] );
+		ksort( $summary['unsupportedAttributes'] );
+
+		foreach ( [ 'bindableAttributes', 'overrideAttributes', 'unsupportedAttributes' ] as $map_key ) {
+			$summary[ $map_key ] = array_map(
+				static function ( array $attributes ): array {
+					sort( $attributes );
+					return array_values( array_unique( $attributes ) );
+				},
+				$summary[ $map_key ]
+			);
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<string, mixed>             $summary
+	 */
+	private static function walk_pattern_override_metadata( array $blocks, array &$summary ): void {
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$block_name = sanitize_text_field( (string) ( $block['blockName'] ?? '' ) );
+			$attrs      = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : [];
+			$metadata   = is_array( $attrs['metadata'] ?? null ) ? $attrs['metadata'] : [];
+			$bindings   = is_array( $metadata['bindings'] ?? null ) ? $metadata['bindings'] : [];
+
+			if ( $block_name !== '' && [] !== $bindings ) {
+				$summary['bindableAttributes'][ $block_name ] = self::resolve_bindable_attributes( $block_name );
+				$override_attributes = [];
+				$unsupported         = [];
+				$bindable_lookup     = array_fill_keys(
+					$summary['bindableAttributes'][ $block_name ] ?? [],
+					true
+				);
+
+				foreach ( $bindings as $attribute_name => $binding ) {
+					if ( ! is_string( $attribute_name ) || ! is_array( $binding ) ) {
+						continue;
+					}
+
+					$source = sanitize_text_field( (string) ( $binding['source'] ?? '' ) );
+					if ( $source !== 'core/pattern-overrides' ) {
+						continue;
+					}
+
+					$summary['hasOverrides'] = true;
+
+					if ( $attribute_name === '__default' ) {
+						$summary['usesDefaultBinding'] = true;
+						$override_attributes          = array_merge(
+							$override_attributes,
+							$summary['bindableAttributes'][ $block_name ] ?? []
+						);
+						continue;
+					}
+
+					if ( isset( $bindable_lookup[ $attribute_name ] ) ) {
+						$override_attributes[] = $attribute_name;
+					} else {
+						$unsupported[] = $attribute_name;
+					}
+				}
+
+				if ( [] !== $override_attributes || [] !== $unsupported || $summary['usesDefaultBinding'] ) {
+					$summary['blockCount'] += 1;
+					$summary['blockNames'][ $block_name ] = true;
+				}
+
+				if ( [] !== $override_attributes ) {
+					$summary['overrideAttributes'][ $block_name ] = array_merge(
+						$summary['overrideAttributes'][ $block_name ] ?? [],
+						$override_attributes
+					);
+				}
+
+				if ( [] !== $unsupported ) {
+					$summary['unsupportedAttributes'][ $block_name ] = array_merge(
+						$summary['unsupportedAttributes'][ $block_name ] ?? [],
+						$unsupported
+					);
+				}
+			}
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( [] !== $inner_blocks ) {
+				self::walk_pattern_override_metadata( $inner_blocks, $summary );
+			}
+		}
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function empty_pattern_override_metadata(): array {
+		return [
+			'hasOverrides'          => false,
+			'blockCount'            => 0,
+			'blockNames'            => [],
+			'bindableAttributes'    => [],
+			'overrideAttributes'    => [],
+			'usesDefaultBinding'    => false,
+			'unsupportedAttributes' => [],
+		];
 	}
 
 	public static function for_template_parts( ?string $area = null, bool $include_content = true ): array {

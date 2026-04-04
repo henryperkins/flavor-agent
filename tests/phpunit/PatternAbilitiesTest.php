@@ -267,6 +267,8 @@ final class PatternAbilitiesTest extends TestCase {
 		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
 		$this->assertStringContainsString( 'theme/hero', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'theme/footer-callout', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'patternOverrides', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'hasOverrides', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'theme/header-utility', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'theme/invisible-pattern', (string) ( $ranking_request['input'] ?? '' ) );
 	}
@@ -358,6 +360,81 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( '## WordPress Developer Guidance', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Cover block reference', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'overlay styling, and inner content layout controls', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_sharpens_custom_block_override_reasons_without_widening_scope(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/custom-block-generic', 0.78, [
+						'patternOverrides' => [
+							'hasOverrides'          => true,
+							'blockCount'            => 1,
+							'blockNames'            => [ 'plugin/card' ],
+							'bindableAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+							'overrideAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+							'usesDefaultBinding'    => false,
+							'unsupportedAttributes' => [],
+						],
+					] ),
+					$this->pattern_point( 'theme/plain-pattern', 0.79 ),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/custom-block-generic', 0.81, [
+						'patternOverrides' => [
+							'hasOverrides'          => true,
+							'blockCount'            => 1,
+							'blockNames'            => [ 'plugin/card' ],
+							'bindableAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+							'overrideAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+							'usesDefaultBinding'    => true,
+							'unsupportedAttributes' => [],
+						],
+					] ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/custom-block-generic',
+								'score'  => 0.87,
+								'reason' => 'Fits the surrounding card layout.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'     => 'page',
+				'blockContext' => [
+					'blockName' => 'plugin/card',
+				],
+				'prompt'       => 'Keep it flexible for repeated card instances.',
+			]
+		);
+
+		$this->assertSame( [ 'theme/custom-block-generic' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertStringContainsString(
+			'Supports Pattern Overrides for plugin/card.',
+			(string) ( $result['recommendations'][0]['reason'] ?? '' )
+		);
+		$this->assertTrue( (bool) ( $result['recommendations'][0]['patternOverrides']['hasOverrides'] ?? false ) );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$this->assertStringContainsString( 'Custom block context: plugin/card', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Supports Pattern Overrides for plugin/card.', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'matchesNearbyCustomBlock', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
 	public function test_recommend_patterns_uses_connector_chat_with_fallback_direct_embeddings(): void {
@@ -580,18 +657,29 @@ final class PatternAbilitiesTest extends TestCase {
 	/**
 	 * @return array{score: float, payload: array<string, mixed>}
 	 */
-	private function pattern_point( string $name, float $score ): array {
+	private function pattern_point( string $name, float $score, array $overrides = [] ): array {
+		$payload = [
+			'name'          => $name,
+			'title'         => ucwords( str_replace( [ 'theme/', '-' ], [ '', ' ' ], $name ) ),
+			'description'   => "Description for {$name}",
+			'categories'    => [ 'marketing' ],
+			'blockTypes'    => [ 'core/template-part/header' ],
+			'templateTypes' => [ 'home' ],
+			'patternOverrides' => [
+				'hasOverrides'          => $name === 'theme/footer-callout',
+				'blockCount'            => $name === 'theme/footer-callout' ? 1 : 0,
+				'blockNames'            => $name === 'theme/footer-callout' ? [ 'core/heading' ] : [],
+				'bindableAttributes'    => $name === 'theme/footer-callout' ? [ 'core/heading' => [ 'content' ] ] : [],
+				'overrideAttributes'    => $name === 'theme/footer-callout' ? [ 'core/heading' => [ 'content' ] ] : [],
+				'usesDefaultBinding'    => false,
+				'unsupportedAttributes' => [],
+			],
+			'content'       => "<!-- wp:paragraph --><p>{$name}</p><!-- /wp:paragraph -->",
+		];
+
 		return [
 			'score'   => $score,
-			'payload' => [
-				'name'          => $name,
-				'title'         => ucwords( str_replace( [ 'theme/', '-' ], [ '', ' ' ], $name ) ),
-				'description'   => "Description for {$name}",
-				'categories'    => [ 'marketing' ],
-				'blockTypes'    => [ 'core/template-part/header' ],
-				'templateTypes' => [ 'home' ],
-				'content'       => "<!-- wp:paragraph --><p>{$name}</p><!-- /wp:paragraph -->",
-			],
+			'payload' => array_replace_recursive( $payload, $overrides ),
 		];
 	}
 

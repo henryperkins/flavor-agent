@@ -8,7 +8,7 @@ I reviewed the repo docs in `docs/README.md`, `docs/SOURCE_OF_TRUTH.md`, `docs/2
 
 The repo's core thesis is still right: keep AI inside native Gutenberg and wp-admin surfaces, keep actions bounded/reviewable/undoable, and align with core infrastructure instead of building a parallel AI app.
 
-The important correction is release timing. As of the March 31, 2026 Core post, WordPress 7.0 is no longer on the earlier April 9, 2026 target. Core says the 7.0 cycle has been extended by "a few weeks" and that a new final timeline will be announced later. The reason is finalizing collaboration architecture, not broadening scope.
+The important correction is release timing. As of the March 31, 2026 Core post, WordPress 7.0 is no longer on the earlier fixed final-release target. Core says the 7.0 cycle has been extended by "a few weeks" and that a new final timeline will be announced later. The reason is finalizing collaboration architecture, not broadening scope.
 
 That means the near-term recommendation should be more conservative around anything tied to collaboration internals.
 
@@ -104,7 +104,7 @@ The collaboration note about metaboxes is a strong ecosystem signal even beyond 
 If I were setting direction from today, I would do this:
 
 1. Finish docs and verification closeout around the existing surfaces.
-2. Update repo assumptions anywhere they still imply the old April 9, 2026 release target.
+2. Update repo assumptions anywhere they still imply the old fixed WordPress 7.0 final-release target.
 3. Deepen admin audit/diagnostics and provenance.
 4. Expand recommendation quality around patterns, styles, navigation overlays, and structural editor constraints.
 5. Wait for the revised 7.0 final timeline and stable collaboration architecture before making any collaboration-adjacent product move.

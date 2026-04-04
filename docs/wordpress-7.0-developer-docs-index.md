@@ -36,7 +36,7 @@ Note: as of 2026-03-25, a `WordPress 7.0 Field Guide` post was not discoverable 
 
 ## New Notes This Refresh
 
-- On 2026-03-31, Core published `Extending the 7.0 Cycle`, which supersedes earlier assumptions that WordPress 7.0 would release on 2026-04-09. The release is now delayed by a few weeks and the final date is pending a revised Core timeline.
+- On 2026-03-31, Core published `Extending the 7.0 Cycle`, which supersedes the earlier fixed final-release assumption for WordPress 7.0. The release is now delayed by a few weeks and the final date is pending a revised Core timeline.
 - The March 10, 2026 Developer Blog roundup says the "always-iframed post editor" work was punted to WordPress 7.1, so the WordPress 7.0 iframe note should be read as the inserted-block-version gate rather than a blanket always-iframed rollout.
 - The February 20, 2026 `Help Test WordPress 7.0` post expands the concrete release-test surface beyond the standalone dev notes: admin refresh, client-side media processing, Icon and Breadcrumbs blocks, Gallery lightbox, Cover external video, and Grid controls are all called out explicitly.
 - The March 11, 2026 Gutenberg 22.7 update shows Connectors work continuing after the standalone Connectors dev note: the Connectors screen and API landed, connector setting names gained the `_ai_` prefix, and providers are dynamically registered from the WP AI Client registry.
