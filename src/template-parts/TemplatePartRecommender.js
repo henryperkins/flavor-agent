@@ -39,6 +39,10 @@ import {
 import { getTemplatePartAreaLookup } from '../utils/template-part-areas';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { formatCount } from '../utils/format-count';
+import {
+	getEditedPostTypeEntity,
+	usePostTypeEntityContract,
+} from '../utils/editor-entity-contracts';
 
 function normalizeTemplatePartSlug( templatePartRef ) {
 	if ( typeof templatePartRef !== 'string' || templatePartRef === '' ) {
@@ -72,18 +76,14 @@ function formatBlockPath( path = [] ) {
 
 function deriveTemplatePartArea(
 	slug,
-	areaLookup = getTemplatePartAreaLookup()
+	areaLookup = getTemplatePartAreaLookup(),
+	knownAreas = []
 ) {
 	if ( typeof areaLookup?.[ slug ] === 'string' && areaLookup[ slug ] ) {
 		return areaLookup[ slug ];
 	}
 
-	if (
-		slug === 'header' ||
-		slug === 'footer' ||
-		slug === 'sidebar' ||
-		slug === 'navigation-overlay'
-	) {
+	if ( Array.isArray( knownAreas ) && knownAreas.includes( slug ) ) {
 		return slug;
 	}
 
@@ -283,23 +283,15 @@ function buildTemplatePartSuggestionViewModel(
 
 export default function TemplatePartRecommender() {
 	const canRecommend = getSurfaceCapability( 'template-part' ).available;
-	const templatePartRef = useSelect( ( select ) => {
-		const editSite = select( 'core/edit-site' );
-
-		if ( ! editSite?.getEditedPostType || ! editSite?.getEditedPostId ) {
-			return null;
-		}
-
-		if ( editSite.getEditedPostType() !== 'wp_template_part' ) {
-			return null;
-		}
-
-		const editedPostId = editSite.getEditedPostId();
-
-		return typeof editedPostId === 'string' && editedPostId !== ''
-			? editedPostId
-			: null;
-	}, [] );
+	const templatePartContract = usePostTypeEntityContract(
+		'wp_template_part'
+	);
+	const templatePartRef = useSelect(
+		( select ) =>
+			getEditedPostTypeEntity( select, 'wp_template_part' )?.entityId ||
+			null,
+		[]
+	);
 	const {
 		recommendations,
 		explanation,
@@ -426,7 +418,25 @@ export default function TemplatePartRecommender() {
 		() => normalizeTemplatePartSlug( templatePartRef ),
 		[ templatePartRef ]
 	);
-	const area = useMemo( () => deriveTemplatePartArea( slug ), [ slug ] );
+	const contractAreaValues = useMemo(
+		() =>
+			Array.isArray( templatePartContract.templatePartAreaOptions )
+				? templatePartContract.templatePartAreaOptions.map(
+						( option ) => option.value
+				  )
+				: [],
+		[ templatePartContract.templatePartAreaOptions ]
+	);
+	const area = useMemo(
+		() => deriveTemplatePartArea( slug, undefined, contractAreaValues ),
+		[ slug, contractAreaValues ]
+	);
+	const areaLabel = useMemo(
+		() =>
+			templatePartContract.templatePartAreaLabels?.[ area ] ||
+			humanizeLabel( area ),
+		[ templatePartContract.templatePartAreaLabels, area ]
+	);
 	const hasMatchingResult = resultRef === templatePartRef;
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
 
@@ -600,7 +610,11 @@ export default function TemplatePartRecommender() {
 		[ undoActivity ]
 	);
 
-	if ( ! templatePartRef ) {
+	if (
+		! templatePartRef ||
+		! templatePartContract.hasConfig ||
+		! templatePartContract.titleField
+	) {
 		return null;
 	}
 
@@ -617,7 +631,7 @@ export default function TemplatePartRecommender() {
 					<div className="flavor-agent-card__meta">
 						{ area && (
 							<span className="flavor-agent-pill">
-								Area: { humanizeLabel( area ) }
+								Area: { areaLabel }
 							</span>
 						) }
 						{ slug && (

@@ -1,35 +1,23 @@
 :root {
-	--flavor-agent-brand-ink: #17232a;
-	--flavor-agent-brand-text: #203038;
-	--flavor-agent-brand-muted: #5f6d73;
-	--flavor-agent-brand-accent: #0b7b80;
-	--flavor-agent-brand-accent-strong: #075c62;
-	--flavor-agent-brand-warm: #cf7a45;
-	--flavor-agent-brand-surface: #fffdf7;
-	--flavor-agent-brand-surface-strong: #f4efe2;
-	--flavor-agent-brand-line: rgba(23, 35, 42, 0.12);
-	--flavor-agent-brand-shadow: 0 24px 56px rgba(17, 34, 41, 0.1);
-	--flavor-agent-brand-serif: "Iowan Old Style", "Palatino Linotype",
-		"Book Antiqua", Georgia, serif;
-	--flavor-agent-brand-sans: "Aptos", "Segoe UI", "Helvetica Neue",
-		sans-serif;
-}
-
-.flavor-agent-brand-note {
-	margin: 0;
-	color: var(--flavor-agent-brand-accent-strong);
-	font-family: var(--flavor-agent-brand-sans);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
+	--flavor-agent-brand-ink: var(--flavor-agent-color-ink);
+	--flavor-agent-brand-text: var(--flavor-agent-color-text);
+	--flavor-agent-brand-muted: var(--flavor-agent-color-muted);
+	--flavor-agent-brand-accent: var(--flavor-agent-color-accent);
+	--flavor-agent-brand-accent-strong: var(--flavor-agent-color-accent-strong);
+	--flavor-agent-brand-warm: var(--flavor-agent-color-warm);
+	--flavor-agent-brand-surface: var(--flavor-agent-surface-brand);
+	--flavor-agent-brand-surface-strong: var(--flavor-agent-surface-brand-strong);
+	--flavor-agent-brand-line: var(--wpds-color-stroke-surface-neutral, #d8d8d8);
+	--flavor-agent-brand-shadow: var(--flavor-agent-shadow-brand);
+	--flavor-agent-brand-serif: var(--flavor-agent-font-serif);
+	--flavor-agent-brand-sans: var(--flavor-agent-font-sans);
 }
 
 .flavor-agent-wordmark {
 	margin: 0;
 	color: var(--flavor-agent-brand-ink);
 	font-family: var(--flavor-agent-brand-serif);
-	font-size: clamp(2.75rem, 5vw, 4.75rem);
+	font-size: clamp(2.2rem, 4.6vw, 3.7rem);
 	font-weight: 700;
 	letter-spacing: -0.06em;
 	line-height: 0.92;
@@ -40,16 +28,24 @@
 	position: relative;
 	overflow: hidden;
 	border: 1px solid var(--flavor-agent-brand-line);
-	border-radius: 28px;
+	border-radius: var(--flavor-agent-radius-2xl);
 	background:
 		radial-gradient(
 			circle at top right,
-			rgba(11, 123, 128, 0.22),
+			color-mix(
+				in srgb,
+				var(--flavor-agent-brand-accent) 22%,
+				transparent
+			),
 			transparent 34%
 		),
 		radial-gradient(
 			circle at bottom left,
-			rgba(207, 122, 69, 0.2),
+			color-mix(
+				in srgb,
+				var(--flavor-agent-brand-warm) 20%,
+				transparent
+			),
 			transparent 30%
 		),
 		linear-gradient(135deg, #f7f0df 0%, #fffdf8 48%, #edf7f7 100%);
@@ -94,7 +90,7 @@
 	left: 54%;
 	width: 52%;
 	height: 132%;
-	border-radius: 999px;
+	border-radius: var(--flavor-agent-radius-full);
 	background:
 		radial-gradient(
 			circle at 32% 36%,
@@ -103,13 +99,21 @@
 		),
 		radial-gradient(
 			circle at 68% 56%,
-			rgba(11, 123, 128, 0.22),
-			rgba(11, 123, 128, 0) 44%
+			color-mix(
+				in srgb,
+				var(--flavor-agent-brand-accent) 22%,
+				transparent
+			),
+			transparent 44%
 		),
 		radial-gradient(
 			circle at 48% 70%,
-			rgba(207, 122, 69, 0.24),
-			rgba(207, 122, 69, 0) 46%
+			color-mix(
+				in srgb,
+				var(--flavor-agent-brand-warm) 24%,
+				transparent
+			),
+			transparent 46%
 		);
 	filter: blur(14px);
 	opacity: 0.95;
@@ -122,7 +126,7 @@
 	z-index: 1;
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: 12px;
 	max-width: 760px;
 }
 
@@ -130,11 +134,11 @@
 	margin: 0;
 	color: var(--flavor-agent-brand-text);
 	font-family: var(--flavor-agent-brand-serif);
-	font-size: clamp(1.7rem, 2.7vw, 2.5rem);
+	font-size: clamp(1.55rem, 2.3vw, 2.15rem);
 	font-weight: 600;
 	letter-spacing: -0.04em;
 	line-height: 1;
-	max-width: 12ch;
+	max-width: 15ch;
 	text-wrap: balance;
 }
 
@@ -142,9 +146,9 @@
 	margin: 0;
 	color: var(--flavor-agent-brand-muted);
 	font-family: var(--flavor-agent-brand-sans);
-	font-size: 15px;
-	line-height: 1.65;
-	max-width: 54ch;
+	font-size: 14px;
+	line-height: 1.6;
+	max-width: 46ch;
 }
 
 .flavor-agent-admin-hero__actions {
@@ -155,7 +159,7 @@
 
 .flavor-agent-admin-hero .button {
 	min-height: 40px;
-	border-radius: 999px;
+	border-radius: var(--flavor-agent-radius-full);
 	padding-inline: 18px;
 	font-weight: 600;
 }

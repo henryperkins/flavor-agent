@@ -1,0 +1,28 @@
+@import "../../node_modules/@wordpress/theme/src/prebuilt/css/design-tokens.css";
+@import "../../node_modules/@wordpress/base-styles/build-style/admin-schemes.css";
+
+/**
+ * Standalone plugin admin pages do not get core's ThemeProvider runtime.
+ * Bridge the public admin color-scheme variables into the WPDS brand/focus
+ * tokens these screens need so they react to the active admin color scheme
+ * without depending on private @wordpress/theme APIs.
+ */
+body {
+	--wpds-color-bg-interactive-brand-strong: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-bg-interactive-brand-strong-active: var(--wp-admin-theme-color-darker-10, #2145e6);
+	--wpds-color-bg-interactive-brand-weak-active: color-mix(
+		in srgb,
+		var(--wp-admin-theme-color, #3858e9) 8%,
+		transparent
+	);
+	--wpds-color-bg-surface-brand: color-mix(
+		in srgb,
+		var(--wp-admin-theme-color, #3858e9) 10%,
+		var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+	);
+	--wpds-color-fg-interactive-brand: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-fg-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
+	--wpds-color-stroke-focus-brand: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-stroke-interactive-brand: var(--wp-admin-theme-color, #3858e9);
+	--wpds-color-stroke-interactive-brand-active: var(--wp-admin-theme-color-darker-20, #183ad6);
+}

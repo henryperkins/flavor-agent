@@ -1,9 +1,9 @@
-# WordPress 7.0 / Gutenberg 22.8 -- Developer Reference
+# WordPress 7.0 / Gutenberg 22.8-22.9 RC -- Developer Reference
 
 > Compiled: 2026-03-19
-> Reviewed: 2026-03-27
-> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0 and 22.8.1 release notes, official dev notes through 2026-03-24
-> Scope anchor: Flavor Agent should treat Gutenberg 22.8.x as the compatibility target for this WordPress 7.0 cycle snapshot
+> Reviewed: 2026-04-03
+> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0 and 22.8.1 release notes, the Gutenberg 22.9 release checklist, and official dev notes through 2026-03-24
+> Scope anchor: Flavor Agent should treat Gutenberg 22.9 RC as the current pre-release compatibility probe, with 22.8.1 as the last stable plugin baseline for this WordPress 7.0 cycle snapshot
 > Scope: API changes, new features, and deprecations relevant to block editor plugin development
 > Status: release-cycle reference snapshot, not the live backlog or the canonical source for shipped Flavor Agent behavior.
 > Use `STATUS.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current product truth and priorities.
@@ -17,6 +17,7 @@
 - [AI as a WordPress Fundamental](https://make.wordpress.org/core/2025/12/04/ai-as-a-wordpress-fundamental/) -- Vision for AI in core
 - [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/) -- Final WordPress 7.0 AI client dev note
 - [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/) -- Final JavaScript Abilities API dev note
+- [Gutenberg 22.9 release checklist](https://github.com/WordPress/gutenberg/issues/76956) -- RC date 2026-04-01, planned stable date 2026-04-08
 - [Gutenberg 22.8.0 Release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0) -- Release notes for the 2026-03-25 scope anchor
 - [Gutenberg 22.8.1 Release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1) -- Patch release notes for the 2026-03-26 bugfix baseline
 
@@ -802,7 +803,7 @@ New [Icon block (#71227)](https://github.com/WordPress/gutenberg/pull/71227) wit
 
 ### Still Experimental (No Stable Replacement)
 
-These APIs remain experimental in both WP 7.0 and Gutenberg 22.8. They are the correct and only way to access their respective features.
+These APIs remain experimental in both WP 7.0 and the late-cycle Gutenberg 22.8/22.9 RC snapshots. They are the correct and only way to access their respective features.
 
 | API | Used By | Notes |
 |-----|---------|-------|
@@ -877,6 +878,7 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | DataViews / DataForm | [DataViews, DataForm, et al. in WordPress 7.0](https://make.wordpress.org/core/2026/03/04/dataviews-dataform-et-al-in-wordpress-7-0/) |
 | Breadcrumb Block Filters | [Breadcrumb block filters](https://make.wordpress.org/core/2026/03/04/breadcrumb-block-filters/) |
 | PHP 7.2/7.3 Dropped | [Dropping support for PHP 7.2 and 7.3](https://make.wordpress.org/core/2026/01/09/dropping-support-for-php-7-2-and-7-3/) |
+| Gutenberg 22.9 RC | [Gutenberg 22.9 release checklist](https://github.com/WordPress/gutenberg/issues/76956) |
 | Gutenberg 22.8.1 | [Release 22.8.1](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1) |
 | Gutenberg 22.8.0 | [Release 22.8.0](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0) |
 | Gutenberg 22.7 | [What's new in Gutenberg 22.7 (11 March)](https://make.wordpress.org/core/2026/03/11/whats-new-in-gutenberg-22-7-11-march/) |

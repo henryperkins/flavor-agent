@@ -1,0 +1,80 @@
+/**
+ * Flavor Agent — Design tokens.
+ *
+ * Two-layer architecture:
+ *
+ * Layer 1 (WPDS): Standard UI consumes --wpds-* tokens from @wordpress/theme
+ *   directly in consumer CSS. Editor screens inherit host runtime values where
+ *   core provides them. Plugin-owned admin bundles import the WPDS design
+ *   tokens and a public admin-scheme bridge for the brand/focus token family,
+ *   so standalone admin pages do not rely on hardcoded fallbacks alone.
+ *
+ * Layer 2 (Brand): This file defines --flavor-agent-* extensions for the
+ *   plugin's own identity: accent teal, warm orange, serif typography, hero
+ *   surfaces, large radii, and the brand shadow. These are intentionally
+ *   fixed — they do not adapt to admin color schemes, matching how established
+ *   plugins (Jetpack, WooCommerce) handle branded settings pages.
+ *
+ * Accent-derived surfaces (--flavor-agent-surface, --flavor-agent-surface-strong)
+ * bridge both layers: they use color-mix() against --wpds-color-bg-surface-neutral-strong
+ * so they follow the active WPDS runtime when available, while the brand
+ * accent tint stays constant.
+ */
+
+:root {
+	/* ── Brand palette ─────────────────────────────────────────────────────── */
+	/* No WPDS equivalent — the plugin's own chromatic identity. */
+
+	--flavor-agent-color-ink: #17232a;            /* Darkest — wordmarks, headings */
+	--flavor-agent-color-text: #203038;           /* Body text (reconciles brand #203038 / old editor #1f2d34) */
+	--flavor-agent-color-muted: #5f6d73;          /* Secondary text (reconciles brand #5f6d73 / old editor #627078) */
+	--flavor-agent-color-accent: #0b7b80;         /* Primary teal */
+	--flavor-agent-color-accent-strong: #075c62;  /* Teal hover/active */
+	--flavor-agent-color-warm: #cf7a45;           /* Warm orange — gradient counterpoint */
+
+	/* ── Brand surfaces ─────────────────────────────────────────────────────── */
+	/* Hero card, settings section, and admin marketing backgrounds.            */
+	/* Fixed — these are the brand aesthetic, not scheme-adaptive chrome.       */
+
+	--flavor-agent-surface-brand: #fffdf7;
+	--flavor-agent-surface-brand-strong: #f4efe2;
+
+	/* ── Accent-derived surfaces ────────────────────────────────────────────── */
+	/* Blends brand accent into the WPDS neutral background when available.     */
+	/* Falls back to static off-white so the panel reads correctly everywhere.  */
+
+	--flavor-agent-surface: color-mix(
+		in srgb,
+		var(--flavor-agent-color-accent) 4%,
+		var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+	);
+	--flavor-agent-surface-strong: color-mix(
+		in srgb,
+		var(--flavor-agent-color-accent) 8%,
+		var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+	);
+
+	/* ── Brand typography ────────────────────────────────────────────────────── */
+	/* WPDS uses system-ui; the plugin uses these custom stacks for identity.   */
+
+	--flavor-agent-font-serif: "Iowan Old Style", "Palatino Linotype",
+		"Book Antiqua", Georgia, serif;
+	--flavor-agent-font-sans: "Aptos", "Segoe UI", "Helvetica Neue",
+		sans-serif;
+
+	/* ── Extended border-radius ─────────────────────────────────────────────── */
+	/* WPDS border-radius scale tops out at lg = 8px. The plugin's rounded      */
+	/* card aesthetic needs larger values — these extend the scale upward.       */
+	/* Small radii (2px, 4px, 8px) should use --wpds-border-radius-* directly.  */
+
+	--flavor-agent-radius-lg: 14px;    /* Cards, form fields */
+	--flavor-agent-radius-xl: 18px;    /* Settings sections, metric cards */
+	--flavor-agent-radius-2xl: 24px;   /* Large section wrappers */
+	--flavor-agent-radius-full: 999px; /* Pills, badges, icon buttons */
+
+	/* ── Brand shadow ────────────────────────────────────────────────────────── */
+	/* A single dramatic drop shadow used on brand hero/marketing surfaces.     */
+	/* Standard UI elevation uses --wpds-elevation-* tokens instead.            */
+
+	--flavor-agent-shadow-brand: 0 24px 56px rgba(17, 34, 41, 0.1);
+}

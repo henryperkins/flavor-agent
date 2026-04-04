@@ -4,8 +4,9 @@
 > Scope: repo-specific execution plan for the current 5-epic roadmap
 > External alignment snapshot verified: 2026-04-03
 > Support target: WordPress 7.0 RC -> stable, PHP 8.0+, Node 20 / npm 10
-> Scope anchor: Gutenberg 22.8.x (`22.8.0` released 2026-03-25; `22.8.1` released 2026-03-26)
-> Baseline: current repo already ships block, pattern, template, template-part, navigation, global styles, and activity surfaces
+> Scope anchor: Gutenberg 22.9 RC line (RC date 2026-04-01; planned stable date 2026-04-08 per the release checklist). Last stable plugin baseline: `22.8.1` (released 2026-03-26)
+> Baseline: current repo already ships block, pattern, template, template-part, navigation, global styles, style book, and activity surfaces
+> Supplemental execution compression: `docs/2026-04-03-three-phase-roadmap.md`
 
 ## Goal
 
@@ -32,10 +33,11 @@ These are the external constraints this repo should treat as current on 2026-04-
    - server-side creation of blocks and patterns
    - navigation overlay work as a template-part-aware flow
    - by the late-cycle planning update, Design System work was explicitly canceled for 7.0, so treat that as adjacent ecosystem direction rather than a 7.0 dependency for this plugin
-3. Gutenberg 22.8 is the scope anchor for this plan. Treat the `22.8.x` line as the current plugin-alignment baseline:
+3. Gutenberg 22.9 entered release-candidate phase on 2026-04-01, with the release checklist targeting 2026-04-08 for the stable plugin release. Treat the 22.9 RC line as the current pre-release alignment signal, while keeping `22.8.1` as the last stable plugin baseline:
+   - `22.9` is the correct late-cycle compatibility probe for editor/admin contract drift during the extended WordPress 7.0 cycle
    - `22.8.0` (2026-03-25) expanded Connectors with registry extensibility, unregister/upsert support, and better empty-state polish
    - `22.8.0` also advanced editor-adjacent surfaces relevant to this plugin, including Global Styles pseudo-selector state UI, pattern-editing/block-fields selection highlighting, and navigation/site-design polish
-   - `22.8.1` (2026-03-26) is primarily a collaboration-heavy patch release, so treat it as bugfix baseline coverage rather than a new product-direction signal
+   - `22.8.1` (2026-03-26) remains the last stable plugin release in the line and should be treated as the stable bugfix baseline until 22.9 ships
 4. The official `AI` plugin now positions itself as the reference implementation for:
    - inline/editor-native AI features
    - Connectors-based provider setup
@@ -93,33 +95,36 @@ Before expanding the roadmap into broader new surfaces, the clearest next steps 
    - Block, navigation, template, and template-part surfaces now share normalized interaction states and shared advisory/review/status components.
    - Block keeps explicit inline apply only for safe local attribute updates, while template and template-part stay preview-first and navigation stays advisory-only.
    - A thin `src/review/notes-adapter.js` shape adapter now exists for future Notes/comment projection without taking a runtime dependency on unstable APIs.
-3. **Deepen the shipped audit slice before adding broader agent behavior.**
+3. **Finish Epic 3 style/theme closeout.** (Completed 2026-04-03)
+   - Planning docs and `STATUS.md` now treat the shipped Global Styles and Style Book surfaces as current baseline rather than future implementation.
+   - The focused WP 7.0 Global Styles smoke now has a fresh passing result recorded in `STATUS.md`.
+4. **Deepen the shipped audit slice before adding broader agent behavior.**
    - Expand `Settings > AI Activity` with before/after inspection, request/provider diagnostics, and clearer ordered-undo visibility.
    - Keep the server-backed repository as the source of truth for undo eligibility and diagnostics.
-4. **Record the navigation contract explicitly.**
+5. **Record the navigation contract explicitly.**
    - Navigation stays advisory-only through v1.0; do not add an apply contract in the current milestone.
    - Revisit only if a bounded previewable/undoable navigation executor becomes its own tracked follow-up.
-5. **Refresh live provider-backed verification.**
+6. **Refresh live provider-backed verification.**
    - Re-run end-to-end recommendation execution with valid credentials and capture the results in `STATUS.md`.
    - Use that run to confirm the current Connectors/provider boundary, docs grounding, and recent Gutenberg trunk-alignment work under real credentials.
-5. **Switch from RC/beta assumptions to stable WordPress 7.0 as soon as available.**
+7. **Switch from RC/beta assumptions to stable WordPress 7.0 as soon as available.**
    - Update the WP 7.0 Docker/browser harness to the stable image tag.
    - Re-audit experimental adapters (`pattern-settings.js`, theme settings sources, and any remaining trunk-sensitive inspector modeling) against final 7.0 core.
 
-6. **Record the remaining WP 7.0 feature-surface decisions that were previously only noted in migration analysis.**
+8. **Record the remaining WP 7.0 feature-surface decisions that were previously only noted in migration analysis.**
    - Client-side `@wordpress/core-abilities` consumption stays deferred for v1; first-party JS remains on feature-specific stores and REST endpoints until a narrow admin/runtime integration is separately scoped.
    - Pattern Overrides support for custom blocks stays deferred until there is a bounded metadata contract worth feeding into ranking and review UI.
    - Expanded `contentOnly` semantics are a tracked structural-constraint update for the later structural milestone, not an implicit current-surface expansion.
    - The first Style milestone does not include width/height preset transforms or pseudo-element-aware token extraction; both stay deferred until style intelligence has its own bounded slice.
    - `customCSS` recommendation generation is explicitly out of scope for v1 unless the product thesis changes.
 
-Only after those six items land should the roadmap move aggressively into new style-book or higher-level site-agent surface work.
+Only after those eight items land should the roadmap move aggressively into broader structural or higher-level site-agent surface work.
 
 ## Ordered Execution
 
 1. Epic 1: Core AI Convergence and Capability Gating (Completed 2026-03-27)
 2. Epic 2: Unified Inline Review Model (Completed 2026-03-27)
-3. Epic 3: Style and Theme Intelligence (Implemented in tree; closeout pending)
+3. Epic 3: Style and Theme Intelligence (Closed 2026-04-03)
 4. Epic 4: Structural Site-Building Intelligence
 5. Epic 5: Durable Audit, Observability, and Narrow Site Agent
 
@@ -127,7 +132,7 @@ The order matters.
 
 Epic 1 reduced architectural drift from WordPress core and the official AI plugin.
 Epic 2 made the existing surfaces feel like one product.
-Epic 3 pushed deeper into native theme and style tooling and is now implemented in tree, with docs/verification closeout still pending.
+Epic 3 pushed deeper into native theme and style tooling and is now closed as shipped baseline.
 Epic 4 expands structural power without leaving Gutenberg semantics.
 Epic 5 adds the durable trust and narrow admin action layer needed before broader agentic behavior.
 
@@ -336,7 +341,7 @@ Browser:
 2. Structural actions are always reviewable before mutation.
 3. Activity and undo presentation are consistent across all surfaces.
 
-## Epic 3: Style and Theme Intelligence (Implemented in tree; closeout pending)
+## Epic 3: Style and Theme Intelligence (Closed 2026-04-03)
 
 ### Objective
 
@@ -350,23 +355,24 @@ This is the clearest way to push beyond current WordPress.com-style integration 
 
 The first bounded Epic 3 slice is already implemented in current code:
 
-1. `inc/Abilities/StyleAbilities.php`, `inc/LLM/StylePrompt.php`, `inc/REST/Agent_Controller.php`, and `inc/Abilities/Registration.php` now provide the dedicated style ability, prompt contract, REST route, and schema coverage.
-2. `src/global-styles/GlobalStylesRecommender.js` now ships the native Site Editor Global Styles surface, with a sidebar mount and document-panel fallback.
-3. `src/utils/style-operations.js` plus `src/store/index.js` now provide deterministic Global Styles apply/undo behavior rather than treating style work as advisory-only.
-4. `inc/Abilities/SurfaceCapabilities.php`, localized surface bootstrapping, and `flavor-agent/check-status` now include the shared `globalStyles` readiness contract instead of treating the style surface as a one-off exception.
-5. Global Styles actions are now wired into shared activity persistence, editor hydration, undo validation, and admin audit handling through the existing client/server activity layers.
-6. The current docs and tests already include the style feature doc, route/ability references, PHPUnit coverage for style contracts/readiness, JS coverage for style operations and surface behavior, and a WP 7.0 smoke for preview/apply/undo.
+1. `inc/Abilities/StyleAbilities.php`, `inc/LLM/StylePrompt.php`, `inc/REST/Agent_Controller.php`, and `inc/Abilities/Registration.php` now provide the shared style ability, prompt contract, REST route, and schema coverage for both `global-styles` and `style-book` scopes.
+2. `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js` now ship the first-party Site Editor style surfaces, with native sidebar/portal integration instead of a custom shell.
+3. `src/utils/style-operations.js` plus `src/store/index.js` now provide deterministic Global Styles and Style Book apply/undo behavior rather than treating style work as advisory-only.
+4. `inc/Abilities/SurfaceCapabilities.php`, localized surface bootstrapping, and `flavor-agent/check-status` now include the shared `globalStyles` and `styleBook` readiness contracts instead of treating style surfaces as one-off exceptions.
+5. Global Styles and Style Book actions are now wired into shared activity persistence, editor hydration, undo validation, and admin audit handling through the existing client/server activity layers.
+6. The current docs and tests already include the style feature doc, route/ability references, PHPUnit coverage for style contracts/readiness, JS coverage for Global Styles and Style Book behavior, and a WP 7.0 smoke for preview/apply/undo on the executable Global Styles path.
 
 ### Delivered Scope
 
 1. Improve current block style recommendations using richer token and support awareness.
-2. Add a first-party Flavor Agent surface for site-level style intelligence that stays native to Site Editor style tooling.
+2. Add first-party Flavor Agent surfaces for site-level and per-block style intelligence that stay native to Site Editor style tooling.
 3. Keep all output grounded in theme tokens, supported design tools, registered style variations, and existing WordPress style semantics.
 4. Keep the first executable contract narrow:
-   - preset substitutions
+   - validated `set_styles` operations for Global Styles scope
+   - validated `set_block_styles` operations for Style Book scope
    - registered theme style variation selection
    - validated supported style paths only
-5. Carry the style surface through the shared review, capability, activity, and undo model rather than inventing a separate interaction system.
+5. Carry the style surfaces through the shared review, capability, activity, and undo model rather than inventing a separate interaction system.
 
 ### Non-Goals
 
@@ -391,20 +397,25 @@ Existing files:
 - `inc/Abilities/StyleAbilities.php`
 - `inc/LLM/StylePrompt.php`
 - `src/global-styles/GlobalStylesRecommender.js`
-- `src/utils/style-operations.js`
-
-Optional follow-up files only if later bounded work justifies them:
-
 - `src/style-book/StyleBookRecommender.js`
-- `src/style-book/__tests__/StyleBookRecommender.test.js`
+- `src/style-book/dom.js`
+- `src/utils/style-operations.js`
+- `src/store/index.js`
+- `src/store/activity-history.js`
+- `src/components/AIActivitySection.js`
+- `src/components/ActivitySessionBootstrap.js`
 
-### Remaining Closeout And Follow-Up Slices
+### Closure Evidence
 
-1. Refresh stale milestone docs so Epic 3 is no longer described as pending implementation in planning/verification documents.
-2. Re-run the focused WP 7.0 Global Styles browser smoke on a Docker-capable host and record the result in `STATUS.md`.
-3. After WordPress 7.0 stable images exist and Core announces the final release timeline, swap the beta-tagged WP 7.0 harness image and re-audit the style surface against the stable runtime.
-4. Keep width/height preset transforms, pseudo-element-aware extraction, and broader Style Book expansion as bounded follow-ups rather than treating them as missing pieces of the shipped slice.
-5. Keep `customCSS` recommendation generation explicitly out of scope for v1 unless the product thesis changes.
+1. Planning docs and `STATUS.md` now describe the Global Styles and Style Book style contract and shipped surfaces as current baseline.
+2. A fresh WP 7.0 browser result is now recorded for the focused Global Styles preview/apply/undo path in `STATUS.md`.
+3. Deferred follow-ups remain explicitly deferred rather than being mistaken for missing shipped work.
+
+### Remaining Follow-Up Slices After Closure
+
+1. After WordPress 7.0 stable images exist and Core announces the final release timeline, swap the beta-tagged WP 7.0 harness image and re-audit the style surface against the stable runtime.
+2. Keep width/height preset transforms, pseudo-element-aware extraction, and any deeper second-stage Style Book expansion as bounded follow-ups rather than treating them as missing pieces of the shipped slice.
+3. Keep `customCSS` recommendation generation explicitly out of scope for v1 unless the product thesis changes.
 
 ### Acceptance And Verification
 
@@ -414,17 +425,11 @@ PHP:
 
 JS:
 
-- `npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js`
+- `npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js`
 
 Browser:
 
 - `npm run test:e2e:wp70 -- --reporter=line -g "global styles surface previews, applies, and undoes executable recommendations"`
-
-### Closure Criteria
-
-1. The planning docs and `STATUS.md` consistently describe the Global Styles style contract and surface as shipped, not pending.
-2. A fresh WP 7.0 browser result is recorded for the focused Global Styles preview/apply/undo path, or the host limitation is explicitly documented.
-3. Deferred follow-ups remain explicitly deferred rather than being mistaken for missing shipped work.
 
 ## Epic 4: Structural Site-Building Intelligence
 
@@ -662,7 +667,7 @@ The external alignment in this plan is based on these primary sources:
 1. WordPress 7.0 release page and current milestone timeline
 2. Extending the 7.0 cycle (2026-03-31)
 3. Planning for WordPress 7.0
-4. Gutenberg 22.8.0 and 22.8.1 release notes
+4. Gutenberg 22.9 release checklist plus the 22.8.0 and 22.8.1 release notes
 5. AI team weekly summary, 2026-03-11
 6. Official `AI` plugin page and roadmap
 7. WordPress AI GitHub repository overview

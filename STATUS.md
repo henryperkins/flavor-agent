@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-02
+> Last updated: 2026-04-03
 
 ## Working
 
@@ -42,16 +42,16 @@
 - Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
 - Programmatic content lane scaffold via `flavor-agent/recommend-content` and `POST /flavor-agent/v1/recommend-content` for future post-editor integration; no first-party UI ships yet
 - Content-only blocks keep the panel but only allow content-safe suggestions, and disabled blocks do not render AI controls
-- Shared capability notices now keep block, navigation, template, template-part, and Global Styles surfaces visible when they are otherwise in scope but unavailable, and the pattern inserter now prepends the same why-unavailable guidance inside the native inserter, with explicit links back to `Settings > Connectors` or `Settings > Flavor Agent`
-- Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, and root-aware allowed-pattern scoping; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
+- Shared capability notices now keep block, navigation, template, template-part, Global Styles, and Style Book surfaces visible when they are otherwise in scope but unavailable, and the pattern inserter now prepends the same why-unavailable guidance inside the native inserter, with explicit links back to `Settings > Connectors` or `Settings > Flavor Agent`
+- Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, root-aware allowed-pattern scoping, and `wp_block` view-config alignment for the patched recommended-category slug; pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
 - Pattern recommendation and indexing backends now have direct PHPUnit coverage for backend gating, runtime-state handling, Qdrant retrieval/reranking, fingerprinting, scheduling, full/incremental sync, deletion, lock contention, and remote failure persistence
-- Site Editor template recommendation panel for `wp_template` documents with richer top-level structural context, validated template-part assignment/replacement, and bounded pattern insertion operations that can target `start`, `end`, `before_block_path`, or `after_block_path` anchors
-- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, executable-target and structural-constraint aware prompt context, and review-confirm-apply support for validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with start/end and before/after-block-path placement where applicable
+- Site Editor template recommendation panel for `wp_template` documents with richer top-level structural context, validated template-part assignment/replacement, bounded pattern insertion operations that can target `start`, `end`, `before_block_path`, or `after_block_path` anchors, and `wp_template` entity-contract gating so the surface tracks the current Site Editor document contract
+- Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, executable-target and structural-constraint aware prompt context, review-confirm-apply support for validated bounded operations (`insert_pattern`, `replace_block_with_pattern`, and `remove_block`), and `wp_template_part` entity-contract alignment for area labels and current-document resolution
 - Site Editor style recommendation panels for the native Styles sidebar, with document-panel fallbacks, review-confirm-apply support for bounded `set_styles`, `set_block_styles`, and `set_theme_variation` operations, shared capability/status messaging when the style backend is unavailable, and explicit `theme.json`-safe guardrails that keep raw CSS and `customCSS` out of scope
 - Inspector-panel navigation recommendations for selected `core/navigation` blocks with richer advisory structure, overlay, location, and accessibility guidance
-- Epic 2 shared review model: block, navigation, template, template-part, and Global Styles surfaces now share normalized interaction states (`idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`), shared advisory/review/status components, and aligned activity/undo presentation
-- Block, template, template-part, and Global Styles apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
-- AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template, template-part, and Global Styles undo still rely on stable locators or recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable
+- Epic 2 shared review model: block, navigation, template, template-part, Global Styles, and Style Book surfaces now share normalized interaction states (`idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`), shared advisory/review/status components, and aligned activity/undo presentation
+- Block, template, template-part, Global Styles, and Style Book apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
+- AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template, template-part, Global Styles, and Style Book undo still rely on stable locators or recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable
 - A shape-only `src/review/notes-adapter.js` now exists for future Notes/comment projection without taking a runtime dependency on unstable editor APIs
 - Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; the page copy now makes the core-managed `Settings > Connectors` vs plugin-managed `Settings > Flavor Agent` ownership boundary explicit, and the OpenAI Native section reports the effective credential source plus core OpenAI connector registration/configuration state
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
@@ -65,7 +65,7 @@
 
 ### Admin UI
 
-- Settings > `AI Activity` now opens a dedicated wp-admin audit page for recent server-backed Flavor Agent actions across block, template, template-part, and Global Styles surfaces
+- Settings > `AI Activity` now opens a dedicated wp-admin audit page for recent server-backed Flavor Agent actions across block, template, template-part, Global Styles, and Style Book surfaces
 - The admin page uses WordPress `DataViews` with the `activity` layout as the default feed, plus persisted/resettable view preferences and grouped summary cards for recorded, applied, undone, and review-needed activity
 - A read-only `DataForm` details panel surfaces stored request metadata, ordered undo status, before/after summaries, and quick links back to the affected entity, plugin settings, and core Connectors when available
 - Sitewide activity queries now flow through the same REST route and repository, but only `manage_options` users can access unscoped/global reads
@@ -84,13 +84,16 @@
 
 - Deepen the new admin activity page with richer diagnostics, before/after inspection, and a cleaner action/discovery layer rather than treating audit visibility as greenfield work.
 - Rerun live provider-backed recommendation execution with valid credentials to refresh end-to-end verification on the active provider path.
-- Re-run the focused WP 7.0 Global Styles preview/apply/undo smoke on a Docker-capable host and keep the result recorded here.
 - Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
 - Revisit navigation apply only if a bounded previewable/undoable executor becomes its own tracked post-v1 milestone.
 - Interactivity API runtime work is explicitly future-facing, not part of the current remediation backlog, because the shipped plugin is still editor/admin only and has no front-end runtime surface that needs it.
 
 ## Recent Verification
 
+- 2026-04-03 epic-3-closure-verification: `vendor/bin/phpunit --filter '(StyleAbilitiesTest|StylePromptTest|InfraAbilitiesTest|RegistrationTest|AgentControllerTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityPermissionsTest|ActivityRepositoryTest)'` passed (`105` tests, `647` assertions).
+- 2026-04-03 epic-3-closure-verification: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js` passed (`16` suites, `138` tests).
+- 2026-04-03 epic-3-closure-verification: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed (existing webpack asset-size warnings only).
+- 2026-04-03 epic-3-closure-verification: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line -g "global styles surface previews, applies, and undoes executable recommendations"` passed (`2` tests including harness auth/setup).
 - 2026-04-01 epic-3-closeout: `vendor/bin/phpunit --filter '(StyleAbilitiesTest|StylePromptTest|InfraAbilitiesTest|RegistrationTest|AgentControllerTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityPermissionsTest|ActivityRepositoryTest)'` passed (`75` tests, `408` assertions).
 - 2026-04-01 epic-3-closeout: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js` passed (`15` suites, `92` tests).
 - 2026-04-01 epic-3-closeout: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line -g "global styles surface previews, applies, and undoes executable recommendations"` was not run on this host because `docker` was not found on `PATH`.
@@ -164,6 +167,6 @@
 - **`docs/2026-04-03-wordpress-direction-review.md`** -- Supplemental dated direction review incorporating the 2026-03-31 Core decision to extend the WordPress 7.0 cycle
 - **`docs/2026-04-03-three-phase-roadmap.md`** -- Supplemental dated three-phase roadmap translating the direction review into concrete execution phases, file targets, and acceptance checks
 - **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
-- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 reference snapshot for compatibility and API research
+- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 stable plus 22.9 RC reference snapshot for compatibility and API research
 - **`docs/wordpress-7.0-developer-docs-index.md`** -- Discovery snapshot of official WordPress 7.0 developer documentation sources
 - **`docs/wp7-migration-opportunities.md`** -- Point-in-time WordPress 7.0 migration assessment; useful for follow-up ideas, not the live backlog

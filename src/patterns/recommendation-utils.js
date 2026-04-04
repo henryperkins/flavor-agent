@@ -36,11 +36,16 @@ function extractReasonKeywords( reason ) {
 export function patchPatternMetadata(
 	patterns,
 	recommendations,
-	originalMetadata = new Map()
+	originalMetadata = new Map(),
+	recommendedCategory = 'recommended'
 ) {
 	const safeRecommendations = Array.isArray( recommendations )
 		? recommendations
 		: [];
+	const normalizedRecommendedCategory =
+		typeof recommendedCategory === 'string' && recommendedCategory
+			? recommendedCategory
+			: 'recommended';
 
 	const patched = patterns.map( ( pattern ) => {
 		const clone = { ...pattern };
@@ -79,11 +84,14 @@ export function patchPatternMetadata(
 
 		const categories = Array.isArray( pattern.categories )
 			? pattern.categories.filter(
-					( category ) => category !== 'recommended'
+					( category ) => category !== normalizedRecommendedCategory
 			  )
 			: [];
 
-		pattern.categories = [ ...categories, 'recommended' ];
+		pattern.categories = [
+			...categories,
+			normalizedRecommendedCategory,
+		];
 		pattern.description = recommendation.reason || pattern.description;
 
 		if ( recommendation.reason ) {

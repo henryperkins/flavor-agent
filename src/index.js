@@ -9,6 +9,7 @@
 import { registerPlugin } from '@wordpress/plugins';
 
 // Shared editor styles.
+import './tokens.css';
 import './editor.css';
 
 // Data store (self-registering).

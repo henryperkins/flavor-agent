@@ -9,7 +9,7 @@ use FlavorAgent\OpenAI\Provider;
 
 final class ResponsesClient extends BaseHttpClient {
 
-	private const REASONING_EFFORT = 'high';
+	private const REASONING_EFFORT = 'medium';
 	private const REQUEST_TIMEOUT  = 90;
 
 	public static function validate_configuration(

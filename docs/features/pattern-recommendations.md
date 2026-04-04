@@ -13,6 +13,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `window.flavorAgentData.canRecommendPatterns` must be true; that requires the active provider's chat and embedding backends plus Qdrant credentials
 - A post type must be available from `core/editor`
+- The `wp_block` entity view config must be available so Flavor Agent can align the patched inserter category with the current WordPress pattern-entity contract instead of hard-coding a category slug
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open
 - Results are scoped by `visiblePatternNames`, derived from the current inserter root so nested insertion contexts only see patterns WordPress already allows there
@@ -20,13 +21,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## End-To-End Flow
 
-1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, and the current visible pattern set
+1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, the current visible pattern set, and the `wp_block` post-type entity contract exposed through `@wordpress/views`
 2. The component triggers `fetchPatternRecommendations()` on editor load and on debounced inserter-search changes
 3. The store posts the request to `POST /flavor-agent/v1/recommend-patterns`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates backend configuration and pattern-index runtime state
 6. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()`, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
-7. The store saves the recommendations and `patchInserterPatterns()` rewrites the native pattern registry metadata through the compatibility layer
+7. The store saves the recommendations and `patchInserterPatterns()` rewrites the native pattern registry metadata through the compatibility layer, using the current view-config-backed recommended category slug instead of assuming a hard-coded `Recommended` category key
 8. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 9. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
 10. The user inserts a recommended pattern through the normal WordPress inserter flow
@@ -34,6 +35,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## What This Surface Can Do
 
 - Add a `Recommended` category to the native inserter data
+- Align the patched recommended-category slug to the live `wp_block` entity view config so Flavor Agent stays compatible with current WordPress pattern views
 - Enrich recommended patterns with contextual descriptions and extracted keywords
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
@@ -80,6 +82,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - `src/patterns/pattern-settings.js`
 - `src/patterns/inserter-dom.js`
 - `src/utils/visible-patterns.js`
+- `src/utils/editor-entity-contracts.js`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/PatternAbilities.php`

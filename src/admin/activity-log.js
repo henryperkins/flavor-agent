@@ -10,15 +10,10 @@ import {
 } from '@wordpress/components';
 import { createRoot, useEffect, useMemo, useState } from '@wordpress/element';
 import { DataForm, DataViews } from '@wordpress/dataviews/wp';
-import {
-	check,
-	page,
-	plugins,
-	symbol,
-	undo,
-	warning,
-} from '@wordpress/icons';
-import '@wordpress/dataviews/build-style/style.css';
+import { check, page, plugins, symbol, undo, warning } from '@wordpress/icons';
+import './wpds-runtime.css';
+import './dataviews-runtime.css';
+import '../tokens.css';
 import './brand.css';
 import './activity-log.css';
 import {
@@ -597,7 +592,10 @@ function ActivityEntryDetails( { entry } ) {
 					</div>
 					{ entry.targetUrl && (
 						<div className="flavor-agent-activity-log__sidebar-actions">
-							<Button href={ entry.targetUrl } variant="secondary">
+							<Button
+								href={ entry.targetUrl }
+								variant="secondary"
+							>
 								{ entry.targetLinkLabel }
 							</Button>
 						</div>
@@ -1078,7 +1076,9 @@ export function ActivityLogApp( { bootData } ) {
 				config={ {
 					perPageSizes,
 				} }
-				onReset={ isViewModified ? () => setView( defaultView ) : false }
+				onReset={
+					isViewModified ? () => setView( defaultView ) : false
+				}
 				isLoading={ isLoading }
 				empty={ <EmptyState view={ effectiveView } /> }
 			>

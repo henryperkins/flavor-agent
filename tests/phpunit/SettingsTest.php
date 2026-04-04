@@ -782,11 +782,15 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Current effective API key source: Settings &gt; Connectors.',
+			'Key source:',
 			$output
 		);
 		$this->assertStringContainsString(
-			'OpenAI connector: registered (key source: Settings &gt; Connectors).',
+			'Settings &gt; Connectors',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Connector status: OpenAI connector: registered (key source: Settings &gt; Connectors).',
 			$output
 		);
 	}
@@ -836,21 +840,25 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'Google (Settings &gt; Connectors)', $output );
 	}
 
-	public function test_render_page_explains_core_and_plugin_managed_settings_boundaries(): void {
+	public function test_render_page_renders_compact_settings_page_guidance(): void {
 		ob_start();
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Settings &gt; Connectors remains the core-managed home',
+			'Set up the AI stack in one pass.',
 			$output
 		);
 		$this->assertStringContainsString(
-			'Settings &gt; Flavor Agent now selects the active provider',
+			'Where credentials live',
 			$output
 		);
 		$this->assertStringContainsString(
-			'automatically use any compatible chat backend already configured here or in Settings &gt; Connectors',
+			'Settings &gt; Connectors stores shared provider credentials.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Pattern Sync',
 			$output
 		);
 	}

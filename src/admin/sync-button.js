@@ -1,3 +1,5 @@
+import './wpds-runtime.css';
+import '../tokens.css';
 import './brand.css';
 import './settings.css';
 

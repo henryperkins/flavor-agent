@@ -64,6 +64,10 @@ import {
 	TEMPLATE_OPERATION_REPLACE,
 } from './template-recommender-helpers';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import {
+	getEditedPostTypeEntity,
+	usePostTypeEntityContract,
+} from '../utils/editor-entity-contracts';
 
 /**
  * Case-insensitive word-boundary search.
@@ -309,59 +313,16 @@ function describeInsertionPoint( {
 	return 'at the end of the template';
 }
 
-function normalizeEditedEntityRef( entityId ) {
-	if ( typeof entityId === 'string' && entityId !== '' ) {
-		return entityId;
-	}
-
-	if ( Number.isInteger( entityId ) && entityId > 0 ) {
-		return String( entityId );
-	}
-
-	return null;
-}
-
-function getEditedEntityRef( select, expectedPostType ) {
-	const editor = select( 'core/editor' );
-	const currentPostType = editor?.getCurrentPostType?.();
-
-	// core/editor tracks the actively edited entity in both post and site
-	// editors, so prefer it to avoid leaking template panels into page editing.
-	if ( typeof currentPostType === 'string' && currentPostType !== '' ) {
-		if ( currentPostType !== expectedPostType ) {
-			return null;
-		}
-
-		const currentPostId = normalizeEditedEntityRef(
-			editor?.getCurrentPostId?.()
-		);
-
-		if ( currentPostId ) {
-			return currentPostId;
-		}
-	}
-
-	const editSite = select( 'core/edit-site' );
-
-	if ( ! editSite?.getEditedPostType || ! editSite?.getEditedPostId ) {
-		return null;
-	}
-
-	if ( editSite.getEditedPostType() !== expectedPostType ) {
-		return null;
-	}
-
-	return normalizeEditedEntityRef( editSite.getEditedPostId() );
-}
-
 export default function TemplateRecommender() {
 	const canRecommend = getSurfaceCapability( 'template' ).available;
+	const templateContract = usePostTypeEntityContract( 'wp_template' );
 	const templateBlocks = useSelect(
 		( select ) => select( blockEditorStore )?.getBlocks?.() || [],
 		[]
 	);
 	const templateRef = useSelect(
-		( select ) => getEditedEntityRef( select, 'wp_template' ),
+		( select ) =>
+			getEditedPostTypeEntity( select, 'wp_template' )?.entityId || null,
 		[]
 	);
 	const templateType = normalizeTemplateType( templateRef );
@@ -711,7 +672,11 @@ export default function TemplateRecommender() {
 		[ undoActivity ]
 	);
 
-	if ( ! templateRef ) {
+	if (
+		! templateRef ||
+		! templateContract.hasConfig ||
+		! templateContract.titleField
+	) {
 		return null;
 	}
 

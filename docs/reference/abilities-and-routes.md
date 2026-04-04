@@ -14,6 +14,7 @@ Use it when you need to answer:
 - The Abilities API exposes closely related contracts for external AI agents on supported WordPress 7.0+ installs
 - Activity persistence and manual pattern sync are REST-only today; they do not have matching registered abilities
 - `POST /flavor-agent/v1/recommend-block` is the main response-shape exception: the REST route wraps the ability payload in `{ payload, clientId }`
+- Pattern, template, and template-part first-party surfaces also read live post-type entity config from `@wordpress/views` so panel visibility, title-field expectations, template-part area labels, and the patched pattern category stay aligned with the current WordPress entity contract
 
 ## Registered Abilities
 

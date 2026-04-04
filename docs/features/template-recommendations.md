@@ -11,6 +11,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Surfacing Conditions
 
 - `TemplateRecommender()` must resolve a current template reference through `core/editor` or `core/edit-site`
+- The `wp_template` entity view config must be available so the panel only renders when the current Site Editor template contract is hydrated with a valid title field
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by `Provider::chat_configured()`
 - The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the template-global visible pattern set
 
@@ -24,7 +25,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## End-To-End Flow
 
-1. `TemplateRecommender()` resolves the current `wp_template` reference and template type
+1. `TemplateRecommender()` resolves the current `wp_template` reference through the shared edited-entity resolver, confirms the live `wp_template` entity contract from `@wordpress/views`, and derives the template type
 2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()`, captures the template-global `visiblePatternNames`, and sends the current top-level template structure plus executable insertion anchors through the server-side collector
 3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` posts it to `POST /flavor-agent/v1/recommend-template`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
@@ -180,6 +181,7 @@ Anchored template insertion is limited to validated top-level template paths gat
 - `src/utils/template-actions.js`
 - `src/utils/template-operation-sequence.js`
 - `src/utils/visible-patterns.js`
+- `src/utils/editor-entity-contracts.js`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/TemplateAbilities.php`

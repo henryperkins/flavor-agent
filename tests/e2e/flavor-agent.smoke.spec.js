@@ -1379,7 +1379,11 @@ test('@wp70-site-editor global styles surface previews, applies, and undoes exec
 
 	await expect(page.getByText('Adjust canvas tone and rhythm')).toBeVisible();
 	await page.getByRole('button', { name: 'Review', exact: true }).click();
-	await expect(page.getByText('Review Before Apply')).toBeVisible();
+	await expect(
+		page
+			.locator('.flavor-agent-review-section')
+			.getByText('Review Before Apply', { exact: true }),
+	).toBeVisible();
 	await page
 		.getByRole('button', { name: 'Apply Style Change', exact: true })
 		.click();
@@ -1536,7 +1540,11 @@ test('template surface smoke previews and applies executable template recommenda
 
 	await expect(page.getByText('Suggested Composition')).toBeVisible();
 	await page.getByRole('button', { name: 'Preview Apply' }).click();
-	await expect(page.getByText('Review Before Apply')).toBeVisible();
+	await expect(
+		page
+			.locator('.flavor-agent-review-section')
+			.getByText('Review Before Apply', { exact: true }),
+	).toBeVisible();
 	await page.evaluate(() => {
 		window.wp.data.dispatch('core/block-editor').clearSelectedBlock();
 	});
@@ -1711,7 +1719,11 @@ test('@wp70-site-editor template-part surface smoke previews, applies, and undoe
 
 	await expect(page.getByText('Suggested Composition')).toBeVisible();
 	await page.getByRole('button', { name: 'Preview Apply' }).click();
-	await expect(page.getByText('Review Before Apply')).toBeVisible();
+	await expect(
+		page
+			.locator('.flavor-agent-review-section')
+			.getByText('Review Before Apply', { exact: true }),
+	).toBeVisible();
 	await page.getByRole('button', { name: 'Confirm Apply' }).click();
 
 	await expect

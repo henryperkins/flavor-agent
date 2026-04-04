@@ -73,7 +73,7 @@ final class AzureBackendValidationTest extends TestCase {
 		$request_body = json_decode( (string) WordPressTestState::$last_remote_post['args']['body'], true );
 		$this->assertIsArray( $request_body );
 		$this->assertSame( 16, $request_body['max_output_tokens'] ?? null );
-		$this->assertSame( 'high', $request_body['reasoning']['effort'] ?? null );
+		$this->assertSame( 'medium', $request_body['reasoning']['effort'] ?? null );
 	}
 
 	public function test_responses_validation_accepts_incomplete_response_object_without_text(): void {
@@ -102,7 +102,7 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertTrue( $result );
 	}
 
-	public function test_rank_sends_high_reasoning_effort(): void {
+	public function test_rank_sends_medium_reasoning_effort(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
@@ -131,7 +131,7 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 'chat-deployment', $request_body['model'] ?? null );
 		$this->assertSame( 'system prompt', $request_body['instructions'] ?? null );
 		$this->assertSame( 'user prompt', $request_body['input'] ?? null );
-		$this->assertSame( 'high', $request_body['reasoning']['effort'] ?? null );
+		$this->assertSame( 'medium', $request_body['reasoning']['effort'] ?? null );
 		$this->assertSame( 90, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
 	}
 
@@ -372,7 +372,7 @@ final class AzureBackendValidationTest extends TestCase {
 		$request_body = json_decode( (string) WordPressTestState::$last_remote_post['args']['body'], true );
 		$this->assertIsArray( $request_body );
 		$this->assertSame( 'gpt-5.4', $request_body['model'] ?? null );
-		$this->assertSame( 'high', $request_body['reasoning']['effort'] ?? null );
+		$this->assertSame( 'medium', $request_body['reasoning']['effort'] ?? null );
 	}
 
 	public function test_openai_native_rank_falls_back_to_connector_key(): void {

@@ -30,6 +30,7 @@ import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { patchPatternMetadata } from './recommendation-utils';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { usePostTypeEntityContract } from '../utils/editor-entity-contracts';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 
@@ -50,7 +51,7 @@ const originalMetadata = new Map();
  *
  * @return {void}
  */
-function patchInserterPatterns( recommendations ) {
+function patchInserterPatterns( recommendations, recommendedCategory ) {
 	const patterns = getBlockPatterns();
 
 	if ( patterns.length === 0 ) {
@@ -60,7 +61,8 @@ function patchInserterPatterns( recommendations ) {
 	const patched = patchPatternMetadata(
 		patterns,
 		recommendations,
-		originalMetadata
+		originalMetadata,
+		recommendedCategory
 	);
 
 	setBlockPatterns( patched );
@@ -89,6 +91,7 @@ export default function PatternRecommender() {
 
 		return normalizeTemplateType( editSite.getEditedPostId() );
 	}, [] );
+	const patternContract = usePostTypeEntityContract( 'wp_block' );
 	const selectedBlockName = useSelect( ( select ) => {
 		const clientId = select( blockEditorStore ).getSelectedBlockClientId();
 
@@ -174,8 +177,15 @@ export default function PatternRecommender() {
 	] );
 
 	useEffect( () => {
-		patchInserterPatterns( recommendations );
-	}, [ recommendations, patternRegistryVersion ] );
+		patchInserterPatterns(
+			recommendations,
+			patternContract.recommendedPatternCategory
+		);
+	}, [
+		recommendations,
+		patternRegistryVersion,
+		patternContract.recommendedPatternCategory,
+	] );
 
 	useEffect( () => {
 		const noticeSlot = noticeSlotRef.current;

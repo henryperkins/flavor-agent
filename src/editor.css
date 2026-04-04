@@ -2,42 +2,10 @@
  * Flavor Agent — Editor styles.
  *
  * Replaces inline styles across Inspector, Pattern, and Template
- * recommendation components with class-based rules. Uses WordPress
- * component CSS variables so the plugin adapts to admin color schemes.
+ * recommendation components with class-based rules. Uses WPDS and
+ * WordPress component variables so editor surfaces follow the host
+ * editor runtime values where core provides them.
  */
-
-/* ---------------------------------------------------------------
- * Shared visual tokens
- * --------------------------------------------------------------- */
-
-.flavor-agent-panel,
-.flavor-agent-card,
-.flavor-agent-chip.components-button,
-.flavor-agent-action-link.components-button.is-link,
-.flavor-agent-inline-link.components-button.is-link {
-  --flavor-agent-accent: #0b7b80;
-  --flavor-agent-accent-strong: #075c62;
-  --flavor-agent-warm: #cf7a45;
-  --flavor-agent-text: #1f2d34;
-  --flavor-agent-muted: #627078;
-  --flavor-agent-brand-serif: "Iowan Old Style", "Palatino Linotype",
-    "Book Antiqua", Georgia, serif;
-  --flavor-agent-brand-sans: "Aptos", "Segoe UI", "Helvetica Neue",
-    sans-serif;
-  --flavor-agent-surface: color-mix(
-    in srgb,
-    var(--flavor-agent-accent) 4%,
-    var(--wp-components-color-background, #fffdf8)
-  );
-  --flavor-agent-surface-strong: color-mix(
-    in srgb,
-    var(--flavor-agent-accent) 8%,
-    var(--wp-components-color-background, #fffdf8)
-  );
-  --flavor-agent-border: rgba(31, 45, 52, 0.12);
-  --flavor-agent-border-strong: rgba(31, 45, 52, 0.2);
-  --flavor-agent-shadow: 0 10px 24px rgba(17, 34, 41, 0.06);
-}
 
 /* ---------------------------------------------------------------
  * Shared panel shells
@@ -46,29 +14,35 @@
 .flavor-agent-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--wpds-dimension-gap-md, 12px);
   padding-top: 4px;
-  font-family: var(--flavor-agent-brand-sans);
+  font-family: var(--flavor-agent-font-sans);
 }
 
 .flavor-agent-panel__intro,
 .flavor-agent-panel__composer,
 .flavor-agent-panel__group {
-  border: 1px solid var(--flavor-agent-border);
-  border-radius: 10px;
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
+  border-radius: var(--wpds-border-radius-lg, 8px);
   background: var(--flavor-agent-surface);
-  box-shadow: var(--flavor-agent-shadow);
+  box-shadow: var(
+    --wpds-elevation-xs,
+    0 1px 1px 0 #00000008,
+    0 1px 2px 0 #00000005,
+    0 3px 3px 0 #00000005,
+    0 4px 4px 0 #00000003
+  );
 }
 
 .flavor-agent-panel__intro {
   position: relative;
   overflow: hidden;
   padding: 12px;
-  border-radius: 16px;
+  border-radius: var(--flavor-agent-radius-lg);
   background: linear-gradient(
       135deg,
-      color-mix(in srgb, var(--flavor-agent-accent) 14%, transparent),
-      color-mix(in srgb, var(--flavor-agent-warm) 10%, transparent) 52%,
+      color-mix(in srgb, var(--flavor-agent-color-accent) 14%, transparent),
+      color-mix(in srgb, var(--flavor-agent-color-warm) 10%, transparent) 52%,
       transparent 82%
     ),
     var(--flavor-agent-surface);
@@ -100,10 +74,10 @@
 .flavor-agent-panel__intro::after {
   inset: auto -18% -48% 42%;
   height: 120px;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--flavor-agent-accent) 18%, white),
+    color-mix(in srgb, var(--flavor-agent-color-accent) 18%, white),
     transparent 64%
   );
   filter: blur(10px);
@@ -118,16 +92,16 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--flavor-agent-accent);
+  color: var(--flavor-agent-color-accent);
 }
 
 .flavor-agent-panel__intro-copy {
   position: relative;
   z-index: 1;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   line-height: 1.5;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
   max-width: 36ch;
 }
 
@@ -144,40 +118,40 @@
 
 .flavor-agent-panel__group {
   padding: 12px;
-  border-radius: 16px;
+  border-radius: var(--flavor-agent-radius-lg);
 }
 
 .flavor-agent-panel__group-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
   margin-bottom: 10px;
 }
 
 .flavor-agent-panel__group-title {
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-panel__group-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-activity-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
   padding: 10px;
-  border-radius: 10px;
-  border: 1px solid var(--flavor-agent-border);
-  background: var(--wp-components-color-background, #fff);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
+  background: var(--wpds-color-bg-surface-neutral-strong, #ffffff);
 }
 
 .flavor-agent-activity-row__info {
@@ -186,15 +160,15 @@
 }
 
 .flavor-agent-activity-row__label {
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   font-weight: 600;
-  color: var(--flavor-agent-text);
+  color: var(--flavor-agent-color-text);
 }
 
 .flavor-agent-activity-row__meta {
   margin-top: 2px;
-  font-size: 11px;
-  color: var(--flavor-agent-muted);
+  font-size: var(--wpds-font-size-xs, 11px);
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-panel__note {
@@ -210,7 +184,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-status-notice__message {
@@ -247,20 +221,20 @@
   gap: 4px;
   min-height: 22px;
   padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid var(--flavor-agent-border);
+  border-radius: var(--flavor-agent-radius-full);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
   background: var(--flavor-agent-surface-strong);
-  color: var(--flavor-agent-muted);
-  font-size: 11px;
+  color: var(--flavor-agent-color-muted);
+  font-size: var(--wpds-font-size-xs, 11px);
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
 }
 
 .flavor-agent-pill--success {
-  border-color: color-mix(in srgb, #00a32a 18%, transparent);
-  background: color-mix(in srgb, #00a32a 10%, transparent);
-  color: #00782d;
+  border-color: var(--wpds-color-stroke-surface-success, #8ac894);
+  background: var(--wpds-color-bg-surface-success-weak, #eaffed);
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
 .flavor-agent-pill--code {
@@ -276,11 +250,11 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--flavor-agent-border);
-  background: var(--wp-components-color-background, #fff);
-  color: var(--flavor-agent-muted);
-  font-size: 11px;
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
+  background: var(--wpds-color-bg-surface-neutral-strong, #ffffff);
+  color: var(--flavor-agent-color-muted);
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.45;
 }
 
@@ -306,17 +280,25 @@
 .flavor-agent-style-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-style-card--active {
-  border-color: color-mix(in srgb, #00a32a 24%, var(--flavor-agent-border));
+  border-color: color-mix(
+      in srgb,
+      var(--wpds-color-stroke-surface-success-strong, #007f30) 24%,
+      var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+    );
   background: linear-gradient(
       135deg,
-      color-mix(in srgb, #00a32a 10%, transparent),
+      color-mix(
+        in srgb,
+        var(--wpds-color-stroke-surface-success-strong, #007f30) 10%,
+        transparent
+      ),
       transparent 55%
     ),
-    var(--wp-components-color-background, #fff);
+    var(--wpds-color-bg-surface-neutral-strong, #ffffff);
 }
 
 .flavor-agent-style-card__badges {
@@ -331,14 +313,14 @@
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-style-card__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-style-operations {
@@ -352,12 +334,12 @@
 
 .flavor-agent-style-operations li {
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--flavor-agent-border);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
   background: var(--flavor-agent-surface);
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.5;
-  color: var(--flavor-agent-text);
+  color: var(--flavor-agent-color-text);
 }
 
 .flavor-agent-style-operations--compact li {
@@ -379,7 +361,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
   margin-bottom: 8px;
 }
 
@@ -389,9 +371,9 @@
 
 .flavor-agent-explanation {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   line-height: 1.5;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 /* ---------------------------------------------------------------
@@ -402,10 +384,16 @@
 .flavor-agent-card {
   padding: 12px;
   margin-bottom: 0;
-  background: var(--wp-components-color-background, #fff);
-  border-radius: 14px;
-  border: 1px solid var(--flavor-agent-border);
-  box-shadow: var(--flavor-agent-shadow);
+  background: var(--wpds-color-bg-surface-neutral-strong, #ffffff);
+  border-radius: var(--flavor-agent-radius-lg);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
+  box-shadow: var(
+    --wpds-elevation-xs,
+    0 1px 1px 0 #00000008,
+    0 1px 2px 0 #00000005,
+    0 3px 3px 0 #00000005,
+    0 4px 4px 0 #00000003
+  );
 }
 
 .flavor-agent-card--template {
@@ -440,31 +428,31 @@
 
 .flavor-agent-card__label {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--wpds-font-size-md, 13px);
   line-height: 1.4;
-  color: var(--flavor-agent-text);
+  color: var(--flavor-agent-color-text);
 }
 
 .flavor-agent-card__description {
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   margin: 0 0 10px;
   line-height: 1.5;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-card__value-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
   margin-bottom: 8px;
 }
 
 .flavor-agent-card__value {
   min-width: 0;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--flavor-agent-border);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
   background: var(--flavor-agent-surface);
 }
 
@@ -475,31 +463,31 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-card__value code {
   display: block;
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.5;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   background: none;
   padding: 0;
-  color: var(--flavor-agent-text);
+  color: var(--flavor-agent-color-text);
 }
 
 .flavor-agent-card__value-arrow {
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-card__confidence {
   margin-top: 4px;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   background: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 10%,
+    var(--flavor-agent-color-accent) 10%,
     var(--wp-components-color-accent-inverted, #e0e0e0)
   );
   overflow: hidden;
@@ -509,8 +497,8 @@
   height: 100%;
   background: linear-gradient(
     90deg,
-    var(--flavor-agent-accent),
-    color-mix(in srgb, var(--flavor-agent-accent) 68%, #70c0ff)
+    var(--flavor-agent-color-accent),
+    color-mix(in srgb, var(--flavor-agent-color-accent) 68%, #70c0ff)
   );
   border-radius: inherit;
 }
@@ -521,12 +509,12 @@
 
 .flavor-agent-card__apply {
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
 }
 
 /* Applied state: brief confirmation feedback */
 .flavor-agent-card__apply--applied {
-  color: #00782d;
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
   pointer-events: none;
 }
 
@@ -538,7 +526,7 @@
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-chips {
@@ -554,21 +542,25 @@
   gap: 6px;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11px;
+  border-radius: var(--flavor-agent-radius-full);
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.4;
   box-shadow: none;
 }
 
 .flavor-agent-chip.components-button.is-secondary {
-  border-color: var(--flavor-agent-border);
+  border-color: var(--wpds-color-stroke-surface-neutral, #d8d8d8);
   background: var(--flavor-agent-surface);
 }
 
 .flavor-agent-chip.is-applied.components-button {
-  border-color: color-mix(in srgb, #00a32a 18%, transparent);
-  background: color-mix(in srgb, #00a32a 12%, transparent);
-  color: #00782d;
+  border-color: var(--wpds-color-stroke-surface-success, #8ac894);
+  background: color-mix(
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 12%,
+    transparent
+  );
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
 .flavor-agent-chip__label {
@@ -584,7 +576,7 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: var(--flavor-agent-chip-preview, transparent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
@@ -603,7 +595,7 @@
 
 .flavor-agent-style-variation.components-button {
   min-height: 30px;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
 }
 
 .flavor-agent-style-variation__star {
@@ -613,10 +605,10 @@
   width: 16px;
   height: 16px;
   margin-left: 6px;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   font-size: 9px;
-  background: color-mix(in srgb, #00a32a 10%, transparent);
-  color: #00782d;
+  background: var(--wpds-color-bg-surface-success-weak, #eaffed);
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
 /* ---------------------------------------------------------------
@@ -633,7 +625,7 @@
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--wpds-border-radius-lg, 8px);
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: var(--flavor-agent-style-preview, transparent);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
@@ -656,14 +648,14 @@
 }
 
 .flavor-agent-style-row__label {
-  font-size: 13px;
+  font-size: var(--wpds-font-size-md, 13px);
   font-weight: 600;
 }
 
 .flavor-agent-style-row__description {
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.45;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
   margin: 0;
 }
 
@@ -682,8 +674,12 @@
 
 .flavor-agent-prompt textarea {
   min-height: 78px;
-  border-radius: 12px;
-  border-color: color-mix(in srgb, var(--flavor-agent-accent) 18%, white);
+  border-radius: var(--flavor-agent-radius-lg);
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 18%,
+    white
+  );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
@@ -691,13 +687,17 @@
   width: 100%;
   justify-content: center;
   min-height: 34px;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   background: linear-gradient(
     135deg,
-    var(--flavor-agent-accent),
-    color-mix(in srgb, var(--flavor-agent-accent) 76%, var(--flavor-agent-warm))
+    var(--flavor-agent-color-accent),
+    color-mix(
+      in srgb,
+      var(--flavor-agent-color-accent) 76%,
+      var(--flavor-agent-color-warm)
+    )
   );
-  border-color: var(--flavor-agent-accent);
+  border-color: var(--flavor-agent-color-accent);
   color: #fff;
   box-shadow: 0 12px 24px rgba(11, 123, 128, 0.18);
 }
@@ -705,27 +705,27 @@
 .flavor-agent-navigation-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
 .flavor-agent-navigation-change {
   padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--flavor-agent-border);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
   background: var(--flavor-agent-surface);
 }
 
 .flavor-agent-navigation-change__target {
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   font-weight: 600;
-  color: var(--flavor-agent-text);
+  color: var(--flavor-agent-color-text);
 }
 
 .flavor-agent-navigation-change__detail {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   line-height: 1.5;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 /* ---------------------------------------------------------------
@@ -735,8 +735,8 @@
 .flavor-agent-template-list {
   margin-bottom: 0;
   padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--flavor-agent-border);
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
   background: var(--flavor-agent-surface);
 }
 
@@ -748,7 +748,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--wpds-dimension-gap-sm, 8px);
   margin-bottom: 6px;
 }
 
@@ -758,9 +758,9 @@
 
 .flavor-agent-review-section__summary {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: var(--wpds-font-size-sm, 12px);
   line-height: 1.5;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-review-section__hint {
@@ -775,8 +775,8 @@
   align-items: center;
   gap: 8px 6px;
   padding: 7px 0;
-  font-size: 12px;
-  border-bottom: 1px solid var(--flavor-agent-border);
+  font-size: var(--wpds-font-size-sm, 12px);
+  border-bottom: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
 }
 
 .flavor-agent-tpl-row:last-child {
@@ -804,21 +804,21 @@
 /* Reason text wraps to full width */
 .flavor-agent-tpl-row__reason {
   flex-basis: 100%;
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.45;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
   padding-left: 2px;
 }
 
 /* ---- Action links: shared base ---- */
 
 .flavor-agent-action-link.components-button.is-link {
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   padding: 2px 8px;
   height: auto;
   min-height: 0;
   text-decoration: none;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   line-height: 1.4;
 }
 
@@ -828,7 +828,7 @@
 
 .flavor-agent-action-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
-    var(--flavor-agent-accent);
+    var(--flavor-agent-color-accent);
 }
 
 .flavor-agent-action-link.components-button.is-link[disabled] {
@@ -841,16 +841,16 @@
   font-family: monospace;
   background: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 10%,
+    var(--flavor-agent-color-accent) 10%,
     transparent
   );
-  color: var(--flavor-agent-accent);
+  color: var(--flavor-agent-color-accent);
 }
 
 .flavor-agent-action-link--part.components-button.is-link:hover {
   background: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 18%,
+    var(--flavor-agent-color-accent) 18%,
     transparent
   );
 }
@@ -869,23 +869,31 @@
 /* Type: pattern — normal font, green-ish accent to distinguish from parts */
 .flavor-agent-action-link--pattern.components-button.is-link {
   font-family: inherit;
-  background: color-mix(in srgb, #00a32a 8%, transparent);
-  color: #00782d;
+  background: color-mix(
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 8%,
+    transparent
+  );
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
 .flavor-agent-action-link--pattern.components-button.is-link:hover {
-  background: color-mix(in srgb, #00a32a 16%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 16%,
+    transparent
+  );
 }
 
 /* ---- Assign / Insert buttons ---- */
 
 .flavor-agent-assign-btn.components-button {
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   height: 24px;
   min-height: 24px;
   padding: 0 10px;
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
 }
 
 /* ---- Done badge ---- */
@@ -896,11 +904,11 @@
   gap: 4px;
   padding: 0 8px;
   min-height: 22px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #00a32a 18%, transparent);
-  background: color-mix(in srgb, #00a32a 10%, transparent);
-  font-size: 11px;
-  color: #00782d;
+  border-radius: var(--flavor-agent-radius-full);
+  border: 1px solid var(--wpds-color-stroke-surface-success, #8ac894);
+  background: var(--wpds-color-bg-surface-success-weak, #eaffed);
+  font-size: var(--wpds-font-size-xs, 11px);
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
   font-weight: 600;
   flex-shrink: 0;
   white-space: nowrap;
@@ -917,7 +925,7 @@
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--wpds-border-radius-sm, 2px);
 }
 
 .flavor-agent-inline-link.components-button.is-link:hover {
@@ -926,55 +934,67 @@
 
 .flavor-agent-inline-link.components-button.is-link:focus-visible {
   box-shadow: 0 0 0 var(--wp-admin-border-width-focus, 2px)
-    var(--flavor-agent-accent);
+    var(--flavor-agent-color-accent);
 }
 
 /* Inline type: part — blue accent, highlights the slug in running text */
 .flavor-agent-inline-link--part.components-button.is-link {
-  color: var(--flavor-agent-accent);
+  color: var(--flavor-agent-color-accent);
 }
 
 .flavor-agent-inline-link--part.components-button.is-link:hover {
   background: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 8%,
+    var(--flavor-agent-color-accent) 8%,
     transparent
   );
 }
 
 /* Inline type: area — same accent so "header" / "footer" stand out */
 .flavor-agent-inline-link--area.components-button.is-link {
-  color: var(--flavor-agent-accent);
+  color: var(--flavor-agent-color-accent);
   font-weight: 500;
 }
 
 .flavor-agent-inline-link--area.components-button.is-link:hover {
   background: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 8%,
+    var(--flavor-agent-color-accent) 8%,
     transparent
   );
 }
 
 /* Inline type: pattern — green accent so patterns are visually distinct */
 .flavor-agent-inline-link--pattern.components-button.is-link {
-  color: #00782d;
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
 .flavor-agent-inline-link--pattern.components-button.is-link:hover {
-  background: color-mix(in srgb, #00a32a 8%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 8%,
+    transparent
+  );
 }
 
 /* ---- Applied card state ---- */
 
 .flavor-agent-card--template.is-applied {
-  border-color: color-mix(in srgb, #00a32a 24%, var(--flavor-agent-border));
+  border-color: color-mix(
+      in srgb,
+      var(--wpds-color-stroke-surface-success-strong, #007f30) 24%,
+      var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+    );
   background: linear-gradient(
       135deg,
-      color-mix(in srgb, #00a32a 10%, transparent),
+      color-mix(
+        in srgb,
+        var(--wpds-color-stroke-surface-success-strong, #007f30) 10%,
+        transparent
+      ),
       transparent 55%
     ),
-    var(--wp-components-color-background, #fff);
+    var(--wpds-color-bg-surface-neutral-strong, #ffffff);
 }
 
 .flavor-agent-template-preview {
@@ -990,10 +1010,10 @@
 .flavor-agent-preview-token {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   padding: 2px 8px;
   line-height: 1.4;
-  border-radius: 999px;
+  border-radius: var(--flavor-agent-radius-full);
   white-space: nowrap;
 }
 
@@ -1001,10 +1021,10 @@
   font-family: monospace;
   background: color-mix(
     in srgb,
-    var(--flavor-agent-accent) 10%,
+    var(--flavor-agent-color-accent) 10%,
     transparent
   );
-  color: var(--flavor-agent-accent);
+  color: var(--flavor-agent-color-accent);
 }
 
 .flavor-agent-preview-token--area {
@@ -1014,8 +1034,12 @@
 }
 
 .flavor-agent-preview-token--pattern {
-  background: color-mix(in srgb, #00a32a 8%, transparent);
-  color: #00782d;
+  background: color-mix(
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 8%,
+    transparent
+  );
+  color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
 /* ---------------------------------------------------------------
@@ -1023,9 +1047,9 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-subpanel-hint {
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   line-height: 1.5;
-  color: var(--flavor-agent-muted);
+  color: var(--flavor-agent-color-muted);
   margin: 0;
   font-style: italic;
 }
@@ -1057,10 +1081,10 @@
   height: 16px;
   padding: 0;
   box-sizing: border-box;
-  border-radius: 999px;
-  background: var(--flavor-agent-accent);
+  border-radius: var(--flavor-agent-radius-full);
+  background: var(--flavor-agent-color-accent);
   color: #fff;
-  font-size: 11px;
+  font-size: var(--wpds-font-size-xs, 11px);
   font-weight: 700;
   line-height: 1;
   text-align: center;
@@ -1078,7 +1102,7 @@
 }
 
 .flavor-agent-inserter-badge--error {
-  background: #d63638;
+  background: var(--wpds-color-fg-content-error-weak, #cc1818);
 }
 
 @keyframes flavor-agent-pulse {

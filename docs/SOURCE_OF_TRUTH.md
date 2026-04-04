@@ -215,7 +215,7 @@ flavor-agent/
     flavor-agent-readme.md  Architecture and editor flow reference
     local-wordpress-ide.md  Local WordPress + devcontainer workflow
     wordpress-7.0-developer-docs-index.md  Discovered WP 7.0 docs source list
-    wordpress-7.0-gutenberg-22.8-reference.md  Version reference and compatibility notes
+    wordpress-7.0-gutenberg-22.8-reference.md  22.8 stable plus 22.9 RC version reference and compatibility notes
     wp7-migration-opportunities.md  Point-in-time WP 7.0 migration assessment
     superpowers/specs/
       2026-03-17-pattern-badge-status-design.md
@@ -717,7 +717,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/SOURCE_OF_TRUTH.md` | Definitive project reference: scope, architecture, inventory, roadmap | **Current** |
 | `docs/FEATURE_SURFACE_MATRIX.md` | Fast map of every shipped surface, gating condition, and apply/undo path | **Current** |
 | `docs/features/README.md` | Entry point for detailed feature docs covering end-to-end flows | **Current** |
-| `docs/features/style-and-theme-intelligence.md` | Detailed Global Styles surface doc: scope contract, prompt/apply flow, guardrails, and undo | **Current** |
+| `docs/features/style-and-theme-intelligence.md` | Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo | **Current** |
 | `docs/reference/abilities-and-routes.md` | Canonical ability and REST contract reference | **Current** |
 | `docs/reference/provider-precedence.md` | AI backend selection and credential fallback chain | **Current** |
 | `docs/reference/template-operations.md` | Operation type vocabulary and validation rules per surface | **Current** |
@@ -725,7 +725,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/flavor-agent-readme.md` | Architecture details: editor flows, settings, pattern lifecycle | **Current** |
 | `docs/local-wordpress-ide.md` | Local Docker/devcontainer workflow and host setup | **Current** |
 | `docs/2026-03-25-roadmap-aligned-execution-plan.md` | Active forward plan aligned to the current WordPress 7.0 and Gutenberg roadmap context | **Current** |
-| `docs/wordpress-7.0-gutenberg-22.8-reference.md` | WP 7.0 and Gutenberg 22.8 API changes, new features, deprecations, and plugin impact | **Reference snapshot** |
+| `docs/wordpress-7.0-gutenberg-22.8-reference.md` | WP 7.0 plus Gutenberg 22.8 stable / 22.9 RC API changes, new features, deprecations, and plugin impact | **Reference snapshot** |
 | `docs/wordpress-7.0-developer-docs-index.md` | Discovery snapshot of official WordPress 7.0 developer documentation sources | **Reference snapshot** |
 | `docs/wp7-migration-opportunities.md` | Point-in-time WordPress 7.0 migration assessment and follow-up opportunities | **Reference snapshot** |
 | `docs/superpowers/specs/2026-03-17-pattern-badge-status-design.md` | Implemented design spec for pattern badge status surface | **Implemented reference spec** |

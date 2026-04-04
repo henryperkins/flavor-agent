@@ -86,6 +86,34 @@ describe( 'patchPatternMetadata', () => {
 		] );
 	} );
 
+	it( 'uses the view-config recommended category slug when provided', () => {
+		const patterns = [
+			{
+				name: 'theme/gallery',
+				description: 'Gallery',
+				categories: [ 'media' ],
+			},
+		];
+
+		const patched = patchPatternMetadata(
+			patterns,
+			[
+				{
+					name: 'theme/gallery',
+					reason: 'Gallery matches the media-heavy section',
+					score: 0.99,
+				},
+			],
+			new Map(),
+			'editor-picks'
+		);
+
+		expect( patched[ 0 ].categories ).toEqual( [
+			'media',
+			'editor-picks',
+		] );
+	} );
+
 	it( 'restores undefined optional properties exactly', () => {
 		const patterns = [
 			{
