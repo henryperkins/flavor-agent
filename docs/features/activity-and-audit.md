@@ -4,7 +4,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Exact Surfaces
 
-- Inline editor activity: `Recent AI Actions` inside the block, template, template-part, and Global Styles recommendation panels
+- Inline editor activity: `Recent AI Actions` inside the block, template, template-part, Global Styles, and Style Book recommendation panels
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
@@ -12,27 +12,29 @@ Navigation recommendations and pattern recommendations do not currently create F
 
 ## Surfacing Conditions
 
-- Inline activity appears only when the current editor scope has recorded block, template, template-part, or Global Styles AI actions
+- Inline activity appears only when the current editor scope has recorded block, template, template-part, Global Styles, or Style Book AI actions
 - The admin audit page appears only for users with `manage_options`
 - Sitewide activity queries are admin-only; scoped activity access follows contextual capability checks through `FlavorAgent\Activity\Permissions`
 
 ## End-To-End Flow
 
-1. A deterministic apply flow succeeds in the block, template, template-part, or Global Styles surface
+1. A deterministic apply flow succeeds in the block, template, template-part, Global Styles, or Style Book surface
 2. The store builds a structured activity entry and persists it through the server-backed activity repository
+   The persisted request payload now carries AI execution provenance including provider/backend label, model, configuration owner, credential source, route/ability, and fallback path when the selected provider resolves to a different runtime backend.
 3. `ActivitySessionBootstrap()` resolves the current editor scope and calls `loadActivitySession()` whenever the edited entity changes
 4. The store hydrates the current scope from server entries, merges pending local entries, and keeps `sessionStorage` as a cache/fallback for the active surface
-5. `AIActivitySection` renders the newest entries for the current scope and shows inline undo when the entry is still valid and tail-undoable
+5. `AIActivitySection` renders the newest entries for the current scope, shows provider/model/path execution summaries, and exposes inline undo when the entry is still valid and tail-undoable
 6. `undoActivity()` validates the live editor state, performs the local undo, and persists the undo-status transition to `POST /flavor-agent/v1/activity/{id}/undo`
-7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` and a read-only `DataForm`
+7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` and a read-only `DataForm` that now exposes provider path, configuration owner, credential source, selected-provider fallback notes, and explicit undo reasons alongside the existing before/after summaries and quick links
 
 ## What This Surface Can Do
 
-- Persist block, template, template-part, and Global Styles apply events to a shared server-backed activity store
+- Persist block, template, template-part, Global Styles, and Style Book apply events to a shared server-backed activity store
 - Hydrate activity back into editor-scoped history when the current entity changes
+- Preserve machine-readable AI request provenance so audit views can explain which backend actually handled a recommendation and where that configuration lives
 - Show ordered undo state, including applied, available, undone, blocked, failed, and pending-sync states
 - Let the user undo the newest valid tail action directly from the editor panel
-- Let admins inspect recent server-backed AI activity across surfaces from wp-admin
+- Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provider ownership, credential-source, ability/route, and undo-reason details
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
 ## Ordered Undo Rules
@@ -40,7 +42,7 @@ Navigation recommendations and pattern recommendations do not currently create F
 - Undo is tail-ordered: older entries are blocked while newer still-applied AI actions remain
 - Block undo is path-plus-attribute based
 - Template and template-part undo rely on stable locators plus persisted post-apply snapshots
-- Global Styles undo relies on the active `root/globalStyles` entity id plus the persisted post-apply user config snapshot
+- Global Styles and Style Book undo both rely on the active `root/globalStyles` entity id plus the persisted post-apply user config snapshot; Style Book also validates the recorded target block before restoring styles
 - If the live editor state no longer matches the recorded post-apply state, the entry becomes blocked or unavailable instead of forcing an unsafe undo
 
 ## Primary Functions And Handlers

@@ -1,5 +1,44 @@
 import { Button } from '@wordpress/components';
 
+function getRequestMeta( entry ) {
+	const requestMeta = entry?.request?.ai;
+
+	return requestMeta &&
+		typeof requestMeta === 'object' &&
+		! Array.isArray( requestMeta )
+		? requestMeta
+		: null;
+}
+
+function getExecutionSummary( entry ) {
+	const requestMeta = getRequestMeta( entry );
+
+	if ( ! requestMeta ) {
+		return '';
+	}
+
+	const parts = [
+		requestMeta.backendLabel || requestMeta.providerLabel || requestMeta.provider,
+		requestMeta.model,
+	].filter( Boolean );
+
+	return parts.join( ' · ' );
+}
+
+function getExecutionPathLabel( entry ) {
+	return getRequestMeta( entry )?.pathLabel || '';
+}
+
+function getFallbackLabel( entry ) {
+	const requestMeta = getRequestMeta( entry );
+
+	if ( ! requestMeta?.usedFallback || ! requestMeta?.selectedProviderLabel ) {
+		return '';
+	}
+
+	return `Fallback from selected ${ requestMeta.selectedProviderLabel }.`;
+}
+
 function getStatusLabel( entry ) {
 	if (
 		entry?.persistence?.status !== 'server' &&
@@ -103,6 +142,21 @@ export default function AIActivitySection( {
 								<div className="flavor-agent-activity-row__meta">
 									{ describeActivity( entry ) }
 								</div>
+								{ getExecutionSummary( entry ) && (
+									<div className="flavor-agent-activity-row__meta">
+										{ getExecutionSummary( entry ) }
+									</div>
+								) }
+								{ getExecutionPathLabel( entry ) && (
+									<div className="flavor-agent-activity-row__meta">
+										{ getExecutionPathLabel( entry ) }
+									</div>
+								) }
+								{ getFallbackLabel( entry ) && (
+									<div className="flavor-agent-activity-row__meta">
+										{ getFallbackLabel( entry ) }
+									</div>
+								) }
 								{ hasPendingUndoSync && (
 									<div className="flavor-agent-activity-row__meta">
 										Activity audit sync pending.

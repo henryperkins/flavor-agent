@@ -19,6 +19,13 @@ final class Provider {
 	private const NATIVE_BASE_URL              = 'https://api.openai.com';
 
 	/**
+	 * @var array<string, mixed>|null
+	 */
+	private static ?array $last_runtime_chat_configuration = null;
+
+	private static bool $has_fresh_runtime_chat_configuration = false;
+
+	/**
 	 * @return array<string, string>
 	 */
 	public static function direct_choices(): array {
@@ -191,7 +198,11 @@ final class Provider {
 	 */
 	public static function chat_configuration( ?string $provider = null, array $overrides = [] ): array {
 		if ( null === $provider ) {
-			return self::runtime_chat_configuration( $overrides );
+			$config = self::runtime_chat_configuration( $overrides );
+			self::$last_runtime_chat_configuration = $config;
+			self::$has_fresh_runtime_chat_configuration = true;
+
+			return $config;
 		}
 
 		$provider = self::normalize_provider( $provider ?? self::get() );
@@ -313,6 +324,108 @@ final class Provider {
 		return $model !== '' ? $model : null;
 	}
 
+	/**
+	 * @return array{
+	 *   selectedProvider: string,
+	 *   selectedProviderLabel: string,
+	 *   provider: string,
+	 *   providerLabel: string,
+	 *   backendLabel: string,
+	 *   model: string,
+	 *   owner: string,
+	 *   ownerLabel: string,
+	 *   pathLabel: string,
+	 *   credentialSource: string,
+	 *   credentialSourceLabel: string,
+	 *   usedFallback: bool
+	 * }
+	 */
+	public static function active_chat_request_meta(): array {
+		$selected_provider = self::get();
+		$config            = (
+			self::$has_fresh_runtime_chat_configuration
+			&& is_array( self::$last_runtime_chat_configuration )
+		)
+			? self::$last_runtime_chat_configuration
+			: self::chat_configuration();
+		self::$has_fresh_runtime_chat_configuration = false;
+		$provider          = self::normalize_provider_for_request_meta(
+			(string) ( $config['provider'] ?? $selected_provider )
+		);
+		$provider_label    = self::provider_label_for_request_meta( $provider );
+		$backend_label     = trim( (string) ( $config['label'] ?? $provider_label ) );
+		$model             = trim( (string) ( $config['model'] ?? '' ) );
+		$used_fallback     = $provider !== $selected_provider;
+		$owner             = 'flavor_agent';
+		$owner_label       = 'Settings > Flavor Agent';
+		$path_label        = 'Flavor Agent chat backend';
+		$credential_source = 'plugin_settings';
+		$credential_label  = 'Settings > Flavor Agent';
+
+		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+			$owner             = 'connectors';
+			$owner_label       = 'Settings > Connectors';
+			$path_label        = 'WordPress AI Client via Settings > Connectors';
+			$credential_source = 'provider_managed';
+			$credential_label  = 'Provider-managed';
+		} elseif ( self::is_connector( $provider ) ) {
+			$owner             = 'connectors';
+			$owner_label       = 'Settings > Connectors';
+			$path_label        = sprintf( '%s via Settings > Connectors', $provider_label );
+			$credential_source = 'provider_managed';
+			$credential_label  = 'Provider-managed';
+		} elseif ( self::is_native( $provider ) ) {
+			$credential_source = self::native_effective_api_key_source();
+			$credential_label  = self::credential_source_label_for_request_meta( $credential_source );
+
+			switch ( $credential_source ) {
+				case 'connector_database':
+					$owner       = 'flavor_agent_and_connectors';
+					$owner_label = 'Settings > Flavor Agent + Settings > Connectors';
+					$path_label  = 'OpenAI Native model in Settings > Flavor Agent, API key in Settings > Connectors';
+					break;
+				case 'env':
+					$owner       = 'environment';
+					$owner_label = 'Environment';
+					$path_label  = 'OpenAI Native model in Settings > Flavor Agent, API key from OPENAI_API_KEY';
+					break;
+				case 'constant':
+					$owner       = 'environment';
+					$owner_label = 'wp-config.php / PHP constant';
+					$path_label  = 'OpenAI Native model in Settings > Flavor Agent, API key from OPENAI_API_KEY constant';
+					break;
+				case 'plugin_override':
+				case 'none':
+				default:
+					$owner       = 'flavor_agent';
+					$owner_label = 'Settings > Flavor Agent';
+					$path_label  = 'OpenAI Native via Settings > Flavor Agent';
+					break;
+			}
+		} else {
+			$owner             = 'flavor_agent';
+			$owner_label       = 'Settings > Flavor Agent';
+			$path_label        = 'Azure OpenAI via Settings > Flavor Agent';
+			$credential_source = 'plugin_settings';
+			$credential_label  = 'Settings > Flavor Agent';
+		}
+
+		return [
+			'selectedProvider'      => $selected_provider,
+			'selectedProviderLabel' => self::provider_label_for_request_meta( $selected_provider ),
+			'provider'              => $provider,
+			'providerLabel'         => $provider_label,
+			'backendLabel'          => '' !== $backend_label ? $backend_label : $provider_label,
+			'model'                 => '' !== $model ? $model : 'provider-managed',
+			'owner'                 => $owner,
+			'ownerLabel'            => $owner_label,
+			'pathLabel'             => $path_label,
+			'credentialSource'      => $credential_source,
+			'credentialSourceLabel' => $credential_label,
+			'usedFallback'          => $used_fallback,
+		];
+	}
+
 	public static function active_embedding_model(): ?string {
 		$model = trim( self::embedding_configuration()['model'] );
 
@@ -334,6 +447,35 @@ final class Provider {
 	 */
 	private static function all_choices(): array {
 		return self::direct_choices() + self::registered_connector_choices();
+	}
+
+	private static function normalize_provider_for_request_meta( string $provider ): string {
+		$provider = sanitize_key( $provider );
+
+		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+			return $provider;
+		}
+
+		return self::normalize_provider( $provider );
+	}
+
+	private static function provider_label_for_request_meta( string $provider ): string {
+		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+			return 'WordPress AI Client';
+		}
+
+		return self::label( $provider );
+	}
+
+	private static function credential_source_label_for_request_meta( string $source ): string {
+		return match ( $source ) {
+			'plugin_override' => 'Settings > Flavor Agent',
+			'connector_database' => 'Settings > Connectors',
+			'env' => 'OPENAI_API_KEY environment variable',
+			'constant' => 'OPENAI_API_KEY PHP constant',
+			'provider_managed' => 'Provider-managed',
+			default => 'Not recorded',
+		};
 	}
 
 	/**

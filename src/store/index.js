@@ -199,6 +199,65 @@ function normalizeStringMessage( value ) {
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
+function isPlainObject( value ) {
+	return (
+		Boolean( value ) &&
+		typeof value === 'object' &&
+		! Array.isArray( value )
+	);
+}
+
+function normalizeRequestMeta( requestMeta = null ) {
+	return isPlainObject( requestMeta ) ? requestMeta : null;
+}
+
+function attachRequestMetaToSuggestion( suggestion, requestMeta ) {
+	const normalizedRequestMeta = normalizeRequestMeta( requestMeta );
+
+	if ( ! normalizedRequestMeta || ! isPlainObject( suggestion ) ) {
+		return suggestion;
+	}
+
+	return {
+		...suggestion,
+		requestMeta: normalizedRequestMeta,
+	};
+}
+
+function attachRequestMetaToSuggestionList( suggestions, requestMeta ) {
+	if ( ! Array.isArray( suggestions ) ) {
+		return [];
+	}
+
+	return suggestions.map( ( suggestion ) =>
+		attachRequestMetaToSuggestion( suggestion, requestMeta )
+	);
+}
+
+function attachRequestMetaToRecommendationPayload( payload = {} ) {
+	if ( ! isPlainObject( payload ) ) {
+		return payload;
+	}
+
+	const requestMeta = normalizeRequestMeta( payload.requestMeta );
+
+	if ( ! requestMeta ) {
+		return payload;
+	}
+
+	return {
+		...payload,
+		settings: attachRequestMetaToSuggestionList( payload.settings, requestMeta ),
+		styles: attachRequestMetaToSuggestionList( payload.styles, requestMeta ),
+		block: attachRequestMetaToSuggestionList( payload.block, requestMeta ),
+		suggestions: attachRequestMetaToSuggestionList(
+			payload.suggestions,
+			requestMeta
+		),
+		requestMeta,
+	};
+}
+
 function getNormalizedReadyState(
 	surface,
 	{ hasPreview = false, hasResult = false }
@@ -929,6 +988,7 @@ function buildBlockActivityEntry( {
 	blockPath = null,
 	clientId,
 	requestPrompt = '',
+	requestMeta = null,
 	requestToken = 0,
 	scope = null,
 	suggestion,
@@ -951,6 +1011,7 @@ function buildBlockActivityEntry( {
 		},
 		prompt: requestPrompt,
 		requestRef: `block:${ clientId }:${ requestToken }`,
+		requestMeta,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -1003,6 +1064,7 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 function buildTemplateActivityEntry( {
 	operations,
 	requestPrompt = '',
+	requestMeta = null,
 	requestToken = 0,
 	scope = null,
 	suggestion,
@@ -1022,6 +1084,7 @@ function buildTemplateActivityEntry( {
 		after: { operations },
 		prompt: requestPrompt,
 		requestRef: `template:${ templateRef || 'unknown' }:${ requestToken }`,
+		requestMeta,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -1029,6 +1092,7 @@ function buildTemplateActivityEntry( {
 function buildTemplatePartActivityEntry( {
 	operations,
 	requestPrompt = '',
+	requestMeta = null,
 	requestToken = 0,
 	scope = null,
 	suggestion,
@@ -1050,6 +1114,7 @@ function buildTemplatePartActivityEntry( {
 		requestRef: `template-part:${
 			templatePartRef || 'unknown'
 		}:${ requestToken }`,
+		requestMeta,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -1059,6 +1124,7 @@ function buildGlobalStylesActivityEntry( {
 	beforeConfig,
 	afterConfig,
 	requestPrompt = '',
+	requestMeta = null,
 	requestToken = 0,
 	scope = null,
 	suggestion,
@@ -1083,6 +1149,7 @@ function buildGlobalStylesActivityEntry( {
 		requestRef: `global-styles:${
 			globalStylesId || 'unknown'
 		}:${ requestToken }`,
+		requestMeta,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -1092,6 +1159,7 @@ function buildStyleBookActivityEntry( {
 	beforeConfig,
 	afterConfig,
 	requestPrompt = '',
+	requestMeta = null,
 	requestToken = 0,
 	scope = null,
 	suggestion,
@@ -1120,6 +1188,7 @@ function buildStyleBookActivityEntry( {
 		requestRef: `style-book:${ globalStylesId || 'unknown' }:${
 			blockName || 'unknown'
 		}:${ requestToken }`,
+		requestMeta,
 		document: buildActivityDocument( scope ),
 	} );
 }
@@ -1443,6 +1512,9 @@ const actions = {
 					method: 'POST',
 					data: { editorContext: context, prompt, clientId },
 				} );
+				const payload = attachRequestMetaToRecommendationPayload(
+					result.payload || {}
+				);
 
 				dispatch(
 					actions.setBlockRecommendations(
@@ -1452,9 +1524,10 @@ const actions = {
 							blockContext: context.block || {},
 							prompt,
 							...sanitizeRecommendationsForContext(
-								result.payload || {},
+								payload,
 								context.block || {}
 							),
+							requestMeta: normalizeRequestMeta( payload.requestMeta ),
 							timestamp: Date.now(),
 						},
 						requestToken
@@ -1553,6 +1626,10 @@ const actions = {
 					),
 					clientId,
 					requestPrompt: storedRecommendations.prompt || '',
+					requestMeta:
+						suggestion?.requestMeta ||
+						storedRecommendations.requestMeta ||
+						null,
 					requestToken: select.getBlockRequestToken( clientId ) || 0,
 					scope,
 					suggestion,
@@ -2315,6 +2392,7 @@ const actions = {
 				buildTemplateActivityEntry( {
 					operations: result.operations,
 					requestPrompt: select.getTemplateRequestPrompt?.() || '',
+					requestMeta: suggestion?.requestMeta || null,
 					requestToken: select.getTemplateResultToken?.() || 0,
 					scope,
 					suggestion,
@@ -2379,6 +2457,7 @@ const actions = {
 					operations: result.operations,
 					requestPrompt:
 						select.getTemplatePartRequestPrompt?.() || '',
+					requestMeta: suggestion?.requestMeta || null,
 					requestToken: select.getTemplatePartResultToken?.() || 0,
 					scope,
 					suggestion,
@@ -2431,6 +2510,7 @@ const actions = {
 					afterConfig: result.afterConfig,
 					requestPrompt:
 						select.getGlobalStylesRequestPrompt?.() || '',
+					requestMeta: suggestion?.requestMeta || null,
 					requestToken: select.getGlobalStylesResultToken?.() || 0,
 					scope,
 					suggestion,
@@ -2483,6 +2563,7 @@ const actions = {
 					beforeConfig: result.beforeConfig,
 					afterConfig: result.afterConfig,
 					requestPrompt: select.getStyleBookRequestPrompt?.() || '',
+					requestMeta: suggestion?.requestMeta || null,
 					requestToken: select.getStyleBookResultToken?.() || 0,
 					scope,
 					suggestion,
@@ -2553,10 +2634,13 @@ const actions = {
 					requestToken,
 					result,
 				} ) => {
+					const payload =
+						attachRequestMetaToRecommendationPayload( result );
+
 					localDispatch(
 						actions.setTemplateRecommendations(
 							requestInput.templateRef,
-							result,
+							payload,
 							requestInput.prompt || '',
 							requestToken
 						)
@@ -2616,10 +2700,13 @@ const actions = {
 					requestToken,
 					result,
 				} ) => {
+					const payload =
+						attachRequestMetaToRecommendationPayload( result );
+
 					localDispatch(
 						actions.setTemplatePartRecommendations(
 							requestInput.templatePartRef,
-							result,
+							payload,
 							requestInput.prompt || '',
 							requestToken
 						)
@@ -2692,10 +2779,13 @@ const actions = {
 					requestToken,
 					result,
 				} ) => {
+					const payload =
+						attachRequestMetaToRecommendationPayload( result );
+
 					localDispatch(
 						actions.setGlobalStylesRecommendations(
 							requestInput.scope,
-							result,
+							payload,
 							requestInput.prompt || '',
 							requestToken,
 							contextSignature
@@ -2769,10 +2859,13 @@ const actions = {
 					requestToken,
 					result,
 				} ) => {
+					const payload =
+						attachRequestMetaToRecommendationPayload( result );
+
 					localDispatch(
 						actions.setStyleBookRecommendations(
 							requestInput.scope,
-							result,
+							payload,
 							requestInput.prompt || '',
 							requestToken,
 							contextSignature

@@ -13,6 +13,7 @@ use FlavorAgent\Abilities\NavigationAbilities;
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\StringArray;
 
@@ -509,7 +510,11 @@ final class Agent_Controller {
 
 		return new \WP_REST_Response(
 			[
-				'payload'  => $result,
+				'payload'  => self::append_request_meta(
+					$result,
+					'flavor-agent/recommend-block',
+					'POST /flavor-agent/v1/recommend-block'
+				),
 				'clientId' => $client_id,
 			],
 			200
@@ -548,7 +553,14 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta(
+				$result,
+				'flavor-agent/recommend-navigation',
+				'POST /flavor-agent/v1/recommend-navigation'
+			),
+			200
+		);
 	}
 
 	public static function handle_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
@@ -558,7 +570,14 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta(
+				$result,
+				'flavor-agent/recommend-style',
+				'POST /flavor-agent/v1/recommend-style'
+			),
+			200
+		);
 	}
 
 	public static function handle_recommend_patterns( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
@@ -593,7 +612,14 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta(
+				$result,
+				'flavor-agent/recommend-template',
+				'POST /flavor-agent/v1/recommend-template'
+			),
+			200
+		);
 	}
 
 	/**
@@ -625,7 +651,30 @@ final class Agent_Controller {
 			return $result;
 		}
 
-		return new \WP_REST_Response( $result, 200 );
+		return new \WP_REST_Response(
+			self::append_request_meta(
+				$result,
+				'flavor-agent/recommend-template-part',
+				'POST /flavor-agent/v1/recommend-template-part'
+			),
+			200
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, mixed>
+	 */
+	private static function append_request_meta( array $payload, string $ability, string $route ): array {
+		$payload['requestMeta'] = array_merge(
+			Provider::active_chat_request_meta(),
+			[
+				'ability' => $ability,
+				'route'   => $route,
+			]
+		);
+
+		return $payload;
 	}
 
 	/**

@@ -26,6 +26,14 @@ describe( 'AIActivitySection', () => {
 							target: {
 								blockName: 'core/paragraph',
 							},
+							request: {
+								ai: {
+									backendLabel: 'Azure OpenAI responses',
+									model: 'gpt-5.3-chat',
+									pathLabel:
+										'Azure OpenAI via Settings > Flavor Agent',
+								},
+							},
 							undo: {
 								canUndo: true,
 								status: 'available',
@@ -50,6 +58,16 @@ describe( 'AIActivitySection', () => {
 							surface: 'template',
 							target: {
 								templateRef: 'theme//home',
+							},
+							request: {
+								ai: {
+									backendLabel: 'WordPress AI Client',
+									model: 'provider-managed',
+									pathLabel:
+										'WordPress AI Client via Settings > Connectors',
+									selectedProviderLabel: 'Azure OpenAI',
+									usedFallback: true,
+								},
 							},
 							undo: {
 								canUndo: false,
@@ -119,6 +137,18 @@ describe( 'AIActivitySection', () => {
 		);
 		expect( getContainer().textContent ).toContain(
 			'Activity audit sync pending.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Azure OpenAI responses · gpt-5.3-chat'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Azure OpenAI via Settings > Flavor Agent'
+		);
+		expect( getContainer().textContent ).toContain(
+			'WordPress AI Client via Settings > Connectors'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Fallback from selected Azure OpenAI.'
 		);
 		expect( getContainer().textContent ).toContain( 'Global Styles action' );
 		expect( getContainer().textContent ).toContain(

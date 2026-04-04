@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-04
 
 ## Working
 
@@ -50,7 +50,7 @@
 - Site Editor style recommendation panels for the native Styles sidebar, with document-panel fallbacks, review-confirm-apply support for bounded `set_styles`, `set_block_styles`, and `set_theme_variation` operations, shared capability/status messaging when the style backend is unavailable, and explicit `theme.json`-safe guardrails that keep raw CSS and `customCSS` out of scope
 - Inspector-panel navigation recommendations for selected `core/navigation` blocks with richer advisory structure, overlay, location, and accessibility guidance
 - Epic 2 shared review model: block, navigation, template, template-part, Global Styles, and Style Book surfaces now share normalized interaction states (`idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`), shared advisory/review/status components, and aligned activity/undo presentation
-- Block, template, template-part, Global Styles, and Style Book apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel
+- Block, template, template-part, Global Styles, and Style Book apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel, including backend/model execution summaries, provider-path ownership labels, and selected-provider fallback notes when the runtime backend differs from the configured provider
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template, template-part, Global Styles, and Style Book undo still rely on stable locators or recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable
 - A shape-only `src/review/notes-adapter.js` now exists for future Notes/comment projection without taking a runtime dependency on unstable editor APIs
 - Admin settings screen with provider selection, Azure OpenAI / OpenAI Native, Qdrant, and Cloudflare AI Search configuration plus pattern sync controls; the page copy now makes the core-managed `Settings > Connectors` vs plugin-managed `Settings > Flavor Agent` ownership boundary explicit, and the OpenAI Native section reports the effective credential source plus core OpenAI connector registration/configuration state
@@ -67,7 +67,7 @@
 
 - Settings > `AI Activity` now opens a dedicated wp-admin audit page for recent server-backed Flavor Agent actions across block, template, template-part, Global Styles, and Style Book surfaces
 - The admin page uses WordPress `DataViews` with the `activity` layout as the default feed, plus persisted/resettable view preferences and grouped summary cards for recorded, applied, undone, and review-needed activity
-- A read-only `DataForm` details panel surfaces stored request metadata, ordered undo status, before/after summaries, and quick links back to the affected entity, plugin settings, and core Connectors when available
+- A read-only `DataForm` details panel surfaces stored request metadata, provider path, configuration owner, credential source, selected-provider fallback state, ordered undo status with explicit undo reasons, before/after summaries, and quick links back to the affected entity, plugin settings, and core Connectors when available
 - Sitewide activity queries now flow through the same REST route and repository, but only `manage_options` users can access unscoped/global reads
 
 ## Known Issues
@@ -78,18 +78,19 @@
 - WordPress `7.0` is still pre-release, and the cycle was extended on 2026-03-31 with a revised final release date still pending. The Docker-backed Site Editor harness still pins `wordpress:beta-7.0-beta4-php8.2-apache`; swap that override once the official stable image exists and Core publishes the final 7.0 timeline.
 - `recommend-navigation` now has a first-party inspector surface, plugin REST route, and checked-in browser smoke, and it is intentionally advisory-only through v1.0. There is still no validated navigation apply contract.
 - AI activity now has a first admin audit screen in wp-admin, but the feature is still not a full observability product: there is no diff-oriented inspection view, no abilities-backed row-action layer yet, and no cross-device/operator workflows beyond the recent-activity timeline.
-- Live recommendation execution with valid LLM credentials was not rerun in this pass.
 
 ## Open Backlog
 
-- Deepen the new admin activity page with richer diagnostics, before/after inspection, and a cleaner action/discovery layer rather than treating audit visibility as greenfield work.
-- Rerun live provider-backed recommendation execution with valid credentials to refresh end-to-end verification on the active provider path.
+- Deepen the new admin activity page with row-level actions, richer before/after inspection, and tighter ability-to-audit cross-reference metadata rather than treating audit visibility as greenfield work.
 - Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
 - Revisit navigation apply only if a bounded previewable/undoable executor becomes its own tracked post-v1 milestone.
 - Interactivity API runtime work is explicitly future-facing, not part of the current remediation backlog, because the shipped plugin is still editor/admin only and has no front-end runtime surface that needs it.
 
 ## Recent Verification
 
+- 2026-04-04 phase-1-provenance-polish: `vendor/bin/phpunit --filter '(ProviderTest|AgentControllerTest|ActivityRepositoryTest)'` passed (`43` tests, `202` assertions).
+- 2026-04-04 phase-1-provenance-polish: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log-utils.test.js src/admin/__tests__/activity-log.test.js src/store/__tests__/store-actions.test.js` passed (`4` suites, `49` tests).
+- 2026-04-04 phase-1-provenance-polish: `wp eval-file <temp-script> --path=/home/hperkins-wp/htdocs/wp.hperkins.com` invoked `POST /flavor-agent/v1/recommend-block` through `rest_do_request()` as admin user `1` and returned HTTP `200` from `Azure OpenAI responses` on `gpt-5.3-chat` with `1` settings suggestion (`Shorten paragraph copy`) and `1` style suggestion (`Use MD body font size`); stored request metadata reported the direct `Azure OpenAI via Settings > Flavor Agent` path with no provider fallback.
 - 2026-04-03 epic-3-closure-verification: `vendor/bin/phpunit --filter '(StyleAbilitiesTest|StylePromptTest|InfraAbilitiesTest|RegistrationTest|AgentControllerTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityPermissionsTest|ActivityRepositoryTest)'` passed (`105` tests, `647` assertions).
 - 2026-04-03 epic-3-closure-verification: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/components/__tests__/AIActivitySection.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js` passed (`16` suites, `138` tests).
 - 2026-04-03 epic-3-closure-verification: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed (existing webpack asset-size warnings only).

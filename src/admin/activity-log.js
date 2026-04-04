@@ -309,25 +309,43 @@ function getDetailFields() {
 			label: 'Diagnostics summary',
 			type: 'text',
 			readOnly: true,
-			render: ( { item } ) => (
-				<span>
-					{ item.provider } · { item.model }
-				</span>
-			),
+			render: ( { item } ) => {
+				const parts = [
+					item.provider,
+					item.model,
+					item.providerPath,
+				].filter( ( value ) => value && value !== 'Not recorded' );
+
+				return <span>{ parts.join( ' · ' ) || 'Not recorded' }</span>;
+			},
 		},
 		{
 			id: 'requestSummary',
 			label: 'Request summary',
 			type: 'text',
 			readOnly: true,
-			render: ( { item } ) => <span>{ item.requestReference }</span>,
+			render: ( { item } ) => {
+				const parts = [
+					item.requestAbility,
+					item.requestReference,
+				].filter( ( value ) => value && value !== 'Not recorded' );
+
+				return <span>{ parts.join( ' · ' ) || 'Not recorded' }</span>;
+			},
 		},
 		{
 			id: 'undoSummary',
 			label: 'Undo summary',
 			type: 'text',
 			readOnly: true,
-			render: ( { item } ) => <span>{ item.undoStatusLabel }</span>,
+			render: ( { item } ) => (
+				<span>
+					{ item.undoStatusLabel }
+					{ item.undoReason && item.undoReason !== 'Not recorded'
+						? ` · ${ item.undoReason }`
+						: '' }
+				</span>
+			),
 		},
 		{
 			id: 'statusLabel',
@@ -421,6 +439,36 @@ function getDetailFields() {
 			readOnly: true,
 		},
 		{
+			id: 'providerPath',
+			label: 'Provider path',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'configurationOwner',
+			label: 'Configured in',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'credentialSource',
+			label: 'Credential source',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'selectedProvider',
+			label: 'Selected provider',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'requestFallback',
+			label: 'Fallback',
+			type: 'text',
+			readOnly: true,
+		},
+		{
 			id: 'tokenUsage',
 			label: 'Token usage',
 			type: 'text',
@@ -435,6 +483,18 @@ function getDetailFields() {
 		{
 			id: 'requestReference',
 			label: 'Reference',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'requestAbility',
+			label: 'Ability',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'requestRoute',
+			label: 'Route',
 			type: 'text',
 			readOnly: true,
 		},
@@ -458,6 +518,12 @@ function getDetailFields() {
 		{
 			id: 'undoError',
 			label: 'Undo error',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'undoReason',
+			label: 'Undo reason',
 			type: 'text',
 			readOnly: true,
 		},
@@ -525,7 +591,17 @@ function getDetailForm() {
 			{
 				id: 'diagnostics',
 				label: 'Diagnostics',
-				children: [ 'provider', 'model', 'tokenUsage', 'latency' ],
+				children: [
+					'provider',
+					'model',
+					'providerPath',
+					'configurationOwner',
+					'credentialSource',
+					'selectedProvider',
+					'requestFallback',
+					'tokenUsage',
+					'latency',
+				],
 				layout: {
 					type: 'details',
 					summary: 'diagnosticsSummary',
@@ -534,7 +610,12 @@ function getDetailForm() {
 			{
 				id: 'request',
 				label: 'Request',
-				children: [ 'requestReference', 'requestPrompt' ],
+				children: [
+					'requestAbility',
+					'requestRoute',
+					'requestReference',
+					'requestPrompt',
+				],
 				layout: {
 					type: 'details',
 					summary: 'requestSummary',
@@ -543,7 +624,7 @@ function getDetailForm() {
 			{
 				id: 'undo',
 				label: 'Undo',
-				children: [ 'undoStatusLabel', 'undoError' ],
+				children: [ 'undoStatusLabel', 'undoReason', 'undoError' ],
 				layout: {
 					type: 'details',
 					summary: 'undoSummary',
@@ -571,7 +652,7 @@ function ActivityEntryDetails( { entry } ) {
 					</h3>
 					<p className="flavor-agent-activity-log__copy">
 						Select an activity item to inspect request metadata,
-						undo state, and navigation links.
+						provider ownership, undo state, and navigation links.
 					</p>
 				</CardBody>
 			</Card>

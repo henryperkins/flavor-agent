@@ -64,4 +64,65 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( 'provider-managed', $config['model'] );
 		$this->assertTrue( $config['configured'] );
 	}
+
+	public function test_active_chat_request_meta_reports_azure_path_from_flavor_agent_settings(): void {
+		WordPressTestState::$options = [
+			Provider::OPTION_NAME                     => Provider::AZURE,
+			'flavor_agent_azure_openai_endpoint'     => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'          => 'azure-key',
+			'flavor_agent_azure_chat_deployment'     => 'gpt-5.3-chat',
+		];
+
+		$config = Provider::chat_configuration();
+		$meta = Provider::active_chat_request_meta();
+
+		$this->assertSame( Provider::AZURE, $config['provider'] );
+		$this->assertSame( Provider::AZURE, $meta['provider'] );
+		$this->assertSame( 'Azure OpenAI', $meta['providerLabel'] );
+		$this->assertSame( 'gpt-5.3-chat', $meta['model'] );
+		$this->assertSame( 'flavor_agent', $meta['owner'] );
+		$this->assertSame( 'Settings > Flavor Agent', $meta['ownerLabel'] );
+		$this->assertSame(
+			'Azure OpenAI via Settings > Flavor Agent',
+			$meta['pathLabel']
+		);
+		$this->assertFalse( $meta['usedFallback'] );
+	}
+
+	public function test_active_chat_request_meta_reports_native_connector_split_ownership(): void {
+		WordPressTestState::$options = [
+			Provider::OPTION_NAME                         => Provider::NATIVE,
+			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
+			'connectors_ai_openai_api_key'               => 'connector-key',
+		];
+		WordPressTestState::$connectors = [
+			'openai' => [
+				'type'           => 'ai_provider',
+				'name'           => 'OpenAI',
+				'authentication' => [
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+
+		$config = Provider::chat_configuration();
+		$meta = Provider::active_chat_request_meta();
+
+		$this->assertSame( Provider::NATIVE, $config['provider'] );
+		$this->assertSame( Provider::NATIVE, $meta['provider'] );
+		$this->assertSame( 'gpt-5.4', $meta['model'] );
+		$this->assertSame(
+			'flavor_agent_and_connectors',
+			$meta['owner']
+		);
+		$this->assertSame(
+			'Settings > Flavor Agent + Settings > Connectors',
+			$meta['ownerLabel']
+		);
+		$this->assertSame(
+			'OpenAI Native model in Settings > Flavor Agent, API key in Settings > Connectors',
+			$meta['pathLabel']
+		);
+		$this->assertSame( 'connector_database', $meta['credentialSource'] );
+	}
 }

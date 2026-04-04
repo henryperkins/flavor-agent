@@ -975,6 +975,11 @@ describe( 'store action thunks', () => {
 			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Tighten the copy.',
+				requestMeta: {
+					backendLabel: 'Azure OpenAI responses',
+					model: 'gpt-5.3-chat',
+					pathLabel: 'Azure OpenAI via Settings > Flavor Agent',
+				},
 			} ),
 			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
@@ -1033,6 +1038,10 @@ describe( 'store action thunks', () => {
 					request: expect.objectContaining( {
 						prompt: 'Tighten the copy.',
 						reference: 'block:block-1:4',
+						ai: expect.objectContaining( {
+							backendLabel: 'Azure OpenAI responses',
+							model: 'gpt-5.3-chat',
+						} ),
 					} ),
 					suggestion: 'Refresh content',
 				} ),
@@ -1114,6 +1123,11 @@ describe( 'store action thunks', () => {
 		const suggestion = {
 			label: 'Clarify template hierarchy',
 			suggestionKey: 'Clarify template hierarchy-0',
+			requestMeta: {
+				backendLabel: 'WordPress AI Client',
+				model: 'provider-managed',
+				pathLabel: 'WordPress AI Client via Settings > Connectors',
+			},
 			operations: [
 				{
 					type: 'insert_pattern',
@@ -1140,6 +1154,10 @@ describe( 'store action thunks', () => {
 					request: expect.objectContaining( {
 						prompt: 'Make the layout more editorial.',
 						reference: 'template:theme//home:3',
+						ai: expect.objectContaining( {
+							backendLabel: 'WordPress AI Client',
+							model: 'provider-managed',
+						} ),
 					} ),
 					suggestion: 'Clarify template hierarchy',
 					suggestionKey: 'Clarify template hierarchy-0',
@@ -1288,6 +1306,10 @@ describe( 'store action thunks', () => {
 		const suggestion = {
 			label: 'Add utility row',
 			suggestionKey: 'Add utility row-0',
+			requestMeta: {
+				backendLabel: 'Azure OpenAI responses',
+				model: 'gpt-5.3-chat',
+			},
 			operations: [
 				{
 					type: 'insert_pattern',
@@ -1318,6 +1340,10 @@ describe( 'store action thunks', () => {
 					request: expect.objectContaining( {
 						prompt: 'Add a utility row.',
 						reference: 'template-part:theme//header:4',
+						ai: expect.objectContaining( {
+							backendLabel: 'Azure OpenAI responses',
+							model: 'gpt-5.3-chat',
+						} ),
 					} ),
 					suggestion: 'Add utility row',
 					suggestionKey: 'Add utility row-0',

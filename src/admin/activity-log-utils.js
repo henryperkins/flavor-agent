@@ -632,6 +632,8 @@ export function summarizeActivityState( state ) {
 
 function getRequestDiagnostics( request = {} ) {
 	const provider = getFirstString( request, [
+		[ 'ai', 'backendLabel' ],
+		[ 'ai', 'providerLabel' ],
 		[ 'provider' ],
 		[ 'providerName' ],
 		[ 'metadata', 'provider' ],
@@ -639,12 +641,43 @@ function getRequestDiagnostics( request = {} ) {
 		[ 'result', 'provider' ],
 	] );
 	const model = getFirstString( request, [
+		[ 'ai', 'model' ],
 		[ 'model' ],
 		[ 'modelName' ],
 		[ 'metadata', 'model' ],
-		[ 'ai', 'model' ],
 		[ 'result', 'model' ],
 	] );
+	const providerPath = getFirstString( request, [
+		[ 'ai', 'pathLabel' ],
+		[ 'pathLabel' ],
+	] );
+	const configurationOwner = getFirstString( request, [
+		[ 'ai', 'ownerLabel' ],
+		[ 'ownerLabel' ],
+	] );
+	const credentialSource = getFirstString( request, [
+		[ 'ai', 'credentialSourceLabel' ],
+		[ 'ai', 'credentialSource' ],
+		[ 'credentialSourceLabel' ],
+		[ 'credentialSource' ],
+	] );
+	const selectedProvider = getFirstString( request, [
+		[ 'ai', 'selectedProviderLabel' ],
+		[ 'ai', 'selectedProvider' ],
+		[ 'selectedProviderLabel' ],
+		[ 'selectedProvider' ],
+	] );
+	const requestAbility = getFirstString( request, [
+		[ 'ai', 'ability' ],
+		[ 'ability' ],
+	] );
+	const requestRoute = getFirstString( request, [
+		[ 'ai', 'route' ],
+		[ 'route' ],
+	] );
+	const usedFallback = Boolean(
+		readPath( request, [ 'ai', 'usedFallback' ] ) ?? request?.usedFallback
+	);
 	const totalTokens = getFirstNumber( request, [
 		[ 'tokenUsage', 'total' ],
 		[ 'usage', 'total_tokens' ],
@@ -685,9 +718,46 @@ function getRequestDiagnostics( request = {} ) {
 	return {
 		provider: provider || EMPTY_VALUE,
 		model: model || EMPTY_VALUE,
+		providerPath: providerPath || EMPTY_VALUE,
+		configurationOwner: configurationOwner || EMPTY_VALUE,
+		credentialSource: credentialSource || EMPTY_VALUE,
+		selectedProvider: selectedProvider || EMPTY_VALUE,
+		requestAbility: requestAbility || EMPTY_VALUE,
+		requestRoute: requestRoute || EMPTY_VALUE,
+		usedFallback,
 		tokenUsageLabel,
 		latencyLabel: latencyMs !== null ? `${ latencyMs } ms` : EMPTY_VALUE,
 	};
+}
+
+function getUndoReason( status, resolvedUndo = null, entry = null ) {
+	if ( status === 'applied' && resolvedUndo?.status === 'available' ) {
+		return 'This is the newest still-applied AI action for this entity.';
+	}
+
+	if (
+		typeof entry?.undo?.error === 'string' &&
+		entry.undo.error.trim()
+	) {
+		return entry.undo.error.trim();
+	}
+
+	if (
+		typeof resolvedUndo?.error === 'string' &&
+		resolvedUndo.error.trim()
+	) {
+		return resolvedUndo.error.trim();
+	}
+
+	if ( status === 'undone' ) {
+		return 'Undo already completed.';
+	}
+
+	if ( status === 'failed' ) {
+		return 'Undo is unavailable.';
+	}
+
+	return EMPTY_VALUE;
 }
 
 function getActivityTitle( entry ) {
@@ -1153,6 +1223,12 @@ export function normalizeActivityEntry(
 			entry.request.reference.trim()
 				? entry.request.reference.trim()
 				: EMPTY_VALUE,
+		providerPath: diagnostics.providerPath,
+		configurationOwner: diagnostics.configurationOwner,
+		credentialSource: diagnostics.credentialSource,
+		selectedProvider: diagnostics.selectedProvider,
+		requestAbility: diagnostics.requestAbility,
+		requestRoute: diagnostics.requestRoute,
 		beforeSummary: summarizeActivityState( entry?.before ),
 		afterSummary: summarizeActivityState( entry?.after ),
 		stateDiff: buildStructuredStateDiff( entry?.before, entry?.after ),
@@ -1160,21 +1236,24 @@ export function normalizeActivityEntry(
 			status === 'applied' && resolvedUndo?.status === 'available'
 				? 'Undo available'
 				: getActivityStatusLabel( status ),
-		undoError: ( () => {
-			if (
-				typeof resolvedUndo?.error === 'string' &&
-				resolvedUndo.error.trim()
-			) {
-				return resolvedUndo.error.trim();
-			}
-			return status === 'blocked'
+		undoError:
+			typeof entry?.undo?.error === 'string' && entry.undo.error.trim()
+				? entry.undo.error.trim()
+				: (
+			status === 'blocked' &&
+			typeof resolvedUndo?.error !== 'string'
 				? ORDERED_UNDO_BLOCKED_ERROR
-				: EMPTY_VALUE;
-		} )(),
+				: EMPTY_VALUE
+				),
+		undoReason: getUndoReason( status, resolvedUndo, entry ),
 		provider: diagnostics.provider,
 		model: diagnostics.model,
 		tokenUsage: diagnostics.tokenUsageLabel,
 		latency: diagnostics.latencyLabel,
+		requestFallback:
+			diagnostics.usedFallback && diagnostics.selectedProvider !== EMPTY_VALUE
+				? `Fallback from selected ${ diagnostics.selectedProvider }.`
+				: EMPTY_VALUE,
 		targetUrl: targetLink.url,
 		targetLinkLabel: targetLink.label,
 		settingsUrl: settingsUrl || '',

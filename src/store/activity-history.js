@@ -515,12 +515,17 @@ export function createActivityEntry( {
 	after = {},
 	prompt = '',
 	requestRef = '',
+	requestMeta = null,
 	document = null,
 	timestamp = new Date().toISOString(),
 } ) {
 	activitySequence += 1;
 
 	const normalizedTimestamp = normalizeActivityTimestamp( timestamp );
+	const normalizedRequestMeta =
+		requestMeta && typeof requestMeta === 'object' && ! Array.isArray( requestMeta )
+			? requestMeta
+			: null;
 
 	return {
 		id: `activity-${ Date.now() }-${ activitySequence }`,
@@ -535,6 +540,11 @@ export function createActivityEntry( {
 		request: {
 			prompt,
 			reference: requestRef,
+			...( normalizedRequestMeta
+				? {
+						ai: normalizedRequestMeta,
+				  }
+				: {} ),
 		},
 		document,
 		timestamp: normalizedTimestamp,

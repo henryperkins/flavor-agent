@@ -78,6 +78,22 @@ describe( 'activity log utils', () => {
 	test( 'normalizeActivityEntries derives operation, document, path, and diff metadata', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {
+				request: {
+					ai: {
+						backendLabel: 'Azure OpenAI responses',
+						providerLabel: 'Azure OpenAI',
+						model: 'gpt-5.3-chat',
+						pathLabel:
+							'Azure OpenAI via Settings > Flavor Agent',
+						ownerLabel: 'Settings > Flavor Agent',
+						credentialSourceLabel: 'Settings > Flavor Agent',
+						selectedProviderLabel: 'Azure OpenAI',
+						ability: 'flavor-agent/recommend-block',
+						route: 'POST /flavor-agent/v1/recommend-block',
+						usedFallback: false,
+					},
+					reference: 'block:block-1:4',
+				},
 				before: {
 					attributes: {
 						content: 'Before copy',
@@ -97,10 +113,50 @@ describe( 'activity log utils', () => {
 			postType: 'post',
 			entityId: '42',
 			blockPath: 'Paragraph · 1',
+			provider: 'Azure OpenAI responses',
+			model: 'gpt-5.3-chat',
+			providerPath: 'Azure OpenAI via Settings > Flavor Agent',
+			configurationOwner: 'Settings > Flavor Agent',
+			credentialSource: 'Settings > Flavor Agent',
+			selectedProvider: 'Azure OpenAI',
+			requestAbility: 'flavor-agent/recommend-block',
+			requestRoute: 'POST /flavor-agent/v1/recommend-block',
+			undoReason:
+				'This is the newest still-applied AI action for this entity.',
 		} );
 		expect( entries[ 0 ].stateDiff ).toContain(
 			'~ content: Before copy → After copy'
 		);
+	} );
+
+	test( 'normalizeActivityEntries records fallback provenance and blocked undo reason', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				status: 'blocked',
+				request: {
+					ai: {
+						backendLabel: 'WordPress AI Client',
+						model: 'provider-managed',
+						pathLabel:
+							'WordPress AI Client via Settings > Connectors',
+						ownerLabel: 'Settings > Connectors',
+						selectedProviderLabel: 'Azure OpenAI',
+						usedFallback: true,
+					},
+				},
+				undo: {
+					status: 'blocked',
+					canUndo: false,
+					error: 'Undo blocked by newer AI actions.',
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			provider: 'WordPress AI Client',
+			requestFallback: 'Fallback from selected Azure OpenAI.',
+			undoReason: 'Undo blocked by newer AI actions.',
+		} );
 	} );
 
 	test( 'normalizeActivityEntries does not misclassify unchanged structured style payloads as style edits', () => {
