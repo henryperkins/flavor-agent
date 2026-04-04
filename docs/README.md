@@ -122,12 +122,3 @@ Right now the intended doc stack is:
 7. Way forward: `docs/2026-03-25-roadmap-aligned-execution-plan.md`
 
 If those seven docs stay aligned, the repo has a solid documentation backbone.
-
-## Additional Design Drafts
-
-These are not part of the current Flavor Agent source-of-truth stack. They exist as forward-looking architecture work for adjacent plugins or future integrations.
-
-1. `docs/codex-broker-provider-architecture.md`
-   - Draft architecture for a WordPress.org-compatible standalone Codex provider plugin backed by a hosted broker.
-2. `docs/reference/codex-broker-provider-api.md`
-   - Draft plugin-to-broker API contract for that standalone Codex provider design.
