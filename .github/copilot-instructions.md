@@ -7,8 +7,8 @@ Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 ## Build, lint, and test commands
 
 ```bash
-# Dependencies (Node 20 / npm 10 pinned via .nvmrc/.npmrc)
-source ~/.nvm/nvm.sh && nvm use 20
+# Dependencies (Node 24 / npm 11 default via .nvmrc; Node 20 / npm 10 also supported)
+source ~/.nvm/nvm.sh && nvm use
 npm ci
 composer install
 
@@ -98,7 +98,7 @@ PHP unit tests do not boot a real WordPress environment. `tests/phpunit/bootstra
 
 Inspector sub-panel suggestion chips rely on the existing ToolsPanel grid layout. The CSS `grid-column: 1 / -1` span behavior for those chips is intentional and easy to break if the layout is refactored casually.
 
-`.nvmrc` and `.npmrc` pin the JS toolchain to Node 20.x / npm 10.x; newer npm versions fail `npm ci`.
+`.nvmrc` defaults the JS toolchain to Node 24.x / npm 11.x, while `package.json` and `.npmrc` also keep the previously verified Node 20.x / npm 10.x toolchain supported under `engine-strict`.
 
 ## Documentation
 

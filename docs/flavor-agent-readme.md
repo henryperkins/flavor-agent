@@ -23,8 +23,8 @@ flavor-agent/
 ├── composer.json                 # PSR-4 autoload + PHP tooling
 ├── package.json                  # @wordpress/scripts build, lint, unit/e2e tests
 ├── .env.example                  # Local WordPress/Docker defaults
-├── .nvmrc                        # Supported Node major version
-├── .npmrc                        # engine-strict pin for Node 20 / npm 10
+├── .nvmrc                        # Default Node major version (latest LTS)
+├── .npmrc                        # engine-strict gate for supported Node/npm majors
 ├── docker-compose.yml            # Local WordPress + MariaDB + phpMyAdmin stack
 ├── .devcontainer/                # VS Code devcontainer config
 ├── build/                        # Built editor/admin assets loaded by WordPress
@@ -230,7 +230,7 @@ Install dependencies:
 
 ```bash
 composer install
-source ~/.nvm/nvm.sh && nvm use 20
+source ~/.nvm/nvm.sh && nvm use
 npm ci
 ```
 
@@ -252,3 +252,4 @@ vendor/bin/phpunit
 - The pattern surface now routes settings-key and DOM-selector differences through `src/patterns/compat.js`, probing future stable APIs first but treating `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the current upstream baseline on Gutenberg trunk / WordPress 7.0.
 - Theme-token source selection now lives in `src/context/theme-settings.js`, which promotes the stable `features` path only when parity with `__experimentalFeatures` is proven and otherwise passes the experimental source through to `src/context/theme-tokens.js`.
 - Flavor Agent now targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key. Compatibility with deprecated `__experimentalRole` is intentionally no longer preserved.
+- The repo now treats Node 24 / npm 11 as the default JS toolchain via `.nvmrc`, while `package.json` keeps the previously verified Node 20 / npm 10 toolchain supported under `engine-strict`.

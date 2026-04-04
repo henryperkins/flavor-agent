@@ -81,7 +81,7 @@ Style/theme closeout and verification:
 - `src/store/activity-history.js`
 - `src/components/ActivitySessionBootstrap.js`
 
-7.0 harness and release verification:
+  7.0 harness and release verification:
 
 - `playwright.wp70.config.js`
 - `scripts/wp70-e2e.js`
@@ -141,16 +141,16 @@ Required automated checks:
 
 ```bash
 vendor/bin/phpunit --filter '(InfraAbilitiesTest|SettingsTest|StyleAbilitiesTest|StylePromptTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/components/__tests__/AIActivitySection.test.js
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:playground -- --reporter=line
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/components/__tests__/AIActivitySection.test.js
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e:playground -- --reporter=line
 ```
 
 Required release/harness checks:
 
 ```bash
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line -g "global styles surface previews, applies, and undoes executable recommendations"
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e:wp70 -- --reporter=line -g "global styles surface previews, applies, and undoes executable recommendations"
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e:wp70 -- --reporter=line
 ```
 
 Required manual checks:
@@ -255,10 +255,10 @@ Required automated checks:
 
 ```bash
 vendor/bin/phpunit --filter '(ServerCollectorTest|RegistrationTest|AgentControllerTest|TemplatePromptTest|TemplatePartPromptTest|NavigationAbilitiesTest)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:playground -- --reporter=line
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70 -- --reporter=line
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:unit -- --runInBand src/utils/__tests__/template-actions.test.js src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/inspector/__tests__/NavigationRecommendations.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e:playground -- --reporter=line
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e:wp70 -- --reporter=line
 ```
 
 Required manual checks:
@@ -339,8 +339,8 @@ Required automated checks:
 
 ```bash
 vendor/bin/phpunit --filter '(RegistrationTest|ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest)'
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/components/__tests__/AIActivitySection.test.js
-source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:unit -- --runInBand src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/components/__tests__/AIActivitySection.test.js
+source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build
 ```
 
 Required manual checks:

@@ -6,14 +6,14 @@ This is the lightweight local-development guide referenced by the main doc index
 
 - PHP 8.0+
 - Composer
-- Node 20.x and npm 10.x
+- Node 24.x and npm 11.x via `.nvmrc` (Node 20.x and npm 10.x also supported)
 - Docker for the local WordPress stack and the WP 7.0 browser harness
 
 ## First-Time Setup
 
 ```bash
 composer install
-source ~/.nvm/nvm.sh && nvm use 20
+source ~/.nvm/nvm.sh && nvm use
 npm ci
 ```
 
@@ -56,7 +56,7 @@ npm run test:e2e
 
 - `build/` is gitignored, so run `npm run build` before testing in WordPress
 - `vendor/` is gitignored, so run `composer install` after a fresh clone
-- The repo pins Node 20 / npm 10 through `.nvmrc` and `.npmrc`
+- `.nvmrc` defaults to Node 24 / npm 11, and the repo also supports Node 20 / npm 10 through the `package.json` engine range under `.npmrc`'s `engine-strict` check
 - The default `npm run test:e2e` command aggregates the quick Playground harness and the Docker-backed WP 7.0 harness
 
 ## Stop Or Reset The Stack

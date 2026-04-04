@@ -7,7 +7,7 @@ Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 ## Commands
 
 ```bash
-npm ci                 # install JS deps reproducibly (Node 20 / npm 10)
+npm ci                 # install JS deps reproducibly (Node 24 / npm 11 via .nvmrc; Node 20 / npm 10 also supported)
 npm start              # dev build with watch (webpack via @wordpress/scripts)
 npm run build          # production build → build/index.js, build/admin.js, build/activity-log.js
 npm run lint:js        # ESLint on src/
@@ -33,74 +33,74 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 
 **PHP backend** (`inc/`, PSR-4 namespace `FlavorAgent\`):
 
-| Namespace | Purpose |
-|-----------|---------|
-| `REST\Agent_Controller` | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-navigation, recommend-template, recommend-template-part, activity, sync-patterns) |
-| `Admin\ActivityPage` | Registers `Settings > AI Activity` and enqueues the admin audit app |
-| `Activity\Repository` | Server-backed AI activity storage, query, create, and ordered undo-state updates |
-| `Activity\Permissions` | Contextual capability checks for activity queries and mutations |
-| `Activity\Serializer` | Activity entry normalization and storage serialization |
-| `LLM\ChatClient` | Chat wrapper that prefers plugin-managed providers and falls back to the WordPress AI Client for block recommendations |
-| `LLM\WordPressAIClient` | Wrapper around the WordPress 7.0 AI client for block recommendations via `wp_ai_client_prompt()` and `is_supported_for_text_generation()` |
-| `LLM\Prompt` | Block recommendation prompt assembly and response parsing |
-| `LLM\TemplatePrompt` | Template recommendation prompt assembly and executable operation parsing |
-| `LLM\TemplatePartPrompt` | Template-part recommendation prompt assembly and response parsing |
-| `LLM\NavigationPrompt` | Navigation recommendation prompt assembly and response parsing |
-| `Context\ServerCollector` | Gathers server-side block, template, template-part, navigation, and theme context |
-| `OpenAI\Provider` | Provider selection (Azure OpenAI vs OpenAI Native), credential fallback chain |
-| `AzureOpenAI\ConfigurationValidator` | Settings-time backend validation helpers |
-| `AzureOpenAI\EmbeddingClient` | Azure OpenAI / OpenAI Native embeddings API |
-| `AzureOpenAI\QdrantClient` | Qdrant vector DB for pattern similarity search |
-| `AzureOpenAI\ResponsesClient` | Azure OpenAI / OpenAI Native Responses API for ranking/chat |
-| `Cloudflare\AISearchClient` | WordPress developer-doc grounding, cache, and prewarm pipeline |
-| `Patterns\PatternIndex` | Embeds registered patterns into Qdrant; syncs on theme/plugin changes |
-| `Abilities\Registration` | Registers abilities + category with WordPress Abilities API |
-| `Abilities\BlockAbilities` | Block recommendation and introspection handlers |
-| `Abilities\PatternAbilities` | Pattern listing and vector-powered recommendation handlers |
-| `Abilities\TemplateAbilities` | Template and template-part composition recommendation handlers |
-| `Abilities\NavigationAbilities` | Navigation structure recommendation handler |
-| `Abilities\WordPressDocsAbilities` | WordPress developer docs search via Cloudflare AI Search |
-| `Abilities\InfraAbilities` | Theme token extraction and status check handlers |
-| `Settings` | Admin settings page (provider selection, Azure/OpenAI Native/Qdrant/Cloudflare, validation, sync, diagnostics) |
-| `Support\StringArray` | String array sanitization utility |
+| Namespace                            | Purpose                                                                                                                                                                |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REST\Agent_Controller`              | REST routes under `flavor-agent/v1/` (recommend-block, recommend-patterns, recommend-navigation, recommend-template, recommend-template-part, activity, sync-patterns) |
+| `Admin\ActivityPage`                 | Registers `Settings > AI Activity` and enqueues the admin audit app                                                                                                    |
+| `Activity\Repository`                | Server-backed AI activity storage, query, create, and ordered undo-state updates                                                                                       |
+| `Activity\Permissions`               | Contextual capability checks for activity queries and mutations                                                                                                        |
+| `Activity\Serializer`                | Activity entry normalization and storage serialization                                                                                                                 |
+| `LLM\ChatClient`                     | Chat wrapper that prefers plugin-managed providers and falls back to the WordPress AI Client for block recommendations                                                 |
+| `LLM\WordPressAIClient`              | Wrapper around the WordPress 7.0 AI client for block recommendations via `wp_ai_client_prompt()` and `is_supported_for_text_generation()`                              |
+| `LLM\Prompt`                         | Block recommendation prompt assembly and response parsing                                                                                                              |
+| `LLM\TemplatePrompt`                 | Template recommendation prompt assembly and executable operation parsing                                                                                               |
+| `LLM\TemplatePartPrompt`             | Template-part recommendation prompt assembly and response parsing                                                                                                      |
+| `LLM\NavigationPrompt`               | Navigation recommendation prompt assembly and response parsing                                                                                                         |
+| `Context\ServerCollector`            | Gathers server-side block, template, template-part, navigation, and theme context                                                                                      |
+| `OpenAI\Provider`                    | Provider selection (Azure OpenAI vs OpenAI Native), credential fallback chain                                                                                          |
+| `AzureOpenAI\ConfigurationValidator` | Settings-time backend validation helpers                                                                                                                               |
+| `AzureOpenAI\EmbeddingClient`        | Azure OpenAI / OpenAI Native embeddings API                                                                                                                            |
+| `AzureOpenAI\QdrantClient`           | Qdrant vector DB for pattern similarity search                                                                                                                         |
+| `AzureOpenAI\ResponsesClient`        | Azure OpenAI / OpenAI Native Responses API for ranking/chat                                                                                                            |
+| `Cloudflare\AISearchClient`          | WordPress developer-doc grounding, cache, and prewarm pipeline                                                                                                         |
+| `Patterns\PatternIndex`              | Embeds registered patterns into Qdrant; syncs on theme/plugin changes                                                                                                  |
+| `Abilities\Registration`             | Registers abilities + category with WordPress Abilities API                                                                                                            |
+| `Abilities\BlockAbilities`           | Block recommendation and introspection handlers                                                                                                                        |
+| `Abilities\PatternAbilities`         | Pattern listing and vector-powered recommendation handlers                                                                                                             |
+| `Abilities\TemplateAbilities`        | Template and template-part composition recommendation handlers                                                                                                         |
+| `Abilities\NavigationAbilities`      | Navigation structure recommendation handler                                                                                                                            |
+| `Abilities\WordPressDocsAbilities`   | WordPress developer docs search via Cloudflare AI Search                                                                                                               |
+| `Abilities\InfraAbilities`           | Theme token extraction and status check handlers                                                                                                                       |
+| `Settings`                           | Admin settings page (provider selection, Azure/OpenAI Native/Qdrant/Cloudflare, validation, sync, diagnostics)                                                         |
+| `Support\StringArray`                | String array sanitization utility                                                                                                                                      |
 
 **JS frontend** (`src/`, built with `@wordpress/scripts`):
 
-| Path | Purpose |
-|------|---------|
-| `index.js` | Entry: registers store, session bootstrap, Inspector filter, pattern/template/template-part plugins |
-| `components/ActivitySessionBootstrap.js` | Reloads session-scoped AI activity when the edited entity changes |
-| `components/AIActivitySection.js` | Shared recent-actions list with per-entry undo affordance |
-| `inspector/InspectorInjector.js` | `editor.BlockEdit` HOC — injects AI panels into all blocks |
-| `inspector/SettingsRecommendations.js` | Settings tab suggestions |
-| `inspector/StylesRecommendations.js` | Appearance tab suggestions + style variation pills |
-| `inspector/SuggestionChips.js` | Reusable chip component for sub-panel suggestions |
-| `inspector/suggestion-keys.js` | Stable key generation for applied-state tracking |
-| `context/block-inspector.js` | Client-side block introspection (supports, attributes, styles) |
-| `context/theme-tokens.js` | Design token extraction from theme.json + global styles |
-| `context/collector.js` | Combines block + theme + structural context for LLM calls |
-| `store/index.js` | `@wordpress/data` store (`flavor-agent`) — recommendations, template apply, undo, activity persistence |
-| `store/activity-history.js` | Session-scoped AI activity schema and storage adapter |
-| `store/update-helpers.js` | Attribute update and undo snapshot helpers |
-| `patterns/PatternRecommender.js` | Pattern recommendation fetch + inserter patching |
-| `patterns/InserterBadge.js` | Inserter toggle badge for recommendation status |
-| `patterns/compat.js` | Stable/experimental pattern API and DOM selector adapter (three-tier: stable, `__experimentalAdditional*`, `__experimental*`) |
-| `patterns/find-inserter-search-input.js` | Re-export wrapper for backward compatibility |
-| `patterns/recommendation-utils.js` | Pattern metadata patching and badge reason extraction |
-| `patterns/inserter-badge-state.js` | Badge state machine for recommendation status display |
-| `templates/TemplateRecommender.js` | Site Editor template preview/apply/undo panel |
-| `templates/template-recommender-helpers.js` | Template UI and operation view-model helpers |
-| `template-parts/TemplatePartRecommender.js` | Template-part-scoped AI recommendations panel |
-| `utils/template-operation-sequence.js` | Template operation validation and normalization |
-| `utils/template-actions.js` | Deterministic template execution, selection, and undo helpers |
-| `utils/structural-identity.js` | Block structural role inference and ancestor tracking |
-| `utils/template-part-areas.js` | Template-part area resolution from attributes, slug, or registry |
-| `utils/template-types.js` | Template slug normalization per pattern templateTypes vocabulary |
-| `utils/pattern-names.js` | Extract distinct pattern names from collections |
-| `utils/visible-patterns.js` | Get editor-visible pattern names for current context |
-| `admin/sync-button.js` | Settings page: manual pattern index sync button |
-| `admin/activity-log.js` | `Settings > AI Activity` DataViews/DataForm audit app |
-| `admin/activity-log-utils.js` | Activity-log formatting, filters, summary cards, and admin links |
+| Path                                        | Purpose                                                                                                                       |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `index.js`                                  | Entry: registers store, session bootstrap, Inspector filter, pattern/template/template-part plugins                           |
+| `components/ActivitySessionBootstrap.js`    | Reloads session-scoped AI activity when the edited entity changes                                                             |
+| `components/AIActivitySection.js`           | Shared recent-actions list with per-entry undo affordance                                                                     |
+| `inspector/InspectorInjector.js`            | `editor.BlockEdit` HOC — injects AI panels into all blocks                                                                    |
+| `inspector/SettingsRecommendations.js`      | Settings tab suggestions                                                                                                      |
+| `inspector/StylesRecommendations.js`        | Appearance tab suggestions + style variation pills                                                                            |
+| `inspector/SuggestionChips.js`              | Reusable chip component for sub-panel suggestions                                                                             |
+| `inspector/suggestion-keys.js`              | Stable key generation for applied-state tracking                                                                              |
+| `context/block-inspector.js`                | Client-side block introspection (supports, attributes, styles)                                                                |
+| `context/theme-tokens.js`                   | Design token extraction from theme.json + global styles                                                                       |
+| `context/collector.js`                      | Combines block + theme + structural context for LLM calls                                                                     |
+| `store/index.js`                            | `@wordpress/data` store (`flavor-agent`) — recommendations, template apply, undo, activity persistence                        |
+| `store/activity-history.js`                 | Session-scoped AI activity schema and storage adapter                                                                         |
+| `store/update-helpers.js`                   | Attribute update and undo snapshot helpers                                                                                    |
+| `patterns/PatternRecommender.js`            | Pattern recommendation fetch + inserter patching                                                                              |
+| `patterns/InserterBadge.js`                 | Inserter toggle badge for recommendation status                                                                               |
+| `patterns/compat.js`                        | Stable/experimental pattern API and DOM selector adapter (three-tier: stable, `__experimentalAdditional*`, `__experimental*`) |
+| `patterns/find-inserter-search-input.js`    | Re-export wrapper for backward compatibility                                                                                  |
+| `patterns/recommendation-utils.js`          | Pattern metadata patching and badge reason extraction                                                                         |
+| `patterns/inserter-badge-state.js`          | Badge state machine for recommendation status display                                                                         |
+| `templates/TemplateRecommender.js`          | Site Editor template preview/apply/undo panel                                                                                 |
+| `templates/template-recommender-helpers.js` | Template UI and operation view-model helpers                                                                                  |
+| `template-parts/TemplatePartRecommender.js` | Template-part-scoped AI recommendations panel                                                                                 |
+| `utils/template-operation-sequence.js`      | Template operation validation and normalization                                                                               |
+| `utils/template-actions.js`                 | Deterministic template execution, selection, and undo helpers                                                                 |
+| `utils/structural-identity.js`              | Block structural role inference and ancestor tracking                                                                         |
+| `utils/template-part-areas.js`              | Template-part area resolution from attributes, slug, or registry                                                              |
+| `utils/template-types.js`                   | Template slug normalization per pattern templateTypes vocabulary                                                              |
+| `utils/pattern-names.js`                    | Extract distinct pattern names from collections                                                                               |
+| `utils/visible-patterns.js`                 | Get editor-visible pattern names for current context                                                                          |
+| `admin/sync-button.js`                      | Settings page: manual pattern index sync button                                                                               |
+| `admin/activity-log.js`                     | `Settings > AI Activity` DataViews/DataForm audit app                                                                         |
+| `admin/activity-log-utils.js`               | Activity-log formatting, filters, summary cards, and admin links                                                              |
 
 **Webpack** has three entry points: `src/index.js` (editor), `src/admin/sync-button.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page).
 
@@ -116,23 +116,23 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 
 ## External Services
 
-| Service | Options (Settings page) |
-|---------|------------------------|
-| Provider selection | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`) |
-| WordPress AI Client providers | Core `Settings > Connectors` screen |
-| Azure OpenAI (chat) | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_chat_deployment` |
-| Azure OpenAI (embeddings) | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_embedding_deployment` |
-| OpenAI Native (chat) | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_chat_model` |
-| OpenAI Native (embeddings) | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_embedding_model` |
-| Qdrant vector DB | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key` |
-| Cloudflare AI Search | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
+| Service                       | Options (Settings page)                                                                                                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider selection            | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`)                                                                                                                              |
+| WordPress AI Client providers | Core `Settings > Connectors` screen                                                                                                                                                             |
+| Azure OpenAI (chat)           | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_chat_deployment`                                                                                     |
+| Azure OpenAI (embeddings)     | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_embedding_deployment`                                                                                |
+| OpenAI Native (chat)          | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_chat_model`                                                                                                                   |
+| OpenAI Native (embeddings)    | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_embedding_model`                                                                                                              |
+| Qdrant vector DB              | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key`                                                                                                                                            |
+| Cloudflare AI Search          | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
 
 Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Gotchas
 
 - `build/` is gitignored — always run `npm run build` before testing in WordPress.
-- `.nvmrc` and `.npmrc` pin the supported JS toolchain to Node `20.x` / npm `10.x`; newer npm versions fail `npm ci` on this repo.
+- `.nvmrc` now defaults the JS toolchain to Node `24.x` / npm `11.x`, and `package.json`/`.npmrc` also allow the previously verified Node `20.x` / npm `10.x` toolchain.
 - WP-CLI is available in the container (`wp <command> --allow-root` via `docker exec wordpress-wordpress-1`).
 - The `@wordpress/data` store name is `flavor-agent` (hyphenated).
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.

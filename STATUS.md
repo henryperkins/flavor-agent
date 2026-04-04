@@ -6,36 +6,36 @@
 
 ### Abilities API (WordPress 7.0+)
 
-| Ability | Handler | Description |
-| --- | --- | --- |
-| `flavor-agent/recommend-block` | `BlockAbilities` | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client |
-| `flavor-agent/recommend-content` | `ContentAbilities` | Programmatic content drafting, editing, and critique scaffold using `WritingPrompt` and the shared chat backend |
-| `flavor-agent/introspect-block` | `BlockAbilities` | Block type registry introspection |
-| `flavor-agent/recommend-patterns` | `PatternAbilities` | Provider-selected embeddings + Qdrant retrieval + LLM reranking |
-| `flavor-agent/recommend-template` | `TemplateAbilities` | Provider-selected template composition suggestions for Site Editor templates |
-| `flavor-agent/recommend-template-part` | `TemplateAbilities` | Template-part composition suggestions with validated bounded composition operations for Site Editor template parts |
-| `flavor-agent/recommend-style` | `StyleAbilities` | Shared Global Styles and Style Book suggestions constrained to validated `theme.json` paths, theme variations, and theme-backed values |
-| `flavor-agent/list-patterns` | `PatternAbilities` | Pattern registry listing with filters |
-| `flavor-agent/list-template-parts` | `TemplateAbilities` | Template part listing with optional area filter |
-| `flavor-agent/search-wordpress-docs` | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search |
-| `flavor-agent/get-theme-tokens` | `InfraAbilities` | Theme preset and global style token extraction |
-| `flavor-agent/recommend-navigation` | `NavigationAbilities` | Navigation structure, overlay behavior, and organization recommendations |
-| `flavor-agent/check-status` | `InfraAbilities` | Backend inventory, OpenAI Native credential metadata, available ability list, and per-surface readiness including Global Styles and Style Book |
+| Ability                                | Handler                  | Description                                                                                                                                    |
+| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flavor-agent/recommend-block`         | `BlockAbilities`         | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client                                                   |
+| `flavor-agent/recommend-content`       | `ContentAbilities`       | Programmatic content drafting, editing, and critique scaffold using `WritingPrompt` and the shared chat backend                                |
+| `flavor-agent/introspect-block`        | `BlockAbilities`         | Block type registry introspection                                                                                                              |
+| `flavor-agent/recommend-patterns`      | `PatternAbilities`       | Provider-selected embeddings + Qdrant retrieval + LLM reranking                                                                                |
+| `flavor-agent/recommend-template`      | `TemplateAbilities`      | Provider-selected template composition suggestions for Site Editor templates                                                                   |
+| `flavor-agent/recommend-template-part` | `TemplateAbilities`      | Template-part composition suggestions with validated bounded composition operations for Site Editor template parts                             |
+| `flavor-agent/recommend-style`         | `StyleAbilities`         | Shared Global Styles and Style Book suggestions constrained to validated `theme.json` paths, theme variations, and theme-backed values         |
+| `flavor-agent/list-patterns`           | `PatternAbilities`       | Pattern registry listing with filters                                                                                                          |
+| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | Template part listing with optional area filter                                                                                                |
+| `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search                                                               |
+| `flavor-agent/get-theme-tokens`        | `InfraAbilities`         | Theme preset and global style token extraction                                                                                                 |
+| `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | Navigation structure, overlay behavior, and organization recommendations                                                                       |
+| `flavor-agent/check-status`            | `InfraAbilities`         | Backend inventory, OpenAI Native credential metadata, available ability list, and per-surface readiness including Global Styles and Style Book |
 
 ### REST API
 
-| Route | Permission | Description |
-| --- | --- | --- |
-| `POST /flavor-agent/v1/recommend-block` | `edit_posts` | Block recommendations from client-provided editor context |
-| `POST /flavor-agent/v1/recommend-content` | `edit_posts` | Programmatic content-lane scaffold for draft, edit, and critique payloads |
-| `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | Pattern recommendations for the inserter |
-| `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | Advisory navigation recommendations for selected `core/navigation` blocks |
-| `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | Template composition recommendations for the Site Editor |
-| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | Template-part composition recommendations for the Site Editor |
-| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | Shared Global Styles and Style Book recommendations for the Site Editor Styles surface |
-| `GET/POST /flavor-agent/v1/activity` | contextual editor/theme capability; sitewide GET requires `manage_options` | Activity query and persistence for AI actions |
-| `POST /flavor-agent/v1/activity/{id}/undo` | contextual editor/theme capability | Persisted undo status transition for an activity entry |
-| `POST /flavor-agent/v1/sync-patterns` | `manage_options` | Manual pattern index sync |
+| Route                                           | Permission                                                                 | Description                                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `POST /flavor-agent/v1/recommend-block`         | `edit_posts`                                                               | Block recommendations from client-provided editor context                              |
+| `POST /flavor-agent/v1/recommend-content`       | `edit_posts`                                                               | Programmatic content-lane scaffold for draft, edit, and critique payloads              |
+| `POST /flavor-agent/v1/recommend-patterns`      | `edit_posts`                                                               | Pattern recommendations for the inserter                                               |
+| `POST /flavor-agent/v1/recommend-navigation`    | `edit_theme_options`                                                       | Advisory navigation recommendations for selected `core/navigation` blocks              |
+| `POST /flavor-agent/v1/recommend-template`      | `edit_theme_options`                                                       | Template composition recommendations for the Site Editor                               |
+| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options`                                                       | Template-part composition recommendations for the Site Editor                          |
+| `POST /flavor-agent/v1/recommend-style`         | `edit_theme_options`                                                       | Shared Global Styles and Style Book recommendations for the Site Editor Styles surface |
+| `GET/POST /flavor-agent/v1/activity`            | contextual editor/theme capability; sitewide GET requires `manage_options` | Activity query and persistence for AI actions                                          |
+| `POST /flavor-agent/v1/activity/{id}/undo`      | contextual editor/theme capability                                         | Persisted undo status transition for an activity entry                                 |
+| `POST /flavor-agent/v1/sync-patterns`           | `manage_options`                                                           | Manual pattern index sync                                                              |
 
 ### Editor UI
 
@@ -73,7 +73,7 @@
 ## Known Issues
 
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
-- JS tooling now expects Node `20.x` with npm `10.x`; on this host, the global Node `24.14.0` / npm `11.9.0` pair fails `npm ci` immediately via `engine-strict` (`EBADENGINE`), so the repo now pins the supported toolchain instead of assuming the global default.
+- JS tooling now defaults to Node `24.x` with npm `11.x` via `.nvmrc`, and the repo's `engine-strict` gate now accepts both the latest-LTS Node `24.x` / npm `11.x` toolchain and the previously verified Node `20.x` / npm `10.x` toolchain.
 - Browser coverage is intentionally split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for refresh/drift-sensitive flows that Playground cannot hold open reliably. The default `npm run test:e2e` command now aggregates both harnesses, and the checked-in smoke suite now covers block, navigation, pattern, template, `wp_template_part`, and Global Styles surfaces. The remaining operational prerequisite is Docker on PATH for the WP 7.0 half.
 - WordPress `7.0` is still pre-release, and the cycle was extended on 2026-03-31 with a revised final release date still pending. The Docker-backed Site Editor harness now pins `wordpress:beta-7.0-RC2-php8.2-apache`, which matches the latest checked pre-release tag from Docker Hub on 2026-04-04; swap that override once the official stable image exists and Core publishes the final 7.0 timeline.
 - The 2026-04-04 Phase 1 acceptance rerun exposed browser-harness regressions in both environments: Playground now fails before the post-editor title/input bootstrap and later misses expected pattern/template UI selectors, while the Docker-backed WP 7.0 RC2 harness boots but fails to find expected Global Styles and template/template-part panel controls. The non-browser acceptance checks remain green.
@@ -91,6 +91,7 @@
 ## Recent Verification
 
 - 2026-04-04 phase-1-closeout: `vendor/bin/phpunit --filter '(InfraAbilitiesTest|SettingsTest|StyleAbilitiesTest|StylePromptTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest)'` passed (`121` tests, `669` assertions).
+- 2026-04-04 toolchain-support-fix: default-host Node `24.14.1` / npm `11.11.0` completed `npm ci --engine-strict=false`, `npm run build`, and `npm run test:unit -- --runInBand` successfully; the repo support contract was then updated so `engine-strict` now accepts both Node `24.x` / npm `11.x` and Node `20.x` / npm `10.x`.
 - 2026-04-04 phase-1-closeout: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand src/context/__tests__/collector.test.js src/context/__tests__/theme-tokens.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/suggestion-keys.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js src/utils/__tests__/style-operations.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/ActivitySessionBootstrap.test.js src/utils/__tests__/capability-flags.test.js src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/components/__tests__/AIActivitySection.test.js` passed (`16` suites, `139` tests).
 - 2026-04-04 phase-1-closeout: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` passed (existing webpack asset-size warnings only).
 - 2026-04-04 phase-1-closeout: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:playground -- --reporter=line` failed (`5` failed, `1` passed). Failures were browser-surface assertions, not PHP/JS unit failures: the post editor title textbox was not found, the expected pattern unavailable notice text was not rendered, pattern recommendation requests did not fire, and template panel toggles were not visible.

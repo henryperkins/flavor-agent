@@ -3,7 +3,7 @@
 > Created: 2026-03-25
 > Scope: repo-specific execution plan for the current 5-epic roadmap
 > External alignment snapshot verified: 2026-04-03
-> Support target: WordPress 7.0 RC -> stable, PHP 8.0+, Node 20 / npm 10
+> Support target: WordPress 7.0 RC -> stable, PHP 8.0+, Node 24 / npm 11 default with Node 20 / npm 10 compatibility
 > Scope anchor: Gutenberg 22.9 RC line (RC date 2026-04-01; planned stable date 2026-04-08 per the release checklist). Last stable plugin baseline: `22.8.1` (released 2026-03-26)
 > Baseline: current repo already ships block, pattern, template, template-part, navigation, global styles, style book, and activity surfaces
 > Supplemental execution compression: `docs/2026-04-03-three-phase-roadmap.md`
@@ -108,6 +108,7 @@ Before expanding the roadmap into broader new surfaces, the clearest next steps 
    - A fresh Azure-backed end-to-end recommendation execution was captured in `STATUS.md`.
    - That run confirmed the current provider boundary and real request provenance path under live credentials.
 7. **Switch from RC/beta assumptions to stable WordPress 7.0 as soon as available.**
+
    - Update the WP 7.0 Docker/browser harness to the stable image tag.
    - Re-audit experimental adapters (`pattern-settings.js`, theme settings sources, and any remaining trunk-sensitive inspector modeling) against final 7.0 core.
 
@@ -629,11 +630,11 @@ Every epic should satisfy these repo-level gates before it is considered complet
    - `composer lint:php`
    - `vendor/bin/phpunit`
 2. JS:
-   - `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run lint:js`
-   - `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:unit -- --runInBand`
+   - `source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run lint:js`
+   - `source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:unit -- --runInBand`
 3. Browser:
-   - `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e`
-   - `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:e2e:wp70`
+   - `source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e`
+   - `source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run test:e2e:wp70`
 4. Docs:
    - update `STATUS.md`
    - update `docs/SOURCE_OF_TRUTH.md`
