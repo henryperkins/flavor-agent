@@ -224,7 +224,7 @@ namespace {
 					throw new \BadMethodCallException(
 						sprintf(
 							'Unknown AI client method %s.',
-							sanitize_text_field( $name )
+							esc_html( sanitize_text_field( $name ) )
 						)
 					);
 				}
@@ -684,7 +684,7 @@ namespace {
 		function wp_is_connector_registered( string $id ): bool {
 			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
 			if ( null !== $error_message ) {
-				throw new \RuntimeException( sanitize_text_field( $error_message ) );
+				throw new \RuntimeException( esc_html( sanitize_text_field( $error_message ) ) );
 			}
 
 			return array_key_exists( $id, WordPressTestState::$connectors );
@@ -695,7 +695,7 @@ namespace {
 		function wp_get_connector( string $id ): ?array {
 			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
 			if ( null !== $error_message ) {
-				throw new \RuntimeException( sanitize_text_field( $error_message ) );
+				throw new \RuntimeException( esc_html( sanitize_text_field( $error_message ) ) );
 			}
 
 			$connector = WordPressTestState::$connectors[ $id ] ?? null;
@@ -708,7 +708,7 @@ namespace {
 		function wp_get_connectors(): array {
 			$error_message = WordPressTestState::get_connector_api_error( __FUNCTION__ );
 			if ( null !== $error_message ) {
-				throw new \RuntimeException( sanitize_text_field( $error_message ) );
+				throw new \RuntimeException( esc_html( sanitize_text_field( $error_message ) ) );
 			}
 
 			return WordPressTestState::$connectors;
@@ -731,6 +731,7 @@ namespace {
 
 	if ( ! function_exists( 'wp_parse_url' ) ) {
 		function wp_parse_url( string $url, int $component = -1 ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- This test bootstrap provides the WordPress compatibility wrapper when core is unavailable.
 			return parse_url( $url, $component );
 		}
 	}
@@ -844,16 +845,22 @@ namespace {
 
 	if ( ! function_exists( 'esc_html__' ) ) {
 		function esc_html__( string $text, string $domain = 'default' ): string {
-			return esc_html( __( $text, $domain ) );
+			unset( $domain );
+
+			return esc_html( $text );
 		}
 	}
 
 	if ( ! function_exists( 'selected' ) ) {
 		function selected( $selected, $current = true, bool $display = true ): string {
-			$result = (string) $selected === (string) $current ? 'selected="selected"' : '';
+			$result = '';
 
-			if ( $display ) {
-				echo $result;
+			if ( (string) $selected === (string) $current ) {
+				$result = 'selected="selected"';
+			}
+
+			if ( $display && '' !== $result ) {
+				echo 'selected="selected"';
 			}
 
 			return $result;
@@ -1070,6 +1077,7 @@ namespace {
 
 	if ( ! function_exists( 'wp_strip_all_tags' ) ) {
 		function wp_strip_all_tags( string $text ): string {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- This test bootstrap defines the WordPress wrapper when core is unavailable.
 			return strip_tags( $text );
 		}
 	}
@@ -1143,8 +1151,8 @@ namespace {
 
 				printf(
 					"<div class='notice notice-%s settings-error'><p><strong>%s</strong></p></div>\n",
-					htmlspecialchars( $type, ENT_QUOTES, 'UTF-8' ),
-					htmlspecialchars( (string) ( $details['message'] ?? '' ), ENT_QUOTES, 'UTF-8' )
+					esc_attr( $type ),
+					esc_html( (string) ( $details['message'] ?? '' ) )
 				);
 			}
 		}
@@ -1154,7 +1162,7 @@ namespace {
 		function settings_fields( string $option_group ): void {
 			printf(
 				'<input type="hidden" name="option_page" value="%s" />',
-				htmlspecialchars( $option_group, ENT_QUOTES, 'UTF-8' )
+				esc_attr( $option_group )
 			);
 		}
 	}
@@ -1169,7 +1177,7 @@ namespace {
 		function submit_button( string $text = 'Save Changes' ): void {
 			printf(
 				'<button type="submit">%s</button>',
-				htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' )
+				esc_html( $text )
 			);
 		}
 	}
