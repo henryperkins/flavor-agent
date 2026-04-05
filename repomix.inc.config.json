@@ -1,0 +1,21 @@
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "output": {
+    "filePath": "output/flavor-agent-inc-repomix.md",
+    "style": "markdown"
+  },
+  "include": [
+    "inc/**/*.php"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDotIgnore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "output/**",
+      "node_modules/**",
+      "vendor/**",
+      "tmp/**"
+    ]
+  }
+}

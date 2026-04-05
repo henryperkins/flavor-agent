@@ -294,7 +294,7 @@ SYSTEM;
 			$override_attributes = array_values(
 				array_filter(
 					array_map(
-						'sanitize_key',
+						static fn( $attribute ): string => sanitize_text_field( (string) $attribute ),
 						is_array( $block['overrideAttributes'] ?? null ) ? $block['overrideAttributes'] : []
 					),
 					static fn( string $attribute ): bool => '' !== $attribute
@@ -747,7 +747,7 @@ SYSTEM;
 							'expectedTarget'    => self::build_expected_target( $target_node ),
 							'targetPath'        => $target_path,
 						];
-						break;
+					break;
 
 				case 'remove_block':
 					$expected_block_name = sanitize_text_field( (string) ( $operation['expectedBlockName'] ?? '' ) );
@@ -776,7 +776,7 @@ SYSTEM;
 							'expectedTarget'    => self::build_expected_target( $target_node ),
 							'targetPath'        => $target_path,
 						];
-						break;
+					break;
 			}
 		}
 

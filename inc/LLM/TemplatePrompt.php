@@ -318,7 +318,7 @@ SYSTEM;
 			$override_attributes = array_values(
 				array_filter(
 					array_map(
-						'sanitize_key',
+						static fn( $attribute ): string => sanitize_text_field( (string) $attribute ),
 						is_array( $block['overrideAttributes'] ?? null ) ? $block['overrideAttributes'] : []
 					),
 					static fn( string $attribute ): bool => '' !== $attribute
@@ -337,7 +337,7 @@ SYSTEM;
 			$unsupported_attributes = array_values(
 				array_filter(
 					array_map(
-						'sanitize_key',
+						static fn( $attribute ): string => sanitize_text_field( (string) $attribute ),
 						is_array( $block['unsupportedAttributes'] ?? null ) ? $block['unsupportedAttributes'] : []
 					),
 					static fn( string $attribute ): bool => '' !== $attribute
