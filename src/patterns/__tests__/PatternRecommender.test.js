@@ -6,20 +6,6 @@ const mockSetBlockPatterns = jest.fn();
 const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
-const mockUseViewConfig = jest.fn();
-
-jest.mock( '@wordpress/fields', () => ( {
-	authorField: { id: 'author', label: 'Author' },
-	excerptField: { id: 'excerpt', label: 'Excerpt' },
-	pageTitleField: { id: 'title', label: 'Title' },
-	patternTitleField: { id: 'title', label: 'Title' },
-	slugField: { id: 'slug', label: 'Slug' },
-	statusField: { id: 'status', label: 'Status' },
-	stickyField: { id: 'sticky', label: 'Sticky' },
-	templateField: { id: 'template', label: 'Template' },
-	templateTitleField: { id: 'title', label: 'Template' },
-	titleField: { id: 'title', label: 'Title' },
-} ) );
 
 jest.mock( '@wordpress/components', () =>
 	require( '../../test-utils/wp-components' ).mockWpComponents()
@@ -36,10 +22,6 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '@wordpress/editor', () => ( {
 	store: 'core/editor',
-} ) );
-
-jest.mock( '@wordpress/views', () => ( {
-	useViewConfig: ( ...args ) => mockUseViewConfig( ...args ),
 } ) );
 
 jest.mock( '../pattern-settings', () => ( {
@@ -138,7 +120,6 @@ describe( 'PatternRecommender', () => {
 		mockFindInserterContainer.mockReset();
 		mockFindInserterSearchInput.mockReset();
 		mockGetVisiblePatternNames.mockReset();
-		mockUseViewConfig.mockReset();
 		mockUseDispatch.mockReturnValue( {
 			fetchPatternRecommendations: mockFetchPatternRecommendations,
 		} );
@@ -151,12 +132,6 @@ describe( 'PatternRecommender', () => {
 		mockGetVisiblePatternNames.mockImplementation(
 			() => state.visiblePatternNames
 		);
-		mockUseViewConfig.mockReturnValue( {
-			default_view: { titleField: 'title' },
-			default_layouts: {},
-			view_list: [ { title: 'Recommended', slug: 'editor-picks' } ],
-			form: [],
-		} );
 		window.flavorAgentData = { canRecommendPatterns: true };
 		originalMutationObserver = window.MutationObserver;
 	} );
@@ -267,7 +242,7 @@ describe( 'PatternRecommender', () => {
 				name: 'theme/hero',
 				title: 'Hero',
 				description: 'Recommended hero pattern.',
-				categories: [ 'featured', 'editor-picks' ],
+				categories: [ 'featured', 'recommended' ],
 				keywords: [ 'recommended', 'hero', 'pattern' ],
 			},
 		] );

@@ -1359,17 +1359,11 @@ describe( 'template-actions', () => {
 			],
 		} );
 
-		expect( result.ok ).toBe( true );
-		expect( result.operations ).toEqual( [
-			expect.objectContaining( {
-				type: 'insert_pattern',
-				insertedBlocksSnapshot: [
-					normalizeBlockSnapshot(
-						createParagraphBlock( 'pattern-1', 'Utility' )
-					),
-				],
-			} ),
-		] );
+		expect( result ).toEqual( {
+			ok: false,
+			error:
+				'Pattern “Header Utility” could not be inserted into this template part.',
+		} );
 	} );
 
 	test( 'prepareTemplatePartSuggestionOperations rejects removing a locked block', () => {

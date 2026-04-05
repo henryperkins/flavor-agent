@@ -46,6 +46,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - This surface is advisory-only through v1.0; there is no validated apply contract
 - It does not write activity entries and does not participate in inline undo
+- The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
 - The panel clears stale results when the selected block changes or when the navigation context signature changes
 - If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled
 

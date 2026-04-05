@@ -306,6 +306,26 @@ describe( 'template recommender helpers', () => {
 		} );
 	} );
 
+	test( 'buildTemplateOperationViewModel omits absent optional template insert metadata', () => {
+		expect(
+			buildTemplateOperationViewModel( {
+				type: TEMPLATE_OPERATION_INSERT_PATTERN,
+				patternName: 'theme/social-links',
+				placement: 'end',
+			} )
+		).toEqual( {
+			key: 'insert_pattern|theme/social-links|end|',
+			type: TEMPLATE_OPERATION_INSERT_PATTERN,
+			slug: '',
+			area: '',
+			currentSlug: '',
+			patternName: 'theme/social-links',
+			patternTitle: 'theme/social-links',
+			placement: 'end',
+			badgeLabel: 'Insert',
+		} );
+	} );
+
 	test( 'buildTemplateSuggestionViewModel derives review and apply data from executable operations', () => {
 		const model = buildTemplateSuggestionViewModel( {
 			label: 'Strengthen the footer',

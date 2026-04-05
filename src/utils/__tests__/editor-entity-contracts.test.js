@@ -1,20 +1,3 @@
-jest.mock( '@wordpress/fields', () => ( {
-	authorField: { id: 'author', label: 'Author' },
-	excerptField: { id: 'excerpt', label: 'Excerpt' },
-	pageTitleField: { id: 'title', label: 'Title' },
-	patternTitleField: { id: 'title', label: 'Title' },
-	slugField: { id: 'slug', label: 'Slug' },
-	statusField: { id: 'status', label: 'Status' },
-	stickyField: { id: 'sticky', label: 'Sticky' },
-	templateField: { id: 'template', label: 'Template' },
-	templateTitleField: { id: 'title', label: 'Template' },
-	titleField: { id: 'title', label: 'Title' },
-} ) );
-
-jest.mock( '@wordpress/views', () => ( {
-	useViewConfig: jest.fn( () => ( {} ) ),
-} ) );
-
 import {
 	getEditedPostTypeEntity,
 	getLockedViewOptions,

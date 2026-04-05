@@ -736,6 +736,31 @@ async function fetchServerActivityEntries( scopeKey ) {
 	return limitActivityLog( response?.entries || [] );
 }
 
+function scheduleActivitySessionReload( options = {} ) {
+	if ( typeof window === 'undefined' ) {
+		return;
+	}
+
+	if ( actions._activitySessionRetryTimer ) {
+		window.clearTimeout( actions._activitySessionRetryTimer );
+	}
+
+	actions._activitySessionRetryTimer = window.setTimeout( () => {
+		actions._activitySessionRetryTimer = null;
+
+		const storeDispatch = window.wp?.data?.dispatch?.( STORE_NAME );
+		const { scope: retryScope, ...retryOptions } = options || {};
+
+		if ( typeof storeDispatch?.loadActivitySession === 'function' ) {
+			storeDispatch.loadActivitySession( {
+				...retryOptions,
+				...( retryScope?.key ? { scope: retryScope } : {} ),
+				retryIfScopeUnavailable: false,
+			} );
+		}
+	}, 150 );
+}
+
 async function persistServerActivityEntry( entry ) {
 	const response = await apiFetch( {
 		path: '/flavor-agent/v1/activity',
@@ -1427,10 +1452,14 @@ const actions = {
 		return async ( { dispatch, registry, select } ) => {
 			const requestToken = ( actions._activitySessionLoadToken || 0 ) + 1;
 			actions._activitySessionLoadToken = requestToken;
-			const scope = getCurrentActivityScope( registry );
+			const scope = options?.scope || getCurrentActivityScope( registry );
 			const nextScopeKey = scope?.key || null;
 
 			if ( ! nextScopeKey ) {
+				if ( options?.retryIfScopeUnavailable !== false ) {
+					scheduleActivitySessionReload( options );
+				}
+
 				syncActivitySession( dispatch, select, scope, {
 					allowUnsavedMigration:
 						options?.allowUnsavedMigration === true,

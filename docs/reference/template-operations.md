@@ -7,11 +7,13 @@ Use it when you need to answer:
 - which operation types are valid for each surface
 - what fields each operation type requires
 - what placements are valid and when `targetPath` applies
-- how the server validates and enriches operations before they reach the client
+- how the server validates and enriches operations before the client re-validates them through the shared execution layer
 
 ## Template Operations
 
 Defined in `inc/LLM/TemplatePrompt.php`. These are the only valid operation types for template recommendations.
+
+The server-side prompt parser is the first validation boundary, and `src/utils/template-operation-sequence.js` is the shared client-side validator that every executable template or template-part surface must pass before apply.
 
 ### Operation Types
 
@@ -31,6 +33,8 @@ All `insert_pattern` operations require a `placement` value:
 | `end` | Insert at the end of the template | No |
 | `before_block_path` | Insert before the block at the given path | Yes |
 | `after_block_path` | Insert after the block at the given path | Yes |
+
+Implicit template insertions are invalid. If `placement` is omitted, the suggestion stays non-executable and the client does not fall back to the editor's current insertion point.
 
 ### Anchor Validation
 
@@ -85,11 +89,12 @@ Defined in `inc/LLM/StylePrompt.php`. These operations target Global Styles or S
 |---|---|---|---|
 | `set_styles` | `global-styles` only | Set a value at a Global Styles path | `path`, `value` |
 | `set_block_styles` | `style-book` only | Set a value at a block-scoped style path | `path`, `value`, `blockName` |
-| `set_theme_variation` | Both | Apply a theme style variation | `variationIndex`, `variationTitle` |
+| `set_theme_variation` | `global-styles` only | Apply a theme style variation | `variationIndex`, `variationTitle` |
 
 ### Constraints
 
 - `set_styles` is rejected on the `style-book` surface
+- `set_theme_variation` is rejected on the `style-book` surface
 - `set_block_styles.blockName` must exactly match the target block in the request scope
 - `path` values must match the supported style paths enumerated in the prompt
 - Preset-backed paths must use preset values (slug + CSS variable), not raw values

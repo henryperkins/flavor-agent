@@ -176,6 +176,10 @@ function resetSiteEditorState( harness ) {
 	runWpCli( harness, [
 		'eval',
 		`
+$table_name = $GLOBALS['wpdb']->prefix . 'flavor_agent_activity';
+if ( $GLOBALS['wpdb']->get_var( $GLOBALS['wpdb']->prepare( 'SHOW TABLES LIKE %s', $table_name ) ) === $table_name ) {
+	$GLOBALS['wpdb']->query( "TRUNCATE TABLE {$table_name}" );
+}
 $ids = get_posts(
 	array(
 		'post_type'   => array( 'post', 'page', 'wp_template', 'wp_template_part' ),

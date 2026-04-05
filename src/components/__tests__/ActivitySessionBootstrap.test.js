@@ -90,6 +90,10 @@ describe( 'ActivitySessionBootstrap', () => {
 
 		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
 			allowUnsavedMigration: false,
+			scope: expect.objectContaining( {
+				postType: 'post',
+				hint: 'post:__unsaved__',
+			} ),
 		} );
 
 		currentEditorState = {
@@ -101,9 +105,15 @@ describe( 'ActivitySessionBootstrap', () => {
 			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
-		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith( {
-			allowUnsavedMigration: true,
-		} );
+		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith(
+			expect.objectContaining( {
+				allowUnsavedMigration: true,
+				scope: expect.objectContaining( {
+					key: 'post:42',
+					entityId: '42',
+				} ),
+			} )
+		);
 
 		currentEditorState = {
 			postType: 'post',
@@ -114,9 +124,15 @@ describe( 'ActivitySessionBootstrap', () => {
 			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
-		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith( {
-			allowUnsavedMigration: false,
-		} );
+		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith(
+			expect.objectContaining( {
+				allowUnsavedMigration: false,
+				scope: expect.objectContaining( {
+					key: 'post:99',
+					entityId: '99',
+				} ),
+			} )
+		);
 	} );
 
 	test( 'switches to the explicit global styles scope when the Styles sidebar is active', () => {
@@ -131,9 +147,15 @@ describe( 'ActivitySessionBootstrap', () => {
 			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
-		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
-			allowUnsavedMigration: false,
-		} );
+		expect( mockLoadActivitySession ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				allowUnsavedMigration: false,
+				scope: expect.objectContaining( {
+					key: 'global_styles:17',
+					entityId: '17',
+				} ),
+			} )
+		);
 	} );
 
 	test( 'switches to a style-book scoped session when the Style Book target is active', () => {
@@ -155,8 +177,15 @@ describe( 'ActivitySessionBootstrap', () => {
 			getRoot().render( <ActivitySessionBootstrap /> );
 		} );
 
-		expect( mockLoadActivitySession ).toHaveBeenCalledWith( {
-			allowUnsavedMigration: false,
-		} );
+		expect( mockLoadActivitySession ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				allowUnsavedMigration: false,
+				scope: expect.objectContaining( {
+					key: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+				} ),
+			} )
+		);
 	} );
 } );

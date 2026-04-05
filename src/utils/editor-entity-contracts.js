@@ -1,22 +1,21 @@
-import {
-	authorField,
-	excerptField,
-	pageTitleField,
-	patternTitleField,
-	slugField,
-	statusField,
-	stickyField,
-	templateField,
-	templateTitleField,
-	titleField,
-} from '@wordpress/fields';
 import { useMemo } from '@wordpress/element';
-import { useViewConfig } from '@wordpress/views';
 
 const EMPTY_OBJECT = Object.freeze( {} );
 const EMPTY_ARRAY = Object.freeze( [] );
 const EMPTY_FORM = Object.freeze( { fields: [] } );
-const UNKNOWN_POST_TYPE = '__flavor_agent_unknown__';
+const authorField = Object.freeze( { id: 'author', label: 'Author' } );
+const excerptField = Object.freeze( { id: 'excerpt', label: 'Excerpt' } );
+const pageTitleField = Object.freeze( { id: 'title', label: 'Title' } );
+const patternTitleField = Object.freeze( { id: 'title', label: 'Title' } );
+const slugField = Object.freeze( { id: 'slug', label: 'Slug' } );
+const statusField = Object.freeze( { id: 'status', label: 'Status' } );
+const stickyField = Object.freeze( { id: 'sticky', label: 'Sticky' } );
+const templateField = Object.freeze( { id: 'template', label: 'Template' } );
+const templateTitleField = Object.freeze( {
+	id: 'title',
+	label: 'Template',
+} );
+const titleField = Object.freeze( { id: 'title', label: 'Title' } );
 
 function isPlainObject( value ) {
 	return Boolean( value ) && typeof value === 'object' && ! Array.isArray( value );
@@ -230,19 +229,15 @@ export function getRecommendedPatternCategorySlug( viewList = [] ) {
 
 export function usePostTypeEntityContract( postType ) {
 	const normalizedPostType = normalizePostType( postType );
-	const rawViewConfig = useViewConfig( {
-		kind: 'postType',
-		name: normalizedPostType || UNKNOWN_POST_TYPE,
-	} );
 
 	return useMemo( () => {
-		const viewConfig = normalizeViewConfigContract( rawViewConfig );
+		const viewConfig = normalizeViewConfigContract( {} );
 		const fields = getPostTypeFieldDefinitions( normalizedPostType );
 		const fieldMap = getPostTypeFieldMap( normalizedPostType );
 		const titleFieldId =
 			typeof viewConfig.defaultView?.titleField === 'string'
 				? viewConfig.defaultView.titleField
-				: '';
+				: fields[ 0 ]?.id || '';
 		const titleField = titleFieldId ? fieldMap[ titleFieldId ] || null : null;
 		const templatePartAreaOptions = getLockedViewOptions(
 			viewConfig.viewList,
@@ -258,14 +253,7 @@ export function usePostTypeEntityContract( postType ) {
 			defaultLayouts: viewConfig.defaultLayouts,
 			viewList: viewConfig.viewList,
 			form: viewConfig.form,
-			hasConfig:
-				normalizedPostType !== '' &&
-				( isPlainObject( rawViewConfig ) &&
-					( Object.keys( viewConfig.defaultView ).length > 0 ||
-						Object.keys( viewConfig.defaultLayouts ).length > 0 ||
-						viewConfig.viewList.length > 0 ||
-						( isPlainObject( rawViewConfig?.form ) &&
-							Object.keys( rawViewConfig.form ).length > 0 ) ) ),
+			hasConfig: normalizedPostType !== '' && fields.length > 0,
 			recommendedPatternCategory:
 				getRecommendedPatternCategorySlug( viewConfig.viewList ),
 			templatePartAreaOptions,
@@ -273,5 +261,5 @@ export function usePostTypeEntityContract( postType ) {
 				templatePartAreaOptions
 			),
 		};
-	}, [ normalizedPostType, rawViewConfig ] );
+	}, [ normalizedPostType ] );
 }

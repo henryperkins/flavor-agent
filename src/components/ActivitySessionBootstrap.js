@@ -15,7 +15,7 @@ export default function ActivitySessionBootstrap() {
 			? {
 					isActive: false,
 					target: null,
-			  }
+				  }
 			: getStyleBookUiState( document )
 	);
 	const editorState = useSelect( ( select ) => {
@@ -91,8 +91,21 @@ export default function ActivitySessionBootstrap() {
 			postType: scopePostType,
 			entityId: scopeEntityId,
 		};
+
 		loadActivitySession( {
 			allowUnsavedMigration,
+			scope: {
+				key: scopeKey,
+				hint: scopeHint,
+				postType: scopePostType,
+				entityId: scopeEntityId,
+				entityKind: scope?.entityKind || '',
+				entityName: scope?.entityName || '',
+				stylesheet: scope?.stylesheet || '',
+				globalStylesId: scope?.globalStylesId || '',
+				blockName: scope?.blockName || '',
+				blockTitle: scope?.blockTitle || '',
+			},
 		} );
 	}, [
 		loadActivitySession,

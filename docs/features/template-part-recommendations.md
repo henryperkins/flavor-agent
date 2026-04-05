@@ -11,7 +11,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Surfacing Conditions
 
 - `TemplatePartRecommender()` must resolve a current template-part reference through the shared edited-entity resolver, preferring `core/editor` and falling back to `core/edit-site`
-- The `wp_template_part` entity view config must be available so the panel can align its title and area labels with the current WordPress template-part contract
+- The shared `wp_template_part` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align its title and area labels with the current WordPress template-part contract while still falling back to built-in field and area metadata when no live view config is exposed
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by `Provider::chat_configured()`
 - The panel clears stale recommendations when the template part changes or when the visible pattern context changes
 
@@ -25,7 +25,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## End-To-End Flow
 
-1. `TemplatePartRecommender()` resolves the current template-part reference through the shared edited-entity resolver, then derives slug and area using both the template-part area lookup and the current `wp_template_part` view-config contract
+1. `TemplatePartRecommender()` resolves the current template-part reference through the shared edited-entity resolver, then derives slug and area using both the template-part area lookup and the normalized `wp_template_part` entity contract returned by `usePostTypeEntityContract()`
 2. The component builds the request through `buildTemplatePartFetchInput()`, including `visiblePatternNames`
 3. `fetchTemplatePartRecommendations()` in the store posts the request to `POST /flavor-agent/v1/recommend-template-part`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template_part()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template_part()`

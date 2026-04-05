@@ -1854,6 +1854,20 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 						},
 						blockEditorSelect
 					) || null;
+				const insertedBlocksSnapshot =
+					resolveRecordedInsertedBlocksSnapshot(
+						insertedSlice,
+						operation.blocks
+					);
+
+				if ( ! insertedSlice?.blocks?.length ) {
+					return {
+						ok: false,
+						error: `Pattern “${
+							operation.patternTitle || operation.patternName || 'unknown'
+						}” could not be inserted into this template part.`,
+					};
+				}
 				appliedOperations.push( {
 					type: operation.type,
 					patternName: operation.patternName,
@@ -1863,11 +1877,7 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator,
 					index: operation.index,
-					insertedBlocksSnapshot:
-						resolveRecordedInsertedBlocksSnapshot(
-							insertedSlice,
-							operation.blocks
-						),
+					insertedBlocksSnapshot,
 				} );
 				break;
 			}

@@ -31,8 +31,10 @@ import { actions } from '../index';
 describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		jest.useFakeTimers();
 		window.sessionStorage.clear();
 		actions._activitySessionLoadToken = 0;
+		actions._activitySessionRetryTimer = null;
 		actions._navigationAbort = null;
 		actions._patternAbort = null;
 		actions._templateAbort = null;
@@ -45,6 +47,15 @@ describe( 'store action thunks', () => {
 		getTemplatePartActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
 		);
+	} );
+
+	afterEach( () => {
+		if ( actions._activitySessionRetryTimer ) {
+			window.clearTimeout( actions._activitySessionRetryTimer );
+			actions._activitySessionRetryTimer = null;
+		}
+
+		jest.useRealTimers();
 	} );
 
 	test( 'fetchBlockRecommendations reads request state from thunk selectors', async () => {
@@ -965,6 +976,143 @@ describe( 'store action thunks', () => {
 				} ),
 			} ),
 		] );
+	} );
+
+	test( 'loadActivitySession honors an explicit scope when registry selectors are late on reload', async () => {
+		const serverEntry = {
+			id: 'activity-hydrated',
+			type: 'apply_suggestion',
+			surface: 'block',
+			timestamp: '2026-03-24T10:00:00Z',
+			target: {
+				clientId: 'block-1',
+				blockPath: [ 0 ],
+				blockName: 'core/paragraph',
+			},
+			document: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'server',
+			},
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+		const registry = {
+			select: jest.fn().mockReturnValue( {} ),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [ serverEntry ],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		await actions.loadActivitySession( {
+			scope: {
+				key: 'post:42',
+				hint: 'post:42',
+				postType: 'post',
+				entityId: '42',
+			},
+		} )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				method: 'GET',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [ serverEntry ] )
+		);
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
+			expect.objectContaining( {
+				id: 'activity-hydrated',
+				surface: 'block',
+				type: 'apply_suggestion',
+				target: expect.objectContaining( {
+					clientId: 'block-1',
+					blockName: 'core/paragraph',
+					blockPath: [ 0 ],
+				} ),
+				document: expect.objectContaining( {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				} ),
+				undo: expect.objectContaining( {
+					status: 'available',
+					canUndo: true,
+				} ),
+				persistence: expect.objectContaining( {
+					status: 'server',
+				} ),
+			} ),
+		] );
+	} );
+
+	test( 'loadActivitySession retries once when reload scope is temporarily unavailable', async () => {
+		const loadActivitySession = jest.fn();
+		window.wp = {
+			data: {
+				dispatch: jest.fn( ( storeName ) =>
+					storeName === 'flavor-agent'
+						? {
+							loadActivitySession,
+						  }
+						: {}
+				),
+			},
+		};
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+		const registry = {
+			select: jest.fn().mockReturnValue( {} ),
+		};
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( dispatch ).not.toHaveBeenCalled();
+		expect( loadActivitySession ).not.toHaveBeenCalled();
+
+		jest.advanceTimersByTime( 150 );
+
+		expect( loadActivitySession ).toHaveBeenCalledWith( {
+			retryIfScopeUnavailable: false,
+		} );
+
+		delete window.wp;
 	} );
 
 	test( 'applySuggestion uses registry-backed block-editor access inside thunks', async () => {

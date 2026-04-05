@@ -16,6 +16,8 @@ Use it when you need to answer:
 4. The entry appears in inline activity history and the admin audit page
 5. User may undo the entry, transitioning through the state machine below
 
+Activity history is also maintained as a scoped client session. `loadActivitySession()` hydrates the current scope, merges any pending local entries, and then refreshes from the server-backed activity repository for that same scope.
+
 ## Undo States
 
 | State | Meaning |
@@ -72,6 +74,16 @@ When a `POST /activity` create request arrives for an entry that already exists 
 
 - If the existing entry is `available` and the incoming entry is `failed` or `undone`, the server updates the existing row with the incoming undo state
 - This handles the case where the client's original create response was lost but a local undo was already applied
+
+## Scope Hydration Retry
+
+`loadActivitySession()` also supports an explicit `scope` option for refresh-safe editor restores. If the current editor selectors cannot resolve a scope key yet, the client:
+
+1. syncs the locally persisted session immediately
+2. schedules a one-shot delayed reload with the same explicit scope
+3. disables further retries on that delayed pass
+
+This keeps recent AI activity visible across Site Editor refreshes without bypassing the normal server merge once the scope becomes available.
 
 ## Pruning
 

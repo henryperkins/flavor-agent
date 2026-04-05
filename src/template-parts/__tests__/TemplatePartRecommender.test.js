@@ -6,20 +6,6 @@ const mockGetTemplatePartActivityUndoState = jest.fn(
 );
 const mockGetTemplatePartAreaLookup = jest.fn( () => ( {} ) );
 const mockUndoActivity = jest.fn();
-const mockUseViewConfig = jest.fn();
-
-jest.mock( '@wordpress/fields', () => ( {
-	authorField: { id: 'author', label: 'Author' },
-	excerptField: { id: 'excerpt', label: 'Excerpt' },
-	pageTitleField: { id: 'title', label: 'Title' },
-	patternTitleField: { id: 'title', label: 'Title' },
-	slugField: { id: 'slug', label: 'Slug' },
-	statusField: { id: 'status', label: 'Status' },
-	stickyField: { id: 'sticky', label: 'Sticky' },
-	templateField: { id: 'template', label: 'Template' },
-	templateTitleField: { id: 'title', label: 'Template' },
-	titleField: { id: 'title', label: 'Title' },
-} ) );
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -42,10 +28,6 @@ jest.mock( '@wordpress/editor', () => {
 			createElement( 'section', { 'data-panel-title': title }, children ),
 	};
 } );
-
-jest.mock( '@wordpress/views', () => ( {
-	useViewConfig: ( ...args ) => mockUseViewConfig( ...args ),
-} ) );
 
 jest.mock( '../../patterns/compat', () => ( {
 	getBlockPatterns: ( ...args ) => mockGetBlockPatterns( ...args ),
@@ -265,37 +247,6 @@ async function renderPanel() {
 
 beforeEach( async () => {
 	jest.clearAllMocks();
-	mockUseViewConfig.mockImplementation( ( { name } ) => {
-		if ( name === 'wp_template_part' ) {
-			return {
-				default_view: { titleField: 'title' },
-				default_layouts: {},
-				view_list: [
-					{
-						title: 'Header',
-						slug: 'header',
-						view: {
-							filters: [
-								{
-									field: 'area',
-									value: 'header',
-									isLocked: true,
-								},
-							],
-						},
-					},
-				],
-				form: [],
-			};
-		}
-
-		return {
-			default_view: {},
-			default_layouts: {},
-			view_list: [],
-			form: [],
-		};
-	} );
 	currentState = createState();
 	window.flavorAgentData = {
 		canRecommendTemplateParts: true,

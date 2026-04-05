@@ -424,9 +424,14 @@ export function buildTemplateOperationViewModel(
 					operation?.patternName ||
 					'',
 				placement: operation?.placement || '',
-				targetPath: Array.isArray( operation?.targetPath )
-					? operation.targetPath
-					: null,
+				...( Array.isArray( operation?.targetPath )
+					? { targetPath: operation.targetPath }
+					: {} ),
+				...( operation?.expectedTarget &&
+				typeof operation.expectedTarget === 'object' &&
+				! Array.isArray( operation.expectedTarget )
+					? { expectedTarget: operation.expectedTarget }
+					: {} ),
 				badgeLabel: 'Insert',
 			};
 		default:

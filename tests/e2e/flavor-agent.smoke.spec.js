@@ -813,7 +813,9 @@ async function getTemplateInsertState(page, insertedContent) {
 			}
 
 			const flavorAgent = window.wp.data.select('flavor-agent');
-			const activityLog = flavorAgent.getActivityLog?.() || [];
+			const activityLog = (flavorAgent.getActivityLog?.() || []).filter(
+				(entry) => entry?.surface === 'template',
+			);
 			const lastActivity = activityLog[activityLog.length - 1] || null;
 			const blocks =
 				window.wp.data.select('core/block-editor').getBlocks?.() || [];
@@ -1185,7 +1187,9 @@ test('block and pattern surfaces explain unavailable providers in native UI', as
 	await expect(
 		page
 			.locator('.flavor-agent-pattern-notice')
-			.getByText('Pattern recommendations rely on Flavor Agent'),
+			.getByText(
+				'Pattern recommendations need a compatible embedding backend and Qdrant',
+			),
 	).toBeVisible();
 	await expect(
 		page
@@ -1319,9 +1323,17 @@ test('pattern surface smoke uses the inserter search to fetch recommendations', 
 	await expect(searchInput).toBeVisible();
 	await searchInput.fill(searchPrompt);
 
-	await expect.poll(() => patternRequests.length >= 2).toBe(true);
+	await expect
+		.poll(() =>
+			patternRequests.findLast(
+				(request) => request?.prompt === searchPrompt,
+			) || null,
+		)
+		.not.toBeNull();
 
-	const activeRequest = patternRequests.at(-1);
+	const activeRequest = patternRequests.findLast(
+		(request) => request?.prompt === searchPrompt,
+	);
 
 	expect(activeRequest.prompt).toBe(searchPrompt);
 	expect(activeRequest.blockContext).toEqual({
@@ -1485,6 +1497,7 @@ test('template surface smoke previews and applies executable template recommenda
 							{
 								type: 'insert_pattern',
 								patternName: TEMPLATE_PATTERN_NAME,
+								placement: 'end',
 							},
 						],
 						templateParts: [],
@@ -1622,7 +1635,10 @@ test('template surface explains unavailable plugin backends', async ({
 
 	const templateNotice = page
 		.locator('.flavor-agent-capability-notice .flavor-agent-panel__note')
-		.filter({ hasText: 'Template recommendations rely on Flavor Agent' });
+		.filter({
+			hasText:
+				'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors.',
+		});
 
 	await ensurePanelOpen(page, 'AI Template Recommendations', templateNotice);
 	await expect(
@@ -1661,7 +1677,8 @@ test('@wp70-site-editor template-part surface smoke previews, applies, and undoe
 							{
 								type: 'insert_pattern',
 								patternName: TEMPLATE_PART_PATTERN_NAME,
-								placement: 'end',
+								placement: 'after_block_path',
+								targetPath: [0, 1],
 							},
 						],
 					},
@@ -1867,6 +1884,7 @@ test('@wp70-site-editor template undo survives a Site Editor refresh when the te
 			hasInsertedContent: false,
 			undoStatus: 'undone',
 		});
+	await saveCurrentPost(page);
 });
 
 test('@wp70-site-editor template undo is disabled after inserted pattern content changes', async ({
@@ -2188,6 +2206,7 @@ test('@wp70-site-editor template undo is disabled after inserted pattern content
 			undoError:
 				'Inserted pattern content changed after apply and cannot be undone automatically.',
 		});
+	await saveCurrentPost(page);
 	await expect
 		.poll(() =>
 			page.evaluate(

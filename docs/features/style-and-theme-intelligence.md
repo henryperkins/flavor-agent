@@ -35,7 +35,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 3. `collectThemeTokens()` contributes theme-token source diagnostics and the active surface posts through `fetchGlobalStylesRecommendations()` or `fetchStyleBookRecommendations()` to `POST /flavor-agent/v1/recommend-style`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_style()` adapts the request to `FlavorAgent\Abilities\StyleAbilities::recommend_style()`
 5. `StyleAbilities::recommend_style()` folds the Site Editor scope, current configs, available variations or Style Book target details, `ServerCollector::for_tokens()`, and supported style paths into the style prompt context
-6. `FlavorAgent\LLM\StylePrompt` constrains the response to validated `set_styles`, `set_block_styles`, and `set_theme_variation` operations
+6. `FlavorAgent\LLM\StylePrompt` constrains the response to validated `set_styles`, `set_block_styles`, and Global Styles-only `set_theme_variation` operations
 7. The UI renders advisory or executable suggestion cards; executable cards enter preview before apply
 8. `applyGlobalStylesSuggestion()` or `applyStyleBookSuggestion()` runs the deterministic executor, records before/after user config, and persists activity
 9. `undoActivity()` delegates style-surface undo to `undoGlobalStyleSuggestionOperations()`, which restores the previous user config only while the live post-apply config still matches the recorded activity state
@@ -156,7 +156,7 @@ User opens the Site Editor Styles sidebar
 
 - Recommend `theme.json`-safe site-level color, typography, spacing, border, and shadow changes that map to supported Global Styles paths
 - Recommend `theme.json`-safe per-block Style Book changes that map to supported `styles.blocks` paths for the active block type
-- Recommend switching to a registered theme style variation
+- Recommend switching Global Styles to a registered theme style variation
 - Keep theme-token source diagnostics attached to the request contract so degraded token sourcing is visible to the backend
 - Record applied Global Styles and Style Book changes in the shared activity system and expose inline undo when the live state still matches the recorded post-apply config
 
@@ -166,7 +166,7 @@ User opens the Site Editor Styles sidebar
 - `set_block_styles`
 - `set_theme_variation`
 
-`set_styles` is valid only for supported site-level style paths and must use theme-backed values when the path points at a preset family. `set_block_styles` is valid only for supported Style Book block paths and must stay inside the validated `styles.blocks[ blockName ]` contract. `set_theme_variation` is valid only when the referenced variation still exists in the Site Editor runtime.
+`set_styles` is valid only for supported site-level style paths and must use theme-backed values when the path points at a preset family. `set_block_styles` is valid only for supported Style Book block paths and must stay inside the validated `styles.blocks[ blockName ]` contract. `set_theme_variation` is valid only on the `global-styles` surface when the referenced variation still exists in the Site Editor runtime, and Style Book suggestions reject it outright.
 
 ## Guardrails And Failure Modes
 
