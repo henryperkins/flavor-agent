@@ -1,4 +1,4 @@
-## Direction read
+# Direction read
 
 Looking ahead, the plugin is mostly pointed the right way.
 
