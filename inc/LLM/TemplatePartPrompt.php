@@ -65,6 +65,7 @@ Rules:
   - `before_block_path`
   - `after_block_path`
 - `before_block_path` and `after_block_path` MUST include `targetPath`.
+- Any path-based operation SHOULD include `expectedTarget` with the live block fingerprint from the executable target list.
 - `replace_block_with_pattern` MUST include `targetPath`, `expectedBlockName`, and `patternName`.
 - `remove_block` MUST include `targetPath` and `expectedBlockName`.
 - Every executable `targetPath` MUST resolve to a real path from the Executable Operation Targets or Executable Insertion Anchors lists.
@@ -518,6 +519,30 @@ SYSTEM;
 	}
 
 	/**
+	 * @param array<string, mixed> $target_node
+	 * @return array<string, mixed>
+	 */
+	private static function build_expected_target( array $target_node ): array {
+		$expected = [
+			'name'       => sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ),
+			'label'      => sanitize_text_field( (string) ( $target_node['label'] ?? '' ) ),
+			'attributes' => is_array( $target_node['attributes'] ?? null ) ? $target_node['attributes'] : [],
+			'childCount' => isset( $target_node['childCount'] ) ? (int) $target_node['childCount'] : 0,
+		];
+
+		$slot = is_array( $target_node['slot'] ?? null ) ? $target_node['slot'] : [];
+		if ( count( $slot ) > 0 ) {
+			$expected['slot'] = [
+				'slug'    => sanitize_key( (string) ( $slot['slug'] ?? '' ) ),
+				'area'    => sanitize_key( (string) ( $slot['area'] ?? '' ) ),
+				'isEmpty' => ! empty( $slot['isEmpty'] ),
+			];
+		}
+
+		return $expected;
+	}
+
+	/**
 	 * @param array<int, mixed>                   $suggestions
 	 * @param array<string, array<string, mixed>> $block_lookup
 	 * @param array<string, true>                 $pattern_lookup
@@ -668,17 +693,22 @@ SYSTEM;
 						continue 2;
 					}
 
-					$normalized = [
-						'type'        => 'insert_pattern',
-						'patternName' => $pattern_name,
-						'placement'   => $placement,
-					];
+						$normalized = [
+							'type'        => 'insert_pattern',
+							'patternName' => $pattern_name,
+							'placement'   => $placement,
+						];
 
-					if ( null !== $target_path ) {
-						$normalized['targetPath'] = $target_path;
-					}
+						if ( null !== $target_path ) {
+							$normalized['targetPath'] = $target_path;
 
-					$valid[] = $normalized;
+							$target_node = $block_lookup[ self::block_path_key( $target_path ) ] ?? null;
+							if ( is_array( $target_node ) ) {
+								$normalized['expectedTarget'] = self::build_expected_target( $target_node );
+							}
+						}
+
+						$valid[] = $normalized;
 					break;
 
 				case 'replace_block_with_pattern':
@@ -710,13 +740,14 @@ SYSTEM;
 						continue 2;
 					}
 
-					$valid[] = [
-						'type'              => 'replace_block_with_pattern',
-						'patternName'       => $pattern_name,
-						'expectedBlockName' => $expected_block_name,
-						'targetPath'        => $target_path,
-					];
-					break;
+						$valid[] = [
+							'type'              => 'replace_block_with_pattern',
+							'patternName'       => $pattern_name,
+							'expectedBlockName' => $expected_block_name,
+							'expectedTarget'    => self::build_expected_target( $target_node ),
+							'targetPath'        => $target_path,
+						];
+						break;
 
 				case 'remove_block':
 					$expected_block_name = sanitize_text_field( (string) ( $operation['expectedBlockName'] ?? '' ) );
@@ -739,12 +770,13 @@ SYSTEM;
 						continue 2;
 					}
 
-					$valid[] = [
-						'type'              => 'remove_block',
-						'expectedBlockName' => $expected_block_name,
-						'targetPath'        => $target_path,
-					];
-					break;
+						$valid[] = [
+							'type'              => 'remove_block',
+							'expectedBlockName' => $expected_block_name,
+							'expectedTarget'    => self::build_expected_target( $target_node ),
+							'targetPath'        => $target_path,
+						];
+						break;
 			}
 		}
 

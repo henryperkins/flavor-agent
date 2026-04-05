@@ -149,4 +149,21 @@ describe( 'structural-identity', () => {
 		);
 		expect( context.branchRoot?.clientId ).toBe( 'header-part' );
 	} );
+
+	test( 'falls back to a generic block identity when the block key is empty', () => {
+		const annotated = annotateStructuralIdentity( [
+			{
+				clientId: 'broken-core-block',
+				name: 'core/',
+				title: '',
+				currentAttributes: {},
+				innerBlocks: [],
+			},
+		] );
+
+		expect( annotated[ 0 ].structuralIdentity ).toMatchObject( {
+			role: 'block',
+			label: 'Block',
+		} );
+	} );
 } );

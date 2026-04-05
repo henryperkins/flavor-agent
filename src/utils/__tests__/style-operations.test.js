@@ -479,6 +479,31 @@ describe( 'style-operations', () => {
 		);
 	} );
 
+	test( 'applyGlobalStyleSuggestionOperations rejects duplicate theme variation operations', () => {
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_theme_variation',
+					variationIndex: 0,
+					variationTitle: 'Default',
+				},
+				{
+					type: 'set_theme_variation',
+					variationIndex: 1,
+					variationTitle: 'Midnight',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: 'Global Styles suggestions may include at most one set_theme_variation operation.',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
 	test( 'applyGlobalStyleSuggestionOperations rejects theme variations for style-book scope', () => {
 		const result = applyGlobalStyleSuggestionOperations(
 			{

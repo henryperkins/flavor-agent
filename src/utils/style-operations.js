@@ -5,6 +5,12 @@ import {
 	buildBlockStyleExecutionContractFromSettings,
 	buildGlobalStylesExecutionContractFromSettings,
 } from '../context/theme-tokens';
+import {
+	displayPresetType,
+	normalizePresetType,
+	sanitizeStyleKey,
+	validateFreeformStyleValueByKind,
+} from './style-validation';
 
 function getCoreSelect( registry ) {
 	return registry?.select?.( 'core' ) || select( 'core' ) || {};
@@ -76,28 +82,6 @@ function getStylePathKey( path = [] ) {
 	return Array.isArray( path ) ? path.join( '.' ) : '';
 }
 
-function sanitizeKey( value ) {
-	return String( value || '' )
-		.trim()
-		.toLowerCase()
-		.replace( /[^a-z0-9_-]/g, '' );
-}
-
-function normalizePresetType( value ) {
-	return sanitizeKey( value ).replaceAll( '-', '' );
-}
-
-function displayPresetType( presetType ) {
-	switch ( normalizePresetType( presetType ) ) {
-		case 'fontsize':
-			return 'font-size';
-		case 'fontfamily':
-			return 'font-family';
-		default:
-			return sanitizeKey( presetType );
-	}
-}
-
 function parsePresetValue( value ) {
 	if ( typeof value !== 'string' ) {
 		return null;
@@ -110,7 +94,7 @@ function parsePresetValue( value ) {
 	}
 
 	const type = normalizePresetType( matches[ 1 ] );
-	const slug = sanitizeKey( matches[ 2 ] );
+	const slug = sanitizeStyleKey( matches[ 2 ] );
 
 	if ( ! type || ! slug ) {
 		return null;
@@ -127,146 +111,6 @@ function buildPresetCssVar( presetType, presetSlug ) {
 	return `var(--wp--preset--${ displayPresetType(
 		presetType
 	) }--${ presetSlug })`;
-}
-
-function isPositiveNumberString( value ) {
-	return /^(?:\d+|\d*\.\d+)$/.test( value ) && Number( value ) > 0;
-}
-
-function isPositiveCssLength( value, { allowPercentage = false } = {} ) {
-	const pattern = allowPercentage
-		? /^(?:\d+|\d*\.\d+)(?:px|em|rem|vh|vw|vmin|vmax|svh|lvh|dvh|svw|lvw|dvw|ch|ex|cap|ic|lh|rlh|cm|mm|q|in|pt|pc|%)$/i
-		: /^(?:\d+|\d*\.\d+)(?:px|em|rem|vh|vw|vmin|vmax|svh|lvh|dvh|svw|lvw|dvw|ch|ex|cap|ic|lh|rlh|cm|mm|q|in|pt|pc)$/i;
-
-	return pattern.test( value ) && Number.parseFloat( value ) > 0;
-}
-
-function isZeroCssLength( value, { allowPercentage = false } = {} ) {
-	const pattern = allowPercentage
-		? /^0(?:\.0+)?(?:px|em|rem|vh|vw|vmin|vmax|svh|lvh|dvh|svw|lvw|dvw|ch|ex|cap|ic|lh|rlh|cm|mm|q|in|pt|pc|%)?$/i
-		: /^0(?:\.0+)?(?:px|em|rem|vh|vw|vmin|vmax|svh|lvh|dvh|svw|lvw|dvw|ch|ex|cap|ic|lh|rlh|cm|mm|q|in|pt|pc)?$/i;
-
-	return pattern.test( value );
-}
-
-function validateLineHeightValue( value ) {
-	if ( typeof value === 'number' ) {
-		return value > 0
-			? { valid: true, value }
-			: { valid: false, value: null };
-	}
-
-	if ( typeof value !== 'string' ) {
-		return { valid: false, value: null };
-	}
-
-	const normalizedValue = value.trim();
-
-	if ( ! normalizedValue ) {
-		return { valid: false, value: null };
-	}
-
-	if (
-		isPositiveNumberString( normalizedValue ) ||
-		isPositiveCssLength( normalizedValue, {
-			allowPercentage: true,
-		} )
-	) {
-		return {
-			valid: true,
-			value: normalizedValue,
-		};
-	}
-
-	return { valid: false, value: null };
-}
-
-function validateLengthValue( value, { allowPercentage = false } = {} ) {
-	if ( typeof value === 'number' ) {
-		return value === 0
-			? { valid: true, value }
-			: { valid: false, value: null };
-	}
-
-	if ( typeof value !== 'string' ) {
-		return { valid: false, value: null };
-	}
-
-	const normalizedValue = value.trim();
-
-	if ( ! normalizedValue ) {
-		return { valid: false, value: null };
-	}
-
-	if (
-		isZeroCssLength( normalizedValue, {
-			allowPercentage,
-		} ) ||
-		isPositiveCssLength( normalizedValue, {
-			allowPercentage,
-		} )
-	) {
-		return {
-			valid: true,
-			value: normalizedValue,
-		};
-	}
-
-	return { valid: false, value: null };
-}
-
-function validateBorderStyleValue( value ) {
-	if ( typeof value !== 'string' ) {
-		return { valid: false, value: null };
-	}
-
-	const normalizedValue = value.trim().toLowerCase();
-	const allowedValues = new Set( [
-		'none',
-		'solid',
-		'dashed',
-		'dotted',
-		'double',
-		'groove',
-		'ridge',
-		'inset',
-		'outset',
-		'hidden',
-	] );
-
-	if ( ! allowedValues.has( normalizedValue ) ) {
-		return { valid: false, value: null };
-	}
-
-	return {
-		valid: true,
-		value: normalizedValue,
-	};
-}
-
-function validateFreeformStyleValue( path = [], value ) {
-	const pathKey = getStylePathKey( path );
-
-	switch ( pathKey ) {
-		case 'typography.lineHeight':
-			return validateLineHeightValue( value );
-		case 'border.radius':
-			return validateLengthValue( value, {
-				allowPercentage: true,
-			} );
-		case 'border.width':
-			return validateLengthValue( value );
-		case 'border.style':
-			return validateBorderStyleValue( value );
-		default:
-			return {
-				valid: false,
-				value: null,
-				error: `Unsupported freeform Global Styles path: ${
-					pathKey || 'unknown'
-				}.`,
-			};
-	}
 }
 
 function normalizeComparableConfigBranch( value = {} ) {
@@ -332,6 +176,10 @@ function normalizeComparableExecutionContract( executionContract = {} ) {
 					valueSource:
 						typeof pathEntry?.valueSource === 'string'
 							? pathEntry.valueSource
+							: '',
+					validation:
+						typeof pathEntry?.validation === 'string'
+							? pathEntry.validation
 							: '',
 				} ) )
 				.sort( ( left, right ) => {
@@ -622,24 +470,36 @@ function normalizeOperations( operations = [] ) {
 				value: normalizeOperationValue( operation?.value ),
 		  } ) )
 		: [];
-	let themeVariation = null;
+	const themeVariations = [];
 	const orderedOperations = [];
 
 	for ( const operation of normalized ) {
 		if ( operation?.type === 'set_theme_variation' ) {
-			if ( ! themeVariation ) {
-				themeVariation = operation;
-			}
-
+			themeVariations.push( operation );
 			continue;
 		}
 
 		orderedOperations.push( operation );
 	}
 
-	return themeVariation
-		? [ themeVariation, ...orderedOperations ]
-		: orderedOperations;
+	return [ ...themeVariations, ...orderedOperations ];
+}
+
+function validateNormalizedOperations( operations = [] ) {
+	const themeVariationCount = operations.filter(
+		( operation ) => operation?.type === 'set_theme_variation'
+	).length;
+
+	if ( themeVariationCount > 1 ) {
+		return {
+			ok: false,
+			error: 'Global Styles suggestions may include at most one set_theme_variation operation.',
+		};
+	}
+
+	return {
+		ok: true,
+	};
 }
 
 function getGlobalStylesRuntime( registry ) {
@@ -725,7 +585,7 @@ function validatePresetStyleOperation(
 	surfaceLabel = 'Global Styles'
 ) {
 	const pathKey = getStylePathKey( operation?.path );
-	const valueType = sanitizeKey( operation?.valueType );
+	const valueType = sanitizeStyleKey( operation?.valueType );
 
 	if ( valueType !== 'preset' ) {
 		return {
@@ -736,7 +596,7 @@ function validatePresetStyleOperation(
 
 	const expectedPresetType = normalizePresetType( pathEntry?.valueSource );
 	const presetType = normalizePresetType( operation?.presetType );
-	const presetSlug = sanitizeKey( operation?.presetSlug );
+	const presetSlug = sanitizeStyleKey( operation?.presetSlug );
 
 	if ( presetType !== expectedPresetType || ! presetSlug ) {
 		return {
@@ -818,7 +678,7 @@ function applyPathBasedStyleOperation( {
 	if ( expectedValueSource === 'freeform' ) {
 		if (
 			operation?.valueType &&
-			sanitizeKey( operation.valueType ) !== 'freeform'
+			sanitizeStyleKey( operation.valueType ) !== 'freeform'
 		) {
 			return {
 				ok: false,
@@ -828,8 +688,8 @@ function applyPathBasedStyleOperation( {
 			};
 		}
 
-		const validatedFreeformValue = validateFreeformStyleValue(
-			operation.path,
+		const validatedFreeformValue = validateFreeformStyleValueByKind(
+			pathEntry?.validation,
 			normalizeOperationValue( operation.value )
 		);
 
@@ -1052,6 +912,12 @@ export function applyGlobalStyleSuggestionOperations(
 			ok: false,
 			error: 'This Global Styles suggestion does not include executable operations.',
 		};
+	}
+
+	const operationValidation = validateNormalizedOperations( operations );
+
+	if ( ! operationValidation.ok ) {
+		return operationValidation;
 	}
 
 	const blockEditorSettings =

@@ -44,6 +44,7 @@ import {
 	getBlockSuggestionExecutionInfo,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
+import { isPlainObject } from '../utils/type-guards';
 
 const STORE_NAME = 'flavor-agent';
 const DEFAULT_BLOCK_REQUEST_STATE = {
@@ -198,14 +199,6 @@ function getSurfaceContract( surface ) {
 
 function normalizeStringMessage( value ) {
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
-}
-
-function isPlainObject( value ) {
-	return (
-		Boolean( value ) &&
-		typeof value === 'object' &&
-		! Array.isArray( value )
-	);
 }
 
 function normalizeRequestMeta( requestMeta = null ) {
@@ -1047,6 +1040,27 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 							? operation.expectedTarget
 							: null,
 					targetBlockName: operation.targetBlockName || '',
+					rootLocator: operation.rootLocator || null,
+					index: Number.isInteger( operation.index )
+						? operation.index
+						: null,
+				};
+
+			case 'replace_block_with_pattern':
+			case 'remove_block':
+				return {
+					type: operation.type,
+					patternName: operation.patternName || '',
+					patternTitle: operation.patternTitle || '',
+					expectedBlockName: operation.expectedBlockName || '',
+					expectedTarget:
+						operation.expectedTarget &&
+						typeof operation.expectedTarget === 'object'
+							? operation.expectedTarget
+							: null,
+					targetPath: Array.isArray( operation.targetPath )
+						? operation.targetPath
+						: null,
 					rootLocator: operation.rootLocator || null,
 					index: Number.isInteger( operation.index )
 						? operation.index

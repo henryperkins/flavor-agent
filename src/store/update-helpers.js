@@ -1,19 +1,11 @@
+import { isPlainObject } from '../utils/type-guards';
+
 const NESTED_MERGE_KEYS = new Set( [ 'metadata', 'style' ] );
 const BANNED_TOP_LEVEL_ATTRIBUTE_KEYS = new Set( [ 'customCSS' ] );
 const ADVISORY_ONLY_BLOCK_SUGGESTION_TYPES = new Set( [
 	'structural_recommendation',
 	'pattern_replacement',
 ] );
-
-/**
- * @param {unknown} value Candidate value.
- * @return {boolean} Whether the value is a plain object.
- */
-function isPlainObject( value ) {
-	return (
-		value !== null && typeof value === 'object' && ! Array.isArray( value )
-	);
-}
 
 /**
  * @param {unknown} left  Left snapshot value.

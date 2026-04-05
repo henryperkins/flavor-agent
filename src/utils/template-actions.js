@@ -99,6 +99,132 @@ function getBlockByPath( blocks, path = [] ) {
 	return block;
 }
 
+function getNormalizedTemplateLock( value ) {
+	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
+}
+
+function getBlockLockValue( block, key ) {
+	const lock =
+		block?.attributes?.lock && typeof block.attributes.lock === 'object'
+			? block.attributes.lock
+			: null;
+
+	return typeof lock?.[ key ] === 'boolean' ? lock[ key ] : null;
+}
+
+function templateLockBlocksInsertion( templateLock ) {
+	return (
+		templateLock === 'all' ||
+		templateLock === 'insert' ||
+		templateLock === 'contentOnly'
+	);
+}
+
+function templateLockBlocksRemoval( templateLock ) {
+	return (
+		templateLock === 'all' ||
+		templateLock === 'insert' ||
+		templateLock === 'contentOnly'
+	);
+}
+
+function getEffectiveTemplateLockForContainer(
+	containerPath = [],
+	blocks = getBlocks(),
+	blockEditorSelect = select( blockEditorStore )
+) {
+	if ( ! Array.isArray( containerPath ) || containerPath.length === 0 ) {
+		return getNormalizedTemplateLock(
+			blockEditorSelect?.getTemplateLock?.() || ''
+		);
+	}
+
+	const containerBlock = getBlockByPath( blocks, containerPath );
+
+	if ( ! containerBlock ) {
+		return '';
+	}
+
+	const containerTemplateLock = getNormalizedTemplateLock(
+		containerBlock?.attributes?.templateLock
+	);
+
+	if ( containerTemplateLock ) {
+		return containerTemplateLock;
+	}
+
+	return getEffectiveTemplateLockForContainer(
+		containerPath.slice( 0, -1 ),
+		blocks,
+		blockEditorSelect
+	);
+}
+
+function isBlockPresent(
+	clientId,
+	blockEditorSelect = select( blockEditorStore )
+) {
+	if ( ! clientId ) {
+		return false;
+	}
+
+	if ( typeof blockEditorSelect?.getBlock === 'function' ) {
+		return Boolean( blockEditorSelect.getBlock( clientId ) );
+	}
+
+	return Boolean(
+		findBlockPath( blockEditorSelect?.getBlocks?.() || [], clientId )
+	);
+}
+
+function getStructuralMutationLockError( {
+	targetBlock = null,
+	targetPath = [],
+	containerPath = [],
+	blocks = getBlocks(),
+	blockEditorSelect = select( blockEditorStore ),
+	operation = 'remove',
+	surfaceLabel = 'template-part',
+} ) {
+	const effectiveTemplateLock = getEffectiveTemplateLockForContainer(
+		containerPath,
+		blocks,
+		blockEditorSelect
+	);
+	const pathLabel = Array.isArray( targetPath )
+		? targetPath.join( ' > ' )
+		: '';
+
+	if (
+		( operation === 'insert' || operation === 'replace' ) &&
+		templateLockBlocksInsertion( effectiveTemplateLock )
+	) {
+		return operation === 'insert'
+			? `The insertion container for this ${ surfaceLabel } operation is locked and cannot accept new blocks automatically.`
+			: `The target block at path ${ pathLabel } is inside a locked container and cannot be replaced automatically.`;
+	}
+
+	const explicitRemoveLock = getBlockLockValue( targetBlock, 'remove' );
+
+	if ( explicitRemoveLock === true ) {
+		return operation === 'replace'
+			? `The target block at path ${ pathLabel } is locked and cannot be replaced automatically.`
+			: `The target block at path ${ pathLabel } is locked and cannot be removed automatically.`;
+	}
+
+	if (
+		( operation === 'remove' || operation === 'replace' ) &&
+		explicitRemoveLock !== false &&
+		templateLockBlocksRemoval( effectiveTemplateLock )
+	) {
+		return operation === 'replace'
+			? `The target block at path ${ pathLabel } is inside a locked container and cannot be replaced automatically.`
+			: `The target block at path ${ pathLabel } is inside a locked container and cannot be removed automatically.`;
+	}
+
+	return null;
+}
+
 function getBlocks() {
 	return select( blockEditorStore ).getBlocks();
 }
@@ -455,6 +581,83 @@ function rebuildBlocksFromSnapshots( snapshots = [] ) {
 		: [];
 }
 
+function restoreBlockSnapshotsAtInsertionPoint(
+	{ rootLocator, index, snapshots = [] },
+	blockEditorDispatch = dispatch( blockEditorStore ),
+	blockEditorSelect = select( blockEditorStore )
+) {
+	if ( ! Number.isInteger( index ) || index < 0 || snapshots.length === 0 ) {
+		return {
+			ok: false,
+			error: 'Flavor Agent could not resolve the insertion point needed to restore the previous block state.',
+		};
+	}
+
+	const resolvedRoot = resolveInsertionRootClientId(
+		rootLocator,
+		blockEditorSelect
+	);
+
+	if ( ! resolvedRoot.ok ) {
+		return resolvedRoot;
+	}
+
+	blockEditorDispatch.insertBlocks(
+		rebuildBlocksFromSnapshots( snapshots ),
+		index,
+		resolvedRoot.rootClientId,
+		true,
+		0
+	);
+
+	const restoredSlice = getCurrentBlockSlice(
+		{
+			rootLocator,
+			index,
+			count: snapshots.length,
+		},
+		blockEditorSelect
+	);
+
+	if (
+		! restoredSlice ||
+		! snapshotMatchesExpectedBlocks(
+			normalizeBlockSnapshots( restoredSlice.blocks ),
+			snapshots
+		)
+	) {
+		return {
+			ok: false,
+			error: 'Flavor Agent could not restore the previous block state automatically.',
+		};
+	}
+
+	return {
+		ok: true,
+	};
+}
+
+function resolveExpectedTargetForOperation(
+	rawExpectedTarget,
+	expectedBlockName = ''
+) {
+	if (
+		rawExpectedTarget &&
+		typeof rawExpectedTarget === 'object' &&
+		! Array.isArray( rawExpectedTarget )
+	) {
+		return rawExpectedTarget;
+	}
+
+	if ( expectedBlockName ) {
+		return {
+			name: expectedBlockName,
+		};
+	}
+
+	return null;
+}
+
 function isAncestorPath( ancestorPath = [], descendantPath = [] ) {
 	if ( ancestorPath.length >= descendantPath.length ) {
 		return false;
@@ -610,6 +813,9 @@ function buildTemplatePartWorkingState(
 						? block.attributes.slug
 						: '';
 				const entry = {
+					attributes: normalizeSerializableValue(
+						block.attributes || {}
+					),
 					clientId: block.clientId || null,
 					area,
 					slug,
@@ -680,6 +886,10 @@ function updateWorkingTemplatePartState( workingState, block, nextAttributes ) {
 
 	const nextEntry = {
 		...block,
+		attributes: {
+			...( block.attributes || {} ),
+			...( nextAttributes || {} ),
+		},
 		area: nextAttributes?.area || block.area || '',
 		slug: nextAttributes?.slug || '',
 	};
@@ -818,21 +1028,6 @@ function resolveTemplateInsertionPoint(
 	return resolveTemplatePartInsertionPoint( placement, targetPath, blocks );
 }
 
-function isTemplateStructureLocked( block ) {
-	const attributes =
-		block && typeof block.attributes === 'object' ? block.attributes : {};
-	const templateLock =
-		typeof attributes?.templateLock === 'string'
-			? attributes.templateLock.trim()
-			: '';
-	const lock =
-		attributes?.lock && typeof attributes.lock === 'object'
-			? attributes.lock
-			: {};
-
-	return templateLock !== '' || Object.keys( lock ).length > 0;
-}
-
 function matchesExpectedTemplateTarget( block, expectedTarget = {} ) {
 	if ( ! block || ! expectedTarget?.name ) {
 		return false;
@@ -925,6 +1120,20 @@ function prepareTemplatePartOperation(
 	}
 
 	const previousSlug = block.slug || '';
+	const previousAttributes = {
+		slug: Object.prototype.hasOwnProperty.call(
+			block.attributes || {},
+			'slug'
+		)
+			? block.attributes.slug
+			: undefined,
+		area: Object.prototype.hasOwnProperty.call(
+			block.attributes || {},
+			'area'
+		)
+			? block.attributes.area
+			: undefined,
+	};
 
 	if ( operation?.type === TEMPLATE_OPERATION_ASSIGN && previousSlug ) {
 		return {
@@ -948,17 +1157,13 @@ function prepareTemplatePartOperation(
 		};
 	}
 
-	const previousArea = block.area || area;
 	const preparedOperation = {
 		type: operation.type,
 		clientId: block.clientId,
 		slug,
 		area,
 		currentSlug,
-		previousAttributes: {
-			slug: previousSlug,
-			area: previousArea,
-		},
+		previousAttributes,
 		nextAttributes: {
 			slug,
 			area,
@@ -1023,6 +1228,20 @@ function prepareInsertPatternOperation(
 				) } no longer matches the expected ${ expectedLabel }. Regenerate recommendations and try again.`,
 			};
 		}
+	}
+
+	const insertionLockError = getStructuralMutationLockError( {
+		containerPath: insertionPoint.rootLocator?.path || [],
+		blocks: workingBlocks,
+		blockEditorSelect,
+		operation: 'insert',
+		surfaceLabel: 'template',
+	} );
+
+	if ( insertionLockError ) {
+		return {
+			error: insertionLockError,
+		};
 	}
 
 	const resolvedRoot =
@@ -1147,6 +1366,12 @@ function prepareTemplatePartInsertPatternOperation(
 	const targetPath = Array.isArray( operation?.targetPath )
 		? operation.targetPath
 		: null;
+	const expectedTarget =
+		operation?.expectedTarget &&
+		typeof operation.expectedTarget === 'object' &&
+		! Array.isArray( operation.expectedTarget )
+			? operation.expectedTarget
+			: null;
 	const insertionPoint = resolveTemplatePartInsertionPoint(
 		placement,
 		targetPath,
@@ -1160,6 +1385,35 @@ function prepareTemplatePartInsertPatternOperation(
 				placement === TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH
 					? 'Flavor Agent could not resolve the targetPath for this template-part insertion.'
 					: `Flavor Agent could not resolve the ${ placement } insertion point for this template part.`,
+		};
+	}
+
+	if ( targetPath && expectedTarget ) {
+		const liveTarget = getBlockByPath( workingBlocks, targetPath );
+
+		if ( ! matchesExpectedTemplateTarget( liveTarget, expectedTarget ) ) {
+			const expectedLabel =
+				expectedTarget.label || expectedTarget.name || 'target block';
+
+			return {
+				error: `The anchored insertion target at path ${ targetPath.join(
+					' > '
+				) } no longer matches the expected ${ expectedLabel }. Regenerate recommendations and try again.`,
+			};
+		}
+	}
+
+	const insertionLockError = getStructuralMutationLockError( {
+		containerPath: insertionPoint.rootLocator?.path || [],
+		blocks: workingBlocks,
+		blockEditorSelect,
+		operation: 'insert',
+		surfaceLabel: 'template-part',
+	} );
+
+	if ( insertionLockError ) {
+		return {
+			error: insertionLockError,
 		};
 	}
 
@@ -1231,6 +1485,7 @@ function prepareTemplatePartInsertPatternOperation(
 		placement,
 		blocks,
 		targetPath: insertionPoint.targetPath,
+		expectedTarget,
 		targetBlockName: insertionPoint.targetBlockName,
 		rootLocator: insertionPoint.rootLocator,
 		index: insertionPoint.index,
@@ -1421,6 +1676,28 @@ function prepareTemplatePartReplaceBlockOperation(
 		return resolvedTarget;
 	}
 
+	const expectedTarget = resolveExpectedTargetForOperation(
+		operation?.expectedTarget,
+		expectedBlockName
+	);
+
+	if (
+		expectedTarget &&
+		! matchesExpectedTemplateTarget(
+			resolvedTarget.targetBlock,
+			expectedTarget
+		)
+	) {
+		const expectedLabel =
+			expectedTarget.label || expectedTarget.name || expectedBlockName;
+
+		return {
+			error: `The target block at path ${ targetPath.join(
+				' > '
+			) } no longer matches the expected ${ expectedLabel }.`,
+		};
+	}
+
 	if ( resolvedTarget.targetBlock?.name !== expectedBlockName ) {
 		return {
 			error: `The target block at path ${ targetPath.join(
@@ -1429,11 +1706,19 @@ function prepareTemplatePartReplaceBlockOperation(
 		};
 	}
 
-	if ( isTemplateStructureLocked( resolvedTarget.targetBlock ) ) {
+	const lockError = getStructuralMutationLockError( {
+		targetBlock: resolvedTarget.targetBlock,
+		targetPath,
+		containerPath: resolvedTarget.parentPath,
+		blocks: workingBlocks,
+		blockEditorSelect,
+		operation: 'replace',
+		surfaceLabel: 'template-part',
+	} );
+
+	if ( lockError ) {
 		return {
-			error: `The target block at path ${ targetPath.join(
-				' > '
-			) } is locked and cannot be replaced automatically.`,
+			error: lockError,
 		};
 	}
 
@@ -1499,6 +1784,7 @@ function prepareTemplatePartReplaceBlockOperation(
 		patternName,
 		patternTitle: pattern.title || patternName,
 		expectedBlockName,
+		expectedTarget,
 		targetPath,
 		rootLocator: resolvedTarget.rootLocator,
 		index: resolvedTarget.index,
@@ -1508,7 +1794,8 @@ function prepareTemplatePartReplaceBlockOperation(
 
 function prepareTemplatePartRemoveBlockOperation(
 	operation,
-	workingBlocks = getBlocks()
+	workingBlocks = getBlocks(),
+	blockEditorSelect = select( blockEditorStore )
 ) {
 	const expectedBlockName = operation?.expectedBlockName || '';
 	const targetPath = Array.isArray( operation?.targetPath )
@@ -1523,6 +1810,28 @@ function prepareTemplatePartRemoveBlockOperation(
 		return resolvedTarget;
 	}
 
+	const expectedTarget = resolveExpectedTargetForOperation(
+		operation?.expectedTarget,
+		expectedBlockName
+	);
+
+	if (
+		expectedTarget &&
+		! matchesExpectedTemplateTarget(
+			resolvedTarget.targetBlock,
+			expectedTarget
+		)
+	) {
+		const expectedLabel =
+			expectedTarget.label || expectedTarget.name || expectedBlockName;
+
+		return {
+			error: `The target block at path ${ targetPath.join(
+				' > '
+			) } no longer matches the expected ${ expectedLabel }.`,
+		};
+	}
+
 	if ( resolvedTarget.targetBlock?.name !== expectedBlockName ) {
 		return {
 			error: `The target block at path ${ targetPath.join(
@@ -1531,17 +1840,26 @@ function prepareTemplatePartRemoveBlockOperation(
 		};
 	}
 
-	if ( isTemplateStructureLocked( resolvedTarget.targetBlock ) ) {
+	const lockError = getStructuralMutationLockError( {
+		targetBlock: resolvedTarget.targetBlock,
+		targetPath,
+		containerPath: resolvedTarget.parentPath,
+		blocks: workingBlocks,
+		blockEditorSelect,
+		operation: 'remove',
+		surfaceLabel: 'template-part',
+	} );
+
+	if ( lockError ) {
 		return {
-			error: `The target block at path ${ targetPath.join(
-				' > '
-			) } is locked and cannot be removed automatically.`,
+			error: lockError,
 		};
 	}
 
 	return {
 		type: TEMPLATE_OPERATION_REMOVE_BLOCK,
 		expectedBlockName,
+		expectedTarget,
 		targetPath,
 		rootLocator: resolvedTarget.rootLocator,
 		index: resolvedTarget.index,
@@ -1716,7 +2034,8 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 			case TEMPLATE_OPERATION_REMOVE_BLOCK: {
 				const prepared = prepareTemplatePartRemoveBlockOperation(
 					operation,
-					currentWorkingBlocks
+					currentWorkingBlocks,
+					blockEditorSelect
 				);
 
 				if ( prepared?.error ) {
@@ -1791,7 +2110,7 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 				} );
 				break;
 
-			case TEMPLATE_OPERATION_INSERT_PATTERN:
+			case TEMPLATE_OPERATION_INSERT_PATTERN: {
 				blockEditorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
@@ -1808,6 +2127,18 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 						},
 						blockEditorSelect
 					) || null;
+
+				if ( ! insertedSlice?.blocks?.length ) {
+					return {
+						ok: false,
+						error: `Pattern “${
+							operation.patternTitle ||
+							operation.patternName ||
+							'unknown'
+						}” could not be inserted into this template.`,
+					};
+				}
+
 				appliedOperations.push( {
 					type: operation.type,
 					patternName: operation.patternName,
@@ -1825,6 +2156,7 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 						),
 				} );
 				break;
+			}
 		}
 	}
 
@@ -1874,6 +2206,47 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 	for ( const operation of prepared.operations ) {
 		switch ( operation.type ) {
 			case TEMPLATE_OPERATION_INSERT_PATTERN: {
+				if ( operation.targetPath && operation.expectedTarget ) {
+					const liveTarget = getBlockByPath(
+						blockEditorSelect?.getBlocks?.() || [],
+						operation.targetPath
+					);
+
+					if (
+						! matchesExpectedTemplateTarget(
+							liveTarget,
+							operation.expectedTarget
+						)
+					) {
+						const expectedLabel =
+							operation.expectedTarget.label ||
+							operation.expectedTarget.name ||
+							'target block';
+
+						return {
+							ok: false,
+							error: `The anchored insertion target at path ${ operation.targetPath.join(
+								' > '
+							) } no longer matches the expected ${ expectedLabel }. Regenerate recommendations and try again.`,
+						};
+					}
+				}
+
+				const insertionLockError = getStructuralMutationLockError( {
+					containerPath: operation.rootLocator?.path || [],
+					blocks: blockEditorSelect?.getBlocks?.() || [],
+					blockEditorSelect,
+					operation: 'insert',
+					surfaceLabel: 'template-part',
+				} );
+
+				if ( insertionLockError ) {
+					return {
+						ok: false,
+						error: insertionLockError,
+					};
+				}
+
 				const resolvedRoot = resolveInsertionRootClientId(
 					operation.rootLocator,
 					blockEditorSelect
@@ -1926,6 +2299,7 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					patternTitle: operation.patternTitle,
 					placement: operation.placement,
 					targetPath: operation.targetPath || null,
+					expectedTarget: operation.expectedTarget || null,
 					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator,
 					index: operation.index,
@@ -1962,6 +2336,26 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					};
 				}
 
+				if (
+					operation.expectedTarget &&
+					! matchesExpectedTemplateTarget(
+						targetBlock,
+						operation.expectedTarget
+					)
+				) {
+					const expectedLabel =
+						operation.expectedTarget.label ||
+						operation.expectedTarget.name ||
+						operation.expectedBlockName;
+
+					return {
+						ok: false,
+						error: `The target block at path ${ operation.targetPath.join(
+							' > '
+						) } no longer matches the expected ${ expectedLabel }.`,
+					};
+				}
+
 				if ( ! resolvedRoot.ok ) {
 					return {
 						ok: false,
@@ -1973,8 +2367,36 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					targetBlock,
 				] );
 				const editorDispatch = getBlockEditorDispatch();
+				const lockError = getStructuralMutationLockError( {
+					targetBlock,
+					targetPath: operation.targetPath,
+					containerPath: operation.targetPath.slice( 0, -1 ),
+					blocks: blockEditorSelect?.getBlocks?.() || [],
+					blockEditorSelect,
+					operation: 'replace',
+					surfaceLabel: 'template-part',
+				} );
+
+				if ( lockError ) {
+					return {
+						ok: false,
+						error: lockError,
+					};
+				}
 
 				editorDispatch.removeBlocks( [ targetBlock.clientId ], false );
+
+				if (
+					isBlockPresent( targetBlock.clientId, blockEditorSelect )
+				) {
+					return {
+						ok: false,
+						error: `The target block at path ${ operation.targetPath.join(
+							' > '
+						) } could not be removed automatically.`,
+					};
+				}
+
 				editorDispatch.insertBlocks(
 					operation.blocks,
 					operation.index,
@@ -1993,11 +2415,41 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 						blockEditorSelect
 					) || null;
 
+				if ( ! insertedSlice?.blocks?.length ) {
+					const restoreResult = restoreBlockSnapshotsAtInsertionPoint(
+						{
+							rootLocator: operation.rootLocator,
+							index: operation.index,
+							snapshots: removedBlocksSnapshot,
+						},
+						editorDispatch,
+						blockEditorSelect
+					);
+
+					return {
+						ok: false,
+						error: restoreResult.ok
+							? `Pattern “${
+									operation.patternTitle ||
+									operation.patternName ||
+									'unknown'
+							  }” could not replace the targeted block in this template part.`
+							: `Pattern “${
+									operation.patternTitle ||
+									operation.patternName ||
+									'unknown'
+							  }” could not replace the targeted block in this template part. ${
+									restoreResult.error
+							  }`,
+					};
+				}
+
 				appliedOperations.push( {
 					type: operation.type,
 					patternName: operation.patternName,
 					patternTitle: operation.patternTitle,
 					expectedBlockName: operation.expectedBlockName,
+					expectedTarget: operation.expectedTarget || null,
 					targetPath: operation.targetPath,
 					rootLocator: operation.rootLocator,
 					index: operation.index,
@@ -2035,14 +2487,63 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					};
 				}
 
+				if (
+					operation.expectedTarget &&
+					! matchesExpectedTemplateTarget(
+						targetBlock,
+						operation.expectedTarget
+					)
+				) {
+					const expectedLabel =
+						operation.expectedTarget.label ||
+						operation.expectedTarget.name ||
+						operation.expectedBlockName;
+
+					return {
+						ok: false,
+						error: `The target block at path ${ operation.targetPath.join(
+							' > '
+						) } no longer matches the expected ${ expectedLabel }.`,
+					};
+				}
+
+				const lockError = getStructuralMutationLockError( {
+					targetBlock,
+					targetPath: operation.targetPath,
+					containerPath: operation.targetPath.slice( 0, -1 ),
+					blocks: blockEditorSelect?.getBlocks?.() || [],
+					blockEditorSelect,
+					operation: 'remove',
+					surfaceLabel: 'template-part',
+				} );
+
+				if ( lockError ) {
+					return {
+						ok: false,
+						error: lockError,
+					};
+				}
+
 				getBlockEditorDispatch().removeBlocks(
 					[ targetBlock.clientId ],
 					false
 				);
 
+				if (
+					isBlockPresent( targetBlock.clientId, blockEditorSelect )
+				) {
+					return {
+						ok: false,
+						error: `The target block at path ${ operation.targetPath.join(
+							' > '
+						) } could not be removed automatically.`,
+					};
+				}
+
 				appliedOperations.push( {
 					type: operation.type,
 					expectedBlockName: operation.expectedBlockName,
+					expectedTarget: operation.expectedTarget || null,
 					targetPath: operation.targetPath,
 					rootLocator: operation.rootLocator,
 					index: operation.index,
@@ -2180,8 +2681,8 @@ function prepareUndoTemplatePartOperation(
 		type: operation.type,
 		clientId: block.clientId,
 		previousAttributes: operation.previousAttributes || {
-			slug: '',
-			area: '',
+			slug: undefined,
+			area: undefined,
 		},
 	};
 }

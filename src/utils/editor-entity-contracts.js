@@ -1,5 +1,6 @@
 import { useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
+import { isPlainObject } from './type-guards';
 
 const EMPTY_OBJECT = Object.freeze( {} );
 const EMPTY_ARRAY = Object.freeze( [] );
@@ -18,21 +19,13 @@ const templateTitleField = Object.freeze( {
 } );
 const titleField = Object.freeze( { id: 'title', label: 'Title' } );
 
-function isPlainObject( value ) {
-	return (
-		Boolean( value ) &&
-		typeof value === 'object' &&
-		! Array.isArray( value )
-	);
-}
-
 function normalizePostType( postType ) {
 	return typeof postType === 'string' ? postType.trim() : '';
 }
 
 export function normalizeEditedEntityRef( entityId ) {
-	if ( typeof entityId === 'string' && entityId !== '' ) {
-		return entityId;
+	if ( typeof entityId === 'string' && entityId.trim() !== '' ) {
+		return entityId.trim();
 	}
 
 	if ( Number.isInteger( entityId ) && entityId > 0 ) {
@@ -122,6 +115,28 @@ export function getPostTypeFieldDefinitions( postType ) {
 		default:
 			return [ titleField ];
 	}
+}
+
+function isKnownPostType( postType ) {
+	switch ( normalizePostType( postType ) ) {
+		case 'post':
+		case 'page':
+		case 'wp_template':
+		case 'wp_template_part':
+		case 'wp_block':
+			return true;
+		default:
+			return false;
+	}
+}
+
+function hasViewConfigData( viewConfigRecord = EMPTY_OBJECT ) {
+	return (
+		isPlainObject( viewConfigRecord?.default_view ) ||
+		isPlainObject( viewConfigRecord?.default_layouts ) ||
+		Array.isArray( viewConfigRecord?.view_list ) ||
+		isPlainObject( viewConfigRecord?.form )
+	);
 }
 
 export function getPostTypeFieldMap( postType ) {
@@ -260,7 +275,10 @@ export function buildPostTypeEntityContract(
 		defaultLayouts: viewConfig.defaultLayouts,
 		viewList: viewConfig.viewList,
 		form: viewConfig.form,
-		hasConfig: normalizedPostType !== '' && fields.length > 0,
+		hasConfig:
+			normalizedPostType !== '' &&
+			( isKnownPostType( normalizedPostType ) ||
+				hasViewConfigData( viewConfigRecord ) ),
 		recommendedPatternCategory: getRecommendedPatternCategorySlug(
 			viewConfig.viewList
 		),

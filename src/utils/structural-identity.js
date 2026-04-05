@@ -36,7 +36,9 @@ function getBlockKey( blockName ) {
 		return 'block';
 	}
 
-	return blockName.includes( '/' ) ? blockName.split( '/' )[ 1 ] : blockName;
+	const key = blockName.includes( '/' ) ? blockName.split( '/' )[ 1 ] : blockName;
+
+	return key || 'block';
 }
 
 function toTitleCase( value ) {

@@ -15,6 +15,7 @@ import {
 	getThemeTokenFeatures,
 	getThemeTokenSourceDetails,
 } from './theme-settings';
+import { FREEFORM_STYLE_VALIDATORS } from '../utils/style-validation';
 
 /**
  * Collect the full design token manifest.
@@ -183,6 +184,7 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 		supportedPaths.push( {
 			path: [ 'typography', 'lineHeight' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.LINE_HEIGHT,
 		} );
 	}
 
@@ -204,6 +206,7 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 		supportedPaths.push( {
 			path: [ 'border', 'radius' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE,
 		} );
 	}
 
@@ -211,6 +214,7 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 		supportedPaths.push( {
 			path: [ 'border', 'style' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.BORDER_STYLE,
 		} );
 	}
 
@@ -218,6 +222,7 @@ export function getGlobalStylesSupportedStylePathsFromTokens( tokens = {} ) {
 		supportedPaths.push( {
 			path: [ 'border', 'width' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.LENGTH,
 		} );
 	}
 
@@ -310,6 +315,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 		supportedPaths.push( {
 			path: [ 'typography', 'lineHeight' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.LINE_HEIGHT,
 		} );
 	}
 
@@ -342,6 +348,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 		supportedPaths.push( {
 			path: [ 'border', 'radius' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE,
 		} );
 	}
 
@@ -352,6 +359,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 		supportedPaths.push( {
 			path: [ 'border', 'style' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.BORDER_STYLE,
 		} );
 	}
 
@@ -362,6 +370,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 		supportedPaths.push( {
 			path: [ 'border', 'width' ],
 			valueSource: 'freeform',
+			validation: FREEFORM_STYLE_VALIDATORS.LENGTH,
 		} );
 	}
 

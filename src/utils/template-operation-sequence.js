@@ -13,6 +13,18 @@ function toNonEmptyString( value ) {
 	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
 }
 
+function normalizeBlockPathSegment( segment ) {
+	if ( Number.isSafeInteger( segment ) && segment >= 0 ) {
+		return segment;
+	}
+
+	if ( typeof segment === 'string' && /^(?:0|[1-9]\d*)$/.test( segment ) ) {
+		return Number.parseInt( segment, 10 );
+	}
+
+	return null;
+}
+
 function normalizeBlockPath( value ) {
 	if ( ! Array.isArray( value ) || value.length === 0 ) {
 		return null;
@@ -21,12 +33,9 @@ function normalizeBlockPath( value ) {
 	const path = [];
 
 	for ( const segment of value ) {
-		const normalizedSegment = Number( segment );
+		const normalizedSegment = normalizeBlockPathSegment( segment );
 
-		if (
-			! Number.isInteger( normalizedSegment ) ||
-			normalizedSegment < 0
-		) {
+		if ( normalizedSegment === null ) {
 			return null;
 		}
 
@@ -309,6 +318,9 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				const targetPath = normalizeBlockPath(
 					rawOperation?.targetPath
 				);
+				const expectedTarget = normalizeExpectedTarget(
+					rawOperation?.expectedTarget
+				);
 
 				if ( ! patternName || ! placement ) {
 					return {
@@ -346,6 +358,10 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					normalizedOperation.targetPath = targetPath;
 				}
 
+				if ( expectedTarget && anchoredPlacements.has( placement ) ) {
+					normalizedOperation.expectedTarget = expectedTarget;
+				}
+
 				normalizedOperations.push( normalizedOperation );
 				break;
 			}
@@ -357,21 +373,35 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				const expectedBlockName = toNonEmptyString(
 					rawOperation?.expectedBlockName
 				);
+				const expectedTarget =
+					normalizeExpectedTarget( rawOperation?.expectedTarget ) ||
+					( expectedBlockName ? { name: expectedBlockName } : null );
 				const targetPath = normalizeBlockPath(
 					rawOperation?.targetPath
 				);
 
-				if ( ! patternName || ! expectedBlockName || ! targetPath ) {
+				if ( ! patternName || ! expectedTarget?.name || ! targetPath ) {
 					return {
 						ok: false,
 						error: 'Template-part block replacements must include patternName, expectedBlockName, and targetPath.',
 					};
 				}
 
+				if (
+					expectedBlockName &&
+					expectedTarget.name !== expectedBlockName
+				) {
+					return {
+						ok: false,
+						error: 'Template-part block replacements must use a matching expectedBlockName and expectedTarget.name.',
+					};
+				}
+
 				normalizedOperations.push( {
 					type,
 					patternName,
-					expectedBlockName,
+					expectedBlockName: expectedTarget.name,
+					expectedTarget,
 					targetPath,
 				} );
 				break;
@@ -381,20 +411,34 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 				const expectedBlockName = toNonEmptyString(
 					rawOperation?.expectedBlockName
 				);
+				const expectedTarget =
+					normalizeExpectedTarget( rawOperation?.expectedTarget ) ||
+					( expectedBlockName ? { name: expectedBlockName } : null );
 				const targetPath = normalizeBlockPath(
 					rawOperation?.targetPath
 				);
 
-				if ( ! expectedBlockName || ! targetPath ) {
+				if ( ! expectedTarget?.name || ! targetPath ) {
 					return {
 						ok: false,
 						error: 'Template-part block removals must include expectedBlockName and targetPath.',
 					};
 				}
 
+				if (
+					expectedBlockName &&
+					expectedTarget.name !== expectedBlockName
+				) {
+					return {
+						ok: false,
+						error: 'Template-part block removals must use a matching expectedBlockName and expectedTarget.name.',
+					};
+				}
+
 				normalizedOperations.push( {
 					type,
-					expectedBlockName,
+					expectedBlockName: expectedTarget.name,
+					expectedTarget,
 					targetPath,
 				} );
 				break;

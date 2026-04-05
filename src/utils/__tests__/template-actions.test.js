@@ -182,10 +182,18 @@ function setupBlockEditor( {
 		const block = findBlockByClientId( state.blocks, clientId );
 
 		if ( block ) {
-			block.attributes = {
+			const nextAttributes = {
 				...block.attributes,
 				...attributes,
 			};
+
+			for ( const [ key, value ] of Object.entries( nextAttributes ) ) {
+				if ( value === undefined ) {
+					delete nextAttributes[ key ];
+				}
+			}
+
+			block.attributes = nextAttributes;
 		}
 	} );
 	const selectBlock = jest.fn();
@@ -363,6 +371,27 @@ describe( 'template-actions', () => {
 		expect( result ).toEqual( {
 			ok: false,
 			error: 'This suggestion targets the “header” area more than once and cannot be applied automatically.',
+		} );
+	} );
+
+	test( 'prepareTemplatePartSuggestionOperations rejects non-canonical block paths', () => {
+		setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Existing' ) ],
+		} );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'remove_block',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ '' ],
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Template-part block removals must include expectedBlockName and targetPath.',
 		} );
 	} );
 
@@ -956,6 +985,38 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'applyTemplateSuggestionOperations fails when inserted blocks are not readable immediately', () => {
+		const { blockEditorDispatch } = setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Intro' ) ],
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
+				},
+			],
+		} );
+		blockEditorDispatch.insertBlocks.mockImplementation( () => {} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Inserted' ),
+		] );
+
+		const result = applyTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					placement: 'end',
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Pattern “Hero Banner” could not be inserted into this template.',
+		} );
+	} );
+
 	test( 'applyTemplateSuggestionOperations rolls back when WordPress template validation fails', () => {
 		const { state, blockEditorDispatch } = setupBlockEditor( {
 			blocks: [ createParagraphBlock( 'existing-1', 'Intro' ) ],
@@ -967,7 +1028,6 @@ describe( 'template-actions', () => {
 				},
 			],
 			template: [ [ 'core/paragraph', {} ] ],
-			templateLock: 'all',
 			validateBlocksToTemplate: ( currentBlocks ) =>
 				currentBlocks.length === 1,
 		} );
@@ -1241,6 +1301,49 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'prepareTemplatePartSuggestionOperations rejects anchored insertions when the target fingerprint no longer matches', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Existing' ),
+				createParagraphBlock( 'existing-2', 'Changed target' ),
+			],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'before_block_path',
+					targetPath: [ 1 ],
+					expectedTarget: {
+						name: 'core/paragraph',
+						label: 'Paragraph',
+						attributes: {
+							content: 'Target',
+						},
+						childCount: 0,
+					},
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'The anchored insertion target at path 1 no longer matches the expected Paragraph. Regenerate recommendations and try again.',
+		} );
+	} );
+
 	test( 'prepareTemplatePartSuggestionOperations rejects missing explicit placement', () => {
 		setupBlockEditor( {
 			patterns: [
@@ -1307,6 +1410,7 @@ describe( 'template-actions', () => {
 				patternTitle: 'Header Utility',
 				placement: 'end',
 				targetPath: null,
+				expectedTarget: null,
 				targetBlockName: '',
 				rootLocator: {
 					type: 'root',
@@ -1369,6 +1473,9 @@ describe( 'template-actions', () => {
 				patternName: 'theme/header-utility',
 				patternTitle: 'Header Utility',
 				expectedBlockName: 'core/paragraph',
+				expectedTarget: {
+					name: 'core/paragraph',
+				},
 				targetPath: [ 1 ],
 				rootLocator: {
 					type: 'root',
@@ -1433,6 +1540,46 @@ describe( 'template-actions', () => {
 		} );
 	} );
 
+	test( 'prepareTemplatePartSuggestionOperations rejects replacing a block inside a locked container', () => {
+		setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'group-1',
+					name: 'core/group',
+					attributes: {
+						templateLock: 'all',
+					},
+					innerBlocks: [
+						createParagraphBlock( 'existing-2', 'Replace me' ),
+					],
+				},
+			],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+
+		const result = prepareTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'replace_block_with_pattern',
+					patternName: 'theme/header-utility',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ 0, 0 ],
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'The target block at path 0 > 0 is inside a locked container and cannot be replaced automatically.',
+		} );
+	} );
+
 	test( 'applyTemplatePartSuggestionOperations removes a targeted block and records an undo anchor', () => {
 		const { blockEditorDispatch, state } = setupBlockEditor( {
 			blocks: [
@@ -1461,6 +1608,9 @@ describe( 'template-actions', () => {
 			{
 				type: 'remove_block',
 				expectedBlockName: 'core/paragraph',
+				expectedTarget: {
+					name: 'core/paragraph',
+				},
 				targetPath: [ 1 ],
 				rootLocator: {
 					type: 'root',
@@ -1486,6 +1636,71 @@ describe( 'template-actions', () => {
 			createParagraphBlock( 'existing-1', 'Keep' ),
 			createParagraphBlock( 'existing-3', 'After me' ),
 		] );
+	} );
+
+	test( 'applyTemplatePartSuggestionOperations restores the removed block when replacement insertion fails', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'existing-2', 'Replace me' ),
+			],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+		blockEditorDispatch.insertBlocks
+			.mockImplementationOnce( () => {} )
+			.mockImplementation( ( blocksToInsert, index, rootClientId ) => {
+				const container = findBlockContainer(
+					state.blocks,
+					rootClientId
+				);
+				container.splice( index, 0, ...cloneValue( blocksToInsert ) );
+			} );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'replace_block_with_pattern',
+					patternName: 'theme/header-utility',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ 1 ],
+					expectedTarget: {
+						name: 'core/paragraph',
+						label: 'Paragraph',
+						attributes: {
+							content: 'Replace me',
+						},
+						childCount: 0,
+					},
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Pattern “Header Utility” could not replace the targeted block in this template part.',
+		} );
+		expect( state.blocks ).toHaveLength( 2 );
+		expect( state.blocks[ 0 ] ).toEqual(
+			createParagraphBlock( 'existing-1', 'Keep' )
+		);
+		expect( state.blocks[ 1 ] ).toEqual(
+			expect.objectContaining( {
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Replace me',
+				},
+				innerBlocks: [],
+			} )
+		);
 	} );
 
 	test( 'applyTemplatePartSuggestionOperations records the intended snapshot when the inserted slice is not readable immediately', () => {
@@ -1524,14 +1739,9 @@ describe( 'template-actions', () => {
 		setupBlockEditor( {
 			blocks: [
 				createParagraphBlock( 'existing-1', 'Keep' ),
-				{
-					...createParagraphBlock( 'existing-2', 'Remove me' ),
-					attributes: {
-						content: 'Remove me',
-						templateLock: 'all',
-					},
-				},
+				createParagraphBlock( 'existing-2', 'Remove me' ),
 			],
+			templateLock: 'all',
 		} );
 
 		const result = prepareTemplatePartSuggestionOperations( {
@@ -1546,7 +1756,40 @@ describe( 'template-actions', () => {
 
 		expect( result ).toEqual( {
 			ok: false,
-			error: 'The target block at path 1 is locked and cannot be removed automatically.',
+			error: 'The target block at path 1 is inside a locked container and cannot be removed automatically.',
+		} );
+	} );
+
+	test( 'applyTemplatePartSuggestionOperations fails when a removal does not remove the target block', () => {
+		const { blockEditorDispatch } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Keep' ),
+				createParagraphBlock( 'existing-2', 'Remove me' ),
+			],
+		} );
+		blockEditorDispatch.removeBlocks.mockImplementation( () => {} );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'remove_block',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ 1 ],
+					expectedTarget: {
+						name: 'core/paragraph',
+						label: 'Paragraph',
+						attributes: {
+							content: 'Remove me',
+						},
+						childCount: 0,
+					},
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'The target block at path 1 could not be removed automatically.',
 		} );
 	} );
 

@@ -151,7 +151,9 @@ function getOperationKey( operation = {} ) {
 		Array.isArray( operation?.targetPath )
 			? operation.targetPath.join( '.' )
 			: ''
-	}|${ operation?.expectedBlockName || '' }`;
+	}|${ operation?.expectedBlockName || '' }|${
+		operation?.expectedTarget?.name || ''
+	}`;
 }
 
 function formatPlacementLabel( placement ) {
@@ -291,9 +293,8 @@ function buildTemplatePartSuggestionViewModel(
 
 export default function TemplatePartRecommender() {
 	const canRecommend = getSurfaceCapability( 'template-part' ).available;
-	const templatePartContract = usePostTypeEntityContract(
-		'wp_template_part'
-	);
+	const templatePartContract =
+		usePostTypeEntityContract( 'wp_template_part' );
 	const templatePartRef = useSelect(
 		( select ) =>
 			getEditedPostTypeEntity( select, 'wp_template_part' )?.entityId ||

@@ -3,6 +3,7 @@ import {
 	getEditedPostTypeEntity,
 	getLockedViewOptions,
 	getRecommendedPatternCategorySlug,
+	normalizeEditedEntityRef,
 	normalizeViewConfigContract,
 } from '../editor-entity-contracts';
 
@@ -106,6 +107,43 @@ describe( 'editor-entity-contracts', () => {
 					value: 'header',
 				},
 			],
+		} );
+	} );
+
+	test( 'trims edited entity refs before accepting them', () => {
+		expect( normalizeEditedEntityRef( ' theme//home ' ) ).toBe(
+			'theme//home'
+		);
+		expect( normalizeEditedEntityRef( '   ' ) ).toBeNull();
+	} );
+
+	test( 'does not report fallback-only unknown post types as configured', () => {
+		expect(
+			buildPostTypeEntityContract( 'unknown_type', {} )
+		).toMatchObject( {
+			postType: 'unknown_type',
+			hasConfig: false,
+			titleField: {
+				id: 'title',
+				label: 'Title',
+			},
+		} );
+	} );
+
+	test( 'treats unknown post types with live view config as configured', () => {
+		expect(
+			buildPostTypeEntityContract( 'unknown_type', {
+				default_view: { titleField: 'headline' },
+				form: {
+					fields: [ { id: 'headline', label: 'Headline' } ],
+				},
+			} )
+		).toMatchObject( {
+			postType: 'unknown_type',
+			hasConfig: true,
+			defaultView: {
+				titleField: 'headline',
+			},
 		} );
 	} );
 
