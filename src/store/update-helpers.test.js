@@ -558,13 +558,40 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
-	test( 'getSuggestionAttributeUpdates drops binding-only suggestions when no bindable attributes are allowed', () => {
+	test( 'getSuggestionAttributeUpdates preserves unrelated metadata when bindings are disallowed', () => {
 		expect(
 			getSuggestionAttributeUpdates(
 				{
 					attributeUpdates: {
 						metadata: {
 							name: 'Hero CTA',
+							bindings: {
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+							},
+						},
+					},
+				},
+				{
+					bindableAttributes: [],
+					isInsideContentOnly: false,
+				}
+			)
+		).toEqual( {
+			metadata: {
+				name: 'Hero CTA',
+			},
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates drops binding-only suggestions when no bindable attributes are allowed', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						metadata: {
 							bindings: {
 								url: {
 									source: 'core/post-meta',
@@ -699,7 +726,7 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
-	test( 'sanitizeRecommendationsForContext drops binding-only suggestions when no bindable attributes are allowed', () => {
+	test( 'sanitizeRecommendationsForContext preserves non-binding metadata when bindings are disallowed', () => {
 		const recommendations = {
 			settings: [
 				{
@@ -720,7 +747,7 @@ describe( 'update helpers', () => {
 			styles: [],
 			block: [],
 			explanation:
-				'Unsupported bindings should not degrade into renames.',
+				'Unsupported bindings should not remove unrelated metadata.',
 		};
 
 		expect(
@@ -729,11 +756,20 @@ describe( 'update helpers', () => {
 				isInsideContentOnly: false,
 			} )
 		).toEqual( {
-			settings: [],
+			settings: [
+				{
+					label: 'Connect CTA fields',
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+						},
+					},
+				},
+			],
 			styles: [],
 			block: [],
 			explanation:
-				'Unsupported bindings should not degrade into renames.',
+				'Unsupported bindings should not remove unrelated metadata.',
 		} );
 	} );
 
@@ -763,7 +799,8 @@ describe( 'update helpers', () => {
 					},
 				},
 			],
-			explanation: 'Preserve structural advice, drop locked wrapper edits.',
+			explanation:
+				'Preserve structural advice, drop locked wrapper edits.',
 		};
 
 		expect(
@@ -869,11 +906,49 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
-	test( 'attributeSnapshotsMatch compares serialized snapshots for undo safety checks', () => {
+	test( 'attributeSnapshotsMatch compares structural snapshots for undo safety checks', () => {
 		expect(
 			attributeSnapshotsMatch(
 				{ content: 'Same', className: 'alpha' },
 				{ content: 'Same', className: 'alpha' }
+			)
+		).toBe( true );
+		expect(
+			attributeSnapshotsMatch(
+				{
+					metadata: {
+						name: 'Hero',
+						bindings: {
+							url: {
+								source: 'core/post-meta',
+								args: { key: 'cta_url' },
+							},
+						},
+					},
+					style: {
+						color: {
+							text: 'var(--wp--preset--color--contrast)',
+							background: 'var(--wp--preset--color--base)',
+						},
+					},
+				},
+				{
+					style: {
+						color: {
+							background: 'var(--wp--preset--color--base)',
+							text: 'var(--wp--preset--color--contrast)',
+						},
+					},
+					metadata: {
+						bindings: {
+							url: {
+								args: { key: 'cta_url' },
+								source: 'core/post-meta',
+							},
+						},
+						name: 'Hero',
+					},
+				}
 			)
 		).toBe( true );
 		expect(

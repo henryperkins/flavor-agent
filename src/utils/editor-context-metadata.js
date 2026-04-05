@@ -15,14 +15,17 @@ function humanizeBlockName( blockName = '' ) {
 		return 'Block';
 	}
 
-	const normalizedName = blockName.startsWith( 'core/' )
-		? blockName.slice( 5 )
+	const normalizedName = blockName.includes( '/' )
+		? blockName.split( '/' )[ 1 ]
 		: blockName;
 
 	return normalizedName
-		.split( '-' )
+		.split( /[-_]/ )
 		.filter( Boolean )
-		.map( ( segment ) => segment.charAt( 0 ).toUpperCase() + segment.slice( 1 ) )
+		.map(
+			( segment ) =>
+				segment.charAt( 0 ).toUpperCase() + segment.slice( 1 )
+		)
 		.join( ' ' );
 }
 

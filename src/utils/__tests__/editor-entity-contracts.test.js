@@ -1,4 +1,5 @@
 import {
+	buildPostTypeEntityContract,
 	getEditedPostTypeEntity,
 	getLockedViewOptions,
 	getRecommendedPatternCategorySlug,
@@ -56,6 +57,56 @@ describe( 'editor-entity-contracts', () => {
 				{ title: 'Recommended', slug: 'editor-picks' },
 			] )
 		).toBe( 'editor-picks' );
+	} );
+
+	test( 'builds a post-type contract from live view config data', () => {
+		expect(
+			buildPostTypeEntityContract( 'wp_template_part', {
+				default_view: { titleField: 'slug' },
+				view_list: [
+					{
+						title: 'Header',
+						slug: 'header',
+						view: {
+							filters: [
+								{
+									field: 'area',
+									value: 'header',
+									isLocked: true,
+								},
+							],
+						},
+					},
+				],
+				form: {
+					fields: [ { id: 'slug', label: 'Slug' } ],
+				},
+			} )
+		).toMatchObject( {
+			postType: 'wp_template_part',
+			titleField: {
+				id: 'slug',
+				label: 'Slug',
+			},
+			defaultView: {
+				titleField: 'slug',
+			},
+			viewList: [
+				expect.objectContaining( {
+					slug: 'header',
+				} ),
+			],
+			form: {
+				fields: [ { id: 'slug', label: 'Slug' } ],
+			},
+			templatePartAreaOptions: [
+				{
+					label: 'Header',
+					slug: 'header',
+					value: 'header',
+				},
+			],
+		} );
 	} );
 
 	test( 'resolves the active entity from core/editor before falling back to core/edit-site', () => {

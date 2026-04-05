@@ -78,12 +78,15 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `src/patterns/PatternRecommender.js`
 - `src/patterns/InserterBadge.js`
-- `src/patterns/inserter-badge-state.js`
-- `src/patterns/compat.js`
-- `src/patterns/pattern-settings.js`
-- `src/patterns/inserter-dom.js`
+- `src/patterns/inserter-badge-state.js` — badge state machine; see `docs/reference/shared-internals.md`
+- `src/patterns/recommendation-utils.js` — pattern metadata patching and badge reason extraction; see `docs/reference/shared-internals.md`
+- `src/patterns/compat.js` — re-export facade for pattern settings and inserter DOM; see `docs/reference/shared-internals.md`
+- `src/patterns/pattern-settings.js` — three-tier pattern API adapter; see `docs/reference/shared-internals.md`
+- `src/patterns/inserter-dom.js` — inserter DOM selectors and finders; see `docs/reference/shared-internals.md`
 - `src/utils/visible-patterns.js`
-- `src/utils/editor-entity-contracts.js`
+- `src/utils/editor-entity-contracts.js` — dual-store entity resolution and `usePostTypeEntityContract` hook; see `docs/reference/shared-internals.md`
+- `src/utils/template-types.js` — template slug normalization; see `docs/reference/shared-internals.md`
+- `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/PatternAbilities.php`

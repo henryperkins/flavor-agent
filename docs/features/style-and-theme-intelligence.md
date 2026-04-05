@@ -202,8 +202,14 @@ User opens the Site Editor Styles sidebar
 - `src/global-styles/GlobalStylesRecommender.js`
 - `src/style-book/StyleBookRecommender.js`
 - `src/utils/style-operations.js`
+- `src/context/theme-tokens.js` — design token extraction and execution contract builders; see `docs/reference/shared-internals.md`
+- `src/utils/editor-context-metadata.js` — viewport visibility summaries for LLM context; see `docs/reference/shared-internals.md`
+- `src/utils/template-types.js` — template slug normalization for scope derivation; see `docs/reference/shared-internals.md`
+- `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
+- `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
+- `src/components/AIReviewSection.js` — shared review-before-apply panel; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
-- `src/store/activity-history.js`
+- `src/store/activity-history.js` — scope resolution for Global Styles and Style Book; see `docs/reference/shared-internals.md`
 - `src/components/ActivitySessionBootstrap.js`
 - `src/components/AIActivitySection.js`
 - `inc/REST/Agent_Controller.php`

@@ -1,3 +1,4 @@
+import { useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
 
 const EMPTY_OBJECT = Object.freeze( {} );
@@ -18,7 +19,11 @@ const templateTitleField = Object.freeze( {
 const titleField = Object.freeze( { id: 'title', label: 'Title' } );
 
 function isPlainObject( value ) {
-	return Boolean( value ) && typeof value === 'object' && ! Array.isArray( value );
+	return (
+		Boolean( value ) &&
+		typeof value === 'object' &&
+		! Array.isArray( value )
+	);
 }
 
 function normalizePostType( postType ) {
@@ -39,9 +44,7 @@ export function normalizeEditedEntityRef( entityId ) {
 
 export function getEditedPostTypeEntity( select, expectedPostType = null ) {
 	const editor = select( 'core/editor' );
-	const currentPostType = normalizePostType(
-		editor?.getCurrentPostType?.()
-	);
+	const currentPostType = normalizePostType( editor?.getCurrentPostType?.() );
 
 	if ( currentPostType ) {
 		if ( expectedPostType && currentPostType !== expectedPostType ) {
@@ -209,7 +212,8 @@ export function getRecommendedPatternCategorySlug( viewList = [] ) {
 	}
 
 	const directSlugMatch = viewList.find(
-		( view ) => typeof view?.slug === 'string' && view.slug === 'recommended'
+		( view ) =>
+			typeof view?.slug === 'string' && view.slug === 'recommended'
 	);
 
 	if ( directSlugMatch ) {
@@ -227,39 +231,75 @@ export function getRecommendedPatternCategorySlug( viewList = [] ) {
 	return titleMatch?.slug || 'recommended';
 }
 
+export function buildPostTypeEntityContract(
+	postType,
+	viewConfigRecord = EMPTY_OBJECT
+) {
+	const normalizedPostType = normalizePostType( postType );
+	const viewConfig = normalizeViewConfigContract( viewConfigRecord );
+	const fields = getPostTypeFieldDefinitions( normalizedPostType );
+	const fieldMap = getPostTypeFieldMap( normalizedPostType );
+	const titleFieldId =
+		typeof viewConfig.defaultView?.titleField === 'string'
+			? viewConfig.defaultView.titleField
+			: fields[ 0 ]?.id || '';
+	const resolvedTitleField = titleFieldId
+		? fieldMap[ titleFieldId ] || null
+		: null;
+	const templatePartAreaOptions = getLockedViewOptions(
+		viewConfig.viewList,
+		'area'
+	);
+
+	return {
+		postType: normalizedPostType,
+		fields,
+		fieldMap,
+		titleField: resolvedTitleField,
+		defaultView: viewConfig.defaultView,
+		defaultLayouts: viewConfig.defaultLayouts,
+		viewList: viewConfig.viewList,
+		form: viewConfig.form,
+		hasConfig: normalizedPostType !== '' && fields.length > 0,
+		recommendedPatternCategory: getRecommendedPatternCategorySlug(
+			viewConfig.viewList
+		),
+		templatePartAreaOptions,
+		templatePartAreaLabels: buildOptionLabelMap( templatePartAreaOptions ),
+	};
+}
+
 export function usePostTypeEntityContract( postType ) {
 	const normalizedPostType = normalizePostType( postType );
+	const viewConfigRecord = useSelect(
+		( select ) => {
+			if ( ! normalizedPostType ) {
+				return EMPTY_OBJECT;
+			}
+
+			const coreSelect = select( 'core' );
+
+			if ( ! coreSelect ) {
+				return EMPTY_OBJECT;
+			}
+
+			return (
+				coreSelect.getPostType?.( normalizedPostType ) ||
+				coreSelect.getEntityRecord?.(
+					'root',
+					'postType',
+					normalizedPostType
+				) ||
+				EMPTY_OBJECT
+			);
+		},
+		[ normalizedPostType ]
+	);
 
 	return useMemo( () => {
-		const viewConfig = normalizeViewConfigContract( {} );
-		const fields = getPostTypeFieldDefinitions( normalizedPostType );
-		const fieldMap = getPostTypeFieldMap( normalizedPostType );
-		const titleFieldId =
-			typeof viewConfig.defaultView?.titleField === 'string'
-				? viewConfig.defaultView.titleField
-				: fields[ 0 ]?.id || '';
-		const titleField = titleFieldId ? fieldMap[ titleFieldId ] || null : null;
-		const templatePartAreaOptions = getLockedViewOptions(
-			viewConfig.viewList,
-			'area'
+		return buildPostTypeEntityContract(
+			normalizedPostType,
+			viewConfigRecord
 		);
-
-		return {
-			postType: normalizedPostType,
-			fields,
-			fieldMap,
-			titleField,
-			defaultView: viewConfig.defaultView,
-			defaultLayouts: viewConfig.defaultLayouts,
-			viewList: viewConfig.viewList,
-			form: viewConfig.form,
-			hasConfig: normalizedPostType !== '' && fields.length > 0,
-			recommendedPatternCategory:
-				getRecommendedPatternCategorySlug( viewConfig.viewList ),
-			templatePartAreaOptions,
-			templatePartAreaLabels: buildOptionLabelMap(
-				templatePartAreaOptions
-			),
-		};
-	}, [ normalizedPostType ] );
+	}, [ normalizedPostType, viewConfigRecord ] );
 }

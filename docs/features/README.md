@@ -14,6 +14,7 @@ Use these docs when you need exact answers for:
 1. `docs/FEATURE_SURFACE_MATRIX.md` - fast scan of all surfaces, conditions, and apply/undo support
 2. one of the surface docs in this directory - exact end-to-end behavior for that feature
 3. `docs/reference/abilities-and-routes.md` - exact ability and REST contracts
+4. `docs/reference/shared-internals.md` - cross-cutting store utilities, shared UI components, and context helpers referenced by multiple surfaces
 
 ## Surface Docs
 

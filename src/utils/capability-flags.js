@@ -158,10 +158,10 @@ export function getSurfaceCapability( surface, input = null ) {
 		? data.capabilities.surfaces[ structuredKey ]
 		: null;
 	const legacyFlagKey = LEGACY_FLAG_KEYS[ surface ];
-	const legacyAvailable =
-		typeof data?.[ legacyFlagKey ] === 'boolean'
-			? data[ legacyFlagKey ]
-			: true;
+	const hasLegacyAvailability = typeof data?.[ legacyFlagKey ] === 'boolean';
+	const legacyAvailable = hasLegacyAvailability
+		? data[ legacyFlagKey ]
+		: false;
 	const available =
 		typeof structuredCapability?.available === 'boolean'
 			? structuredCapability.available
@@ -175,7 +175,10 @@ export function getSurfaceCapability( surface, input = null ) {
 		reason = structuredCapability.reason;
 	} else if ( available ) {
 		reason = 'ready';
-	} else if ( surface === 'block' ) {
+	} else if (
+		surface === 'block' &&
+		( hasStructuredCapability || hasLegacyAvailability )
+	) {
 		reason = 'block_backend_unconfigured';
 	}
 

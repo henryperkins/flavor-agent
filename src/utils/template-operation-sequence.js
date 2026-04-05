@@ -41,6 +41,7 @@ function normalizeExpectedTarget( value ) {
 		return null;
 	}
 
+	const normalizedChildCount = Number( value.childCount );
 	const expectedTarget = {
 		name:
 			typeof value.name === 'string' && value.name.trim() !== ''
@@ -50,10 +51,14 @@ function normalizeExpectedTarget( value ) {
 			typeof value.label === 'string' && value.label.trim() !== ''
 				? value.label.trim()
 				: '',
-		childCount: Number.isInteger( Number( value.childCount ) )
-			? Number( value.childCount )
-			: 0,
 	};
+
+	if (
+		Number.isInteger( normalizedChildCount ) &&
+		normalizedChildCount >= 0
+	) {
+		expectedTarget.childCount = normalizedChildCount;
+	}
 
 	if ( value.attributes && typeof value.attributes === 'object' ) {
 		expectedTarget.attributes = Object.fromEntries(

@@ -69,6 +69,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Key Implementation Files
 
 - `src/inspector/NavigationRecommendations.js`
+- `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
+- `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
+- `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/NavigationAbilities.php`

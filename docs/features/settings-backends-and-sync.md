@@ -81,8 +81,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `inc/Settings.php`
 - `inc/OpenAI/Provider.php`
+- `inc/AzureOpenAI/ConfigurationValidator.php`
 - `inc/Abilities/InfraAbilities.php`
 - `inc/Abilities/WordPressDocsAbilities.php`
+- `inc/Abilities/SurfaceCapabilities.php` — shared surface readiness checks; see `docs/reference/shared-internals.md`
 - `inc/Patterns/PatternIndex.php`
+- `inc/Cloudflare/AISearchClient.php`
 - `src/admin/sync-button.js`
+- `src/utils/capability-flags.js` — client-side surface capability flag derivation; see `docs/reference/shared-internals.md`
 - `inc/REST/Agent_Controller.php`

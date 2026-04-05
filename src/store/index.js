@@ -36,6 +36,7 @@ import {
 	readPersistedActivityLog,
 	writePersistedActivityLog,
 } from './activity-history';
+import { resolveActivityBlock } from './block-targeting';
 import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
@@ -247,8 +248,14 @@ function attachRequestMetaToRecommendationPayload( payload = {} ) {
 
 	return {
 		...payload,
-		settings: attachRequestMetaToSuggestionList( payload.settings, requestMeta ),
-		styles: attachRequestMetaToSuggestionList( payload.styles, requestMeta ),
+		settings: attachRequestMetaToSuggestionList(
+			payload.settings,
+			requestMeta
+		),
+		styles: attachRequestMetaToSuggestionList(
+			payload.styles,
+			requestMeta
+		),
 		block: attachRequestMetaToSuggestionList( payload.block, requestMeta ),
 		suggestions: attachRequestMetaToSuggestionList(
 			payload.suggestions,
@@ -389,6 +396,10 @@ function getStyleBookHasResult( state ) {
 			( state.styleBookSuggestions.length > 0 ||
 				normalizeStringMessage( state.styleBookExplanation ) )
 	);
+}
+
+function getScopeKey( scope = null ) {
+	return normalizeStringMessage( scope?.scopeKey || scope?.key ) || null;
 }
 
 function getSurfaceStatusNotice( surface, options = {} ) {
@@ -559,12 +570,14 @@ function isStaleStyleBookRequest( state, requestToken ) {
 }
 
 function buildActivityDocument( scope ) {
-	if ( ! scope?.key ) {
+	const scopeKey = getScopeKey( scope );
+
+	if ( ! scopeKey ) {
 		return null;
 	}
 
 	return {
-		scopeKey: scope.key,
+		scopeKey,
 		postType: scope.postType,
 		entityId: scope.entityId,
 		entityKind: scope.entityKind || '',
@@ -597,7 +610,7 @@ function syncActivitySession(
 	{ allowUnsavedMigration = false } = {}
 ) {
 	const currentScopeKey = select.getActivityScopeKey?.() || null;
-	const nextScopeKey = scope?.key || null;
+	const nextScopeKey = getScopeKey( scope );
 
 	if ( currentScopeKey === nextScopeKey ) {
 		return select.getActivityLog?.() || [];
@@ -754,7 +767,7 @@ function scheduleActivitySessionReload( options = {} ) {
 		if ( typeof storeDispatch?.loadActivitySession === 'function' ) {
 			storeDispatch.loadActivitySession( {
 				...retryOptions,
-				...( retryScope?.key ? { scope: retryScope } : {} ),
+				...( getScopeKey( retryScope ) ? { scope: retryScope } : {} ),
 				retryIfScopeUnavailable: false,
 			} );
 		}
@@ -966,44 +979,6 @@ function findBlockPath( blocks, clientId, path = [] ) {
 	}
 
 	return null;
-}
-
-function getBlockByPath( blocks, path = [] ) {
-	let currentBlocks = blocks;
-	let block = null;
-
-	for ( const index of path ) {
-		if ( ! Array.isArray( currentBlocks ) ) {
-			return null;
-		}
-
-		block = currentBlocks[ index ] || null;
-
-		if ( ! block ) {
-			return null;
-		}
-
-		currentBlocks = block.innerBlocks || [];
-	}
-
-	return block;
-}
-
-function resolveActivityBlock( blockEditorSelect, target = {} ) {
-	if ( target.clientId ) {
-		const directBlock = blockEditorSelect.getBlock?.( target.clientId );
-
-		if ( directBlock ) {
-			return directBlock;
-		}
-	}
-
-	return Array.isArray( target.blockPath )
-		? getBlockByPath(
-				blockEditorSelect.getBlocks?.() || [],
-				target.blockPath
-		  )
-		: null;
 }
 
 function buildBlockActivityEntry( {
@@ -1327,16 +1302,31 @@ async function runAbortableRecommendationRequest( {
 	onSuccess,
 	select,
 } ) {
-	if ( actions[ abortKey ] ) {
-		actions[ abortKey ].abort();
-	}
-
-	const controller = new AbortController();
-	actions[ abortKey ] = controller;
 	const request = {
 		...( buildRequest( { input, select } ) || {} ),
 	};
+	const abortId =
+		request.abortId === null || request.abortId === undefined
+			? null
+			: String( request.abortId );
 	const requestData = request.requestData ?? input;
+	const controller = new AbortController();
+
+	if ( abortId === null ) {
+		if ( actions[ abortKey ] ) {
+			actions[ abortKey ].abort();
+		}
+
+		actions[ abortKey ] = controller;
+	} else {
+		const currentAbortControllers = isPlainObject( actions[ abortKey ] )
+			? actions[ abortKey ]
+			: {};
+
+		currentAbortControllers[ abortId ]?.abort?.();
+		currentAbortControllers[ abortId ] = controller;
+		actions[ abortKey ] = currentAbortControllers;
+	}
 
 	request.requestData = requestData;
 	onLoading?.( { dispatch, input, ...request } );
@@ -1367,8 +1357,20 @@ async function runAbortableRecommendationRequest( {
 			...request,
 		} );
 	} finally {
-		if ( actions[ abortKey ] === controller ) {
-			actions[ abortKey ] = null;
+		if ( abortId === null ) {
+			if ( actions[ abortKey ] === controller ) {
+				actions[ abortKey ] = null;
+			}
+		} else if ( isPlainObject( actions[ abortKey ] ) ) {
+			const currentAbortControllers = { ...actions[ abortKey ] };
+
+			if ( currentAbortControllers[ abortId ] === controller ) {
+				delete currentAbortControllers[ abortId ];
+				actions[ abortKey ] =
+					Object.keys( currentAbortControllers ).length > 0
+						? currentAbortControllers
+						: null;
+			}
 		}
 	}
 }
@@ -1399,7 +1401,13 @@ const actions = {
 	},
 
 	clearBlockRecommendations( clientId ) {
-		return { type: 'CLEAR_BLOCK_RECS', clientId };
+		return ( { dispatch } ) => {
+			if ( isPlainObject( actions._blockRecommendationAbort ) ) {
+				actions._blockRecommendationAbort[ clientId ]?.abort?.();
+			}
+
+			dispatch( { type: 'CLEAR_BLOCK_RECS', clientId } );
+		};
 	},
 
 	clearBlockError( clientId ) {
@@ -1453,7 +1461,7 @@ const actions = {
 			const requestToken = ( actions._activitySessionLoadToken || 0 ) + 1;
 			actions._activitySessionLoadToken = requestToken;
 			const scope = options?.scope || getCurrentActivityScope( registry );
-			const nextScopeKey = scope?.key || null;
+			const nextScopeKey = getScopeKey( scope );
 
 			if ( ! nextScopeKey ) {
 				if ( options?.retryIfScopeUnavailable !== false ) {
@@ -1523,64 +1531,126 @@ const actions = {
 	},
 
 	fetchBlockRecommendations( clientId, context, prompt = '' ) {
-		return async ( { dispatch, select } ) => {
-			const requestToken = select.getBlockRequestToken( clientId ) + 1;
-
-			dispatch(
-				actions.setBlockRequestState(
+		return ( { dispatch, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_blockRecommendationAbort',
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => ( {
+					abortId: requestInput?.clientId || null,
+					clientId: requestInput?.clientId || '',
+					requestData: {
+						editorContext: requestInput?.context || {},
+						prompt: requestInput?.prompt || '',
+						clientId: requestInput?.clientId || '',
+					},
+					requestToken:
+						( registrySelect.getBlockRequestToken?.(
+							requestInput?.clientId
+						) || 0 ) + 1,
+				} ),
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-block',
+				input: {
 					clientId,
-					'loading',
-					null,
-					requestToken
-				)
-			);
+					context,
+					prompt,
+				},
+				onError: ( {
+					clientId: requestClientId,
+					dispatch: localDispatch,
+					err,
+					requestData,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setBlockRecommendations(
+							requestClientId,
+							{
+								blockName:
+									requestData.editorContext?.block?.name ||
+									'',
+								blockContext:
+									requestData.editorContext?.block || {},
+								prompt: requestData.prompt || '',
+								settings: [],
+								styles: [],
+								block: [],
+								explanation: '',
+								requestMeta: null,
+								timestamp: Date.now(),
+							},
+							requestToken
+						)
+					);
+					localDispatch(
+						actions.setBlockRequestState(
+							requestClientId,
+							'error',
+							err?.message || 'Request failed.',
+							requestToken
+						)
+					);
+				},
+				onLoading: ( {
+					clientId: requestClientId,
+					dispatch: localDispatch,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setBlockRequestState(
+							requestClientId,
+							'loading',
+							null,
+							requestToken
+						)
+					);
+				},
+				onSuccess: ( {
+					clientId: requestClientId,
+					dispatch: localDispatch,
+					requestData,
+					requestToken,
+					result,
+				} ) => {
+					const payload = attachRequestMetaToRecommendationPayload(
+						result.payload || {}
+					);
 
-			try {
-				const result = await apiFetch( {
-					path: '/flavor-agent/v1/recommend-block',
-					method: 'POST',
-					data: { editorContext: context, prompt, clientId },
-				} );
-				const payload = attachRequestMetaToRecommendationPayload(
-					result.payload || {}
-				);
-
-				dispatch(
-					actions.setBlockRecommendations(
-						clientId,
-						{
-							blockName: context.block?.name || '',
-							blockContext: context.block || {},
-							prompt,
-							...sanitizeRecommendationsForContext(
-								payload,
-								context.block || {}
-							),
-							requestMeta: normalizeRequestMeta( payload.requestMeta ),
-							timestamp: Date.now(),
-						},
-						requestToken
-					)
-				);
-				dispatch(
-					actions.setBlockRequestState(
-						clientId,
-						'ready',
-						null,
-						requestToken
-					)
-				);
-			} catch ( err ) {
-				dispatch(
-					actions.setBlockRequestState(
-						clientId,
-						'error',
-						err.message || 'Request failed.',
-						requestToken
-					)
-				);
-			}
-		};
+					localDispatch(
+						actions.setBlockRecommendations(
+							requestClientId,
+							{
+								blockName:
+									requestData.editorContext?.block?.name ||
+									'',
+								blockContext:
+									requestData.editorContext?.block || {},
+								prompt: requestData.prompt || '',
+								...sanitizeRecommendationsForContext(
+									payload,
+									requestData.editorContext?.block || {}
+								),
+								requestMeta: normalizeRequestMeta(
+									payload.requestMeta
+								),
+								timestamp: Date.now(),
+							},
+							requestToken
+						)
+					);
+					localDispatch(
+						actions.setBlockRequestState(
+							requestClientId,
+							'ready',
+							null,
+							requestToken
+						)
+					);
+				},
+				select,
+			} );
 	},
 
 	applySuggestion( clientId, suggestion ) {
@@ -2104,7 +2174,7 @@ const actions = {
 
 			const scopeKey =
 				activity?.document?.scopeKey ||
-				scope?.key ||
+				getScopeKey( scope ) ||
 				select.getActivityScopeKey?.() ||
 				null;
 
@@ -3357,7 +3427,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				globalStylesSuggestions: action.payload?.suggestions ?? [],
 				globalStylesExplanation: action.payload?.explanation ?? '',
 				globalStylesRequestPrompt: action.prompt ?? '',
-				globalStylesScopeKey: action.scope?.scopeKey || null,
+				globalStylesScopeKey: getScopeKey( action.scope ),
 				globalStylesEntityId:
 					action.scope?.globalStylesId ||
 					action.scope?.entityId ||
@@ -3443,7 +3513,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				styleBookSuggestions: action.payload?.suggestions ?? [],
 				styleBookExplanation: action.payload?.explanation ?? '',
 				styleBookRequestPrompt: action.prompt ?? '',
-				styleBookScopeKey: action.scope?.scopeKey || null,
+				styleBookScopeKey: getScopeKey( action.scope ),
 				styleBookGlobalStylesId: action.scope?.globalStylesId || null,
 				styleBookBlockName: action.scope?.blockName || null,
 				styleBookBlockTitle: action.scope?.blockTitle || '',

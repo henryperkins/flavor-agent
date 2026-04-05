@@ -1,5 +1,6 @@
 import {
 	inferTemplatePartArea,
+	isTemplatePartSlugRegisteredForArea,
 	matchesTemplatePartArea,
 } from '../template-part-areas';
 
@@ -75,6 +76,24 @@ describe( 'template-part-areas', () => {
 					footer: 'footer',
 				}
 			)
+		).toBe( false );
+	} );
+
+	test( 'isTemplatePartSlugRegisteredForArea uses the same canonical slug resolver as inference', () => {
+		expect(
+			isTemplatePartSlugRegisteredForArea( 'header', 'header', {} )
+		).toBe( true );
+		expect(
+			isTemplatePartSlugRegisteredForArea(
+				'footer-newsletter',
+				'footer',
+				{
+					'footer-newsletter': 'footer',
+				}
+			)
+		).toBe( true );
+		expect(
+			isTemplatePartSlugRegisteredForArea( 'footer', 'header', {} )
 		).toBe( false );
 	} );
 } );

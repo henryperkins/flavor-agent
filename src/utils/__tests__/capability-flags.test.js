@@ -109,6 +109,17 @@ describe( 'capability-flags', () => {
 		} );
 	} );
 
+	test( 'fails closed when no structured or legacy capability data exists', () => {
+		window.flavorAgentData = {};
+
+		expect( getSurfaceCapability( 'template-part' ) ).toMatchObject( {
+			available: false,
+			reason: 'plugin_provider_unconfigured',
+			actionHref: '',
+			actions: [],
+		} );
+	} );
+
 	test( 'returns template-part settings guidance when the provider is unavailable', () => {
 		window.flavorAgentData = {
 			canRecommendTemplateParts: false,

@@ -160,7 +160,7 @@ Anchored template insertion is limited to validated top-level template paths gat
 |---|---|---|
 | UI shell | `TemplateRecommender()` in `src/templates/TemplateRecommender.js` | Renders the panel, entity links, preview flow, activity, and undo |
 | Input builder | `buildTemplateFetchInput()` in `src/templates/template-recommender-helpers.js` | Normalizes the request payload |
-| Context helpers | `buildEditorTemplateSlotSnapshot()` and `buildTemplateRecommendationContextSignature()` | Capture slot state and invalidation boundaries |
+| Context helpers | `buildEditorTemplateSlotSnapshot()` and `collectVisiblePatternNames()` | Capture slot state and invalidation boundaries |
 | Store request | `fetchTemplateRecommendations()` in `src/store/index.js` | Sends the recommendation request |
 | Store apply | `applyTemplateSuggestion()` in `src/store/index.js` | Runs deterministic apply and records activity |
 | Deterministic executor | `applyTemplateSuggestionOperations()` in `src/utils/template-actions.js` | Validates and executes the structured operation set |
@@ -181,7 +181,14 @@ Anchored template insertion is limited to validated top-level template paths gat
 - `src/utils/template-actions.js`
 - `src/utils/template-operation-sequence.js`
 - `src/utils/visible-patterns.js`
-- `src/utils/editor-entity-contracts.js`
+- `src/utils/editor-entity-contracts.js` — dual-store entity resolution and `usePostTypeEntityContract` hook; see `docs/reference/shared-internals.md`
+- `src/utils/editor-context-metadata.js` — pattern override and viewport visibility summaries; see `docs/reference/shared-internals.md`
+- `src/utils/template-part-areas.js` — template-part area resolution for slot state; see `docs/reference/shared-internals.md`
+- `src/utils/template-types.js` — template slug normalization; see `docs/reference/shared-internals.md`
+- `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
+- `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
+- `src/components/AIReviewSection.js` — shared review-before-apply panel; see `docs/reference/shared-internals.md`
+- `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/TemplateAbilities.php`

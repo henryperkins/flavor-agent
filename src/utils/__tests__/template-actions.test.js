@@ -120,6 +120,10 @@ function setupBlockEditor( {
 	canInsertBlockType = () => true,
 	allowedPatterns,
 	blockTypes = {},
+	validateBlocksToTemplate,
+	initialTemplateValidity = true,
+	template = null,
+	templateLock = false,
 } = {} ) {
 	const resolvedBlockTypes = {
 		'core/group': {
@@ -153,12 +157,16 @@ function setupBlockEditor( {
 		insertionPoint: cloneValue( insertionPoint ),
 		patterns: cloneValue( patterns ),
 	};
+	let templateValidity = initialTemplateValidity;
 
 	const blockEditorSelect = {
 		getBlocks: jest.fn( () => state.blocks ),
 		getBlock: jest.fn( ( clientId ) =>
 			findBlockByClientId( state.blocks, clientId )
 		),
+		getTemplate: jest.fn( () => template ),
+		getTemplateLock: jest.fn( () => templateLock ),
+		isValidTemplate: jest.fn( () => templateValidity ),
 		getSettings: jest.fn( () => ( {
 			__experimentalBlockPatterns: state.patterns,
 		} ) ),
@@ -189,11 +197,21 @@ function setupBlockEditor( {
 	const removeBlocks = jest.fn( ( clientIds ) => {
 		removeBlocksByClientIds( state.blocks, clientIds );
 	} );
+	const validateTemplate = jest.fn( ( nextBlocks ) => {
+		if ( typeof validateBlocksToTemplate === 'function' ) {
+			templateValidity = validateBlocksToTemplate(
+				cloneValue( nextBlocks )
+			);
+		}
+
+		return templateValidity;
+	} );
 	const blockEditorDispatch = {
 		updateBlockAttributes,
 		selectBlock,
 		insertBlocks,
 		removeBlocks,
+		validateBlocksToTemplate: validateTemplate,
 	};
 
 	mockRegistrySelect.mockImplementation( ( storeName ) =>
@@ -592,6 +610,46 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'prepareTemplateSuggestionOperations accepts built-in template-part area slugs without localized registry data', () => {
+		window.flavorAgentData = {
+			templatePartAreas: {},
+		};
+		setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'tp-1',
+					name: 'core/template-part',
+					attributes: {
+						area: 'header',
+					},
+					innerBlocks: [],
+				},
+			],
+		} );
+
+		const result = prepareTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'assign_template_part',
+					slug: 'header',
+					area: 'header',
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'assign_template_part',
+				clientId: 'tp-1',
+				nextAttributes: {
+					slug: 'header',
+					area: 'header',
+				},
+			} ),
+		] );
+	} );
+
 	test( 'normalizeBlockSnapshot serializes rich text attribute values to stable HTML strings', () => {
 		const snapshot = normalizeBlockSnapshot( {
 			clientId: 'rich-1',
@@ -772,6 +830,57 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'prepareTemplateSuggestionOperations does not require childCount when the anchored target has children', () => {
+		setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'existing-1', 'Intro' ),
+				{
+					clientId: 'group-1',
+					name: 'core/group',
+					attributes: {},
+					innerBlocks: [
+						createParagraphBlock( 'nested-1', 'Nested target' ),
+					],
+				},
+			],
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Inserted' ),
+		] );
+
+		const result = prepareTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					placement: 'before_block_path',
+					targetPath: [ 1 ],
+					expectedTarget: {
+						name: 'core/group',
+						label: 'Group',
+					},
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect( result.operations ).toEqual( [
+			expect.objectContaining( {
+				type: 'insert_pattern',
+				targetPath: [ 1 ],
+				targetBlockName: 'core/group',
+				index: 1,
+			} ),
+		] );
+	} );
+
 	test( 'applyTemplateSuggestionOperations records anchored template insertion metadata', () => {
 		const { blockEditorDispatch } = setupBlockEditor( {
 			blocks: [
@@ -844,6 +953,52 @@ describe( 'template-actions', () => {
 					),
 				],
 			},
+		] );
+	} );
+
+	test( 'applyTemplateSuggestionOperations rolls back when WordPress template validation fails', () => {
+		const { state, blockEditorDispatch } = setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Intro' ) ],
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
+				},
+			],
+			template: [ [ 'core/paragraph', {} ] ],
+			templateLock: 'all',
+			validateBlocksToTemplate: ( currentBlocks ) =>
+				currentBlocks.length === 1,
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Inserted' ),
+		] );
+
+		const result = applyTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					placement: 'start',
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Flavor Agent could not keep this document aligned with the current WordPress template constraints. The changes were reverted.',
+		} );
+		expect( blockEditorDispatch.insertBlocks ).toHaveBeenCalled();
+		expect(
+			blockEditorDispatch.validateBlocksToTemplate
+		).toHaveBeenCalled();
+		expect( blockEditorDispatch.removeBlocks ).toHaveBeenCalledWith(
+			[ 'pattern-1' ],
+			false
+		);
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Intro' ),
 		] );
 	} );
 
@@ -1361,8 +1516,7 @@ describe( 'template-actions', () => {
 
 		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'Pattern “Header Utility” could not be inserted into this template part.',
+			error: 'Pattern “Header Utility” could not be inserted into this template part.',
 		} );
 	} );
 

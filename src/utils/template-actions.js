@@ -30,6 +30,7 @@ import {
 import {
 	getTemplatePartAreaLookup,
 	inferTemplatePartArea,
+	isTemplatePartSlugRegisteredForArea,
 	matchesTemplatePartArea,
 } from './template-part-areas';
 
@@ -552,6 +553,42 @@ function getCurrentBlockSlice(
 	};
 }
 
+function validateTemplateDocumentState(
+	blockEditorDispatch = dispatch( blockEditorStore ),
+	blockEditorSelect = select( blockEditorStore )
+) {
+	const currentBlocks = blockEditorSelect?.getBlocks?.();
+	const validateBlocksToTemplate =
+		blockEditorDispatch?.validateBlocksToTemplate;
+	const readTemplateValidity = blockEditorSelect?.isValidTemplate;
+
+	if ( ! Array.isArray( currentBlocks ) ) {
+		return { ok: true };
+	}
+
+	let isValid = null;
+
+	if ( typeof validateBlocksToTemplate === 'function' ) {
+		isValid = validateBlocksToTemplate( currentBlocks );
+	}
+
+	if (
+		typeof isValid !== 'boolean' &&
+		typeof readTemplateValidity === 'function'
+	) {
+		isValid = readTemplateValidity();
+	}
+
+	if ( isValid === false ) {
+		return {
+			ok: false,
+			error: 'Flavor Agent could not keep this document aligned with the current WordPress template constraints. The changes were reverted.',
+		};
+	}
+
+	return { ok: true };
+}
+
 function buildTemplatePartWorkingState(
 	areaLookup = getTemplatePartAreaLookup(),
 	blockEditorSelect = select( blockEditorStore )
@@ -661,13 +698,7 @@ function validateTemplatePartSlugForArea(
 	area,
 	areaLookup = getTemplatePartAreaLookup()
 ) {
-	if ( ! slug || ! area ) {
-		return false;
-	}
-
-	const registeredArea = areaLookup?.[ slug ] || '';
-
-	return registeredArea !== '' && registeredArea === area;
+	return isTemplatePartSlugRegisteredForArea( slug, area, areaLookup );
 }
 
 function resolveInsertionPoint() {
@@ -1797,6 +1828,25 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 		}
 	}
 
+	const templateValidity = validateTemplateDocumentState(
+		blockEditorDispatch,
+		blockEditorSelect
+	);
+
+	if ( ! templateValidity.ok ) {
+		const rollback = undoTemplateSuggestionOperations( {
+			operations: appliedOperations,
+		} );
+
+		return {
+			ok: false,
+			error: rollback.ok
+				? templateValidity.error
+				: rollback.error ||
+				  `${ templateValidity.error } Flavor Agent could not restore the previous state automatically.`,
+		};
+	}
+
 	return {
 		ok: true,
 		operations: appliedOperations,
@@ -1864,7 +1914,9 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					return {
 						ok: false,
 						error: `Pattern “${
-							operation.patternTitle || operation.patternName || 'unknown'
+							operation.patternTitle ||
+							operation.patternName ||
+							'unknown'
 						}” could not be inserted into this template part.`,
 					};
 				}
@@ -2008,6 +2060,25 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 		}
 	}
 
+	const templateValidity = validateTemplateDocumentState(
+		getBlockEditorDispatch(),
+		blockEditorSelect
+	);
+
+	if ( ! templateValidity.ok ) {
+		const rollback = undoTemplatePartSuggestionOperations( {
+			operations: appliedOperations,
+		} );
+
+		return {
+			ok: false,
+			error: rollback.ok
+				? templateValidity.error
+				: rollback.error ||
+				  `${ templateValidity.error } Flavor Agent could not restore the previous state automatically.`,
+		};
+	}
+
 	return {
 		ok: true,
 		operations: appliedOperations,
@@ -2060,7 +2131,7 @@ export function resolveTemplatePartUndoTarget(
 
 	if ( ! block && expectedArea ) {
 		block = findTemplatePart( blocks, ( candidate ) =>
-			matchesTemplatePartArea( candidate, expectedArea )
+			matchesTemplatePartArea( candidate, expectedArea, areaLookup )
 		);
 	}
 

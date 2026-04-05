@@ -16,6 +16,52 @@ function isPlainObject( value ) {
 }
 
 /**
+ * @param {unknown} left  Left snapshot value.
+ * @param {unknown} right Right snapshot value.
+ * @return {boolean} Whether the snapshot values are structurally equal.
+ */
+function areSnapshotValuesEqual( left, right ) {
+	if ( Object.is( left, right ) ) {
+		return true;
+	}
+
+	if ( Array.isArray( left ) || Array.isArray( right ) ) {
+		if ( ! Array.isArray( left ) || ! Array.isArray( right ) ) {
+			return false;
+		}
+
+		if ( left.length !== right.length ) {
+			return false;
+		}
+
+		return left.every( ( value, index ) =>
+			areSnapshotValuesEqual( value, right[ index ] )
+		);
+	}
+
+	if ( isPlainObject( left ) || isPlainObject( right ) ) {
+		if ( ! isPlainObject( left ) || ! isPlainObject( right ) ) {
+			return false;
+		}
+
+		const leftKeys = Object.keys( left );
+		const rightKeys = Object.keys( right );
+
+		if ( leftKeys.length !== rightKeys.length ) {
+			return false;
+		}
+
+		return leftKeys.every(
+			( key ) =>
+				Object.prototype.hasOwnProperty.call( right, key ) &&
+				areSnapshotValuesEqual( left[ key ], right[ key ] )
+		);
+	}
+
+	return false;
+}
+
+/**
  * @param {Record<string, unknown>} currentValue Existing object value.
  * @param {Record<string, unknown>} nextValue    Incoming object value.
  * @return {Record<string, unknown>} Deeply merged object.
@@ -404,9 +450,7 @@ export function attributeSnapshotsMatch(
 	previousSnapshot = {},
 	currentSnapshot = {}
 ) {
-	return (
-		JSON.stringify( previousSnapshot ) === JSON.stringify( currentSnapshot )
-	);
+	return areSnapshotValuesEqual( previousSnapshot, currentSnapshot );
 }
 
 /**
@@ -474,8 +518,7 @@ function filterAttributeUpdatesForBindableAttributes(
 	if ( Object.keys( filteredBindings ).length > 0 ) {
 		nextMetadata.bindings = filteredBindings;
 	} else {
-		delete nextUpdates.metadata;
-		return nextUpdates;
+		delete nextMetadata.bindings;
 	}
 
 	if ( Object.keys( nextMetadata ).length > 0 ) {
@@ -585,8 +628,8 @@ export function sanitizeRecommendationsForContext(
 	blockContext = {}
 ) {
 	const normalized = normalizeSuggestionGroups( recommendations );
-	const normalizedBlockSuggestions = normalized.block.map(
-		( suggestion ) => normalizeBlockSuggestionForExecution( suggestion )
+	const normalizedBlockSuggestions = normalized.block.map( ( suggestion ) =>
+		normalizeBlockSuggestionForExecution( suggestion )
 	);
 	const restrictions = getEditingRestrictions( blockContext );
 	const bindableAttributeKeys = getBindableAttributeKeys( blockContext );
@@ -632,8 +675,8 @@ export function sanitizeRecommendationsForContext(
 			...bindingSafeRecommendations,
 			settings: [],
 			styles: [],
-			block: bindingSafeRecommendations.block.filter(
-				( suggestion ) => isAdvisoryOnlyBlockSuggestion( suggestion )
+			block: bindingSafeRecommendations.block.filter( ( suggestion ) =>
+				isAdvisoryOnlyBlockSuggestion( suggestion )
 			),
 		};
 	}

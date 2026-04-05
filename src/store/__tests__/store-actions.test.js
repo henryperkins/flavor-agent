@@ -35,6 +35,7 @@ describe( 'store action thunks', () => {
 		window.sessionStorage.clear();
 		actions._activitySessionLoadToken = 0;
 		actions._activitySessionRetryTimer = null;
+		actions._blockRecommendationAbort = null;
 		actions._navigationAbort = null;
 		actions._patternAbort = null;
 		actions._templateAbort = null;
@@ -171,6 +172,64 @@ describe( 'store action thunks', () => {
 				},
 				'Simplify the header menu.',
 				2
+			)
+		);
+	} );
+
+	test( 'fetchBlockRecommendations clears the current block payload before surfacing request errors', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network blew up.' ) );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const context = {
+			block: {
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Hello world',
+				},
+			},
+		};
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			context,
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setBlockRequestState( 'block-1', 'loading', null, 5 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					blockName: 'core/paragraph',
+					blockContext: context.block,
+					prompt: 'Tighten this copy.',
+					settings: [],
+					styles: [],
+					block: [],
+					explanation: '',
+					requestMeta: null,
+					timestamp: expect.any( Number ),
+				},
+				5
+			)
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			3,
+			actions.setBlockRequestState(
+				'block-1',
+				'error',
+				'Network blew up.',
+				5
 			)
 		);
 	} );
@@ -1081,7 +1140,7 @@ describe( 'store action thunks', () => {
 				dispatch: jest.fn( ( storeName ) =>
 					storeName === 'flavor-agent'
 						? {
-							loadActivitySession,
+								loadActivitySession,
 						  }
 						: {}
 				),

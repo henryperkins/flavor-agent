@@ -71,10 +71,13 @@ Navigation recommendations and pattern recommendations do not currently create F
 - `src/components/ActivitySessionBootstrap.js`
 - `src/components/AIActivitySection.js`
 - `src/store/index.js`
-- `src/store/activity-history.js`
+- `src/store/activity-history.js` — session cache/fallback layer, scope resolution, and undo-state resolution; see `docs/reference/shared-internals.md`
+- `src/store/update-helpers.js` — attribute snapshot comparison for block undo validation; see `docs/reference/shared-internals.md`
+- `src/store/block-targeting.js` — resolves activity targets by clientId or blockPath; see `docs/reference/shared-internals.md`
 - `src/admin/activity-log.js`
 - `src/admin/activity-log-utils.js`
 - `inc/Admin/ActivityPage.php`
 - `inc/Activity/Permissions.php`
 - `inc/Activity/Repository.php`
+- `inc/Activity/Serializer.php`
 - `inc/REST/Agent_Controller.php`

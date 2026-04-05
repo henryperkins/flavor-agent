@@ -45,7 +45,9 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `LLM\Prompt`                         | Block recommendation prompt assembly and response parsing                                                                                                              |
 | `LLM\TemplatePrompt`                 | Template recommendation prompt assembly and executable operation parsing                                                                                               |
 | `LLM\TemplatePartPrompt`             | Template-part recommendation prompt assembly and response parsing                                                                                                      |
-| `LLM\NavigationPrompt`               | Navigation recommendation prompt assembly and response parsing                                                                                                         |
+| `LLM\NavigationPrompt`               | Navigation recommendation prompt assembly and response parsing                                                                         |
+| `LLM\StylePrompt`                   | Style recommendation prompt assembly, operation parsing, and path validation                                                           |
+| `LLM\WritingPrompt`                 | Content recommendation prompt assembly (scaffold)                                                                                      |
 | `Context\ServerCollector`            | Gathers server-side block, template, template-part, navigation, and theme context                                                                                      |
 | `OpenAI\Provider`                    | Provider selection (Azure OpenAI vs OpenAI Native), credential fallback chain                                                                                          |
 | `AzureOpenAI\ConfigurationValidator` | Settings-time backend validation helpers                                                                                                                               |
@@ -60,7 +62,10 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `Abilities\TemplateAbilities`        | Template and template-part composition recommendation handlers                                                                                                         |
 | `Abilities\NavigationAbilities`      | Navigation structure recommendation handler                                                                                                                            |
 | `Abilities\WordPressDocsAbilities`   | WordPress developer docs search via Cloudflare AI Search                                                                                                               |
-| `Abilities\InfraAbilities`           | Theme token extraction and status check handlers                                                                                                                       |
+| `Abilities\InfraAbilities`           | Theme token extraction and status check handlers                                                                                       |
+| `Abilities\StyleAbilities`           | Global Styles and Style Book recommendation handlers                                                                                   |
+| `Abilities\ContentAbilities`         | Content recommendation handlers (scaffold)                                                                                             |
+| `Abilities\SurfaceCapabilities`      | Shared surface readiness checks and localized capability flag assembly                                                                 |
 | `Settings`                           | Admin settings page (provider selection, Azure/OpenAI Native/Qdrant/Cloudflare, validation, sync, diagnostics)                                                         |
 | `Support\StringArray`                | String array sanitization utility                                                                                                                                      |
 
@@ -71,6 +76,10 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `index.js`                                  | Entry: registers store, session bootstrap, Inspector filter, pattern/template/template-part plugins                           |
 | `components/ActivitySessionBootstrap.js`    | Reloads session-scoped AI activity when the edited entity changes                                                             |
 | `components/AIActivitySection.js`           | Shared recent-actions list with per-entry undo affordance                                                                     |
+| `components/CapabilityNotice.js`            | Backend-unavailable notice used by all seven recommendation surfaces                                                          |
+| `components/AIStatusNotice.js`              | Contextual status feedback (loading, error, success) used across all surfaces                                                 |
+| `components/AIAdvisorySection.js`           | Advisory-only suggestion section for non-executable recommendations                                                           |
+| `components/AIReviewSection.js`             | Review-before-apply confirmation panel for executable recommendations                                                         |
 | `inspector/InspectorInjector.js`            | `editor.BlockEdit` HOC — injects AI panels into all blocks                                                                    |
 | `inspector/SettingsRecommendations.js`      | Settings tab suggestions                                                                                                      |
 | `inspector/StylesRecommendations.js`        | Appearance tab suggestions + style variation pills                                                                            |
@@ -82,12 +91,15 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `store/index.js`                            | `@wordpress/data` store (`flavor-agent`) — recommendations, template apply, undo, activity persistence                        |
 | `store/activity-history.js`                 | Session-scoped AI activity schema and storage adapter                                                                         |
 | `store/update-helpers.js`                   | Attribute update and undo snapshot helpers                                                                                    |
+| `store/block-targeting.js`                  | Resolves activity targets by clientId or blockPath for undo                                                                   |
 | `patterns/PatternRecommender.js`            | Pattern recommendation fetch + inserter patching                                                                              |
 | `patterns/InserterBadge.js`                 | Inserter toggle badge for recommendation status                                                                               |
 | `patterns/compat.js`                        | Stable/experimental pattern API and DOM selector adapter (three-tier: stable, `__experimentalAdditional*`, `__experimental*`) |
 | `patterns/find-inserter-search-input.js`    | Re-export wrapper for backward compatibility                                                                                  |
 | `patterns/recommendation-utils.js`          | Pattern metadata patching and badge reason extraction                                                                         |
 | `patterns/inserter-badge-state.js`          | Badge state machine for recommendation status display                                                                         |
+| `patterns/pattern-settings.js`              | Three-tier pattern settings key resolution and pattern read/write                                                             |
+| `patterns/inserter-dom.js`                  | Inserter container, search input, and toggle DOM selectors and finders                                                        |
 | `templates/TemplateRecommender.js`          | Site Editor template preview/apply/undo panel                                                                                 |
 | `templates/template-recommender-helpers.js` | Template UI and operation view-model helpers                                                                                  |
 | `template-parts/TemplatePartRecommender.js` | Template-part-scoped AI recommendations panel                                                                                 |
@@ -98,6 +110,10 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `utils/template-types.js`                   | Template slug normalization per pattern templateTypes vocabulary                                                              |
 | `utils/pattern-names.js`                    | Extract distinct pattern names from collections                                                                               |
 | `utils/visible-patterns.js`                 | Get editor-visible pattern names for current context                                                                          |
+| `utils/editor-context-metadata.js`          | Pattern override and viewport visibility summaries for LLM context                                                            |
+| `utils/editor-entity-contracts.js`          | Dual-store entity resolution, post-type field definitions, and view contract hook                                             |
+| `utils/capability-flags.js`                 | Surface capability flag derivation from localized bootstrap data                                                              |
+| `utils/format-count.js`                     | Count formatting, humanization, and CSS class-name join micro-utilities                                                       |
 | `admin/sync-button.js`                      | Settings page: manual pattern index sync button                                                                               |
 | `admin/activity-log.js`                     | `Settings > AI Activity` DataViews/DataForm audit app                                                                         |
 | `admin/activity-log-utils.js`               | Activity-log formatting, filters, summary cards, and admin links                                                              |
@@ -150,6 +166,7 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
 - `docs/features/README.md` — entry point for detailed per-surface docs
 - `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
+- `docs/reference/shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers
 - `docs/flavor-agent-readme.md` — architecture companion and editor-flow reference
 - `docs/local-wordpress-ide.md` — local Docker/devcontainer workflow
 - `docs/2026-03-25-roadmap-aligned-execution-plan.md` — active forward plan

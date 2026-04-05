@@ -344,7 +344,6 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 - `inc/Abilities/InfraAbilities.php`
 - `inc/Abilities/SurfaceCapabilities.php`
 - `inc/REST/Agent_Controller.php`
-- `inc/LLM/StylePrompt.php`
 - `src/store/index.js`
 
 ## Contract Verification Checklist

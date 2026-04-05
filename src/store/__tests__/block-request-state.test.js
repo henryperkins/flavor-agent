@@ -9,6 +9,10 @@ jest.mock( '../../utils/template-actions', () => ( {
 import { actions, reducer, selectors } from '../index';
 
 describe( 'block request state', () => {
+	beforeEach( () => {
+		actions._blockRecommendationAbort = null;
+	} );
+
 	test( 'loading state is isolated per clientId', () => {
 		const state = reducer(
 			undefined,
@@ -103,10 +107,16 @@ describe( 'block request state', () => {
 				3
 			)
 		);
-		state = reducer(
-			state,
-			actions.clearBlockRecommendations( 'block-a' )
-		);
+		const abort = jest.fn();
+		const dispatch = jest.fn();
+
+		actions._blockRecommendationAbort = {
+			'block-a': {
+				abort,
+			},
+		};
+		actions.clearBlockRecommendations( 'block-a' )( { dispatch } );
+		state = reducer( state, dispatch.mock.calls[ 0 ][ 0 ] );
 
 		expect(
 			selectors.getBlockRecommendations( state, 'block-a' )
@@ -114,6 +124,57 @@ describe( 'block request state', () => {
 		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'idle' );
 		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
 		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 0 );
+		expect( abort ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'global styles and style book reducers accept scope.key as well as scope.scopeKey', () => {
+		let state = reducer(
+			undefined,
+			actions.setGlobalStylesRecommendations(
+				{
+					key: 'global_styles:17',
+					entityId: '17',
+				},
+				{
+					suggestions: [ { label: 'Use accent canvas' } ],
+					explanation: 'Editorial palette.',
+				},
+				'Make this feel more editorial.',
+				2
+			)
+		);
+
+		expect( selectors.getGlobalStylesScopeKey( state ) ).toBe(
+			'global_styles:17'
+		);
+		expect( selectors.getGlobalStylesInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
+
+		state = reducer(
+			state,
+			actions.setStyleBookRecommendations(
+				{
+					key: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				{
+					suggestions: [ { label: 'Tighten paragraph rhythm' } ],
+					explanation: 'Use a denser type rhythm.',
+				},
+				'Make this paragraph feel more editorial.',
+				3
+			)
+		);
+
+		expect( selectors.getStyleBookScopeKey( state ) ).toBe(
+			'style_book:17:core/paragraph'
+		);
+		expect( selectors.getStyleBookInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
 	} );
 
 	test( 'normalized block interaction state exposes advisory-ready and inline-apply semantics', () => {

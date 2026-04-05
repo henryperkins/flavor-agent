@@ -3,14 +3,37 @@
   "output": {
     "filePath": "output/flavor-agent-source-repomix.md",
     "style": "markdown",
-    "headerText": "Flavor Agent WordPress plugin source pack. This pack is limited to plugin source code only: the main bootstrap and uninstall PHP files, server-side PHP under inc/, and editor/admin source under src/, while excluding tests, docs, generated assets, and local tooling state.",
+    "headerText": "Flavor Agent WordPress plugin context pack. This pack combines the runtime source with the highest-signal repository context: build manifests, architecture docs, and contract references, while excluding tests, generated assets, dependency trees, local tooling state, and low-signal helper files.",
     "splitOutput": 2000000
   },
   "include": [
+    "CLAUDE.md",
+    "STATUS.md",
+    "package.json",
+    "composer.json",
+    "webpack.config.js",
     "flavor-agent.php",
     "uninstall.php",
+    "docs/README.md",
+    "docs/SOURCE_OF_TRUTH.md",
+    "docs/FEATURE_SURFACE_MATRIX.md",
+    "docs/flavor-agent-readme.md",
+    "docs/reference/**/*.md",
     "inc/**/*",
-    "src/**/*"
+    "src/*.js",
+    "src/*.css",
+    "src/admin/*.js",
+    "src/admin/*.css",
+    "src/components/*.js",
+    "src/context/*.js",
+    "src/global-styles/*.js",
+    "src/inspector/*.js",
+    "src/patterns/*.js",
+    "src/store/*.js",
+    "src/style-book/*.js",
+    "src/template-parts/*.js",
+    "src/templates/*.js",
+    "src/utils/*.js"
   ],
   "ignore": {
     "useGitignore": true,
@@ -32,9 +55,12 @@
       "src/**/__tests__/**",
       "src/**/*.test.*",
       "src/**/*.spec.*",
+      "src/admin/dataviews-runtime.css",
+      "src/admin/wpds-runtime.css",
+      "src/review/**",
       "src/test-utils/**",
-      "tmp/**",
       "tests/**",
+      "tmp/**",
       "vendor/**"
     ]
   },

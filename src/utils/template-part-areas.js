@@ -1,3 +1,13 @@
+const BUILTIN_TEMPLATE_PART_AREAS = Object.freeze( [
+	'header',
+	'footer',
+	'sidebar',
+] );
+
+function normalizeTemplatePartArea( value ) {
+	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
+}
+
 export function getTemplatePartAreaLookup() {
 	const localized =
 		typeof window !== 'undefined'
@@ -11,6 +21,31 @@ export function getTemplatePartAreaLookup() {
 	return localized;
 }
 
+export function resolveTemplatePartAreaFromSlug(
+	slug,
+	areaLookup = getTemplatePartAreaLookup()
+) {
+	const normalizedSlug = normalizeTemplatePartArea( slug );
+
+	if ( ! normalizedSlug ) {
+		return { area: '', source: '' };
+	}
+
+	const registeredArea = normalizeTemplatePartArea(
+		areaLookup?.[ normalizedSlug ]
+	);
+
+	if ( registeredArea ) {
+		return { area: registeredArea, source: 'registry' };
+	}
+
+	if ( BUILTIN_TEMPLATE_PART_AREAS.includes( normalizedSlug ) ) {
+		return { area: normalizedSlug, source: 'slug' };
+	}
+
+	return { area: '', source: '' };
+}
+
 export function resolveTemplatePartAreaEvidence(
 	attributes,
 	areaLookup = getTemplatePartAreaLookup()
@@ -19,22 +54,19 @@ export function resolveTemplatePartAreaEvidence(
 		return { area: '', source: '' };
 	}
 
-	if ( typeof attributes.area === 'string' && attributes.area !== '' ) {
-		return { area: attributes.area, source: 'explicit' };
+	const explicitArea = normalizeTemplatePartArea( attributes.area );
+
+	if ( explicitArea ) {
+		return { area: explicitArea, source: 'explicit' };
 	}
 
-	if ( typeof attributes.slug === 'string' && attributes.slug !== '' ) {
-		if ( typeof areaLookup?.[ attributes.slug ] === 'string' ) {
-			return { area: areaLookup[ attributes.slug ], source: 'registry' };
-		}
+	const slugArea = resolveTemplatePartAreaFromSlug(
+		attributes.slug,
+		areaLookup
+	);
 
-		if (
-			attributes.slug === 'header' ||
-			attributes.slug === 'footer' ||
-			attributes.slug === 'sidebar'
-		) {
-			return { area: attributes.slug, source: 'slug' };
-		}
+	if ( slugArea.area ) {
+		return slugArea;
 	}
 
 	if ( attributes.tagName === 'header' || attributes.tagName === 'footer' ) {
@@ -61,4 +93,21 @@ export function matchesTemplatePartArea(
 	areaLookup = getTemplatePartAreaLookup()
 ) {
 	return inferTemplatePartArea( block?.attributes, areaLookup ) === area;
+}
+
+export function isTemplatePartSlugRegisteredForArea(
+	slug,
+	area,
+	areaLookup = getTemplatePartAreaLookup()
+) {
+	const normalizedArea = normalizeTemplatePartArea( area );
+
+	if ( ! normalizedArea ) {
+		return false;
+	}
+
+	return (
+		resolveTemplatePartAreaFromSlug( slug, areaLookup ).area ===
+		normalizedArea
+	);
 }

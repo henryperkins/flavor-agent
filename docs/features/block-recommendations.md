@@ -216,8 +216,16 @@ User selects block + prompt
 - `src/inspector/SettingsRecommendations.js`
 - `src/inspector/StylesRecommendations.js`
 - `src/inspector/SuggestionChips.js`
+- `src/inspector/suggestion-keys.js`
 - `src/context/collector.js`
+- `src/context/block-inspector.js` — client-side block introspection (supports, attributes, styles); see `docs/reference/shared-internals.md`
+- `src/context/theme-tokens.js` — design token extraction for LLM context; see `docs/reference/shared-internals.md`
+- `src/utils/structural-identity.js` — block structural role inference for `structuralIdentity` context; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
+- `src/store/update-helpers.js` — safe attribute merging, undo patch construction, suggestion sanitization; see `docs/reference/shared-internals.md`
+- `src/store/block-targeting.js` — resolves activity targets by clientId or blockPath for undo; see `docs/reference/shared-internals.md`
+- `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
+- `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/BlockAbilities.php`
 - `inc/LLM/ChatClient.php`

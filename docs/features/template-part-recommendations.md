@@ -160,9 +160,14 @@ Replace and remove operations only stay executable when their `targetPath` is li
 - `src/template-parts/TemplatePartRecommender.js`
 - `src/utils/template-actions.js`
 - `src/utils/template-operation-sequence.js`
-- `src/utils/template-part-areas.js`
-- `src/utils/editor-entity-contracts.js`
+- `src/utils/template-part-areas.js` — four-tier template-part area resolution; see `docs/reference/shared-internals.md`
+- `src/utils/editor-entity-contracts.js` — dual-store entity resolution and `usePostTypeEntityContract` hook; see `docs/reference/shared-internals.md`
+- `src/utils/editor-context-metadata.js` — pattern override summaries; see `docs/reference/shared-internals.md`
 - `src/utils/visible-patterns.js`
+- `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
+- `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
+- `src/components/AIReviewSection.js` — shared review-before-apply panel; see `docs/reference/shared-internals.md`
+- `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/TemplateAbilities.php`
