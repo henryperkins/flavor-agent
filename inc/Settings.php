@@ -1545,6 +1545,7 @@ final class Settings {
 			return false;
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; the value is unslashed and sanitized immediately below.
 		$option_page = $_POST['option_page'] ?? null;
 
 		if ( ! is_string( $option_page ) ) {
@@ -1561,6 +1562,7 @@ final class Settings {
 			return Provider::normalize_provider( get_option( Provider::OPTION_NAME, Provider::AZURE ) );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; the value is unslashed before normalization.
 		$provider = $_POST[ Provider::OPTION_NAME ] ?? get_option( Provider::OPTION_NAME, Provider::AZURE );
 
 		if ( is_string( $provider ) ) {
@@ -1575,6 +1577,7 @@ final class Settings {
 			return true;
 		}
 
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- The nonce is unslashed and sanitized before verification.
 		$nonce = $_POST['_wpnonce'] ?? null;
 
 		if ( ! is_string( $nonce ) ) {
@@ -1595,6 +1598,7 @@ final class Settings {
 			return sanitize_text_field( $fallback );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; the value is unslashed and sanitized immediately below.
 		$value = $_POST[ $option_name ] ?? null;
 
 		if ( ! is_string( $value ) ) {
@@ -1611,6 +1615,7 @@ final class Settings {
 			return self::sanitize_url_value( $fallback );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; the value is unslashed and sanitized immediately below.
 		$value = $_POST[ $option_name ] ?? null;
 
 		if ( ! is_string( $value ) ) {

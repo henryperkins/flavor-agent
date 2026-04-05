@@ -234,6 +234,7 @@ final class StyleAbilities {
 			? self::supported_block_style_paths_from_manifest( $block_manifest )
 			: self::supported_style_paths();
 		$template_structure    = self::normalize_template_structure( $style_context['templateStructure'] ?? [] );
+		$template_visibility   = self::normalize_template_visibility( $style_context['templateVisibility'] ?? [] );
 		$context               = [
 			'currentConfig'         => $current_config,
 			'mergedConfig'          => $merged_config,
@@ -257,6 +258,10 @@ final class StyleAbilities {
 
 		if ( [] !== $template_structure ) {
 			$context['templateStructure'] = $template_structure;
+		}
+
+		if ( [] !== $template_visibility ) {
+			$context['templateVisibility'] = $template_visibility;
 		}
 
 		$block_manifest_context = self::normalize_block_manifest_context( $block_manifest );
@@ -765,6 +770,69 @@ final class StyleAbilities {
 		}
 
 		return $normalized;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_template_visibility( mixed $visibility ): array {
+		$visibility = self::normalize_map( $visibility );
+		$blocks     = [];
+
+		foreach ( self::normalize_list( $visibility['blocks'] ?? [] ) as $block ) {
+			$block = self::normalize_map( $block );
+			$path  = [];
+
+			foreach ( self::normalize_list( $block['path'] ?? [] ) as $segment ) {
+				if ( is_int( $segment ) || is_numeric( $segment ) ) {
+					$path[] = max( 0, (int) $segment );
+				}
+			}
+
+			$name = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+
+			if ( [] === $path || '' === $name ) {
+				continue;
+			}
+
+			$blocks[] = [
+				'path'             => $path,
+				'name'             => $name,
+				'label'            => sanitize_text_field( (string) ( $block['label'] ?? '' ) ),
+				'hiddenViewports'  => array_values(
+					array_unique(
+						array_filter(
+							array_map(
+								static fn( mixed $viewport ): string => is_string( $viewport )
+									? sanitize_key( $viewport )
+									: '',
+								self::normalize_list( $block['hiddenViewports'] ?? [] )
+							),
+							static fn( string $viewport ): bool => '' !== $viewport
+						)
+					)
+				),
+				'visibleViewports' => array_values(
+					array_unique(
+						array_filter(
+							array_map(
+								static fn( mixed $viewport ): string => is_string( $viewport )
+									? sanitize_key( $viewport )
+									: '',
+								self::normalize_list( $block['visibleViewports'] ?? [] )
+							),
+							static fn( string $viewport ): bool => '' !== $viewport
+						)
+					)
+				),
+			];
+		}
+
+		return [
+			'hasVisibilityRules' => ! empty( $visibility['hasVisibilityRules'] ) || [] !== $blocks,
+			'blockCount'         => [] !== $blocks ? count( $blocks ) : max( 0, (int) ( $visibility['blockCount'] ?? 0 ) ),
+			'blocks'             => $blocks,
+		];
 	}
 
 	/**

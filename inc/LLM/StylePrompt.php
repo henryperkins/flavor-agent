@@ -74,6 +74,8 @@ Return ONLY a JSON object with this exact shape:
 	- set_theme_variation MUST reference an Available variation by index and title.
 	- If a request cannot be executed safely, return an advisory suggestion with tone=advisory and an empty operations array.
 	- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented WordPress Global Styles capabilities or theme.json standards.
+	- When Viewport Visibility Constraints are provided, treat hidden-on-mobile or hidden-on-desktop blocks as conditional surfaces. Do not recommend styling them as the primary experience for viewports where they are hidden, and mention the constraint when it materially changes the advice.
+	- Do not invent viewport visibility constraints when none are listed.
 	- Prefer 1-4 suggestions.
 	- Keep labels under 60 characters and descriptions under 180 characters.
 SYSTEM;
@@ -87,6 +89,7 @@ SYSTEM;
 		$style_book_target  = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
 		$block_manifest     = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
 		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$template_visibility = is_array( $style_context['templateVisibility'] ?? null ) ? $style_context['templateVisibility'] : [];
 		$surface            = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
 		$sections           = [];
 
@@ -271,6 +274,10 @@ SYSTEM;
 			$sections[] = wp_json_encode( $template_structure );
 		}
 
+		$sections[] = '';
+		$sections[] = '## Viewport visibility constraints';
+		$sections[] = self::format_template_visibility_summary( $template_visibility );
+
 		if ( [] !== $docs_guidance ) {
 			$guidance_lines = [];
 
@@ -306,6 +313,89 @@ SYSTEM;
 			);
 
 		return implode( "\n", $sections );
+	}
+
+	/**
+	 * @param array<string, mixed> $summary
+	 */
+	private static function format_template_visibility_summary( array $summary ): string {
+		$blocks = is_array( $summary['blocks'] ?? null ) ? $summary['blocks'] : [];
+
+		if ( [] === $blocks ) {
+			return 'None detected.';
+		}
+
+		$lines = [];
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$label             = sanitize_text_field( (string) ( $block['label'] ?? ( $block['name'] ?? 'Block' ) ) );
+			$name              = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+			$path              = self::format_visibility_path( $block['path'] ?? null );
+			$hidden_viewports  = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['hiddenViewports'] ?? null ) ? $block['hiddenViewports'] : []
+					),
+					static fn( string $viewport ): bool => '' !== $viewport
+				)
+			);
+			$visible_viewports = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['visibleViewports'] ?? null ) ? $block['visibleViewports'] : []
+					),
+					static fn( string $viewport ): bool => '' !== $viewport
+				)
+			);
+			$details           = [];
+
+			if ( [] !== $hidden_viewports ) {
+				$details[] = 'hidden on `' . implode( '`, `', $hidden_viewports ) . '`';
+			}
+
+			if ( [] !== $visible_viewports ) {
+				$details[] = 'explicitly visible on `' . implode( '`, `', $visible_viewports ) . '`';
+			}
+
+			$line = '- ';
+
+			if ( '' !== $path ) {
+				$line .= "{$path} - ";
+			}
+
+			$line .= "`{$label}`";
+
+			if ( '' !== $name && $name !== $label ) {
+				$line .= " ({$name})";
+			}
+
+			if ( [] !== $details ) {
+				$line .= ': ' . implode( '; ', $details );
+			}
+
+			$lines[] = $line;
+		}
+
+		return [] !== $lines ? implode( "\n", $lines ) : 'None detected.';
+	}
+
+	private static function format_visibility_path( mixed $path ): string {
+		if ( ! is_array( $path ) || [] === $path ) {
+			return '';
+		}
+
+		$segments = array_map(
+			static fn( mixed $segment ): int => (int) $segment + 1,
+			$path
+		);
+
+		return 'Path ' . implode( ' > ', $segments );
 	}
 
 	public static function parse_response( string $raw, array $context ): array|\WP_Error {

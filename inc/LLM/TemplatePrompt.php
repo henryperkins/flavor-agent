@@ -85,8 +85,11 @@ Rules:
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Prioritize explicitly empty template-part placeholders before replacing existing assignments.
 - Respect the theme's design tokens when suggesting patterns.
+- When Current Pattern Override Blocks are listed, treat them as intentionally overridable content zones. Prefer recommendations that preserve or complement those boundaries, and mention the tradeoff if you suggest replacing around them.
+- When Current Viewport Visibility Constraints are listed, do not describe hidden-on-mobile or hidden-on-desktop blocks as primary placement for those viewports. Mention visibility constraints when they materially affect the recommendation.
 - If no candidate patterns are available, focus on template part composition and leave patternSuggestions as an empty array.
 - Do not invent new template-part areas when no Explicitly Empty Areas are listed.
+- Do not invent Pattern Overrides or viewport visibility constraints when none are listed.
 - Do not propose free-form template rewrites or raw block markup.
 - Return 1-3 suggestions. Each should be distinct and actionable.
 - Keep labels under 60 characters. Keep descriptions under 200 characters.
@@ -232,6 +235,18 @@ SYSTEM;
 			$sections[] = "## Executable Pattern Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors );
 		}
 
+		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null )
+			? $context['currentPatternOverrides']
+			: [];
+		$sections[]                = "## Current Pattern Override Blocks\n"
+			. self::format_current_pattern_overrides( $current_pattern_overrides );
+
+		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null )
+			? $context['currentViewportVisibility']
+			: [];
+		$sections[]                  = "## Current Viewport Visibility Constraints\n"
+			. self::format_current_viewport_visibility( $current_viewport_visibility );
+
 		$tokens = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
 		if ( ! empty( $tokens ) ) {
 			$token_lines = [];
@@ -278,6 +293,164 @@ SYSTEM;
 		$sections[]  = "## User Instruction\n{$instruction}";
 
 		return implode( "\n\n", $sections );
+	}
+
+	/**
+	 * @param array<string, mixed> $summary
+	 */
+	private static function format_current_pattern_overrides( array $summary ): string {
+		$blocks = is_array( $summary['blocks'] ?? null ) ? $summary['blocks'] : [];
+
+		if ( [] === $blocks ) {
+			return 'None detected.';
+		}
+
+		$lines = [];
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$label               = sanitize_text_field( (string) ( $block['label'] ?? ( $block['name'] ?? 'Block' ) ) );
+			$name                = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+			$path                = self::format_block_path( $block['path'] ?? null );
+			$override_attributes = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['overrideAttributes'] ?? null ) ? $block['overrideAttributes'] : []
+					),
+					static fn( string $attribute ): bool => '' !== $attribute
+				)
+			);
+			$details             = [];
+
+			if ( [] !== $override_attributes ) {
+				$details[] = 'overridable attributes: `' . implode( '`, `', $override_attributes ) . '`';
+			}
+
+			if ( ! empty( $block['usesDefaultBinding'] ) ) {
+				$details[] = 'uses default binding expansion';
+			}
+
+			$unsupported_attributes = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['unsupportedAttributes'] ?? null ) ? $block['unsupportedAttributes'] : []
+					),
+					static fn( string $attribute ): bool => '' !== $attribute
+				)
+			);
+
+			if ( [] !== $unsupported_attributes ) {
+				$details[] = 'unsupported binding keys: `' . implode( '`, `', $unsupported_attributes ) . '`';
+			}
+
+			$line = '- ';
+
+			if ( '' !== $path ) {
+				$line .= "{$path} - ";
+			}
+
+			$line .= "`{$label}`";
+
+			if ( '' !== $name && $name !== $label ) {
+				$line .= " ({$name})";
+			}
+
+			if ( [] !== $details ) {
+				$line .= ': ' . implode( '; ', $details );
+			}
+
+			$lines[] = $line;
+		}
+
+		return [] !== $lines ? implode( "\n", $lines ) : 'None detected.';
+	}
+
+	/**
+	 * @param array<string, mixed> $summary
+	 */
+	private static function format_current_viewport_visibility( array $summary ): string {
+		$blocks = is_array( $summary['blocks'] ?? null ) ? $summary['blocks'] : [];
+
+		if ( [] === $blocks ) {
+			return 'None detected.';
+		}
+
+		$lines = [];
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$label             = sanitize_text_field( (string) ( $block['label'] ?? ( $block['name'] ?? 'Block' ) ) );
+			$name              = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+			$path              = self::format_block_path( $block['path'] ?? null );
+			$hidden_viewports  = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['hiddenViewports'] ?? null ) ? $block['hiddenViewports'] : []
+					),
+					static fn( string $viewport ): bool => '' !== $viewport
+				)
+			);
+			$visible_viewports = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['visibleViewports'] ?? null ) ? $block['visibleViewports'] : []
+					),
+					static fn( string $viewport ): bool => '' !== $viewport
+				)
+			);
+			$details           = [];
+
+			if ( [] !== $hidden_viewports ) {
+				$details[] = 'hidden on `' . implode( '`, `', $hidden_viewports ) . '`';
+			}
+
+			if ( [] !== $visible_viewports ) {
+				$details[] = 'explicitly visible on `' . implode( '`, `', $visible_viewports ) . '`';
+			}
+
+			$line = '- ';
+
+			if ( '' !== $path ) {
+				$line .= "{$path} - ";
+			}
+
+			$line .= "`{$label}`";
+
+			if ( '' !== $name && $name !== $label ) {
+				$line .= " ({$name})";
+			}
+
+			if ( [] !== $details ) {
+				$line .= ': ' . implode( '; ', $details );
+			}
+
+			$lines[] = $line;
+		}
+
+		return [] !== $lines ? implode( "\n", $lines ) : 'None detected.';
+	}
+
+	private static function format_block_path( mixed $path ): string {
+		if ( ! is_array( $path ) || [] === $path ) {
+			return '';
+		}
+
+		$segments = array_map(
+			static fn( mixed $segment ): int => (int) $segment + 1,
+			$path
+		);
+
+		return 'Path ' . implode( ' > ', $segments );
 	}
 
 	/**

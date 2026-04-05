@@ -476,6 +476,10 @@ export default function TemplateRecommender() {
 			} ),
 		[ editorSlots, editorStructure, visiblePatternNames ]
 	);
+	const currentPatternOverrideCount =
+		editorStructure?.currentPatternOverrides?.blockCount || 0;
+	const currentVisibilityConstraintCount =
+		editorStructure?.currentViewportVisibility?.blockCount || 0;
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature
 	);
@@ -695,6 +699,24 @@ export default function TemplateRecommender() {
 						suggested template-part change or pattern insertion,
 						then confirm before Flavor Agent mutates the template.
 					</p>
+					<div className="flavor-agent-card__meta">
+						{ currentPatternOverrideCount > 0 && (
+							<span className="flavor-agent-pill">
+								{ formatCount(
+									currentPatternOverrideCount,
+									'override-ready block'
+								) }
+							</span>
+						) }
+						{ currentVisibilityConstraintCount > 0 && (
+							<span className="flavor-agent-pill">
+								{ formatCount(
+									currentVisibilityConstraintCount,
+									'viewport constraint'
+								) }
+							</span>
+						) }
+					</div>
 				</div>
 
 				{ ! canRecommend && <CapabilityNotice surface="template" /> }

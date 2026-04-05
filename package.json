@@ -11,6 +11,7 @@
     "build": "wp-scripts build",
     "start": "wp-scripts start",
     "lint:js": "wp-scripts lint-js src/",
+    "lint:plugin": "bash scripts/plugin-check.sh",
     "test:unit": "wp-scripts test-unit-js",
     "test:e2e": "npm run test:e2e:playground && npm run test:e2e:wp70",
     "test:e2e:playground": "playwright test",
@@ -23,7 +24,8 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
-    "@wordpress/scripts": "^30.0.0"
+    "@wordpress/scripts": "^30.0.0",
+    "repomix": "^1.13.1"
   },
   "dependencies": {
     "@wordpress/api-fetch": "^7.0.0",

@@ -434,6 +434,52 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertTrue( $result['structureStats']['hasTemplateParts'] );
 	}
 
+	public function test_for_template_collects_current_pattern_overrides_and_viewport_visibility(): void {
+		WordPressTestState::$block_templates['wp_template'][0]->content =
+			'<!-- wp:group {"metadata":{"blockVisibility":{"viewport":{"mobile":false,"desktop":true}}}} -->'
+			. '<div>'
+			. '<!-- wp:heading {"metadata":{"bindings":{"content":{"source":"core/pattern-overrides"}}}} --><h2>Hello</h2><!-- /wp:heading -->'
+			. '</div>'
+			. '<!-- /wp:group -->';
+
+		$result = ServerCollector::for_template( 'theme//home', 'home' );
+
+		$this->assertSame(
+			[
+				'hasOverrides' => true,
+				'blockCount'   => 1,
+				'blockNames'   => [ 'core/heading' ],
+				'blocks'       => [
+					[
+						'path'               => [ 0, 0 ],
+						'name'               => 'core/heading',
+						'label'              => 'Heading',
+						'overrideAttributes' => [ 'content' ],
+						'usesDefaultBinding' => false,
+						'bindableAttributes' => [ 'content' ],
+					],
+				],
+			],
+			$result['currentPatternOverrides']
+		);
+		$this->assertSame(
+			[
+				'hasVisibilityRules' => true,
+				'blockCount'         => 1,
+				'blocks'             => [
+					[
+						'path'             => [ 0 ],
+						'name'             => 'core/group',
+						'label'            => 'Group',
+						'hiddenViewports'  => [ 'mobile' ],
+						'visibleViewports' => [ 'desktop' ],
+					],
+				],
+			],
+			$result['currentViewportVisibility']
+		);
+	}
+
 	public function test_for_template_part_returns_summarized_block_tree_and_area_ranked_patterns(): void {
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:group {"tagName":"header","align":"wide"} -->'
@@ -610,6 +656,34 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertArrayNotHasKey( 'content', $result['patterns'][0] );
 		$this->assertContains( 'theme/generic-stack', $pattern_names );
 		$this->assertNotContains( 'theme/home-hero', $pattern_names );
+	}
+
+	public function test_for_template_part_collects_current_pattern_override_metadata(): void {
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:group -->'
+			. '<!-- wp:paragraph {"metadata":{"bindings":{"content":{"source":"core/pattern-overrides"}}}} --><p>Hello</p><!-- /wp:paragraph -->'
+			. '<!-- /wp:group -->';
+
+		$result = ServerCollector::for_template_part( 'theme//header' );
+
+		$this->assertSame(
+			[
+				'hasOverrides' => true,
+				'blockCount'   => 1,
+				'blockNames'   => [ 'core/paragraph' ],
+				'blocks'       => [
+					[
+						'path'               => [ 0, 0 ],
+						'name'               => 'core/paragraph',
+						'label'              => 'Paragraph',
+						'overrideAttributes' => [ 'content' ],
+						'usesDefaultBinding' => false,
+						'bindableAttributes' => [ 'content' ],
+					],
+				],
+			],
+			$result['currentPatternOverrides']
+		);
 	}
 
 	public function test_for_template_part_marks_locked_blocks_as_non_destructive_targets(): void {

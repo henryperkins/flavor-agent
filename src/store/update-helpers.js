@@ -1,5 +1,9 @@
 const NESTED_MERGE_KEYS = new Set( [ 'metadata', 'style' ] );
 const BANNED_TOP_LEVEL_ATTRIBUTE_KEYS = new Set( [ 'customCSS' ] );
+const ADVISORY_ONLY_BLOCK_SUGGESTION_TYPES = new Set( [
+	'structural_recommendation',
+	'pattern_replacement',
+] );
 
 /**
  * @param {unknown} value Candidate value.
@@ -204,6 +208,31 @@ function normalizeSuggestionGroups( recommendations ) {
 }
 
 /**
+ * @param {Object} suggestion Suggestion candidate.
+ * @return {boolean} Whether the block suggestion is advisory-only by type.
+ */
+function isAdvisoryOnlyBlockSuggestion( suggestion ) {
+	return ADVISORY_ONLY_BLOCK_SUGGESTION_TYPES.has( suggestion?.type );
+}
+
+/**
+ * Advisory-only block suggestions should never carry executable updates.
+ *
+ * @param {Object} suggestion Suggestion candidate.
+ * @return {Object} Normalized suggestion.
+ */
+function normalizeBlockSuggestionForExecution( suggestion ) {
+	if ( ! suggestion || ! isAdvisoryOnlyBlockSuggestion( suggestion ) ) {
+		return suggestion;
+	}
+
+	return {
+		...suggestion,
+		attributeUpdates: [],
+	};
+}
+
+/**
  * @param {Object} blockContext Context stored with a block recommendation set.
  * @return {string[]} Content attribute names.
  */
@@ -270,12 +299,22 @@ function getEditingRestrictions( blockContext ) {
  * @return {object|null} Filtered suggestion or null when no allowed updates remain.
  */
 function filterSuggestionForContentOnly( suggestion, contentAttributeKeys ) {
-	if ( ! suggestion || ! isPlainObject( suggestion.attributeUpdates ) ) {
+	const normalizedSuggestion =
+		normalizeBlockSuggestionForExecution( suggestion );
+
+	if ( isAdvisoryOnlyBlockSuggestion( normalizedSuggestion ) ) {
+		return normalizedSuggestion;
+	}
+
+	if (
+		! normalizedSuggestion ||
+		! isPlainObject( normalizedSuggestion.attributeUpdates )
+	) {
 		return null;
 	}
 
 	const filteredUpdates = filterAttributeUpdatesForContentOnly(
-		suggestion.attributeUpdates,
+		normalizedSuggestion.attributeUpdates,
 		contentAttributeKeys
 	);
 
@@ -284,7 +323,7 @@ function filterSuggestionForContentOnly( suggestion, contentAttributeKeys ) {
 	}
 
 	return {
-		...suggestion,
+		...normalizedSuggestion,
 		attributeUpdates: filteredUpdates,
 	};
 }
@@ -546,13 +585,18 @@ export function sanitizeRecommendationsForContext(
 	blockContext = {}
 ) {
 	const normalized = normalizeSuggestionGroups( recommendations );
+	const normalizedBlockSuggestions = normalized.block.map(
+		( suggestion ) => normalizeBlockSuggestionForExecution( suggestion )
+	);
 	const restrictions = getEditingRestrictions( blockContext );
 	const bindableAttributeKeys = getBindableAttributeKeys( blockContext );
 	const themeSafeRecommendations = {
 		...normalized,
 		settings: sanitizeSuggestionGroupForThemeSafety( normalized.settings ),
 		styles: sanitizeSuggestionGroupForThemeSafety( normalized.styles ),
-		block: sanitizeSuggestionGroupForThemeSafety( normalized.block ),
+		block: sanitizeSuggestionGroupForThemeSafety(
+			normalizedBlockSuggestions
+		),
 	};
 	const bindingSafeRecommendations = {
 		...themeSafeRecommendations,
@@ -588,7 +632,9 @@ export function sanitizeRecommendationsForContext(
 			...bindingSafeRecommendations,
 			settings: [],
 			styles: [],
-			block: [],
+			block: bindingSafeRecommendations.block.filter(
+				( suggestion ) => isAdvisoryOnlyBlockSuggestion( suggestion )
+			),
 		};
 	}
 
@@ -650,4 +696,28 @@ export function getSuggestionAttributeUpdates( suggestion, blockContext = {} ) {
 		bindingSafeUpdates,
 		getContentAttributeKeys( blockContext )
 	);
+}
+
+/**
+ * @param {Object} suggestion        Suggestion candidate.
+ * @param {Object} [blockContext={}] Block context used to enforce locking rules.
+ * @return {{ allowedUpdates: Object, isAdvisory: boolean, isAdvisoryOnly: boolean, isExecutable: boolean }}
+ * Block suggestion execution metadata.
+ */
+export function getBlockSuggestionExecutionInfo(
+	suggestion,
+	blockContext = {}
+) {
+	const advisoryOnly = isAdvisoryOnlyBlockSuggestion( suggestion );
+	const allowedUpdates = advisoryOnly
+		? {}
+		: getSuggestionAttributeUpdates( suggestion, blockContext );
+	const hasExecutableUpdates = Object.keys( allowedUpdates ).length > 0;
+
+	return {
+		allowedUpdates,
+		isAdvisory: advisoryOnly || ! hasExecutableUpdates,
+		isAdvisoryOnly: advisoryOnly,
+		isExecutable: ! advisoryOnly && hasExecutableUpdates,
+	};
 }

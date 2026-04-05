@@ -263,6 +263,10 @@ final class PatternAbilities {
 				'patternOverrides' => $c['payload']['patternOverrides'] ?? [
 					'hasOverrides' => false,
 				],
+				'overrideCapabilities' => self::build_override_capabilities(
+					is_array( $c['payload']['patternOverrides'] ?? null ) ? $c['payload']['patternOverrides'] : [],
+					is_array( $c['rankingHint'] ?? null ) ? $c['rankingHint'] : []
+				),
 				'rankingHints'  => self::prepare_candidate_ranking_hint_for_llm(
 					is_array( $c['rankingHint'] ?? null ) ? $c['rankingHint'] : []
 				),
@@ -325,6 +329,10 @@ final class PatternAbilities {
 				'patternOverrides' => $payload['patternOverrides'] ?? [
 					'hasOverrides' => false,
 				],
+				'overrideCapabilities' => self::build_override_capabilities(
+					is_array( $payload['patternOverrides'] ?? null ) ? $payload['patternOverrides'] : [],
+					$ranking_hint
+				),
 				'content'    => $payload['content'] ?? '',
 			];
 		}
@@ -506,6 +514,30 @@ SYSTEM;
 		}
 
 		return rtrim( $reason, ". \t\n\r\0\x0B" ) . '. ' . $hint;
+	}
+
+	/**
+	 * @param array<string, mixed> $pattern_overrides
+	 * @param array<string, mixed> $ranking_hint
+	 * @return array<string, mixed>
+	 */
+	private static function build_override_capabilities( array $pattern_overrides, array $ranking_hint ): array {
+		$override_attributes = is_array( $pattern_overrides['overrideAttributes'] ?? null )
+			? $pattern_overrides['overrideAttributes']
+			: [];
+		$unsupported_attributes = is_array( $pattern_overrides['unsupportedAttributes'] ?? null )
+			? $pattern_overrides['unsupportedAttributes']
+			: [];
+
+		return [
+			'hasPatternOverrides'     => ! empty( $pattern_overrides['hasOverrides'] ),
+			'overrideBlockCount'      => max( 0, (int) ( $pattern_overrides['blockCount'] ?? 0 ) ),
+			'usesDefaultBinding'      => ! empty( $pattern_overrides['usesDefaultBinding'] ),
+			'hasBindableOverrides'    => [] !== $override_attributes,
+			'hasUnsupportedOverrides' => [] !== $unsupported_attributes,
+			'matchesNearbyCustomBlock' => ! empty( $ranking_hint['matchesNearbyCustomBlock'] ),
+			'supportsCustomBlocks'    => ! empty( $ranking_hint['supportsCustomBlocks'] ),
+		];
 	}
 
 	/**

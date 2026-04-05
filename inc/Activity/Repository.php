@@ -80,7 +80,7 @@ final class Repository {
 		if ( function_exists( 'dbDelta' ) ) {
 			\dbDelta( $sql );
 		} else {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Internal schema definition for plugin-owned table.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Internal schema definition for a plugin-owned table; schema creation is not cacheable.
 			$wpdb->query( $sql );
 		}
 
@@ -146,6 +146,7 @@ final class Repository {
 			'created_at'         => Serializer::mysql_datetime_from_timestamp( $timestamp ),
 			'updated_at'         => Serializer::mysql_datetime_from_timestamp( $timestamp ),
 		];
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
 		$inserted  = $wpdb->insert( self::table_name(), $record );
 
 		if ( false === $inserted ) {
@@ -218,7 +219,7 @@ final class Repository {
 		}
 
 		$sql .= ' ORDER BY created_at DESC, id DESC LIMIT %d';
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Query targets the plugin-owned activity table and is prepared in the same call.
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
 		$rows = array_reverse( is_array( $rows ) ? $rows : [] );
 
@@ -364,6 +365,7 @@ final class Repository {
 			],
 			$timestamp
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
 		$updated = $wpdb->update(
 			self::table_name(),
 			[
@@ -415,6 +417,7 @@ final class Repository {
 		}
 
 		$table_name = self::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Deletes from the plugin-owned activity log table must execute immediately.
 		$deleted    = $wpdb->query(
 			$wpdb->prepare(
 				'DELETE FROM %i WHERE created_at < %s',
@@ -478,7 +481,7 @@ final class Repository {
 			$table_name,
 			$activity_id
 		);
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads from the plugin-owned activity table are prepared above and should bypass object caching.
 		$row = $wpdb->get_row( $sql, ARRAY_A );
 
 		return is_array( $row ) ? $row : null;
@@ -512,6 +515,7 @@ final class Repository {
 		$updated_timestamp = Serializer::normalize_timestamp(
 			$incoming_undo['updatedAt'] ?? $normalized['timestamp'] ?? null
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
 		$updated           = $wpdb->update(
 			self::table_name(),
 			[
@@ -561,7 +565,7 @@ final class Repository {
 			(string) ( $row['entity_type'] ?? '' ),
 			(string) ( $row['entity_ref'] ?? '' )
 		);
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared immediately above.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads from the plugin-owned activity table are prepared above and should bypass object caching.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		if ( ! is_array( $rows ) ) {
@@ -699,7 +703,7 @@ final class Repository {
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql built from allow-listed column names and %s/%d placeholders only.
 			$sql = $wpdb->prepare( $sql, $args );
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- When no args, query has no user input; when args present, prepared above.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Query reads the plugin-owned activity table; it is either static or prepared above.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		return array_values( is_array( $rows ) ? $rows : [] );
@@ -1854,6 +1858,7 @@ final class Repository {
 		}
 
 		$table_name = self::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Table existence checks read plugin-owned schema metadata directly.
 		$result     = $wpdb->get_var(
 			$wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name )
 		);

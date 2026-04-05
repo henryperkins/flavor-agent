@@ -104,6 +104,14 @@ final class RegistrationTest extends TestCase {
 		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
 		$this->assertTrue( (bool) ( $ability['meta']['mcp']['public'] ?? false ) );
 		$this->assertSame(
+			'Recommend editorial content',
+			$ability['label'] ?? null
+		);
+		$this->assertStringContainsString(
+			'blog posts, essays, and site copy',
+			(string) ( $ability['description'] ?? '' )
+		);
+		$this->assertSame(
 			'string',
 			$ability['input_schema']['properties']['mode']['type'] ?? null
 		);

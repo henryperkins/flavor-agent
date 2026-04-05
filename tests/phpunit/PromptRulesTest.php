@@ -153,6 +153,47 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( 'list', $result['settings'][0]['panel'] );
 	}
 
+	public function test_parse_response_keeps_advisory_block_suggestions_without_panel_and_strips_attribute_updates(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block'       => [
+						[
+							'label'            => 'Wrap this block in a Group',
+							'description'      => 'Use a Group parent to unlock spacing and background controls.',
+							'type'             => 'structural_recommendation',
+							'attributeUpdates' => [
+								'customCSS' => '.wp-block-group { color: red; }',
+							],
+						],
+					],
+					'explanation' => 'Structural advice should stay advisory.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Wrap this block in a Group',
+					'description'      => 'Use a Group parent to unlock spacing and background controls.',
+					'type'             => 'structural_recommendation',
+					'attributeUpdates' => [],
+					'currentValue'     => null,
+					'suggestedValue'   => null,
+					'isCurrentStyle'   => null,
+					'isRecommended'    => null,
+					'confidence'       => null,
+					'preview'          => null,
+					'presetSlug'       => null,
+					'cssVar'           => null,
+				],
+			],
+			$result['block']
+		);
+	}
+
 	public function test_enforce_block_context_rules_strips_unsupported_bindings_for_unlocked_blocks(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[
@@ -203,6 +244,128 @@ final class PromptRulesTest extends TestCase {
 				],
 			],
 			$result['settings']
+		);
+	}
+
+	public function test_enforce_block_context_rules_keeps_advisory_block_suggestions_when_bindable_attributes_are_present(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Wrap this block in a Group',
+						'type'             => 'structural_recommendation',
+						'attributeUpdates' => [],
+					],
+				],
+				'explanation' => 'Advisory structure guidance should survive binding filters.',
+			],
+			[
+				'bindableAttributes' => [ 'url' ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Wrap this block in a Group',
+					'type'             => 'structural_recommendation',
+					'attributeUpdates' => [],
+				],
+			],
+			$result['block']
+		);
+	}
+
+	public function test_enforce_block_context_rules_preserves_advisory_block_suggestions_in_content_only_mode(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Wrap this block in a Group',
+						'type'             => 'structural_recommendation',
+						'attributeUpdates' => [
+							'backgroundColor' => 'accent',
+						],
+					],
+					[
+						'label'            => 'Use accent background',
+						'type'             => 'attribute_change',
+						'attributeUpdates' => [
+							'backgroundColor' => 'accent',
+						],
+					],
+				],
+				'explanation' => 'Structural advice should survive locked wrapper edits.',
+			],
+			[
+				'editingMode'       => 'contentOnly',
+				'contentAttributes' => [
+					'content' => [
+						'role' => 'content',
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Wrap this block in a Group',
+					'type'             => 'structural_recommendation',
+					'attributeUpdates' => [],
+				],
+			],
+			$result['block']
+		);
+	}
+
+	public function test_enforce_block_context_rules_preserves_advisory_block_suggestions_for_supports_content_role_blocks_without_direct_content_attributes(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Replace with a richer pattern',
+						'type'             => 'pattern_replacement',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline',
+						],
+					],
+					[
+						'label'            => 'Change wrapper spacing',
+						'type'             => 'attribute_change',
+						'attributeUpdates' => [
+							'style' => [
+								'spacing' => [
+									'padding' => 'var(--wp--preset--spacing--40)',
+								],
+							],
+						],
+					],
+				],
+				'explanation' => 'Only advisory structure guidance should survive.',
+			],
+			[
+				'editingMode'         => 'contentOnly',
+				'supportsContentRole' => true,
+				'contentAttributes'   => [],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Replace with a richer pattern',
+					'type'             => 'pattern_replacement',
+					'attributeUpdates' => [],
+				],
+			],
+			$result['block']
 		);
 	}
 

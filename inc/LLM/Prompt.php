@@ -30,13 +30,30 @@ Respond with a JSON object (no markdown fences, no explanation outside the JSON)
   "explanation": "One sentence summary of your recommendations."
 }
 
-Each item in settings/styles/block is an object:
+Each item in settings/styles is an object:
 {
   "label": "Human-readable name (e.g. 'Use theme accent background')",
   "description": "Why this helps (one sentence)",
 	"panel": "Which Inspector panel: general|layout|position|advanced|bindings|list|color|filter|typography|dimensions|border|shadow|background",
-  "type": "Optional: attribute_change|style_variation",
-  "attributeUpdates": { "attributeName": "value" },
+	"type": "Optional: attribute_change|style_variation",
+	"attributeUpdates": { "attributeName": "value" },
+  "currentValue": "Optional: current value for before/after display",
+  "suggestedValue": "Optional: suggested value for before/after display",
+  "isCurrentStyle": "Optional boolean for style variation items",
+  "isRecommended": "Optional boolean for style variation items",
+  "confidence": 0.0-1.0,
+  "preview": "Optional: hex color for visual preview swatch",
+  "presetSlug": "Optional: theme preset slug being used",
+  "cssVar": "Optional: var(--wp--preset--color--accent)"
+}
+
+Each item in block is an object:
+{
+  "label": "Human-readable name",
+  "description": "Why this helps (one sentence)",
+	"type": "Optional: attribute_change|style_variation|structural_recommendation|pattern_replacement",
+	"attributeUpdates": { "attributeName": "value" },
+	"panel": "Optional for executable block items when helpful; omit it for advisory structural/pattern ideas",
   "currentValue": "Optional: current value for before/after display",
   "suggestedValue": "Optional: suggested value for before/after display",
   "isCurrentStyle": "Optional boolean for style variation items",
@@ -54,6 +71,10 @@ Rules:
 - Only suggest changes for panels listed in the block's inspectorPanels.
 - If inspectorPanels is an empty object or array, treat that as an explicit signal that no mapped Inspector panels are available — not that the field was omitted. Do not say the panels were not provided.
 - You may still suggest a registered style variation as a block-level "style_variation" item when styles are provided and one is clearly beneficial, even if inspectorPanels is empty.
+- When a block has little or no direct Inspector surface, you may use the block array for advisory suggestions about parent containers, structural composition, or replacing the block with a more suitable pattern.
+- Structural_recommendation and pattern_replacement block items are advisory-only. Omit panel for those items unless it materially clarifies the idea, and do not include attributeUpdates.
+- Advisory block suggestions must not invent executable attributeUpdates for ancestor blocks, wrappers, or replacement patterns. Only include attributeUpdates when the selected block's own local attributes can be changed safely.
+- If you need to suggest both a local selected-block mutation and a broader structural idea, emit two separate suggestions instead of combining them into one item.
 - Use "list" for List View tab suggestions.
 - When bindableAttributes are provided, only suggest metadata.bindings changes for those attribute names.
 - Only suggest preset values that exist in the provided themeTokens.
@@ -351,9 +372,9 @@ SYSTEM;
 		}
 
 		return [
-			'settings'    => self::validate_suggestions( $data['settings'] ?? [] ),
-			'styles'      => self::validate_suggestions( $data['styles'] ?? [] ),
-			'block'       => self::validate_suggestions( $data['block'] ?? [] ),
+			'settings'    => self::validate_suggestions( $data['settings'] ?? [], 'settings' ),
+			'styles'      => self::validate_suggestions( $data['styles'] ?? [], 'styles' ),
+			'block'       => self::validate_suggestions( $data['block'] ?? [], 'block' ),
 			'explanation' => sanitize_text_field( $data['explanation'] ?? '' ),
 		];
 	}
@@ -370,6 +391,7 @@ SYSTEM;
 			];
 		}
 
+		$payload = self::normalize_block_payload_for_execution( $payload );
 		$payload = self::filter_payload_for_bindable_attributes( $payload, $block );
 
 		if ( ! $restrictions['contentOnly'] ) {
@@ -377,6 +399,20 @@ SYSTEM;
 		}
 
 		$content_attribute_keys = array_keys( $block['contentAttributes'] ?? [] );
+
+		if ( self::uses_inner_blocks_as_content( $block ) ) {
+			return [
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => array_values(
+					array_filter(
+						$payload['block'] ?? [],
+						fn( array $suggestion ): bool => self::is_advisory_only_block_type( $suggestion['type'] ?? null )
+					)
+				),
+				'explanation' => $payload['explanation'] ?? '',
+			];
+		}
 
 		return [
 			'settings'    => [],
@@ -435,26 +471,40 @@ SYSTEM;
 		);
 	}
 
-	private static function validate_suggestions( array $suggestions ): array {
+	private static function validate_suggestions( array $suggestions, string $group ): array {
 		$valid = [];
 		foreach ( $suggestions as $s ) {
 			if ( ! is_array( $s ) || empty( $s['label'] ) ) {
 				continue;
 			}
 
+			$type                   = isset( $s['type'] ) ? sanitize_key( $s['type'] ) : null;
 			$has_executable_updates = is_array( $s['attributeUpdates'] ?? null ) && [] !== $s['attributeUpdates'];
 			$attribute_updates      = self::sanitize_attribute_updates( $s['attributeUpdates'] ?? [] );
-			$attribute_updates      = self::filter_unsafe_attribute_updates( $attribute_updates )['value'];
+			$is_advisory_block_type = 'block' === $group && self::is_advisory_only_block_type( $type );
+
+			if ( $is_advisory_block_type ) {
+				$has_executable_updates = false;
+				$attribute_updates      = [];
+			} else {
+				$attribute_updates = self::filter_unsafe_attribute_updates( $attribute_updates )['value'];
+			}
 
 			if ( $has_executable_updates && ( ! is_array( $attribute_updates ) || [] === $attribute_updates ) ) {
 				continue;
 			}
 
-			$valid[] = [
-				'label'            => sanitize_text_field( $s['label'] ),
-				'description'      => sanitize_text_field( $s['description'] ?? '' ),
-				'panel'            => self::normalize_panel_key( $s['panel'] ?? 'general' ),
-				'type'             => isset( $s['type'] ) ? sanitize_key( $s['type'] ) : null,
+			$normalized = [
+				'label'       => sanitize_text_field( $s['label'] ),
+				'description' => sanitize_text_field( $s['description'] ?? '' ),
+			];
+
+			if ( 'block' !== $group || array_key_exists( 'panel', $s ) ) {
+				$normalized['panel'] = self::normalize_panel_key( $s['panel'] ?? 'general' );
+			}
+
+			$normalized += [
+				'type'             => $type,
 				'attributeUpdates' => is_array( $attribute_updates ) ? $attribute_updates : [],
 				'currentValue'     => self::sanitize_display_value( $s['currentValue'] ?? null ),
 				'suggestedValue'   => self::sanitize_display_value( $s['suggestedValue'] ?? null ),
@@ -465,11 +515,19 @@ SYSTEM;
 				'presetSlug'       => isset( $s['presetSlug'] ) ? sanitize_key( $s['presetSlug'] ) : null,
 				'cssVar'           => isset( $s['cssVar'] ) ? sanitize_text_field( $s['cssVar'] ) : null,
 			];
+
+			$valid[] = $normalized;
 		}
 		return $valid;
 	}
 
 	private static function filter_suggestion_for_content_only( array $suggestion, array $content_attribute_keys ): ?array {
+		$suggestion = self::normalize_block_suggestion_for_execution( $suggestion );
+
+		if ( self::is_advisory_only_block_type( $suggestion['type'] ?? null ) ) {
+			return $suggestion;
+		}
+
 		if ( ! is_array( $suggestion['attributeUpdates'] ?? null ) ) {
 			return null;
 		}
@@ -491,11 +549,38 @@ SYSTEM;
 		return $suggestion;
 	}
 
+	private static function normalize_block_payload_for_execution( array $payload ): array {
+		$payload['block'] = array_values(
+			array_map(
+				fn( array $suggestion ): array => self::normalize_block_suggestion_for_execution( $suggestion ),
+				array_filter(
+					$payload['block'] ?? [],
+					'is_array'
+				)
+			)
+		);
+
+		return $payload;
+	}
+
+	private static function normalize_block_suggestion_for_execution( array $suggestion ): array {
+		if ( ! self::is_advisory_only_block_type( $suggestion['type'] ?? null ) ) {
+			return $suggestion;
+		}
+
+		$suggestion['attributeUpdates'] = [];
+
+		return $suggestion;
+	}
+
 	/**
 	 * @param string[] $bindable_attribute_keys
 	 */
 	private static function filter_suggestion_for_bindable_attributes( array $suggestion, array $bindable_attribute_keys ): ?array {
-		if ( ! is_array( $suggestion['attributeUpdates'] ?? null ) ) {
+		if (
+			! is_array( $suggestion['attributeUpdates'] ?? null ) ||
+			[] === $suggestion['attributeUpdates']
+		) {
 			return $suggestion;
 		}
 
@@ -579,6 +664,14 @@ SYSTEM;
 			'disabled'    => $editing_mode === 'disabled',
 			'contentOnly' => ! empty( $block['isInsideContentOnly'] ) || $editing_mode === 'contentOnly',
 		];
+	}
+
+	private static function uses_inner_blocks_as_content( array $block ): bool {
+		return ! empty( $block['supportsContentRole'] ) && empty( $block['contentAttributes'] );
+	}
+
+	private static function is_advisory_only_block_type( mixed $type ): bool {
+		return in_array( $type, [ 'structural_recommendation', 'pattern_replacement' ], true );
 	}
 
 	private static function normalize_editing_mode( mixed $value ): string {

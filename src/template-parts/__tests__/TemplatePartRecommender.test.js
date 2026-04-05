@@ -1,6 +1,7 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockGetBlockPatterns = jest.fn();
+const mockFetchTemplatePartRecommendations = jest.fn();
 const mockGetTemplatePartActivityUndoState = jest.fn(
 	( activity ) => activity?.undo || {}
 );
@@ -256,7 +257,7 @@ beforeEach( async () => {
 		applyTemplatePartSuggestion: jest.fn(),
 		clearTemplatePartRecommendations: jest.fn(),
 		clearUndoError: jest.fn(),
-		fetchTemplatePartRecommendations: jest.fn(),
+		fetchTemplatePartRecommendations: mockFetchTemplatePartRecommendations,
 		setTemplatePartSelectedSuggestion: jest.fn(),
 		undoActivity: mockUndoActivity,
 	} ) );
@@ -272,6 +273,86 @@ afterEach( async () => {
 } );
 
 describe( 'TemplatePartRecommender', () => {
+	test( 'submits live pattern override metadata with template-part requests', async () => {
+		currentState = createState( {
+			blockEditor: {
+				blocks: [
+					{
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [
+							{
+								name: 'core/navigation',
+								attributes: {
+									metadata: {
+										bindings: {
+											overlayMenu: {
+												source: 'core/pattern-overrides',
+											},
+										},
+									},
+								},
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		} );
+
+		await renderPanel();
+
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find( ( element ) => element.textContent === 'Get Suggestions' )
+				.click();
+		} );
+
+		expect( mockFetchTemplatePartRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				templatePartRef: 'theme//header',
+				editorStructure: {
+					currentPatternOverrides: {
+						hasOverrides: true,
+						blockCount: 1,
+						blockNames: [ 'core/navigation' ],
+						blocks: [
+							{
+								path: [ 0, 0 ],
+								name: 'core/navigation',
+								label: 'Navigation',
+								overrideAttributes: [ 'overlayMenu' ],
+								usesDefaultBinding: false,
+							},
+						],
+					},
+				},
+			} )
+		);
+	} );
+
+	test( 'handles template-part requests without live override metadata', async () => {
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find( ( element ) => element.textContent === 'Get Suggestions' )
+				.click();
+		} );
+
+		expect( mockFetchTemplatePartRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				templatePartRef: 'theme//header',
+				editorStructure: {
+					currentPatternOverrides: {
+						hasOverrides: false,
+						blockCount: 0,
+						blockNames: [],
+						blocks: [],
+					},
+				},
+			} )
+		);
+	} );
+
 	test( 'renders non-interactive preview tokens in the review overlay', async () => {
 		currentState = createState( {
 			store: {

@@ -2,6 +2,7 @@ import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
 	buildUndoAttributeUpdates,
+	getBlockSuggestionExecutionInfo,
 	getSuggestionAttributeUpdates,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
@@ -581,6 +582,33 @@ describe( 'update helpers', () => {
 		).toEqual( {} );
 	} );
 
+	test( 'getBlockSuggestionExecutionInfo keeps structural recommendations advisory even with safe local updates', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'structural_recommendation',
+					attributeUpdates: {
+						metadata: {
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+								},
+							},
+						},
+					},
+				},
+				{
+					isInsideContentOnly: false,
+				}
+			)
+		).toEqual( {
+			allowedUpdates: {},
+			isAdvisory: true,
+			isAdvisoryOnly: true,
+			isExecutable: false,
+		} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext preserves optional UI metadata for unlocked blocks', () => {
 		const recommendations = {
 			settings: [
@@ -706,6 +734,106 @@ describe( 'update helpers', () => {
 			block: [],
 			explanation:
 				'Unsupported bindings should not degrade into renames.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves advisory structural suggestions in contentOnly mode', () => {
+		const recommendations = {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Wrap this block in a Group',
+					type: 'structural_recommendation',
+					attributeUpdates: {
+						metadata: {
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+								},
+							},
+						},
+					},
+				},
+				{
+					label: 'Use accent background',
+					type: 'attribute_change',
+					attributeUpdates: {
+						backgroundColor: 'accent',
+					},
+				},
+			],
+			explanation: 'Preserve structural advice, drop locked wrapper edits.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, {
+				editingMode: 'contentOnly',
+				contentAttributes: {
+					content: {
+						role: 'content',
+					},
+				},
+			} )
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Wrap this block in a Group',
+					type: 'structural_recommendation',
+					attributeUpdates: [],
+				},
+			],
+			explanation:
+				'Preserve structural advice, drop locked wrapper edits.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves advisory structural suggestions for supportsContentRole blocks without direct content attributes', () => {
+		const recommendations = {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Wrap this block in a Group',
+					type: 'structural_recommendation',
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+				{
+					label: 'Change wrapper spacing',
+					type: 'attribute_change',
+					attributeUpdates: {
+						style: {
+							spacing: {
+								padding: 'var(--wp--preset--spacing--40)',
+							},
+						},
+					},
+				},
+			],
+			explanation: 'Only advisory structure guidance should survive.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, {
+				editingMode: 'contentOnly',
+				supportsContentRole: true,
+				contentAttributes: {},
+			} )
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Wrap this block in a Group',
+					type: 'structural_recommendation',
+					attributeUpdates: [],
+				},
+			],
+			explanation: 'Only advisory structure guidance should survive.',
 		} );
 	} );
 

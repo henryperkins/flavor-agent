@@ -83,6 +83,14 @@ final class TemplateAbilities {
 			);
 		}
 
+		if ( array_key_exists( 'currentPatternOverrides', $editor_structure ) ) {
+			$context['currentPatternOverrides'] = $editor_structure['currentPatternOverrides'];
+		}
+
+		if ( array_key_exists( 'currentViewportVisibility', $editor_structure ) ) {
+			$context['currentViewportVisibility'] = $editor_structure['currentViewportVisibility'];
+		}
+
 		$system = TemplatePrompt::build_system();
 		$user   = TemplatePrompt::build_user(
 			$context,
@@ -126,6 +134,12 @@ final class TemplateAbilities {
 		$context = ServerCollector::for_template_part( $template_part_ref, $visible_pattern_names );
 		if ( is_wp_error( $context ) ) {
 			return $context;
+		}
+
+		$editor_structure = self::normalize_editor_structure( $input['editorStructure'] ?? null );
+
+		if ( array_key_exists( 'currentPatternOverrides', $editor_structure ) ) {
+			$context['currentPatternOverrides'] = $editor_structure['currentPatternOverrides'];
 		}
 
 		$system = TemplatePartPrompt::build_system();
@@ -269,7 +283,142 @@ final class TemplateAbilities {
 			$result['topLevelBlockTree'] = $top_level_block_tree;
 		}
 
+		if ( array_key_exists( 'currentPatternOverrides', $input ) ) {
+			$result['currentPatternOverrides'] = self::normalize_pattern_override_summary(
+				$input['currentPatternOverrides']
+			);
+		}
+
+		if ( array_key_exists( 'currentViewportVisibility', $input ) ) {
+			$result['currentViewportVisibility'] = self::normalize_viewport_visibility_summary(
+				$input['currentViewportVisibility']
+			);
+		}
+
 		return $result;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_pattern_override_summary( mixed $input ): array {
+		$input = self::normalize_input( $input );
+
+		$blocks = [];
+
+		foreach ( is_array( $input['blocks'] ?? null ) ? $input['blocks'] : [] as $block ) {
+			$block = self::normalize_input( $block );
+			$path  = self::sanitize_block_path( $block['path'] ?? null );
+			$name  = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+
+			if ( null === $path || '' === $name ) {
+				continue;
+			}
+
+			$entry = [
+				'path'               => $path,
+				'name'               => $name,
+				'label'              => sanitize_text_field( (string) ( $block['label'] ?? '' ) ),
+				'overrideAttributes' => array_values(
+					array_unique(
+						array_map(
+							'sanitize_key',
+							StringArray::sanitize( $block['overrideAttributes'] ?? [] )
+						)
+					)
+				),
+				'usesDefaultBinding' => ! empty( $block['usesDefaultBinding'] ),
+			];
+
+			$bindable_attributes = array_values(
+				array_unique(
+					array_map(
+						'sanitize_key',
+						StringArray::sanitize( $block['bindableAttributes'] ?? [] )
+					)
+				)
+			);
+
+			if ( [] !== $bindable_attributes ) {
+				$entry['bindableAttributes'] = $bindable_attributes;
+			}
+
+			$unsupported_attributes = array_values(
+				array_unique(
+					array_map(
+						'sanitize_key',
+						StringArray::sanitize( $block['unsupportedAttributes'] ?? [] )
+					)
+				)
+			);
+
+			if ( [] !== $unsupported_attributes ) {
+				$entry['unsupportedAttributes'] = $unsupported_attributes;
+			}
+
+			$blocks[] = $entry;
+		}
+
+		return [
+			'hasOverrides' => ! empty( $input['hasOverrides'] ) || [] !== $blocks,
+			'blockCount'   => [] !== $blocks ? count( $blocks ) : max( 0, (int) ( $input['blockCount'] ?? 0 ) ),
+			'blockNames'   => array_values(
+				array_unique(
+					array_map(
+						'sanitize_text_field',
+						StringArray::sanitize( $input['blockNames'] ?? array_column( $blocks, 'name' ) )
+					)
+				)
+			),
+			'blocks'       => $blocks,
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_viewport_visibility_summary( mixed $input ): array {
+		$input = self::normalize_input( $input );
+
+		$blocks = [];
+
+		foreach ( is_array( $input['blocks'] ?? null ) ? $input['blocks'] : [] as $block ) {
+			$block = self::normalize_input( $block );
+			$path  = self::sanitize_block_path( $block['path'] ?? null );
+			$name  = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+
+			if ( null === $path || '' === $name ) {
+				continue;
+			}
+
+			$blocks[] = [
+				'path'             => $path,
+				'name'             => $name,
+				'label'            => sanitize_text_field( (string) ( $block['label'] ?? '' ) ),
+				'hiddenViewports'  => array_values(
+					array_unique(
+						array_map(
+							'sanitize_key',
+							StringArray::sanitize( $block['hiddenViewports'] ?? [] )
+						)
+					)
+				),
+				'visibleViewports' => array_values(
+					array_unique(
+						array_map(
+							'sanitize_key',
+							StringArray::sanitize( $block['visibleViewports'] ?? [] )
+						)
+					)
+				),
+			];
+		}
+
+		return [
+			'hasVisibilityRules' => ! empty( $input['hasVisibilityRules'] ) || [] !== $blocks,
+			'blockCount'         => [] !== $blocks ? count( $blocks ) : max( 0, (int) ( $input['blockCount'] ?? 0 ) ),
+			'blocks'             => $blocks,
+		];
 	}
 
 	/**

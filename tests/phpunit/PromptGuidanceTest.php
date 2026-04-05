@@ -159,6 +159,26 @@ final class PromptGuidanceTest extends TestCase {
 			'Do not say the panels were not provided.',
 			$prompt
 		);
+		$this->assertStringContainsString(
+			'structural_recommendation|pattern_replacement',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'parent containers, structural composition, or replacing the block with a more suitable pattern',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Only include attributeUpdates when the selected block\'s own local attributes can be changed safely.',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'Optional for executable block items when helpful; omit it for advisory structural/pattern ideas',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'emit two separate suggestions instead of combining them into one item',
+			$prompt
+		);
 	}
 
 	public function test_block_prompt_reports_explicitly_empty_available_panels(): void {

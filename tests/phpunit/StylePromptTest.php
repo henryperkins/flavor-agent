@@ -216,6 +216,33 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( 'Global styles reference: Use theme.json preset families for color and typography changes.', $prompt );
 	}
 
+	public function test_build_user_includes_template_visibility_constraints(): void {
+		$context                                     = $this->build_context();
+		$context['styleContext']['templateVisibility'] = [
+			'hasVisibilityRules' => true,
+			'blockCount'         => 1,
+			'blocks'             => [
+				[
+					'path'             => [ 1, 0 ],
+					'name'             => 'core/query-title',
+					'label'            => 'Query Title',
+					'hiddenViewports'  => [ 'mobile' ],
+					'visibleViewports' => [ 'desktop' ],
+				],
+			],
+		];
+
+		$prompt = StylePrompt::build_user(
+			$context,
+			'Keep the archive title feeling deliberate.'
+		);
+
+		$this->assertStringContainsString( '## Viewport visibility constraints', $prompt );
+		$this->assertStringContainsString( 'Path 2 > 1 - `Query Title`', $prompt );
+		$this->assertStringContainsString( 'hidden on `mobile`', $prompt );
+		$this->assertStringContainsString( 'explicitly visible on `desktop`', $prompt );
+	}
+
 	public function test_parse_response_filters_unsafe_style_operations(): void {
 		$result = StylePrompt::parse_response(
 			wp_json_encode(

@@ -170,6 +170,12 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
 					],
+					'editorStructure'     => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 				],
 			]
 		);
@@ -801,6 +807,11 @@ final class Agent_Controller {
 			$input['visiblePatternNames'] = self::sanitize_string_array(
 				$request->get_param( 'visiblePatternNames' )
 			);
+		}
+
+		$editor_structure = $request->get_param( 'editorStructure' );
+		if ( is_array( $editor_structure ) || is_object( $editor_structure ) ) {
+			$input['editorStructure'] = self::sanitize_structured_value( $editor_structure );
 		}
 
 		$result = TemplateAbilities::recommend_template_part( $input );

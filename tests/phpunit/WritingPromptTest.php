@@ -9,6 +9,15 @@ use PHPUnit\Framework\TestCase;
 
 final class WritingPromptTest extends TestCase {
 
+	public function test_build_system_uses_updated_henry_voice_prompt(): void {
+		$prompt = WritingPrompt::build_system();
+
+		$this->assertStringContainsString( 'blog posts, essays, and site copy', $prompt );
+		$this->assertStringContainsString( 'Preserve truth and specificity.', $prompt );
+		$this->assertStringContainsString( 'The tools change. The instinct doesn\'t.', $prompt );
+		$this->assertStringContainsString( 'ask concise follow-up questions instead of inventing details', $prompt );
+	}
+
 	public function test_build_user_includes_voice_notes_and_existing_draft(): void {
 		$prompt = WritingPrompt::build_user(
 			[
@@ -30,6 +39,20 @@ final class WritingPromptTest extends TestCase {
 		$this->assertStringContainsString( '## Existing draft', $prompt );
 		$this->assertStringContainsString( 'This is the existing draft.', $prompt );
 		$this->assertStringContainsString( 'Tags: ai, WordPress', $prompt );
+	}
+
+	public function test_build_user_defaults_to_requested_piece_instruction(): void {
+		$prompt = WritingPrompt::build_user(
+			[
+				'mode'        => 'draft',
+				'postContext' => [
+					'title' => 'Draft title',
+				],
+			]
+		);
+
+		$this->assertStringContainsString( '## User instruction', $prompt );
+		$this->assertStringContainsString( 'Draft the requested piece in Henry\'s voice.', $prompt );
 	}
 
 	public function test_parse_response_accepts_fenced_json_and_sanitizes_issues(): void {

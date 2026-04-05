@@ -143,6 +143,9 @@ const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 const {
 	buildGlobalStylesRecommendationContextSignature,
 } = require( '../../utils/style-operations' );
+const {
+	collectViewportVisibilitySummary,
+} = require( '../../utils/editor-context-metadata' );
 
 import GlobalStylesRecommender from '../GlobalStylesRecommender';
 
@@ -261,6 +264,9 @@ function buildContextSignature(
 		mergedConfig: globalStylesData.mergedConfig,
 		availableVariations: globalStylesData.variations,
 		templateStructure: buildExpectedTemplateStructure(),
+		templateVisibility: collectViewportVisibilitySummary(
+			currentEditedBlocks
+		),
 		themeTokenDiagnostics,
 		executionContract,
 	} );
@@ -511,6 +517,11 @@ describe( 'GlobalStylesRecommender', () => {
 					},
 					availableVariations: expect.any( Array ),
 					templateStructure: buildExpectedTemplateStructure(),
+					templateVisibility: {
+						hasVisibilityRules: false,
+						blockCount: 0,
+						blocks: [],
+					},
 					themeTokenDiagnostics: {
 						source: 'stable',
 						settingsKey: 'features',
@@ -547,6 +558,11 @@ describe( 'GlobalStylesRecommender', () => {
 				styleContext: expect.objectContaining( {
 					availableVariations: expect.any( Array ),
 					templateStructure: buildExpectedTemplateStructure(),
+					templateVisibility: {
+						hasVisibilityRules: false,
+						blockCount: 0,
+						blocks: [],
+					},
 					themeTokenDiagnostics: {
 						source: 'stable',
 						settingsKey: 'features',
@@ -753,6 +769,75 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( sidebar.textContent ).not.toContain(
 			'Prefer accent palette values.'
 		);
+	} );
+
+	test( 'clears stale results after template viewport visibility changes', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Prefer accent palette values.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+
+		currentEditedBlocks = [
+			{
+				name: 'core/template-part',
+				attributes: {
+					metadata: {
+						blockVisibility: {
+							viewport: {
+								mobile: false,
+								desktop: true,
+							},
+						},
+					},
+				},
+				innerBlocks: [
+					{
+						name: 'core/site-title',
+						innerBlocks: [],
+					},
+				],
+			},
+			{
+				name: 'core/group',
+				innerBlocks: [
+					{
+						name: 'core/query-title',
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
+			1
+		);
+		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
 	} );
 
 	test( 'clears stale results after block editor settings change the theme token diagnostics', () => {

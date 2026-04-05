@@ -72,6 +72,10 @@ final class ContentAbilitiesTest extends TestCase {
 			WordPressTestState::$last_ai_client_prompt['system'] ?? ''
 		);
 		$this->assertStringContainsString(
+			'blog posts, essays, and site copy',
+			WordPressTestState::$last_ai_client_prompt['system'] ?? ''
+		);
+		$this->assertStringContainsString(
 			'Technology is rapidly evolving.',
 			WordPressTestState::$last_ai_client_prompt['text'] ?? ''
 		);

@@ -19,6 +19,7 @@ import {
 	buildGlobalStylesExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
 } from '../context/theme-tokens';
+import { collectViewportVisibilitySummary } from '../utils/editor-context-metadata';
 import {
 	findStylesSidebarMountNode,
 	getStyleBookUiState,
@@ -133,6 +134,7 @@ function buildRequestInput( {
 	mergedConfig,
 	availableVariations,
 	templateStructure,
+	templateVisibility,
 	contextSignature,
 	themeTokenDiagnostics,
 } ) {
@@ -156,6 +158,7 @@ function buildRequestInput( {
 			mergedConfig,
 			availableVariations,
 			templateStructure,
+			templateVisibility,
 			themeTokenDiagnostics,
 		},
 		contextSignature,
@@ -205,6 +208,7 @@ function GlobalStylesPanel( {
 	prompt,
 	setPrompt,
 	capabilityAvailable,
+	visibilityConstraintCount,
 	isLoading,
 	isApplying,
 	isUndoing,
@@ -239,6 +243,14 @@ function GlobalStylesPanel( {
 					<span className="flavor-agent-pill">
 						Review before apply
 					</span>
+					{ visibilityConstraintCount > 0 && (
+						<span className="flavor-agent-pill">
+							{ formatCount(
+								visibilityConstraintCount,
+								'viewport constraint'
+							) }
+						</span>
+					) }
 					{ suggestions.length > 0 && (
 						<span className="flavor-agent-pill">
 							{ formatCount( suggestions.length, 'suggestion' ) }
@@ -470,6 +482,7 @@ export default function GlobalStylesRecommender() {
 		mergedConfig,
 		availableVariations,
 		templateStructure,
+		templateVisibility,
 		rawSuggestions,
 		currentExplanation,
 		currentResultContextSignature,
@@ -530,6 +543,7 @@ export default function GlobalStylesRecommender() {
 			...suggestion,
 			suggestionKey: getSuggestionKey( suggestion, index ),
 		} ) );
+		const editedBlocks = blockEditor?.getBlocks?.() || [];
 
 		return {
 			isGlobalStylesActive:
@@ -561,9 +575,9 @@ export default function GlobalStylesRecommender() {
 			availableVariations: Array.isArray( globalStylesData?.variations )
 				? globalStylesData.variations
 				: [],
-			templateStructure: buildTemplateStructureSnapshot(
-				blockEditor?.getBlocks?.() || []
-			),
+			templateStructure: buildTemplateStructureSnapshot( editedBlocks ),
+			templateVisibility:
+				collectViewportVisibilitySummary( editedBlocks ),
 			rawSuggestions: mappedSuggestions,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
 			currentResultContextSignature:
@@ -593,6 +607,7 @@ export default function GlobalStylesRecommender() {
 			mergedConfig,
 			availableVariations,
 			templateStructure,
+			templateVisibility,
 			themeTokenDiagnostics,
 			executionContract,
 		} );
@@ -803,6 +818,7 @@ export default function GlobalStylesRecommender() {
 				mergedConfig,
 				availableVariations,
 				templateStructure,
+				templateVisibility,
 				contextSignature: recommendationContextSignature,
 				themeTokenDiagnostics,
 			} )
@@ -816,6 +832,7 @@ export default function GlobalStylesRecommender() {
 		recommendationContextSignature,
 		scope,
 		templateStructure,
+		templateVisibility,
 		themeTokenDiagnostics,
 	] );
 
@@ -842,6 +859,7 @@ export default function GlobalStylesRecommender() {
 			prompt={ prompt }
 			setPrompt={ setPrompt }
 			capabilityAvailable={ capability.available && Boolean( scope ) }
+			visibilityConstraintCount={ templateVisibility?.blockCount || 0 }
 			isLoading={ isLoading }
 			isApplying={ isApplying }
 			isUndoing={ undoStatus === 'undoing' }

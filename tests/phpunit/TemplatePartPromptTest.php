@@ -47,6 +47,39 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( 'containsSpacer: yes', $prompt );
 	}
 
+	public function test_build_user_includes_pattern_override_context(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'         => 'theme//header',
+				'slug'                    => 'header',
+				'title'                   => 'Header',
+				'area'                    => 'header',
+				'blockTree'               => [],
+				'patterns'                => [],
+				'currentPatternOverrides' => [
+					'hasOverrides' => true,
+					'blockCount'   => 1,
+					'blockNames'   => [ 'core/navigation' ],
+					'blocks'       => [
+						[
+							'path'               => [ 0, 1 ],
+							'name'               => 'core/navigation',
+							'label'              => 'Navigation',
+							'overrideAttributes' => [ 'overlayMenu' ],
+							'usesDefaultBinding' => true,
+						],
+					],
+				],
+				'themeTokens'             => [],
+			]
+		);
+
+		$this->assertStringContainsString( '## Current Pattern Override Blocks', $prompt );
+		$this->assertStringContainsString( 'Path 1 > 2 - `Navigation`', $prompt );
+		$this->assertStringContainsString( 'overridable attributes: `overlayMenu`', $prompt );
+		$this->assertStringContainsString( 'uses default binding expansion', $prompt );
+	}
+
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {
 		$context = [
 			'blockTree'        => [

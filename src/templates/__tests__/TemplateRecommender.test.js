@@ -492,6 +492,151 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 	} );
 
+	test( 'submits live override and viewport metadata with template recommendation requests', async () => {
+		currentState = createState( {
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [
+					{
+						clientId: 'group-1',
+						name: 'core/group',
+						attributes: {
+							metadata: {
+								blockVisibility: {
+									viewport: {
+										mobile: false,
+										desktop: true,
+									},
+								},
+							},
+						},
+						innerBlocks: [
+							{
+								clientId: 'heading-1',
+								name: 'core/heading',
+								attributes: {
+									metadata: {
+										bindings: {
+											content: {
+												source: 'core/pattern-overrides',
+											},
+										},
+									},
+								},
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		} );
+
+		await renderPanel();
+
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find( ( element ) => element.textContent === 'Get Suggestions' )
+				.click();
+		} );
+
+		expect( mockFetchTemplateRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				templateRef: TEMPLATE_REF,
+				editorStructure: expect.objectContaining( {
+					currentPatternOverrides: {
+						hasOverrides: true,
+						blockCount: 1,
+						blockNames: [ 'core/heading' ],
+						blocks: [
+							{
+								path: [ 0, 0 ],
+								name: 'core/heading',
+								label: 'Heading',
+								overrideAttributes: [ 'content' ],
+								usesDefaultBinding: false,
+							},
+						],
+					},
+					currentViewportVisibility: {
+						hasVisibilityRules: true,
+						blockCount: 1,
+						blocks: [
+							{
+								path: [ 0 ],
+								name: 'core/group',
+								label: 'Group',
+								hiddenViewports: [ 'mobile' ],
+								visibleViewports: [ 'desktop' ],
+							},
+						],
+					},
+				} ),
+			} )
+		);
+	} );
+
+	test( 'clears stale recommendations when live override metadata changes', async () => {
+		currentState = createState( {
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [
+					{
+						clientId: 'group-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [
+							{
+								clientId: 'heading-1',
+								name: 'core/heading',
+								attributes: {
+									metadata: {
+										bindings: {
+											content: {
+												source: 'core/pattern-overrides',
+											},
+										},
+									},
+								},
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		} );
+
+		await renderPanel();
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+
+		currentState = {
+			...getState(),
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [
+					{
+						clientId: 'group-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [
+							{
+								clientId: 'heading-1',
+								name: 'core/heading',
+								attributes: {},
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		};
+
+		await renderPanel();
+		await renderPanel();
+
+		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( hasText( 'Add hero intro' ) ).toBe( false );
+	} );
+
 	test( 'clears stale recommendations when the top-level template structure changes without changing slots', async () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 

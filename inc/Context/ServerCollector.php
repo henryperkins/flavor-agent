@@ -614,6 +614,237 @@ final class ServerCollector {
 		];
 	}
 
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<string, string>            $part_area_lookup
+	 * @return array<string, mixed>
+	 */
+	private static function collect_current_pattern_override_summary( array $blocks, array $part_area_lookup = [] ): array {
+		$summary = [
+			'hasOverrides' => false,
+			'blockCount'   => 0,
+			'blockNames'   => [],
+			'blocks'       => [],
+		];
+
+		self::walk_current_pattern_override_summary( $blocks, [], $part_area_lookup, $summary );
+
+		$summary['blockNames'] = array_values( array_keys( $summary['blockNames'] ) );
+		sort( $summary['blockNames'] );
+
+		return $summary;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<int, int>                  $path
+	 * @param array<string, string>            $part_area_lookup
+	 * @param array<string, mixed>             $summary
+	 */
+	private static function walk_current_pattern_override_summary( array $blocks, array $path, array $part_area_lookup, array &$summary ): void {
+		foreach ( $blocks as $index => $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $block['blockName'] ?? '' ) );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$attributes          = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : [];
+			$metadata            = is_array( $attributes['metadata'] ?? null ) ? $attributes['metadata'] : [];
+			$bindings            = is_array( $metadata['bindings'] ?? null ) ? $metadata['bindings'] : [];
+			$next_path           = array_merge( $path, [ (int) $index ] );
+			$bindable_attributes = self::resolve_bindable_attributes( $name );
+			$bindable_lookup     = array_fill_keys( $bindable_attributes, true );
+			$override_attributes = [];
+			$unsupported         = [];
+			$uses_default_binding = false;
+
+			foreach ( $bindings as $attribute_name => $binding ) {
+				if ( ! is_string( $attribute_name ) || ! is_array( $binding ) ) {
+					continue;
+				}
+
+				$source = sanitize_text_field( (string) ( $binding['source'] ?? '' ) );
+
+				if ( 'core/pattern-overrides' !== $source ) {
+					continue;
+				}
+
+				if ( '__default' === $attribute_name ) {
+					$uses_default_binding = true;
+					$override_attributes  = array_merge( $override_attributes, $bindable_attributes );
+					continue;
+				}
+
+				if ( isset( $bindable_lookup[ $attribute_name ] ) ) {
+					$override_attributes[] = $attribute_name;
+				} else {
+					$unsupported[] = $attribute_name;
+				}
+			}
+
+			if ( [] !== $override_attributes || [] !== $unsupported || $uses_default_binding ) {
+				$slug                      = sanitize_key( (string) ( $attributes['slug'] ?? '' ) );
+				$area                      = sanitize_key(
+					(string) (
+						$attributes['area'] ?? (
+							$slug !== '' ? ( $part_area_lookup[ $slug ] ?? '' ) : ''
+						)
+					)
+				);
+				$summary['hasOverrides']   = true;
+				++$summary['blockCount'];
+				$summary['blockNames'][ $name ] = true;
+
+				$entry = [
+					'path'               => $next_path,
+					'name'               => $name,
+					'label'              => self::describe_template_block_label( $name, $slug, $area ),
+					'overrideAttributes' => array_values( array_unique( $override_attributes ) ),
+					'usesDefaultBinding' => $uses_default_binding,
+				];
+
+				if ( [] !== $bindable_attributes ) {
+					$entry['bindableAttributes'] = array_values( array_unique( $bindable_attributes ) );
+				}
+
+				if ( [] !== $unsupported ) {
+					$entry['unsupportedAttributes'] = array_values( array_unique( $unsupported ) );
+				}
+
+				$summary['blocks'][] = $entry;
+			}
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( [] !== $inner_blocks ) {
+				self::walk_current_pattern_override_summary( $inner_blocks, $next_path, $part_area_lookup, $summary );
+			}
+		}
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<string, string>            $part_area_lookup
+	 * @return array<string, mixed>
+	 */
+	private static function collect_current_viewport_visibility_summary( array $blocks, array $part_area_lookup = [] ): array {
+		$summary = [
+			'hasVisibilityRules' => false,
+			'blockCount'         => 0,
+			'blocks'             => [],
+		];
+
+		self::walk_current_viewport_visibility_summary( $blocks, [], $part_area_lookup, $summary );
+
+		return $summary;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param array<int, int>                  $path
+	 * @param array<string, string>            $part_area_lookup
+	 * @param array<string, mixed>             $summary
+	 */
+	private static function walk_current_viewport_visibility_summary( array $blocks, array $path, array $part_area_lookup, array &$summary ): void {
+		foreach ( $blocks as $index => $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $block['blockName'] ?? '' ) );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$attributes         = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : [];
+			$metadata           = is_array( $attributes['metadata'] ?? null ) ? $attributes['metadata'] : [];
+			$visibility_summary = self::summarize_viewport_visibility_rules( $metadata['blockVisibility'] ?? null );
+			$next_path          = array_merge( $path, [ (int) $index ] );
+
+			if ( null !== $visibility_summary ) {
+				$slug  = sanitize_key( (string) ( $attributes['slug'] ?? '' ) );
+				$area  = sanitize_key(
+					(string) (
+						$attributes['area'] ?? (
+							$slug !== '' ? ( $part_area_lookup[ $slug ] ?? '' ) : ''
+						)
+					)
+				);
+				$summary['hasVisibilityRules'] = true;
+				++$summary['blockCount'];
+				$summary['blocks'][] = [
+					'path'             => $next_path,
+					'name'             => $name,
+					'label'            => self::describe_template_block_label( $name, $slug, $area ),
+					'hiddenViewports'  => $visibility_summary['hiddenViewports'],
+					'visibleViewports' => $visibility_summary['visibleViewports'],
+				];
+			}
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( [] !== $inner_blocks ) {
+				self::walk_current_viewport_visibility_summary( $inner_blocks, $next_path, $part_area_lookup, $summary );
+			}
+		}
+	}
+
+	/**
+	 * @return array{hiddenViewports: string[], visibleViewports: string[]}|null
+	 */
+	private static function summarize_viewport_visibility_rules( mixed $block_visibility ): ?array {
+		if ( false === $block_visibility ) {
+			return [
+				'hiddenViewports'  => [ 'all' ],
+				'visibleViewports' => [],
+			];
+		}
+
+		if ( ! is_array( $block_visibility ) ) {
+			return null;
+		}
+
+		$viewport_rules = is_array( $block_visibility['viewport'] ?? null ) ? $block_visibility['viewport'] : [];
+		$hidden         = [];
+		$visible        = [];
+
+		foreach ( $viewport_rules as $viewport => $value ) {
+			if ( ! is_string( $viewport ) || ! is_bool( $value ) ) {
+				continue;
+			}
+
+			$normalized_viewport = sanitize_key( $viewport );
+
+			if ( '' === $normalized_viewport ) {
+				continue;
+			}
+
+			if ( $value ) {
+				$visible[] = $normalized_viewport;
+			} else {
+				$hidden[] = $normalized_viewport;
+			}
+		}
+
+		if ( [] === $hidden && [] === $visible ) {
+			return null;
+		}
+
+		sort( $hidden );
+		sort( $visible );
+
+		return [
+			'hiddenViewports'  => array_values( array_unique( $hidden ) ),
+			'visibleViewports' => array_values( array_unique( $visible ) ),
+		];
+	}
+
 	public static function for_template_parts( ?string $area = null, bool $include_content = true ): array {
 		$query = [];
 
@@ -691,6 +922,7 @@ final class ServerCollector {
 			'area'                  => $area,
 			'blockTree'             => $block_tree,
 			'topLevelBlocks'        => $top_level_blocks,
+			'currentPatternOverrides' => self::collect_current_pattern_override_summary( $blocks ),
 			'blockCounts'           => $block_counts,
 			'structureStats'        => [
 				'blockCount'            => $summary_stats['blockCount'],
@@ -862,6 +1094,8 @@ final class ServerCollector {
 			'emptyAreas'               => $slots['emptyAreas'],
 			'allowedAreas'             => $slots['allowedAreas'],
 			'topLevelBlockTree'        => $top_level_block_tree,
+			'currentPatternOverrides'  => self::collect_current_pattern_override_summary( $template_blocks, $part_area_lookup ),
+			'currentViewportVisibility' => self::collect_current_viewport_visibility_summary( $template_blocks, $part_area_lookup ),
 			'topLevelInsertionAnchors' => self::collect_template_insertion_anchors( $top_level_block_tree ),
 			'structureStats'           => self::collect_template_structure_stats( $template_blocks, $top_level_block_tree ),
 			'availableParts'           => $available_parts,

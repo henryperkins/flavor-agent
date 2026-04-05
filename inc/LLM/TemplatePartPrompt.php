@@ -75,8 +75,10 @@ Rules:
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Respect the theme's design tokens when suggesting patterns or structural changes.
+- When Current Pattern Override Blocks are listed, treat them as intentional override boundaries. Prefer suggestions that preserve or work with those customizable blocks, and call out the tradeoff if you suggest replacing around them.
 - When multiple operations are returned, keep the plan small, explicit, and ordered.
 - If no matching patterns are available, leave patternSuggestions as an empty array.
+- Do not invent Pattern Overrides when none are listed.
 - Return 1-3 suggestions. Each should be distinct and actionable.
 - Keep labels under 60 characters. Keep descriptions under 200 characters.
 SYSTEM;
@@ -188,6 +190,12 @@ SYSTEM;
 			$sections[] = "## Structural Constraints\n{$formatted_constraints}";
 		}
 
+		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null )
+			? $context['currentPatternOverrides']
+			: [];
+		$sections[]                = "## Current Pattern Override Blocks\n"
+			. self::format_current_pattern_overrides( $current_pattern_overrides );
+
 		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
 		if ( count( $patterns ) > 0 ) {
 			$max   = 20;
@@ -260,6 +268,80 @@ SYSTEM;
 		$sections[]  = "## User Instruction\n{$instruction}";
 
 		return implode( "\n\n", $sections );
+	}
+
+	/**
+	 * @param array<string, mixed> $summary
+	 */
+	private static function format_current_pattern_overrides( array $summary ): string {
+		$blocks = is_array( $summary['blocks'] ?? null ) ? $summary['blocks'] : [];
+
+		if ( [] === $blocks ) {
+			return 'None detected.';
+		}
+
+		$lines = [];
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$label               = sanitize_text_field( (string) ( $block['label'] ?? ( $block['name'] ?? 'Block' ) ) );
+			$name                = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+			$path                = self::format_block_path_label( $block['path'] ?? null );
+			$override_attributes = array_values(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						is_array( $block['overrideAttributes'] ?? null ) ? $block['overrideAttributes'] : []
+					),
+					static fn( string $attribute ): bool => '' !== $attribute
+				)
+			);
+			$details             = [];
+
+			if ( [] !== $override_attributes ) {
+				$details[] = 'overridable attributes: `' . implode( '`, `', $override_attributes ) . '`';
+			}
+
+			if ( ! empty( $block['usesDefaultBinding'] ) ) {
+				$details[] = 'uses default binding expansion';
+			}
+
+			$line = '- ';
+
+			if ( '' !== $path ) {
+				$line .= "{$path} - ";
+			}
+
+			$line .= "`{$label}`";
+
+			if ( '' !== $name && $name !== $label ) {
+				$line .= " ({$name})";
+			}
+
+			if ( [] !== $details ) {
+				$line .= ': ' . implode( '; ', $details );
+			}
+
+			$lines[] = $line;
+		}
+
+		return [] !== $lines ? implode( "\n", $lines ) : 'None detected.';
+	}
+
+	private static function format_block_path_label( mixed $path ): string {
+		if ( ! is_array( $path ) || [] === $path ) {
+			return '';
+		}
+
+		$segments = array_map(
+			static fn( mixed $segment ): int => (int) $segment + 1,
+			$path
+		);
+
+		return 'Path ' . implode( ' > ', $segments );
 	}
 
 	/**

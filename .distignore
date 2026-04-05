@@ -5,6 +5,7 @@
 .github
 .git
 .gitignore
+.distignore
 .mcp.json
 .npmrc
 .nvmrc
@@ -18,15 +19,16 @@ docker-compose.yml
 .dockerignore
 docs
 .env.example
+flavor-agent-*-php-*.md
 node_modules
 output
 package-lock.json
 package.json
 phpcs.xml.dist
 phpunit.xml.dist
+plugin-check.md
 playwright.config.js
 playwright.wp70.config.js
-plugin-check.md
 scripts
 src
 STATUS.md

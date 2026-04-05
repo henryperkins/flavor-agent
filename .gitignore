@@ -4,8 +4,10 @@ vendor/
 
 # Build and test artifacts
 build/
+dist/
 output/
 .phpunit.result.cache
+flavor-agent-*-php-*.md
 
 # Local environment
 .env

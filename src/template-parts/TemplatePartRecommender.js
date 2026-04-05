@@ -28,6 +28,7 @@ import {
 	selectBlockByPath,
 } from '../utils/template-actions';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
+import { collectPatternOverrideSummary } from '../utils/editor-context-metadata';
 import {
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 	TEMPLATE_OPERATION_REMOVE_BLOCK,
@@ -100,11 +101,13 @@ function normalizeVisiblePatternNames( visiblePatternNames ) {
 
 function buildTemplatePartRecommendationContextSignature( {
 	visiblePatternNames,
+	currentPatternOverrides,
 } = {} ) {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
 
 	return JSON.stringify( {
+		currentPatternOverrides: currentPatternOverrides || null,
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
 			? [ ...normalizedVisiblePatternNames ].sort()
 			: null,
@@ -115,6 +118,7 @@ function buildTemplatePartFetchInput( {
 	templatePartRef,
 	prompt,
 	visiblePatternNames,
+	editorStructure,
 } ) {
 	const input = { templatePartRef };
 	const trimmedPrompt = prompt.trim();
@@ -127,6 +131,10 @@ function buildTemplatePartFetchInput( {
 
 	if ( Array.isArray( normalizedVisiblePatternNames ) ) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
+	}
+
+	if ( editorStructure ) {
+		input.editorStructure = editorStructure;
 	}
 
 	return input;
@@ -403,12 +411,25 @@ export default function TemplatePartRecommender() {
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const previousTemplatePartRef = useRef( templatePartRef );
+	const templatePartAreaLookup = useMemo(
+		() => getTemplatePartAreaLookup(),
+		[]
+	);
+	const currentPatternOverrides = useMemo(
+		() =>
+			collectPatternOverrideSummary(
+				editorBlocks,
+				templatePartAreaLookup
+			),
+		[ editorBlocks, templatePartAreaLookup ]
+	);
 	const recommendationContextSignature = useMemo(
 		() =>
 			buildTemplatePartRecommendationContextSignature( {
 				visiblePatternNames,
+				currentPatternOverrides,
 			} ),
-		[ visiblePatternNames ]
+		[ currentPatternOverrides, visiblePatternNames ]
 	);
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature
@@ -579,10 +600,14 @@ export default function TemplatePartRecommender() {
 				templatePartRef,
 				prompt,
 				visiblePatternNames,
+				editorStructure: {
+					currentPatternOverrides,
+				},
 			} )
 		);
 	}, [
 		canRecommend,
+		currentPatternOverrides,
 		fetchTemplatePartRecommendations,
 		prompt,
 		templatePartRef,
@@ -632,6 +657,14 @@ export default function TemplatePartRecommender() {
 						{ area && (
 							<span className="flavor-agent-pill">
 								Area: { areaLabel }
+							</span>
+						) }
+						{ currentPatternOverrides.blockCount > 0 && (
+							<span className="flavor-agent-pill">
+								{ formatCount(
+									currentPatternOverrides.blockCount,
+									'override-ready block'
+								) }
 							</span>
 						) }
 						{ slug && (

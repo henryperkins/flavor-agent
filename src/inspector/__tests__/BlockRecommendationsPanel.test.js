@@ -1,5 +1,6 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
+const mockSuggestionChips = jest.fn();
 const mockFetchBlockRecommendations = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockClearBlockError = jest.fn();
@@ -57,7 +58,10 @@ jest.mock( '../../store/activity-history', () => ( {
 
 jest.mock( '../../components/AIActivitySection', () => () => null );
 jest.mock( '../NavigationRecommendations', () => () => null );
-jest.mock( '../SuggestionChips', () => () => null );
+jest.mock( '../SuggestionChips', () => ( props ) => {
+	mockSuggestionChips( props );
+	return null;
+} );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
@@ -210,6 +214,7 @@ function getTextarea() {
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	mockSuggestionChips.mockReset();
 	currentState = createState();
 	window.flavorAgentData = {
 		canRecommendBlocks: true,
@@ -417,6 +422,167 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		} );
 
 		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'separates executable block suggestions from advisory structural ideas', () => {
+		renderPanel();
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Hide on mobile',
+								description:
+									'Use viewport visibility for mobile.',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+							},
+							{
+								label: 'Wrap this block in a Group',
+								description:
+									'Use a Group parent to add spacing and background controls.',
+								type: 'structural_recommendation',
+							},
+							{
+								label: 'Replace with a callout pattern',
+								description:
+									'Swap to a richer callout pattern when stronger layout controls are needed.',
+								type: 'pattern_replacement',
+							},
+						],
+						blockContext: {
+							name: 'plugin/plain-block',
+						},
+					},
+				},
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).toContain( 'Block suggestions' );
+		expect( getContainer().textContent ).toContain( 'Advisory suggestions' );
+		expect( getContainer().textContent ).toContain(
+			'Wrap this block in a Group'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Replace with a callout pattern'
+		);
+		expect( mockSuggestionChips ).toHaveBeenCalledTimes( 1 );
+		expect( mockSuggestionChips.mock.calls[ 0 ][ 0 ] ).toEqual(
+			expect.objectContaining( {
+				clientId: 'block-1',
+				label: 'AI block suggestions',
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Hide on mobile',
+					} ),
+				],
+			} )
+		);
+	} );
+
+	test( 'keeps purely advisory block suggestions out of one-click chips', () => {
+		renderPanel();
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Wrap this block in a Group',
+								description:
+									'Use a Group parent to unlock spacing and background controls.',
+								type: 'structural_recommendation',
+							},
+						],
+						blockContext: {
+							name: 'plugin/plain-block',
+						},
+					},
+				},
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).toContain( 'Advisory suggestions' );
+		expect( getContainer().textContent ).toContain(
+			'Wrap this block in a Group'
+		);
+		expect( mockSuggestionChips ).not.toHaveBeenCalled();
+	} );
+
+	test( 'keeps structural and pattern suggestions advisory even when they include safe local updates', () => {
+		renderPanel();
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Wrap this block in a Group',
+								description:
+									'Use a Group parent to unlock spacing and background controls.',
+								type: 'structural_recommendation',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+							},
+							{
+								label: 'Replace with a callout pattern',
+								description:
+									'Swap to a richer pattern with stronger layout affordances.',
+								type: 'pattern_replacement',
+								attributeUpdates: {
+									className: 'is-style-outline',
+								},
+							},
+						],
+						blockContext: {
+							name: 'plugin/plain-block',
+						},
+					},
+				},
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).toContain( 'Advisory suggestions' );
+		expect( getContainer().textContent ).toContain(
+			'Wrap this block in a Group'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Replace with a callout pattern'
+		);
+		expect( mockSuggestionChips ).not.toHaveBeenCalled();
 	} );
 
 	test( 'does not keep an undo success notice once the resolved entry is no longer undone', () => {

@@ -1,5 +1,10 @@
 import { validateTemplateOperationSequence } from '../utils/template-operation-sequence';
 import { inferTemplatePartArea } from '../utils/template-part-areas';
+import {
+	collectPatternOverrideSummary,
+	collectViewportVisibilitySummary,
+	describeEditorBlockLabel,
+} from '../utils/editor-context-metadata';
 export { formatCount } from '../utils/format-count';
 
 export const ENTITY_PART = 'part';
@@ -79,37 +84,6 @@ export function normalizeVisiblePatternNames( visiblePatternNames ) {
 	return Array.from( new Set( visiblePatternNames.filter( Boolean ) ) );
 }
 
-function describeTemplateBlockLabel( blockName = '', slug = '', area = '' ) {
-	if ( blockName === 'core/template-part' ) {
-		if ( slug && area ) {
-			return `${ slug } template part (${ area })`;
-		}
-
-		if ( slug ) {
-			return `${ slug } template part`;
-		}
-
-		if ( area ) {
-			return `Empty ${ area } template-part slot`;
-		}
-
-		return 'Template-part slot';
-	}
-
-	const normalizedName = blockName.startsWith( 'core/' )
-		? blockName.slice( 5 )
-		: blockName;
-
-	return normalizedName
-		.split( '-' )
-		.map( ( segment ) =>
-			segment
-				? segment.charAt( 0 ).toUpperCase() + segment.slice( 1 )
-				: ''
-		)
-		.join( ' ' );
-}
-
 function summarizeTemplateBlockAttributes( attributes = {} ) {
 	const summary = {};
 
@@ -135,6 +109,17 @@ export function buildEditorTemplateTopLevelStructureSnapshot(
 	if ( ! Array.isArray( blocks ) ) {
 		return {
 			topLevelBlockTree: [],
+			currentPatternOverrides: {
+				hasOverrides: false,
+				blockCount: 0,
+				blockNames: [],
+				blocks: [],
+			},
+			currentViewportVisibility: {
+				hasVisibilityRules: false,
+				blockCount: 0,
+				blocks: [],
+			},
 		};
 	}
 
@@ -160,7 +145,11 @@ export function buildEditorTemplateTopLevelStructureSnapshot(
 				const entry = {
 					path: [ index ],
 					name: block.name,
-					label: describeTemplateBlockLabel( block.name, slug, area ),
+					label: describeEditorBlockLabel(
+						block.name,
+						attributes,
+						areaLookup
+					),
 					attributes: summarizeTemplateBlockAttributes( attributes ),
 					childCount: Array.isArray( block.innerBlocks )
 						? block.innerBlocks.length
@@ -178,6 +167,14 @@ export function buildEditorTemplateTopLevelStructureSnapshot(
 				return entry;
 			} )
 			.filter( Boolean ),
+		currentPatternOverrides: collectPatternOverrideSummary(
+			blocks,
+			areaLookup
+		),
+		currentViewportVisibility: collectViewportVisibilitySummary(
+			blocks,
+			areaLookup
+		),
 	};
 }
 
@@ -194,6 +191,10 @@ export function buildTemplateRecommendationContextSignature( {
 		topLevelBlockTree: Array.isArray( editorStructure?.topLevelBlockTree )
 			? editorStructure.topLevelBlockTree
 			: null,
+		currentPatternOverrides:
+			editorStructure?.currentPatternOverrides || null,
+		currentViewportVisibility:
+			editorStructure?.currentViewportVisibility || null,
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )
 			? [ ...normalizedVisiblePatternNames ].sort()
 			: null,

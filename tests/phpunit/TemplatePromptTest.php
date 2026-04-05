@@ -43,6 +43,56 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertStringContainsString( 'Last top-level block: core/query', $prompt );
 	}
 
+	public function test_build_user_includes_pattern_override_and_visibility_context(): void {
+		$prompt = TemplatePrompt::build_user(
+			[
+				'templateType'              => 'home',
+				'title'                     => 'Home',
+				'assignedParts'             => [],
+				'emptyAreas'                => [],
+				'availableParts'            => [],
+				'patterns'                  => [],
+				'topLevelBlockTree'         => [],
+				'topLevelInsertionAnchors'  => [],
+				'currentPatternOverrides'   => [
+					'hasOverrides' => true,
+					'blockCount'   => 1,
+					'blockNames'   => [ 'core/heading' ],
+					'blocks'       => [
+						[
+							'path'               => [ 0, 1 ],
+							'name'               => 'core/heading',
+							'label'              => 'Heading',
+							'overrideAttributes' => [ 'content' ],
+							'usesDefaultBinding' => false,
+						],
+					],
+				],
+				'currentViewportVisibility' => [
+					'hasVisibilityRules' => true,
+					'blockCount'         => 1,
+					'blocks'             => [
+						[
+							'path'             => [ 1 ],
+							'name'             => 'core/group',
+							'label'            => 'Group',
+							'hiddenViewports'  => [ 'mobile' ],
+							'visibleViewports' => [ 'desktop' ],
+						],
+					],
+				],
+				'themeTokens'               => [],
+			]
+		);
+
+		$this->assertStringContainsString( '## Current Pattern Override Blocks', $prompt );
+		$this->assertStringContainsString( 'Path 1 > 2 - `Heading`', $prompt );
+		$this->assertStringContainsString( 'overridable attributes: `content`', $prompt );
+		$this->assertStringContainsString( '## Current Viewport Visibility Constraints', $prompt );
+		$this->assertStringContainsString( 'hidden on `mobile`', $prompt );
+		$this->assertStringContainsString( 'explicitly visible on `desktop`', $prompt );
+	}
+
 	public function test_parse_response_keeps_only_valid_structured_template_operations(): void {
 		$context = [
 			'assignedParts'  => [

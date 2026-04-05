@@ -40,7 +40,7 @@ import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
 	buildUndoAttributeUpdates,
-	getSuggestionAttributeUpdates,
+	getBlockSuggestionExecutionInfo,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
 
@@ -1588,6 +1588,8 @@ const actions = {
 			const scope = getCurrentActivityScope( registry );
 			const applyErrorMessage =
 				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
+			const advisoryApplyMessage =
+				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.';
 
 			syncActivitySession( localDispatch, select, scope );
 
@@ -1600,12 +1602,25 @@ const actions = {
 				registry?.dispatch?.( 'core/block-editor' ) || {};
 			const currentAttributes =
 				blockEditorSelect.getBlockAttributes?.( clientId ) || {};
-			const allowedUpdates = getSuggestionAttributeUpdates(
+			const execution = getBlockSuggestionExecutionInfo(
 				suggestion,
 				blockContext
 			);
+			const allowedUpdates = execution.allowedUpdates;
 			let nextAttributes = null;
 			let didApply = false;
+
+			if ( execution.isAdvisoryOnly ) {
+				localDispatch(
+					actions.setBlockRequestState(
+						clientId,
+						'error',
+						advisoryApplyMessage,
+						select.getBlockRequestToken( clientId ) || 0
+					)
+				);
+				return false;
+			}
 
 			if ( Object.keys( allowedUpdates ).length > 0 ) {
 				const safeUpdates = buildSafeAttributeUpdates(

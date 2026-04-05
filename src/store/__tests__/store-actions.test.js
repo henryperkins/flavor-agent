@@ -1248,6 +1248,63 @@ describe( 'store action thunks', () => {
 		expect( result ).toBe( false );
 	} );
 
+	test( 'applySuggestion rejects advisory block suggestions even when they include safe local updates', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: { name: 'core/paragraph' },
+				prompt: 'Improve the layout.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 7 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Old copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion( 'block-1', {
+			label: 'Wrap this block in a Group',
+			type: 'structural_recommendation',
+			attributeUpdates: {
+				metadata: {
+					blockVisibility: {
+						viewport: {
+							mobile: false,
+						},
+					},
+				},
+			},
+		} )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockRequestState(
+				'block-1',
+				'error',
+				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.',
+				7
+			)
+		);
+		expect( result ).toBe( false );
+	} );
+
 	test( 'applyTemplateSuggestion records success with thunk selector methods', async () => {
 		applyTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,

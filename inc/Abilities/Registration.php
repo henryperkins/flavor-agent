@@ -96,8 +96,8 @@ final class Registration {
 		wp_register_ability(
 			'flavor-agent/recommend-content',
 			[
-				'label'               => __( 'Recommend post content', 'flavor-agent' ),
-				'description'         => __( 'Draft, edit, or critique blog post content in Henry Perkins\'s voice.', 'flavor-agent' ),
+				'label'               => __( 'Recommend editorial content', 'flavor-agent' ),
+				'description'         => __( 'Draft, edit, or critique blog posts, essays, and site copy in Henry Perkins\'s voice.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ ContentAbilities::class, 'recommend_content' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -351,6 +351,8 @@ final class Registration {
 										],
 									],
 								],
+								'currentPatternOverrides' => [ 'type' => 'object' ],
+								'currentViewportVisibility' => [ 'type' => 'object' ],
 							],
 						],
 					],
@@ -445,6 +447,12 @@ final class Registration {
 						'visiblePatternNames' => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
+						],
+						'editorStructure'     => [
+							'type'       => 'object',
+							'properties' => [
+								'currentPatternOverrides' => [ 'type' => 'object' ],
+							],
 						],
 					],
 					'required'   => [ 'templatePartRef' ],

@@ -106,6 +106,8 @@ describe( 'template recommender helpers', () => {
 					assignedParts: [ { slug: 'site-header', area: 'header' } ],
 				},
 				topLevelBlockTree: null,
+				currentPatternOverrides: null,
+				currentViewportVisibility: null,
 				visiblePatternNames: [ 'theme/footer', 'theme/hero' ],
 			} )
 		);
@@ -171,6 +173,8 @@ describe( 'template recommender helpers', () => {
 						},
 					},
 				],
+				currentPatternOverrides: null,
+				currentViewportVisibility: null,
 				visiblePatternNames: null,
 			} )
 		);
@@ -261,6 +265,89 @@ describe( 'template recommender helpers', () => {
 					},
 				},
 			],
+			currentPatternOverrides: {
+				hasOverrides: false,
+				blockCount: 0,
+				blockNames: [],
+				blocks: [],
+			},
+			currentViewportVisibility: {
+				hasVisibilityRules: false,
+				blockCount: 0,
+				blocks: [],
+			},
+		} );
+	} );
+
+	test( 'buildEditorTemplateTopLevelStructureSnapshot summarizes live pattern overrides and viewport visibility', () => {
+		expect(
+			buildEditorTemplateTopLevelStructureSnapshot( [
+				{
+					name: 'core/group',
+					attributes: {
+						metadata: {
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+									desktop: true,
+								},
+							},
+						},
+					},
+					innerBlocks: [
+						{
+							name: 'core/heading',
+							attributes: {
+								metadata: {
+									bindings: {
+										content: {
+											source: 'core/pattern-overrides',
+										},
+									},
+								},
+							},
+							innerBlocks: [],
+						},
+					],
+				},
+			] )
+		).toEqual( {
+			topLevelBlockTree: [
+				{
+					path: [ 0 ],
+					name: 'core/group',
+					label: 'Group',
+					attributes: {},
+					childCount: 1,
+				},
+			],
+			currentPatternOverrides: {
+				hasOverrides: true,
+				blockCount: 1,
+				blockNames: [ 'core/heading' ],
+				blocks: [
+					{
+						path: [ 0, 0 ],
+						name: 'core/heading',
+						label: 'Heading',
+						overrideAttributes: [ 'content' ],
+						usesDefaultBinding: false,
+					},
+				],
+			},
+			currentViewportVisibility: {
+				hasVisibilityRules: true,
+				blockCount: 1,
+				blocks: [
+					{
+						path: [ 0 ],
+						name: 'core/group',
+						label: 'Group',
+						hiddenViewports: [ 'mobile' ],
+						visibleViewports: [ 'desktop' ],
+					},
+				],
+			},
 		} );
 	} );
 

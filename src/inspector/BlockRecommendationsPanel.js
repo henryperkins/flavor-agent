@@ -17,12 +17,14 @@ import {
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
 } from '../store/activity-history';
+import { getBlockSuggestionExecutionInfo } from '../store/update-helpers';
 import { collectBlockContext } from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
+import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
 export function findBlockPath( blocks, clientId, path = [] ) {
@@ -199,10 +201,10 @@ export function BlockRecommendationsContent( {
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
+	const blockSuggestions = recommendations?.block || [];
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
-			const blockSuggestions = recommendations?.block || [];
 
 			return {
 				interactionState: store.getBlockInteractionState( clientId, {
@@ -245,6 +247,32 @@ export function BlockRecommendationsContent( {
 			undoError,
 			undoStatus,
 		]
+	);
+	const { executableBlockSuggestions, advisoryBlockSuggestions } = useMemo(
+		() => {
+			const blockContext = recommendations?.blockContext || {};
+			const executable = [];
+			const advisory = [];
+
+			for ( const suggestion of blockSuggestions ) {
+				const execution = getBlockSuggestionExecutionInfo(
+					suggestion,
+					blockContext
+				);
+
+				if ( execution.isExecutable ) {
+					executable.push( suggestion );
+				} else {
+					advisory.push( suggestion );
+				}
+			}
+
+			return {
+				executableBlockSuggestions: executable,
+				advisoryBlockSuggestions: advisory,
+			};
+		},
+		[ blockSuggestions, recommendations?.blockContext ]
 	);
 
 	useEffect( () => {
@@ -354,34 +382,104 @@ export function BlockRecommendationsContent( {
 
 			<NavigationRecommendations clientId={ clientId } />
 
-			{ recommendations?.block?.length > 0 && (
+			{ executableBlockSuggestions.length > 0 && (
 				<div className="flavor-agent-panel__group">
 					<div className="flavor-agent-panel__group-header">
 						<div className="flavor-agent-panel__group-title">
 							Block suggestions
 						</div>
 						<span className="flavor-agent-pill">
-							{ recommendations.block.length }{ ' ' }
-							{ recommendations.block.length === 1
+							{ executableBlockSuggestions.length }{ ' ' }
+							{ executableBlockSuggestions.length === 1
 								? 'idea'
 								: 'ideas' }
 						</span>
 					</div>
 					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-						Block suggestions can apply inline when Flavor Agent is
-						only updating local attributes on this block. Structural
-						surfaces keep the same status and history model, but
-						require preview before mutation.
+						One-click apply stays available when Flavor Agent can
+						safely change this block&apos;s local attributes. Broader
+						structural and replacement ideas stay advisory.
 					</p>
 					<SuggestionChips
 						clientId={ clientId }
-						suggestions={ recommendations.block }
+						suggestions={ executableBlockSuggestions }
 						label="AI block suggestions"
 					/>
 				</div>
 			) }
+
+			{ advisoryBlockSuggestions.length > 0 && (
+				<div className="flavor-agent-panel__group">
+					<div className="flavor-agent-panel__group-header">
+						<div className="flavor-agent-panel__group-title">
+							Advisory suggestions
+						</div>
+						<span className="flavor-agent-pill">
+							{ advisoryBlockSuggestions.length }{ ' ' }
+							{ advisoryBlockSuggestions.length === 1
+								? 'idea'
+								: 'ideas' }
+						</span>
+					</div>
+					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+						These ideas need manual follow-through or a broader
+						preview/apply flow, so Flavor Agent keeps them advisory
+						instead of pretending they are one-click safe.
+					</p>
+					<div className="flavor-agent-panel__group-body">
+						{ advisoryBlockSuggestions.map( ( suggestion ) => (
+							<AdvisorySuggestionCard
+								key={ getSuggestionKey( suggestion ) }
+								suggestion={ suggestion }
+							/>
+						) ) }
+					</div>
+				</div>
+			) }
 		</div>
 	);
+}
+
+function AdvisorySuggestionCard( { suggestion } ) {
+	const typeLabel = getAdvisorySuggestionTypeLabel( suggestion );
+
+	return (
+		<div className="flavor-agent-card">
+			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+				<div className="flavor-agent-card__lead">
+					<span className="flavor-agent-card__label">
+						{ suggestion?.label || 'Suggestion' }
+					</span>
+					{ typeLabel && (
+						<div className="flavor-agent-card__meta">
+							<span className="flavor-agent-pill">
+								{ typeLabel }
+							</span>
+						</div>
+					) }
+				</div>
+			</div>
+
+			{ suggestion?.description && (
+				<p className="flavor-agent-card__description">
+					{ suggestion.description }
+				</p>
+			) }
+		</div>
+	);
+}
+
+function getAdvisorySuggestionTypeLabel( suggestion ) {
+	switch ( suggestion?.type ) {
+		case 'structural_recommendation':
+			return 'Structure';
+		case 'pattern_replacement':
+			return 'Pattern';
+		case 'style_variation':
+			return 'Style variation';
+		default:
+			return 'Advisory';
+	}
 }
 
 export function BlockRecommendationsPanel( props ) {
