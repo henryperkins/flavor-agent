@@ -155,7 +155,7 @@ Each recommendation surface disables independently when its required backend is 
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.
 - The plugin respects `contentOnly` editing mode: suggestions won't propose changes to locked attributes.
 - `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
-- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, and `templatePartAreas` to the editor script.
+- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendContent`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, `canRecommendGlobalStyles`, `canRecommendStyleBook`, and `templatePartAreas` to the editor script.
 - The JS global `flavorAgentAdmin` (localized on the main settings page) exposes `restUrl` and `nonce` to the settings-page admin script.
 - The JS global `flavorAgentActivityLog` (localized on `Settings > AI Activity`) exposes `restUrl`, `nonce`, `adminUrl`, `settingsUrl`, `connectorsUrl`, and `defaultLimit` to the activity-log app.
 - Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`; the adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys. Direct experimental usages remain in `src/context/theme-tokens.js` and `src/context/block-inspector.js` because WordPress has not promoted stable replacements yet.

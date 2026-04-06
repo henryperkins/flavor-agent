@@ -88,7 +88,21 @@ flavor-agent/
     Cloudflare/
       AISearchClient.php    Cloudflare AI Search grounding, cache, and prewarm pipeline
     Context/
-      ServerCollector.php   Server-side context: blocks, tokens, patterns, templates, navigation, and token-source diagnostics
+      ServerCollector.php               Facade: delegates to per-surface collectors and exposes for_block, for_template, etc.
+      BlockContextCollector.php         Block-level context assembly for recommendation requests
+      BlockTypeIntrospector.php         Block type supports, attributes, and inspector panel introspection
+      NavigationContextCollector.php    Navigation menu context for navigation recommendation requests
+      NavigationParser.php              Navigation block markup parsing and menu-item extraction
+      PatternCandidateSelector.php      Candidate pattern selection, filtering, and limit enforcement
+      PatternCatalog.php                Registered pattern catalog query and metadata extraction
+      PatternOverrideAnalyzer.php       Pattern override binding detection and summary
+      TemplateContextCollector.php      Template-level context for template recommendation requests
+      TemplatePartContextCollector.php  Template-part-scoped context for template-part recommendations
+      TemplateRepository.php            Template and template-part entity lookup and metadata
+      TemplateStructureAnalyzer.php     Template block-tree structural analysis and slot detection
+      TemplateTypeResolver.php          Template type resolution and normalization
+      ThemeTokenCollector.php           Theme token extraction and token-source diagnostics
+      ViewportVisibilityAnalyzer.php    Block viewport visibility and blockVisibility attribute analysis
     Patterns/
       PatternIndex.php      Pattern embedding lifecycle: sync, diff, cron, fingerprint
     Abilities/
@@ -303,6 +317,14 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **UI:** `src/style-book/StyleBookRecommender.js` portals into the Style Book panel using `src/style-book/dom.js` for target resolution. Uses the same shared prompt -> suggestions -> explanation -> review -> apply -> undo/history model.
 - **Apply:** Deterministic client helpers validate block-scoped style paths and preset requirements before updating the active `root/globalStyles` entity. Applied changes persist before/after config plus operation metadata for scoped undo.
 - **Guardrails:** `set_styles` is rejected on the style-book surface. `set_theme_variation` is also rejected on the style-book surface. `set_block_styles.blockName` must exactly match the target block in scope. Same raw CSS, `customCSS`, and unsupported-path guardrails as Global Styles.
+
+#### Content Recommendations (Programmatic Scaffold)
+
+- **Surface:** No first-party Gutenberg panel yet. The contract exists as a stable REST + Abilities endpoint so a future post-editor UI, external agent, or admin tool can attach without inventing one later.
+- **Trigger:** A caller posts `mode` (`draft`, `edit`, or `critique`), optional `prompt`, optional `voiceProfile`, and optional `postContext` to the endpoint.
+- **LLM:** `ChatClient::chat()` using `WritingPrompt` for Henry-voice system prompt assembly and response parsing.
+- **Response:** `mode`, `title`, `summary`, `content`, `notes[]`, and `issues[]`. Editorial-only — no auto-apply path.
+- **Guards:** `edit` and `critique` modes require `postContext.content`. `draft` mode accepts a prompt, title, or other working context.
 
 #### Shared Inline Review Model
 

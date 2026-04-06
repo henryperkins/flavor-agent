@@ -69,7 +69,7 @@ The plugin registers 13 abilities across block, pattern, template, navigation, d
 
 ### REST routes
 
-All routes live under `flavor-agent/v1/`: `recommend-block`, `recommend-patterns`, `recommend-navigation`, `recommend-template`, `recommend-template-part`, `activity`, and `sync-patterns`. Block/pattern routes require `edit_posts`, navigation/template routes require `edit_theme_options`, activity uses contextual permissions, and sync requires `manage_options`.
+All routes live under `flavor-agent/v1/`: `recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-navigation`, `recommend-template`, `recommend-template-part`, `recommend-style`, `activity`, and `sync-patterns`. Block/pattern/content routes require `edit_posts`, navigation/template/style routes require `edit_theme_options`, activity uses contextual permissions, and sync requires `manage_options`.
 
 ### LLM provider architecture
 
