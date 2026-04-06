@@ -9,6 +9,8 @@ import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 import { formatCount } from '../utils/format-count';
+import InlineActionFeedback from '../components/InlineActionFeedback';
+import RecommendationLane from '../components/RecommendationLane';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import groupByPanel from './group-by-panel';
 import {
@@ -93,23 +95,13 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 				</SurfacePanelIntro>
 
 				{ variationSuggestions.length > 0 && (
-					<div className="flavor-agent-panel__group">
-						<div className="flavor-agent-panel__group-header">
-							<div className="flavor-agent-panel__group-title">
-								Style Variations
-							</div>
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									variationSuggestions.length,
-									'variation'
-								) }
-							</span>
-						</div>
-						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-							Apply a registered style variation directly from the
-							Styles tab when the current block exposes one.
-						</p>
-
+					<RecommendationLane
+						title="Style Variations"
+						tone="Apply now"
+						count={ variationSuggestions.length }
+						countNoun="variation"
+						description="Apply a registered style variation directly from the Styles tab when the current block exposes one."
+					>
 						<ButtonGroup className="flavor-agent-style-variations">
 							{ variationSuggestions.map( ( s ) => {
 								const key = getSuggestionKey( s );
@@ -156,61 +148,46 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 						</ButtonGroup>
 
 						{ feedback?.type === 'variation' && (
-							<InlineApplyFeedback
+							<InlineActionFeedback
 								message={ `${ feedback.label }.` }
 							/>
 						) }
-					</div>
+					</RecommendationLane>
 				) }
 
 				{ Object.entries( byPanel ).map( ( [ panel, items ] ) => (
-					<div key={ panel } className="flavor-agent-panel__group">
-						<div className="flavor-agent-panel__group-header">
-							<div className="flavor-agent-panel__group-title">
-								{ panelLabel( panel ) }
-							</div>
-							<span className="flavor-agent-pill">
-								{ formatCount( items.length, 'suggestion' ) }
-							</span>
-						</div>
-
-						<div className="flavor-agent-panel__group-body">
-							{ items.map( ( s ) => {
-								const key = getSuggestionKey( s );
-								return (
-									<StyleSuggestionRow
-										key={ key }
-										suggestion={ s }
-										onApply={ () =>
-											void handleApply( s, key )
-										}
-										applied={ appliedKey === key }
-									/>
-								);
-							} ) }
-						</div>
-					</div>
+					<RecommendationLane
+						key={ panel }
+						title={ panelLabel( panel ) }
+						tone="Apply now"
+						count={ items.length }
+						countNoun="suggestion"
+						description="Flavor Agent keeps these style updates beside the native controls they map to."
+					>
+						{ items.map( ( s ) => {
+							const key = getSuggestionKey( s );
+							return (
+								<StyleSuggestionRow
+									key={ key }
+									suggestion={ s }
+									onApply={ () => void handleApply( s, key ) }
+									applied={ appliedKey === key }
+								/>
+							);
+						} ) }
+					</RecommendationLane>
 				) ) }
 
 				{ delegatedSuggestions.length > 0 && (
-					<div className="flavor-agent-panel__group">
-						<div className="flavor-agent-panel__group-header">
-							<div className="flavor-agent-panel__group-title">
-								Native Style Panels
-							</div>
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									delegatedPanelTitles.length,
-									'panel'
-								) }
-							</span>
-						</div>
-						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-							More style suggestions appear directly inside the
-							native { delegatedPanelTitles.join( ', ' ) } panels
-							above so the action stays next to the matching
-							control.
-						</p>
+					<RecommendationLane
+						title="Native Style Panels"
+						tone="Suggested"
+						count={ delegatedPanelTitles.length }
+						countNoun="panel"
+						description={ `More style suggestions appear directly inside the native ${ delegatedPanelTitles.join(
+							', '
+						) } panels above so the action stays next to the matching control.` }
+					>
 						<div className="flavor-agent-style-surface__meta">
 							{ delegatedPanelTitles.map( ( title ) => (
 								<span
@@ -221,7 +198,7 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 								</span>
 							) ) }
 						</div>
-					</div>
+					</RecommendationLane>
 				) }
 			</div>
 		</PanelBody>
@@ -229,8 +206,15 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 }
 
 function StyleSuggestionRow( { suggestion, onApply, applied } ) {
-	const { label, description, preview, cssVar } = suggestion;
+	const { label, description, preview, cssVar, confidence } = suggestion;
 	const previewLabel = preview && ! isColor( preview ) ? preview : '';
+	const confidenceLabel =
+		confidence !== null && confidence !== undefined
+			? `${ Math.max(
+					0,
+					Math.min( 100, Math.round( confidence * 100 ) )
+			  ) }% confidence`
+			: '';
 
 	return (
 		<div
@@ -254,6 +238,12 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 							{ label }
 						</div>
 						<div className="flavor-agent-style-card__badges">
+							<span className="flavor-agent-pill">Apply now</span>
+							{ confidenceLabel && (
+								<span className="flavor-agent-pill">
+									{ confidenceLabel }
+								</span>
+							) }
 							{ previewLabel && (
 								<code className="flavor-agent-pill flavor-agent-pill--code">
 									{ previewLabel }
@@ -286,24 +276,7 @@ function StyleSuggestionRow( { suggestion, onApply, applied } ) {
 				/>
 			</div>
 
-			{ applied && <InlineApplyFeedback message={ `${ label }.` } /> }
-		</div>
-	);
-}
-
-function InlineApplyFeedback( { message } ) {
-	return (
-		<div
-			className="flavor-agent-inline-feedback"
-			role="status"
-			aria-live="polite"
-		>
-			<span className="flavor-agent-pill flavor-agent-pill--success">
-				Applied
-			</span>
-			<span className="flavor-agent-inline-feedback__message">
-				{ message }
-			</span>
+			{ applied && <InlineActionFeedback message={ `${ label }.` } /> }
 		</div>
 	);
 }

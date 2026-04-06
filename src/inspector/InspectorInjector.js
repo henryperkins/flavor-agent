@@ -13,9 +13,8 @@ import {
 import { useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
 
-import { collectBlockContext } from '../context/collector';
+import { getLiveBlockContextSignature } from '../context/collector';
 import { STORE_NAME } from '../store';
-import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import { BlockRecommendationsPanel } from './BlockRecommendationsPanel';
 import SettingsRecommendations from './SettingsRecommendations';
 import StylesRecommendations from './StylesRecommendations';
@@ -30,31 +29,28 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 		const { clientId, isSelected } = props;
 		const { recommendations, editingMode, status, storedContextSignature } =
 			useSelect(
-			( sel ) => {
-				const editor = sel( blockEditorStore );
-				const store = sel( STORE_NAME );
+				( sel ) => {
+					const editor = sel( blockEditorStore );
+					const store = sel( STORE_NAME );
 
-				return {
-					recommendations:
-						store.getBlockRecommendations( clientId ),
-					status: store.getBlockStatus( clientId ),
-					storedContextSignature:
-						store.getBlockRecommendationContextSignature(
-							clientId
-						),
-					editingMode: editor.getBlockEditingMode( clientId ),
-				};
-			},
-			[ clientId ]
+					return {
+						recommendations:
+							store.getBlockRecommendations( clientId ),
+						status: store.getBlockStatus( clientId ),
+						storedContextSignature:
+							store.getBlockRecommendationContextSignature(
+								clientId
+							),
+						editingMode: editor.getBlockEditingMode( clientId ),
+					};
+				},
+				[ clientId ]
 			);
-		const isDisabled = editingMode === 'disabled';
-		const liveContext = useMemo( () => collectBlockContext( clientId ), [
-			clientId,
-		] );
-		const liveContextSignature = useMemo(
-			() => buildBlockRecommendationContextSignature( liveContext ),
-			[ liveContext ]
+		const liveContextSignature = useSelect(
+			( select ) => getLiveBlockContextSignature( select, clientId ),
+			[ clientId ]
 		);
+		const isDisabled = editingMode === 'disabled';
 		const hasMatchingResult =
 			status === 'ready' &&
 			Boolean( recommendations ) &&
@@ -83,11 +79,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 
 					{ hasRecs &&
 						visibleRecommendations.settings?.length > 0 && (
-						<SettingsRecommendations
-							clientId={ clientId }
-							suggestions={ visibleRecommendations.settings }
-						/>
-					) }
+							<SettingsRecommendations
+								clientId={ clientId }
+								suggestions={ visibleRecommendations.settings }
+							/>
+						) }
 				</InspectorControls>
 
 				{ hasRecs && visibleRecommendations.styles?.length > 0 && (
@@ -124,7 +120,14 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	};
 }, 'withAIRecommendations' );
 
-function SubPanelSuggestions( { group, panel, clientId, suggestions, label } ) {
+function SubPanelSuggestions( {
+	group,
+	panel,
+	clientId,
+	suggestions,
+	label,
+	title,
+} ) {
 	const filtered = useMemo(
 		() => ( suggestions || [] ).filter( ( s ) => s.panel === panel ),
 		[ panel, suggestions ]
@@ -138,6 +141,8 @@ function SubPanelSuggestions( { group, panel, clientId, suggestions, label } ) {
 				clientId={ clientId }
 				suggestions={ filtered }
 				label={ label }
+				title={ title }
+				tone="Apply now"
 			/>
 		</InspectorControls>
 	);

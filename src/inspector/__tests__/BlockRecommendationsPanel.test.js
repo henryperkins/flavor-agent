@@ -44,6 +44,11 @@ jest.mock( '../../store', () => ( {
 
 jest.mock( '../../context/collector', () => ( {
 	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
+	getLiveBlockContextSignature: ( _select, clientId ) => {
+		const context = mockCollectBlockContext( clientId );
+
+		return context ? JSON.stringify( context ) : '';
+	},
 } ) );
 
 jest.mock( '../../utils/block-recommendation-context', () => ( {
@@ -231,7 +236,9 @@ function renderPanel() {
 
 function renderContent( clientId = 'block-1' ) {
 	act( () => {
-		getRoot().render( <BlockRecommendationsContent clientId={ clientId } /> );
+		getRoot().render(
+			<BlockRecommendationsContent clientId={ clientId } />
+		);
 	} );
 }
 
@@ -452,6 +459,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				description:
 					'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.',
 				entries: expect.any( Array ),
+				resetKey: 'block-1',
 			} )
 		);
 
@@ -526,9 +534,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Block suggestions' );
+		expect( getContainer().textContent ).toContain( 'Apply Now' );
+		expect( getContainer().textContent ).toContain( 'Manual Ideas' );
 		expect( getContainer().textContent ).toContain(
-			'Advisory suggestions'
+			'Recommended Next Step'
 		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
@@ -594,9 +603,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain(
-			'Advisory suggestions'
-		);
+		expect( getContainer().textContent ).toContain( 'Manual Ideas' );
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);
@@ -659,9 +666,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain(
-			'Advisory suggestions'
-		);
+		expect( getContainer().textContent ).toContain( 'Manual Ideas' );
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);
@@ -738,7 +743,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).not.toContain( 'Stale' );
 	} );
 
-	test( 'marks stored block results stale and hides suggestions when the live context changes', () => {
+	test( 'marks stored block results stale and keeps them visible until the user refreshes', () => {
 		currentState = createState( {
 			store: {
 				blockRecommendations: {
@@ -782,9 +787,101 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
-			'Context has changed since the last request.'
+			'This block changed after the last request.'
 		);
-		expect( getContainer().textContent ).not.toContain( 'Hide on mobile' );
-		expect( mockSuggestionChips ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain(
+			'Refresh recommendations for the current block'
+		);
+		expect( mockSuggestionChips ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Hide on mobile',
+					} ),
+				],
+				disabled: true,
+			} )
+		);
+	} );
+
+	test( 'marks same-clientId block edits stale and refreshes against the updated live context', () => {
+		const initialContext = {
+			block: {
+				name: 'core/paragraph',
+				currentAttributes: {
+					content: 'Original copy',
+				},
+			},
+		};
+		const updatedContext = {
+			block: {
+				name: 'core/paragraph',
+				currentAttributes: {
+					content: 'Updated copy',
+				},
+			},
+		};
+
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Hide on mobile',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+							},
+						],
+						explanation: 'Use viewport visibility for mobile.',
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( initialContext ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+		mockCollectBlockContext.mockReturnValue( initialContext );
+
+		renderContent();
+
+		expect( getContainer().textContent ).not.toContain( 'Stale' );
+
+		mockCollectBlockContext.mockReturnValue( updatedContext );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'This block changed after the last request.'
+		);
+
+		mockFetchBlockRecommendations.mockClear();
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Refresh' );
+
+		expect( refreshButton ).toBeDefined();
+
+		act( () => {
+			refreshButton.click();
+		} );
+
+		expect( mockFetchBlockRecommendations ).toHaveBeenCalledWith(
+			'block-1',
+			updatedContext,
+			''
+		);
 	} );
 } );

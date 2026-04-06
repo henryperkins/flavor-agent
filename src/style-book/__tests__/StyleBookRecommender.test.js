@@ -60,7 +60,17 @@ jest.mock( '../../components/AIStatusNotice', () => {
 		return createElement(
 			'div',
 			{ 'data-status-notice': 'true' },
-			props.notice.message
+			createElement( 'span', null, props.notice.message ),
+			props.onAction && props.notice.actionLabel
+				? createElement(
+						'button',
+						{
+							type: 'button',
+							onClick: props.onAction,
+						},
+						props.notice.actionLabel
+				  )
+				: null
 		);
 	};
 } );
@@ -405,6 +415,46 @@ beforeEach( () => {
 					getSurfaceStatusNotice: ( surface, options = {} ) => {
 						void surface;
 
+						if ( options.undoError ) {
+							return {
+								source: 'undo',
+								tone: 'error',
+								message: options.undoError,
+								actionType: null,
+								actionLabel: '',
+							};
+						}
+
+						if ( options.undoSuccessMessage ) {
+							return {
+								source: 'undo',
+								tone: 'success',
+								message: options.undoSuccessMessage,
+								actionType: null,
+								actionLabel: '',
+							};
+						}
+
+						if ( options.applyError ) {
+							return {
+								source: 'apply',
+								tone: 'error',
+								message: options.applyError,
+								actionType: null,
+								actionLabel: '',
+							};
+						}
+
+						if ( options.applySuccessMessage ) {
+							return {
+								source: 'apply',
+								tone: 'success',
+								message: options.applySuccessMessage,
+								actionType: 'undo',
+								actionLabel: 'Undo',
+							};
+						}
+
 						if ( options.requestError ) {
 							return {
 								source: 'request',
@@ -457,7 +507,9 @@ describe( 'StyleBookRecommender', () => {
 		} );
 
 		const textarea = sidebar.querySelector( 'textarea' );
-		const button = sidebar.querySelector( 'button' );
+		const button = Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+			( candidate ) => candidate.textContent === 'Get Style Suggestions'
+		);
 
 		act( () => {
 			const descriptor = Object.getOwnPropertyDescriptor(
@@ -599,6 +651,69 @@ describe( 'StyleBookRecommender', () => {
 		);
 	} );
 
+	test( 'keeps the apply success undo notice visible after review closes while suggestions remain', () => {
+		currentStoreState = {
+			...currentStoreState,
+			activityLog: [
+				{
+					id: 'activity-1',
+					surface: 'style-book',
+					suggestion: 'Refine paragraph rhythm',
+					target: {
+						globalStylesId: '17',
+						blockName: 'core/paragraph',
+						blockTitle: 'Paragraph',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+						error: null,
+					},
+				},
+			],
+			recommendations: [
+				{
+					suggestionKey: 'style-book-1',
+					label: 'Refine paragraph rhythm',
+					description:
+						'Increase the block gap to give the example more breathing room.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [
+						{
+							type: 'set_block_styles',
+							path: [ 'spacing', 'blockGap' ],
+							value: 'var:preset|spacing|40',
+							presetSlug: '40',
+						},
+					],
+				},
+			],
+			explanation: 'Push spacing slightly further for the example block.',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+			applyStatus: 'success',
+			selectedSuggestionKey: null,
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		const notices = Array.from(
+			sidebar.querySelectorAll( '[data-status-notice="true"]' )
+		);
+		const applySuccessNotice = notices.find( ( element ) =>
+			element.textContent.includes(
+				'Flavor Agent applied the selected Style Book change.'
+			)
+		);
+
+		expect( applySuccessNotice ).toBeDefined();
+		expect( applySuccessNotice.textContent ).toContain( 'Undo' );
+	} );
+
 	test( 'renders shared style card badges and review state for executable style book suggestions', () => {
 		currentStoreState = {
 			...currentStoreState,
@@ -633,7 +748,7 @@ describe( 'StyleBookRecommender', () => {
 
 		expect( sidebar.textContent ).toContain( 'Style Book' );
 		expect( sidebar.textContent ).toContain( 'Paragraph' );
-		expect( sidebar.textContent ).toContain( 'Review to apply' );
+		expect( sidebar.textContent ).toContain( 'Review first' );
 		expect( sidebar.textContent ).toContain( 'Spacing' );
 		expect( sidebar.textContent ).toContain( 'Review open' );
 		expect( sidebar.textContent ).toContain( 'spacing.blockGap → 40' );

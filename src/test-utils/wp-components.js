@@ -117,19 +117,37 @@ function mockWpComponents( overrides = {} ) {
 			),
 		Spinner: () => createElement( 'div', null, 'Loading…' ),
 		TextareaControl: ( {
+			__nextHasNoMarginBottom,
 			className,
 			disabled,
 			help,
+			hideLabelFromVision,
 			label,
 			onChange = () => {},
 			placeholder,
 			rows,
 			value,
-		} ) =>
-			createElement(
+			...props
+		} ) => {
+			void __nextHasNoMarginBottom;
+
+			return createElement(
 				'label',
 				null,
-				label ? createElement( 'span', null, label ) : null,
+				label
+					? createElement(
+							'span',
+							hideLabelFromVision
+								? {
+										style: {
+											position: 'absolute',
+											left: '-9999px',
+										},
+								  }
+								: null,
+							label
+					  )
+					: null,
 				createElement( 'textarea', {
 					'aria-label': label,
 					className,
@@ -139,9 +157,11 @@ function mockWpComponents( overrides = {} ) {
 					value,
 					onInput: ( event ) => onChange( event.target.value ),
 					onChange: ( event ) => onChange( event.target.value ),
+					...props,
 				} ),
 				help ? createElement( 'div', null, help ) : null
-			),
+			);
+		},
 		Tooltip: ( { children } ) => createElement( Fragment, null, children ),
 		...overrides,
 	};

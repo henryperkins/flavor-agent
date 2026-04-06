@@ -6,12 +6,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Primary surface: the native block inserter, patched so recommended patterns appear in a `Recommended` category
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
-- Unavailable state: when plugin-owned pattern backends are missing, the native inserter prepends a shared capability notice that explains the missing backend and links to `Settings > Flavor Agent`
+- Unavailable state: when pattern backends are missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendPatterns` must be true; that requires the active provider's chat and embedding backends plus Qdrant credentials
+- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a compatible embedding backend plus Qdrant in `Settings > Flavor Agent`, and a usable chat provider from `Settings > Flavor Agent` or `Settings > Connectors`
 - A post type must be available from `core/editor`
 - The shared `wp_block` entity contract from `usePostTypeEntityContract()` must resolve so Flavor Agent can align the patched inserter category with the current WordPress pattern-entity contract while still defaulting the category slug to `recommended` when no live view config is exposed
 - Passive fetch runs when the editor loads
@@ -40,7 +40,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
 - Show inserter-level status as count, loading, or error feedback
-- Explain missing plugin-owned ranking backends inside the native inserter before any recommendation request can succeed
+- Explain missing embedding, Qdrant, or chat setup paths inside the native inserter before any recommendation request can succeed
 
 ## Guardrails And Failure Modes
 

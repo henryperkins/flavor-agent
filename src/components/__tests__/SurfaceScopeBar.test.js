@@ -68,6 +68,39 @@ describe( 'SurfaceScopeBar', () => {
 		).not.toBeNull();
 	} );
 
+	test( 'renders a refresh action when stale results are retained', () => {
+		const onRefresh = jest.fn();
+
+		act( () => {
+			getRoot().render(
+				<SurfaceScopeBar
+					scopeLabel="Paragraph"
+					isFresh={ false }
+					hasResult
+					staleReason="This recommendation was generated for a different block state."
+					onRefresh={ onRefresh }
+					refreshLabel="Refresh Results"
+				/>
+			);
+		} );
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Refresh Results' )
+		);
+
+		expect( getContainer().textContent ).toContain(
+			'different block state'
+		);
+
+		act( () => {
+			refreshButton.click();
+		} );
+
+		expect( onRefresh ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	test( 'does not show freshness indicator without a result', () => {
 		act( () => {
 			getRoot().render(

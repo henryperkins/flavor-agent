@@ -13,14 +13,17 @@ import {
 	getResolvedActivityEntries,
 } from '../store/activity-history';
 import { getBlockSuggestionExecutionInfo } from '../store/update-helpers';
-import { collectBlockContext } from '../context/collector';
+import {
+	collectBlockContext,
+	getLiveBlockContextSignature,
+} from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import RecommendationHero from '../components/RecommendationHero';
+import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
-import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
-import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
@@ -137,7 +140,7 @@ function useBlockRecommendationState( clientId ) {
 		[ blockActivityLog, blockEditorSelection ]
 	);
 	const blockActivityEntries = useMemo(
-		() => [ ...resolvedBlockActivities ].slice( -3 ).reverse(),
+		() => [ ...resolvedBlockActivities ].reverse(),
 		[ resolvedBlockActivities ]
 	);
 	const latestBlockActivity = useMemo(
@@ -176,6 +179,29 @@ function useBlockRecommendationState( clientId ) {
 	};
 }
 
+function getFeaturedSuggestion(
+	executableBlockSuggestions,
+	advisoryBlockSuggestions
+) {
+	if ( executableBlockSuggestions.length > 0 ) {
+		return {
+			suggestion: executableBlockSuggestions[ 0 ],
+			tone: 'Apply now',
+			why: 'Flavor Agent can safely apply this directly on the current block.',
+		};
+	}
+
+	if ( advisoryBlockSuggestions.length > 0 ) {
+		return {
+			suggestion: advisoryBlockSuggestions[ 0 ],
+			tone: 'Manual',
+			why: 'This is the strongest next move, but it still needs manual follow-through.',
+		};
+	}
+
+	return null;
+}
+
 export function BlockRecommendationsContent( {
 	clientId,
 	eyebrow = 'Selected Block',
@@ -205,43 +231,37 @@ export function BlockRecommendationsContent( {
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
-	const liveContext = useMemo(
-		() => collectBlockContext( clientId ),
+	const liveContextSignature = useSelect(
+		( select ) => getLiveBlockContextSignature( select, clientId ),
 		[ clientId ]
 	);
-	const liveContextSignature = useMemo(
-		() =>
-			liveContext
-				? buildBlockRecommendationContextSignature( liveContext )
-				: '',
-		[ liveContext ]
-	);
+	const liveContext = useMemo( () => {
+		void liveContextSignature;
+
+		return clientId ? collectBlockContext( clientId ) : null;
+	}, [ clientId, liveContextSignature ] );
 	const hasApplySuccess =
 		Boolean( latestBlockActivity ) &&
 		latestBlockActivity?.id === latestUndoableActivityId;
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
-	const hasMatchingResult =
+	const hasFreshResult =
 		status === 'ready' &&
 		Boolean( recommendations ) &&
 		( ! storedContextSignature ||
 			storedContextSignature === liveContextSignature );
 	const hasResult = status === 'ready' && Boolean( recommendations );
-	const blockSuggestions = hasMatchingResult
+	const isStaleResult = hasResult && ! hasFreshResult;
+	const blockSuggestions = hasResult
 		? recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS
 		: EMPTY_BLOCK_SUGGESTIONS;
 	const hasBlockSuggestions = blockSuggestions.length > 0;
-	const { interactionState, statusNotice } = useSelect(
+	const { statusNotice } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
 
 			return {
-				interactionState: store.getBlockInteractionState( clientId, {
-					undoError,
-					hasSuccess: hasApplySuccess,
-					hasUndoSuccess,
-				} ),
 				statusNotice: store.getSurfaceStatusNotice( 'block', {
 					requestError: error,
 					undoError,
@@ -251,7 +271,7 @@ export function BlockRecommendationsContent( {
 					hasSuccess: hasApplySuccess,
 					hasUndoSuccess,
 					emptyMessage:
-						hasMatchingResult && ! hasBlockSuggestions
+						hasFreshResult && ! hasBlockSuggestions
 							? 'No block suggestions were returned for the current prompt.'
 							: '',
 					applySuccessMessage: hasApplySuccess
@@ -271,10 +291,9 @@ export function BlockRecommendationsContent( {
 			};
 		},
 		[
-			clientId,
 			error,
 			hasResult,
-			hasMatchingResult,
+			hasFreshResult,
 			hasBlockSuggestions,
 			hasApplySuccess,
 			hasUndoSuccess,
@@ -308,6 +327,16 @@ export function BlockRecommendationsContent( {
 				advisoryBlockSuggestions: advisory,
 			};
 		}, [ blockSuggestions, recommendations?.blockContext ] );
+	const featuredSuggestion = useMemo(
+		() =>
+			isStaleResult
+				? null
+				: getFeaturedSuggestion(
+						executableBlockSuggestions,
+						advisoryBlockSuggestions
+				  ),
+		[ advisoryBlockSuggestions, executableBlockSuggestions, isStaleResult ]
+	);
 
 	useEffect( () => {
 		setPrompt( '' );
@@ -334,6 +363,19 @@ export function BlockRecommendationsContent( {
 		},
 		[ undoActivity ]
 	);
+	const handleRefresh = useCallback( () => {
+		if ( ! canRecommendBlocks || ! liveContext ) {
+			return;
+		}
+
+		fetchBlockRecommendations( clientId, liveContext, prompt );
+	}, [
+		canRecommendBlocks,
+		clientId,
+		fetchBlockRecommendations,
+		liveContext,
+		prompt,
+	] );
 	let dismissStatusNotice;
 
 	if ( statusNotice?.source === 'request' ) {
@@ -341,12 +383,6 @@ export function BlockRecommendationsContent( {
 	} else if ( statusNotice?.source === 'undo' ) {
 		dismissStatusNotice = clearUndoError;
 	}
-
-	const showSecondaryGuidance =
-		blockSuggestions.length === 0 &&
-		blockActivityEntries.length === 0 &&
-		interactionState !== 'success' &&
-		statusNotice?.source !== 'empty';
 
 	if ( ! clientId || ! block || isDisabled ) {
 		return null;
@@ -367,20 +403,37 @@ export function BlockRecommendationsContent( {
 				</Notice>
 			) }
 
-			<SurfacePanelIntro eyebrow={ eyebrow } introCopy={ introCopy } />
-
 			<SurfaceScopeBar
 				scopeLabel={ block?.name || '' }
-				isFresh={ hasMatchingResult }
+				scopeDetails={ eyebrow ? [ eyebrow ] : [] }
+				isFresh={ hasFreshResult }
 				hasResult={ hasResult }
+				staleReason={
+					isStaleResult
+						? 'This block changed after the last request. Refresh before applying anything from the previous result.'
+						: ''
+				}
+				refreshLabel="Refresh"
+				onRefresh={ isStaleResult ? handleRefresh : undefined }
+				isRefreshing={ isLoading }
 			/>
 
 			<SurfaceComposer
+				eyebrow={ eyebrow }
+				title="Ask Flavor Agent"
 				prompt={ prompt }
 				onPromptChange={ setPrompt }
 				onFetch={ handleFetch }
-				placeholder="What are you trying to achieve?"
-				rows={ 2 }
+				placeholder="Describe the outcome you want for this block."
+				label="What do you want to improve about this block?"
+				rows={ 3 }
+				helperText={ introCopy }
+				starterPrompts={ [
+					'Improve clarity and spacing',
+					'Make this feel more editorial',
+					'Simplify the layout',
+				] }
+				submitHint="Press Cmd/Ctrl+Enter to submit."
 				fetchIcon={ icon }
 				isLoading={ isLoading }
 				disabled={ ! canRecommendBlocks }
@@ -396,10 +449,76 @@ export function BlockRecommendationsContent( {
 				onDismiss={ dismissStatusNotice }
 			/>
 
-			{ recommendations?.explanation && (
+			{ hasResult && recommendations?.explanation && (
 				<p className="flavor-agent-explanation flavor-agent-panel__note">
 					{ recommendations.explanation }
 				</p>
+			) }
+
+			{ isStaleResult && (
+				<RecommendationHero
+					title="Refresh recommendations for the current block"
+					description="Flavor Agent kept the previous result visible so you can compare it against the current block."
+					tone="Stale"
+					why="Apply actions stay disabled until you refresh against the live block context."
+					primaryActionLabel="Refresh"
+					onPrimaryAction={ handleRefresh }
+					primaryActionDisabled={ isLoading }
+				/>
+			) }
+
+			{ featuredSuggestion && (
+				<RecommendationHero
+					title={
+						featuredSuggestion?.suggestion?.label ||
+						'Recommended next change'
+					}
+					description={
+						featuredSuggestion?.suggestion?.description || ''
+					}
+					tone={ featuredSuggestion.tone }
+					why={ featuredSuggestion.why }
+				/>
+			) }
+
+			<NavigationRecommendations clientId={ clientId } embedded />
+
+			{ executableBlockSuggestions.length > 0 && (
+				<RecommendationLane
+					title="Apply Now"
+					tone={ isStaleResult ? 'Stale' : 'Apply now' }
+					count={ executableBlockSuggestions.length }
+					countNoun="suggestion"
+					description={
+						isStaleResult
+							? 'These suggestions are shown for reference from the last request. Refresh before applying them.'
+							: 'One-click apply remains available when Flavor Agent can safely change local block attributes.'
+					}
+				>
+					<SuggestionChips
+						clientId={ clientId }
+						suggestions={ executableBlockSuggestions }
+						label="AI block suggestions"
+						disabled={ isStaleResult }
+					/>
+				</RecommendationLane>
+			) }
+
+			{ advisoryBlockSuggestions.length > 0 && (
+				<RecommendationLane
+					title="Manual Ideas"
+					tone="Manual"
+					count={ advisoryBlockSuggestions.length }
+					countNoun="suggestion"
+					description="These ideas need manual follow-through or a broader review flow, so Flavor Agent keeps them advisory."
+				>
+					{ advisoryBlockSuggestions.map( ( suggestion ) => (
+						<AdvisorySuggestionCard
+							key={ getSuggestionKey( suggestion ) }
+							suggestion={ suggestion }
+						/>
+					) ) }
+				</RecommendationLane>
 			) }
 
 			<AIActivitySection
@@ -407,70 +526,10 @@ export function BlockRecommendationsContent( {
 				entries={ blockActivityEntries }
 				isUndoing={ undoStatus === 'undoing' }
 				onUndo={ handleUndo }
+				initialOpen={ ! hasResult }
+				resetKey={ clientId || 'block' }
+				maxVisible={ 3 }
 			/>
-
-			<NavigationRecommendations clientId={ clientId } />
-
-			{ executableBlockSuggestions.length > 0 && (
-				<div className="flavor-agent-panel__group">
-					<div className="flavor-agent-panel__group-header">
-						<div className="flavor-agent-panel__group-title">
-							Block suggestions
-						</div>
-						<span className="flavor-agent-pill">
-							{ executableBlockSuggestions.length }{ ' ' }
-							{ executableBlockSuggestions.length === 1
-								? 'idea'
-								: 'ideas' }
-						</span>
-					</div>
-					{ showSecondaryGuidance && (
-						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-							One-click apply stays available when Flavor Agent
-							can safely change this block&apos;s local
-							attributes. Broader structural and replacement ideas
-							stay advisory.
-						</p>
-					) }
-					<SuggestionChips
-						clientId={ clientId }
-						suggestions={ executableBlockSuggestions }
-						label="AI block suggestions"
-					/>
-				</div>
-			) }
-
-			{ advisoryBlockSuggestions.length > 0 && (
-				<div className="flavor-agent-panel__group">
-					<div className="flavor-agent-panel__group-header">
-						<div className="flavor-agent-panel__group-title">
-							Advisory suggestions
-						</div>
-						<span className="flavor-agent-pill">
-							{ advisoryBlockSuggestions.length }{ ' ' }
-							{ advisoryBlockSuggestions.length === 1
-								? 'idea'
-								: 'ideas' }
-						</span>
-					</div>
-					{ showSecondaryGuidance && (
-						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-							These ideas need manual follow-through or a broader
-							preview/apply flow, so Flavor Agent keeps them
-							advisory instead of pretending they are one-click
-							safe.
-						</p>
-					) }
-					<div className="flavor-agent-panel__group-body">
-						{ advisoryBlockSuggestions.map( ( suggestion ) => (
-							<AdvisorySuggestionCard
-								key={ getSuggestionKey( suggestion ) }
-								suggestion={ suggestion }
-							/>
-						) ) }
-					</div>
-				</div>
-			) }
 		</div>
 	);
 }

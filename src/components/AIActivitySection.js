@@ -1,4 +1,5 @@
 import { Button } from '@wordpress/components';
+import { useEffect, useRef, useState } from '@wordpress/element';
 
 function getRequestMeta( entry ) {
 	const requestMeta = entry?.request?.ai;
@@ -102,30 +103,84 @@ export default function AIActivitySection( {
 	onUndo,
 	description = '',
 	title = 'Recent AI Actions',
+	initialOpen = true,
+	resetKey = null,
+	maxVisible = Number.POSITIVE_INFINITY,
+	showMore = true,
+	className = '',
 } ) {
+	const [ isOpen, setIsOpen ] = useState( initialOpen );
+	const [ showAll, setShowAll ] = useState( false );
+	const previousResetKey = useRef( resetKey );
+	const previousInitialOpen = useRef( initialOpen );
+
+	useEffect( () => {
+		if ( previousResetKey.current === resetKey ) {
+			return;
+		}
+
+		previousResetKey.current = resetKey;
+		setIsOpen( initialOpen );
+		setShowAll( false );
+	}, [ initialOpen, resetKey ] );
+
+	useEffect( () => {
+		if ( ! previousInitialOpen.current && initialOpen ) {
+			setIsOpen( true );
+			setShowAll( false );
+		}
+
+		previousInitialOpen.current = initialOpen;
+	}, [ initialOpen ] );
+
 	if ( entries.length === 0 ) {
 		return null;
 	}
 
-	return (
-		<div className="flavor-agent-panel__group">
-			<div className="flavor-agent-panel__group-header">
-				<div className="flavor-agent-panel__group-title">{ title }</div>
-				<span className="flavor-agent-pill">
-					{ entries.length }{ ' ' }
-					{ entries.length === 1 ? 'action' : 'actions' }
-				</span>
-			</div>
+	const hasOverflow =
+		showMore &&
+		Number.isFinite( maxVisible ) &&
+		maxVisible > 0 &&
+		entries.length > maxVisible &&
+		! showAll;
+	const visibleEntries = hasOverflow
+		? entries.slice( 0, maxVisible )
+		: entries;
 
-			{ description && (
+	return (
+		<div
+			className={ `flavor-agent-panel__group flavor-agent-activity-section ${ className }` }
+		>
+			<button
+				type="button"
+				className="flavor-agent-panel__group-header flavor-agent-activity-section__toggle"
+				onClick={ () => setIsOpen( ( previous ) => ! previous ) }
+				aria-expanded={ isOpen }
+			>
+				<div className="flavor-agent-panel__group-title">{ title }</div>
+				<div className="flavor-agent-card__meta">
+					<span className="flavor-agent-pill">
+						{ entries.length }{ ' ' }
+						{ entries.length === 1 ? 'action' : 'actions' }
+					</span>
+				</div>
+				<span
+					className="flavor-agent-activity-section__chevron"
+					aria-hidden="true"
+				>
+					{ isOpen ? '\u25B2' : '\u25BC' }
+				</span>
+			</button>
+
+			{ isOpen && description && (
 				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
 					{ description }
 				</p>
 			) }
 
-			{ entries.length > 0 && (
+			{ isOpen && visibleEntries.length > 0 && (
 				<div className="flavor-agent-panel__group-body">
-					{ entries.map( ( entry ) => {
+					{ visibleEntries.map( ( entry ) => {
 						const canUndo =
 							entry?.undo?.status === 'available' &&
 							entry?.undo?.canUndo === true;
@@ -193,6 +248,16 @@ export default function AIActivitySection( {
 						);
 					} ) }
 				</div>
+			) }
+
+			{ isOpen && hasOverflow && (
+				<Button
+					variant="link"
+					onClick={ () => setShowAll( true ) }
+					className="flavor-agent-advisory-section__show-more"
+				>
+					{ `Show ${ entries.length - maxVisible } more` }
+				</Button>
 			) }
 		</div>
 	);

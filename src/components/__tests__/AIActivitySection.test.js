@@ -173,10 +173,182 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Style Book action · Paragraph'
 		);
-		expect( getContainer().querySelectorAll( 'button' ) ).toHaveLength( 1 );
+		const undoButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Undo' );
 
-		getContainer().querySelector( 'button' ).click();
+		expect( undoButton ).toBeTruthy();
+
+		undoButton.click();
 
 		expect( onUndo ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'supports collapsed history and show-more overflow behavior', () => {
+		const entries = Array.from( { length: 5 }, ( _, index ) => ( {
+			id: `activity-${ index + 1 }`,
+			suggestion: `Suggestion ${ index + 1 }`,
+			surface: 'block',
+			target: {
+				blockName: 'core/paragraph',
+			},
+			undo: {
+				canUndo: false,
+				status: 'failed',
+			},
+		} ) );
+
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ entries }
+					initialOpen={ false }
+					maxVisible={ 2 }
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Recent AI Actions' );
+		expect( getContainer().textContent ).not.toContain( 'Suggestion 1' );
+
+		const toggle = getContainer().querySelector(
+			'.flavor-agent-activity-section__toggle'
+		);
+
+		act( () => {
+			toggle.click();
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Suggestion 1' );
+		expect( getContainer().textContent ).not.toContain( 'Suggestion 3' );
+		expect( getContainer().textContent ).toContain( 'Show 3 more' );
+
+		const showMoreButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent.includes( 'Show 3 more' ) );
+
+		act( () => {
+			showMoreButton.click();
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Suggestion 5' );
+	} );
+
+	test( 'keeps the user-selected open state when new entries are appended for the same surface', () => {
+		const initialEntries = [
+			{
+				id: 'activity-1',
+				suggestion: 'Suggestion 1',
+				surface: 'block',
+				target: {
+					blockName: 'core/paragraph',
+				},
+				undo: {
+					canUndo: false,
+					status: 'failed',
+				},
+			},
+		];
+
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ initialEntries }
+					initialOpen={ false }
+					resetKey="block-1"
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+
+		const toggle = getContainer().querySelector(
+			'.flavor-agent-activity-section__toggle'
+		);
+
+		act( () => {
+			toggle.click();
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Suggestion 1' );
+
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'activity-2',
+							suggestion: 'Suggestion 2',
+							surface: 'block',
+							target: {
+								blockName: 'core/paragraph',
+							},
+							undo: {
+								canUndo: false,
+								status: 'failed',
+							},
+						},
+						...initialEntries,
+					] }
+					initialOpen={ false }
+					resetKey="block-1"
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Suggestion 2' );
+		expect( getContainer().textContent ).toContain( 'Suggestion 1' );
+	} );
+
+	test( 'resets the open state when the reset key changes', () => {
+		const entries = [
+			{
+				id: 'activity-1',
+				suggestion: 'Suggestion 1',
+				surface: 'block',
+				target: {
+					blockName: 'core/paragraph',
+				},
+				undo: {
+					canUndo: false,
+					status: 'failed',
+				},
+			},
+		];
+
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ entries }
+					initialOpen={ false }
+					resetKey="block-1"
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+
+		const toggle = getContainer().querySelector(
+			'.flavor-agent-activity-section__toggle'
+		);
+
+		act( () => {
+			toggle.click();
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Suggestion 1' );
+
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ entries }
+					initialOpen={ false }
+					resetKey="block-2"
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).not.toContain( 'Suggestion 1' );
 	} );
 } );

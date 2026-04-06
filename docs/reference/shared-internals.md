@@ -63,7 +63,7 @@ Four shared components form a consistent UI contract across all recommendation s
 
 ### `src/components/CapabilityNotice.js`
 
-Renders a non-dismissible `<Notice>` with an optional action link when the backend capability for a given surface is unavailable. Delegates content to `getCapabilityNotice(surface, data)` from `src/utils/capability-flags.js`. Returns `null` when the capability is satisfied.
+Renders a non-dismissible `<Notice>` with optional action links when the backend capability for a given surface is unavailable. Delegates content to `getCapabilityNotice(surface, data)` from `src/utils/capability-flags.js`. Returns `null` when the capability is satisfied.
 
 **Props:** `surface` (string key: `'block'`, `'pattern'`, `'template'`, `'templatePart'`, `'navigation'`, `'globalStyles'`, `'styleBook'`), `data` (optional override for `flavorAgentData`)
 

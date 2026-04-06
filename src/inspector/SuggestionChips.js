@@ -6,6 +6,7 @@ import { Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { check } from '@wordpress/icons';
 
+import InlineActionFeedback from '../components/InlineActionFeedback';
 import { STORE_NAME } from '../store';
 import { getSuggestionKey } from './suggestion-keys';
 import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
@@ -17,7 +18,14 @@ function buildChipFeedback( suggestion, key ) {
 	};
 }
 
-export default function SuggestionChips( { clientId, suggestions, label } ) {
+export default function SuggestionChips( {
+	clientId,
+	suggestions,
+	label,
+	disabled = false,
+	title = '',
+	tone = '',
+} ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion,
@@ -29,6 +37,19 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 
 	return (
 		<div className="flavor-agent-chip-surface">
+			{ ( title || tone ) && (
+				<div className="flavor-agent-chip-surface__header">
+					{ title && (
+						<div className="flavor-agent-section-label">
+							{ title }
+						</div>
+					) }
+					{ tone && (
+						<span className="flavor-agent-pill">{ tone }</span>
+					) }
+				</div>
+			) }
+
 			<div
 				className="flavor-agent-chips"
 				role="group"
@@ -44,7 +65,7 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 							variant={ wasApplied ? 'primary' : 'secondary' }
 							size="small"
 							onClick={ () => void handleApply( s ) }
-							disabled={ wasApplied }
+							disabled={ wasApplied || disabled }
 							title={ s.description || s.label }
 							icon={ wasApplied ? check : undefined }
 							className={ `flavor-agent-chip${
@@ -62,7 +83,7 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 							<span className="flavor-agent-chip__label">
 								{ s.label }
 							</span>
-							{ ! wasApplied && s.preview && (
+							{ ! wasApplied && ! disabled && s.preview && (
 								<span
 									className="flavor-agent-chip__preview"
 									aria-hidden="true"
@@ -74,18 +95,11 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 			</div>
 
 			{ feedback && (
-				<div
-					className="flavor-agent-inline-feedback flavor-agent-inline-feedback--compact"
-					role="status"
-					aria-live="polite"
-				>
-					<span className="flavor-agent-pill flavor-agent-pill--success">
-						Applied
-					</span>
-					<span className="flavor-agent-inline-feedback__message">
-						{ feedback.label }
-					</span>
-				</div>
+				<InlineActionFeedback
+					compact
+					message={ feedback.label }
+					className="flavor-agent-chip-surface__feedback"
+				/>
 			) }
 		</div>
 	);

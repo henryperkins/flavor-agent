@@ -407,7 +407,7 @@ describe( 'TemplatePartRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Advisory Suggestions' ) ).toBe( true );
+		expect( hasText( 'Manual Ideas' ) ).toBe( true );
 		expect( hasText( 'Introduce utility links' ) ).toBe( true );
 		expect( hasText( 'Browse pattern' ) ).toBe( true );
 	} );

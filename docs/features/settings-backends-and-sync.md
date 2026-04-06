@@ -27,7 +27,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Surface | Primary gate |
 |---|---|
 | Block recommendations | `ChatClient::is_supported()`; honors the selected provider when it is a configured connector-backed provider, otherwise uses the selected direct provider when configured here, otherwise falls back to the generic WordPress AI Client / Connectors path |
-| Pattern recommendations | Active direct provider chat + embeddings, Qdrant configured, and a usable pattern index |
+| Pattern recommendations | Active provider embeddings, Qdrant configured, any usable chat provider (direct or connector-backed), and a usable pattern index |
 | Template recommendations | Active provider chat configured (direct or connector-backed) |
 | Template-part recommendations | Active provider chat configured (direct or connector-backed) |
 | Navigation recommendations | Active provider chat configured (direct or connector-backed) and current user can edit theme options |

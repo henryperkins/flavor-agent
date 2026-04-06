@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-03
+> Last updated: 2026-04-06
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -13,13 +13,15 @@ Use these documents together:
 3. `STATUS.md` -- current verified state and known issues
 4. `docs/FEATURE_SURFACE_MATRIX.md` -- feature locations, surfacing conditions, and apply/undo matrix
 5. `docs/features/README.md` -- deep-dive user-flow documentation for each shipped surface
-6. `docs/reference/` -- canonical programmatic contract docs (abilities-and-routes, provider-precedence, template-operations, activity-state-machine)
+6. `docs/reference/` -- canonical programmatic contract docs (abilities-and-routes, shared-internals, provider-precedence, template-operations, activity-state-machine)
 7. `docs/flavor-agent-readme.md` -- editor-flow and architecture companion
 8. `docs/2026-03-25-roadmap-aligned-execution-plan.md` -- active forward plan
 
+Supplemental dated planning docs such as `docs/2026-04-03-wordpress-direction-review.md` and `docs/2026-04-03-three-phase-roadmap.md` are historical context, not the active plan of record.
+
 ## What This Plugin Is
 
-Flavor Agent is a WordPress plugin that adds AI-powered recommendations directly into the native Gutenberg editor. It should feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
+Flavor Agent is a WordPress plugin that adds AI-assisted recommendations and editorial scaffolding across the native Gutenberg editor and relevant wp-admin screens. It should feel like Gutenberg and wp-admin became smarter, not like a separate AI application was bolted on. It does not insert or mutate content automatically without a bounded UI path -- it recommends, the user reviews where needed, and the user decides.
 
 Applied AI changes are now tracked through the shared activity system and can be reversed from the UI when the live document still matches the recorded post-apply state. Activity persistence now uses server-backed storage, with editor-scoped hydration and `sessionStorage` retained only as a cache/fallback for the current editing surface.
 
@@ -37,20 +39,27 @@ Seven first-party recommendation surfaces exist today:
 6. **Style Book Recommender** -- Per-block style suggestions in the Style Book panel, bounded to block-scoped style paths and theme-backed values.
 7. **Navigation Inspector** -- Advisory navigation structure, overlay, and accessibility guidance for selected `core/navigation` blocks in the native Inspector.
 
-An eighth surface -- **WordPress Abilities API** -- exposes the same capabilities as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
+The plugin also ships one first-party admin audit surface at `Settings > AI Activity` and one programmatic content lane exposed through REST + Abilities, but not yet mounted in a first-party Gutenberg panel.
+
+A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
 
 ## Repository Layout
+
+Representative live-tree snapshot of the current repo (selected files only; generated assets, installed dependencies, and many test helpers are omitted for brevity):
 
 ```
 flavor-agent/
   flavor-agent.php          Bootstrap, lifecycle hooks, REST + Abilities registration, editor/admin asset enqueue
-  uninstall.php             Removes plugin-owned options, sync state, grounding caches, scheduled jobs
-  composer.json             PSR-4 autoload for inc/ (FlavorAgent\)
-  package.json              @wordpress/scripts build, lint, tests
-  webpack.config.js         Three entry points: editor (src/index.js), admin (src/admin/sync-button.js), activity-log (src/admin/activity-log.js)
+  readme.txt                Plugin readme and install/configuration summary
+  uninstall.php             Removes plugin-owned options, sync state, grounding caches, and scheduled jobs
+  composer.json             PSR-4 autoload + PHP lint/test aliases
+  package.json              @wordpress/scripts build/lint/test scripts plus dist/doc checks
+  jsconfig.json             JS tooling config
+  webpack.config.js         Three entry points: editor, settings admin, activity log admin
+  playwright.config.js      Playground Playwright harness
+  playwright.wp70.config.js Docker-backed WP 7.0 Playwright harness
   phpcs.xml.dist            WPCS config
   phpunit.xml.dist          PHPUnit config
-  playwright.wp70.config.js Docker-backed WP 7.0 Playwright config for Site Editor refresh/drift coverage
   .env.example              Local WordPress/Docker defaults
   .nvmrc                    Default Node major (24, latest LTS)
   .npmrc                    engine-strict gate for supported Node/npm majors
@@ -61,7 +70,11 @@ flavor-agent/
     wordpress/Dockerfile    Local WordPress dev image with Composer + WP-CLI
   docker-compose.yml        Local WordPress + MariaDB + phpMyAdmin stack
   scripts/
+    build-dist.sh           Build `dist/flavor-agent.zip`
+    check-doc-freshness.sh  Guard against known stale live-doc wording
     local-wordpress.ps1     Start/install/reset/wp helper for local stack
+    plugin-check.sh         Wrapper around the plugin validation flow
+    prepare-release.sh      Build temp release tree with `.distignore`
     wp70-e2e.js             Bootstrap/teardown helper for the WP 7.0 browser harness
   .github/
     copilot-instructions.md Repo guidance for GitHub Copilot
@@ -69,189 +82,230 @@ flavor-agent/
   STATUS.md                 Feature inventory and verification log
 
   inc/                      PHP backend (PSR-4 namespace FlavorAgent\)
-    REST/
-      Agent_Controller.php  REST routes under flavor-agent/v1/
-    LLM/
-      WordPressAIClient.php WordPress 7.0 AI client wrapper for block recommendations using `wp_ai_client_prompt()` and Connectors-backed availability checks
-      Prompt.php            Block recommendation prompt assembly and response parsing
-      TemplatePrompt.php    Template recommendation prompt assembly and structured operation parsing
-      StylePrompt.php       Global Styles recommendation prompt assembly and operation parsing
-      NavigationPrompt.php  Navigation recommendation prompt assembly and response parsing
-      TemplatePartPrompt.php  Template-part recommendation prompt assembly and response parsing
-    OpenAI/
-      Provider.php          Provider selection (Azure OpenAI vs OpenAI Native), connector-aware credential precedence, status metadata
-    AzureOpenAI/
-      ConfigurationValidator.php  Deployment and backend validation helpers
-      EmbeddingClient.php   Provider-selected embeddings client (Azure OpenAI or OpenAI Native)
-      QdrantClient.php      Qdrant vector DB CRUD and search
-      ResponsesClient.php   Provider-selected responses client (chat/ranking)
-    Cloudflare/
-      AISearchClient.php    Cloudflare AI Search grounding, cache, and prewarm pipeline
-    Context/
-      ServerCollector.php               Facade: delegates to per-surface collectors and exposes for_block, for_template, etc.
-      BlockContextCollector.php         Block-level context assembly for recommendation requests
-      BlockTypeIntrospector.php         Block type supports, attributes, and inspector panel introspection
-      NavigationContextCollector.php    Navigation menu context for navigation recommendation requests
-      NavigationParser.php              Navigation block markup parsing and menu-item extraction
-      PatternCandidateSelector.php      Candidate pattern selection, filtering, and limit enforcement
-      PatternCatalog.php                Registered pattern catalog query and metadata extraction
-      PatternOverrideAnalyzer.php       Pattern override binding detection and summary
-      TemplateContextCollector.php      Template-level context for template recommendation requests
-      TemplatePartContextCollector.php  Template-part-scoped context for template-part recommendations
-      TemplateRepository.php            Template and template-part entity lookup and metadata
-      TemplateStructureAnalyzer.php     Template block-tree structural analysis and slot detection
-      TemplateTypeResolver.php          Template type resolution and normalization
-      ThemeTokenCollector.php           Theme token extraction and token-source diagnostics
-      ViewportVisibilityAnalyzer.php    Block viewport visibility and blockVisibility attribute analysis
-    Patterns/
-      PatternIndex.php      Pattern embedding lifecycle: sync, diff, cron, fingerprint
+    Activity/
+      Permissions.php       Contextual capability checks for activity reads/writes/undo
+      Repository.php        Server-backed activity persistence, query, and pruning
+      Serializer.php        Activity normalization for REST/admin consumers
+    Admin/
+      ActivityPage.php      Settings > AI Activity screen registration and admin asset bootstrap
     Abilities/
       Registration.php      Abilities API category + 13 ability registrations
       BlockAbilities.php    recommend-block, introspect-block
+      ContentAbilities.php  recommend-content
       PatternAbilities.php  recommend-patterns, list-patterns
       TemplateAbilities.php recommend-template, recommend-template-part, list-template-parts
       StyleAbilities.php    recommend-style
       NavigationAbilities.php recommend-navigation
-      InfraAbilities.php    get-theme-tokens, check-status, backend/connector inventory
+      InfraAbilities.php    get-theme-tokens, check-status, backend inventory
       SurfaceCapabilities.php Shared localized + check-status surface readiness contract
-      WordPressDocsAbilities.php  search-wordpress-docs
-    Admin/
-      ActivityPage.php      Settings > AI Activity screen registration and admin asset bootstrap
+      WordPressDocsAbilities.php search-wordpress-docs
+    AzureOpenAI/
+      BaseHttpClient.php    Shared HTTP client/retry plumbing
+      ConfigurationValidator.php Deployment and backend validation helpers
+      EmbeddingClient.php   Provider-selected embeddings client
+      EmbeddingSignature.php Stable embedding fingerprint helpers
+      QdrantClient.php      Qdrant vector DB CRUD and search
+      ResponsesClient.php   Provider-selected responses/chat client
+    Cloudflare/
+      AISearchClient.php    Cloudflare AI Search grounding, cache, and prewarm pipeline
+    Context/
+      ServerCollector.php               Facade for per-surface context collectors
+      BlockContextCollector.php         Block-level context assembly
+      BlockTypeIntrospector.php         Block supports, attributes, and inspector panel introspection
+      NavigationContextCollector.php    Navigation recommendation context
+      NavigationParser.php              Navigation block markup parsing
+      PatternCandidateSelector.php      Candidate pattern selection and filtering
+      PatternCatalog.php                Pattern registry metadata extraction
+      PatternOverrideAnalyzer.php       Pattern override binding detection and summary
+      TemplateContextCollector.php      Template-level recommendation context
+      TemplatePartContextCollector.php  Template-part-scoped recommendation context
+      TemplateRepository.php            Template and template-part lookup helpers
+      TemplateStructureAnalyzer.php     Template block-tree structural analysis
+      TemplateTypeResolver.php          Template type normalization
+      ThemeTokenCollector.php           Theme token extraction and diagnostics
+      ViewportVisibilityAnalyzer.php    `blockVisibility` analysis
+    LLM/
+      ChatClient.php        Shared chat entry point with provider selection + fallback
+      NavigationPrompt.php  Navigation recommendation prompt assembly and parsing
+      Prompt.php            Block recommendation prompt assembly and parsing
+      StylePrompt.php       Global Styles / Style Book prompt assembly and parsing
+      TemplatePartPrompt.php Template-part recommendation prompt assembly and parsing
+      TemplatePrompt.php    Template recommendation prompt assembly and parsing
+      WordPressAIClient.php WordPress AI Client wrapper for connector-backed execution
+      WritingPrompt.php     Programmatic content-lane prompt assembly and parsing
+    OpenAI/
+      Provider.php          Provider selection, connector-aware precedence, runtime metadata
+    Patterns/
+      PatternIndex.php      Pattern embedding lifecycle: sync, diff, cron, fingerprint
+    REST/
+      Agent_Controller.php  REST routes under `flavor-agent/v1/`
     Support/
+      CollectsDocsGuidance.php Docs-guidance helper trait
+      FormatsDocsGuidance.php Docs-guidance formatting helpers
+      NormalizesInput.php   Structured input normalization helpers
       StringArray.php       Array sanitization utility
     Settings.php            Admin settings page, remote validation, sync/diagnostics panels
 
   src/                      JS frontend (built with @wordpress/scripts)
-    index.js                Entry: registers store, session bootstrap, inspector filter, pattern/template/global styles plugins
-    editor.css              Editor-side styles for all plugin surfaces
+    index.js                Entry: registers store, session bootstrap, and editor-side plugins
+    tokens.css              Shared design tokens for plugin UI
+    editor.css              Editor-side styles for shipped surfaces
     admin/
       sync-button.js        Settings-screen pattern sync trigger
-      activity-log.js       DataViews/DataForm admin audit screen for recent AI activity
+      activity-log.js       DataViews/DataForm admin audit screen
       activity-log.css      Activity page styling layered on top of wp-admin and DataViews
-      activity-log-utils.js Activity-entry normalization, persisted view helpers, and ordered undo-state derivation
+      activity-log-utils.js Activity-entry normalization and admin view helpers
+      brand.css             Shared admin brand layer
+      dataviews-runtime.css DataViews compatibility styling
+      settings.css          Settings-screen styling
+      wpds-runtime.css      WPDS runtime compatibility styling
     components/
-      AIActivitySection.js  Shared recent-actions list with per-entry undo affordance across block/template/template-part/global-styles/style-book
-      AIAdvisorySection.js  Shared advisory suggestion list for non-executable surfaces
-      AIReviewSection.js    Shared review-confirm-apply framing for executable surfaces
+      AIActivitySection.js  Shared recent-actions list with per-entry undo affordance
+      AIAdvisorySection.js  Shared advisory suggestion list
+      AIReviewSection.js    Shared review-confirm-apply framing
       AIStatusNotice.js     Shared loading/error/success status notice
-      ActivitySessionBootstrap.js  Reloads editor-scoped activity history when the edited entity changes
-      CapabilityNotice.js   Surface-specific unavailable/setup messaging with links to Settings or Connectors
-    global-styles/
-      GlobalStylesRecommender.js  Site Editor Global Styles AI panel with review-confirm-apply
-    style-book/
-      StyleBookRecommender.js  Style Book per-block style AI panel with review-confirm-apply
-      dom.js                Style Book panel DOM discovery and portal target resolution
-    store/
-      index.js              @wordpress/data store (flavor-agent): state, actions, selectors, template apply, undo, activity hydration, and history persistence
-      activity-history.js   Editor-scoped AI activity schema plus storage adapter and helpers, including Global Styles scope resolution
-      update-helpers.js     Safe attribute merge, content-only filtering, and undo snapshot helpers
-    inspector/
-      InspectorInjector.js  editor.BlockEdit HOC -- injects AI panels into all blocks
-      BlockRecommendationsPanel.js  Block-level recommendation prompt and suggestion panel
-      NavigationRecommendations.js  Navigation advisory panel for core/navigation blocks
-      SettingsRecommendations.js  Settings tab suggestion cards
-      StylesRecommendations.js   Appearance tab + style variation pills
-      SuggestionChips.js    Compact chips for sub-panel injection
-      suggestion-keys.js    Stable key generation for suggestion tracking
-      panel-delegation.js   Inspector panel routing for block vs navigation surfaces
-    review/
-      notes-adapter.js      Shape-only adapter for future Notes/comment projection (not wired into runtime UI)
+      ActivitySessionBootstrap.js Entity-change-driven activity hydration
+      CapabilityNotice.js   Shared unavailable/setup messaging
+      InlineActionFeedback.js Inline apply/undo feedback shell
+      RecommendationHero.js Shared featured recommendation presentation
+      RecommendationLane.js Shared grouped recommendation lane
+      SurfaceComposer.js    Shared surface layout composer
+      SurfacePanelIntro.js  Shared panel intro copy block
+      SurfaceScopeBar.js    Shared scope/freshness strip
     context/
-      collector.js          Assembles full block context for LLM calls
+      collector.js          Assembles full block context for block recommendations
       block-inspector.js    Recursive block capability manifest builder
       theme-settings.js     Theme-token source adapter + stable-parity diagnostics
-      theme-tokens.js       Design token extraction from theme.json + global styles
+      theme-tokens.js       Design token extraction from `theme.json` + Global Styles
+    global-styles/
+      GlobalStylesRecommender.js Site Editor Global Styles panel
+    inspector/
+      InspectorInjector.js  `editor.BlockEdit` HOC for AI panel injection
+      BlockRecommendationsPanel.js Block-level prompt and suggestion panel
+      NavigationRecommendations.js Navigation advisory panel for `core/navigation`
+      SettingsRecommendations.js Settings tab suggestion cards
+      StylesRecommendations.js Appearance tab + style variation pills
+      SuggestionChips.js    Compact chips for sub-panel injection
+      group-by-panel.js     Panel-grouping helpers
+      panel-delegation.js   Inspector panel routing for block vs navigation surfaces
+      suggestion-keys.js    Stable key generation for suggestion tracking
+      use-suggestion-apply-feedback.js Shared apply-feedback hook
     patterns/
       pattern-settings.js   Stable/experimental pattern settings + selector diagnostics
-      inserter-dom.js       Fail-closed inserter search/toggle DOM discovery
-      compat.js             Backward-compatible barrel for pattern settings + DOM helpers
+      inserter-dom.js       Fail-closed inserter DOM discovery
+      compat.js             Compatibility barrel for pattern settings + DOM helpers
       PatternRecommender.js Headless fetcher + native inserter patching
-      InserterBadge.js      Badge portal on inserter toggle (count/loading/error)
-      inserter-badge-state.js  Pure badge view-model derivation
-      recommendation-utils.js  Pattern metadata patching + badge reason extraction
-      find-inserter-search-input.js  Re-export of inserter-dom.findInserterSearchInput for backward compat
-    templates/
-      TemplateRecommender.js  Site Editor review-confirm-apply panel with linked entities
-      template-recommender-helpers.js  Pure helpers for template UI and executable operation view models
+      InserterBadge.js      Badge portal on inserter toggle
+      inserter-badge-state.js Pure badge view-model derivation
+      recommendation-utils.js Pattern metadata patching + badge reason extraction
+      find-inserter-search-input.js Backward-compatible re-export
+    review/
+      notes-adapter.js      Shape-only adapter for future Notes/comment projection
+    store/
+      index.js              `@wordpress/data` store for request state, apply/undo, and activity hydration
+      activity-history.js   Editor-scoped activity schema plus storage adapter/helpers
+      block-targeting.js    Live block resolution for activity entries
+      update-helpers.js     Safe attribute merge, content-only filtering, undo snapshot helpers
+    style-book/
+      StyleBookRecommender.js Style Book per-block style AI panel
+      dom.js                Style Book panel DOM discovery and portal target resolution
     template-parts/
-      TemplatePartRecommender.js  Template-part-scoped AI recommendations panel
+      TemplatePartRecommender.js Template-part-scoped AI recommendations panel
+    templates/
+      TemplateRecommender.js Site Editor review-confirm-apply panel with linked entities
+      template-recommender-helpers.js Template UI and executable-operation helpers
     utils/
-      style-operations.js   Deterministic Global Styles and Style Book apply and undo helpers
-      structural-identity.js  Block tree structural role annotation
-      template-part-areas.js  Template-part area resolution
-      template-types.js     Template slug normalization
-      template-operation-sequence.js  Template operation validation and normalization
-      template-actions.js   Editor navigation actions plus deterministic template operation preparation/execution/undo
-      pattern-names.js      Extract distinct pattern names
-      visible-patterns.js   Inserter-scoped visible pattern list
       capability-flags.js   Surface capability flag derivation from localized data
+      editor-context-metadata.js Shared editor metadata summaries
+      editor-entity-contracts.js Shared entity/view contract normalization
+      format-count.js       Shared count/string formatting helpers
+      structural-identity.js Block tree structural role annotation
+      style-design-semantics.js Style-oriented design summary helpers
+      style-operations.js   Deterministic Global Styles / Style Book apply and undo helpers
+      template-actions.js   Template and template-part preparation/execution/undo helpers
+      template-operation-sequence.js Template operation validation and normalization
+      template-part-areas.js Template-part area resolution
+      template-types.js     Template slug normalization
+      visible-patterns.js   Inserter-scoped visible pattern list
 
   tests/
     e2e/
-      flavor-agent.smoke.spec.js  Playwright smoke coverage
-      auth.wp70.setup.js     Playwright login setup for the Docker-backed WP 7.0 harness
-      wp70.global-setup.js   Docker bootstrap for the WP 7.0 Site Editor harness
+      flavor-agent.smoke.spec.js  Shared Playwright smoke coverage
+      auth.wp70.setup.js          Playwright login setup for the Docker-backed WP 7.0 harness
+      wp70.global-setup.js        Docker bootstrap for the WP 7.0 Site Editor harness
       playground-mu-plugin/
         flavor-agent-loader.php   Loads the plugin in WP Playground
-      wp70-theme/            Repo-local block theme fixture for deterministic Site Editor tests
+      wp70-theme/                 Repo-local block theme fixture for deterministic Site Editor tests
     phpunit/
-      bootstrap.php         WP function/class stubs
       AgentControllerTest.php
+      ActivityPermissionsTest.php
+      ActivityRepositoryTest.php
       AISearchClientTest.php
       AzureBackendValidationTest.php
       BlockAbilitiesTest.php
+      ChatClientTest.php
+      ContentAbilitiesTest.php
       DocsGroundingEntityCacheTest.php
       DocsPrewarmTest.php
+      EditorSurfaceCapabilitiesTest.php
       InfraAbilitiesTest.php
       NavigationAbilitiesTest.php
-      PromptGuidanceTest.php
-      PromptRulesTest.php
+      PatternAbilitiesTest.php
+      PatternCatalogTest.php
+      PatternIndexTest.php
+      ProviderTest.php
       RegistrationTest.php
       ServerCollectorTest.php
       SettingsTest.php
-      TemplatePromptTest.php
+      StyleAbilitiesTest.php
+      StylePromptTest.php
       TemplatePartPromptTest.php
+      TemplatePromptTest.php
       WordPressAIClientTest.php
-    (JS tests live alongside source in __tests__/ dirs and *.test.js files)
+      WritingPromptTest.php
+    src/**/__tests__/ and `*.test.js`
+      Current JS unit coverage for store state, shared components, inspector flows, pattern compat, template/style surfaces, and utilities
 
   docs/
     README.md               Doc entry point and update contract
-    FEATURE_SURFACE_MATRIX.md  Feature surface and gating matrix
-    features/
-      README.md            Entry point for per-surface deep dives
-      *.md                 Block, pattern, navigation, template, Global Styles, activity, settings docs
-    reference/
-      abilities-and-routes.md  Abilities API and REST contract map
-      provider-precedence.md   AI backend selection and credential fallback chain
-      template-operations.md   Operation type vocabulary and validation rules per surface
-      activity-state-machine.md  Undo states, transitions, ordered undo, and pruning
     SOURCE_OF_TRUTH.md      This document
+    FEATURE_SURFACE_MATRIX.md Feature surface and gating matrix
     flavor-agent-readme.md  Architecture and editor flow reference
     local-wordpress-ide.md  Local WordPress + devcontainer workflow
-    wordpress-7.0-developer-docs-index.md  Discovered WP 7.0 docs source list
-    wordpress-7.0-gutenberg-22.8-reference.md  22.8 stable plus 22.9 RC version reference and compatibility notes
-    wp7-migration-opportunities.md  Point-in-time WP 7.0 migration assessment
-    superpowers/specs/
-      2026-03-17-pattern-badge-status-design.md
-
-  build/                    Webpack output (gitignored, must run npm run build)
-  vendor/                   Composer autoloader (gitignored, must run composer install)
-  node_modules/             JS dependencies (gitignored)
-  output/                   Playwright artifacts (gitignored)
+    2026-03-25-roadmap-aligned-execution-plan.md Active forward plan
+    2026-04-03-wordpress-direction-review.md Supplemental dated direction review
+    2026-04-03-three-phase-roadmap.md Supplemental dated roadmap translation
+    features/
+      README.md             Entry point for per-surface deep dives
+      activity-and-audit.md
+      block-recommendations.md
+      content-recommendations.md
+      navigation-recommendations.md
+      pattern-recommendations.md
+      settings-backends-and-sync.md
+      style-and-theme-intelligence.md
+      template-part-recommendations.md
+      template-recommendations.md
+    reference/
+      abilities-and-routes.md Contract map for Abilities API + REST
+      activity-state-machine.md Undo states, transitions, ordered undo, pruning
+      provider-precedence.md Provider selection and credential fallback chain
+      shared-internals.md   Shared store/components/context helpers
+      template-operations.md Operation vocabulary and validation rules per surface
 ```
 
 ## External Services
 
-| Service                          | Purpose                                        | Required For                                                                              | Config Options                                                                                                                   |
-| -------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| WordPress AI Client + Connectors | Block recommendation fallback LLM              | Block Inspector recommendations when direct plugin chat is not configured                 | Core-managed in `Settings > Connectors`                                                                                          |
-| Provider selection               | Chooses between Azure OpenAI and OpenAI Native | Pattern/template/navigation recommendations                                               | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`)                                                               |
-| Azure OpenAI Embeddings          | Pattern embedding (3072-dim)                   | Pattern index + pattern recommendations (Azure provider)                                  | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment`                                                            |
-| Azure OpenAI Responses           | LLM ranking / chat                             | Pattern ranking, template/navigation recommendations (Azure provider)                     | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment`                                                                 |
-| OpenAI Native Embeddings         | Pattern embedding                              | Pattern index + pattern recommendations (Native provider)                                 | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
-| OpenAI Native Chat               | LLM ranking / chat                             | Pattern ranking, template/navigation recommendations (Native provider)                    | Optional `flavor_agent_openai_native_api_key` override, `_chat_model`; otherwise inherits core OpenAI connector credentials      |
-| Qdrant                           | Vector similarity search                       | Pattern recommendations                                                                   | `flavor_agent_qdrant_url`, `_key`                                                                                                |
-| Cloudflare AI Search             | WordPress dev-doc grounding                    | Supplemental doc context for block, pattern, template, template-part, and navigation recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results`                                     |
+| Service                          | Purpose                                                   | Required For                                                                                                    | Config Options                                                                                                                   |
+| -------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| WordPress AI Client + Connectors | Generic text-generation fallback and connector registry   | Block/content requests when no direct Flavor Agent chat backend is available, plus connector-backed chat paths | Core-managed in `Settings > Connectors`                                                                                          |
+| Provider selection               | Chooses Azure OpenAI, OpenAI Native, or a connector path | All chat-backed recommendation lanes plus pattern ranking                                                       | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a configured connector-backed provider)                     |
+| Azure OpenAI Embeddings          | Pattern embedding (3072-dim)                              | Pattern index + pattern recommendations when Azure is the active embedding backend                              | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment`                                                            |
+| Azure OpenAI Responses           | Chat + ranking                                            | Direct-provider block/content/template/template-part/navigation/style requests and pattern ranking              | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment`                                                                 |
+| OpenAI Native Embeddings         | Pattern embedding                                         | Pattern index + pattern recommendations when OpenAI Native is the active embedding backend                      | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
+| OpenAI Native Chat               | Chat + ranking                                            | Direct-provider block/content/template/template-part/navigation/style requests and pattern ranking              | Optional `flavor_agent_openai_native_api_key` override, `_chat_model`; otherwise inherits core OpenAI connector credentials      |
+| Qdrant                           | Vector similarity search                                  | Pattern recommendations                                                                                         | `flavor_agent_qdrant_url`, `_key`                                                                                                |
+| Cloudflare AI Search             | WordPress dev-doc grounding                               | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results`                                     |
 
 The plugin works in degraded mode without any services configured. Each surface gracefully disables when its required backends are absent.
 
@@ -379,7 +433,7 @@ All abilities registered with full JSON Schema input/output definitions:
 #### WordPress Docs Grounding (Cloudflare AI Search)
 
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
-- Recommendation-time grounding for block, pattern, template, template-part, and navigation suggestions is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
+- Recommendation-time grounding for block, pattern, template, template-part, navigation, Global Styles, and Style Book suggestions is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
 - Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks). Source keys with an `ai-search/<instanceId>/` prefix are now recognized alongside the plain `developer.wordpress.org/` prefix.
 - Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation). Exact entity misses now also fall back to prewarmed generic editor/template/template-part guidance families before returning empty. Throttled by credential fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
 
@@ -630,82 +684,32 @@ User opens the Style Book panel for a block type
 
 ### PHP (PHPUnit)
 
-| Test File                       | Tests   | What's Covered                                                                                                                                                                       |
-| ------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `AgentControllerTest`           | 15      | REST recommend-block/template/style wrapping, activity endpoints, template-part visiblePatternNames forwarding, and string array validation                                          |
-| `ServerCollectorTest`           | 15      | Template parts metadata, area lookup, content-role introspection, template candidate ordering, visible-pattern filtering, and token diagnostics                                      |
-| `InfraAbilitiesTest`            | 9       | check-status: Cloudflare backend, admin filtering, model fallback, provider inventory, and shared surface readiness including Global Styles and Style Book                           |
-| `RegistrationTest`              | 5       | Ability schema structure, check-status surfaces schema, entityKey schema, visiblePatternNames schema, and recommend-style/recommend-template-part schema                             |
-| `StyleAbilitiesTest`            | 9       | Global Styles and Style Book scope validation, surface-aware operation rules, and safe style recommendation normalization                                                            |
-| `StylePromptTest`               | 10      | Global Styles and Style Book prompt assembly, supported-path validation, block-scoped path rules, and variation parsing                                                              |
-| `EditorSurfaceCapabilitiesTest` | 2       | Shared localized capability payload for surface parity, including `globalStyles` and `styleBook`                                                                                     |
-| `DocsGroundingEntityCacheTest`  | 7       | Two-tier cache: query vs entity, seeding, inference, instance-prefixed source keys                                                                                                   |
-| `AISearchClientTest`            | 24      | Search flow, config, cache, source filtering, URL trust, entity keys, instance-prefixed source keys, probe-only validation, trusted-docs compatibility                               |
-| `PromptRulesTest`               | 3       | Content-only rules, disabled blocks, container behavior                                                                                                                              |
-| `BlockAbilitiesTest`            | 4       | Input normalization, XSS sanitization, disabled block short-circuit, selectedBlock/editorContext input paths                                                                         |
-| `PromptGuidanceTest`            | 8       | Guidance sections, structural identity, content-only restrictions, filter panel coverage, duotone summaries, aspect-ratio rules                                                      |
-| `SettingsTest`                  | 21      | Changed-vs-unchanged Azure/Qdrant/Cloudflare save validation, rollback, partial credentials, probe-only Cloudflare validation, and settings notice rendering                         |
-| `AzureBackendValidationTest`    | 16      | Azure embeddings/responses validation, remote error propagation, payload-shape checks, Qdrant response-shape checks, OpenAI Native validation                                        |
-| `NavigationAbilitiesTest`       | 15      | Input validation, prompt assembly, docs guidance, response parsing limits, and system prompt rules                                                                                   |
-| `TemplatePromptTest`            | 12      | Structured template operation parsing, editorStructure anchor validation, conflicting multi-step validation, visible-pattern context, and legacy fallback normalization              |
-| `TemplatePartPromptTest`        | 4       | Template-part prompt assembly, executable-operation parsing, expectedBlockName validation, and advisory fallback                                                                     |
-| `DocsPrewarmTest`               | 19      | Warm set definition, cache seeding, state recording, throttling (same creds, changed creds, expired window), partial/total failure, schedule/should prewarm, diagnostics, resilience |
-| `WordPressAIClientTest`         | 3       | Function-based prompt creation, system instruction application, missing-provider error                                                                                               |
-| `PatternIndexTest`              | 13      | Pattern embedding sync, diff-based update, fingerprint lifecycle, batch sizing, and cron scheduling                                                                                  |
-| `ChatClientTest`                | 4       | Provider-managed chat, WordPress AI Client fallback, is_supported gating                                                                                                             |
-| `PatternAbilitiesTest`          | 10      | Pattern recommendation pipeline, list-patterns filtering, Qdrant integration, and score threshold enforcement                                                                        |
-| `ActivityRepositoryTest`        | 14      | Activity create, query, ordered undo eligibility, undo state transitions, merge-on-duplicate, and pruning                                                                            |
-| `ActivityPermissionsTest`       | 7       | Contextual permission checks for post, template, template-part, and global reads                                                                                                     |
-| **Total**                       | **273** |                                                                                                                                                                                      |
+This section is intentionally representative rather than a line-by-line manifest. The live suite currently includes the files under `tests/phpunit/`, with these areas carrying direct coverage:
+
+| Suite / area | Representative files | What's Covered |
+| ------------ | -------------------- | -------------- |
+| Contract and registration | `AgentControllerTest`, `RegistrationTest`, `EditorSurfaceCapabilitiesTest` | REST wrappers, ability schemas, localized capability payloads, activity endpoints, and route/shape validation |
+| Block and content abilities | `BlockAbilitiesTest`, `ContentAbilitiesTest`, `PromptGuidanceTest`, `PromptRulesTest`, `WordPressAIClientTest`, `ChatClientTest` | Block input normalization, editorial content scaffold behavior, prompt guardrails, and WordPress AI Client fallback behavior |
+| Provider and backend configuration | `ProviderTest`, `SettingsTest`, `AzureBackendValidationTest`, `InfraAbilitiesTest` | Provider selection, connector/native credential precedence, backend diagnostics, validation rollback, and effective runtime metadata |
+| Pattern pipeline | `PatternAbilitiesTest`, `PatternCatalogTest`, `PatternIndexTest` | Registry filtering, recommendation pipeline behavior, sync/fingerprint lifecycle, and Qdrant-backed indexing rules |
+| Template, style, and navigation prompting | `TemplatePromptTest`, `TemplatePartPromptTest`, `StyleAbilitiesTest`, `StylePromptTest`, `NavigationAbilitiesTest` | Structured operations, bounded placements, style scope rules, variation parsing, and navigation advice parsing |
+| Activity and persistence | `ActivityRepositoryTest`, `ActivityPermissionsTest` | Activity create/query/prune, ordered undo eligibility, undo state transitions, and contextual permissions |
+| Docs grounding | `AISearchClientTest`, `DocsGroundingEntityCacheTest`, `DocsPrewarmTest` | Trusted-source filtering, cache layers, prewarm scheduling, throttling, and diagnostics |
+| Shared context collectors | `ServerCollectorTest` | Template/template-part metadata, visible-pattern filtering, and token diagnostics |
 
 ### JS (Jest)
 
-| Test File                                                  | What's Covered                                                                                                                                                              |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `store/__tests__/activity-history.test.js`                 | Activity scope resolution including Global Styles and Style Book, session storage persistence, legacy template-entry downgrade, latest-applied/undoable stack rules         |
-| `store/__tests__/activity-history-state.test.js`           | Reducer hydration of persisted activity state, legacy non-undoable template entries, and undo side effects                                                                  |
-| `store/__tests__/block-request-state.test.js`              | Per-block request state, stale token rejection                                                                                                                              |
-| `store/__tests__/navigation-request-state.test.js`         | Per-navigation request state and token lifecycle                                                                                                                            |
-| `store/__tests__/pattern-status.test.js`                   | Pattern status/error transitions, badge recalculation                                                                                                                       |
-| `store/__tests__/store-actions.test.js`                    | Block/template/template-part/Global Styles/Style Book apply logging, client-side validation failures, session persistence, and undo thunk behavior                          |
-| `store/__tests__/template-apply-state.test.js`             | Template preview/apply reducer state transitions                                                                                                                            |
-| `store/update-helpers.test.js`                             | Safe merge, content-only filtering, editing restrictions, and undo snapshot comparison                                                                                      |
-| `inspector/__tests__/BlockRecommendationsPanel.test.js`    | Block recommendation panel prompt, suggestion rendering, and capability-gated behavior                                                                                      |
-| `inspector/__tests__/SettingsRecommendations.test.js`      | Settings tab suggestion card rendering and apply interactions                                                                                                               |
-| `inspector/__tests__/StylesRecommendations.test.js`        | Appearance tab style variation pills and recommendation rendering                                                                                                           |
-| `inspector/__tests__/SuggestionChips.test.js`              | Compact chip rendering and sub-panel layout                                                                                                                                 |
-| `inspector/__tests__/NavigationRecommendations.test.js`    | Navigation advisory panel rendering and gating                                                                                                                              |
-| `inspector/__tests__/panel-delegation.test.js`             | Inspector panel routing for block vs navigation surfaces                                                                                                                    |
-| `inspector/suggestion-keys.test.js`                        | Key generation                                                                                                                                                              |
-| `patterns/__tests__/inserter-badge-state.test.js`          | Badge view-model derivation (all 4 states)                                                                                                                                  |
-| `patterns/__tests__/recommendation-utils.test.js`          | Metadata patching, badge reason extraction                                                                                                                                  |
-| `patterns/__tests__/find-inserter-search-input.test.js`    | DOM search strategy (delegates to compat)                                                                                                                                   |
-| `patterns/__tests__/compat.test.js`                        | Stable/experimental/additional API negotiation, DOM selector strategies, fallback behavior                                                                                  |
-| `patterns/__tests__/InserterBadge.test.js`                 | Inserter badge portal rendering and state transitions                                                                                                                       |
-| `patterns/__tests__/PatternRecommender.test.js`            | Pattern fetcher lifecycle, inserter patching, and error handling                                                                                                            |
-| `context/__tests__/block-inspector.test.js`                | Block capability manifest building and recursive attribute introspection                                                                                                    |
-| `context/__tests__/theme-tokens.test.js`                   | Theme token extraction, summarization, and source diagnostics                                                                                                               |
-| `context/__tests__/collector.test.js`                      | Theme-token collector diagnostics and server-token enrichment                                                                                                               |
-| `templates/__tests__/TemplateRecommender.test.js`          | Template panel rendering, suggestion lifecycle, and editorStructure integration                                                                                             |
-| `templates/__tests__/template-recommender-helpers.test.js` | Entity map, suggestion view models, context signature, format helpers                                                                                                       |
-| `template-parts/__tests__/TemplatePartRecommender.test.js` | Template-part panel rendering and operation execution                                                                                                                       |
-| `components/__tests__/AIStatusNotice.test.js`              | Shared status notice rendering across surface states                                                                                                                        |
-| `components/__tests__/AIAdvisorySection.test.js`           | Shared advisory list rendering                                                                                                                                              |
-| `components/__tests__/AIReviewSection.test.js`             | Shared review-confirm-apply framing                                                                                                                                         |
-| `components/__tests__/AIActivitySection.test.js`           | Shared activity history and undo rendering                                                                                                                                  |
-| `components/__tests__/ActivitySessionBootstrap.test.js`    | Entity-change-driven activity reload                                                                                                                                        |
-| `review/__tests__/notes-adapter.test.js`                   | Notes shape normalization for future comment projection                                                                                                                     |
-| `utils/__tests__/structural-identity.test.js`              | Role annotation, location resolution, position tracking                                                                                                                     |
-| `utils/__tests__/template-actions.test.js`                 | Template and template-part operation preparation, placement validation, refresh-safe undo resolution, inserted-pattern drift detection, and client-side conflict validation |
-| `utils/__tests__/template-part-areas.test.js`              | Area resolution priority chain                                                                                                                                              |
-| `utils/__tests__/template-types.test.js`                   | Slug normalization                                                                                                                                                          |
-| `utils/__tests__/visible-patterns.test.js`                 | Inserter-scoped pattern list, injected block-editor selector, null-root document scope                                                                                      |
-| `utils/__tests__/capability-flags.test.js`                 | Surface capability flag derivation from localized data                                                                                                                      |
-| `utils/__tests__/style-operations.test.js`                 | Global Styles and Style Book runtime resolution, deterministic apply, and refresh-safe undo rules                                                                           |
-| `global-styles/__tests__/GlobalStylesRecommender.test.js`  | Site Editor Global Styles request shaping and scoped sidebar behavior                                                                                                       |
-| `style-book/__tests__/StyleBookRecommender.test.js`        | Style Book per-block panel rendering, scope resolution, and portal behavior                                                                                                 |
-| `admin/__tests__/activity-log.test.js`                     | Admin audit page DataViews rendering and view persistence                                                                                                                   |
-| `admin/__tests__/activity-log-utils.test.js`               | Activity entry formatting, filters, summary cards, and admin links                                                                                                          |
+Current high-signal coverage map:
+
+| Area | Representative files | What's Covered |
+| ---- | -------------------- | -------------- |
+| Store state and activity orchestration | `src/store/__tests__/activity-history.test.js`, `activity-history-state.test.js`, `store-actions.test.js`, `template-apply-state.test.js`, `pattern-status.test.js`, `navigation-request-state.test.js` | Request lifecycle, stale-result rejection, activity hydration, undo coordination, and executable-surface reducer state |
+| Inspector flows | `src/inspector/__tests__/BlockRecommendationsPanel.test.js`, `SettingsRecommendations.test.js`, `StylesRecommendations.test.js`, `NavigationRecommendations.test.js`, `InspectorInjector.test.js`, `panel-delegation.test.js`, `SuggestionChips.test.js`, `src/inspector/suggestion-keys.test.js` | Panel rendering, capability gating, delegated sub-panel behavior, navigation framing, and key generation |
+| Pattern inserter integration | `src/patterns/__tests__/PatternRecommender.test.js`, `InserterBadge.test.js`, `compat.test.js`, `recommendation-utils.test.js`, `find-inserter-search-input.test.js`, `inserter-badge-state.test.js` | Inserter DOM discovery, compat negotiation, metadata patching, badge state, and fetcher lifecycle |
+| Template and style surfaces | `src/templates/__tests__/TemplateRecommender.test.js`, `template-recommender-helpers.test.js`, `src/template-parts/__tests__/TemplatePartRecommender.test.js`, `src/global-styles/__tests__/GlobalStylesRecommender.test.js`, `src/style-book/__tests__/StyleBookRecommender.test.js` | Site Editor rendering, suggestion lifecycle, operation helpers, scope resolution, and panel portal behavior |
+| Shared UI composition | `src/components/__tests__/AIStatusNotice.test.js`, `AIAdvisorySection.test.js`, `AIReviewSection.test.js`, `AIActivitySection.test.js`, `ActivitySessionBootstrap.test.js`, `RecommendationHero.test.js`, `RecommendationLane.test.js`, `SurfaceComposer.test.js`, `SurfacePanelIntro.test.js`, `SurfaceScopeBar.test.js` | Shared review model, status framing, featured/grouped presentation, scope UI, and activity bootstrap behavior |
+| Utility modules | `src/utils/__tests__/editor-entity-contracts.test.js`, `editor-context-metadata.test.js`, `format-count.test.js`, `style-design-semantics.test.js`, `style-operations.test.js`, `template-actions.test.js`, `template-part-areas.test.js`, `template-types.test.js`, `visible-patterns.test.js`, `capability-flags.test.js`, `structural-identity.test.js` | Entity contracts, editor metadata summaries, formatting helpers, design semantics, deterministic apply/undo rules, and structural analysis |
+| Admin audit page | `src/admin/__tests__/activity-log.test.js`, `activity-log-utils.test.js` | DataViews rendering, persisted admin views, summary cards, filters, and entity/settings link generation |
 
 ## Definition of "Complete" (v1.0)
 
@@ -762,14 +766,18 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/SOURCE_OF_TRUTH.md`                                          | Definitive project reference: scope, architecture, inventory, roadmap                                      | **Current**                    |
 | `docs/FEATURE_SURFACE_MATRIX.md`                                   | Fast map of every shipped surface, gating condition, and apply/undo path                                   | **Current**                    |
 | `docs/features/README.md`                                          | Entry point for detailed feature docs covering end-to-end flows                                            | **Current**                    |
+| `docs/features/content-recommendations.md`                         | Programmatic content lane contract and current no-first-party-UI status                                     | **Current**                    |
 | `docs/features/style-and-theme-intelligence.md`                    | Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo | **Current**                    |
 | `docs/reference/abilities-and-routes.md`                           | Canonical ability and REST contract reference                                                              | **Current**                    |
+| `docs/reference/shared-internals.md`                               | Shared store utilities, UI components, and context helpers                                                  | **Current**                    |
 | `docs/reference/provider-precedence.md`                            | AI backend selection and credential fallback chain                                                         | **Current**                    |
 | `docs/reference/template-operations.md`                            | Operation type vocabulary and validation rules per surface                                                 | **Current**                    |
 | `docs/reference/activity-state-machine.md`                         | Undo states, transitions, ordered undo, and pruning                                                        | **Current**                    |
 | `docs/flavor-agent-readme.md`                                      | Architecture details: editor flows, settings, style surfaces, pattern lifecycle, and admin audit          | **Current**                    |
 | `docs/local-wordpress-ide.md`                                      | Local Docker/devcontainer workflow and host setup                                                          | **Current**                    |
 | `docs/2026-03-25-roadmap-aligned-execution-plan.md`                | Active forward plan aligned to the current WordPress 7.0 and Gutenberg roadmap context                     | **Current**                    |
+| `docs/2026-04-03-wordpress-direction-review.md`                    | Supplemental dated direction review after the WordPress 7.0 schedule extension                              | **Supplemental context**       |
+| `docs/2026-04-03-three-phase-roadmap.md`                           | Supplemental dated three-phase execution framing derived from the direction review                           | **Supplemental context**       |
 | `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WP 7.0 plus Gutenberg 22.8 stable / 22.9 RC API changes, new features, deprecations, and plugin impact     | **Reference snapshot**         |
 | `docs/wordpress-7.0-developer-docs-index.md`                       | Discovery snapshot of official WordPress 7.0 developer documentation sources                               | **Reference snapshot**         |
 | `docs/wp7-migration-opportunities.md`                              | Point-in-time WordPress 7.0 migration assessment and follow-up opportunities                               | **Reference snapshot**         |
@@ -783,9 +791,12 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 # JS
 source ~/.nvm/nvm.sh && nvm use      # Default JS toolchain from .nvmrc (Node 24 / npm 11)
 npm ci                               # Install JS deps reproducibly
-npm run build                        # Production build -> build/index.js, build/admin.js
+npm run build                        # Production build -> build/index.js, build/admin.js, build/activity-log.js
+npm run dist                         # Prepare release temp tree and zip -> dist/flavor-agent.zip
 npm start                            # Dev build with watch
 npm run lint:js                      # ESLint on src/
+npm run lint:plugin                  # Plugin validation wrapper
+npm run check:docs                   # Live-doc freshness checks
 npm run test:unit -- --runInBand     # Jest unit tests
 npm run test:e2e                     # Default Playwright smoke coverage (Playground + WP 7.0 harness)
 npm run test:e2e:playground          # Fast 6.9.4 Playground smoke harness
@@ -806,7 +817,7 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 
 ## Key Technical Decisions
 
-1. **Split recommendation backends**: Block recommendations use `ChatClient`, which prefers the direct plugin-managed provider when configured and otherwise falls back to the WordPress AI Client / Connectors path; pattern/template/navigation use provider-selected embeddings/responses via `Provider`. Not a redundancy -- different strengths for different tasks.
+1. **Shared provider selection, split execution paths**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both ride the same `Provider` selection layer, which can use Azure OpenAI, OpenAI Native, a configured connector-backed provider, or the generic WordPress AI Client fallback when no direct chat backend is configured. Pattern embeddings remain plugin-managed even when chat is connector-backed.
 2. **Narrow approval model**: Block suggestions still apply inline on click, but template suggestions use an explicit preview-confirm-apply step. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.

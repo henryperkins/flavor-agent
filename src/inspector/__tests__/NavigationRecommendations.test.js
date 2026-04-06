@@ -118,6 +118,14 @@ function renderComponent( clientId = 'nav-1' ) {
 	} );
 }
 
+function renderEmbeddedComponent( clientId = 'nav-1' ) {
+	act( () => {
+		getRoot().render(
+			<NavigationRecommendations clientId={ clientId } embedded />
+		);
+	} );
+}
+
 beforeEach( () => {
 	jest.clearAllMocks();
 	currentState = {
@@ -156,6 +164,17 @@ beforeEach( () => {
 		clearNavigationRecommendations: mockClearNavigationRecommendations,
 		fetchNavigationRecommendations: mockFetchNavigationRecommendations,
 	} ) );
+	mockClearNavigationRecommendations.mockImplementation( () => {
+		currentState.store = {
+			...currentState.store,
+			navigationBlockClientId: null,
+			navigationRecommendations: [],
+			navigationExplanation: '',
+			navigationError: null,
+			navigationStatus: 'idle',
+			navigationContextSignature: null,
+		};
+	} );
 } );
 
 afterEach( () => {
@@ -371,6 +390,40 @@ describe( 'NavigationRecommendations', () => {
 		);
 	} );
 
+	test( 'shows the stale scope badge in embedded mode when the stored navigation result context mismatches', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationContextSignature: 'stale-signature',
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderEmbeddedComponent();
+
+		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Menu ID 42' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'Context has changed since the last request.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Navigation Recommendations'
+		);
+	} );
+
 	test( 'shows the navigation intro copy on first render', () => {
 		currentState.blockEditor.blocks = {
 			'nav-1': {
@@ -421,14 +474,24 @@ describe( 'NavigationRecommendations', () => {
 
 		renderComponent();
 
-		expect( getContainer().textContent ).toContain( 'Navigation ideas' );
+		expect( getContainer().textContent ).toContain(
+			'Recommended Next Changes'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Recommended Next Step'
+		);
 		expect( getContainer().textContent ).toContain( 'Group utility links' );
 		expect( getContainer().textContent ).toContain(
 			'Move utility links into a smaller secondary row.'
 		);
 	} );
 
-	test( 'clears stale navigation recommendations when the selected block changes in place', () => {
+	test( 'keeps previous navigation results visible as stale when the selected block changes in place', () => {
+		const initialMarkup =
+			'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->';
+		const updatedMarkup =
+			'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- wp:navigation-link {"label":"Contact"} /--><!-- /wp:navigation -->';
+
 		currentState.blockEditor.blocks = {
 			'nav-1': {
 				clientId: 'nav-1',
@@ -455,14 +518,18 @@ describe( 'NavigationRecommendations', () => {
 			navigationExplanation: 'Existing guidance.',
 			navigationError: null,
 			navigationStatus: 'ready',
+			navigationContextSignature: JSON.stringify( {
+				menuId: 42,
+				navigationMarkup: initialMarkup,
+			} ),
 		};
 		mockSerialize.mockImplementation( ( blocks ) =>
 			blocks?.[ 0 ]?.innerBlocks?.length === 1
-				? '<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->'
-				: '<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- wp:navigation-link {"label":"Contact"} /--><!-- /wp:navigation -->'
+				? initialMarkup
+				: updatedMarkup
 		);
 
-		renderComponent();
+		renderEmbeddedComponent();
 
 		currentState.blockEditor.blocks = {
 			'nav-1': {
@@ -494,9 +561,15 @@ describe( 'NavigationRecommendations', () => {
 			},
 		};
 
-		renderComponent();
+		renderEmbeddedComponent();
+		renderEmbeddedComponent();
 
-		expect( mockClearNavigationRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( mockClearNavigationRecommendations ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'Context has changed since the last request.'
+		);
 	} );
 
 	test( 'buildNavigationFetchInput includes a trimmed prompt when present', () => {
@@ -535,7 +608,12 @@ describe( 'NavigationRecommendations', () => {
 		} );
 	} );
 
-	test( 'clears stale navigation recommendations when only referenced-menu attributes change', () => {
+	test( 'keeps previous navigation results visible as stale when only referenced-menu attributes change', () => {
+		const mobileMarkup =
+			'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} /-->';
+		const alwaysMarkup =
+			'<!-- wp:navigation {"ref":42,"overlayMenu":"always"} /-->';
+
 		currentState.blockEditor.blocks = {
 			'nav-1': {
 				clientId: 'nav-1',
@@ -553,14 +631,18 @@ describe( 'NavigationRecommendations', () => {
 			navigationExplanation: 'Existing guidance.',
 			navigationError: null,
 			navigationStatus: 'ready',
+			navigationContextSignature: JSON.stringify( {
+				menuId: 42,
+				navigationMarkup: mobileMarkup,
+			} ),
 		};
 		mockSerialize.mockImplementation( ( blocks ) =>
 			blocks?.[ 0 ]?.attributes?.overlayMenu === 'mobile'
-				? '<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} /-->'
-				: '<!-- wp:navigation {"ref":42,"overlayMenu":"always"} /-->'
+				? mobileMarkup
+				: alwaysMarkup
 		);
 
-		renderComponent();
+		renderEmbeddedComponent();
 
 		currentState.blockEditor.blocks = {
 			'nav-1': {
@@ -574,7 +656,53 @@ describe( 'NavigationRecommendations', () => {
 			},
 		};
 
-		renderComponent();
+		renderEmbeddedComponent();
+		renderEmbeddedComponent();
+
+		expect( mockClearNavigationRecommendations ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+	} );
+
+	test( 'clears navigation results when the scoped navigation block changes', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+			'nav-2': {
+				clientId: 'nav-2',
+				name: 'core/navigation',
+				attributes: {
+					ref: 84,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationContextSignature: JSON.stringify( {
+				menuId: 42,
+				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
+			} ),
+		};
+		mockSerialize.mockImplementation( ( blocks ) => {
+			const menuId = Number( blocks?.[ 0 ]?.attributes?.ref || 0 );
+
+			return `<!-- wp:navigation {"ref":${ menuId }} /-->`;
+		} );
+
+		renderComponent( 'nav-1' );
+		renderComponent( 'nav-2' );
+		renderComponent( 'nav-2' );
 
 		expect( mockClearNavigationRecommendations ).toHaveBeenCalledTimes( 1 );
 	} );

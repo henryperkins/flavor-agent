@@ -1,0 +1,16 @@
+{
+	"typeAcquisition": {
+		"enable": false
+	},
+	"compilerOptions": {
+		"maxNodeModuleJsDepth": 0,
+		"skipLibCheck": true
+	},
+	"exclude": [
+		"node_modules",
+		"build",
+		"dist",
+		"output",
+		"vendor"
+	]
+}

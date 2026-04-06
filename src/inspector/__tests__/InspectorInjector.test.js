@@ -20,6 +20,11 @@ jest.mock( '@wordpress/data', () => ( {
 
 jest.mock( '../../context/collector', () => ( {
 	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
+	getLiveBlockContextSignature: ( _select, clientId ) => {
+		const context = mockCollectBlockContext( clientId );
+
+		return context ? JSON.stringify( context ) : '';
+	},
 } ) );
 
 jest.mock( '../../utils/block-recommendation-context', () => ( {
@@ -66,7 +71,9 @@ function renderComponent( props = {} ) {
 	const Wrapped = withAIRecommendations( BlockEdit );
 
 	act( () => {
-		getRoot().render( <Wrapped clientId="block-1" isSelected { ...props } /> );
+		getRoot().render(
+			<Wrapped clientId="block-1" isSelected { ...props } />
+		);
 	} );
 }
 
@@ -139,6 +146,25 @@ describe( 'InspectorInjector', () => {
 		mockCollectBlockContext.mockReturnValue( {
 			block: {
 				name: 'core/paragraph',
+			},
+		} );
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Block Panel' );
+		expect( getContainer().textContent ).not.toContain( 'Settings 1' );
+		expect( getContainer().textContent ).not.toContain( 'Styles 1' );
+	} );
+
+	test( 'drops previously fresh injected suggestions after a same-clientId block edit changes context', () => {
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Settings 1' );
+		expect( getContainer().textContent ).toContain( 'Styles 1' );
+
+		mockCollectBlockContext.mockReturnValue( {
+			block: {
+				name: 'core/heading',
 			},
 		} );
 

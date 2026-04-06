@@ -487,7 +487,9 @@ describe( 'GlobalStylesRecommender', () => {
 		} );
 
 		const textarea = sidebar.querySelector( 'textarea' );
-		const button = sidebar.querySelector( 'button' );
+		const button = Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+			( candidate ) => candidate.textContent === 'Get Style Suggestions'
+		);
 
 		expect( textarea ).not.toBeNull();
 		expect( button ).not.toBeNull();
@@ -555,7 +557,9 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		const button = sidebar.querySelector( 'button' );
+		const button = Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+			( candidate ) => candidate.textContent === 'Get Style Suggestions'
+		);
 
 		expect( button ).not.toBeNull();
 		expect( button.disabled ).toBe( false );
@@ -1211,7 +1215,7 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( sidebar.textContent ).toContain( 'Review to apply' );
+		expect( sidebar.textContent ).toContain( 'Review first' );
 		expect( sidebar.textContent ).toContain( 'Color' );
 		expect( sidebar.textContent ).toContain( 'Review open' );
 		expect( sidebar.textContent ).toContain( 'color.background → accent' );
@@ -1259,6 +1263,69 @@ describe( 'GlobalStylesRecommender', () => {
 		} );
 
 		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
+
+	test( 'keeps the apply success undo notice visible after review closes while suggestions remain', () => {
+		currentStoreState = {
+			...currentStoreState,
+			activityLog: [
+				{
+					id: 'activity-1',
+					surface: 'global-styles',
+					suggestion: 'Use accent canvas',
+					target: {
+						globalStylesId: '17',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+						error: null,
+					},
+				},
+			],
+			recommendations: [
+				{
+					suggestionKey: 'global-style-1',
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [
+						{
+							type: 'set_styles',
+							path: [ 'color', 'background' ],
+							value: 'var:preset|color|accent',
+							presetSlug: 'accent',
+						},
+					],
+				},
+			],
+			explanation: 'Prefer accent palette values.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+			applyStatus: 'success',
+			selectedSuggestionKey: null,
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		const notices = Array.from(
+			sidebar.querySelectorAll( '[data-status-notice="true"]' )
+		);
+		const applySuccessNotice = notices.find( ( element ) =>
+			element.textContent.includes(
+				'Flavor Agent applied the selected Global Styles change.'
+			)
+		);
+
+		expect( applySuccessNotice ).toBeDefined();
+		expect( applySuccessNotice.textContent ).toContain( 'Undo' );
 	} );
 
 	test( 'does not mark activity history as undoing while apply is in flight', () => {

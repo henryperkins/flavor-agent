@@ -31,6 +31,8 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import RecommendationHero from '../components/RecommendationHero';
+import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
@@ -628,6 +630,8 @@ export default function TemplateRecommender() {
 		! hasMatchingResult &&
 		templateActivityEntries.length === 0 &&
 		! selectedSuggestionKey;
+	const featuredSuggestionCard =
+		executableSuggestionCards[ 0 ] || advisorySuggestionCards[ 0 ] || null;
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommend ) {
@@ -785,72 +789,73 @@ export default function TemplateRecommender() {
 					</p>
 				) }
 
-				<AIActivitySection
-					description="Template actions use the same latest-valid undo rule as the block review surface."
-					entries={ templateActivityEntries }
-					isUndoing={ undoStatus === 'undoing' }
-					onUndo={ handleUndo }
-				/>
+				{ canRecommend && featuredSuggestionCard && (
+					<RecommendationHero
+						title={
+							featuredSuggestionCard.label ||
+							'Recommended template change'
+						}
+						description={ featuredSuggestionCard.description || '' }
+						tone={
+							featuredSuggestionCard.canApply
+								? 'Review first'
+								: 'Manual'
+						}
+						why={
+							featuredSuggestionCard.canApply
+								? 'Flavor Agent validated a deterministic operation sequence for this suggestion, so review it before applying.'
+								: 'This is the strongest next idea, but it still needs manual follow-through.'
+						}
+					/>
+				) }
 
 				{ canRecommend && executableSuggestionCards.length > 0 && (
-					<div className="flavor-agent-panel__group">
-						<div className="flavor-agent-panel__group-header">
-							<div className="flavor-agent-panel__group-title">
-								Suggested Composition
-							</div>
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									executableSuggestionCards.length,
-									'suggestion'
-								) }
-							</span>
-						</div>
-						<div className="flavor-agent-panel__group-body">
-							{ executableSuggestionCards.map(
-								( suggestion, index ) => (
-									<TemplateSuggestionCard
-										key={ `${ resultToken }-${ getSuggestionCardKey(
-											suggestion,
-											index
-										) }` }
-										suggestion={ suggestion }
-										entityMap={ entityMap }
-										insertionPointLabel={
-											insertionPointLabel
-										}
-										templateBlocks={ templateBlocks }
-										isApplied={
-											lastAppliedSuggestionKey ===
-											suggestion.suggestionKey
-										}
-										isApplying={
-											applyStatus === 'applying'
-										}
-										isSelected={
-											selectedSuggestionKey ===
-											suggestion.suggestionKey
-										}
-										onEntityClick={ handleEntityAction }
-										onApplySuggestion={
-											handleApplySuggestion
-										}
-										onCancelPreview={ handleCancelPreview }
-										onPreviewSuggestion={
-											handlePreviewSuggestion
-										}
-									/>
-								)
-							) }
-						</div>
-					</div>
+					<RecommendationLane
+						title="Review First"
+						tone="Review first"
+						count={ executableSuggestionCards.length }
+						countNoun="suggestion"
+						description="Preview the validated operations below before Flavor Agent mutates the template."
+					>
+						{ executableSuggestionCards.map(
+							( suggestion, index ) => (
+								<TemplateSuggestionCard
+									key={ `${ resultToken }-${ getSuggestionCardKey(
+										suggestion,
+										index
+									) }` }
+									suggestion={ suggestion }
+									entityMap={ entityMap }
+									insertionPointLabel={ insertionPointLabel }
+									templateBlocks={ templateBlocks }
+									isApplied={
+										lastAppliedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									isApplying={ applyStatus === 'applying' }
+									isSelected={
+										selectedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									onEntityClick={ handleEntityAction }
+									onApplySuggestion={ handleApplySuggestion }
+									onCancelPreview={ handleCancelPreview }
+									onPreviewSuggestion={
+										handlePreviewSuggestion
+									}
+								/>
+							)
+						) }
+					</RecommendationLane>
 				) }
 
 				{ canRecommend && advisorySuggestionCards.length > 0 && (
 					<AIAdvisorySection
-						title="Advisory Suggestions"
+						title="Manual Ideas"
 						count={ advisorySuggestionCards.length }
 						countNoun="suggestion"
 						initialOpen
+						advisoryLabel="Manual"
 						description={
 							showSecondaryGuidance
 								? 'These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them.'
@@ -888,6 +893,16 @@ export default function TemplateRecommender() {
 						) }
 					</AIAdvisorySection>
 				) }
+
+				<AIActivitySection
+					description="Template actions use the same latest-valid undo rule as the block review surface."
+					entries={ templateActivityEntries }
+					isUndoing={ undoStatus === 'undoing' }
+					onUndo={ handleUndo }
+					initialOpen={ ! hasResult || ! canRecommend }
+					resetKey={ templateRef || 'template' }
+					maxVisible={ 3 }
+				/>
 			</div>
 		</PluginDocumentSettingPanel>
 	);

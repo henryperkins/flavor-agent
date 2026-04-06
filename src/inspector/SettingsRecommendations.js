@@ -7,17 +7,26 @@ import { PanelBody, Button } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { Icon, check, arrowRight } from '@wordpress/icons';
 
+import InlineActionFeedback from '../components/InlineActionFeedback';
+import RecommendationLane from '../components/RecommendationLane';
 import { STORE_NAME } from '../store';
-import { formatCount } from '../utils/format-count';
 import groupByPanel from './group-by-panel';
 import { DELEGATED_SETTINGS_PANELS } from './panel-delegation';
 import { getSuggestionKey } from './suggestion-keys';
 import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
+function buildSettingsFeedback( suggestion, key ) {
+	return {
+		key,
+		label: suggestion?.label || 'Suggestion',
+	};
+}
+
 export default function SettingsRecommendations( { clientId, suggestions } ) {
 	const { applySuggestion } = useDispatch( STORE_NAME );
-	const { appliedKey, handleApply } = useSuggestionApplyFeedback( {
+	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion,
+		buildFeedback: buildSettingsFeedback,
 		clientId,
 		getKey: getSuggestionKey,
 		suggestions,
@@ -37,44 +46,38 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 		<PanelBody title="AI Settings" initialOpen>
 			<div className="flavor-agent-panel">
 				{ Object.entries( grouped ).map( ( [ panel, items ] ) => (
-					<div key={ panel } className="flavor-agent-panel__group">
-						{ Object.keys( grouped ).length > 1 && (
-							<div className="flavor-agent-panel__group-header">
-								<div className="flavor-agent-panel__group-title">
-									{ panelLabel( panel ) }
-								</div>
-								<span className="flavor-agent-pill">
-									{ formatCount(
-										items.length,
-										'suggestion'
-									) }
-								</span>
-							</div>
-						) }
-
-						<div className="flavor-agent-panel__group-body">
-							{ items.map( ( suggestion ) => {
-								const key = getSuggestionKey( suggestion );
-								return (
-									<SuggestionCard
-										key={ key }
-										suggestion={ suggestion }
-										onApply={ () =>
-											void handleApply( suggestion )
-										}
-										applied={ appliedKey === key }
-									/>
-								);
-							} ) }
-						</div>
-					</div>
+					<RecommendationLane
+						key={ panel }
+						title={ panelLabel( panel ) }
+						tone="Apply now"
+						count={ items.length }
+						countNoun="suggestion"
+						description="Flavor Agent can apply these local settings changes directly inside this panel."
+					>
+						{ items.map( ( suggestion ) => {
+							const key = getSuggestionKey( suggestion );
+							return (
+								<SuggestionCard
+									key={ key }
+									suggestion={ suggestion }
+									onApply={ () =>
+										void handleApply( suggestion )
+									}
+									applied={ appliedKey === key }
+									feedback={
+										feedback?.key === key ? feedback : null
+									}
+								/>
+							);
+						} ) }
+					</RecommendationLane>
 				) ) }
 			</div>
 		</PanelBody>
 	);
 }
 
-function SuggestionCard( { suggestion, onApply, applied } ) {
+function SuggestionCard( { suggestion, onApply, applied, feedback } ) {
 	const { label, description, confidence, currentValue, suggestedValue } =
 		suggestion;
 	const confidenceLabel =
@@ -93,13 +96,14 @@ function SuggestionCard( { suggestion, onApply, applied } ) {
 			>
 				<div className="flavor-agent-card__lead">
 					<span className="flavor-agent-card__label">{ label }</span>
-					{ confidenceLabel && (
-						<div className="flavor-agent-card__meta">
+					<div className="flavor-agent-card__meta">
+						<span className="flavor-agent-pill">Apply now</span>
+						{ confidenceLabel && (
 							<span className="flavor-agent-pill">
 								{ confidenceLabel }
 							</span>
-						</div>
-					) }
+						) }
+					</div>
 				</div>
 				<Button
 					size="small"
@@ -154,6 +158,10 @@ function SuggestionCard( { suggestion, onApply, applied } ) {
 						} }
 					/>
 				</div>
+			) }
+
+			{ feedback && (
+				<InlineActionFeedback compact message={ `${ label }.` } />
 			) }
 		</div>
 	);

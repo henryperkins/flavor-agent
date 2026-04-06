@@ -610,7 +610,7 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Advisory Suggestions' ) ).toBe( true );
+		expect( hasText( 'Manual Ideas' ) ).toBe( true );
 		expect( hasText( 'Explore an editorial collage' ) ).toBe( true );
 		expect( hasText( 'Suggested Patterns' ) ).toBe( true );
 		expect( hasText( 'Footer' ) ).toBe( true );
@@ -997,7 +997,11 @@ describe( 'TemplateRecommender', () => {
 			)
 		).toBe( true );
 		expect( hasText( 'Clarify hierarchy' ) ).toBe( true );
-		expect( hasText( 'Undo available' ) ).toBe( true );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toBe( true );
 		expect( hasText( 'Suggested Composition' ) ).toBe( false );
 		expect( getTextarea() ).toBeNull();
 	} );
@@ -1060,7 +1064,17 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Undo available' ) ).toBe( true );
+		await act( async () => {
+			getContainer()
+				.querySelector( '.flavor-agent-activity-section__toggle' )
+				.click();
+		} );
+
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toBe( true );
 
 		currentState = {
 			...getState(),
@@ -1072,12 +1086,17 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Undo unavailable' ) ).toBe( true );
+		await act( async () => {
+			getContainer()
+				.querySelector( '.flavor-agent-activity-section__toggle' )
+				.click();
+		} );
+
 		expect(
-			hasText(
-				'Inserted pattern content changed after apply and cannot be undone automatically.'
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent === 'Undo'
 			)
-		).toBe( true );
+		).toBe( false );
 	} );
 
 	test( 'renders non-interactive preview tokens in the review overlay', () => {

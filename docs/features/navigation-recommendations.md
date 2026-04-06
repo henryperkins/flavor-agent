@@ -6,21 +6,22 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: inside the block `AI Recommendations` panel
 - Scope: only for selected `core/navigation` blocks
-- UI shape: advisory-only header, capability notice when unavailable, otherwise a prompt field plus grouped recommendation cards and per-change detail rows
+- UI shape: advisory-only nested subsection with its own prompt and request state, a featured recommendation first, then grouped `Manual` category lanes and per-change detail rows
 
 ## Surfacing Conditions
 
 - The selected block must be `core/navigation`
-- The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag requires the active chat provider and `edit_theme_options`
+- The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag comes from the shared surface-capability contract and requires both `edit_theme_options` and any compatible chat provider from `Settings > Flavor Agent` or `Settings > Connectors`
 - The request button is only enabled when `buildNavigationFetchInput()` can derive either:
   - a menu ID from `attributes.ref`, or
   - serialized navigation block markup
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> suggestions -> explanation -> undo/history only where execution exists
+- Learned-once sequence: prompt -> featured recommendation -> grouped manual lanes
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Navigation uses the same advisory/status shell as the executable surfaces but intentionally stops at `advisory-ready`
+- The first returned suggestion is promoted as the recommended next navigation change; remaining ideas are grouped by category (`Structure`, `Overlay`, `Accessibility`)
 - There is no preview or apply path here; the user reviews the grouped changes and edits navigation manually
 - Because navigation remains advisory-only through v1.0, it does not create activity entries and does not participate in inline undo (see `docs/features/activity-and-audit.md` for the activity contract)
 
@@ -48,7 +49,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Structural change groups are still advisory, but the backend now rejects any structural `changes[].targetPath` that does not map to the current menu inventory
 - It does not write activity entries and does not participate in inline undo
 - The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
-- The panel clears stale results when the selected block changes or when the navigation context signature changes
+- The panel clears stale results when the selected block changes or when the navigation context signature changes; unlike block recommendations, it does not retain stale results or expose a refresh affordance
 - If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled
 
 ## Primary Functions And Handlers
@@ -72,7 +73,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - `src/inspector/NavigationRecommendations.js`
 - `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`
 - `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
-- `src/components/AIAdvisorySection.js` — shared advisory-only section; see `docs/reference/shared-internals.md`
+- `src/components/RecommendationHero.js` — shared featured next-step shell; see `docs/reference/shared-internals.md`
+- `src/components/RecommendationLane.js` — shared grouped-lane shell; see `docs/reference/shared-internals.md`
 - `src/store/index.js`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/NavigationAbilities.php`

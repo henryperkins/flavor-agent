@@ -46,6 +46,7 @@
       transparent 82%
     ),
     var(--flavor-agent-surface);
+  box-shadow: none;
 }
 
 .flavor-agent-panel__intro::before,
@@ -57,8 +58,7 @@
 }
 
 .flavor-agent-panel__intro::before {
-  background-image:
-    linear-gradient(rgba(31, 45, 52, 0.08) 1px, transparent 1px),
+  background-image: linear-gradient(rgba(31, 45, 52, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(31, 45, 52, 0.08) 1px, transparent 1px);
   background-position: center;
   background-size: 18px 18px;
@@ -110,15 +110,98 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px;
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 18%,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--flavor-agent-color-accent) 4%, transparent),
+      transparent 65%
+    ),
+    var(--flavor-agent-surface-strong);
 }
 
 .flavor-agent-panel__composer .components-base-control__field {
   margin-bottom: 0;
 }
 
+.flavor-agent-panel__composer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.flavor-agent-panel__composer-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.flavor-agent-panel__composer-eyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-color-accent);
+}
+
+.flavor-agent-panel__composer-title {
+  font-size: var(--wpds-font-size-md, 13px);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--flavor-agent-color-text);
+}
+
+.flavor-agent-panel__composer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.flavor-agent-panel__composer-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flavor-agent-panel__composer-starter.components-button {
+  min-height: 28px;
+  border-radius: var(--flavor-agent-radius-full);
+}
+
+.flavor-agent-panel__composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.flavor-agent-panel__composer-helper {
+  margin: 0;
+  font-size: var(--wpds-font-size-xs, 11px);
+  line-height: 1.45;
+  color: var(--flavor-agent-color-muted);
+}
+
 .flavor-agent-panel__group {
   padding: 12px;
   border-radius: var(--flavor-agent-radius-lg);
+}
+
+.flavor-agent-recommendation-lane {
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--flavor-agent-color-accent) 3%, transparent),
+      transparent 75%
+    ),
+    var(--flavor-agent-surface);
 }
 
 .flavor-agent-panel__group-header {
@@ -142,6 +225,84 @@
   display: flex;
   flex-direction: column;
   gap: var(--wpds-dimension-gap-sm, 8px);
+}
+
+.flavor-agent-recommendation-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--flavor-agent-radius-lg);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--flavor-agent-color-accent) 24%,
+      var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+    );
+  background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--flavor-agent-color-accent) 10%, transparent),
+      transparent 56%
+    ),
+    var(--flavor-agent-surface-strong);
+  box-shadow: var(
+    --wpds-elevation-xs,
+    0 1px 1px 0 #00000008,
+    0 1px 2px 0 #00000005,
+    0 3px 3px 0 #00000005,
+    0 4px 4px 0 #00000003
+  );
+}
+
+.flavor-agent-recommendation-hero__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.flavor-agent-recommendation-hero__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flavor-agent-recommendation-hero__eyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flavor-agent-color-accent);
+}
+
+.flavor-agent-recommendation-hero__title {
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--flavor-agent-color-text);
+}
+
+.flavor-agent-recommendation-hero__description,
+.flavor-agent-recommendation-hero__why {
+  margin: 0;
+  font-size: var(--wpds-font-size-sm, 12px);
+  line-height: 1.5;
+}
+
+.flavor-agent-recommendation-hero__description {
+  color: var(--flavor-agent-color-text);
+}
+
+.flavor-agent-recommendation-hero__why {
+  color: var(--flavor-agent-color-muted);
+}
+
+.flavor-agent-recommendation-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .flavor-agent-activity-row {
@@ -196,6 +357,42 @@
   height: auto;
   min-height: 0;
   padding: 0;
+}
+
+.flavor-agent-activity-section {
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--flavor-agent-color-accent) 2%, transparent),
+      transparent 80%
+    ),
+    var(--flavor-agent-surface);
+}
+
+.flavor-agent-activity-section__toggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flavor-agent-activity-section__toggle:hover {
+  color: inherit;
+}
+
+.flavor-agent-activity-section__toggle:focus-visible {
+  outline: 2px solid var(--wp-admin-theme-color, #3858e9);
+  outline-offset: 4px;
+  border-radius: var(--flavor-agent-radius-lg);
+}
+
+.flavor-agent-activity-section__chevron {
+  flex: 0 0 auto;
+  color: var(--flavor-agent-color-muted);
+  font-size: 10px;
+  line-height: 1;
 }
 
 .flavor-agent-advisory-section .flavor-agent-panel__group-body {
@@ -301,6 +498,18 @@
   color: var(--flavor-agent-color-muted);
 }
 
+.flavor-agent-scope-bar__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.flavor-agent-scope-bar__refresh.components-button {
+  min-height: 28px;
+  border-radius: var(--flavor-agent-radius-full);
+}
+
 .flavor-agent-pill--fresh {
   border-color: var(--wpds-color-stroke-surface-success, #8ac894);
   background: var(--wpds-color-bg-surface-success-weak, #eaffed);
@@ -348,6 +557,33 @@
   color: var(--wpds-color-fg-content-success-weak, #007f30);
 }
 
+.flavor-agent-pill--hero {
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 28%,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 10%,
+    var(--flavor-agent-surface-strong)
+  );
+  color: var(--flavor-agent-color-text);
+}
+
+.flavor-agent-pill--lane {
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 18%,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 6%,
+    var(--flavor-agent-surface-strong)
+  );
+}
+
 .flavor-agent-pill--code {
   font-family: monospace;
   font-weight: 500;
@@ -378,6 +614,12 @@
   flex: 1 1 auto;
 }
 
+.flavor-agent-inline-feedback__action.components-button {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+
 .flavor-agent-style-surface__intro {
   gap: 10px;
 }
@@ -396,10 +638,10 @@
 
 .flavor-agent-style-card--active {
   border-color: color-mix(
-      in srgb,
-      var(--wpds-color-stroke-surface-success-strong, #007f30) 24%,
-      var(--wpds-color-stroke-surface-neutral, #d8d8d8)
-    );
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 24%,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
   background: linear-gradient(
       135deg,
       color-mix(
@@ -640,6 +882,17 @@
   gap: var(--wpds-dimension-gap-sm, 8px);
 }
 
+.flavor-agent-chip-surface__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flavor-agent-chip-surface__header .flavor-agent-section-label {
+  margin-bottom: 0;
+}
+
 .flavor-agent-chips {
   display: flex;
   flex-wrap: wrap;
@@ -786,11 +1039,7 @@
 .flavor-agent-prompt textarea {
   min-height: 78px;
   border-radius: var(--flavor-agent-radius-lg);
-  border-color: color-mix(
-    in srgb,
-    var(--flavor-agent-color-accent) 18%,
-    white
-  );
+  border-color: color-mix(in srgb, var(--flavor-agent-color-accent) 18%, white);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
@@ -1092,10 +1341,10 @@
 
 .flavor-agent-card--template.is-applied {
   border-color: color-mix(
-      in srgb,
-      var(--wpds-color-stroke-surface-success-strong, #007f30) 24%,
-      var(--wpds-color-stroke-surface-neutral, #d8d8d8)
-    );
+    in srgb,
+    var(--wpds-color-stroke-surface-success-strong, #007f30) 24%,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
   background: linear-gradient(
       135deg,
       color-mix(

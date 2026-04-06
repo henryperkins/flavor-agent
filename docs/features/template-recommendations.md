@@ -6,13 +6,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Recommendations`
 - Scope: only while editing a `wp_template` entity
-- UI shape: settings-backed capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, preview-before-apply, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, preview-before-apply, recent activity, and inline undo
 
 ## Surfacing Conditions
 
 - `TemplateRecommender()` must resolve a current template reference through `core/editor` or `core/edit-site`
 - The shared `wp_template` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align with the current Site Editor template shape while still falling back to built-in field metadata when no live view config is exposed
-- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by `Provider::chat_configured()`
+- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by the shared surface-capability contract and flips on when any compatible chat provider is configured in `Settings > Flavor Agent` or `Settings > Connectors`
 - The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the template-global visible pattern set
 
 ## Shared Interaction Model

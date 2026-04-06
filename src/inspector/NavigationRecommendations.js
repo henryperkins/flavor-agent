@@ -10,9 +10,10 @@ import {
 } from '@wordpress/element';
 
 import { formatCount, humanizeString } from '../utils/format-count';
-import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import RecommendationHero from '../components/RecommendationHero';
+import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
@@ -92,7 +93,84 @@ function buildNavigationContextSignature( { block, blockClientId } ) {
 	return JSON.stringify( requestContext );
 }
 
-export default function NavigationRecommendations( { clientId } ) {
+function groupNavigationSuggestions( suggestions = [] ) {
+	return suggestions.reduce( ( groups, suggestion ) => {
+		const category = suggestion?.category || 'structure';
+
+		if ( ! groups[ category ] ) {
+			groups[ category ] = [];
+		}
+
+		groups[ category ].push( suggestion );
+		return groups;
+	}, {} );
+}
+
+function NavigationSuggestionCard( { suggestion } ) {
+	return (
+		<div className="flavor-agent-card">
+			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+				<div className="flavor-agent-card__lead">
+					<div className="flavor-agent-card__label">
+						{ suggestion?.label || 'Navigation suggestion' }
+					</div>
+					<div className="flavor-agent-card__meta">
+						<span className="flavor-agent-pill">
+							{ formatCategoryLabel( suggestion?.category ) }
+						</span>
+						<span className="flavor-agent-pill">
+							{ formatCount(
+								suggestion?.changes?.length || 0,
+								'change'
+							) }
+						</span>
+					</div>
+				</div>
+			</div>
+
+			{ suggestion?.description && (
+				<p className="flavor-agent-card__description">
+					{ suggestion.description }
+				</p>
+			) }
+
+			<div className="flavor-agent-navigation-list">
+				{ ( suggestion?.changes || [] ).map(
+					( change, changeIndex ) => (
+						<div
+							key={ `${ suggestion?.label || 'navigation' }-${
+								change?.type || 'change'
+							}-${ changeIndex }` }
+							className="flavor-agent-navigation-change"
+						>
+							<div className="flavor-agent-card__meta">
+								<span className="flavor-agent-pill">
+									{ formatChangeType( change?.type ) }
+								</span>
+								{ change?.target && (
+									<span className="flavor-agent-navigation-change__target">
+										{ change.target }
+									</span>
+								) }
+							</div>
+
+							{ change?.detail && (
+								<p className="flavor-agent-navigation-change__detail">
+									{ change.detail }
+								</p>
+							) }
+						</div>
+					)
+				) }
+			</div>
+		</div>
+	);
+}
+
+export default function NavigationRecommendations( {
+	clientId,
+	embedded = false,
+} ) {
 	const canRecommend = getSurfaceCapability( 'navigation' ).available;
 	const {
 		navigationBlock,
@@ -146,9 +224,6 @@ export default function NavigationRecommendations( { clientId } ) {
 			} ),
 		[ clientId, navigationBlock ]
 	);
-	const previousRecommendationContextSignature = useRef(
-		recommendationContextSignature
-	);
 	const hasMatchingResult =
 		resultBlockClientId === clientId &&
 		status === 'ready' &&
@@ -156,6 +231,14 @@ export default function NavigationRecommendations( { clientId } ) {
 			currentResultContextSignature === recommendationContextSignature );
 	const hasResult = resultBlockClientId === clientId && status === 'ready';
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
+	const featuredSuggestion = hasSuggestions ? recommendations[ 0 ] : null;
+	const groupedSuggestions = useMemo(
+		() =>
+			groupNavigationSuggestions(
+				hasSuggestions ? recommendations.slice( 1 ) : []
+			),
+		[ hasSuggestions, recommendations ]
+	);
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -168,9 +251,10 @@ export default function NavigationRecommendations( { clientId } ) {
 					requestError: error,
 					hasResult: hasMatchingResult,
 					hasSuggestions,
-					emptyMessage: hasMatchingResult
-						? 'No navigation suggestions were returned for the current prompt.'
-						: '',
+					emptyMessage:
+						hasMatchingResult && ! hasSuggestions
+							? 'No navigation suggestions were returned for the current prompt.'
+							: '',
 					onDismissAction: Boolean( error ),
 				} ),
 			};
@@ -180,38 +264,16 @@ export default function NavigationRecommendations( { clientId } ) {
 
 	useEffect( () => {
 		const blockChanged = previousClientId.current !== clientId;
-		const recommendationContextChanged =
-			previousRecommendationContextSignature.current !==
-			recommendationContextSignature;
 
-		if ( ! blockChanged && ! recommendationContextChanged ) {
+		if ( ! blockChanged ) {
 			return;
 		}
 
 		previousClientId.current = clientId;
-		previousRecommendationContextSignature.current =
-			recommendationContextSignature;
-
-		if (
-			! blockChanged &&
-			! ( resultBlockClientId === clientId || isLoading || error )
-		) {
-			return;
-		}
 
 		clearNavigationRecommendations();
-
-		if ( blockChanged ) {
-			setPrompt( '' );
-		}
-	}, [
-		clientId,
-		clearNavigationRecommendations,
-		error,
-		isLoading,
-		recommendationContextSignature,
-		resultBlockClientId,
-	] );
+		setPrompt( '' );
+	}, [ clientId, clearNavigationRecommendations ] );
 
 	const handleFetch = useCallback( () => {
 		if ( canRecommend && requestInput ) {
@@ -235,148 +297,128 @@ export default function NavigationRecommendations( { clientId } ) {
 
 	return (
 		<>
-			<SurfacePanelIntro
-				eyebrow="Navigation Recommendations"
-				introCopy="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only in v1.0, so the status model stays consistent without introducing an apply path."
-				meta={
-					menuId > 0 ? (
-						<span className="flavor-agent-pill">
-							Menu ID { menuId }
-						</span>
-					) : null
-				}
-			/>
+			{ ! embedded && (
+				<SurfacePanelIntro
+					eyebrow="Navigation Recommendations"
+					introCopy="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only, so accepted changes still need manual follow-through."
+					meta={
+						menuId > 0 ? (
+							<span className="flavor-agent-pill">
+								Menu ID { menuId }
+							</span>
+						) : null
+					}
+				/>
+			) }
 
 			{ ! canRecommend && <CapabilityNotice surface="navigation" /> }
 
 			{ canRecommend && (
 				<>
-					<SurfaceScopeBar
-						scopeLabel="Navigation Block"
-						scopeDetails={
-							menuId > 0 ? [ `Menu ID ${ menuId }` ] : []
-						}
-						isFresh={ hasMatchingResult }
-						hasResult={ hasResult }
-					/>
-
-					<SurfaceComposer
-						prompt={ prompt }
-						onPromptChange={ setPrompt }
-						onFetch={ handleFetch }
-						placeholder="Describe the structure or behavior you want."
-						label="What do you want to improve about this navigation?"
-						fetchLabel="Get Navigation Suggestions"
-						loadingLabel="Getting navigation suggestions\u2026"
-						fetchVariant="secondary"
-						isLoading={ isLoading }
-						disabled={ ! requestInput }
-					/>
-
-					<AIStatusNotice
-						notice={ statusNotice }
-						onDismiss={
-							statusNotice?.source === 'request'
-								? clearNavigationError
-								: undefined
-						}
-					/>
-
-					{ hasMatchingResult && explanation && (
-						<p className="flavor-agent-explanation flavor-agent-panel__note">
-							{ explanation }
-						</p>
-					) }
-
-					{ hasSuggestions && (
-						<AIAdvisorySection
-							title="Navigation ideas"
-							count={ recommendations.length }
-							countNoun="idea"
-							initialOpen
-							description={
-								interactionState === 'advisory-ready'
-									? 'Review the suggested changes below and make any accepted edits manually in the editor.'
-									: ''
+					{ ( ! embedded || hasResult ) && (
+						<SurfaceScopeBar
+							scopeLabel="Navigation Block"
+							scopeDetails={
+								menuId > 0 ? [ `Menu ID ${ menuId }` ] : []
 							}
-							advisoryLabel="Advisory only"
-						>
-							{ recommendations.map( ( suggestion, index ) => (
-								<div
-									key={ `${
-										suggestion?.label || 'navigation'
-									}-${ index }` }
-									className="flavor-agent-card"
-								>
-									<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
-										<div className="flavor-agent-card__lead">
-											<div className="flavor-agent-card__label">
-												{ suggestion?.label ||
-													'Navigation suggestion' }
-											</div>
-											<div className="flavor-agent-card__meta">
-												<span className="flavor-agent-pill">
-													{ formatCategoryLabel(
-														suggestion?.category
-													) }
-												</span>
-												<span className="flavor-agent-pill">
-													{ formatCount(
-														suggestion?.changes
-															?.length || 0,
-														'change'
-													) }
-												</span>
-											</div>
-										</div>
-									</div>
-
-									{ suggestion?.description && (
-										<p className="flavor-agent-card__description">
-											{ suggestion.description }
-										</p>
-									) }
-
-									<div className="flavor-agent-navigation-list">
-										{ ( suggestion?.changes || [] ).map(
-											( change, changeIndex ) => (
-												<div
-													key={ `${
-														suggestion?.label ||
-														'navigation'
-													}-${
-														change?.type || 'change'
-													}-${ changeIndex }` }
-													className="flavor-agent-navigation-change"
-												>
-													<div className="flavor-agent-card__meta">
-														<span className="flavor-agent-pill">
-															{ formatChangeType(
-																change?.type
-															) }
-														</span>
-														{ change?.target && (
-															<span className="flavor-agent-navigation-change__target">
-																{
-																	change.target
-																}
-															</span>
-														) }
-													</div>
-
-													{ change?.detail && (
-														<p className="flavor-agent-navigation-change__detail">
-															{ change.detail }
-														</p>
-													) }
-												</div>
-											)
-										) }
-									</div>
-								</div>
-							) ) }
-						</AIAdvisorySection>
+							isFresh={ hasMatchingResult }
+							hasResult={ hasResult }
+						/>
 					) }
+
+					<RecommendationLane
+						title="Recommended Next Changes"
+						tone="Manual"
+						count={ hasSuggestions ? recommendations.length : null }
+						countNoun="idea"
+						description={
+							interactionState === 'advisory-ready'
+								? 'Navigation recommendations stay advisory here. Make accepted changes manually in the editor.'
+								: 'Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack.'
+						}
+					>
+						<SurfaceComposer
+							title={
+								embedded
+									? 'Ask About Navigation'
+									: 'Ask Flavor Agent'
+							}
+							prompt={ prompt }
+							onPromptChange={ setPrompt }
+							onFetch={ handleFetch }
+							placeholder="Describe the structure or behavior you want."
+							label="What do you want to improve about this navigation?"
+							helperText="Flavor Agent will suggest the next navigation changes to make manually."
+							starterPrompts={ [
+								'Improve menu hierarchy',
+								'Reduce overlay friction',
+								'Improve keyboard support',
+							] }
+							fetchLabel="Get Navigation Suggestions"
+							loadingLabel="Getting navigation suggestions\u2026"
+							fetchVariant="secondary"
+							isLoading={ isLoading }
+							disabled={ ! requestInput }
+						/>
+
+						<AIStatusNotice
+							notice={ statusNotice }
+							onDismiss={
+								statusNotice?.source === 'request'
+									? clearNavigationError
+									: undefined
+							}
+						/>
+
+						{ hasMatchingResult && explanation && (
+							<p className="flavor-agent-explanation flavor-agent-panel__note">
+								{ explanation }
+							</p>
+						) }
+
+						{ featuredSuggestion && (
+							<RecommendationHero
+								title={
+									featuredSuggestion?.label ||
+									'Recommended navigation change'
+								}
+								description={
+									featuredSuggestion?.description || ''
+								}
+								tone="Manual"
+								why="Start with this change first, then work through the supporting ideas below."
+							>
+								<NavigationSuggestionCard
+									suggestion={ featuredSuggestion }
+								/>
+							</RecommendationHero>
+						) }
+
+						{ Object.entries( groupedSuggestions ).map(
+							( [ category, items ] ) => (
+								<RecommendationLane
+									key={ category }
+									title={ `${ formatCategoryLabel(
+										category
+									) } Changes` }
+									tone="Manual"
+									count={ items.length }
+									countNoun="idea"
+									description="Make these accepted changes manually in the navigation block."
+								>
+									{ items.map( ( suggestion, index ) => (
+										<NavigationSuggestionCard
+											key={ `${
+												suggestion?.label ||
+												'navigation'
+											}-${ index }` }
+											suggestion={ suggestion }
+										/>
+									) ) }
+								</RecommendationLane>
+							)
+						) }
+					</RecommendationLane>
 				</>
 			) }
 		</>

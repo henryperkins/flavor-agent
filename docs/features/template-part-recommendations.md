@@ -6,20 +6,21 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Part Recommendations`
 - Scope: only while editing a `wp_template_part` entity
-- UI shape: settings-backed capability notice when unavailable, otherwise a prompt field, slug and area badges, explanation text, focus-block links, suggested-pattern links, preview-before-apply, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, slug and area badges, explanation text, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, focus-block links, suggested-pattern links, preview-before-apply, recent activity, and inline undo
 
 ## Surfacing Conditions
 
 - `TemplatePartRecommender()` must resolve a current template-part reference through the shared edited-entity resolver, preferring `core/editor` and falling back to `core/edit-site`
 - The shared `wp_template_part` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align its title and area labels with the current WordPress template-part contract while still falling back to built-in field and area metadata when no live view config is exposed
-- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by `Provider::chat_configured()`
+- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by the shared surface-capability contract and flips on when any compatible chat provider is configured in `Settings > Flavor Agent` or `Settings > Connectors`
 - The panel clears stale recommendations when the template part changes or when the visible pattern context changes
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo and history
+- Learned-once sequence: prompt -> featured recommendation -> grouped lanes -> review where needed -> apply where allowed -> undo and history
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template-part recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only when the user explicitly opens preview on a validated suggestion
+- The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the same shared status notice pattern as block and template
 - Suggestions that fail deterministic validation stay visible in the shared advisory shell so the user can still review focus blocks and pattern ideas without getting an apply affordance
 

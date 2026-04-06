@@ -4,6 +4,7 @@
  * Assembles a context snapshot for a single block's Inspector
  * recommendations. Combines block introspection with theme tokens.
  */
+import { store as blocksStore } from '@wordpress/blocks';
 import { select } from '@wordpress/data';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 
@@ -13,8 +14,9 @@ import {
 	summarizeTree,
 } from './block-inspector';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
+import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import { buildStructuralContext } from '../utils/structural-identity';
-export { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
+export { buildBlockRecommendationContextSignature };
 
 /**
  * Build a focused context for a single block's Inspector recommendations.
@@ -73,6 +75,66 @@ export function collectBlockContext( clientId ) {
 		structuralBranch,
 		themeTokens: tokenSummary,
 	};
+}
+
+/**
+ * Subscribe a React selector callback to every store read that influences the
+ * live block recommendation context for the current block.
+ *
+ * @param {Function} registrySelect Registry-aware selector function from useSelect.
+ * @param {string}   clientId       Selected block client ID.
+ * @return {boolean} Whether the target block is available.
+ */
+function subscribeToBlockContextSources( registrySelect, clientId ) {
+	if ( ! clientId ) {
+		return false;
+	}
+
+	const editor = registrySelect( blockEditorStore );
+	const block = editor?.getBlock?.( clientId ) || null;
+
+	if ( ! block ) {
+		return false;
+	}
+
+	const rootId = editor.getBlockRootClientId?.( clientId ) || '';
+	const blockName = block?.name || editor.getBlockName?.( clientId ) || '';
+
+	editor.getBlockAttributes?.( clientId );
+	editor.getBlockEditingMode?.( clientId );
+	editor.getBlockParents?.( clientId );
+	editor.getBlockCount?.( clientId );
+	editor.getBlockOrder?.( rootId );
+	editor.getBlocks?.();
+	editor.getSettings?.();
+
+	if ( blockName ) {
+		const blocks = registrySelect( blocksStore );
+
+		blocks.getBlockType?.( blockName );
+		blocks.getBlockStyles?.( blockName );
+		blocks.getBlockVariations?.( blockName, 'block' );
+	}
+
+	return true;
+}
+
+/**
+ * Build a signature that updates whenever the current block recommendation
+ * context changes, even if the selected clientId stays the same.
+ *
+ * @param {Function} registrySelect Registry-aware selector function from useSelect.
+ * @param {string}   clientId       Selected block client ID.
+ * @return {string} Fresh block context signature, or an empty string.
+ */
+export function getLiveBlockContextSignature( registrySelect, clientId ) {
+	if ( ! subscribeToBlockContextSources( registrySelect, clientId ) ) {
+		return '';
+	}
+
+	const context = collectBlockContext( clientId );
+
+	return context ? buildBlockRecommendationContextSignature( context ) : '';
 }
 
 function getSiblingNames( clientId, direction, count ) {

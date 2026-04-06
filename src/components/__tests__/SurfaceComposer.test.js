@@ -18,7 +18,7 @@ beforeEach( () => {
 } );
 
 describe( 'SurfaceComposer', () => {
-	test( 'renders prompt textarea and fetch button', () => {
+	test( 'renders a visible label and fetch button', () => {
 		act( () => {
 			getRoot().render(
 				<SurfaceComposer
@@ -32,6 +32,9 @@ describe( 'SurfaceComposer', () => {
 		const textarea = getContainer().querySelector( 'textarea' );
 		expect( textarea ).not.toBeNull();
 		expect( textarea.value ).toBe( 'test prompt' );
+		expect( getContainer().textContent ).toContain(
+			'What are you trying to achieve?'
+		);
 
 		const button = getContainer().querySelector( 'button' );
 		expect( button.textContent ).toBe( 'Get Suggestions' );
@@ -107,5 +110,66 @@ describe( 'SurfaceComposer', () => {
 		} );
 
 		expect( mockOnFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'renders starter prompt chips and updates the prompt when clicked', () => {
+		act( () => {
+			getRoot().render(
+				<SurfaceComposer
+					prompt=""
+					onPromptChange={ mockOnPromptChange }
+					onFetch={ mockOnFetch }
+					starterPrompts={ [
+						'Make this feel more editorial',
+						'Improve clarity and spacing',
+					] }
+				/>
+			);
+		} );
+
+		const starterButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) =>
+			button.textContent.includes( 'Make this feel more editorial' )
+		);
+
+		act( () => {
+			starterButton.click();
+		} );
+
+		expect( mockOnPromptChange ).toHaveBeenCalledWith(
+			'Make this feel more editorial'
+		);
+	} );
+
+	test( 'submits with cmd/ctrl-enter when the shortcut is enabled', () => {
+		act( () => {
+			getRoot().render(
+				<SurfaceComposer
+					prompt="something"
+					onPromptChange={ mockOnPromptChange }
+					onFetch={ mockOnFetch }
+					submitHint="Press Cmd/Ctrl+Enter to submit."
+				/>
+			);
+		} );
+
+		const textarea = getContainer().querySelector( 'textarea' );
+
+		act( () => {
+			textarea.dispatchEvent(
+				new window.KeyboardEvent( 'keydown', {
+					bubbles: true,
+					cancelable: true,
+					key: 'Enter',
+					ctrlKey: true,
+				} )
+			);
+		} );
+
+		expect( mockOnFetch ).toHaveBeenCalledTimes( 1 );
+		expect( getContainer().textContent ).toContain(
+			'Press Cmd/Ctrl+Enter to submit.'
+		);
 	} );
 } );

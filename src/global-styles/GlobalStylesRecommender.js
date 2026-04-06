@@ -1,4 +1,4 @@
-import { Button, TextareaControl } from '@wordpress/components';
+import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import {
@@ -15,6 +15,9 @@ import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import RecommendationHero from '../components/RecommendationHero';
+import RecommendationLane from '../components/RecommendationLane';
+import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
@@ -149,7 +152,7 @@ function formatBadgeLabel( value = '' ) {
 }
 
 function getToneLabel( suggestion ) {
-	return suggestion?.tone === 'executable' ? 'Review to apply' : 'Advisory';
+	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual';
 }
 
 function OperationList( {
@@ -189,6 +192,7 @@ function GlobalStylesPanel( {
 	explanation,
 	notice,
 	activityEntries,
+	activityResetKey,
 	hasResult,
 	hasMatchingResult,
 	onNoticeAction,
@@ -201,6 +205,88 @@ function GlobalStylesPanel( {
 } ) {
 	const panelNotice = isInlineStyleNotice( notice ) ? null : notice;
 	const inlineNotice = isInlineStyleNotice( notice ) ? notice : null;
+	const executableSuggestions = suggestions.filter(
+		( suggestion ) => suggestion?.tone === 'executable'
+	);
+	const manualSuggestions = suggestions.filter(
+		( suggestion ) => suggestion?.tone !== 'executable'
+	);
+	const featuredSuggestion =
+		executableSuggestions[ 0 ] || manualSuggestions[ 0 ] || null;
+
+	const renderSuggestionCard = ( suggestion ) => (
+		<div
+			key={ suggestion.suggestionKey }
+			className={ `flavor-agent-card flavor-agent-style-card${
+				selectedSuggestion?.suggestionKey === suggestion.suggestionKey
+					? ' flavor-agent-style-card--active'
+					: ''
+			}` }
+		>
+			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+				<div className="flavor-agent-card__lead">
+					<div className="flavor-agent-card__label">
+						{ suggestion.label }
+					</div>
+					{ suggestion.description && (
+						<p className="flavor-agent-card__description">
+							{ suggestion.description }
+						</p>
+					) }
+				</div>
+				<div className="flavor-agent-style-card__badges">
+					<span className="flavor-agent-pill">
+						{ getToneLabel( suggestion ) }
+					</span>
+					{ suggestion.category && (
+						<span className="flavor-agent-pill">
+							{ formatBadgeLabel( suggestion.category ) }
+						</span>
+					) }
+					{ selectedSuggestion?.suggestionKey ===
+						suggestion.suggestionKey && (
+						<span className="flavor-agent-pill flavor-agent-pill--success">
+							Review open
+						</span>
+					) }
+				</div>
+			</div>
+
+			<OperationList
+				operations={ suggestion.operations || [] }
+				compact
+				suggestionKey={ suggestion.suggestionKey }
+			/>
+
+			<div className="flavor-agent-style-card__footer">
+				{ showSecondaryGuidance && (
+					<span className="flavor-agent-panel__intro-copy">
+						{ suggestion.tone === 'executable'
+							? 'Preview the exact operations before applying them to the current Global Styles scope.'
+							: 'This stays advisory until the backend can express it as a safe theme-backed operation set.' }
+					</span>
+				) }
+
+				{ suggestion.tone === 'executable' && (
+					<div className="flavor-agent-style-card__actions">
+						<Button
+							variant="secondary"
+							size="small"
+							onClick={ () =>
+								onReview( suggestion.suggestionKey )
+							}
+							className="flavor-agent-card__apply"
+						>
+							{ selectedSuggestion?.suggestionKey ===
+							suggestion.suggestionKey
+								? 'Reviewing'
+								: 'Review' }
+						</Button>
+					</div>
+				) }
+			</div>
+		</div>
+	);
 
 	return (
 		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
@@ -240,39 +326,31 @@ function GlobalStylesPanel( {
 				onAction={ onNoticeAction }
 			/>
 
-			<div className="flavor-agent-panel__group">
-				<div className="flavor-agent-panel__group-header">
-					<div className="flavor-agent-panel__group-title">
-						Ask Flavor Agent
-					</div>
-				</div>
-				<div className="flavor-agent-panel__group-body">
-					<TextareaControl
-						label="Describe the style direction"
-						help={
-							showSecondaryGuidance
-								? 'Optional. Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope.'
-								: ''
-						}
-						value={ prompt }
-						onChange={ setPrompt }
-						rows={ 4 }
-						disabled={ ! capabilityAvailable }
-					/>
-					<Button
-						variant="primary"
-						onClick={ onRequest }
-						disabled={ ! capabilityAvailable || isLoading }
-						className="flavor-agent-card__apply"
-					>
-						{ isLoading ? 'Thinking…' : 'Get Style Suggestions' }
-					</Button>
-				</div>
-			</div>
+			<SurfaceComposer
+				title="Ask Flavor Agent"
+				prompt={ prompt }
+				onPromptChange={ setPrompt }
+				onFetch={ onRequest }
+				label="Describe the style direction"
+				placeholder="Describe the style direction you want across the site."
+				helperText={
+					showSecondaryGuidance
+						? 'Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope.'
+						: ''
+				}
+				rows={ 4 }
+				starterPrompts={ [
+					'Refine contrast and hierarchy',
+					'Make the palette feel warmer',
+					'Tighten spacing and rhythm',
+				] }
+				fetchLabel="Get Style Suggestions"
+				loadingLabel="Thinking…"
+				isLoading={ isLoading }
+				disabled={ ! capabilityAvailable }
+			/>
 
-			{ inlineNotice &&
-				! selectedSuggestion &&
-				suggestions.length === 0 && (
+			{ inlineNotice && ! selectedSuggestion && (
 					<AIStatusNotice
 						notice={ inlineNotice }
 						onAction={ onNoticeAction }
@@ -280,115 +358,58 @@ function GlobalStylesPanel( {
 					/>
 				) }
 
-			{ suggestions.length > 0 && (
-				<div className="flavor-agent-panel__group">
-					<div className="flavor-agent-panel__group-header">
-						<div className="flavor-agent-panel__group-title">
-							Suggestions
-						</div>
-						<span className="flavor-agent-pill">
-							{ suggestions.length }{ ' ' }
-							{ suggestions.length === 1
-								? 'suggestion'
-								: 'suggestions' }
-						</span>
-					</div>
+			{ explanation && suggestions.length > 0 && (
+				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+					{ explanation }
+				</p>
+			) }
 
-					{ explanation && (
-						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-							{ explanation }
-						</p>
-					) }
+			{ featuredSuggestion && (
+				<RecommendationHero
+					title={
+						featuredSuggestion.label ||
+						'Recommended style adjustment'
+					}
+					description={ featuredSuggestion.description || '' }
+					tone={ getToneLabel( featuredSuggestion ) }
+					why={
+						featuredSuggestion.tone === 'executable'
+							? 'Start here first, then review the exact operations before applying them.'
+							: 'Start here first, then use the remaining ideas as manual follow-through guidance.'
+					}
+				/>
+			) }
 
-					<div className="flavor-agent-panel__group-body">
-						{ inlineNotice && ! selectedSuggestion && (
-							<AIStatusNotice
-								notice={ inlineNotice }
-								onAction={ onNoticeAction }
-								className="flavor-agent-style-feedback-notice"
-							/>
-						) }
+			{ executableSuggestions.length > 0 && (
+				<RecommendationLane
+					title="Review First"
+					tone="Review first"
+					count={ executableSuggestions.length }
+					countNoun="suggestion"
+					description={
+						showSecondaryGuidance
+							? 'Preview the exact operations before applying them to the current Global Styles scope.'
+							: ''
+					}
+				>
+					{ executableSuggestions.map( renderSuggestionCard ) }
+				</RecommendationLane>
+			) }
 
-						{ suggestions.map( ( suggestion ) => (
-							<div
-								key={ suggestion.suggestionKey }
-								className={ `flavor-agent-card flavor-agent-style-card${
-									selectedSuggestion?.suggestionKey ===
-									suggestion.suggestionKey
-										? ' flavor-agent-style-card--active'
-										: ''
-								}` }
-							>
-								<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
-									<div className="flavor-agent-card__lead">
-										<div className="flavor-agent-card__label">
-											{ suggestion.label }
-										</div>
-										{ suggestion.description && (
-											<p className="flavor-agent-card__description">
-												{ suggestion.description }
-											</p>
-										) }
-									</div>
-									<div className="flavor-agent-style-card__badges">
-										<span className="flavor-agent-pill">
-											{ getToneLabel( suggestion ) }
-										</span>
-										{ suggestion.category && (
-											<span className="flavor-agent-pill">
-												{ formatBadgeLabel(
-													suggestion.category
-												) }
-											</span>
-										) }
-										{ selectedSuggestion?.suggestionKey ===
-											suggestion.suggestionKey && (
-											<span className="flavor-agent-pill flavor-agent-pill--success">
-												Review open
-											</span>
-										) }
-									</div>
-								</div>
-
-								<OperationList
-									operations={ suggestion.operations || [] }
-									compact
-									suggestionKey={ suggestion.suggestionKey }
-								/>
-
-								<div className="flavor-agent-style-card__footer">
-									{ showSecondaryGuidance && (
-										<span className="flavor-agent-panel__intro-copy">
-											{ suggestion.tone === 'executable'
-												? 'Preview the exact operations before applying them to the current Global Styles scope.'
-												: 'This stays advisory until the backend can express it as a safe theme-backed operation set.' }
-										</span>
-									) }
-
-									{ suggestion.tone === 'executable' && (
-										<div className="flavor-agent-style-card__actions">
-											<Button
-												variant="secondary"
-												size="small"
-												onClick={ () =>
-													onReview(
-														suggestion.suggestionKey
-													)
-												}
-												className="flavor-agent-card__apply"
-											>
-												{ selectedSuggestion?.suggestionKey ===
-												suggestion.suggestionKey
-													? 'Reviewing'
-													: 'Review' }
-											</Button>
-										</div>
-									) }
-								</div>
-							</div>
-						) ) }
-					</div>
-				</div>
+			{ manualSuggestions.length > 0 && (
+				<RecommendationLane
+					title="Manual Ideas"
+					tone="Manual"
+					count={ manualSuggestions.length }
+					countNoun="suggestion"
+					description={
+						showSecondaryGuidance
+							? 'These ideas stay advisory until Flavor Agent can express them as safe theme-backed operations.'
+							: ''
+					}
+				>
+					{ manualSuggestions.map( renderSuggestionCard ) }
+				</RecommendationLane>
 			) }
 
 			{ selectedSuggestion && (
@@ -430,6 +451,9 @@ function GlobalStylesPanel( {
 				onUndo={ onUndo }
 				title="Recent AI Style Actions"
 				description="Undo is only available while the current Global Styles state still matches the applied AI change."
+				initialOpen={ ! hasResult }
+				resetKey={ activityResetKey }
+				maxVisible={ 3 }
 			/>
 		</div>
 	);
@@ -872,6 +896,7 @@ export default function GlobalStylesRecommender() {
 			explanation={ explanation }
 			notice={ notice }
 			activityEntries={ activityEntries }
+			activityResetKey={ scope?.globalStylesId || 'global-styles' }
 			hasResult={ hasResult }
 			hasMatchingResult={ hasMatchingResult }
 			onNoticeAction={

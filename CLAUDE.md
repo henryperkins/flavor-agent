@@ -124,10 +124,10 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 ## Key Integration Points
 
 - **Inspector injection**: `editor.BlockEdit` filter via `createHigherOrderComponent` + `<InspectorControls group="...">` for each tab (settings, styles, color, typography, dimensions, border).
-- **REST API**: All routes live under `flavor-agent/v1/`, registered in `Agent_Controller::register_routes()`. `recommend-block` and `recommend-patterns` use `edit_posts`, `recommend-navigation`, `recommend-template`, and `recommend-template-part` use `edit_theme_options`, activity routes use contextual `Activity\Permissions`, and `sync-patterns` uses `manage_options`.
+- **REST API**: All routes live under `flavor-agent/v1/`, registered in `Agent_Controller::register_routes()`. `recommend-block`, `recommend-content`, and `recommend-patterns` use `edit_posts`; `recommend-navigation`, `recommend-style`, `recommend-template`, and `recommend-template-part` use `edit_theme_options`; activity routes use contextual `Activity\Permissions`; and `sync-patterns` uses `manage_options`.
 - **Pattern index lifecycle**: Auto-reindexes on theme switch, plugin activation/deactivation, upgrades, and relevant option changes. Uses WP cron event `flavor_agent_reindex_patterns`.
 - **Docs grounding lifecycle**: Prewarm and context-warm cron events (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) scheduled on activation.
-- **Activity history**: Block, template, and template-part applies write structured activity entries through the server-backed activity repository; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state again before undo.
+- **Activity history**: Block, template, template-part, Global Styles, and Style Book applies write structured activity entries through the server-backed activity repository; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state again before undo.
 - **Admin audit UI**: `Settings > AI Activity` is powered by `src/admin/activity-log.js` and reads the same server-backed activity data used by inline editor history.
 - **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 13 abilities across block, pattern, template, navigation, docs, infra, content, and style categories. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
 
@@ -155,9 +155,9 @@ Each recommendation surface disables independently when its required backend is 
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.
 - The plugin respects `contentOnly` editing mode: suggestions won't propose changes to locked attributes.
 - `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
-- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendContent`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, `canRecommendGlobalStyles`, `canRecommendStyleBook`, and `templatePartAreas` to the editor script.
+- The JS global `flavorAgentData` (localized via `wp_localize_script`) exposes `restUrl`, `nonce`, `settingsUrl`, `connectorsUrl`, `canManageFlavorAgentSettings`, the structured `capabilities.surfaces` map, the legacy `canRecommendBlocks` / `canRecommendPatterns` / `canRecommendContent` / `canRecommendTemplates` / `canRecommendTemplateParts` / `canRecommendNavigation` / `canRecommendGlobalStyles` / `canRecommendStyleBook` flags, and `templatePartAreas` to the editor script.
 - The JS global `flavorAgentAdmin` (localized on the main settings page) exposes `restUrl` and `nonce` to the settings-page admin script.
-- The JS global `flavorAgentActivityLog` (localized on `Settings > AI Activity`) exposes `restUrl`, `nonce`, `adminUrl`, `settingsUrl`, `connectorsUrl`, and `defaultLimit` to the activity-log app.
+- The JS global `flavorAgentActivityLog` (localized on `Settings > AI Activity`) exposes `restUrl`, `nonce`, `adminUrl`, `settingsUrl`, `connectorsUrl`, `defaultPerPage`, `maxPerPage`, `locale`, and `timeZone` to the activity-log app.
 - Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`; the adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys. Direct experimental usages remain in `src/context/theme-tokens.js` and `src/context/block-inspector.js` because WordPress has not promoted stable replacements yet.
 
 ## Docs

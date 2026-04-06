@@ -6,6 +6,8 @@
  * Every recommendation surface already computes `hasMatchingResult`;
  * this component surfaces that information to the user.
  */
+import { Button } from '@wordpress/components';
+
 import { joinClassNames } from '../utils/format-count';
 
 export default function SurfaceScopeBar( {
@@ -14,6 +16,10 @@ export default function SurfaceScopeBar( {
 	isFresh = false,
 	hasResult = false,
 	staleMessage = 'Context has changed since the last request.',
+	staleReason = '',
+	refreshLabel = 'Refresh',
+	onRefresh,
+	isRefreshing = false,
 	className = '',
 } ) {
 	if ( ! hasResult && ! scopeLabel && scopeDetails.length === 0 ) {
@@ -21,6 +27,7 @@ export default function SurfaceScopeBar( {
 	}
 
 	const showFreshness = hasResult;
+	const resolvedStaleMessage = staleReason || staleMessage;
 
 	return (
 		<div
@@ -53,21 +60,37 @@ export default function SurfaceScopeBar( {
 			</div>
 
 			{ showFreshness && (
-				<span
-					className={ joinClassNames(
-						'flavor-agent-pill',
-						isFresh
-							? 'flavor-agent-pill--fresh'
-							: 'flavor-agent-pill--stale'
+				<div className="flavor-agent-scope-bar__status">
+					<span
+						className={ joinClassNames(
+							'flavor-agent-pill',
+							isFresh
+								? 'flavor-agent-pill--fresh'
+								: 'flavor-agent-pill--stale'
+						) }
+					>
+						{ isFresh ? 'Current' : 'Stale' }
+					</span>
+
+					{ ! isFresh && typeof onRefresh === 'function' && (
+						<Button
+							size="small"
+							variant="secondary"
+							onClick={ onRefresh }
+							disabled={ isRefreshing }
+							className="flavor-agent-scope-bar__refresh"
+						>
+							{ isRefreshing
+								? `${ refreshLabel }\u2026`
+								: refreshLabel }
+						</Button>
 					) }
-				>
-					{ isFresh ? 'Current' : 'Stale' }
-				</span>
+				</div>
 			) }
 
-			{ ! isFresh && hasResult && staleMessage && (
+			{ ! isFresh && hasResult && resolvedStaleMessage && (
 				<p className="flavor-agent-scope-bar__stale-message">
-					{ staleMessage }
+					{ resolvedStaleMessage }
 				</p>
 			) }
 		</div>
