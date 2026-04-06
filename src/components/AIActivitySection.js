@@ -123,75 +123,77 @@ export default function AIActivitySection( {
 				</p>
 			) }
 
-			<div className="flavor-agent-panel__group-body">
-				{ entries.map( ( entry ) => {
-					const canUndo =
-						entry?.undo?.status === 'available' &&
-						entry?.undo?.canUndo === true;
-					const hasPendingUndoSync =
-						entry?.persistence?.status !== 'server' &&
-						entry?.persistence?.syncType === 'undo';
+			{ entries.length > 0 && (
+				<div className="flavor-agent-panel__group-body">
+					{ entries.map( ( entry ) => {
+						const canUndo =
+							entry?.undo?.status === 'available' &&
+							entry?.undo?.canUndo === true;
+						const hasPendingUndoSync =
+							entry?.persistence?.status !== 'server' &&
+							entry?.persistence?.syncType === 'undo';
 
-					return (
-						<div
-							key={ entry.id }
-							className="flavor-agent-activity-row"
-						>
-							<div className="flavor-agent-activity-row__info">
-								<div className="flavor-agent-activity-row__label">
-									{ entry?.suggestion || 'AI action' }
-								</div>
-								<div className="flavor-agent-activity-row__meta">
-									{ describeActivity( entry ) }
-								</div>
-								{ getExecutionSummary( entry ) && (
-									<div className="flavor-agent-activity-row__meta">
-										{ getExecutionSummary( entry ) }
+						return (
+							<div
+								key={ entry.id }
+								className="flavor-agent-activity-row"
+							>
+								<div className="flavor-agent-activity-row__info">
+									<div className="flavor-agent-activity-row__label">
+										{ entry?.suggestion || 'AI action' }
 									</div>
-								) }
-								{ getExecutionPathLabel( entry ) && (
 									<div className="flavor-agent-activity-row__meta">
-										{ getExecutionPathLabel( entry ) }
+										{ describeActivity( entry ) }
 									</div>
-								) }
-								{ getFallbackLabel( entry ) && (
-									<div className="flavor-agent-activity-row__meta">
-										{ getFallbackLabel( entry ) }
-									</div>
-								) }
-								{ hasPendingUndoSync && (
-									<div className="flavor-agent-activity-row__meta">
-										Activity audit sync pending.
-									</div>
-								) }
-								{ ( entry?.undo?.status === 'failed' ||
-									entry?.undo?.status === 'blocked' ) &&
-									entry?.undo?.error && (
+									{ getExecutionSummary( entry ) && (
 										<div className="flavor-agent-activity-row__meta">
-											{ entry.undo.error }
+											{ getExecutionSummary( entry ) }
 										</div>
 									) }
+									{ getExecutionPathLabel( entry ) && (
+										<div className="flavor-agent-activity-row__meta">
+											{ getExecutionPathLabel( entry ) }
+										</div>
+									) }
+									{ getFallbackLabel( entry ) && (
+										<div className="flavor-agent-activity-row__meta">
+											{ getFallbackLabel( entry ) }
+										</div>
+									) }
+									{ hasPendingUndoSync && (
+										<div className="flavor-agent-activity-row__meta">
+											Activity audit sync pending.
+										</div>
+									) }
+									{ ( entry?.undo?.status === 'failed' ||
+										entry?.undo?.status === 'blocked' ) &&
+										entry?.undo?.error && (
+											<div className="flavor-agent-activity-row__meta">
+												{ entry.undo.error }
+											</div>
+										) }
+								</div>
+
+								<span className="flavor-agent-pill">
+									{ getStatusLabel( entry ) }
+								</span>
+
+								{ canUndo && (
+									<Button
+										size="small"
+										variant="secondary"
+										onClick={ () => onUndo( entry.id ) }
+										className="flavor-agent-card__apply"
+										disabled={ isUndoing }
+									>
+										{ isUndoing ? 'Undoing…' : 'Undo' }
+									</Button>
+								) }
 							</div>
-
-							<span className="flavor-agent-pill">
-								{ getStatusLabel( entry ) }
-							</span>
-
-							{ canUndo && (
-								<Button
-									size="small"
-									variant="secondary"
-									onClick={ () => onUndo( entry.id ) }
-									className="flavor-agent-card__apply"
-									disabled={ isUndoing }
-								>
-									{ isUndoing ? 'Undoing…' : 'Undo' }
-								</Button>
-							) }
-						</div>
-					);
-				} ) }
-			</div>
+						);
+					} ) }
+				</div>
+			) }
 		</div>
 	);
 }

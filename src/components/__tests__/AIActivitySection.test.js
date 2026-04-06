@@ -11,6 +11,23 @@ import AIActivitySection from '../AIActivitySection';
 const { getContainer, getRoot } = setupReactTest();
 
 describe( 'AIActivitySection', () => {
+	test( 'suppresses the section by default when there is no activity history yet', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					description="Undo is only available while the current state still matches the applied AI change."
+					entries={ [] }
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toBe( '' );
+		expect(
+			getContainer().querySelector( '.flavor-agent-panel__group' )
+		).toBeNull();
+	} );
+
 	test( 'renders ordered undo labels and only shows undo buttons for available rows', () => {
 		const onUndo = jest.fn();
 

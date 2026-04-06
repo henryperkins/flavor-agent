@@ -207,9 +207,17 @@ function StyleBookPanel( {
 	onCancelReview,
 	onApply,
 	onUndo,
+	showSecondaryGuidance,
 } ) {
 	const panelNotice = isInlineStyleNotice( notice ) ? null : notice;
 	const inlineNotice = isInlineStyleNotice( notice ) ? notice : null;
+	let promptHelp = '';
+
+	if ( showSecondaryGuidance ) {
+		promptHelp = blockTitle
+			? `Flavor Agent will keep changes inside the theme-backed Style Book controls for ${ blockTitle }. Raw CSS and custom CSS are out of scope.`
+			: 'Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope.';
+	}
 
 	return (
 		<div className="flavor-agent-panel flavor-agent-style-book-panel">
@@ -252,14 +260,11 @@ function StyleBookPanel( {
 				<div className="flavor-agent-panel__group-body">
 					<TextareaControl
 						label="Describe the block style direction"
-						help={
-							blockTitle
-								? `Flavor Agent will keep changes inside the theme-backed Style Book controls for ${ blockTitle }. Raw CSS and custom CSS are out of scope.`
-								: 'Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope.'
-						}
+						help={ promptHelp }
 						value={ prompt }
 						onChange={ setPrompt }
 						rows={ 4 }
+						disabled={ ! capabilityAvailable }
 					/>
 					<Button
 						variant="primary"
@@ -359,14 +364,16 @@ function StyleBookPanel( {
 								/>
 
 								<div className="flavor-agent-style-card__footer">
-									<span className="flavor-agent-panel__intro-copy">
-										{ suggestion.tone === 'executable'
-											? `Preview the exact operations before applying them to ${
-													blockTitle ||
-													'the active block example'
-											  }.`
-											: 'This stays advisory until the backend can express it as a safe theme-backed block style operation set.' }
-									</span>
+									{ showSecondaryGuidance && (
+										<span className="flavor-agent-panel__intro-copy">
+											{ suggestion.tone === 'executable'
+												? `Preview the exact operations before applying them to ${
+														blockTitle ||
+														'the active block example'
+												  }.`
+												: 'This stays advisory until the backend can express it as a safe theme-backed block style operation set.' }
+										</span>
+									) }
 
 									{ suggestion.tone === 'executable' && (
 										<div className="flavor-agent-style-card__actions">
@@ -407,7 +414,11 @@ function StyleBookPanel( {
 						isApplying ? 'Applying…' : 'Apply Style Change'
 					}
 					className="flavor-agent-style-review"
-					hint="Only the operations shown here will run against the active Style Book example."
+					hint={
+						showSecondaryGuidance
+							? 'Only the operations shown here will run against the active Style Book example.'
+							: ''
+					}
 				>
 					{ inlineNotice && (
 						<AIStatusNotice
@@ -578,19 +589,15 @@ export default function StyleBookRecommender() {
 					globalStylesData?.mergedConfig || {},
 					blockName
 				),
-				templateStructure: buildTemplateStructureSnapshot(
-					editedBlocks
-				),
+				templateStructure:
+					buildTemplateStructureSnapshot( editedBlocks ),
 				templateVisibility:
 					collectViewportVisibilitySummary( editedBlocks ),
-				designSemantics: buildStyleBookDesignSemantics(
-					editedBlocks,
-					{
-						blockName,
-						blockTitle,
-						templateType,
-					}
-				),
+				designSemantics: buildStyleBookDesignSemantics( editedBlocks, {
+					blockName,
+					blockTitle,
+					templateType,
+				} ),
 				rawSuggestions: mappedSuggestions,
 				currentExplanation: store?.getStyleBookExplanation?.() || '',
 				currentResultContextSignature:
@@ -663,6 +670,8 @@ export default function StyleBookRecommender() {
 		() => getLatestUndoableActivity( activityEntries )?.id || null,
 		[ activityEntries ]
 	);
+	const showSecondaryGuidance =
+		! hasMatchingResult && activityEntries.length === 0;
 	const hasApplySuccess =
 		applyStatus === 'success' &&
 		Boolean( latestStyleBookActivity ) &&
@@ -933,6 +942,7 @@ export default function StyleBookRecommender() {
 			onCancelReview={ () => setStyleBookSelectedSuggestion( null ) }
 			onApply={ handleApply }
 			onUndo={ handleUndo }
+			showSecondaryGuidance={ showSecondaryGuidance }
 		/>
 	);
 

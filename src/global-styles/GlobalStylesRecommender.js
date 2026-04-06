@@ -193,6 +193,7 @@ function GlobalStylesPanel( {
 	onCancelReview,
 	onApply,
 	onUndo,
+	showSecondaryGuidance,
 } ) {
 	const panelNotice = isInlineStyleNotice( notice ) ? null : notice;
 	const inlineNotice = isInlineStyleNotice( notice ) ? notice : null;
@@ -242,10 +243,15 @@ function GlobalStylesPanel( {
 				<div className="flavor-agent-panel__group-body">
 					<TextareaControl
 						label="Describe the style direction"
-						help="Optional. Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope."
+						help={
+							showSecondaryGuidance
+								? 'Optional. Flavor Agent will keep recommendations inside theme-backed Global Styles controls. Raw CSS and custom CSS are out of scope.'
+								: ''
+						}
 						value={ prompt }
 						onChange={ setPrompt }
 						rows={ 4 }
+						disabled={ ! capabilityAvailable }
 					/>
 					<Button
 						variant="primary"
@@ -345,11 +351,13 @@ function GlobalStylesPanel( {
 								/>
 
 								<div className="flavor-agent-style-card__footer">
-									<span className="flavor-agent-panel__intro-copy">
-										{ suggestion.tone === 'executable'
-											? 'Preview the exact operations before applying them to the current Global Styles scope.'
-											: 'This stays advisory until the backend can express it as a safe theme-backed operation set.' }
-									</span>
+									{ showSecondaryGuidance && (
+										<span className="flavor-agent-panel__intro-copy">
+											{ suggestion.tone === 'executable'
+												? 'Preview the exact operations before applying them to the current Global Styles scope.'
+												: 'This stays advisory until the backend can express it as a safe theme-backed operation set.' }
+										</span>
+									) }
 
 									{ suggestion.tone === 'executable' && (
 										<div className="flavor-agent-style-card__actions">
@@ -390,7 +398,11 @@ function GlobalStylesPanel( {
 						isApplying ? 'Applying…' : 'Apply Style Change'
 					}
 					className="flavor-agent-style-review"
-					hint="Only the operations shown here will run against the current Global Styles scope."
+					hint={
+						showSecondaryGuidance
+							? 'Only the operations shown here will run against the current Global Styles scope.'
+							: ''
+					}
 				>
 					{ inlineNotice && (
 						<AIStatusNotice
@@ -613,6 +625,8 @@ export default function GlobalStylesRecommender() {
 		() => getLatestUndoableActivity( activityEntries )?.id || null,
 		[ activityEntries ]
 	);
+	const showSecondaryGuidance =
+		! hasMatchingResult && activityEntries.length === 0;
 	const hasApplySuccess =
 		applyStatus === 'success' &&
 		Boolean( latestGlobalStylesActivity ) &&
@@ -855,6 +869,7 @@ export default function GlobalStylesRecommender() {
 			onCancelReview={ () => setGlobalStylesSelectedSuggestion( null ) }
 			onApply={ handleApply }
 			onUndo={ handleUndo }
+			showSecondaryGuidance={ showSecondaryGuidance }
 		/>
 	);
 

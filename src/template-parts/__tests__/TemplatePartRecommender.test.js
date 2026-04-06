@@ -304,7 +304,9 @@ describe( 'TemplatePartRecommender', () => {
 
 		await act( async () => {
 			Array.from( getContainer().querySelectorAll( 'button' ) )
-				.find( ( element ) => element.textContent === 'Get Suggestions' )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
 				.click();
 		} );
 
@@ -334,7 +336,9 @@ describe( 'TemplatePartRecommender', () => {
 	test( 'handles template-part requests without live override metadata', async () => {
 		await act( async () => {
 			Array.from( getContainer().querySelectorAll( 'button' ) )
-				.find( ( element ) => element.textContent === 'Get Suggestions' )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
 				.click();
 		} );
 
@@ -430,9 +434,9 @@ describe( 'TemplatePartRecommender', () => {
 		await renderPanel();
 
 		expect( hasText( 'After target block (Path 1 > 2)' ) ).toBe( true );
-		expect(
-			getContainer().textContent.replace( /\s+/g, ' ' )
-		).toContain( 'relative to Path 1 > 2.' );
+		expect( getContainer().textContent.replace( /\s+/g, ' ' ) ).toContain(
+			'relative to Path 1 > 2.'
+		);
 		expect( hasText( 'Path 0 > 1' ) ).toBe( false );
 	} );
 
@@ -583,6 +587,11 @@ describe( 'TemplatePartRecommender', () => {
 		).not.toBeNull();
 		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
+		expect(
+			hasText(
+				'Template-part actions share the same history and latest-valid undo behavior as the other executable review surfaces.'
+			)
+		).toBe( true );
 		expect( hasText( 'Add utility links' ) ).toBe( true );
 		expect( hasText( 'Undo available' ) ).toBe( true );
 		expect( hasText( 'Suggested Composition' ) ).toBe( false );

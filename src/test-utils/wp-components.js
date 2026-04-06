@@ -118,6 +118,7 @@ function mockWpComponents( overrides = {} ) {
 		Spinner: () => createElement( 'div', null, 'Loading…' ),
 		TextareaControl: ( {
 			className,
+			disabled,
 			help,
 			label,
 			onChange = () => {},
@@ -132,6 +133,7 @@ function mockWpComponents( overrides = {} ) {
 				createElement( 'textarea', {
 					'aria-label': label,
 					className,
+					disabled,
 					placeholder,
 					rows,
 					value,

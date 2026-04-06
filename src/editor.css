@@ -1062,12 +1062,40 @@
   position: relative;
 }
 
-.flavor-agent-pattern-notice {
+.flavor-agent-pattern-inserter-slot {
   padding: 8px 8px 0;
 }
 
-.flavor-agent-pattern-notice .components-notice {
+.flavor-agent-pattern-inserter-slot .components-notice {
   margin: 0 0 8px;
+}
+
+.flavor-agent-pattern-summary {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--wpds-border-radius-lg, 8px);
+  border: 1px solid var(--wpds-color-stroke-surface-neutral, #d8d8d8);
+  background: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 8%,
+    var(--wpds-color-bg-surface-neutral-strong, #ffffff)
+  );
+}
+
+.flavor-agent-pattern-summary__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.flavor-agent-pattern-summary__copy {
+  margin: 0;
+  font-size: var(--wpds-font-size-xs, 11px);
+  line-height: 1.45;
+  color: var(--flavor-agent-color-muted);
 }
 
 .flavor-agent-inserter-badge {

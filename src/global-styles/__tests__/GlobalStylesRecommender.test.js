@@ -11,6 +11,7 @@ const mockRenderAIStatusNotice = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
 const mockGetStyleBookUiState = jest.fn();
 const mockSubscribeToStyleBookUi = jest.fn();
+let mockSurfaceCapability = null;
 const DEFAULT_EXECUTION_CONTRACT = {
 	supportedStylePaths: [
 		{
@@ -92,9 +93,10 @@ jest.mock(
 );
 
 jest.mock( '../../utils/capability-flags', () => ( {
-	getSurfaceCapability: () => ( {
-		available: true,
-	} ),
+	getSurfaceCapability: () =>
+		mockSurfaceCapability || {
+			available: true,
+		},
 } ) );
 
 jest.mock( '../../style-book/dom', () => ( {
@@ -315,6 +317,9 @@ beforeEach( () => {
 	currentStyleBookUiState = {
 		isActive: false,
 		target: null,
+	};
+	mockSurfaceCapability = {
+		available: true,
 	};
 
 	mockGetGlobalStylesUserConfig.mockImplementation(
@@ -588,6 +593,19 @@ describe( 'GlobalStylesRecommender', () => {
 		expect(
 			mockFetchGlobalStylesRecommendations.mock.calls[ 0 ][ 0 ]
 		).not.toHaveProperty( 'prompt' );
+	} );
+
+	test( 'disables the composer when Global Styles recommendations are unavailable', () => {
+		mockSurfaceCapability = {
+			available: false,
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.querySelector( 'textarea' )?.disabled ).toBe( true );
+		expect( sidebar.querySelector( 'button' )?.disabled ).toBe( true );
 	} );
 
 	test( 'mounts into the Styles sidebar after it appears later', async () => {
@@ -1123,6 +1141,12 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( sidebar.textContent ).toContain( 'Color' );
 		expect( sidebar.textContent ).toContain( 'Review open' );
 		expect( sidebar.textContent ).toContain( 'color.background → accent' );
+		expect( sidebar.textContent ).not.toContain(
+			'Raw CSS and custom CSS are out of scope.'
+		);
+		expect( sidebar.textContent ).not.toContain(
+			'Preview the exact operations before applying them to the current Global Styles scope.'
+		);
 	} );
 
 	test( 'dispatches undo from the Global Styles apply success notice for the latest activity', () => {
@@ -1195,6 +1219,9 @@ describe( 'GlobalStylesRecommender', () => {
 			][ 0 ];
 
 		expect( lastCall.isUndoing ).toBe( false );
+		expect( lastCall.description ).toBe(
+			'Undo is only available while the current Global Styles state still matches the applied AI change.'
+		);
 		expect(
 			sidebar.querySelector( '[data-is-undoing="false"]' )
 		).not.toBeNull();

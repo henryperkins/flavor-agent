@@ -100,6 +100,7 @@ function createSelectMap() {
 			getBlockAttributes: mockGetBlockAttributes,
 		},
 		'flavor-agent': {
+			getPatternStatus: jest.fn( () => state.store.patternStatus ),
 			getPatternRecommendations: jest.fn(
 				() => state.store.patternRecommendations
 			),
@@ -138,6 +139,7 @@ describe( 'PatternRecommender', () => {
 				blockAttributes: {},
 			},
 			store: {
+				patternStatus: 'idle',
 				patternRecommendations: [],
 			},
 		};
@@ -559,7 +561,7 @@ describe( 'PatternRecommender', () => {
 		);
 		expect(
 			inserterContainer.querySelector(
-				'.flavor-agent-pattern-notice-slot'
+				'.flavor-agent-pattern-inserter-slot'
 			)
 		).not.toBeNull();
 
@@ -569,8 +571,105 @@ describe( 'PatternRecommender', () => {
 
 		expect(
 			inserterContainer.querySelector(
-				'.flavor-agent-pattern-notice-slot'
+				'.flavor-agent-pattern-inserter-slot'
 			)
 		).toBeNull();
+	} );
+
+	test( 'renders a persistent summary inside the inserter when recommendations are ready', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+			{
+				name: 'theme/footer',
+				score: 0.91,
+				reason: 'Recommended footer pattern.',
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain(
+			'Recommended now includes 2 AI-ranked patterns for this insertion point.'
+		);
+		expect(
+			inserterContainer.querySelector(
+				'.flavor-agent-pattern-inserter-slot'
+			)
+		).not.toBeNull();
+	} );
+
+	test( 'reattaches the inserter summary when Gutenberg replaces the container', () => {
+		const firstContainer = document.createElement( 'div' );
+		const secondContainer = document.createElement( 'div' );
+		const searchInput = {
+			addEventListener: jest.fn(),
+			removeEventListener: jest.fn(),
+		};
+		const observerInstances = [];
+		let currentContainer = firstContainer;
+		let triggerObserver = null;
+
+		firstContainer.className = 'block-editor-inserter__panel-content';
+		secondContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( firstContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		mockFindInserterContainer.mockImplementation( () => currentContainer );
+		mockFindInserterSearchInput.mockReturnValue( searchInput );
+		window.MutationObserver = class MockMutationObserver {
+			constructor( callback ) {
+				this.observe = jest.fn();
+				this.disconnect = jest.fn();
+				observerInstances.push( this );
+				triggerObserver = callback;
+			}
+		};
+
+		renderComponent();
+
+		expect(
+			firstContainer.querySelector(
+				'.flavor-agent-pattern-inserter-slot'
+			)
+		).not.toBeNull();
+		expect( observerInstances ).toHaveLength( 1 );
+
+		firstContainer.remove();
+		document.body.appendChild( secondContainer );
+		currentContainer = secondContainer;
+
+		act( () => {
+			triggerObserver( [] );
+		} );
+
+		expect(
+			secondContainer.querySelector(
+				'.flavor-agent-pattern-inserter-slot'
+			)
+		).not.toBeNull();
+		expect( observerInstances[ 0 ].disconnect ).not.toHaveBeenCalled();
+
+		act( () => {
+			getRoot().unmount();
+		} );
+
+		expect( observerInstances[ 0 ].disconnect ).toHaveBeenCalled();
+		secondContainer.remove();
 	} );
 } );

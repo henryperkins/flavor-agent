@@ -10,6 +10,7 @@ const mockGetLatestAppliedActivity = jest.fn();
 const mockGetLatestUndoableActivity = jest.fn();
 const mockGetResolvedActivityEntries = jest.fn();
 const mockGetBlockActivityUndoState = jest.fn();
+const mockRenderAIActivitySection = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -56,7 +57,10 @@ jest.mock( '../../store/activity-history', () => ( {
 		mockGetResolvedActivityEntries( ...args ),
 } ) );
 
-jest.mock( '../../components/AIActivitySection', () => () => null );
+jest.mock( '../../components/AIActivitySection', () => ( props ) => {
+	mockRenderAIActivitySection( props );
+	return null;
+} );
 jest.mock( '../NavigationRecommendations', () => () => null );
 jest.mock( '../SuggestionChips', () => ( props ) => {
 	mockSuggestionChips( props );
@@ -416,6 +420,17 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain(
 			'Applied Refresh hero copy.'
 		);
+		expect(
+			mockRenderAIActivitySection.mock.calls[
+				mockRenderAIActivitySection.mock.calls.length - 1
+			][ 0 ]
+		).toEqual(
+			expect.objectContaining( {
+				description:
+					'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.',
+				entries: expect.any( Array ),
+			} )
+		);
 
 		const undoButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
@@ -487,6 +502,12 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		);
 		expect( getContainer().textContent ).toContain(
 			'Replace with a callout pattern'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'One-click apply stays available when Flavor Agent can safely change this block'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'These ideas need manual follow-through or a broader preview/apply flow'
 		);
 		expect( mockSuggestionChips ).toHaveBeenCalledTimes( 1 );
 		expect( mockSuggestionChips.mock.calls[ 0 ][ 0 ] ).toEqual(

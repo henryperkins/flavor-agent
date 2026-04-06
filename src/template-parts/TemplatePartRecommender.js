@@ -538,47 +538,39 @@ export default function TemplatePartRecommender() {
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneTemplatePartActivity?.undo?.status === 'undone';
-	const { interactionState, statusNotice } = useSelect(
+	const statusNotice = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
 
-			return {
-				interactionState: store.getTemplatePartInteractionState( {
-					undoError,
-					hasPreview: Boolean( selectedSuggestionKey ),
-					hasSuccess: Boolean( hasApplySuccess ),
-					hasUndoSuccess,
-				} ),
-				statusNotice: store.getSurfaceStatusNotice( 'template-part', {
-					requestStatus: isLoading ? 'loading' : 'idle',
-					requestError: error,
-					applyError,
-					undoError,
-					undoStatus,
-					applyStatus,
-					hasResult: hasMatchingResult,
-					hasSuggestions,
-					hasPreview: Boolean( selectedSuggestionKey ),
-					hasSuccess: Boolean( hasApplySuccess ),
-					hasUndoSuccess,
-					applySuccessMessage: hasApplySuccess
-						? `Applied ${ formatCount(
-								lastAppliedOperations.length,
-								'template-part operation'
-						  ) }.`
-						: '',
-					undoSuccessMessage: hasUndoSuccess
-						? `Undid ${
-								lastUndoneTemplatePartActivity?.suggestion ||
-								'suggestion'
-						  }.`
-						: '',
-					emptyMessage: hasMatchingResult
-						? 'No template-part suggestions were returned for this request.'
-						: '',
-					onUndoDismissAction: Boolean( undoError ),
-				} ),
-			};
+			return store.getSurfaceStatusNotice( 'template-part', {
+				requestStatus: isLoading ? 'loading' : 'idle',
+				requestError: error,
+				applyError,
+				undoError,
+				undoStatus,
+				applyStatus,
+				hasResult: hasMatchingResult,
+				hasSuggestions,
+				hasPreview: Boolean( selectedSuggestionKey ),
+				hasSuccess: Boolean( hasApplySuccess ),
+				hasUndoSuccess,
+				applySuccessMessage: hasApplySuccess
+					? `Applied ${ formatCount(
+							lastAppliedOperations.length,
+							'template-part operation'
+					  ) }.`
+					: '',
+				undoSuccessMessage: hasUndoSuccess
+					? `Undid ${
+							lastUndoneTemplatePartActivity?.suggestion ||
+							'suggestion'
+					  }.`
+					: '',
+				emptyMessage: hasMatchingResult
+					? 'No template-part suggestions were returned for this request.'
+					: '',
+				onUndoDismissAction: Boolean( undoError ),
+			} );
 		},
 		[
 			applyError,
@@ -596,6 +588,10 @@ export default function TemplatePartRecommender() {
 			hasUndoSuccess,
 		]
 	);
+	const showSecondaryGuidance =
+		! hasMatchingResult &&
+		templatePartActivityEntries.length === 0 &&
+		! selectedSuggestionKey;
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommend ) {
@@ -749,12 +745,7 @@ export default function TemplatePartRecommender() {
 				) }
 
 				<AIActivitySection
-					description={
-						interactionState === 'success' ||
-						templatePartActivityEntries.length > 0
-							? 'Template-part actions share the same history and latest-valid undo behavior as the other executable review surfaces.'
-							: ''
-					}
+					description="Template-part actions share the same history and latest-valid undo behavior as the other executable review surfaces."
 					entries={ templatePartActivityEntries }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
@@ -812,7 +803,11 @@ export default function TemplatePartRecommender() {
 						title="Advisory Suggestions"
 						count={ advisorySuggestionCards.length }
 						countNoun="suggestion"
-						description="These suggestions stay visible, but Flavor Agent could not validate an exact deterministic operation sequence for them."
+						description={
+							showSecondaryGuidance
+								? 'These suggestions stay visible, but Flavor Agent could not validate an exact deterministic operation sequence for them.'
+								: ''
+						}
 					>
 						{ advisorySuggestionCards.map(
 							( suggestion, index ) => (

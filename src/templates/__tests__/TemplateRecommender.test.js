@@ -866,10 +866,35 @@ describe( 'TemplateRecommender', () => {
 		).not.toBeNull();
 		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
+		expect(
+			hasText(
+				'Template actions use the same latest-valid undo rule as the block review surface.'
+			)
+		).toBe( true );
 		expect( hasText( 'Clarify hierarchy' ) ).toBe( true );
 		expect( hasText( 'Undo available' ) ).toBe( true );
 		expect( hasText( 'Suggested Composition' ) ).toBe( false );
 		expect( getTextarea() ).toBeNull();
+	} );
+
+	test( 'hides the empty activity section when template recommendations are unavailable and no history exists', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [],
+				templateRecommendations: [],
+				templateStatus: 'idle',
+			},
+		} );
+		window.flavorAgentData = {
+			canRecommendTemplates: false,
+			settingsUrl:
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+		};
+
+		await renderPanel();
+
+		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
+		expect( hasText( 'Recent AI Actions' ) ).toBe( false );
 	} );
 
 	test( 'recomputes template undo availability when the block tree changes', async () => {

@@ -25,6 +25,7 @@ import {
 } from '@wordpress/element';
 
 import CapabilityNotice from '../components/CapabilityNotice';
+import { formatCount } from '../utils/format-count';
 import {
 	getBlockPatternCategories,
 	getBlockPatterns,
@@ -48,7 +49,7 @@ import { getVisiblePatternNames } from '../utils/visible-patterns';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const OBSERVER_TIMEOUT_MS = 3000;
-const NOTICE_SLOT_CLASS = 'flavor-agent-pattern-notice-slot';
+const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
 
 function getRegistryVersion( entries, prefix, includeLabel = false ) {
 	if ( ! Array.isArray( entries ) ) {
@@ -191,6 +192,28 @@ function patchInserterPatterns(
 	);
 }
 
+function PatternSummary( { count } ) {
+	return (
+		<div
+			className="flavor-agent-pattern-summary"
+			role="status"
+			aria-live="polite"
+		>
+			<div className="flavor-agent-pattern-summary__header">
+				<span className="flavor-agent-pill">Flavor Agent</span>
+				<span className="flavor-agent-pill">
+					{ formatCount( count, 'recommendation' ) }
+				</span>
+			</div>
+			<p className="flavor-agent-pattern-summary__copy">
+				Recommended now includes{ ' ' }
+				{ formatCount( count, 'AI-ranked pattern' ) } for this insertion
+				point.
+			</p>
+		</div>
+	);
+}
+
 export default function PatternRecommender() {
 	const canRecommend = getSurfaceCapability( 'pattern' ).available;
 	const postType = useSelect(
@@ -312,10 +335,14 @@ export default function PatternRecommender() {
 
 		return 'none:0';
 	}, [] );
-	const recommendations = useSelect(
-		( select ) => select( STORE_NAME ).getPatternRecommendations(),
-		[]
-	);
+	const { patternStatus, recommendations } = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
+
+		return {
+			patternStatus: store.getPatternStatus(),
+			recommendations: store.getPatternRecommendations(),
+		};
+	}, [] );
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
 	const patchStateRef = useRef( createPatchState() );
 	const observerRef = useRef( null );
@@ -326,9 +353,14 @@ export default function PatternRecommender() {
 
 	if ( ! noticeSlotRef.current && typeof document !== 'undefined' ) {
 		const noticeSlot = document.createElement( 'div' );
-		noticeSlot.className = NOTICE_SLOT_CLASS;
+		noticeSlot.className = INSERTER_SLOT_CLASS;
 		noticeSlotRef.current = noticeSlot;
 	}
+
+	const shouldRenderInserterAffordance =
+		isInserterOpen &&
+		( ! canRecommend ||
+			( patternStatus === 'ready' && recommendations.length > 0 ) );
 
 	const buildBaseInput = useCallback( () => {
 		const input = {
@@ -376,6 +408,10 @@ export default function PatternRecommender() {
 	useEffect( () => {
 		const noticeSlot = noticeSlotRef.current;
 
+		if ( ! noticeSlot ) {
+			return undefined;
+		}
+
 		const cleanupNotice = () => {
 			if ( noticeObserverRef.current ) {
 				noticeObserverRef.current.disconnect();
@@ -406,23 +442,7 @@ export default function PatternRecommender() {
 			);
 		};
 
-		if ( canRecommend || ! isInserterOpen ) {
-			cleanupNotice();
-			return undefined;
-		}
-
-		const existingContainer = findInserterContainer( document );
-
-		if ( existingContainer ) {
-			attachNotice( existingContainer );
-			return cleanupNotice;
-		}
-
-		if ( ! window.MutationObserver ) {
-			return cleanupNotice;
-		}
-
-		const observer = new window.MutationObserver( () => {
+		const syncNotice = () => {
 			const inserterContainer = findInserterContainer( document );
 
 			if ( ! inserterContainer ) {
@@ -430,8 +450,23 @@ export default function PatternRecommender() {
 			}
 
 			attachNotice( inserterContainer );
-			observer.disconnect();
-			noticeObserverRef.current = null;
+		};
+
+		if ( ! shouldRenderInserterAffordance ) {
+			cleanupNotice();
+			return undefined;
+		}
+
+		syncNotice();
+
+		if ( ! window.MutationObserver ) {
+			return cleanupNotice;
+		}
+
+		// Gutenberg can replace the inserter container without toggling the
+		// open state, so keep the slot attached for the whole affordance lifetime.
+		const observer = new window.MutationObserver( () => {
+			syncNotice();
 		} );
 
 		observer.observe( document.body, {
@@ -440,18 +475,10 @@ export default function PatternRecommender() {
 		} );
 		noticeObserverRef.current = observer;
 
-		const timeout = setTimeout( () => {
-			if ( noticeObserverRef.current ) {
-				noticeObserverRef.current.disconnect();
-				noticeObserverRef.current = null;
-			}
-		}, OBSERVER_TIMEOUT_MS );
-
 		return () => {
-			clearTimeout( timeout );
 			cleanupNotice();
 		};
-	}, [ canRecommend, isInserterOpen ] );
+	}, [ shouldRenderInserterAffordance ] );
 
 	const handleSearchInput = useCallback(
 		( value ) => {
@@ -573,11 +600,13 @@ export default function PatternRecommender() {
 		};
 	}, [ canRecommend, isInserterOpen, handleSearchInput ] );
 
-	if ( ! canRecommend && isInserterOpen && noticeSlotRef.current ) {
+	if ( shouldRenderInserterAffordance && noticeSlotRef.current ) {
 		return createPortal(
-			<div className="flavor-agent-pattern-notice">
+			canRecommend ? (
+				<PatternSummary count={ recommendations.length } />
+			) : (
 				<CapabilityNotice surface="pattern" />
-			</div>,
+			),
 			noticeSlotRef.current
 		);
 	}

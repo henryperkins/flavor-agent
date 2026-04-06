@@ -27,6 +27,8 @@ import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
+const EMPTY_BLOCK_SUGGESTIONS = [];
+
 export function findBlockPath( blocks, clientId, path = [] ) {
 	for ( let index = 0; index < blocks.length; index++ ) {
 		const block = blocks[ index ];
@@ -201,7 +203,8 @@ export function BlockRecommendationsContent( {
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
-	const blockSuggestions = recommendations?.block || [];
+	const blockSuggestions = recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS;
+	const hasBlockSuggestions = blockSuggestions.length > 0;
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -216,8 +219,8 @@ export function BlockRecommendationsContent( {
 					requestError: error,
 					undoError,
 					undoStatus,
-					hasResult: blockSuggestions.length > 0,
-					hasSuggestions: blockSuggestions.length > 0,
+					hasResult: hasBlockSuggestions,
+					hasSuggestions: hasBlockSuggestions,
 					hasSuccess: hasApplySuccess,
 					hasUndoSuccess,
 					applySuccessMessage: hasApplySuccess
@@ -239,11 +242,11 @@ export function BlockRecommendationsContent( {
 		[
 			clientId,
 			error,
+			hasBlockSuggestions,
 			hasApplySuccess,
 			hasUndoSuccess,
 			lastUndoneBlockActivity,
 			latestBlockActivity,
-			recommendations,
 			undoError,
 			undoStatus,
 		]
@@ -301,6 +304,12 @@ export function BlockRecommendationsContent( {
 	} else if ( statusNotice?.source === 'undo' ) {
 		dismissStatusNotice = clearUndoError;
 	}
+
+	const showSecondaryGuidance =
+		blockSuggestions.length === 0 &&
+		blockActivityEntries.length === 0 &&
+		interactionState !== 'success' &&
+		statusNotice?.source !== 'empty';
 
 	if ( ! clientId || ! block || isDisabled ) {
 		return null;
@@ -367,12 +376,7 @@ export function BlockRecommendationsContent( {
 			) }
 
 			<AIActivitySection
-				description={
-					interactionState === 'success' ||
-					blockActivityEntries.length > 0
-						? 'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.'
-						: ''
-				}
+				description="Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface."
 				entries={ blockActivityEntries }
 				isUndoing={ undoStatus === 'undoing' }
 				onUndo={ handleUndo }
@@ -393,11 +397,14 @@ export function BlockRecommendationsContent( {
 								: 'ideas' }
 						</span>
 					</div>
-					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-						One-click apply stays available when Flavor Agent can
-						safely change this block&apos;s local attributes.
-						Broader structural and replacement ideas stay advisory.
-					</p>
+					{ showSecondaryGuidance && (
+						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+							One-click apply stays available when Flavor Agent
+							can safely change this block&apos;s local
+							attributes. Broader structural and replacement ideas
+							stay advisory.
+						</p>
+					) }
 					<SuggestionChips
 						clientId={ clientId }
 						suggestions={ executableBlockSuggestions }
@@ -419,11 +426,14 @@ export function BlockRecommendationsContent( {
 								: 'ideas' }
 						</span>
 					</div>
-					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-						These ideas need manual follow-through or a broader
-						preview/apply flow, so Flavor Agent keeps them advisory
-						instead of pretending they are one-click safe.
-					</p>
+					{ showSecondaryGuidance && (
+						<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+							These ideas need manual follow-through or a broader
+							preview/apply flow, so Flavor Agent keeps them
+							advisory instead of pretending they are one-click
+							safe.
+						</p>
+					) }
 					<div className="flavor-agent-panel__group-body">
 						{ advisoryBlockSuggestions.map( ( suggestion ) => (
 							<AdvisorySuggestionCard

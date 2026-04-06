@@ -60,7 +60,7 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 							}
 						>
 							<span className="flavor-agent-chip__label">
-								{ wasApplied ? 'Applied' : s.label }
+								{ s.label }
 							</span>
 							{ ! wasApplied && s.preview && (
 								<span

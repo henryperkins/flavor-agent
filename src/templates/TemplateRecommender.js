@@ -559,44 +559,36 @@ export default function TemplateRecommender() {
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneTemplateActivity?.undo?.status === 'undone';
-	const { interactionState, statusNotice } = useSelect(
+	const statusNotice = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
 
-			return {
-				interactionState: store.getTemplateInteractionState( {
-					undoError,
-					hasPreview: Boolean( selectedSuggestionKey ),
-					hasSuccess: Boolean( hasApplySuccess ),
-					hasUndoSuccess,
-				} ),
-				statusNotice: store.getSurfaceStatusNotice( 'template', {
-					requestStatus: isLoading ? 'loading' : 'idle',
-					requestError: error,
-					applyError,
-					undoError,
-					undoStatus,
-					applyStatus,
-					hasResult: hasMatchingResult,
-					hasSuggestions,
-					hasPreview: Boolean( selectedSuggestionKey ),
-					hasSuccess: Boolean( hasApplySuccess ),
-					hasUndoSuccess,
-					applySuccessMessage: hasApplySuccess
-						? `Applied ${ formatCount(
-								lastAppliedOperations.length,
-								'template operation'
-						  ) }.`
-						: '',
-					undoSuccessMessage: hasUndoSuccess
-						? `Undid ${
-								lastUndoneTemplateActivity?.suggestion ||
-								'suggestion'
-						  }.`
-						: '',
-					onUndoDismissAction: Boolean( undoError ),
-				} ),
-			};
+			return store.getSurfaceStatusNotice( 'template', {
+				requestStatus: isLoading ? 'loading' : 'idle',
+				requestError: error,
+				applyError,
+				undoError,
+				undoStatus,
+				applyStatus,
+				hasResult: hasMatchingResult,
+				hasSuggestions,
+				hasPreview: Boolean( selectedSuggestionKey ),
+				hasSuccess: Boolean( hasApplySuccess ),
+				hasUndoSuccess,
+				applySuccessMessage: hasApplySuccess
+					? `Applied ${ formatCount(
+							lastAppliedOperations.length,
+							'template operation'
+					  ) }.`
+					: '',
+				undoSuccessMessage: hasUndoSuccess
+					? `Undid ${
+							lastUndoneTemplateActivity?.suggestion ||
+							'suggestion'
+					  }.`
+					: '',
+				onUndoDismissAction: Boolean( undoError ),
+			} );
 		},
 		[
 			applyError,
@@ -614,6 +606,10 @@ export default function TemplateRecommender() {
 			hasUndoSuccess,
 		]
 	);
+	const showSecondaryGuidance =
+		! hasMatchingResult &&
+		templateActivityEntries.length === 0 &&
+		! selectedSuggestionKey;
 
 	const handleFetch = useCallback( () => {
 		if ( ! canRecommend ) {
@@ -782,12 +778,7 @@ export default function TemplateRecommender() {
 				) }
 
 				<AIActivitySection
-					description={
-						interactionState === 'success' ||
-						templateActivityEntries.length > 0
-							? 'Template actions use the same latest-valid undo rule as the block review surface.'
-							: ''
-					}
+					description="Template actions use the same latest-valid undo rule as the block review surface."
 					entries={ templateActivityEntries }
 					isUndoing={ undoStatus === 'undoing' }
 					onUndo={ handleUndo }
@@ -851,7 +842,11 @@ export default function TemplateRecommender() {
 						title="Advisory Suggestions"
 						count={ advisorySuggestionCards.length }
 						countNoun="suggestion"
-						description="These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them."
+						description={
+							showSecondaryGuidance
+								? 'These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them.'
+								: ''
+						}
 					>
 						{ advisorySuggestionCards.map(
 							( suggestion, index ) => (

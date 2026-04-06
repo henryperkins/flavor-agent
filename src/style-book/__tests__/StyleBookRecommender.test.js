@@ -10,6 +10,8 @@ const mockGetGlobalStylesActivityUndoState = jest.fn();
 const mockGetStyleBookUiState = jest.fn();
 const mockSubscribeToStyleBookUi = jest.fn();
 const mockRenderAIStatusNotice = jest.fn();
+const mockRenderAIActivitySection = jest.fn();
+let mockSurfaceCapability = null;
 const DEFAULT_EXECUTION_CONTRACT = {
 	supportedStylePaths: [
 		{
@@ -62,7 +64,10 @@ jest.mock( '../../components/AIStatusNotice', () => {
 		);
 	};
 } );
-jest.mock( '../../components/AIActivitySection', () => () => null );
+jest.mock( '../../components/AIActivitySection', () => ( props ) => {
+	mockRenderAIActivitySection( props );
+	return null;
+} );
 jest.mock(
 	'../../components/AIReviewSection',
 	() =>
@@ -71,9 +76,10 @@ jest.mock(
 );
 
 jest.mock( '../../utils/capability-flags', () => ( {
-	getSurfaceCapability: () => ( {
-		available: true,
-	} ),
+	getSurfaceCapability: () =>
+		mockSurfaceCapability || {
+			available: true,
+		},
 } ) );
 
 jest.mock( '../../context/theme-tokens', () => ( {
@@ -129,7 +135,7 @@ const {
 
 import StyleBookRecommender from '../StyleBookRecommender';
 
-const { getContainer, getRoot } = setupReactTest();
+const { getRoot } = setupReactTest();
 
 let sidebar = null;
 let currentBlockEditorSettings = null;
@@ -328,6 +334,9 @@ beforeEach( () => {
 			blockTitle: 'Paragraph',
 		},
 	};
+	mockSurfaceCapability = {
+		available: true,
+	};
 	styleBookUiSubscriber = null;
 
 	mockGetGlobalStylesUserConfig.mockImplementation(
@@ -523,8 +532,59 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.textContent ).toContain(
 			'Select a block example in Style Book to request recommendations.'
 		);
+		expect( sidebar.querySelector( 'textarea' )?.disabled ).toBe( true );
 		expect( sidebar.querySelector( 'button' )?.disabled ).toBe( true );
 		expect( mockFetchStyleBookRecommendations ).not.toHaveBeenCalled();
+	} );
+
+	test( 'disables the composer when Style Book recommendations are unavailable', () => {
+		mockSurfaceCapability = {
+			available: false,
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.querySelector( 'textarea' )?.disabled ).toBe( true );
+		expect( sidebar.querySelector( 'button' )?.disabled ).toBe( true );
+	} );
+
+	test( 'passes the undo guidance to the recent style-book activity section', () => {
+		currentStoreState = {
+			...currentStoreState,
+			activityLog: [
+				{
+					id: 'activity-1',
+					surface: 'style-book',
+					suggestion: 'Refine paragraph spacing',
+					target: {
+						globalStylesId: '17',
+						blockName: 'core/paragraph',
+						blockTitle: 'Paragraph',
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+						error: null,
+					},
+				},
+			],
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		const lastCall =
+			mockRenderAIActivitySection.mock.calls[
+				mockRenderAIActivitySection.mock.calls.length - 1
+			][ 0 ];
+
+		expect( lastCall.entries ).toHaveLength( 1 );
+		expect( lastCall.description ).toBe(
+			'Undo is only available while the current Style Book block styles still match the applied AI change.'
+		);
 	} );
 
 	test( 'renders shared style card badges and review state for executable style book suggestions', () => {
@@ -565,6 +625,12 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.textContent ).toContain( 'Spacing' );
 		expect( sidebar.textContent ).toContain( 'Review open' );
 		expect( sidebar.textContent ).toContain( 'spacing.blockGap → 40' );
+		expect( sidebar.textContent ).not.toContain(
+			'Raw CSS and custom CSS are out of scope.'
+		);
+		expect( sidebar.textContent ).not.toContain(
+			'Preview the exact operations before applying them to Paragraph.'
+		);
 	} );
 
 	test( 'drops stale recommendations when the selected Style Book block changes', () => {
@@ -668,7 +734,9 @@ describe( 'StyleBookRecommender', () => {
 		} );
 
 		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( sidebar.textContent ).not.toContain( 'Tighten paragraph rhythm' );
+		expect( sidebar.textContent ).not.toContain(
+			'Tighten paragraph rhythm'
+		);
 	} );
 
 	test( 'clears stale recommendations after surrounding semantic context changes without structure drift', () => {
@@ -734,6 +802,8 @@ describe( 'StyleBookRecommender', () => {
 		} );
 
 		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( sidebar.textContent ).not.toContain( 'Tighten paragraph rhythm' );
+		expect( sidebar.textContent ).not.toContain(
+			'Tighten paragraph rhythm'
+		);
 	} );
 } );

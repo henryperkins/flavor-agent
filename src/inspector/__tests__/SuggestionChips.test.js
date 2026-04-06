@@ -108,7 +108,7 @@ describe( 'SuggestionChips', () => {
 		} );
 
 		expect( chip.disabled ).toBe( true );
-		expect( chip.textContent ).toBe( 'Applied' );
+		expect( chip.textContent ).toBe( 'Use accent color' );
 
 		chip.click();
 
