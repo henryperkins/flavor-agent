@@ -100,6 +100,7 @@ function createState( overrides = {} ) {
 			templatePartLastAppliedOperations: [],
 			templatePartLastAppliedSuggestionKey: null,
 			templatePartRecommendations: [],
+			templatePartContextSignature: null,
 			templatePartResultRef: null,
 			templatePartResultToken: 1,
 			templatePartSelectedSuggestionKey: null,
@@ -212,11 +213,17 @@ function selectStore( storeName ) {
 			getTemplatePartRecommendations: jest.fn(
 				() => getState().store.templatePartRecommendations
 			),
+			getTemplatePartContextSignature: jest.fn(
+				() => getState().store.templatePartContextSignature
+			),
 			getTemplatePartResultRef: jest.fn(
 				() => getState().store.templatePartResultRef
 			),
 			getTemplatePartResultToken: jest.fn(
 				() => getState().store.templatePartResultToken
+			),
+			getTemplatePartStatus: jest.fn(
+				() => getState().store.templatePartStatus
 			),
 			getTemplatePartSelectedSuggestionKey: jest.fn(
 				() => getState().store.templatePartSelectedSuggestionKey
@@ -273,6 +280,138 @@ afterEach( async () => {
 } );
 
 describe( 'TemplatePartRecommender', () => {
+	test( 'does not render stale template-part results when the stored context signature mismatches', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Replace navigation block',
+						description:
+							'Swap the existing navigation block for a utility-links pattern.',
+						operations: [
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/utility-links',
+								expectedBlockName: 'core/navigation',
+								targetPath: [ 0 ],
+							},
+						],
+					},
+				],
+				templatePartContextSignature: 'stale-signature',
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
+				templatePartStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Replace navigation block' ) ).toBe( false );
+		expect( hasText( 'Confirm Apply' ) ).toBe( false );
+	} );
+
+	test( 'shows a stale scope badge when the stored template-part result context mismatches', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Replace navigation block',
+						operations: [
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/utility-links',
+								expectedBlockName: 'core/navigation',
+								targetPath: [ 0 ],
+							},
+						],
+					},
+				],
+				templatePartContextSignature: 'stale-signature',
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
+				templatePartStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Header Template Part' ) ).toBe( true );
+		expect( hasText( 'Slug: header' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
+		expect( hasText( 'Context has changed since the last request.' ) ).toBe(
+			true
+		);
+	} );
+
+	test( 'does not show the current scope badge when the latest template-part request failed', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [],
+				templatePartExplanation: '',
+				templatePartError: 'Template-part request failed.',
+				templatePartStatus: 'error',
+				templatePartResultRef: 'theme//header',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Template-part request failed.' ) ).toBe( true );
+		expect( hasText( 'Current' ) ).toBe( false );
+	} );
+
+	test( 'treats an empty successful template-part response as a current result', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [],
+				templatePartExplanation: '',
+				templatePartResultRef: 'theme//header',
+				templatePartStatus: 'ready',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Current' ) ).toBe( true );
+		expect(
+			hasText(
+				'No template-part suggestions were returned for this request.'
+			)
+		).toBe( true );
+	} );
+
+	test( 'keeps advisory template-part suggestions expanded when they are returned', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Introduce utility links',
+						description:
+							'Add a compact utility-links pattern near the navigation block.',
+						patternSuggestions: [ 'theme/utility-links' ],
+						operations: [],
+					},
+				],
+				templatePartExplanation: 'One advisory idea is available.',
+				templatePartResultRef: 'theme//header',
+				templatePartStatus: 'ready',
+			},
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
+			{
+				name: 'theme/utility-links',
+				title: 'Utility Links',
+			},
+		] );
+
+		await renderPanel();
+
+		expect( hasText( 'Advisory Suggestions' ) ).toBe( true );
+		expect( hasText( 'Introduce utility links' ) ).toBe( true );
+		expect( hasText( 'Browse pattern' ) ).toBe( true );
+	} );
+
 	test( 'submits live pattern override metadata with template-part requests', async () => {
 		currentState = createState( {
 			blockEditor: {

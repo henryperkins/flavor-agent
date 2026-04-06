@@ -177,6 +177,165 @@ describe( 'block request state', () => {
 		);
 	} );
 
+	test( 'empty successful results still count as ready across block and editor-wide surfaces', () => {
+		let state = reducer(
+			undefined,
+			actions.setBlockRecommendations(
+				'block-a',
+				{
+					block: [],
+					settings: [],
+					styles: [],
+					explanation: '',
+				},
+				1,
+				'block-context'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-a', 'ready', null, 1 )
+		);
+
+		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+			'advisory-ready'
+		);
+
+		state = reducer(
+			state,
+			actions.setTemplateRecommendations(
+				'theme//home',
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'',
+				2,
+				'template-context'
+			)
+		);
+
+		expect( selectors.getTemplateInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
+
+		state = reducer(
+			state,
+			actions.setTemplatePartRecommendations(
+				'theme//header',
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'',
+				3,
+				'template-part-context'
+			)
+		);
+
+		expect( selectors.getTemplatePartInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
+
+		state = reducer(
+			state,
+			actions.setGlobalStylesRecommendations(
+				{
+					key: 'global_styles:17',
+					entityId: '17',
+				},
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'',
+				4,
+				'global-styles-context'
+			)
+		);
+
+		expect( selectors.getGlobalStylesInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
+
+		state = reducer(
+			state,
+			actions.setStyleBookRecommendations(
+				{
+					key: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'',
+				5,
+				'style-book-context'
+			)
+		);
+
+		expect( selectors.getStyleBookInteractionState( state ) ).toBe(
+			'advisory-ready'
+		);
+	} );
+
+	test( 'global styles and style book interaction state stays error when the latest request failed', () => {
+		let state = reducer(
+			undefined,
+			actions.setGlobalStylesRecommendations(
+				{
+					key: 'global_styles:17',
+					entityId: '17',
+				},
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'',
+				1,
+				'context-a'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setGlobalStylesStatus( 'error', 'Global styles failed.', 1 )
+		);
+
+		expect( selectors.getGlobalStylesInteractionState( state ) ).toBe(
+			'error'
+		);
+
+		state = reducer(
+			state,
+			actions.setStyleBookRecommendations(
+				{
+					key: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				{
+					suggestions: [],
+					explanation: '',
+				},
+				'',
+				2,
+				'context-b'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setStyleBookStatus( 'error', 'Style Book failed.', 2 )
+		);
+
+		expect( selectors.getStyleBookInteractionState( state ) ).toBe(
+			'error'
+		);
+	} );
+
 	test( 'normalized block interaction state exposes advisory-ready and inline-apply semantics', () => {
 		let state = reducer(
 			undefined,

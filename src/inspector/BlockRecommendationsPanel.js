@@ -1,9 +1,4 @@
-import {
-	PanelBody,
-	Button,
-	Notice,
-	TextareaControl,
-} from '@wordpress/components';
+import { PanelBody, Notice } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -22,6 +17,10 @@ import { collectBlockContext } from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import SurfaceComposer from '../components/SurfaceComposer';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
+import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
@@ -80,6 +79,8 @@ function useBlockRecommendationState( clientId ) {
 		recommendations,
 		isLoading,
 		error,
+		status,
+		storedContextSignature,
 		blockActivityLog,
 		undoError,
 		undoStatus,
@@ -110,6 +111,9 @@ function useBlockRecommendationState( clientId ) {
 				recommendations: store.getBlockRecommendations( clientId ),
 				isLoading: store.isBlockLoading( clientId ),
 				error: store.getBlockError( clientId ),
+				status: store.getBlockStatus( clientId ),
+				storedContextSignature:
+					store.getBlockRecommendationContextSignature( clientId ),
 				blockActivityLog: blockEntries,
 				undoError: store.getUndoError(),
 				undoStatus: store.getUndoStatus(),
@@ -157,6 +161,8 @@ function useBlockRecommendationState( clientId ) {
 		recommendations,
 		isLoading,
 		error,
+		status,
+		storedContextSignature,
 		blockActivityEntries,
 		latestBlockActivity,
 		latestUndoableActivityId,
@@ -180,6 +186,8 @@ export function BlockRecommendationsContent( {
 		recommendations,
 		isLoading,
 		error,
+		status,
+		storedContextSignature,
 		blockActivityEntries,
 		latestBlockActivity,
 		latestUndoableActivityId,
@@ -197,13 +205,32 @@ export function BlockRecommendationsContent( {
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
+	const liveContext = useMemo(
+		() => collectBlockContext( clientId ),
+		[ clientId ]
+	);
+	const liveContextSignature = useMemo(
+		() =>
+			liveContext
+				? buildBlockRecommendationContextSignature( liveContext )
+				: '',
+		[ liveContext ]
+	);
 	const hasApplySuccess =
 		Boolean( latestBlockActivity ) &&
 		latestBlockActivity?.id === latestUndoableActivityId;
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
-	const blockSuggestions = recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS;
+	const hasMatchingResult =
+		status === 'ready' &&
+		Boolean( recommendations ) &&
+		( ! storedContextSignature ||
+			storedContextSignature === liveContextSignature );
+	const hasResult = status === 'ready' && Boolean( recommendations );
+	const blockSuggestions = hasMatchingResult
+		? recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS
+		: EMPTY_BLOCK_SUGGESTIONS;
 	const hasBlockSuggestions = blockSuggestions.length > 0;
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
@@ -219,10 +246,14 @@ export function BlockRecommendationsContent( {
 					requestError: error,
 					undoError,
 					undoStatus,
-					hasResult: hasBlockSuggestions,
+					hasResult,
 					hasSuggestions: hasBlockSuggestions,
 					hasSuccess: hasApplySuccess,
 					hasUndoSuccess,
+					emptyMessage:
+						hasMatchingResult && ! hasBlockSuggestions
+							? 'No block suggestions were returned for the current prompt.'
+							: '',
 					applySuccessMessage: hasApplySuccess
 						? `Applied ${
 								latestBlockActivity?.suggestion || 'suggestion'
@@ -242,6 +273,8 @@ export function BlockRecommendationsContent( {
 		[
 			clientId,
 			error,
+			hasResult,
+			hasMatchingResult,
 			hasBlockSuggestions,
 			hasApplySuccess,
 			hasUndoSuccess,
@@ -285,12 +318,16 @@ export function BlockRecommendationsContent( {
 			return;
 		}
 
-		const context = collectBlockContext( clientId );
-
-		if ( context ) {
-			fetchBlockRecommendations( clientId, context, prompt );
+		if ( liveContext ) {
+			fetchBlockRecommendations( clientId, liveContext, prompt );
 		}
-	}, [ canRecommendBlocks, clientId, fetchBlockRecommendations, prompt ] );
+	}, [
+		canRecommendBlocks,
+		clientId,
+		fetchBlockRecommendations,
+		liveContext,
+		prompt,
+	] );
 	const handleUndo = useCallback(
 		( activityId ) => {
 			undoActivity( activityId );
@@ -330,34 +367,24 @@ export function BlockRecommendationsContent( {
 				</Notice>
 			) }
 
-			<div className="flavor-agent-panel__intro">
-				<p className="flavor-agent-panel__eyebrow">{ eyebrow }</p>
-				<p className="flavor-agent-panel__intro-copy">{ introCopy }</p>
-			</div>
+			<SurfacePanelIntro eyebrow={ eyebrow } introCopy={ introCopy } />
 
-			<div className="flavor-agent-panel__composer">
-				<TextareaControl
-					__nextHasNoMarginBottom
-					disabled={ ! canRecommendBlocks }
-					label="What are you trying to achieve?"
-					hideLabelFromVision
-					placeholder="What are you trying to achieve?"
-					value={ prompt }
-					onChange={ setPrompt }
-					rows={ 2 }
-					className="flavor-agent-prompt"
-				/>
+			<SurfaceScopeBar
+				scopeLabel={ block?.name || '' }
+				isFresh={ hasMatchingResult }
+				hasResult={ hasResult }
+			/>
 
-				<Button
-					variant="primary"
-					onClick={ handleFetch }
-					disabled={ isLoading || ! canRecommendBlocks }
-					icon={ icon }
-					className="flavor-agent-fetch-button"
-				>
-					{ isLoading ? 'Getting Suggestions…' : 'Get Suggestions' }
-				</Button>
-			</div>
+			<SurfaceComposer
+				prompt={ prompt }
+				onPromptChange={ setPrompt }
+				onFetch={ handleFetch }
+				placeholder="What are you trying to achieve?"
+				rows={ 2 }
+				fetchIcon={ icon }
+				isLoading={ isLoading }
+				disabled={ ! canRecommendBlocks }
+			/>
 
 			<AIStatusNotice
 				notice={ statusNotice }

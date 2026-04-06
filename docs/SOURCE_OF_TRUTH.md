@@ -92,7 +92,7 @@ flavor-agent/
     Patterns/
       PatternIndex.php      Pattern embedding lifecycle: sync, diff, cron, fingerprint
     Abilities/
-      Registration.php      Abilities API category + 12 ability registrations
+      Registration.php      Abilities API category + 13 ability registrations
       BlockAbilities.php    recommend-block, introspect-block
       PatternAbilities.php  recommend-patterns, list-patterns
       TemplateAbilities.php recommend-template, recommend-template-part, list-template-parts
@@ -448,7 +448,7 @@ User selects block -> InspectorInjector renders AI panel
            -> ServerCollector::introspect_block_type() (server enrichment)
            -> AISearchClient::maybe_search_with_cache_fallbacks() (docs grounding)
            -> Prompt::build_system() + Prompt::build_user()
-           -> WordPressAIClient::chat() (core AI client)
+           -> ChatClient::chat() (provider-first, WordPress AI Client fallback)
            -> Prompt::parse_response()
            -> Prompt::enforce_block_context_rules()
         <- JSON response: { settings, styles, block, explanation }
@@ -745,7 +745,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/reference/provider-precedence.md`                            | AI backend selection and credential fallback chain                                                         | **Current**                    |
 | `docs/reference/template-operations.md`                            | Operation type vocabulary and validation rules per surface                                                 | **Current**                    |
 | `docs/reference/activity-state-machine.md`                         | Undo states, transitions, ordered undo, and pruning                                                        | **Current**                    |
-| `docs/flavor-agent-readme.md`                                      | Architecture details: editor flows, settings, pattern lifecycle                                            | **Current**                    |
+| `docs/flavor-agent-readme.md`                                      | Architecture details: editor flows, settings, style surfaces, pattern lifecycle, and admin audit          | **Current**                    |
 | `docs/local-wordpress-ide.md`                                      | Local Docker/devcontainer workflow and host setup                                                          | **Current**                    |
 | `docs/2026-03-25-roadmap-aligned-execution-plan.md`                | Active forward plan aligned to the current WordPress 7.0 and Gutenberg roadmap context                     | **Current**                    |
 | `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WP 7.0 plus Gutenberg 22.8 stable / 22.9 RC API changes, new features, deprecations, and plugin impact     | **Reference snapshot**         |

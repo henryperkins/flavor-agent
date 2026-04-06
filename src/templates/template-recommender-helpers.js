@@ -208,6 +208,7 @@ export function buildTemplateFetchInput( {
 	editorSlots,
 	visiblePatternNames,
 	editorStructure,
+	contextSignature = '',
 } ) {
 	const input = { templateRef };
 	const trimmedPrompt = prompt.trim();
@@ -232,6 +233,10 @@ export function buildTemplateFetchInput( {
 
 	if ( Array.isArray( normalizedVisiblePatternNames ) ) {
 		input.visiblePatternNames = normalizedVisiblePatternNames;
+	}
+
+	if ( contextSignature ) {
+		input.contextSignature = contextSignature;
 	}
 
 	return input;

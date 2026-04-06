@@ -175,7 +175,7 @@
 - **`docs/features/README.md`** -- Entry point for the detailed surface docs in `docs/features/`
 - **`docs/features/style-and-theme-intelligence.md`** -- Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo
 - **`docs/reference/abilities-and-routes.md`** -- Canonical mapping of Abilities API contracts, REST routes, permissions, and first-party callers
-- **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference
+- **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference, including style surfaces and the admin audit surface
 - **`docs/2026-03-25-roadmap-aligned-execution-plan.md`** -- Active forward plan aligned to WordPress 7.0, Gutenberg, and official AI plugin roadmaps
 - **`docs/2026-04-03-wordpress-direction-review.md`** -- Supplemental dated direction review incorporating the 2026-03-31 Core decision to extend the WordPress 7.0 cycle
 - **`docs/2026-04-03-three-phase-roadmap.md`** -- Supplemental dated three-phase roadmap translating the direction review into concrete execution phases, file targets, and acceptance checks

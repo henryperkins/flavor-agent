@@ -1,5 +1,4 @@
 import { serialize } from '@wordpress/blocks';
-import { Button, TextareaControl } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
@@ -14,6 +13,9 @@ import { formatCount, humanizeString } from '../utils/format-count';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import SurfaceComposer from '../components/SurfaceComposer';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
@@ -100,6 +102,7 @@ export default function NavigationRecommendations( { clientId } ) {
 		isLoading,
 		status,
 		resultBlockClientId,
+		currentResultContextSignature,
 	} = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -113,6 +116,8 @@ export default function NavigationRecommendations( { clientId } ) {
 				isLoading: store.isNavigationLoading( clientId ),
 				status: store.getNavigationStatus( clientId ),
 				resultBlockClientId: store.getNavigationBlockClientId(),
+				currentResultContextSignature:
+					store.getNavigationContextSignature( clientId ),
 			};
 		},
 		[ clientId ]
@@ -145,7 +150,11 @@ export default function NavigationRecommendations( { clientId } ) {
 		recommendationContextSignature
 	);
 	const hasMatchingResult =
-		resultBlockClientId === clientId && status === 'ready';
+		resultBlockClientId === clientId &&
+		status === 'ready' &&
+		( ! currentResultContextSignature ||
+			currentResultContextSignature === recommendationContextSignature );
+	const hasResult = resultBlockClientId === clientId && status === 'ready';
 	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
@@ -206,9 +215,17 @@ export default function NavigationRecommendations( { clientId } ) {
 
 	const handleFetch = useCallback( () => {
 		if ( canRecommend && requestInput ) {
-			fetchNavigationRecommendations( requestInput );
+			fetchNavigationRecommendations( {
+				...requestInput,
+				contextSignature: recommendationContextSignature,
+			} );
 		}
-	}, [ canRecommend, fetchNavigationRecommendations, requestInput ] );
+	}, [
+		canRecommend,
+		fetchNavigationRecommendations,
+		recommendationContextSignature,
+		requestInput,
+	] );
 
 	if ( navigationBlock?.name !== 'core/navigation' ) {
 		return null;
@@ -218,9 +235,9 @@ export default function NavigationRecommendations( { clientId } ) {
 
 	return (
 		<>
-			<AIAdvisorySection
-				title="Navigation recommendations"
-				description="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only in v1.0, so the status model stays consistent without introducing an apply path."
+			<SurfacePanelIntro
+				eyebrow="Navigation Recommendations"
+				introCopy="Ask for structure, overlay, or accessibility guidance for this navigation block. Flavor Agent keeps this surface advisory-only in v1.0, so the status model stays consistent without introducing an apply path."
 				meta={
 					menuId > 0 ? (
 						<span className="flavor-agent-pill">
@@ -234,29 +251,27 @@ export default function NavigationRecommendations( { clientId } ) {
 
 			{ canRecommend && (
 				<>
-					<div className="flavor-agent-panel__composer">
-						<TextareaControl
-							__nextHasNoMarginBottom
-							label="What do you want to improve about this navigation?"
-							hideLabelFromVision
-							placeholder="Describe the structure or behavior you want."
-							value={ prompt }
-							onChange={ setPrompt }
-							rows={ 3 }
-							className="flavor-agent-prompt"
-						/>
+					<SurfaceScopeBar
+						scopeLabel="Navigation Block"
+						scopeDetails={
+							menuId > 0 ? [ `Menu ID ${ menuId }` ] : []
+						}
+						isFresh={ hasMatchingResult }
+						hasResult={ hasResult }
+					/>
 
-						<Button
-							variant="secondary"
-							onClick={ handleFetch }
-							disabled={ isLoading || ! requestInput }
-							className="flavor-agent-fetch-button"
-						>
-							{ isLoading
-								? 'Getting navigation suggestions…'
-								: 'Get Navigation Suggestions' }
-						</Button>
-					</div>
+					<SurfaceComposer
+						prompt={ prompt }
+						onPromptChange={ setPrompt }
+						onFetch={ handleFetch }
+						placeholder="Describe the structure or behavior you want."
+						label="What do you want to improve about this navigation?"
+						fetchLabel="Get Navigation Suggestions"
+						loadingLabel="Getting navigation suggestions\u2026"
+						fetchVariant="secondary"
+						isLoading={ isLoading }
+						disabled={ ! requestInput }
+					/>
 
 					<AIStatusNotice
 						notice={ statusNotice }
@@ -278,6 +293,7 @@ export default function NavigationRecommendations( { clientId } ) {
 							title="Navigation ideas"
 							count={ recommendations.length }
 							countNoun="idea"
+							initialOpen
 							description={
 								interactionState === 'advisory-ready'
 									? 'Review the suggested changes below and make any accepted edits manually in the editor.'

@@ -15,6 +15,8 @@ import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	buildBlockStyleExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
@@ -201,6 +203,8 @@ function StyleBookPanel( {
 	notice,
 	activityEntries,
 	blockTitle,
+	hasResult,
+	hasMatchingResult,
 	onNoticeAction,
 	onRequest,
 	onReview,
@@ -222,13 +226,11 @@ function StyleBookPanel( {
 	return (
 		<div className="flavor-agent-panel flavor-agent-style-book-panel">
 			<CapabilityNotice surface="style-book" />
-			<div className="flavor-agent-panel__intro flavor-agent-style-surface__intro">
-				<p className="flavor-agent-panel__eyebrow">Style Book</p>
-				<p className="flavor-agent-panel__intro-copy">
-					Review stays required before Flavor Agent applies
-					theme-backed block style changes to the active Style Book
-					example.
-				</p>
+			<SurfacePanelIntro
+				eyebrow="Style Book"
+				introCopy="Review stays required before Flavor Agent applies theme-backed block style changes to the active Style Book example."
+				className="flavor-agent-style-surface__intro"
+			>
 				<div className="flavor-agent-style-surface__meta">
 					<span className="flavor-agent-pill">Style Book</span>
 					{ blockTitle && (
@@ -245,7 +247,13 @@ function StyleBookPanel( {
 						</span>
 					) }
 				</div>
-			</div>
+			</SurfacePanelIntro>
+			<SurfaceScopeBar
+				scopeLabel="Style Book"
+				scopeDetails={ blockTitle ? [ blockTitle ] : [] }
+				isFresh={ hasMatchingResult }
+				hasResult={ hasResult }
+			/>
 			<AIStatusNotice
 				notice={ panelNotice }
 				onAction={ onNoticeAction }
@@ -646,6 +654,7 @@ export default function StyleBookRecommender() {
 	const hasMatchingResult = Boolean(
 		scope?.scopeKey &&
 			currentResultRef === scope.scopeKey &&
+			status === 'ready' &&
 			currentResultContextSignature &&
 			currentResultContextSignature === recommendationContextSignature
 	);
@@ -654,6 +663,12 @@ export default function StyleBookRecommender() {
 		[ hasMatchingResult, rawSuggestions ]
 	);
 	const explanation = hasMatchingResult ? currentExplanation : '';
+	const hasResult = Boolean(
+		scope?.scopeKey &&
+			currentResultRef === scope.scopeKey &&
+			status === 'ready' &&
+			currentResultContextSignature
+	);
 	const selectedSuggestion = useMemo(
 		() =>
 			suggestions.find(
@@ -696,7 +711,7 @@ export default function StyleBookRecommender() {
 				applySuccessMessage: hasApplySuccess
 					? 'Flavor Agent applied the selected Style Book change.'
 					: '',
-				hasResult: suggestions.length > 0 || Boolean( explanation ),
+				hasResult,
 				hasSuggestions: suggestions.length > 0,
 				hasPreview: Boolean( selectedSuggestion ),
 				hasOperations:
@@ -932,6 +947,8 @@ export default function StyleBookRecommender() {
 			notice={ notice }
 			activityEntries={ activityEntries }
 			blockTitle={ scope?.blockTitle || '' }
+			hasResult={ hasResult }
+			hasMatchingResult={ hasMatchingResult }
 			onNoticeAction={
 				notice?.actionType === 'undo' && latestStyleBookActivity
 					? () => handleUndo( latestStyleBookActivity.id )

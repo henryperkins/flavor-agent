@@ -413,6 +413,18 @@ beforeEach( () => {
 							};
 						}
 
+						if (
+							options.hasResult &&
+							! options.hasSuggestions &&
+							options.emptyMessage
+						) {
+							return {
+								source: 'empty',
+								tone: 'info',
+								message: options.emptyMessage,
+							};
+						}
+
 						return null;
 					},
 				};
@@ -630,6 +642,78 @@ describe( 'StyleBookRecommender', () => {
 		);
 		expect( sidebar.textContent ).not.toContain(
 			'Preview the exact operations before applying them to Paragraph.'
+		);
+	} );
+
+	test( 'shows a stale scope badge when the stored Style Book result context mismatches', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Tighten paragraph rhythm',
+					description: 'Keep the example more compact.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Existing explanation',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: 'stale-signature',
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Style Book' );
+		expect( sidebar.textContent ).toContain( 'Paragraph' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
+		expect( sidebar.textContent ).toContain(
+			'Context has changed since the last request.'
+		);
+		expect( sidebar.textContent ).not.toContain(
+			'Tighten paragraph rhythm'
+		);
+	} );
+
+	test( 'does not show the current scope badge when the latest Style Book request failed', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [],
+			explanation: '',
+			status: 'error',
+			error: 'Request failed.',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Request failed.' );
+		expect( sidebar.textContent ).not.toContain( 'Current' );
+	} );
+
+	test( 'treats an empty successful Style Book response as a current result', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [],
+			explanation: '',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Current' );
+		expect( sidebar.textContent ).toContain(
+			'No safe Style Book changes were returned for this prompt.'
 		);
 	} );
 

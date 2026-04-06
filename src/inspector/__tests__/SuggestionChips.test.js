@@ -114,4 +114,51 @@ describe( 'SuggestionChips', () => {
 
 		expect( mockApplySuggestion ).toHaveBeenCalledTimes( 1 );
 	} );
+
+	test( 'keeps apply feedback visible across rerenders with a cloned suggestion array', async () => {
+		const initialSuggestions = [
+			{
+				label: 'Use accent color',
+				panel: 'color',
+			},
+		];
+
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					suggestions={ initialSuggestions }
+				/>
+			);
+		} );
+
+		await act( async () => {
+			getContainer().querySelector( 'button' ).click();
+			await Promise.resolve();
+		} );
+
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect(
+			getContainer().querySelector( '.flavor-agent-inline-feedback' )
+				?.textContent
+		).toBe( 'AppliedUse accent color' );
+		expect( getContainer().querySelector( 'button' )?.disabled ).toBe(
+			true
+		);
+	} );
 } );

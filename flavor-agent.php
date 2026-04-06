@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Flavor Agent
- * Description: LLM-powered block recommendations in the native Inspector sidebar.
+ * Description: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including blocks, patterns, templates, template parts, navigation, Global Styles, Style Book, and AI Activity.
  * Version: 0.1.0
  * Author: Lakefront Digital
  * Text Domain: flavor-agent

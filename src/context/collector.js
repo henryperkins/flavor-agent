@@ -14,6 +14,7 @@ import {
 } from './block-inspector';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
 import { buildStructuralContext } from '../utils/structural-identity';
+export { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 
 /**
  * Build a focused context for a single block's Inspector recommendations.

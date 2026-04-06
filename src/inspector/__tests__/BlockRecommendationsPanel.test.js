@@ -46,6 +46,11 @@ jest.mock( '../../context/collector', () => ( {
 	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
 } ) );
 
+jest.mock( '../../utils/block-recommendation-context', () => ( {
+	buildBlockRecommendationContextSignature: ( context = {} ) =>
+		JSON.stringify( context || {} ),
+} ) );
+
 jest.mock( '../../store/activity-history', () => ( {
 	getBlockActivityUndoState: ( ...args ) =>
 		mockGetBlockActivityUndoState( ...args ),
@@ -71,7 +76,10 @@ jest.mock( '../SuggestionChips', () => ( props ) => {
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
-import { BlockRecommendationsDocumentPanel } from '../BlockRecommendationsPanel';
+import {
+	BlockRecommendationsContent,
+	BlockRecommendationsDocumentPanel,
+} from '../BlockRecommendationsPanel';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -108,6 +116,7 @@ function createState( overrides = {} ) {
 			activityLog: [],
 			blockErrors: {},
 			blockRecommendations: {},
+			blockContextSignatures: {},
 			blockStatuses: {},
 			lastUndoneActivityId: null,
 			undoError: null,
@@ -146,6 +155,14 @@ function selectStore( storeName ) {
 				( clientId ) => getState().store.blockErrors[ clientId ] || null
 			),
 			getBlockInteractionState: jest.fn( () => 'idle' ),
+			getBlockStatus: jest.fn(
+				( clientId ) =>
+					getState().store.blockStatuses[ clientId ] || 'idle'
+			),
+			getBlockRecommendationContextSignature: jest.fn(
+				( clientId ) =>
+					getState().store.blockContextSignatures[ clientId ] || null
+			),
 			getBlockRecommendations: jest.fn(
 				( clientId ) =>
 					getState().store.blockRecommendations[ clientId ] || null
@@ -209,6 +226,12 @@ function selectStore( storeName ) {
 function renderPanel() {
 	act( () => {
 		getRoot().render( <BlockRecommendationsDocumentPanel /> );
+	} );
+}
+
+function renderContent( clientId = 'block-1' ) {
+	act( () => {
+		getRoot().render( <BlockRecommendationsContent clientId={ clientId } /> );
 	} );
 }
 
@@ -488,6 +511,16 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 						},
 					},
 				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( {
+						block: {
+							name: 'core/paragraph',
+						},
+					} ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
 			},
 		} );
 
@@ -546,6 +579,16 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 						},
 					},
 				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( {
+						block: {
+							name: 'core/paragraph',
+						},
+					} ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
 			},
 		} );
 
@@ -601,6 +644,16 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 						},
 					},
 				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( {
+						block: {
+							name: 'core/paragraph',
+						},
+					} ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
 			},
 		} );
 
@@ -651,5 +704,87 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect(
 			getContainer().querySelector( '[data-status-notice="true"]' )
 		).toBeNull();
+	} );
+
+	test( 'shows the current block scope even before recommendations exist', () => {
+		renderPanel();
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/heading',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/heading',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).toContain( 'core/heading' );
+		expect( getContainer().textContent ).not.toContain( 'Current' );
+		expect( getContainer().textContent ).not.toContain( 'Stale' );
+	} );
+
+	test( 'marks stored block results stale and hides suggestions when the live context changes', () => {
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Hide on mobile',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+							},
+						],
+						explanation: 'Use viewport visibility for mobile.',
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( {
+						block: {
+							name: 'core/paragraph',
+						},
+					} ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+		mockCollectBlockContext.mockReturnValue( {
+			block: {
+				name: 'core/quote',
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'Context has changed since the last request.'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Hide on mobile' );
+		expect( mockSuggestionChips ).not.toHaveBeenCalled();
 	} );
 } );

@@ -22,6 +22,7 @@ import {
 	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../../utils/template-actions';
+import { buildBlockRecommendationContextSignature } from '../../utils/block-recommendation-context';
 import {
 	createActivityEntry,
 	readPersistedActivityLog,
@@ -78,6 +79,8 @@ describe( 'store action thunks', () => {
 				name: 'core/paragraph',
 			},
 		};
+		const contextSignature =
+			buildBlockRecommendationContextSignature( context );
 
 		await actions.fetchBlockRecommendations(
 			'block-1',
@@ -109,6 +112,7 @@ describe( 'store action thunks', () => {
 				type: 'SET_BLOCK_RECS',
 				clientId: 'block-1',
 				requestToken: 3,
+				contextSignature,
 				recommendations: expect.objectContaining( {
 					blockName: 'core/paragraph',
 					blockContext: context.block,
@@ -134,6 +138,7 @@ describe( 'store action thunks', () => {
 		};
 		const input = {
 			blockClientId: 'nav-1',
+			contextSignature: 'navigation-signature',
 			menuId: 42,
 			navigationMarkup:
 				'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
@@ -171,7 +176,8 @@ describe( 'store action thunks', () => {
 					explanation: 'Mocked navigation response',
 				},
 				'Simplify the header menu.',
-				2
+				2,
+				'navigation-signature'
 			)
 		);
 	} );
@@ -191,6 +197,8 @@ describe( 'store action thunks', () => {
 				},
 			},
 		};
+		const contextSignature =
+			buildBlockRecommendationContextSignature( context );
 
 		await actions.fetchBlockRecommendations(
 			'block-1',
@@ -220,7 +228,8 @@ describe( 'store action thunks', () => {
 					requestMeta: null,
 					timestamp: expect.any( Number ),
 				},
-				5
+				5,
+				contextSignature
 			)
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -291,6 +300,7 @@ describe( 'store action thunks', () => {
 			getTemplateRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 		const input = {
+			contextSignature: 'template-signature',
 			templateRef: 'theme//home',
 			prompt: 'Tighten the structure.',
 			templateType: 'home',
@@ -306,7 +316,11 @@ describe( 'store action thunks', () => {
 			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-template',
 				method: 'POST',
-				data: input,
+				data: {
+					templateRef: 'theme//home',
+					prompt: 'Tighten the structure.',
+					templateType: 'home',
+				},
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -322,7 +336,8 @@ describe( 'store action thunks', () => {
 					explanation: 'Mocked template response',
 				},
 				'Tighten the structure.',
-				5
+				5,
+				'template-signature'
 			)
 		);
 	} );
@@ -1322,6 +1337,55 @@ describe( 'store action thunks', () => {
 		expect( result ).toBe( false );
 	} );
 
+	test( 'applySuggestion ignores no-op updates without surfacing an error or logging activity', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: { name: 'core/paragraph' },
+				prompt: 'Keep the same content.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Same copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion( 'block-1', {
+			label: 'Keep current copy',
+			attributeUpdates: {
+				content: 'Same copy',
+			},
+		} )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect(
+			dispatch.mock.calls.some(
+				( [ action ] ) =>
+					action?.type === 'LOG_ACTIVITY' ||
+					action?.type === 'SET_BLOCK_REQUEST_STATE'
+			)
+		).toBe( false );
+		expect( result ).toBe( false );
+	} );
+
 	test( 'applySuggestion rejects advisory block suggestions even when they include safe local updates', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
@@ -1523,6 +1587,7 @@ describe( 'store action thunks', () => {
 			getTemplatePartRequestToken: jest.fn().mockReturnValue( 2 ),
 		};
 		const input = {
+			contextSignature: 'template-part-signature',
 			templatePartRef: 'theme//header',
 			prompt: 'Add a compact utility row.',
 			visiblePatternNames: [ 'theme/header-utility' ],
@@ -1538,7 +1603,11 @@ describe( 'store action thunks', () => {
 			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-template-part',
 				method: 'POST',
-				data: input,
+				data: {
+					templatePartRef: 'theme//header',
+					prompt: 'Add a compact utility row.',
+					visiblePatternNames: [ 'theme/header-utility' ],
+				},
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
@@ -1554,7 +1623,8 @@ describe( 'store action thunks', () => {
 					explanation: 'Mocked template-part response',
 				},
 				'Add a compact utility row.',
-				3
+				3,
+				'template-part-signature'
 			)
 		);
 	} );

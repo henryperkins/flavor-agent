@@ -79,6 +79,11 @@ function createSelectors() {
 			getNavigationBlockClientId: jest.fn(
 				() => getState().store.navigationBlockClientId
 			),
+			getNavigationContextSignature: jest.fn( ( clientId ) =>
+				getState().store.navigationBlockClientId === clientId
+					? getState().store.navigationContextSignature
+					: null
+			),
 			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 				void surface;
 
@@ -125,6 +130,7 @@ beforeEach( () => {
 			navigationExplanation: '',
 			navigationError: null,
 			navigationStatus: 'idle',
+			navigationContextSignature: null,
 		},
 	};
 	window.flavorAgentData = {
@@ -253,12 +259,15 @@ describe( 'NavigationRecommendations', () => {
 		expect( mockSerialize ).toHaveBeenCalledWith( [
 			currentState.blockEditor.blocks[ 'nav-1' ],
 		] );
-		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith( {
-			blockClientId: 'nav-1',
-			menuId: 42,
-			navigationMarkup:
-				'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
-		} );
+		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				blockClientId: 'nav-1',
+				menuId: 42,
+				navigationMarkup:
+					'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
+				contextSignature: expect.any( String ),
+			} )
+		);
 	} );
 
 	test( 'includes serialized block markup when a referenced menu has no in-canvas inner structure', () => {
@@ -292,12 +301,131 @@ describe( 'NavigationRecommendations', () => {
 		expect( mockSerialize ).toHaveBeenCalledWith( [
 			currentState.blockEditor.blocks[ 'nav-1' ],
 		] );
-		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith( {
-			blockClientId: 'nav-1',
-			menuId: 42,
-			navigationMarkup:
-				'<!-- wp:navigation {"ref":42,"overlayMenu":"always"} /-->',
-		} );
+		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				blockClientId: 'nav-1',
+				menuId: 42,
+				navigationMarkup:
+					'<!-- wp:navigation {"ref":42,"overlayMenu":"always"} /-->',
+				contextSignature: expect.any( String ),
+			} )
+		);
+	} );
+
+	test( 'does not render stale navigation results when the stored context signature mismatches', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationContextSignature: 'stale-signature',
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderComponent();
+
+		expect( getContainer().textContent ).not.toContain(
+			'Group utility links'
+		);
+	} );
+
+	test( 'shows a stale scope badge when the stored navigation result context mismatches', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationContextSignature: 'stale-signature',
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Menu ID 42' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'Context has changed since the last request.'
+		);
+	} );
+
+	test( 'shows the navigation intro copy on first render', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain(
+			'Ask for structure, overlay, or accessibility guidance for this navigation block.'
+		);
+	} );
+
+	test( 'keeps advisory navigation ideas expanded when they are returned', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [
+				{
+					label: 'Group utility links',
+					description:
+						'Move utility links into a smaller secondary row.',
+					category: 'structure',
+					changes: [],
+				},
+			],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationContextSignature: null,
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Navigation ideas' );
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
+		expect( getContainer().textContent ).toContain(
+			'Move utility links into a smaller secondary row.'
+		);
 	} );
 
 	test( 'clears stale navigation recommendations when the selected block changes in place', () => {

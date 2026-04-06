@@ -1,6 +1,6 @@
 # Flavor Agent Copilot Instructions
 
-WordPress plugin: AI-powered block recommendations in the Gutenberg Inspector, vector-powered pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, and server-backed AI activity history with an admin audit surface.
+WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, vector-powered pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
@@ -35,6 +35,7 @@ vendor/bin/phpunit --filter test_method_name tests/phpunit/AgentControllerTest.p
 npm run test:e2e                # all suites
 npm run test:e2e:playground     # fast Playground smoke suite
 npm run test:e2e:wp70           # Docker-backed WP 7.0 Site Editor suite
+npm run check:docs              # stale-doc freshness guard
 
 # Local Docker environment
 npm run wp:start       # docker compose up
@@ -46,9 +47,9 @@ npm run wp:reset       # docker compose down -v (destroys volumes)
 
 ## High-level architecture
 
-`flavor-agent.php` is the runtime bootstrap. It wires editor asset enqueueing, REST routes, the settings page, Abilities API registration, pattern-index lifecycle hooks, and docs-grounding cron. It localizes three JS globals: `flavorAgentData` (editor — REST URL, nonce, capability flags, template-part areas), `flavorAgentAdmin` (settings page), and `flavorAgentActivityLog` (AI Activity admin page — REST URL, nonce, admin URLs, default limit).
+`flavor-agent.php` is the runtime bootstrap. It wires editor asset enqueueing, REST routes, the settings page, Abilities API registration, pattern-index lifecycle hooks, and docs-grounding cron. It localizes three JS globals: `flavorAgentData` (editor — REST URL, nonce, settings/connectors URLs, `canManageFlavorAgentSettings`, structured surface capabilities, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendContent`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, `canRecommendGlobalStyles`, `canRecommendStyleBook`, and template-part areas), `flavorAgentAdmin` (settings page), and `flavorAgentActivityLog` (AI Activity admin page — REST URL, nonce, admin URLs, `defaultPerPage`, `maxPerPage`, `locale`, and `timeZone`).
 
-`webpack.config.js` has three entry points: `src/index.js` (editor), `src/admin/sync-button.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page). `src/index.js` is the client composition root: it self-registers the `flavor-agent` `@wordpress/data` store, installs the `editor.BlockEdit` filter, and registers the pattern recommender, inserter badge, template recommender, and template-part recommender plugins.
+`webpack.config.js` has three entry points: `src/index.js` (editor), `src/admin/sync-button.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page). `src/index.js` is the client composition root: it self-registers the `flavor-agent` `@wordpress/data` store, installs the `editor.BlockEdit` filter, and registers `ActivitySessionBootstrap`, `BlockRecommendationsDocumentPanel`, the pattern recommender, inserter badge, template recommender, template-part recommender, Global Styles recommender, and Style Book recommender plugins.
 
 ### Recommendation surfaces
 
@@ -64,7 +65,7 @@ npm run wp:reset       # docker compose down -v (destroys volumes)
 
 ### Abilities API integration
 
-The plugin registers 11 abilities across block, pattern, template, navigation, docs, and infra categories via `wp_abilities_api_categories_init` and `wp_abilities_api_init`. On WP 7.0 admin screens, core auto-hydrates server-side abilities into the client-side `@wordpress/core-abilities` store.
+The plugin registers 13 abilities across block, pattern, template, navigation, docs, infra, content, and style categories via `wp_abilities_api_categories_init` and `wp_abilities_api_init`. On WP 7.0 admin screens, core auto-hydrates server-side abilities into the client-side `@wordpress/core-abilities` store.
 
 ### REST routes
 

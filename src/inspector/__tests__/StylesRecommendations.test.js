@@ -129,6 +129,26 @@ describe( 'StylesRecommendations', () => {
 		expect( getContainer().textContent ).toContain( 'Style Variations' );
 	} );
 
+	test( 'disables the current style variation', () => {
+		const variation = {
+			label: 'Outline',
+			description: 'Outline style',
+			panel: 'general',
+			type: 'style_variation',
+			attributeUpdates: { className: 'is-style-outline' },
+			isCurrentStyle: true,
+		};
+
+		renderComponent( [ variation ] );
+
+		const button = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( candidate ) => candidate.textContent === 'Outline' );
+
+		expect( button?.disabled ).toBe( true );
+		expect( mockApplySuggestion ).not.toHaveBeenCalled();
+	} );
+
 	test( 'returns null for empty suggestions', () => {
 		renderComponent( [] );
 		expect( getContainer().innerHTML ).toBe( '' );
@@ -156,6 +176,32 @@ describe( 'StylesRecommendations', () => {
 			getContainer().querySelector( '.flavor-agent-inline-feedback' )
 				?.textContent
 		).toBe( 'AppliedUse softer shadow.' );
+	} );
+
+	test( 'keeps row feedback visible across rerenders with cloned suggestions', async () => {
+		const suggestion = makeSuggestion( 'shadow', 'Use softer shadow' );
+
+		renderComponent( [ suggestion ] );
+
+		const applyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Apply' );
+
+		await act( async () => {
+			applyButton.click();
+			await Promise.resolve();
+		} );
+
+		renderComponent( [ { ...suggestion } ] );
+
+		expect(
+			getContainer().querySelector( '.flavor-agent-inline-feedback' )
+				?.textContent
+		).toBe( 'AppliedUse softer shadow.' );
+		const rerenderedApplyButton = getContainer().querySelector(
+			'.flavor-agent-style-row__apply'
+		);
+		expect( rerenderedApplyButton?.disabled ).toBe( true );
 	} );
 } );
 

@@ -8,11 +8,11 @@ Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Flavor Agent adds AI-assisted block, pattern, content, template, navigation, and style recommendations inside the block editor.
+Flavor Agent adds AI-assisted recommendations across the native Gutenberg editor and wp-admin, including blocks, patterns, content, templates, template parts, navigation, global styles, style book, and the AI Activity audit surface.
 
 == Description ==
 
-Flavor Agent integrates AI-powered editorial assistance directly into the WordPress editor. It can surface contextual recommendations for blocks, patterns, content, templates, template parts, navigation, and global styles while keeping configuration inside standard WordPress admin screens.
+Flavor Agent integrates AI-powered editorial assistance directly into the WordPress editor and admin. It can surface contextual recommendations for blocks, patterns, content, templates, template parts, navigation, global styles, and style book while keeping configuration inside standard WordPress admin screens.
 
 == Installation ==
 

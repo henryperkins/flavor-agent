@@ -1,18 +1,22 @@
 # Flavor Agent
 
-Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the block editor.
+Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the native Gutenberg editor and wp-admin surfaces.
 
 This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`.
 
-It currently has five primary editor experiences:
+It currently has seven primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the selected plugin provider when chat is configured here and otherwise falling back to the WordPress AI Client plus core Connectors.
 - Pattern recommendations in the native inserter, powered by the active OpenAI provider (Azure OpenAI or OpenAI Native) plus Qdrant.
 - Navigation recommendations in the native Inspector for selected `core/navigation` blocks, powered by the active OpenAI provider and scoped as advisory guidance today.
 - Template recommendations in the Site Editor, powered by the active OpenAI provider with validated template-part and pattern operations.
 - Template-part recommendations in the Site Editor, scoped to individual template parts with a narrow review-confirm-apply path for validated bounded operations.
+- Global Styles recommendations in the Site Editor Styles sidebar, bounded to validated `theme.json` paths and theme-backed values.
+- Style Book recommendations in the Site Editor Styles sidebar, scoped to per-block style paths and theme-backed values.
 
-There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template plus template-part suggestions use a review-confirm-apply flow inside the document settings panel when the returned operations are validated. Block, template, and template-part applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback.
+It also ships the AI Activity admin audit surface in wp-admin and a programmatic content-lane scaffold with no first-party post-editor UI yet.
+
+There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template, template-part, Global Styles, and Style Book suggestions use review-confirm-apply flows inside the relevant Site Editor sidebar or document settings panel when the returned operations are validated. Block, template, template-part, Global Styles, and Style Book applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data.
 
 ## Current Architecture
 

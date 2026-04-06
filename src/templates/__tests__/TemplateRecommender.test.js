@@ -60,6 +60,9 @@ const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import TemplateRecommender from '../TemplateRecommender';
 import {
+	buildEditorTemplateSlotSnapshot,
+	buildEditorTemplateTopLevelStructureSnapshot,
+	buildTemplateRecommendationContextSignature,
 	getSuggestionCardKey,
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 } from '../template-recommender-helpers';
@@ -80,6 +83,22 @@ const SUGGESTION = {
 	],
 };
 const SUGGESTION_KEY = getSuggestionCardKey( SUGGESTION, 0 );
+
+function buildTemplateContextSignature( state = getState() ) {
+	return buildTemplateRecommendationContextSignature( {
+		editorSlots: buildEditorTemplateSlotSnapshot(
+			state.blockEditor.blocks
+		),
+		editorStructure: buildEditorTemplateTopLevelStructureSnapshot(
+			state.blockEditor.blocks
+		),
+		visiblePatternNames: (
+			state.blockEditor.allowedPatternsByRoot.null || []
+		)
+			.map( ( pattern ) => pattern?.name )
+			.filter( Boolean ),
+	} );
+}
 
 let currentState = null;
 function getState() {
@@ -203,12 +222,16 @@ function createSelectors() {
 			getTemplateRecommendations: jest.fn(
 				() => getState().store.templateRecommendations
 			),
+			getTemplateContextSignature: jest.fn(
+				() => getState().store.templateContextSignature
+			),
 			getTemplateResultRef: jest.fn(
 				() => getState().store.templateResultRef
 			),
 			getTemplateResultToken: jest.fn(
 				() => getState().store.templateResultToken
 			),
+			getTemplateStatus: jest.fn( () => getState().store.templateStatus ),
 			getTemplateSelectedSuggestionKey: jest.fn(
 				() => getState().store.templateSelectedSuggestionKey
 			),
@@ -312,6 +335,7 @@ function createState( overrides = {} ) {
 			templateLastAppliedOperations: [],
 			templateLastAppliedSuggestionKey: null,
 			templateRecommendations: [ SUGGESTION ],
+			templateContextSignature: null,
 			templateResultRef: TEMPLATE_REF,
 			templateResultToken: 1,
 			templateSelectedSuggestionKey: SUGGESTION_KEY,
@@ -376,6 +400,14 @@ async function renderPanel() {
 beforeEach( async () => {
 	jest.clearAllMocks();
 	currentState = createState();
+	currentState = {
+		...currentState,
+		store: {
+			...currentState.store,
+			templateContextSignature:
+				buildTemplateContextSignature( currentState ),
+		},
+	};
 	mockGetTemplateActivityUndoState.mockImplementation(
 		( activity ) => activity?.undo || {}
 	);
@@ -419,6 +451,7 @@ beforeEach( async () => {
 				templateError: null,
 				templateStatus: 'idle',
 				templateResultRef: null,
+				templateContextSignature: null,
 				templateResultToken: getState().store.templateResultToken + 1,
 				templateSelectedSuggestionKey: null,
 				templateApplyStatus: 'idle',
@@ -490,6 +523,98 @@ describe( 'TemplateRecommender', () => {
 
 		expect( mockClearTemplateRecommendations ).not.toHaveBeenCalled();
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
+	} );
+
+	test( 'does not render stale template results when the stored context signature mismatches', async () => {
+		currentState = createState( {
+			store: {
+				templateContextSignature: 'stale-signature',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Add hero intro' ) ).toBe( false );
+		expect( hasText( 'Confirm Apply' ) ).toBe( false );
+	} );
+
+	test( 'shows a stale scope badge when the stored template result context mismatches', async () => {
+		currentState = createState( {
+			store: {
+				templateContextSignature: 'stale-signature',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Home Template' ) ).toBe( true );
+		expect( hasText( TEMPLATE_REF ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
+		expect( hasText( 'Context has changed since the last request.' ) ).toBe(
+			true
+		);
+	} );
+
+	test( 'does not show the current scope badge when the latest template request failed', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [],
+				templateExplanation: '',
+				templateError: 'Template request failed.',
+				templateStatus: 'error',
+				templateContextSignature: null,
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Template request failed.' ) ).toBe( true );
+		expect( hasText( 'Current' ) ).toBe( false );
+	} );
+
+	test( 'treats an empty successful template response as a current result', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [],
+				templateExplanation: '',
+				templateApplyError: null,
+				templateApplyStatus: 'idle',
+				templateSelectedSuggestionKey: null,
+				templateContextSignature: buildTemplateContextSignature(),
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Current' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( false );
+		expect( hasText( 'Add hero intro' ) ).toBe( false );
+	} );
+
+	test( 'keeps advisory template suggestions expanded when they are returned', async () => {
+		currentState = createState( {
+			store: {
+				templateRecommendations: [
+					{
+						label: 'Explore an editorial collage',
+						description:
+							'Consider a more magazine-like grouping before the footer.',
+						patternSuggestions: [ 'theme/footer' ],
+						operations: [],
+					},
+				],
+				templateExplanation: 'One advisory idea is available.',
+				templateSelectedSuggestionKey: null,
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Advisory Suggestions' ) ).toBe( true );
+		expect( hasText( 'Explore an editorial collage' ) ).toBe( true );
+		expect( hasText( 'Suggested Patterns' ) ).toBe( true );
+		expect( hasText( 'Footer' ) ).toBe( true );
+		expect( hasText( 'Browse pattern' ) ).toBe( true );
 	} );
 
 	test( 'submits live override and viewport metadata with template recommendation requests', async () => {

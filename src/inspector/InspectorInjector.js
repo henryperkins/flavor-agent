@@ -11,8 +11,11 @@ import {
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
+import { useMemo } from '@wordpress/element';
 
+import { collectBlockContext } from '../context/collector';
 import { STORE_NAME } from '../store';
+import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import { BlockRecommendationsPanel } from './BlockRecommendationsPanel';
 import SettingsRecommendations from './SettingsRecommendations';
 import StylesRecommendations from './StylesRecommendations';
@@ -25,29 +28,51 @@ import {
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
 		const { clientId, isSelected } = props;
-		const { recommendations, editingMode } = useSelect(
+		const { recommendations, editingMode, status, storedContextSignature } =
+			useSelect(
 			( sel ) => {
 				const editor = sel( blockEditorStore );
+				const store = sel( STORE_NAME );
 
 				return {
 					recommendations:
-						sel( STORE_NAME ).getBlockRecommendations( clientId ),
+						store.getBlockRecommendations( clientId ),
+					status: store.getBlockStatus( clientId ),
+					storedContextSignature:
+						store.getBlockRecommendationContextSignature(
+							clientId
+						),
 					editingMode: editor.getBlockEditingMode( clientId ),
 				};
 			},
 			[ clientId ]
-		);
+			);
 		const isDisabled = editingMode === 'disabled';
+		const liveContext = useMemo( () => collectBlockContext( clientId ), [
+			clientId,
+		] );
+		const liveContextSignature = useMemo(
+			() => buildBlockRecommendationContextSignature( liveContext ),
+			[ liveContext ]
+		);
+		const hasMatchingResult =
+			status === 'ready' &&
+			Boolean( recommendations ) &&
+			( ! storedContextSignature ||
+				storedContextSignature === liveContextSignature );
+		const visibleRecommendations = hasMatchingResult
+			? recommendations
+			: null;
 
 		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;
 		}
 
 		const hasRecs =
-			recommendations &&
-			( recommendations.settings?.length > 0 ||
-				recommendations.styles?.length > 0 ||
-				recommendations.block?.length > 0 );
+			visibleRecommendations &&
+			( visibleRecommendations.settings?.length > 0 ||
+				visibleRecommendations.styles?.length > 0 ||
+				visibleRecommendations.block?.length > 0 );
 
 		return (
 			<>
@@ -56,19 +81,20 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				<InspectorControls>
 					<BlockRecommendationsPanel clientId={ clientId } />
 
-					{ hasRecs && recommendations.settings?.length > 0 && (
+					{ hasRecs &&
+						visibleRecommendations.settings?.length > 0 && (
 						<SettingsRecommendations
 							clientId={ clientId }
-							suggestions={ recommendations.settings }
+							suggestions={ visibleRecommendations.settings }
 						/>
 					) }
 				</InspectorControls>
 
-				{ hasRecs && recommendations.styles?.length > 0 && (
+				{ hasRecs && visibleRecommendations.styles?.length > 0 && (
 					<InspectorControls group="styles">
 						<StylesRecommendations
 							clientId={ clientId }
-							suggestions={ recommendations.styles }
+							suggestions={ visibleRecommendations.styles }
 						/>
 					</InspectorControls>
 				) }
@@ -80,7 +106,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								key={ `settings-${ config.group }` }
 								{ ...config }
 								clientId={ clientId }
-								suggestions={ recommendations.settings }
+								suggestions={ visibleRecommendations.settings }
 							/>
 						) ) }
 						{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
@@ -88,7 +114,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								key={ `styles-${ config.group }` }
 								{ ...config }
 								clientId={ clientId }
-								suggestions={ recommendations.styles }
+								suggestions={ visibleRecommendations.styles }
 							/>
 						) ) }
 					</>
@@ -99,7 +125,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 }, 'withAIRecommendations' );
 
 function SubPanelSuggestions( { group, panel, clientId, suggestions, label } ) {
-	const filtered = ( suggestions || [] ).filter( ( s ) => s.panel === panel );
+	const filtered = useMemo(
+		() => ( suggestions || [] ).filter( ( s ) => s.panel === panel ),
+		[ panel, suggestions ]
+	);
 	if ( ! filtered.length ) {
 		return null;
 	}

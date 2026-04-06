@@ -1,4 +1,4 @@
-import { Button, TextareaControl, Tooltip } from '@wordpress/components';
+import { Button, Tooltip } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -15,6 +15,9 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import SurfaceComposer from '../components/SurfaceComposer';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
 import {
@@ -125,6 +128,7 @@ function buildTemplatePartFetchInput( {
 	prompt,
 	visiblePatternNames,
 	editorStructure,
+	contextSignature = '',
 } ) {
 	const input = { templatePartRef };
 	const trimmedPrompt = prompt.trim();
@@ -141,6 +145,10 @@ function buildTemplatePartFetchInput( {
 
 	if ( editorStructure ) {
 		input.editorStructure = editorStructure;
+	}
+
+	if ( contextSignature ) {
+		input.contextSignature = contextSignature;
 	}
 
 	return input;
@@ -312,8 +320,10 @@ export default function TemplatePartRecommender() {
 		explanation,
 		error,
 		resultRef,
+		resultContextSignature,
 		resultToken,
 		isLoading,
+		status,
 		selectedSuggestionKey,
 		applyStatus,
 		applyError,
@@ -331,8 +341,10 @@ export default function TemplatePartRecommender() {
 			explanation: store.getTemplatePartExplanation(),
 			error: store.getTemplatePartError(),
 			resultRef: store.getTemplatePartResultRef(),
+			resultContextSignature: store.getTemplatePartContextSignature(),
 			resultToken: store.getTemplatePartResultToken(),
 			isLoading: store.isTemplatePartLoading(),
+			status: store.getTemplatePartStatus(),
 			selectedSuggestionKey: store.getTemplatePartSelectedSuggestionKey(),
 			applyStatus: store.getTemplatePartApplyStatus(),
 			applyError: store.getTemplatePartApplyError(),
@@ -465,8 +477,17 @@ export default function TemplatePartRecommender() {
 			humanizeLabel( area ),
 		[ templatePartContract.templatePartAreaLabels, area ]
 	);
-	const hasMatchingResult = resultRef === templatePartRef;
-	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
+	const hasMatchingResult =
+		resultRef === templatePartRef &&
+		status === 'ready' &&
+		( ! resultContextSignature ||
+			resultContextSignature === recommendationContextSignature );
+	const visibleRecommendations = useMemo(
+		() => ( hasMatchingResult ? recommendations : [] ),
+		[ hasMatchingResult, recommendations ]
+	);
+	const hasResult = resultRef === templatePartRef && status === 'ready';
+	const hasSuggestions = visibleRecommendations.length > 0;
 
 	useEffect( () => {
 		const templatePartChanged =
@@ -479,10 +500,11 @@ export default function TemplatePartRecommender() {
 			return;
 		}
 
+		const hasStoredResultForTemplatePart = resultRef === templatePartRef;
 		const shouldClearRecommendations =
 			templatePartChanged ||
 			( recommendationContextChanged &&
-				( hasMatchingResult || isLoading ) );
+				( hasStoredResultForTemplatePart || isLoading ) );
 
 		previousTemplatePartRef.current = templatePartRef;
 		previousRecommendationContextSignature.current =
@@ -499,15 +521,16 @@ export default function TemplatePartRecommender() {
 		}
 	}, [
 		clearTemplatePartRecommendations,
-		hasMatchingResult,
 		isLoading,
 		recommendationContextSignature,
+		resultContextSignature,
+		resultRef,
 		templatePartRef,
 	] );
 
 	const suggestionCards = useMemo(
 		() =>
-			recommendations.map( ( suggestion, index ) =>
+			visibleRecommendations.map( ( suggestion, index ) =>
 				buildTemplatePartSuggestionViewModel(
 					{
 						...suggestion,
@@ -519,7 +542,7 @@ export default function TemplatePartRecommender() {
 					patternTitleMap
 				)
 			),
-		[ recommendations, patternTitleMap ]
+		[ visibleRecommendations, patternTitleMap ]
 	);
 	const executableSuggestionCards = useMemo(
 		() => suggestionCards.filter( ( suggestion ) => suggestion.canApply ),
@@ -606,6 +629,7 @@ export default function TemplatePartRecommender() {
 				editorStructure: {
 					currentPatternOverrides,
 				},
+				contextSignature: recommendationContextSignature,
 			} )
 		);
 	}, [
@@ -613,6 +637,7 @@ export default function TemplatePartRecommender() {
 		currentPatternOverrides,
 		fetchTemplatePartRecommendations,
 		prompt,
+		recommendationContextSignature,
 		templatePartRef,
 		visiblePatternNames,
 	] );
@@ -652,66 +677,56 @@ export default function TemplatePartRecommender() {
 			title="AI Template Part Recommendations"
 		>
 			<div className="flavor-agent-panel">
-				<div className="flavor-agent-panel__intro">
-					<p className="flavor-agent-panel__eyebrow">
-						{ formatTemplatePartLabel( slug, area ) }
-					</p>
-					<div className="flavor-agent-card__meta">
-						{ area && (
-							<span className="flavor-agent-pill">
-								Area: { areaLabel }
-							</span>
-						) }
-						{ currentPatternOverrides.blockCount > 0 && (
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									currentPatternOverrides.blockCount,
-									'override-ready block'
-								) }
-							</span>
-						) }
-						{ slug && (
-							<code className="flavor-agent-pill flavor-agent-pill--code">
-								Slug: { slug }
-							</code>
-						) }
-					</div>
-					<p className="flavor-agent-panel__intro-copy">
-						Describe the structural change you want inside this
-						template part. Review the focus blocks and pattern
-						suggestions first, then confirm only the executable
-						operations Flavor Agent can validate deterministically.
-					</p>
-				</div>
+				<SurfacePanelIntro
+					eyebrow={ formatTemplatePartLabel( slug, area ) }
+					introCopy="Describe the structural change you want inside this template part. Review the focus blocks and pattern suggestions first, then confirm only the executable operations Flavor Agent can validate deterministically."
+					meta={
+						<>
+							{ area && (
+								<span className="flavor-agent-pill">
+									Area: { areaLabel }
+								</span>
+							) }
+							{ currentPatternOverrides.blockCount > 0 && (
+								<span className="flavor-agent-pill">
+									{ formatCount(
+										currentPatternOverrides.blockCount,
+										'override-ready block'
+									) }
+								</span>
+							) }
+							{ slug && (
+								<code className="flavor-agent-pill flavor-agent-pill--code">
+									Slug: { slug }
+								</code>
+							) }
+						</>
+					}
+				/>
+
+				<SurfaceScopeBar
+					scopeLabel={ formatTemplatePartLabel( slug, area ) }
+					scopeDetails={ [
+						area ? `Area: ${ areaLabel }` : '',
+						slug ? `Slug: ${ slug }` : '',
+					].filter( Boolean ) }
+					isFresh={ hasMatchingResult }
+					hasResult={ hasResult }
+				/>
 
 				{ ! canRecommend && (
 					<CapabilityNotice surface="template-part" />
 				) }
 
 				{ canRecommend && (
-					<div className="flavor-agent-panel__composer">
-						<TextareaControl
-							__nextHasNoMarginBottom
-							label="What are you trying to achieve with this template part?"
-							hideLabelFromVision
-							placeholder="Describe the structure or layout you want."
-							value={ prompt }
-							onChange={ setPrompt }
-							rows={ 3 }
-							className="flavor-agent-prompt"
-						/>
-
-						<Button
-							variant="primary"
-							onClick={ handleFetch }
-							disabled={ isLoading }
-							className="flavor-agent-fetch-button"
-						>
-							{ isLoading
-								? 'Getting suggestions…'
-								: 'Get Suggestions' }
-						</Button>
-					</div>
+					<SurfaceComposer
+						prompt={ prompt }
+						onPromptChange={ setPrompt }
+						onFetch={ handleFetch }
+						placeholder="Describe the structure or layout you want."
+						label="What are you trying to achieve with this template part?"
+						isLoading={ isLoading }
+					/>
 				) }
 
 				{ canRecommend && isLoading && (
@@ -803,6 +818,7 @@ export default function TemplatePartRecommender() {
 						title="Advisory Suggestions"
 						count={ advisorySuggestionCards.length }
 						countNoun="suggestion"
+						initialOpen
 						description={
 							showSecondaryGuidance
 								? 'These suggestions stay visible, but Flavor Agent could not validate an exact deterministic operation sequence for them.'

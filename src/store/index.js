@@ -9,6 +9,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { createReduxStore, register } from '@wordpress/data';
 
 import { getPatternBadgeReason } from '../patterns/recommendation-utils';
+import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import {
 	applyGlobalStyleSuggestionOperations,
 	getGlobalStylesActivityUndoState,
@@ -51,6 +52,7 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	status: 'idle',
 	error: null,
 	requestToken: 0,
+	contextSignature: null,
 };
 
 const DEFAULT_STATE = {
@@ -62,6 +64,7 @@ const DEFAULT_STATE = {
 	navigationError: null,
 	navigationRequestPrompt: '',
 	navigationBlockClientId: null,
+	navigationContextSignature: null,
 	navigationRequestToken: 0,
 	navigationResultToken: 0,
 	activityScopeKey: null,
@@ -79,6 +82,7 @@ const DEFAULT_STATE = {
 	templateError: null,
 	templateRequestPrompt: '',
 	templateRef: null,
+	templateContextSignature: null,
 	templateRequestToken: 0,
 	templateResultToken: 0,
 	templateSelectedSuggestionKey: null,
@@ -92,6 +96,7 @@ const DEFAULT_STATE = {
 	templatePartError: null,
 	templatePartRequestPrompt: '',
 	templatePartRef: null,
+	templatePartContextSignature: null,
 	templatePartRequestToken: 0,
 	templatePartResultToken: 0,
 	templatePartSelectedSuggestionKey: null,
@@ -359,35 +364,34 @@ function getNavigationHasResult( state, blockClientId = null ) {
 	);
 }
 
-function getTemplateHasResult( state ) {
+function getBlockHasResult( state, clientId ) {
+	const requestState = getStoredBlockRequestState( state, clientId );
+
 	return Boolean(
-		state.templateRef &&
-			( state.templateRecommendations.length > 0 ||
-				normalizeStringMessage( state.templateExplanation ) )
+		requestState.status === 'ready' &&
+			state.blockRecommendations[ clientId ]
 	);
+}
+
+function getTemplateHasResult( state ) {
+	return Boolean( state.templateStatus === 'ready' && state.templateRef );
 }
 
 function getTemplatePartHasResult( state ) {
 	return Boolean(
-		state.templatePartRef &&
-			( state.templatePartRecommendations.length > 0 ||
-				normalizeStringMessage( state.templatePartExplanation ) )
+		state.templatePartStatus === 'ready' && state.templatePartRef
 	);
 }
 
 function getGlobalStylesHasResult( state ) {
 	return Boolean(
-		state.globalStylesEntityId &&
-			( state.globalStylesSuggestions.length > 0 ||
-				normalizeStringMessage( state.globalStylesExplanation ) )
+		state.globalStylesStatus === 'ready' && state.globalStylesEntityId
 	);
 }
 
 function getStyleBookHasResult( state ) {
 	return Boolean(
-		state.styleBookScopeKey &&
-			( state.styleBookSuggestions.length > 0 ||
-				normalizeStringMessage( state.styleBookExplanation ) )
+		state.styleBookStatus === 'ready' && state.styleBookScopeKey
 	);
 }
 
@@ -676,11 +680,15 @@ function getApiErrorMessage( error, fallback = 'Request failed.' ) {
 }
 
 function getApiErrorCode( error ) {
-	return typeof error?.code === 'string' && error.code
-		? error.code
-		: typeof error?.data?.code === 'string' && error.data.code
-		? error.data.code
-		: '';
+	if ( typeof error?.code === 'string' && error.code ) {
+		return error.code;
+	}
+
+	if ( typeof error?.data?.code === 'string' && error.data.code ) {
+		return error.data.code;
+	}
+
+	return '';
 }
 
 function buildActivityQueryPath( {
@@ -874,15 +882,14 @@ function isNonRetryableUndoSyncError( entry, error ) {
 	}
 
 	const status = getApiErrorStatus( error );
-	const code = getApiErrorCode( error );
-
 	if ( status < 400 || status >= 500 ) {
 		return false;
 	}
 
 	if (
 		status === 409 &&
-		code === 'flavor_agent_activity_invalid_undo_transition'
+		getApiErrorCode( error ) ===
+			'flavor_agent_activity_invalid_undo_transition'
 	) {
 		return false;
 	}
@@ -1430,7 +1437,6 @@ async function runAbortableRecommendationRequest( {
 	request.requestData = requestData;
 	onLoading?.( { dispatch, input, ...request } );
 
-	let lastError = null;
 	const maxRetries = 1;
 
 	for ( let attempt = 0; attempt <= maxRetries; attempt++ ) {
@@ -1451,8 +1457,6 @@ async function runAbortableRecommendationRequest( {
 			} );
 			return;
 		} catch ( err ) {
-			lastError = err;
-
 			if ( err?.name === 'AbortError' ) {
 				clearAbortController( abortKey, abortId, controller );
 				return;
@@ -1492,12 +1496,18 @@ const actions = {
 		};
 	},
 
-	setBlockRecommendations( clientId, recommendations, requestToken = null ) {
+	setBlockRecommendations(
+		clientId,
+		recommendations,
+		requestToken = null,
+		contextSignature = null
+	) {
 		return {
 			type: 'SET_BLOCK_RECS',
 			clientId,
 			recommendations,
 			requestToken,
+			contextSignature,
 		};
 	},
 
@@ -1639,28 +1649,37 @@ const actions = {
 				buildRequest: ( {
 					input: requestInput,
 					select: registrySelect,
-				} ) => ( {
-					abortId: requestInput?.clientId || null,
-					clientId: requestInput?.clientId || '',
-					requestData: {
-						editorContext: requestInput?.context || {},
-						prompt: requestInput?.prompt || '',
+				} ) => {
+					const contextSignature =
+						requestInput?.contextSignature || null;
+
+					return {
+						abortId: requestInput?.clientId || null,
 						clientId: requestInput?.clientId || '',
-					},
-					requestToken:
-						( registrySelect.getBlockRequestToken?.(
-							requestInput?.clientId
-						) || 0 ) + 1,
-				} ),
+						contextSignature,
+						requestData: {
+							editorContext: requestInput?.context || {},
+							prompt: requestInput?.prompt || '',
+							clientId: requestInput?.clientId || '',
+						},
+						requestToken:
+							( registrySelect.getBlockRequestToken?.(
+								requestInput?.clientId
+							) || 0 ) + 1,
+					};
+				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-block',
 				input: {
 					clientId,
 					context,
+					contextSignature:
+						buildBlockRecommendationContextSignature( context ),
 					prompt,
 				},
 				onError: ( {
 					clientId: requestClientId,
+					contextSignature,
 					dispatch: localDispatch,
 					err,
 					requestData,
@@ -1683,7 +1702,8 @@ const actions = {
 								requestMeta: null,
 								timestamp: Date.now(),
 							},
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 					localDispatch(
@@ -1711,6 +1731,7 @@ const actions = {
 				},
 				onSuccess: ( {
 					clientId: requestClientId,
+					contextSignature,
 					dispatch: localDispatch,
 					requestData,
 					requestToken,
@@ -1739,7 +1760,8 @@ const actions = {
 								),
 								timestamp: Date.now(),
 							},
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 					localDispatch(
@@ -1781,6 +1803,7 @@ const actions = {
 			const allowedUpdates = execution.allowedUpdates;
 			let nextAttributes = null;
 			let didApply = false;
+			let isNoOp = false;
 
 			if ( execution.isAdvisoryOnly ) {
 				localDispatch(
@@ -1799,16 +1822,28 @@ const actions = {
 					currentAttributes,
 					allowedUpdates
 				);
+				const proposedNextAttributes = {
+					...currentAttributes,
+					...safeUpdates,
+				};
 
 				if (
 					Object.keys( safeUpdates ).length > 0 &&
+					attributeSnapshotsMatch(
+						currentAttributes,
+						proposedNextAttributes
+					)
+				) {
+					isNoOp = true;
+				}
+
+				if (
+					Object.keys( safeUpdates ).length > 0 &&
+					! isNoOp &&
 					typeof blockEditorDispatch.updateBlockAttributes ===
 						'function'
 				) {
-					nextAttributes = {
-						...currentAttributes,
-						...safeUpdates,
-					};
+					nextAttributes = proposedNextAttributes;
 					blockEditorDispatch.updateBlockAttributes(
 						clientId,
 						safeUpdates
@@ -1818,6 +1853,10 @@ const actions = {
 			}
 
 			if ( ! didApply ) {
+				if ( isNoOp ) {
+					return false;
+				}
+
 				localDispatch(
 					actions.setBlockRequestState(
 						clientId,
@@ -1883,7 +1922,8 @@ const actions = {
 		blockClientId,
 		payload,
 		prompt = '',
-		requestToken = null
+		requestToken = null,
+		contextSignature = null
 	) {
 		return {
 			type: 'SET_NAVIGATION_RECS',
@@ -1891,6 +1931,7 @@ const actions = {
 			payload,
 			prompt,
 			requestToken,
+			contextSignature,
 		};
 	},
 
@@ -1952,11 +1993,15 @@ const actions = {
 					const requestToken =
 						( registrySelect.getNavigationRequestToken?.() || 0 ) +
 						1;
-					const { blockClientId = null, ...requestData } =
-						requestInput || {};
+					const {
+						blockClientId = null,
+						contextSignature = null,
+						...requestData
+					} = requestInput || {};
 
 					return {
 						blockClientId,
+						contextSignature,
 						requestData,
 						requestToken,
 					};
@@ -1966,6 +2011,7 @@ const actions = {
 				input,
 				onError: ( {
 					blockClientId,
+					contextSignature,
 					dispatch: localDispatch,
 					err,
 					requestData,
@@ -1976,7 +2022,8 @@ const actions = {
 							blockClientId,
 							getEmptySuggestionResponse(),
 							requestData.prompt || '',
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 					localDispatch(
@@ -2005,6 +2052,7 @@ const actions = {
 				},
 				onSuccess: ( {
 					blockClientId,
+					contextSignature,
 					dispatch: localDispatch,
 					requestData,
 					requestToken,
@@ -2015,7 +2063,8 @@ const actions = {
 							blockClientId,
 							result,
 							requestData.prompt || '',
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 				},
@@ -2031,7 +2080,8 @@ const actions = {
 		templateRef,
 		payload,
 		prompt = '',
-		requestToken = null
+		requestToken = null,
+		contextSignature = null
 	) {
 		return {
 			type: 'SET_TEMPLATE_RECS',
@@ -2039,6 +2089,7 @@ const actions = {
 			payload,
 			prompt,
 			requestToken,
+			contextSignature,
 		};
 	},
 
@@ -2077,7 +2128,8 @@ const actions = {
 		templatePartRef,
 		payload,
 		prompt = '',
-		requestToken = null
+		requestToken = null,
+		contextSignature = null
 	) {
 		return {
 			type: 'SET_TEMPLATE_PART_RECS',
@@ -2085,6 +2137,7 @@ const actions = {
 			payload,
 			prompt,
 			requestToken,
+			contextSignature,
 		};
 	},
 
@@ -2870,14 +2923,26 @@ const actions = {
 		return ( { dispatch, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_templateAbort',
-				buildRequest: ( { select: registrySelect } ) => ( {
-					requestToken:
-						( registrySelect.getTemplateRequestToken?.() || 0 ) + 1,
-				} ),
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => {
+					const { contextSignature = null, ...requestData } =
+						requestInput || {};
+
+					return {
+						contextSignature,
+						requestData,
+						requestToken:
+							( registrySelect.getTemplateRequestToken?.() ||
+								0 ) + 1,
+					};
+				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-template',
 				input,
 				onError: ( {
+					contextSignature,
 					dispatch: localDispatch,
 					err,
 					input: requestInput,
@@ -2888,7 +2953,8 @@ const actions = {
 							requestInput.templateRef,
 							getEmptySuggestionResponse(),
 							requestInput.prompt || '',
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 					localDispatch(
@@ -2910,6 +2976,7 @@ const actions = {
 					);
 				},
 				onSuccess: ( {
+					contextSignature,
 					dispatch: localDispatch,
 					input: requestInput,
 					requestToken,
@@ -2923,7 +2990,8 @@ const actions = {
 							requestInput.templateRef,
 							payload,
 							requestInput.prompt || '',
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 				},
@@ -2935,15 +3003,26 @@ const actions = {
 		return ( { dispatch, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_templatePartAbort',
-				buildRequest: ( { select: registrySelect } ) => ( {
-					requestToken:
-						( registrySelect.getTemplatePartRequestToken?.() ||
-							0 ) + 1,
-				} ),
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => {
+					const { contextSignature = null, ...requestData } =
+						requestInput || {};
+
+					return {
+						contextSignature,
+						requestData,
+						requestToken:
+							( registrySelect.getTemplatePartRequestToken?.() ||
+								0 ) + 1,
+					};
+				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-template-part',
 				input,
 				onError: ( {
+					contextSignature,
 					dispatch: localDispatch,
 					err,
 					input: requestInput,
@@ -2954,7 +3033,8 @@ const actions = {
 							requestInput.templatePartRef,
 							getEmptySuggestionResponse(),
 							requestInput.prompt || '',
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 					localDispatch(
@@ -2976,6 +3056,7 @@ const actions = {
 					);
 				},
 				onSuccess: ( {
+					contextSignature,
 					dispatch: localDispatch,
 					input: requestInput,
 					requestToken,
@@ -2989,7 +3070,8 @@ const actions = {
 							requestInput.templatePartRef,
 							payload,
 							requestInput.prompt || '',
-							requestToken
+							requestToken,
+							contextSignature
 						)
 					);
 				},
@@ -3184,6 +3266,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 						...currentEntry,
 						status: action.status,
 						error: action.error ?? null,
+						contextSignature:
+							action.contextSignature ??
+							currentEntry.contextSignature,
 						requestToken:
 							action.requestToken ?? currentEntry.requestToken,
 					},
@@ -3206,6 +3291,13 @@ function reducer( state = DEFAULT_STATE, action ) {
 				blockRecommendations: {
 					...state.blockRecommendations,
 					[ action.clientId ]: action.recommendations,
+				},
+				blockRequestState: {
+					...state.blockRequestState,
+					[ action.clientId ]: {
+						...getStoredBlockRequestState( state, action.clientId ),
+						contextSignature: action.contextSignature ?? null,
+					},
 				},
 			};
 		case 'CLEAR_BLOCK_RECS': {
@@ -3427,6 +3519,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationExplanation: action.payload?.explanation ?? '',
 				navigationRequestPrompt: action.prompt ?? '',
 				navigationBlockClientId: action.blockClientId ?? null,
+				navigationContextSignature: action.contextSignature ?? null,
 				navigationRequestToken:
 					action.requestToken ?? state.navigationRequestToken,
 				navigationResultToken: state.navigationResultToken + 1,
@@ -3451,6 +3544,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationError: null,
 				navigationRequestPrompt: '',
 				navigationBlockClientId: null,
+				navigationContextSignature: null,
 				navigationRequestToken: state.navigationRequestToken + 1,
 				navigationResultToken: state.navigationResultToken + 1,
 			};
@@ -3497,6 +3591,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateExplanation: action.payload?.explanation ?? '',
 				templateRequestPrompt: action.prompt ?? '',
 				templateRef: action.templateRef,
+				templateContextSignature: action.contextSignature ?? null,
 				templateRequestToken:
 					action.requestToken ?? state.templateRequestToken,
 				templateResultToken: state.templateResultToken + 1,
@@ -3544,6 +3639,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateError: null,
 				templateRequestPrompt: '',
 				templateRef: null,
+				templateContextSignature: null,
 				templateRequestToken: state.templateRequestToken + 1,
 				templateResultToken: state.templateResultToken + 1,
 				templateSelectedSuggestionKey: null,
@@ -3766,6 +3862,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templatePartExplanation: action.payload?.explanation ?? '',
 				templatePartRequestPrompt: action.prompt ?? '',
 				templatePartRef: action.templatePartRef,
+				templatePartContextSignature: action.contextSignature ?? null,
 				templatePartRequestToken:
 					action.requestToken ?? state.templatePartRequestToken,
 				templatePartResultToken: state.templatePartResultToken + 1,
@@ -3813,6 +3910,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templatePartError: null,
 				templatePartRequestPrompt: '',
 				templatePartRef: null,
+				templatePartContextSignature: null,
 				templatePartRequestToken: state.templatePartRequestToken + 1,
 				templatePartResultToken: state.templatePartResultToken + 1,
 				templatePartSelectedSuggestionKey: null,
@@ -3875,6 +3973,8 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).error,
 	getBlockRequestToken: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).requestToken,
+	getBlockRecommendationContextSignature: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).contextSignature,
 	isBlockLoading: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).status === 'loading',
 	getStatus: ( state, clientId ) =>
@@ -3927,6 +4027,10 @@ const selectors = {
 			? ''
 			: state.navigationRequestPrompt,
 	getNavigationBlockClientId: ( state ) => state.navigationBlockClientId,
+	getNavigationContextSignature: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? null
+			: state.navigationContextSignature,
 	getNavigationRequestToken: ( state ) => state.navigationRequestToken,
 	getNavigationResultToken: ( state, blockClientId = null ) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
@@ -3941,6 +4045,7 @@ const selectors = {
 	getTemplateError: ( state ) => state.templateError,
 	getTemplateRequestPrompt: ( state ) => state.templateRequestPrompt,
 	getTemplateResultRef: ( state ) => state.templateRef,
+	getTemplateContextSignature: ( state ) => state.templateContextSignature,
 	getTemplateRequestToken: ( state ) => state.templateRequestToken,
 	getTemplateResultToken: ( state ) => state.templateResultToken,
 	isTemplateLoading: ( state ) => state.templateStatus === 'loading',
@@ -3960,6 +4065,8 @@ const selectors = {
 	getTemplatePartError: ( state ) => state.templatePartError,
 	getTemplatePartRequestPrompt: ( state ) => state.templatePartRequestPrompt,
 	getTemplatePartResultRef: ( state ) => state.templatePartRef,
+	getTemplatePartContextSignature: ( state ) =>
+		state.templatePartContextSignature,
 	getTemplatePartRequestToken: ( state ) => state.templatePartRequestToken,
 	getTemplatePartResultToken: ( state ) => state.templatePartResultToken,
 	isTemplatePartLoading: ( state ) => state.templatePartStatus === 'loading',
@@ -4053,14 +4160,7 @@ const selectors = {
 		getNormalizedInteractionState( 'block', {
 			requestStatus: getStoredBlockRequestState( state, clientId ).status,
 			requestError: getBlockRequestError( state, clientId ),
-			hasResult: Boolean(
-				( state.blockRecommendations[ clientId ]?.block?.length || 0 ) +
-					( state.blockRecommendations[ clientId ]?.settings
-						?.length || 0 ) +
-					( state.blockRecommendations[ clientId ]?.styles?.length ||
-						0 ) >
-					0
-			),
+			hasResult: getBlockHasResult( state, clientId ),
 			undoStatus: state.undoStatus,
 			undoError: normalizeStringMessage( options.undoError ),
 			hasSuccess: Boolean( options.hasSuccess ),

@@ -9,6 +9,7 @@ import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
 import { formatCount } from '../utils/format-count';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import groupByPanel from './group-by-panel';
 import {
 	DELEGATED_STYLE_PANELS,
@@ -63,13 +64,11 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 	return (
 		<PanelBody title="AI Style Suggestions" initialOpen icon={ stylesIcon }>
 			<div className="flavor-agent-panel">
-				<div className="flavor-agent-panel__intro flavor-agent-style-surface__intro">
-					<p className="flavor-agent-panel__eyebrow">Block Styles</p>
-					<p className="flavor-agent-panel__intro-copy">
-						One-click apply stays available for safe block-level
-						style changes. Suggestions stay grouped beside the
-						native controls they map to.
-					</p>
+				<SurfacePanelIntro
+					eyebrow="Block Styles"
+					introCopy="One-click apply stays available for safe block-level style changes. Suggestions stay grouped beside the native controls they map to."
+					className="flavor-agent-style-surface__intro"
+				>
 					<div className="flavor-agent-style-surface__meta">
 						<span className="flavor-agent-pill">
 							{ formatCount( suggestions.length, 'suggestion' ) }
@@ -91,7 +90,7 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 							</span>
 						) }
 					</div>
-				</div>
+				</SurfacePanelIntro>
 
 				{ variationSuggestions.length > 0 && (
 					<div className="flavor-agent-panel__group">
@@ -113,14 +112,18 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 
 						<ButtonGroup className="flavor-agent-style-variations">
 							{ variationSuggestions.map( ( s ) => {
-								const key = `variation-${ s.label }`;
+								const key = getSuggestionKey( s );
 								const applied = appliedKey === key;
+								const isCurrentStyle = Boolean(
+									s.isCurrentStyle
+								);
+								const isDisabled = isCurrentStyle || applied;
 
 								return (
 									<Button
 										key={ key }
 										variant={
-											s.isCurrentStyle || applied
+											isCurrentStyle || applied
 												? 'primary'
 												: 'secondary'
 										}
@@ -128,9 +131,17 @@ export default function StylesRecommendations( { clientId, suggestions } ) {
 										onClick={ () =>
 											void handleApply( s, key )
 										}
-										title={ s.description }
-										icon={ applied ? check : undefined }
-										disabled={ applied }
+										title={
+											isCurrentStyle
+												? 'Current style variation'
+												: s.description
+										}
+										icon={
+											isCurrentStyle || applied
+												? check
+												: undefined
+										}
+										disabled={ isDisabled }
 										className="flavor-agent-style-variation"
 									>
 										{ s.label }

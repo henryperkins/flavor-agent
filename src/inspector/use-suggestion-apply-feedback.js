@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 
 const FEEDBACK_MS = 1200;
 
@@ -12,6 +18,17 @@ export default function useSuggestionApplyFeedback( {
 	const [ appliedKey, setAppliedKey ] = useState( null );
 	const [ feedback, setFeedback ] = useState( null );
 	const resetTimerRef = useRef( null );
+	const suggestionSetKey = useMemo( () => {
+		if ( ! Array.isArray( suggestions ) || suggestions.length === 0 ) {
+			return '';
+		}
+
+		return suggestions
+			.map( ( suggestion, index ) =>
+				String( getKey( suggestion ) || `suggestion-${ index }` )
+			)
+			.join( '|' );
+	}, [ getKey, suggestions ] );
 
 	useEffect( () => {
 		return () => {
@@ -29,7 +46,7 @@ export default function useSuggestionApplyFeedback( {
 
 		setAppliedKey( null );
 		setFeedback( null );
-	}, [ suggestions ] );
+	}, [ suggestionSetKey ] );
 
 	const handleApply = useCallback(
 		async ( suggestion, keyOverride = null ) => {

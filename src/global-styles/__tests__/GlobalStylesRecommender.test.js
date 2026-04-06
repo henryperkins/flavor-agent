@@ -710,6 +710,80 @@ describe( 'GlobalStylesRecommender', () => {
 		);
 	} );
 
+	test( 'shows a stale scope badge when the stored Global Styles result context mismatches', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Prefer accent palette values.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: 'stale-signature',
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Global Styles' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
+		expect( sidebar.textContent ).toContain(
+			'Context has changed since the last request.'
+		);
+		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+	} );
+
+	test( 'does not show the current scope badge when the latest Global Styles request failed', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [],
+			explanation: '',
+			status: 'error',
+			error: 'Request failed.',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Request failed.' );
+		expect( sidebar.textContent ).not.toContain( 'Current' );
+	} );
+
+	test( 'treats an empty successful Global Styles response as a current result', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [],
+			explanation: '',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Current' );
+		expect(
+			sidebar.querySelector( '[data-status-notice="true"]' )
+		).not.toBeNull();
+	} );
+
 	test( 'clears stale results after the active Global Styles entity changes', () => {
 		currentStoreState = {
 			...currentStoreState,

@@ -14,7 +14,7 @@
  * Free-form text (explanation, description, reason) is scanned for
  * entity mentions and linked inline with the same type-aware actions.
  */
-import { Button, TextareaControl, Tooltip } from '@wordpress/components';
+import { Button, Tooltip } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -31,6 +31,9 @@ import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import SurfaceComposer from '../components/SurfaceComposer';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
@@ -331,8 +334,10 @@ export default function TemplateRecommender() {
 		explanation,
 		error,
 		resultRef,
+		resultContextSignature,
 		resultToken,
 		isLoading,
+		status,
 		selectedSuggestionKey,
 		applyStatus,
 		applyError,
@@ -350,8 +355,10 @@ export default function TemplateRecommender() {
 			explanation: store.getTemplateExplanation(),
 			error: store.getTemplateError(),
 			resultRef: store.getTemplateResultRef(),
+			resultContextSignature: store.getTemplateContextSignature(),
 			resultToken: store.getTemplateResultToken(),
 			isLoading: store.isTemplateLoading(),
+			status: store.getTemplateStatus(),
 			selectedSuggestionKey: store.getTemplateSelectedSuggestionKey(),
 			applyStatus: store.getTemplateApplyStatus(),
 			applyError: store.getTemplateApplyError(),
@@ -483,8 +490,17 @@ export default function TemplateRecommender() {
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature
 	);
-	const hasMatchingResult = resultRef === templateRef;
-	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
+	const hasMatchingResult =
+		resultRef === templateRef &&
+		status === 'ready' &&
+		( ! resultContextSignature ||
+			resultContextSignature === recommendationContextSignature );
+	const visibleRecommendations = useMemo(
+		() => ( hasMatchingResult ? recommendations : [] ),
+		[ hasMatchingResult, recommendations ]
+	);
+	const hasResult = resultRef === templateRef && status === 'ready';
+	const hasSuggestions = visibleRecommendations.length > 0;
 
 	useEffect( () => {
 		const templateChanged = previousTemplateRef.current !== templateRef;
@@ -496,10 +512,11 @@ export default function TemplateRecommender() {
 			return;
 		}
 
+		const hasStoredResultForTemplate = resultRef === templateRef;
 		const shouldClearRecommendations =
 			templateChanged ||
 			( recommendationContextChanged &&
-				( hasMatchingResult || isLoading ) );
+				( hasStoredResultForTemplate || isLoading ) );
 
 		previousTemplateRef.current = templateRef;
 		previousRecommendationContextSignature.current =
@@ -516,19 +533,20 @@ export default function TemplateRecommender() {
 		}
 	}, [
 		clearTemplateRecommendations,
-		recommendationContextSignature,
-		hasMatchingResult,
 		isLoading,
+		recommendationContextSignature,
+		resultContextSignature,
+		resultRef,
 		templateRef,
 	] );
 
 	const entityMap = useMemo(
-		() => buildEntityMap( recommendations, patternTitleMap ),
-		[ recommendations, patternTitleMap ]
+		() => buildEntityMap( visibleRecommendations, patternTitleMap ),
+		[ visibleRecommendations, patternTitleMap ]
 	);
 	const suggestionCards = useMemo(
 		() =>
-			recommendations.map( ( suggestion, index ) =>
+			visibleRecommendations.map( ( suggestion, index ) =>
 				buildTemplateSuggestionViewModel(
 					{
 						...suggestion,
@@ -540,7 +558,7 @@ export default function TemplateRecommender() {
 					patternTitleMap
 				)
 			),
-		[ recommendations, patternTitleMap ]
+		[ visibleRecommendations, patternTitleMap ]
 	);
 	const executableSuggestionCards = useMemo(
 		() => suggestionCards.filter( ( suggestion ) => suggestion.canApply ),
@@ -624,6 +642,7 @@ export default function TemplateRecommender() {
 				editorSlots,
 				editorStructure,
 				visiblePatternNames,
+				contextSignature: recommendationContextSignature,
 			} )
 		);
 	}, [
@@ -632,6 +651,7 @@ export default function TemplateRecommender() {
 		editorStructure,
 		fetchTemplateRecommendations,
 		prompt,
+		recommendationContextSignature,
 		templateRef,
 		templateType,
 		visiblePatternNames,
@@ -686,61 +706,49 @@ export default function TemplateRecommender() {
 			title="AI Template Recommendations"
 		>
 			<div className="flavor-agent-panel">
-				<div className="flavor-agent-panel__intro">
-					<p className="flavor-agent-panel__eyebrow">
-						{ formatTemplateTypeLabel( templateType ) }
-					</p>
-					<p className="flavor-agent-panel__intro-copy">
-						Describe the structure or layout you want. Review each
-						suggested template-part change or pattern insertion,
-						then confirm before Flavor Agent mutates the template.
-					</p>
-					<div className="flavor-agent-card__meta">
-						{ currentPatternOverrideCount > 0 && (
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									currentPatternOverrideCount,
-									'override-ready block'
-								) }
-							</span>
-						) }
-						{ currentVisibilityConstraintCount > 0 && (
-							<span className="flavor-agent-pill">
-								{ formatCount(
-									currentVisibilityConstraintCount,
-									'viewport constraint'
-								) }
-							</span>
-						) }
-					</div>
-				</div>
+				<SurfacePanelIntro
+					eyebrow={ formatTemplateTypeLabel( templateType ) }
+					introCopy="Describe the structure or layout you want. Review each suggested template-part change or pattern insertion, then confirm before Flavor Agent mutates the template."
+					meta={
+						<>
+							{ currentPatternOverrideCount > 0 && (
+								<span className="flavor-agent-pill">
+									{ formatCount(
+										currentPatternOverrideCount,
+										'override-ready block'
+									) }
+								</span>
+							) }
+							{ currentVisibilityConstraintCount > 0 && (
+								<span className="flavor-agent-pill">
+									{ formatCount(
+										currentVisibilityConstraintCount,
+										'viewport constraint'
+									) }
+								</span>
+							) }
+						</>
+					}
+				/>
+
+				<SurfaceScopeBar
+					scopeLabel={ formatTemplateTypeLabel( templateType ) }
+					scopeDetails={ templateRef ? [ templateRef ] : [] }
+					isFresh={ hasMatchingResult }
+					hasResult={ hasResult }
+				/>
 
 				{ ! canRecommend && <CapabilityNotice surface="template" /> }
 
 				{ canRecommend && (
-					<div className="flavor-agent-panel__composer">
-						<TextareaControl
-							__nextHasNoMarginBottom
-							label="What are you trying to achieve with this template?"
-							hideLabelFromVision
-							placeholder="Describe the structure or layout you want."
-							value={ prompt }
-							onChange={ setPrompt }
-							rows={ 3 }
-							className="flavor-agent-prompt"
-						/>
-
-						<Button
-							variant="primary"
-							onClick={ handleFetch }
-							disabled={ isLoading }
-							className="flavor-agent-fetch-button"
-						>
-							{ isLoading
-								? 'Getting suggestions…'
-								: 'Get Suggestions' }
-						</Button>
-					</div>
+					<SurfaceComposer
+						prompt={ prompt }
+						onPromptChange={ setPrompt }
+						onFetch={ handleFetch }
+						placeholder="Describe the structure or layout you want."
+						label="What are you trying to achieve with this template?"
+						isLoading={ isLoading }
+					/>
 				) }
 
 				{ canRecommend && isLoading && (
@@ -842,6 +850,7 @@ export default function TemplateRecommender() {
 						title="Advisory Suggestions"
 						count={ advisorySuggestionCards.length }
 						countNoun="suggestion"
+						initialOpen
 						description={
 							showSecondaryGuidance
 								? 'These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them.'

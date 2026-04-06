@@ -13,6 +13,7 @@
     "start": "wp-scripts start",
     "lint:js": "wp-scripts lint-js src/",
     "lint:plugin": "bash scripts/plugin-check.sh",
+    "check:docs": "bash scripts/check-doc-freshness.sh",
     "test:unit": "wp-scripts test-unit-js",
     "test:e2e": "npm run test:e2e:playground && npm run test:e2e:wp70",
     "test:e2e:playground": "playwright test",

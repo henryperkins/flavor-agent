@@ -338,4 +338,15 @@ describe( 'template apply state', () => {
 			} )
 		).toBeNull();
 	} );
+
+	test( 'template interaction state stays error after a failed request with no successful result', () => {
+		const state = reducer(
+			undefined,
+			actions.setTemplateStatus( 'error', 'Template request failed.', 1 )
+		);
+
+		expect( selectors.getTemplateInteractionState( state ) ).toBe(
+			'error'
+		);
+	} );
 } );

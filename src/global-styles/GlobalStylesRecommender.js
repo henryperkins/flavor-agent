@@ -15,6 +15,8 @@ import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	buildGlobalStylesExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
@@ -187,6 +189,8 @@ function GlobalStylesPanel( {
 	explanation,
 	notice,
 	activityEntries,
+	hasResult,
+	hasMatchingResult,
 	onNoticeAction,
 	onRequest,
 	onReview,
@@ -201,14 +205,11 @@ function GlobalStylesPanel( {
 	return (
 		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
 			<CapabilityNotice surface="global-styles" />
-			<div className="flavor-agent-panel__intro flavor-agent-style-surface__intro">
-				<p className="flavor-agent-panel__eyebrow">
-					Site Editor Styles
-				</p>
-				<p className="flavor-agent-panel__intro-copy">
-					Global Styles suggestions stay theme-backed and keep the
-					review-before-apply contract intact.
-				</p>
+			<SurfacePanelIntro
+				eyebrow="Site Editor Styles"
+				introCopy="Global Styles suggestions stay theme-backed and keep the review-before-apply contract intact."
+				className="flavor-agent-style-surface__intro"
+			>
 				<div className="flavor-agent-style-surface__meta">
 					<span className="flavor-agent-pill">Global Styles</span>
 					<span className="flavor-agent-pill">
@@ -228,7 +229,12 @@ function GlobalStylesPanel( {
 						</span>
 					) }
 				</div>
-			</div>
+			</SurfacePanelIntro>
+			<SurfaceScopeBar
+				scopeLabel="Global Styles"
+				isFresh={ hasMatchingResult }
+				hasResult={ hasResult }
+			/>
 			<AIStatusNotice
 				notice={ panelNotice }
 				onAction={ onNoticeAction }
@@ -601,6 +607,7 @@ export default function GlobalStylesRecommender() {
 	const hasMatchingResult = Boolean(
 		scope?.globalStylesId &&
 			currentResultRef === scope.globalStylesId &&
+			status === 'ready' &&
 			currentResultContextSignature &&
 			currentResultContextSignature === recommendationContextSignature
 	);
@@ -609,6 +616,12 @@ export default function GlobalStylesRecommender() {
 		[ hasMatchingResult, rawSuggestions ]
 	);
 	const explanation = hasMatchingResult ? currentExplanation : '';
+	const hasResult = Boolean(
+		scope?.globalStylesId &&
+			currentResultRef === scope.globalStylesId &&
+			status === 'ready' &&
+			currentResultContextSignature
+	);
 	const selectedSuggestion = useMemo(
 		() =>
 			suggestions.find(
@@ -653,7 +666,7 @@ export default function GlobalStylesRecommender() {
 				applySuccessMessage: hasApplySuccess
 					? 'Flavor Agent applied the selected Global Styles change.'
 					: '',
-				hasResult: suggestions.length > 0 || Boolean( explanation ),
+				hasResult,
 				hasSuggestions: suggestions.length > 0,
 				hasPreview: Boolean( selectedSuggestion ),
 				hasOperations:
@@ -859,6 +872,8 @@ export default function GlobalStylesRecommender() {
 			explanation={ explanation }
 			notice={ notice }
 			activityEntries={ activityEntries }
+			hasResult={ hasResult }
+			hasMatchingResult={ hasMatchingResult }
 			onNoticeAction={
 				notice?.actionType === 'undo' && latestGlobalStylesActivity
 					? () => handleUndo( latestGlobalStylesActivity.id )

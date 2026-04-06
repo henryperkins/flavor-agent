@@ -1,6 +1,6 @@
 # CLAUDE.md — Flavor Agent
 
-WordPress plugin: AI-powered block recommendations in the Gutenberg Inspector, vector-powered pattern recommendations in the inserter, template composition suggestions in the Site Editor, template-part recommendations, navigation structure suggestions, and server-backed AI activity history with an admin audit surface.
+WordPress plugin: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including block Inspector guidance, vector-powered pattern recommendations in the inserter, template and template-part composition suggestions in the Site Editor, navigation structure suggestions, Global Styles and Style Book recommendations, and server-backed AI activity history with an admin audit surface.
 
 Entry point: `flavor-agent.php` · Requires WP 7.0+ · PHP 8.0+
 
@@ -15,6 +15,7 @@ npm run test:unit -- --runInBand  # Jest unit tests
 npm run test:e2e       # Playwright smoke suites (Playground + WP 7.0)
 npm run test:e2e:playground  # fast Playground smoke suite
 npm run test:e2e:wp70  # Docker-backed WP 7.0 Site Editor suite
+npm run check:docs     # stale-doc freshness guard
 npm run wp:start       # docker compose up (local dev)
 npm run wp:stop        # docker compose down
 npm run wp:reset       # docker compose down -v (destroys volumes)
@@ -73,7 +74,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 
 | Path                                        | Purpose                                                                                                                       |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `index.js`                                  | Entry: registers store, session bootstrap, Inspector filter, pattern/template/template-part plugins                           |
+| `index.js`                                  | Entry: registers store, session bootstrap, BlockRecommendationsDocumentPanel, Inspector filter, pattern/template/template-part/Global Styles/Style Book plugins   |
 | `components/ActivitySessionBootstrap.js`    | Reloads session-scoped AI activity when the edited entity changes                                                             |
 | `components/AIActivitySection.js`           | Shared recent-actions list with per-entry undo affordance                                                                     |
 | `components/CapabilityNotice.js`            | Backend-unavailable notice used by all seven recommendation surfaces                                                          |
@@ -128,7 +129,7 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 - **Docs grounding lifecycle**: Prewarm and context-warm cron events (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) scheduled on activation.
 - **Activity history**: Block, template, and template-part applies write structured activity entries through the server-backed activity repository; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state again before undo.
 - **Admin audit UI**: `Settings > AI Activity` is powered by `src/admin/activity-log.js` and reads the same server-backed activity data used by inline editor history.
-- **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 11 abilities across block, pattern, template, navigation, docs, and infra categories. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
+- **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 13 abilities across block, pattern, template, navigation, docs, infra, content, and style categories. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
 
 ## External Services
 

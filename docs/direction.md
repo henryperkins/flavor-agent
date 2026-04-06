@@ -1,8 +1,13 @@
-# Direction read
+# Direction Read Archive
 
-Looking ahead, the plugin is mostly pointed the right way.
+> Archived review memo from 2026-04-03.
+> The live docs and status pages now supersede the observations below; use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, and `docs/features/` for current truth.
 
-Current WordPress 7.0 signals favor:
+This file is preserved for historical context only.
+
+Looking ahead, the plugin was mostly pointed the right way.
+
+At the time, WordPress 7.0 signals appeared to favor:
 
 - **server-scoped AI feature endpoints**, not arbitrary client-side prompt execution
 - **Connectors + AI Client** as the platform trust layer
@@ -33,7 +38,7 @@ In particular:
 
 So the core product wiring is in decent shape.
 
-## Inconsistencies and issues I found
+## Historical Findings
 
 ### 1. The plugin’s outward-facing description undersells the product
 
@@ -191,7 +196,7 @@ The same surface is labeled differently in different places:
 
 Small, but messy. It weakens the surface identity.
 
-## What I’d prioritize next
+## Historical Priorities
 
 If you want this repo to match current WordPress direction cleanly, I’d do this in order:
 
@@ -228,7 +233,7 @@ If you want this repo to match current WordPress direction cleanly, I’d do thi
     - keep first-party UI on REST/store for now
    - avoid re-architecting around client-side abilities until that layer settles more
 
-## Bottom line
+## Historical Bottom Line
 
 The **runtime architecture is ahead of the docs**.
 
