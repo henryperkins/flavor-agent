@@ -184,6 +184,91 @@ describe( 'AIActivitySection', () => {
 		expect( onUndo ).toHaveBeenCalledWith( 'activity-1' );
 	} );
 
+	test( 'hides undo controls when an undo handler is not provided', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'activity-1',
+							suggestion: 'Refresh content',
+							surface: 'block',
+							target: {
+								blockName: 'core/paragraph',
+							},
+							undo: {
+								canUndo: true,
+								status: 'available',
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain( 'Undo available' );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toBeUndefined();
+	} );
+
+	test( 'renders request diagnostics as review rows instead of undo failures', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion:
+								'No block-lane suggestions returned',
+							surface: 'block',
+							target: {
+								blockName: 'core/paragraph',
+							},
+							request: {
+								ai: {
+									backendLabel: 'Azure OpenAI responses',
+									model: 'gpt-5.4-mini',
+								},
+							},
+							diagnostic: {
+								detailLines: [
+									'Flavor Agent returned 1 style, but none in the block lane.',
+									'The block context exposed no mapped inspector panels for this request.',
+								],
+							},
+							undo: {
+								canUndo: false,
+								status: 'failed',
+								error: null,
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'No block-lane suggestions returned'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Block request diagnostic · paragraph'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Azure OpenAI responses · gpt-5.4-mini'
+		);
+		expect( getContainer().textContent ).toContain( 'Review' );
+		expect( getContainer().textContent ).toContain(
+			'Flavor Agent returned 1 style, but none in the block lane.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Undo unavailable'
+		);
+	} );
+
 	test( 'supports collapsed history and show-more overflow behavior', () => {
 		const entries = Array.from( { length: 5 }, ( _, index ) => ( {
 			id: `activity-${ index + 1 }`,

@@ -51,12 +51,13 @@ export default function SurfaceComposer( {
 } ) {
 	const resolvedHelperText = helperText || help;
 	const hasHeader = eyebrow || title || meta;
+	const canFetch = typeof onFetch === 'function';
 
 	const handleKeyDown = ( event ) => {
 		if (
 			disabled ||
 			isLoading ||
-			typeof onFetch !== 'function' ||
+			! canFetch ||
 			! matchesSubmitShortcut( event, submitShortcut )
 		) {
 			return;
@@ -151,8 +152,8 @@ export default function SurfaceComposer( {
 
 				<Button
 					variant={ fetchVariant }
-					onClick={ onFetch }
-					disabled={ isLoading || disabled }
+					onClick={ canFetch ? onFetch : undefined }
+					disabled={ isLoading || disabled || ! canFetch }
 					icon={ fetchIcon }
 					className="flavor-agent-fetch-button"
 				>

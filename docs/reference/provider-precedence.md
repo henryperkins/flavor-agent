@@ -24,9 +24,10 @@ If the option is missing or invalid, the provider defaults to `azure_openai`. Th
 
 `ChatClient::chat()` is the only entry point for block recommendations.
 
-1. If the selected provider is a connector-backed provider, requests are sent through `wp_ai_client_prompt()->using_provider( $provider_id )`.
-2. Otherwise, if the selected direct provider is configured, requests use `ResponsesClient::rank()`.
-3. Otherwise, block recommendations fall back to the generic WordPress AI Client path (`WordPressAIClient::is_supported()`) when any connector-backed text provider is available.
+1. Flavor Agent first tries the selected provider from `flavor_agent_openai_provider`.
+2. If that selected provider is configured, requests run through `ResponsesClient::rank()`, which delegates connector-backed providers to `wp_ai_client_prompt()->using_provider( $provider_id )` and direct providers to the configured Responses API endpoint.
+3. If the selected provider is not configured, Flavor Agent tries the other direct provider (`azure_openai` or `openai_native`) before using the generic WordPress AI Client fallback.
+4. Only when no direct provider is configured does block chat fall back to the generic WordPress AI Client path (`WordPressAIClient::is_supported()`) with the synthetic `wordpress_ai_client` runtime provider.
 
 `ChatClient::is_supported()` returns `true` if either tier is available. This is the gate for the `flavor-agent/recommend-block` ability.
 

@@ -19,6 +19,7 @@ export default function AIReviewSection( {
 	className = '',
 } ) {
 	const resolvedCountLabel = countLabel || formatCount( count, countNoun );
+	const canConfirm = typeof onConfirm === 'function';
 
 	return (
 		<div
@@ -73,8 +74,8 @@ export default function AIReviewSection( {
 
 				<Button
 					variant="primary"
-					onClick={ onConfirm }
-					disabled={ confirmDisabled }
+					onClick={ canConfirm ? onConfirm : undefined }
+					disabled={ confirmDisabled || ! canConfirm }
 					className="flavor-agent-card__apply"
 				>
 					{ confirmLabel }

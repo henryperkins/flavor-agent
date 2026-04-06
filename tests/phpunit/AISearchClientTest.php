@@ -85,7 +85,7 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
-	public function test_search_derives_trusted_guidance_url_from_cloudflare_source_key(): void {
+	public function test_search_normalizes_crlf_frontmatter_before_extracting_url_and_excerpt(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -99,6 +99,52 @@ final class AISearchClientTest extends TestCase {
 			'body'     => wp_json_encode(
 				[
 					'result' => [
+						'search_query' => 'template part area guidance',
+						'chunks'       => [
+							[
+								'id'    => 'chunk-1',
+								'score' => 0.8,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/rest-api/reference/wp_template_parts',
+									'metadata' => [],
+								],
+								'text'  => "---\r\nsource_url: \"https://developer.wordpress.org/rest-api/reference/wp_template_parts/\"\r\n---\r\nWhere the template part is intended for use.",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'template part area guidance' );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result['guidance'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
+			$result['guidance'][0]['url']
+		);
+		$this->assertSame(
+			'Where the template part is intended for use.',
+			$result['guidance'][0]['excerpt']
+		);
+		$this->assertStringNotContainsString( 'source_url', $result['guidance'][0]['excerpt'] );
+	}
+
+	public function test_search_rejects_chunks_without_explicit_trusted_urls_even_with_trusted_source_keys(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+			'flavor_agent_cloudflare_ai_search_max_results' => 4,
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+				'body'     => wp_json_encode(
+				[
+					'result' => [
 						'search_query' => 'block editor',
 						'chunks'       => [
 							[
@@ -108,7 +154,7 @@ final class AISearchClientTest extends TestCase {
 									'key'      => 'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
 									'metadata' => [],
 								],
-								'text'  => 'The Blocks endpoint returns data about registered block types.',
+								'text'  => 'Malicious non-doc content that only borrows a trusted-looking source key.',
 							],
 						],
 					],
@@ -119,15 +165,7 @@ final class AISearchClientTest extends TestCase {
 		$result = AISearchClient::search( 'block editor' );
 
 		$this->assertIsArray( $result );
-		$this->assertCount( 1, $result['guidance'] );
-		$this->assertSame(
-			'https://developer.wordpress.org/rest-api/reference/blocks/',
-			$result['guidance'][0]['url']
-		);
-		$this->assertSame(
-			'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
-			$result['guidance'][0]['sourceKey']
-		);
+		$this->assertSame( [], $result['guidance'] );
 	}
 
 	public function test_search_rejects_forged_or_traversing_source_keys_when_urls_are_missing(): void {
@@ -229,6 +267,39 @@ final class AISearchClientTest extends TestCase {
 
 		$this->assertSame( 'block editor', $request_body['messages'][0]['content'] );
 		$this->assertSame( 3, $request_body['ai_search_options']['retrieval']['max_num_results'] );
+	}
+
+	public function test_validate_configuration_rejects_probe_results_without_explicit_trusted_urls(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'   => 'forged-probe',
+								'item' => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+									'metadata' => [],
+								],
+								'text' => 'Malicious non-doc content that only borrows a trusted-looking source key.',
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::validate_configuration(
+			'account-123',
+			'wp-dev-docs',
+			'token-xyz'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'cloudflare_ai_search_validation_untrusted_source', $result->get_error_code() );
 	}
 
 	public function test_validate_configuration_surfaces_cloudflare_errors(): void {
@@ -928,6 +999,29 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 360, function_exists( 'mb_strlen' ) ? mb_strlen( $result, 'UTF-8' ) : strlen( $result ) );
 		$this->assertStringEndsWith( '...', $result );
 		$this->assertStringNotContainsString( "\xef\xbf\xbd", $result );
+	}
+
+	public function test_normalize_family_context_drops_recursive_objects_without_fatal_error(): void {
+		$method = new \ReflectionMethod( AISearchClient::class, 'normalize_family_context' );
+		$method->setAccessible( true );
+
+		$recursive       = new \stdClass();
+		$recursive->self = $recursive;
+
+		$result = $method->invoke(
+			null,
+			[
+				'recursive' => $recursive,
+				'surface'   => 'block',
+			]
+		);
+
+		$this->assertSame(
+			[
+				'surface' => 'block',
+			],
+			$result
+		);
 	}
 
 	public function test_resolve_entity_key_prefers_explicit_entity_key_before_legacy_query_inference(): void {

@@ -84,6 +84,7 @@ function useBlockRecommendationState( clientId ) {
 		error,
 		status,
 		storedContextSignature,
+		requestDiagnostics,
 		blockActivityLog,
 		undoError,
 		undoStatus,
@@ -117,6 +118,8 @@ function useBlockRecommendationState( clientId ) {
 				status: store.getBlockStatus( clientId ),
 				storedContextSignature:
 					store.getBlockRecommendationContextSignature( clientId ),
+				requestDiagnostics:
+					store.getBlockRequestDiagnostics?.( clientId ) || null,
 				blockActivityLog: blockEntries,
 				undoError: store.getUndoError(),
 				undoStatus: store.getUndoStatus(),
@@ -166,6 +169,7 @@ function useBlockRecommendationState( clientId ) {
 		error,
 		status,
 		storedContextSignature,
+		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
 		latestUndoableActivityId,
@@ -214,6 +218,7 @@ export function BlockRecommendationsContent( {
 		error,
 		status,
 		storedContextSignature,
+		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
 		latestUndoableActivityId,
@@ -337,6 +342,73 @@ export function BlockRecommendationsContent( {
 				  ),
 		[ advisoryBlockSuggestions, executableBlockSuggestions, isStaleResult ]
 	);
+	const diagnosticActivityEntry = useMemo( () => {
+		if ( ! hasFreshResult || ! requestDiagnostics?.hasEmptyBlockResult ) {
+			return null;
+		}
+
+		return {
+			id: `block-request-diagnostic:${ clientId || 'unknown' }:${
+				requestDiagnostics.requestToken || 0
+			}`,
+			type: 'request_diagnostic',
+			surface: 'block',
+			suggestion:
+				requestDiagnostics.title ||
+				'No block-lane suggestions returned',
+			target: {
+				clientId,
+				blockName:
+					requestDiagnostics.blockName ||
+					block?.name ||
+					recommendations?.blockName ||
+					'',
+			},
+			request: {
+				prompt: requestDiagnostics.prompt || recommendations?.prompt || '',
+				...( requestDiagnostics.requestMeta
+					? {
+							ai: requestDiagnostics.requestMeta,
+					  }
+					: {} ),
+			},
+			diagnostic: {
+				detailLines: Array.isArray( requestDiagnostics.detailLines )
+					? requestDiagnostics.detailLines
+					: [],
+				rawCounts: requestDiagnostics.rawCounts || null,
+				finalCounts: requestDiagnostics.finalCounts || null,
+				reasonCodes: Array.isArray( requestDiagnostics.reasonCodes )
+					? requestDiagnostics.reasonCodes
+					: [],
+			},
+			undo: {
+				canUndo: false,
+				status: 'failed',
+				error: null,
+			},
+			timestamp:
+				requestDiagnostics.timestamp || new Date().toISOString(),
+			executionResult: 'review',
+		};
+	}, [
+		block?.name,
+		clientId,
+		hasFreshResult,
+		recommendations?.blockName,
+		recommendations?.prompt,
+		requestDiagnostics,
+	] );
+	const activitySectionEntries = useMemo(
+		() =>
+			diagnosticActivityEntry
+				? [ diagnosticActivityEntry, ...blockActivityEntries ]
+				: blockActivityEntries,
+		[ blockActivityEntries, diagnosticActivityEntry ]
+	);
+	const activitySectionDescription = diagnosticActivityEntry
+		? 'Recent request diagnostics and applied actions for this block.'
+		: 'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.';
 
 	useEffect( () => {
 		setPrompt( '' );
@@ -522,8 +594,8 @@ export function BlockRecommendationsContent( {
 			) }
 
 			<AIActivitySection
-				description="Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface."
-				entries={ blockActivityEntries }
+				description={ activitySectionDescription }
+				entries={ activitySectionEntries }
 				isUndoing={ undoStatus === 'undoing' }
 				onUndo={ handleUndo }
 				initialOpen={ ! hasResult }

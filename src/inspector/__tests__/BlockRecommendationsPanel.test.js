@@ -168,6 +168,11 @@ function selectStore( storeName ) {
 				( clientId ) =>
 					getState().store.blockContextSignatures[ clientId ] || null
 			),
+			getBlockRequestDiagnostics: jest.fn(
+				( clientId ) =>
+					getState().store.blockRequestDiagnostics?.[ clientId ] ||
+					null
+			),
 			getBlockRecommendations: jest.fn(
 				( clientId ) =>
 					getState().store.blockRecommendations[ clientId ] || null
@@ -741,6 +746,68 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'core/heading' );
 		expect( getContainer().textContent ).not.toContain( 'Current' );
 		expect( getContainer().textContent ).not.toContain( 'Stale' );
+	} );
+
+	test( 'adds an activity diagnostic row when a fresh request returns no block-lane suggestions', () => {
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [],
+						settings: [],
+						styles: [ { label: 'Use accent text' } ],
+						explanation: 'Use stronger editorial contrast.',
+						prompt: 'Make this feel more editorial.',
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( {
+						block: {
+							name: 'core/paragraph',
+						},
+					} ),
+				},
+				blockRequestDiagnostics: {
+					'block-1': {
+						hasEmptyBlockResult: true,
+						title: 'No block-lane suggestions returned',
+						detailLines: [
+							'Flavor Agent returned 1 style, but none in the block lane.',
+						],
+						blockName: 'core/paragraph',
+						prompt: 'Make this feel more editorial.',
+						requestToken: 3,
+						timestamp: '2026-04-06T12:00:00Z',
+					},
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		const latestActivityProps =
+			mockRenderAIActivitySection.mock.calls[
+				mockRenderAIActivitySection.mock.calls.length - 1
+			][ 0 ];
+
+		expect( latestActivityProps.description ).toContain(
+			'Recent request diagnostics and applied actions'
+		);
+		expect( latestActivityProps.entries[ 0 ] ).toEqual(
+			expect.objectContaining( {
+				type: 'request_diagnostic',
+				suggestion: 'No block-lane suggestions returned',
+				diagnostic: expect.objectContaining( {
+					detailLines: [
+						'Flavor Agent returned 1 style, but none in the block lane.',
+					],
+				} ),
+				executionResult: 'review',
+			} )
+		);
 	} );
 
 	test( 'marks stored block results stale and keeps them visible until the user refreshes', () => {

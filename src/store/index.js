@@ -42,6 +42,7 @@ import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
 	buildUndoAttributeUpdates,
+	buildBlockRecommendationDiagnostics,
 	getBlockSuggestionExecutionInfo,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
@@ -53,6 +54,7 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	error: null,
 	requestToken: 0,
 	contextSignature: null,
+	diagnostics: null,
 };
 
 const DEFAULT_STATE = {
@@ -208,6 +210,25 @@ function normalizeStringMessage( value ) {
 
 function normalizeRequestMeta( requestMeta = null ) {
 	return isPlainObject( requestMeta ) ? requestMeta : null;
+}
+
+function normalizeBlockRequestDiagnostics( diagnostics = null ) {
+	return isPlainObject( diagnostics ) ? diagnostics : null;
+}
+
+function logEmptyBlockRecommendationDiagnostics( diagnostics = null ) {
+	if (
+		! diagnostics?.hasEmptyBlockResult ||
+		typeof console === 'undefined' ||
+		typeof console.warn !== 'function'
+	) {
+		return;
+	}
+
+	console.warn(
+		'[Flavor Agent] Empty block recommendation lane',
+		diagnostics
+	);
 }
 
 function attachRequestMetaToSuggestion( suggestion, requestMeta ) {
@@ -474,21 +495,7 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 		};
 	}
 
-	const advisoryMessage = normalizeStringMessage( options.advisoryMessage );
 	const interactionState = getNormalizedInteractionState( surface, options );
-
-	if ( interactionState === 'advisory-ready' && advisoryMessage ) {
-		return {
-			source: 'advisory',
-			tone: 'info',
-			message: advisoryMessage,
-			isDismissible: false,
-			actionType: null,
-			actionLabel: '',
-			actionDisabled: false,
-		};
-	}
-
 	const emptyMessage = normalizeStringMessage( options.emptyMessage );
 
 	if (
@@ -501,6 +508,20 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 			source: 'empty',
 			tone: 'info',
 			message: emptyMessage,
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const advisoryMessage = normalizeStringMessage( options.advisoryMessage );
+
+	if ( interactionState === 'advisory-ready' && advisoryMessage ) {
+		return {
+			source: 'advisory',
+			tone: 'info',
+			message: advisoryMessage,
 			isDismissible: false,
 			actionType: null,
 			actionLabel: '',
@@ -953,10 +974,16 @@ async function persistPendingActivityEntries( entries = [] ) {
 			persistedEntries.push( await persistPendingActivityEntry( entry ) );
 		} catch ( error ) {
 			if ( isUndoSyncConflictError( error ) ) {
-				const reconciledEntry = await reconcileActivityEntryFromServer(
-					entry,
-					entry?.document?.scopeKey || null
-				);
+				let reconciledEntry = null;
+
+				try {
+					reconciledEntry = await reconcileActivityEntryFromServer(
+						entry,
+						entry?.document?.scopeKey || null
+					);
+				} catch {
+					reconciledEntry = null;
+				}
 
 				if ( reconciledEntry ) {
 					persistedEntries.push( reconciledEntry );
@@ -1500,7 +1527,8 @@ const actions = {
 		clientId,
 		recommendations,
 		requestToken = null,
-		contextSignature = null
+		contextSignature = null,
+		diagnostics = null
 	) {
 		return {
 			type: 'SET_BLOCK_RECS',
@@ -1508,6 +1536,7 @@ const actions = {
 			recommendations,
 			requestToken,
 			contextSignature,
+			diagnostics,
 		};
 	},
 
@@ -1703,7 +1732,8 @@ const actions = {
 								timestamp: Date.now(),
 							},
 							requestToken,
-							contextSignature
+							contextSignature,
+							null
 						)
 					);
 					localDispatch(
@@ -1740,6 +1770,36 @@ const actions = {
 					const payload = attachRequestMetaToRecommendationPayload(
 						result.payload || {}
 					);
+					const blockContext =
+						requestData.editorContext?.block || {};
+					const sanitizedPayload = sanitizeRecommendationsForContext(
+						payload,
+						blockContext
+					);
+					const diagnosticsBase =
+						buildBlockRecommendationDiagnostics(
+							payload,
+							sanitizedPayload,
+							blockContext
+						);
+					const requestMeta = normalizeRequestMeta(
+						payload.requestMeta
+					);
+					const diagnostics = diagnosticsBase
+						? {
+								...diagnosticsBase,
+								clientId: requestClientId,
+								blockName:
+									requestData.editorContext?.block?.name ||
+									'',
+								prompt: requestData.prompt || '',
+								requestToken,
+								timestamp: new Date().toISOString(),
+								requestMeta,
+						  }
+						: null;
+
+					logEmptyBlockRecommendationDiagnostics( diagnostics );
 
 					localDispatch(
 						actions.setBlockRecommendations(
@@ -1748,20 +1808,15 @@ const actions = {
 								blockName:
 									requestData.editorContext?.block?.name ||
 									'',
-								blockContext:
-									requestData.editorContext?.block || {},
+								blockContext,
 								prompt: requestData.prompt || '',
-								...sanitizeRecommendationsForContext(
-									payload,
-									requestData.editorContext?.block || {}
-								),
-								requestMeta: normalizeRequestMeta(
-									payload.requestMeta
-								),
+								...sanitizedPayload,
+								requestMeta,
 								timestamp: Date.now(),
 							},
 							requestToken,
-							contextSignature
+							contextSignature,
+							diagnostics
 						)
 					);
 					localDispatch(
@@ -1787,8 +1842,14 @@ const actions = {
 
 			syncActivitySession( localDispatch, select, scope );
 
-			const storedRecommendations =
-				select.getBlockRecommendations( clientId ) || {};
+			const storedRecommendationPayload =
+				select.getBlockRecommendations( clientId ) || null;
+			const storedRecommendations = storedRecommendationPayload || {};
+			const failedApplyStatus =
+				select.getBlockStatus?.( clientId ) === 'ready' ||
+				Boolean( storedRecommendationPayload )
+					? 'ready'
+					: 'idle';
 			const blockContext = storedRecommendations.blockContext || {};
 			const blockEditorSelect =
 				registry?.select?.( 'core/block-editor' ) || {};
@@ -1809,7 +1870,7 @@ const actions = {
 				localDispatch(
 					actions.setBlockRequestState(
 						clientId,
-						'error',
+						failedApplyStatus,
 						advisoryApplyMessage,
 						select.getBlockRequestToken( clientId ) || 0
 					)
@@ -1860,7 +1921,7 @@ const actions = {
 				localDispatch(
 					actions.setBlockRequestState(
 						clientId,
-						'error',
+						failedApplyStatus,
 						applyErrorMessage,
 						select.getBlockRequestToken( clientId ) || 0
 					)
@@ -2818,11 +2879,27 @@ const actions = {
 
 			localDispatch( actions.setGlobalStylesApplyState( 'applying' ) );
 
-			const result = applyGlobalStyleSuggestionOperations(
-				suggestion,
-				registry,
-				{ surface: 'global-styles' }
-			);
+			let result;
+
+			try {
+				result = applyGlobalStyleSuggestionOperations(
+					suggestion,
+					registry,
+					{ surface: 'global-styles' }
+				);
+			} catch ( err ) {
+				const message =
+					err?.message || 'Global Styles apply failed unexpectedly.';
+
+				localDispatch(
+					actions.setGlobalStylesApplyState( 'error', message )
+				);
+
+				return {
+					ok: false,
+					error: message,
+				};
+			}
 
 			if ( ! result.ok ) {
 				localDispatch(
@@ -2872,11 +2949,27 @@ const actions = {
 
 			localDispatch( actions.setStyleBookApplyState( 'applying' ) );
 
-			const result = applyGlobalStyleSuggestionOperations(
-				suggestion,
-				registry,
-				{ surface: 'style-book' }
-			);
+			let result;
+
+			try {
+				result = applyGlobalStyleSuggestionOperations(
+					suggestion,
+					registry,
+					{ surface: 'style-book' }
+				);
+			} catch ( err ) {
+				const message =
+					err?.message || 'Style Book apply failed unexpectedly.';
+
+				localDispatch(
+					actions.setStyleBookApplyState( 'error', message )
+				);
+
+				return {
+					ok: false,
+					error: message,
+				};
+			}
 
 			if ( ! result.ok ) {
 				localDispatch(
@@ -3266,6 +3359,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 						...currentEntry,
 						status: action.status,
 						error: action.error ?? null,
+						diagnostics:
+							action.status === 'loading' ||
+							action.status === 'error'
+								? null
+								: currentEntry.diagnostics ?? null,
 						contextSignature:
 							action.contextSignature ??
 							currentEntry.contextSignature,
@@ -3297,6 +3395,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 					[ action.clientId ]: {
 						...getStoredBlockRequestState( state, action.clientId ),
 						contextSignature: action.contextSignature ?? null,
+						diagnostics: normalizeBlockRequestDiagnostics(
+							action.diagnostics
+						),
 					},
 				},
 			};
@@ -3975,6 +4076,8 @@ const selectors = {
 		getStoredBlockRequestState( state, clientId ).requestToken,
 	getBlockRecommendationContextSignature: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).contextSignature,
+	getBlockRequestDiagnostics: ( state, clientId ) =>
+		getStoredBlockRequestState( state, clientId ).diagnostics,
 	isBlockLoading: ( state, clientId ) =>
 		getStoredBlockRequestState( state, clientId ).status === 'loading',
 	getStatus: ( state, clientId ) =>

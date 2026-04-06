@@ -112,6 +112,21 @@ describe( 'SurfaceComposer', () => {
 		expect( mockOnFetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	test( 'disables the fetch button when no fetch handler is provided', () => {
+		act( () => {
+			getRoot().render(
+				<SurfaceComposer
+					prompt="something"
+					onPromptChange={ mockOnPromptChange }
+				/>
+			);
+		} );
+
+		const button = getContainer().querySelector( 'button' );
+
+		expect( button.disabled ).toBe( true );
+	} );
+
 	test( 'renders starter prompt chips and updates the prompt when clicked', () => {
 		act( () => {
 			getRoot().render(

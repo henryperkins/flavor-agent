@@ -23,17 +23,22 @@ Activity history is also maintained as a scoped client session. `loadActivitySes
 | State | Meaning |
 |---|---|
 | `available` | The action has been applied and can be undone |
+| `blocked` | The action is still applied, but undo is temporarily blocked because newer AI actions on the same entity are still runtime-active |
 | `undone` | The action was successfully rolled back |
 | `failed` | The undo attempt failed (error message stored in `undo.error`) |
 
 ## Valid Transitions
 
 ```text
-available -> undone    (successful undo)
-available -> failed    (undo attempted but failed)
+available -> undone    (successful persisted undo)
+available -> failed    (undo attempted but failed and was persisted)
+available -> blocked   (runtime-only ordered-undo overlay)
+blocked   -> available (runtime-only once newer activity is no longer active)
 ```
 
-No other transitions are accepted. The `update_undo_status()` method rejects any status value other than `undone` or `failed` with a `400` error.
+Only `undone` and `failed` are persisted by `update_undo_status()`. The runtime `blocked` state is computed client-side from the ordered-undo rule and is not written back to the server.
+
+No other persisted transitions are accepted. The `update_undo_status()` method rejects any status value other than `undone` or `failed` with a `400` error.
 
 Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`.
 
@@ -49,7 +54,7 @@ At runtime, the client can still resolve an entry back to effectively `available
 
 ## Ordered Undo Rule
 
-Undo is not always permitted even when the state is `available`. The server enforces ordered undo to prevent incoherent rollbacks.
+Undo is not always permitted even when the persisted state is `available`. The server enforces ordered undo to prevent incoherent rollbacks, and the client reflects that constraint as the runtime `blocked` state.
 
 An undo is **blocked** (HTTP 409) when newer activity entries exist on the same entity that have not yet been undone. Specifically:
 

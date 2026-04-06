@@ -30,6 +30,7 @@ const { getContainer, getRoot } = setupReactTest();
 let currentEditorState = null;
 let currentInterfaceState = null;
 let currentCoreState = null;
+let styleBookUiSubscription = null;
 
 beforeEach( () => {
 	jest.clearAllMocks();
@@ -47,7 +48,13 @@ beforeEach( () => {
 		isActive: false,
 		target: null,
 	} );
-	mockSubscribeToStyleBookUi.mockImplementation( () => () => {} );
+	styleBookUiSubscription = null;
+	mockSubscribeToStyleBookUi.mockImplementation( ( documentRef, callback ) => {
+		void documentRef;
+		styleBookUiSubscription = callback;
+
+		return () => {};
+	} );
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( ( storeName ) => {
@@ -182,6 +189,54 @@ describe( 'ActivitySessionBootstrap', () => {
 					key: 'style_book:17:core/paragraph',
 					globalStylesId: '17',
 					blockName: 'core/paragraph',
+				} ),
+			} )
+		);
+	} );
+
+	test( 'reloads the activity session when the Style Book metadata changes for the same scope key', () => {
+		currentInterfaceState = {
+			activeComplementaryArea: 'edit-site/global-styles',
+		};
+		currentCoreState = {
+			globalStylesId: '17',
+		};
+		mockGetStyleBookUiState.mockReturnValue( {
+			isActive: true,
+			target: {
+				blockName: 'core/paragraph',
+				blockTitle: 'Paragraph',
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ActivitySessionBootstrap /> );
+		} );
+
+		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith(
+			expect.objectContaining( {
+				scope: expect.objectContaining( {
+					key: 'style_book:17:core/paragraph',
+					blockTitle: 'Paragraph',
+				} ),
+			} )
+		);
+
+		act( () => {
+			styleBookUiSubscription( {
+				isActive: true,
+				target: {
+					blockName: 'core/paragraph',
+					blockTitle: 'Text',
+				},
+			} );
+		} );
+
+		expect( mockLoadActivitySession ).toHaveBeenLastCalledWith(
+			expect.objectContaining( {
+				scope: expect.objectContaining( {
+					key: 'style_book:17:core/paragraph',
+					blockTitle: 'Text',
 				} ),
 			} )
 		);

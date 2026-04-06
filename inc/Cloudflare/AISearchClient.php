@@ -21,6 +21,7 @@ final class AISearchClient {
 	private const PREWARM_STATE_OPTION       = 'flavor_agent_docs_prewarm_state';
 	private const WARM_QUEUE_OPTION          = 'flavor_agent_docs_warm_queue';
 	private const PREWARM_THROTTLE_SECONDS   = 3600;
+	private const MAX_FAMILY_CONTEXT_DEPTH   = 8;
 	private const GUIDANCE_BLOCK_EDITOR_KEY  = 'guidance:block-editor';
 	private const GUIDANCE_TEMPLATE_KEY      = 'guidance:template';
 	private const GUIDANCE_TEMPLATE_PART_KEY = 'guidance:template-part';
@@ -998,16 +999,32 @@ final class AISearchClient {
 	 * @return array<string, mixed>
 	 */
 	private static function normalize_family_context( array $family_context ): array {
-		$normalized = self::normalize_family_context_value( $family_context );
+		$normalized = self::normalize_family_context_value( $family_context, 0, [] );
 
 		return is_array( $normalized ) ? $normalized : [];
 	}
 
 	/**
+	 * @param array<int, true> $seen_object_ids
 	 * @return array<string, mixed>|bool|float|int|string|null
 	 */
-	private static function normalize_family_context_value( mixed $value ): array|bool|float|int|string|null {
+	private static function normalize_family_context_value(
+		mixed $value,
+		int $depth = 0,
+		array $seen_object_ids = []
+	): array|bool|float|int|string|null {
+		if ( $depth > self::MAX_FAMILY_CONTEXT_DEPTH ) {
+			return null;
+		}
+
 		if ( is_object( $value ) ) {
+			$object_id = spl_object_id( $value );
+
+			if ( isset( $seen_object_ids[ $object_id ] ) ) {
+				return null;
+			}
+
+			$seen_object_ids[ $object_id ] = true;
 			$value = get_object_vars( $value );
 		}
 
@@ -1016,7 +1033,11 @@ final class AISearchClient {
 			$normalized = [];
 
 			foreach ( $value as $key => $entry ) {
-				$normalized_entry = self::normalize_family_context_value( $entry );
+				$normalized_entry = self::normalize_family_context_value(
+					$entry,
+					$depth + 1,
+					$seen_object_ids
+				);
 
 				if ( null === $normalized_entry || [] === $normalized_entry || '' === $normalized_entry ) {
 					continue;
@@ -1210,13 +1231,8 @@ final class AISearchClient {
 			$metadata     = is_array( $item['metadata'] ?? null ) ? $item['metadata'] : [];
 			$parsed_chunk = self::parse_chunk_text( (string) ( $chunk['text'] ?? '' ) );
 			$source_key   = sanitize_text_field( (string) ( $item['key'] ?? '' ) );
-			$has_url      = ( is_string( $metadata['url'] ?? null ) && trim( (string) $metadata['url'] ) !== '' ) || trim( $parsed_chunk['url'] ) !== '';
 			$url          = self::normalize_guidance_url( $metadata['url'] ?? null, $parsed_chunk['url'] );
 			$text         = self::sanitize_excerpt( $parsed_chunk['excerpt'] );
-
-			if ( $url === '' && ! $has_url ) {
-				$url = self::normalize_guidance_url_from_source_key( $source_key, $instance_id );
-			}
 
 			if ( $text === '' || $url === '' || ! self::is_allowed_guidance_source( $source_key, $url, $instance_id ) ) {
 				continue;
@@ -1527,19 +1543,16 @@ final class AISearchClient {
 	 * @return array{excerpt: string, url: string}
 	 */
 	private static function parse_chunk_text( string $text ): array {
-		$url     = '';
-		$excerpt = $text;
+		$normalized_text = str_replace( [ "\r\n", "\r" ], "\n", $text );
+		$url             = '';
+		$excerpt         = $normalized_text;
 
-		if ( str_starts_with( $text, "---\n" ) ) {
-			$parts = explode( "\n---\n", $text, 2 );
+		if ( preg_match( '/\A---\n(.*?)\n---(?:\n|$)(.*)\z/s', $normalized_text, $matches ) ) {
+			$frontmatter = (string) ( $matches[1] ?? '' );
+			$excerpt     = (string) ( $matches[2] ?? '' );
 
-			if ( count( $parts ) === 2 ) {
-				$frontmatter = $parts[0];
-				$excerpt     = $parts[1];
-
-				if ( preg_match( '/(?:original_url|source_url):\s*"([^"]+)"/', $frontmatter, $matches ) ) {
-					$url = (string) ( $matches[1] ?? '' );
-				}
+			if ( preg_match( '/(?:original_url|source_url):\s*"([^"]+)"/', $frontmatter, $url_matches ) ) {
+				$url = (string) ( $url_matches[1] ?? '' );
 			}
 		}
 

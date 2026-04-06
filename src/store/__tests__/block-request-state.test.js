@@ -127,6 +127,38 @@ describe( 'block request state', () => {
 		expect( abort ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	test( 'stores block request diagnostics with the latest successful result and clears them on reload', () => {
+		const diagnostics = {
+			hasEmptyBlockResult: true,
+			title: 'No block-lane suggestions returned',
+		};
+		let state = reducer(
+			undefined,
+			actions.setBlockRecommendations(
+				'block-a',
+				{
+					block: [],
+					settings: [],
+					styles: [],
+				},
+				2,
+				'block-context',
+				diagnostics
+			)
+		);
+
+		expect( selectors.getBlockRequestDiagnostics( state, 'block-a' ) ).toEqual(
+			diagnostics
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-a', 'loading', null, 3 )
+		);
+
+		expect( selectors.getBlockRequestDiagnostics( state, 'block-a' ) ).toBeNull();
+	} );
+
 	test( 'global styles and style book reducers accept scope.key as well as scope.scopeKey', () => {
 		let state = reducer(
 			undefined,
@@ -387,5 +419,54 @@ describe( 'block request state', () => {
 				undoStatus: 'success',
 			} )
 		).toBe( 'advisory-ready' );
+	} );
+
+	test( 'dismissing an inline block apply failure preserves the last ready recommendation set', () => {
+		let state = reducer(
+			undefined,
+			actions.setBlockRecommendations(
+				'block-a',
+				{
+					block: [ { label: 'Refresh hierarchy' } ],
+				},
+				3,
+				'block-context'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-a', 'ready', null, 3 )
+		);
+		state = reducer(
+			state,
+			actions.setBlockRequestState(
+				'block-a',
+				'ready',
+				'This suggestion could not be applied safely.',
+				3
+			)
+		);
+
+		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'ready' );
+		expect( selectors.getBlockError( state, 'block-a' ) ).toBe(
+			'This suggestion could not be applied safely.'
+		);
+		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+			'error'
+		);
+
+		state = reducer( state, actions.clearBlockError( 'block-a' ) );
+
+		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'ready' );
+		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
+		expect( selectors.getBlockRecommendations( state, 'block-a' ) ).toEqual(
+			{
+				block: [ { label: 'Refresh hierarchy' } ],
+			}
+		);
+		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+			'advisory-ready'
+		);
 	} );
 } );

@@ -339,6 +339,25 @@ describe( 'template apply state', () => {
 		).toBeNull();
 	} );
 
+	test( 'empty-result notices win over advisory copy once a zero-suggestion result is ready', () => {
+		expect(
+			selectors.getSurfaceStatusNotice( undefined, 'global-styles', {
+				hasResult: true,
+				hasSuggestions: false,
+				emptyMessage:
+					'No safe Global Styles changes were returned for this prompt.',
+				advisoryMessage:
+					'Review a theme-backed change before applying it.',
+			} )
+		).toEqual(
+			expect.objectContaining( {
+				source: 'empty',
+				message:
+					'No safe Global Styles changes were returned for this prompt.',
+			} )
+		);
+	} );
+
 	test( 'template interaction state stays error after a failed request with no successful result', () => {
 		const state = reducer(
 			undefined,

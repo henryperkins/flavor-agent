@@ -10,7 +10,7 @@ Use it when you need to answer:
 
 ## How First-Party UI And Abilities Relate
 
-- The shipped Gutenberg and wp-admin UI uses the plugin REST routes plus the `flavor-agent` data store
+- The shipped Gutenberg editor UI uses the plugin REST routes plus the `flavor-agent` data store, while the wp-admin audit page is a separate `apiFetch` + `DataViews` app and does not use that store
 - The Abilities API exposes closely related contracts for external AI agents on supported WordPress 7.0+ installs
 - Activity persistence and manual pattern sync are REST-only today; they do not have matching registered abilities
 - `POST /flavor-agent/v1/recommend-block` is the main response-shape exception: the REST route wraps the ability payload in `{ payload, clientId }`

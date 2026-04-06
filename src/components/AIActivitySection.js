@@ -1,6 +1,10 @@
 import { Button } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
+function isDiagnosticEntry( entry ) {
+	return entry?.type === 'request_diagnostic';
+}
+
 function getRequestMeta( entry ) {
 	const requestMeta = entry?.request?.ai;
 
@@ -43,6 +47,10 @@ function getFallbackLabel( entry ) {
 }
 
 function getStatusLabel( entry ) {
+	if ( isDiagnosticEntry( entry ) ) {
+		return 'Review';
+	}
+
 	if (
 		entry?.persistence?.status !== 'server' &&
 		entry?.persistence?.syncType === 'undo'
@@ -72,6 +80,15 @@ function getStatusLabel( entry ) {
 }
 
 function describeActivity( entry ) {
+	if ( isDiagnosticEntry( entry ) ) {
+		return entry?.target?.blockName
+			? `Block request diagnostic · ${ entry.target.blockName.replace(
+					'core/',
+					''
+			  ) }`
+			: 'Block request diagnostic';
+	}
+
 	if ( entry?.surface === 'template' ) {
 		return 'Template action';
 	}
@@ -95,6 +112,14 @@ function describeActivity( entry ) {
 	}
 
 	return 'Block action';
+}
+
+function getDiagnosticDetailLines( entry ) {
+	return Array.isArray( entry?.diagnostic?.detailLines )
+		? entry.diagnostic.detailLines.filter(
+				( line ) => typeof line === 'string' && line.trim() !== ''
+		  )
+		: [];
 }
 
 export default function AIActivitySection( {
@@ -183,7 +208,8 @@ export default function AIActivitySection( {
 					{ visibleEntries.map( ( entry ) => {
 						const canUndo =
 							entry?.undo?.status === 'available' &&
-							entry?.undo?.canUndo === true;
+							entry?.undo?.canUndo === true &&
+							typeof onUndo === 'function';
 						const hasPendingUndoSync =
 							entry?.persistence?.status !== 'server' &&
 							entry?.persistence?.syncType === 'undo';
@@ -214,6 +240,16 @@ export default function AIActivitySection( {
 										<div className="flavor-agent-activity-row__meta">
 											{ getFallbackLabel( entry ) }
 										</div>
+									) }
+									{ getDiagnosticDetailLines( entry ).map(
+										( line, index ) => (
+											<div
+												key={ `${ entry.id }:diagnostic:${ index }` }
+												className="flavor-agent-activity-row__meta"
+											>
+												{ line }
+											</div>
+										)
 									) }
 									{ hasPendingUndoSync && (
 										<div className="flavor-agent-activity-row__meta">

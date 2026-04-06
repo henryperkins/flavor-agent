@@ -11,9 +11,20 @@ jest.mock( '../../utils/template-actions', () => ( {
 	undoTemplatePartSuggestionOperations: jest.fn(),
 	undoTemplateSuggestionOperations: jest.fn(),
 } ) );
+jest.mock( '../../utils/style-operations', () => ( {
+	applyGlobalStyleSuggestionOperations: jest.fn(),
+	getGlobalStylesActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
+	undoGlobalStyleSuggestionOperations: jest.fn(),
+} ) );
 
 import apiFetch from '@wordpress/api-fetch';
 
+import {
+	applyGlobalStyleSuggestionOperations,
+	getGlobalStylesActivityUndoState,
+} from '../../utils/style-operations';
 import {
 	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
@@ -47,6 +58,9 @@ describe( 'store action thunks', () => {
 			( activity ) => activity?.undo || {}
 		);
 		getTemplatePartActivityUndoState.mockImplementation(
+			( activity ) => activity?.undo || {}
+		);
+		getGlobalStylesActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
 		);
 	} );
@@ -1329,7 +1343,7 @@ describe( 'store action thunks', () => {
 		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockRequestState(
 				'block-1',
-				'error',
+				'ready',
 				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.',
 				4
 			)
@@ -1435,12 +1449,94 @@ describe( 'store action thunks', () => {
 		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockRequestState(
 				'block-1',
-				'error',
+				'ready',
 				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.',
 				7
 			)
 		);
 		expect( result ).toBe( false );
+	} );
+
+	test( 'applyGlobalStylesSuggestion converts thrown executor exceptions into apply errors', async () => {
+		applyGlobalStyleSuggestionOperations.mockImplementation( () => {
+			throw new Error( 'Global Styles executor crashed.' );
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+
+		const result = await actions.applyGlobalStylesSuggestion( {
+			label: 'Use accent canvas',
+		} )( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setGlobalStylesApplyState( 'applying' )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setGlobalStylesApplyState(
+				'error',
+				'Global Styles executor crashed.'
+			)
+		);
+		expect(
+			dispatch.mock.calls.some(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Global Styles executor crashed.',
+		} );
+	} );
+
+	test( 'applyStyleBookSuggestion converts thrown executor exceptions into apply errors', async () => {
+		applyGlobalStyleSuggestionOperations.mockImplementation( () => {
+			throw new Error( 'Style Book executor crashed.' );
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+
+		const result = await actions.applyStyleBookSuggestion( {
+			label: 'Refine paragraph rhythm',
+		} )( {
+			dispatch,
+			registry: null,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setStyleBookApplyState( 'applying' )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setStyleBookApplyState(
+				'error',
+				'Style Book executor crashed.'
+			)
+		);
+		expect(
+			dispatch.mock.calls.some(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Style Book executor crashed.',
+		} );
 	} );
 
 	test( 'applyTemplateSuggestion records success with thunk selector methods', async () => {
@@ -2646,6 +2742,99 @@ describe( 'store action thunks', () => {
 					} ),
 					persistence: expect.objectContaining( {
 						status: 'server',
+					} ),
+				} ),
+			] )
+		);
+	} );
+
+	test( 'loadActivitySession falls back to failedEntries when conflict reconciliation cannot reach the server', async () => {
+		const pendingUndoEntry = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				updatedAt: '2026-03-24T10:00:01Z',
+				undoneAt: '2026-03-24T10:00:01Z',
+			},
+			persistence: {
+				status: 'local',
+				syncType: 'undo',
+				updatedAt: '2026-03-24T10:00:01Z',
+			},
+		};
+		const staleServerEntry = {
+			...pendingUndoEntry,
+			undo: {
+				canUndo: true,
+				status: 'available',
+				updatedAt: '2026-03-24T10:00:00Z',
+				undoneAt: null,
+			},
+			persistence: {
+				status: 'server',
+				syncType: null,
+				updatedAt: '2026-03-24T10:00:00Z',
+			},
+		};
+
+		apiFetch
+			.mockRejectedValueOnce( {
+				code: 'flavor_agent_activity_invalid_undo_transition',
+				message:
+					'Flavor Agent only allows undo status changes from the available state.',
+				data: {
+					status: 409,
+					code: 'flavor_agent_activity_invalid_undo_transition',
+				},
+			} )
+			.mockRejectedValueOnce(
+				new Error( 'Conflict reconciliation fetch failed.' )
+			)
+			.mockResolvedValueOnce( {
+				entries: [ staleServerEntry ],
+			} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingUndoEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
+					id: 'activity-1',
+					persistence: expect.objectContaining( {
+						status: 'local',
+						syncType: 'undo',
+					} ),
+					undo: expect.objectContaining( {
+						status: 'undone',
 					} ),
 				} ),
 			] )

@@ -48,4 +48,21 @@ describe( 'AIReviewSection', () => {
 		expect( onCancel ).toHaveBeenCalledTimes( 1 );
 		expect( onConfirm ).toHaveBeenCalledTimes( 1 );
 	} );
+
+	test( 'disables the confirm action when no confirm handler is provided', () => {
+		act( () => {
+			getRoot().render(
+				<AIReviewSection
+					summary="Review the validated structural changes before mutating content."
+				/>
+			);
+		} );
+
+		const confirmButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Confirm Apply' );
+
+		expect( confirmButton ).toBeTruthy();
+		expect( confirmButton.disabled ).toBe( true );
+	} );
 } );

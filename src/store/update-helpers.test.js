@@ -1,5 +1,6 @@
 import {
 	attributeSnapshotsMatch,
+	buildBlockRecommendationDiagnostics,
 	buildSafeAttributeUpdates,
 	buildUndoAttributeUpdates,
 	getBlockSuggestionExecutionInfo,
@@ -724,6 +725,60 @@ describe( 'update helpers', () => {
 			block: [],
 			explanation: 'Only supported bindings should survive.',
 		} );
+	} );
+
+	test( 'buildBlockRecommendationDiagnostics explains when suggestions were routed to non-block lanes', () => {
+		const rawRecommendations = {
+			settings: [],
+			styles: [
+				{
+					label: 'Use accent text',
+					attributeUpdates: {
+						textColor: 'accent',
+					},
+				},
+			],
+			block: [],
+			explanation: 'Use the accent preset for stronger emphasis.',
+		};
+		const sanitizedRecommendations = sanitizeRecommendationsForContext(
+			rawRecommendations,
+			{
+				editingMode: 'default',
+			}
+		);
+
+		expect(
+			buildBlockRecommendationDiagnostics(
+				rawRecommendations,
+				sanitizedRecommendations,
+				{
+					editingMode: 'default',
+				}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				hasEmptyBlockResult: true,
+				title: 'No block-lane suggestions returned',
+				rawCounts: {
+					settings: 0,
+					styles: 1,
+					block: 0,
+				},
+				finalCounts: {
+					settings: 0,
+					styles: 1,
+					block: 0,
+				},
+				reasonCodes: expect.arrayContaining( [
+					'model_returned_no_block_items',
+					'suggestions_routed_to_other_lanes',
+				] ),
+				detailLines: expect.arrayContaining( [
+					'Flavor Agent returned 1 style, but none in the block lane.',
+				] ),
+			} )
+		);
 	} );
 
 	test( 'sanitizeRecommendationsForContext preserves non-binding metadata when bindings are disallowed', () => {

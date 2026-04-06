@@ -610,6 +610,224 @@ function sanitizeSuggestionGroupForThemeSafety( suggestions ) {
 		.filter( Boolean );
 }
 
+function hasExplicitlyEmptyInspectorPanels( blockContext = {} ) {
+	if ( ! Object.prototype.hasOwnProperty.call( blockContext, 'inspectorPanels' ) ) {
+		return false;
+	}
+
+	if ( Array.isArray( blockContext.inspectorPanels ) ) {
+		return blockContext.inspectorPanels.length === 0;
+	}
+
+	if ( isPlainObject( blockContext.inspectorPanels ) ) {
+		return Object.keys( blockContext.inspectorPanels ).length === 0;
+	}
+
+	return false;
+}
+
+function summarizeSuggestionCounts( counts = {} ) {
+	const parts = [];
+
+	if ( Number.isInteger( counts.settings ) && counts.settings > 0 ) {
+		parts.push(
+			`${ counts.settings } setting${
+				counts.settings === 1 ? '' : 's'
+			}`
+		);
+	}
+
+	if ( Number.isInteger( counts.styles ) && counts.styles > 0 ) {
+		parts.push(
+			`${ counts.styles } style${
+				counts.styles === 1 ? '' : 's'
+			}`
+		);
+	}
+
+	if ( Number.isInteger( counts.block ) && counts.block > 0 ) {
+		parts.push(
+			`${ counts.block } block suggestion${
+				counts.block === 1 ? '' : 's'
+			}`
+		);
+	}
+
+	return parts.length > 0 ? parts.join( ', ' ) : 'no suggestions';
+}
+
+function getRecommendationGroupCounts( recommendations = {} ) {
+	const normalized = normalizeSuggestionGroups( recommendations );
+
+	return {
+		settings: normalized.settings.length,
+		styles: normalized.styles.length,
+		block: normalized.block.length,
+	};
+}
+
+/**
+ * Build a diagnostic summary for successful block requests whose block lane
+ * ends up empty after validation.
+ *
+ * @param {Object} rawRecommendations       Recommendation payload before client sanitization.
+ * @param {Object} sanitizedRecommendations Recommendation payload after client sanitization.
+ * @param {Object} [blockContext={}]        Block context used for sanitization.
+ * @return {?Object} Diagnostics for empty block-lane results.
+ */
+export function buildBlockRecommendationDiagnostics(
+	rawRecommendations,
+	sanitizedRecommendations,
+	blockContext = {}
+) {
+	const rawCounts = getRecommendationGroupCounts( rawRecommendations );
+	const finalCounts = getRecommendationGroupCounts( sanitizedRecommendations );
+
+	if ( finalCounts.block > 0 ) {
+		return null;
+	}
+
+	const normalized = normalizeSuggestionGroups( rawRecommendations );
+	const normalizedBlockSuggestions = normalized.block.map( ( suggestion ) =>
+		normalizeBlockSuggestionForExecution( suggestion )
+	);
+	const restrictions = getEditingRestrictions( blockContext );
+	const bindableAttributeKeys = getBindableAttributeKeys( blockContext );
+	const themeSafeBlockSuggestions = sanitizeSuggestionGroupForThemeSafety(
+		normalizedBlockSuggestions
+	);
+	const bindingSafeBlockSuggestions =
+		sanitizeSuggestionGroupForBindableAttributes(
+			themeSafeBlockSuggestions,
+			bindableAttributeKeys
+		);
+	let contentSafeBlockSuggestions = bindingSafeBlockSuggestions;
+	const reasonCodes = [];
+	const detailLines = [];
+
+	if ( restrictions.disabled ) {
+		contentSafeBlockSuggestions = [];
+	} else if ( restrictions.contentOnly ) {
+		if ( usesInnerBlocksAsContent( blockContext ) ) {
+			contentSafeBlockSuggestions =
+				bindingSafeBlockSuggestions.filter( ( suggestion ) =>
+					isAdvisoryOnlyBlockSuggestion( suggestion )
+				);
+		} else {
+			const contentAttributeKeys = getContentAttributeKeys( blockContext );
+
+			contentSafeBlockSuggestions = bindingSafeBlockSuggestions
+				.map( ( suggestion ) =>
+					filterSuggestionForContentOnly(
+						suggestion,
+						contentAttributeKeys
+					)
+				)
+				.filter( Boolean );
+		}
+	}
+
+	if ( rawCounts.block === 0 ) {
+		reasonCodes.push( 'model_returned_no_block_items' );
+
+		if ( finalCounts.settings > 0 || finalCounts.styles > 0 ) {
+			reasonCodes.push( 'suggestions_routed_to_other_lanes' );
+			detailLines.push(
+				`Flavor Agent returned ${ summarizeSuggestionCounts(
+					finalCounts
+				) }, but none in the block lane.`
+			);
+		} else {
+			detailLines.push(
+				'Flavor Agent returned no block-lane suggestions for this request.'
+			);
+		}
+	} else {
+		detailLines.push(
+			`Block-lane suggestions changed from ${ rawCounts.block } raw to ${ finalCounts.block } after validation.`
+		);
+
+		if (
+			themeSafeBlockSuggestions.length < normalizedBlockSuggestions.length
+		) {
+			reasonCodes.push( 'theme_safety_removed_block_items' );
+			detailLines.push(
+				'At least one block suggestion was removed because its attribute updates were empty or unsafe after theme-safety checks.'
+			);
+		}
+
+		if (
+			bindingSafeBlockSuggestions.length < themeSafeBlockSuggestions.length
+		) {
+			reasonCodes.push( 'binding_filters_removed_block_items' );
+			detailLines.push(
+				Array.isArray( bindableAttributeKeys ) &&
+					bindableAttributeKeys.length > 0
+					? 'At least one block suggestion targeted unsupported bindings for this block.'
+					: 'Binding-only block suggestions were removed because this block exposes no bindable attributes.'
+			);
+		}
+
+		if ( restrictions.disabled ) {
+			reasonCodes.push( 'block_editing_disabled' );
+			detailLines.push(
+				'The selected block is in disabled editing mode, so block-lane suggestions cannot be used.'
+			);
+		} else if ( restrictions.contentOnly ) {
+			if ( usesInnerBlocksAsContent( blockContext ) ) {
+				reasonCodes.push( 'content_only_inner_blocks_lock' );
+				detailLines.push(
+					'This block is content-restricted and exposes editable content only through inner blocks, so wrapper-level block updates were removed.'
+				);
+			} else if (
+				contentSafeBlockSuggestions.length <
+				bindingSafeBlockSuggestions.length
+			) {
+				reasonCodes.push( 'content_only_removed_block_items' );
+				detailLines.push(
+					'This block is content-restricted, so non-content block updates were removed.'
+				);
+			}
+		}
+
+		if ( reasonCodes.length === 0 ) {
+			reasonCodes.push( 'block_items_removed_after_validation' );
+			detailLines.push(
+				'Block-lane suggestions were removed after validation for the current block context.'
+			);
+		}
+	}
+
+	if ( hasExplicitlyEmptyInspectorPanels( blockContext ) ) {
+		reasonCodes.push( 'no_mapped_inspector_panels' );
+		detailLines.push(
+			'The block context exposed no mapped inspector panels for this request.'
+		);
+	}
+
+	return {
+		hasEmptyBlockResult: true,
+		title:
+			rawCounts.block === 0
+				? 'No block-lane suggestions returned'
+				: 'Block-lane suggestions were filtered out',
+		detailLines,
+		reasonCodes: [ ...new Set( reasonCodes ) ],
+		rawCounts,
+		finalCounts,
+		filterCounts: {
+			themeSafe: themeSafeBlockSuggestions.length,
+			bindingSafe: bindingSafeBlockSuggestions.length,
+			contentSafe: contentSafeBlockSuggestions.length,
+		},
+		restrictions: {
+			disabled: restrictions.disabled,
+			contentOnly: restrictions.contentOnly,
+			usesInnerBlocksAsContent: usesInnerBlocksAsContent( blockContext ),
+		},
+	};
+}
+
 /**
  * @param {Object} recommendations   Raw recommendations payload.
  * @param {Object} [blockContext={}] Block context used to enforce locking rules.

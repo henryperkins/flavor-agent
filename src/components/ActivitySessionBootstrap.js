@@ -76,6 +76,12 @@ export default function ActivitySessionBootstrap() {
 	const scopeHint = scope?.hint ?? '';
 	const scopePostType = scope?.postType ?? '';
 	const scopeEntityId = scope?.entityId ?? '';
+	const scopeEntityKind = scope?.entityKind ?? '';
+	const scopeEntityName = scope?.entityName ?? '';
+	const scopeStylesheet = scope?.stylesheet ?? '';
+	const scopeGlobalStylesId = scope?.globalStylesId ?? '';
+	const scopeBlockName = scope?.blockName ?? '';
+	const scopeBlockTitle = scope?.blockTitle ?? '';
 
 	useEffect( () => {
 		const allowUnsavedMigration =
@@ -99,20 +105,26 @@ export default function ActivitySessionBootstrap() {
 				hint: scopeHint,
 				postType: scopePostType,
 				entityId: scopeEntityId,
-				entityKind: scope?.entityKind || '',
-				entityName: scope?.entityName || '',
-				stylesheet: scope?.stylesheet || '',
-				globalStylesId: scope?.globalStylesId || '',
-				blockName: scope?.blockName || '',
-				blockTitle: scope?.blockTitle || '',
+				entityKind: scopeEntityKind,
+				entityName: scopeEntityName,
+				stylesheet: scopeStylesheet,
+				globalStylesId: scopeGlobalStylesId,
+				blockName: scopeBlockName,
+				blockTitle: scopeBlockTitle,
 			},
 		} );
 	}, [
-		loadActivitySession,
+		scopeBlockName,
+		scopeBlockTitle,
 		scopeEntityId,
+		scopeEntityKind,
+		scopeEntityName,
+		scopeGlobalStylesId,
+		loadActivitySession,
 		scopeHint,
 		scopeKey,
 		scopePostType,
+		scopeStylesheet,
 	] );
 
 	return null;

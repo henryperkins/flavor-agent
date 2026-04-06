@@ -85,6 +85,7 @@ Same four placements as template operations: `start`, `end`, `before_block_path`
 
 ### Validation Constraints
 
+- Template-part suggestions can apply at most three executable operations automatically
 - `insert_pattern` with `placement = start` requires a live `start` insertion anchor
 - `insert_pattern` with `placement = end` requires a live `end` insertion anchor
 - `replace_block_with_pattern` requires that the target block at `targetPath` matches `expectedBlockName` and that `replace_block_with_pattern` is in the target's `allowedOperations`
