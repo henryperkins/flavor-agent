@@ -88,6 +88,15 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_block_wraps_payload_with_client_id(): void {
 		WordPressTestState::$options = [];
+		WordPressTestState::$ai_client_generate_text_result = [
+			'text'       => '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+			'tokenUsage' => [
+				'total'  => 52,
+				'input'  => 21,
+				'output' => 31,
+			],
+			'latencyMs'  => 187,
+		];
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
 		$request->set_param( 'clientId', 'client-123' );
@@ -119,6 +128,9 @@ final class AgentControllerTest extends TestCase {
 					'requestMeta' => [
 						'selectedProvider'      => 'azure_openai',
 						'selectedProviderLabel' => 'Azure OpenAI',
+						'connectorId'           => 'wordpress_ai_client',
+						'connectorLabel'        => 'WordPress AI Client',
+						'connectorPluginSlug'   => '',
 						'provider'              => 'wordpress_ai_client',
 						'providerLabel'         => 'WordPress AI Client',
 						'backendLabel'          => 'WordPress AI Client',
@@ -128,6 +140,12 @@ final class AgentControllerTest extends TestCase {
 						'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
 						'credentialSource'      => 'provider_managed',
 						'credentialSourceLabel' => 'Provider-managed',
+						'tokenUsage'            => [
+							'total'  => 52,
+							'input'  => 21,
+							'output' => 31,
+						],
+						'latencyMs'             => 187,
 						'usedFallback'          => true,
 						'ability'               => 'flavor-agent/recommend-block',
 						'route'                 => 'POST /flavor-agent/v1/recommend-block',
@@ -216,8 +234,10 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_content_forwards_post_context(): void {
+		ActivityRepository::install();
 		WordPressTestState::$options                        = [];
 		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$capabilities['edit_posts']     = true;
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
 				'mode'    => 'critique',
@@ -248,6 +268,14 @@ final class AgentControllerTest extends TestCase {
 				'tags'     => [ 'ai', 'wordpress' ],
 			]
 		);
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_content( $request );
 
@@ -275,9 +303,60 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-content',
 			'POST /flavor-agent/v1/recommend-content'
 		);
+		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
+		$this->assertSame( 'content', $entries[0]['surface'] ?? null );
+		$this->assertSame( 'review', $entries[0]['executionResult'] ?? null );
+	}
+
+	public function test_handle_recommend_content_persists_failed_request_diagnostic_when_scoped(): void {
+		ActivityRepository::install();
+		WordPressTestState::$options                        = [];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$capabilities['edit_posts']     = true;
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'mode'    => 'critique',
+				'title'   => 'Needs more specifics',
+				'summary' => 'Ask for the source draft first.',
+				'content' => '',
+				'notes'   => [],
+				'issues'  => [],
+			]
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-content' );
+		$request->set_param( 'mode', 'critique' );
+		$request->set_param( 'prompt', 'Critique this draft.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_content( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'missing_existing_content', $response->get_error_code() );
+
+		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
+		$this->assertSame( 'content', $entries[0]['surface'] ?? null );
+		$this->assertSame( 'failed', $entries[0]['undo']['status'] ?? null );
+		$this->assertSame(
+			'Edit and critique modes require existing postContext.content.',
+			$entries[0]['undo']['error'] ?? null
+		);
 	}
 
 	public function test_handle_recommend_patterns_appends_matching_request_meta(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_posts'] = true;
 		$this->configure_pattern_recommendation_backends();
 		$this->save_ready_pattern_index_state();
 
@@ -305,6 +384,14 @@ final class AgentControllerTest extends TestCase {
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
 		$request->set_param( 'postType', 'page' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_patterns( $request );
 
@@ -319,6 +406,11 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-patterns',
 			'POST /flavor-agent/v1/recommend-patterns'
 		);
+		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
+		$this->assertSame( 'pattern', $entries[0]['surface'] ?? null );
+		$this->assertSame( 'review', $entries[0]['executionResult'] ?? null );
 	}
 
 	public function test_handle_recommend_patterns_passes_insertion_context_through_to_ranking(): void {
@@ -1062,6 +1154,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_navigation_forwards_selected_navigation_context(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
 		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
 			'post_type'    => 'wp_navigation',
@@ -1100,12 +1194,21 @@ final class AgentControllerTest extends TestCase {
 		];
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-navigation' );
+		$request->set_param( 'blockClientId', 'nav-1' );
 		$request->set_param( 'menuId', 42 );
 		$request->set_param(
 			'navigationMarkup',
 			'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- wp:navigation-link {"label":"Contact","url":"/contact"} /--><!-- /wp:navigation -->'
 		);
 		$request->set_param( 'prompt', 'Simplify the header navigation.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_navigation( $request );
 
@@ -1158,6 +1261,11 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-navigation',
 			'POST /flavor-agent/v1/recommend-navigation'
 		);
+		$entries = ActivityRepository::query( [ 'scopeKey' => 'wp_template:theme//home' ] );
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
+		$this->assertSame( 'navigation', $entries[0]['surface'] ?? null );
+		$this->assertSame( 'nav-1', $entries[0]['target']['clientId'] ?? null );
 	}
 
 	public function test_handle_sync_patterns_appends_sync_route_metadata(): void {

@@ -8,6 +8,7 @@ final class Serializer {
 
 	private const UNDO_STATUS_AVAILABLE = 'available';
 	private const UNDO_STATUS_FAILED    = 'failed';
+	private const UNDO_STATUS_REVIEW    = 'review';
 	private const UNDO_STATUS_UNDONE    = 'undone';
 
 	/**
@@ -90,6 +91,35 @@ final class Serializer {
 			];
 		}
 
+		if ( 'content' === $surface ) {
+			return [
+				'type' => 'content',
+				'ref'  => '' !== $document_key
+					? $document_key
+					: self::normalize_string( $target['requestRef'] ?? '' ),
+			];
+		}
+
+		if ( 'navigation' === $surface ) {
+			$client_id = self::normalize_string( $target['clientId'] ?? '' );
+
+			return [
+				'type' => 'navigation',
+				'ref'  => '' !== $document_key
+					? $document_key . ( '' !== $client_id ? ':client:' . $client_id : '' )
+					: $client_id,
+			];
+		}
+
+		if ( 'pattern' === $surface ) {
+			return [
+				'type' => 'pattern',
+				'ref'  => '' !== $document_key
+					? $document_key
+					: self::normalize_string( $target['requestRef'] ?? '' ),
+			];
+		}
+
 		$block_name = self::normalize_string( $target['blockName'] ?? '' );
 		$block_path = '';
 
@@ -146,7 +176,7 @@ final class Serializer {
 	public static function normalize_undo_for_storage( array $undo, string $timestamp ): array {
 		$status = self::normalize_string( $undo['status'] ?? self::UNDO_STATUS_AVAILABLE );
 
-		if ( ! in_array( $status, [ self::UNDO_STATUS_AVAILABLE, self::UNDO_STATUS_FAILED, self::UNDO_STATUS_UNDONE ], true ) ) {
+		if ( ! in_array( $status, [ self::UNDO_STATUS_AVAILABLE, self::UNDO_STATUS_FAILED, self::UNDO_STATUS_REVIEW, self::UNDO_STATUS_UNDONE ], true ) ) {
 			$status = self::UNDO_STATUS_AVAILABLE;
 		}
 

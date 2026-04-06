@@ -24,19 +24,21 @@ import { BlockRecommendationsDocumentPanel } from './inspector/BlockRecommendati
 import ActivitySessionBootstrap from './components/ActivitySessionBootstrap';
 import PatternRecommender from './patterns/PatternRecommender';
 import InserterBadge from './patterns/InserterBadge';
+import ContentRecommender from './content/ContentRecommender';
 import TemplateRecommender from './templates/TemplateRecommender';
 import TemplatePartRecommender from './template-parts/TemplatePartRecommender';
 import GlobalStylesRecommender from './global-styles/GlobalStylesRecommender';
 import StyleBookRecommender from './style-book/StyleBookRecommender';
 
 registerPlugin( 'flavor-agent', {
-	render: () => (
-		<>
-			<ActivitySessionBootstrap />
-			<BlockRecommendationsDocumentPanel />
-			<PatternRecommender />
-			<InserterBadge />
-			<TemplateRecommender />
+		render: () => (
+			<>
+				<ActivitySessionBootstrap />
+				<BlockRecommendationsDocumentPanel />
+				<ContentRecommender />
+				<PatternRecommender />
+				<InserterBadge />
+				<TemplateRecommender />
 			<TemplatePartRecommender />
 			<GlobalStylesRecommender />
 			<StyleBookRecommender />

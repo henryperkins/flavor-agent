@@ -459,6 +459,33 @@ describe( 'ActivityLogApp', () => {
 						{ value: '11', label: 'User #11' },
 						{ value: '7', label: 'User #7' },
 					],
+					provider: [
+						{
+							value: 'Azure OpenAI responses',
+							label: 'Azure OpenAI responses',
+						},
+					],
+					providerPath: [
+						{
+							value: 'Azure OpenAI via Settings > Flavor Agent',
+							label: 'Azure OpenAI via Settings > Flavor Agent',
+						},
+					],
+					configurationOwner: [
+						{
+							value: 'Settings > Flavor Agent',
+							label: 'Settings > Flavor Agent',
+						},
+					],
+					credentialSource: [
+						{
+							value: 'Settings > Flavor Agent',
+							label: 'Settings > Flavor Agent',
+						},
+					],
+					selectedProvider: [
+						{ value: 'Azure OpenAI', label: 'Azure OpenAI' },
+					],
 				},
 			} )
 		);
@@ -488,6 +515,19 @@ describe( 'ActivityLogApp', () => {
 		).toEqual( [
 			{ value: '11', label: 'User #11' },
 			{ value: '7', label: 'User #7' },
+		] );
+		expect(
+			fields.find( ( field ) => field.id === 'provider' ).elements
+		).toEqual( [
+			{ value: 'Azure OpenAI responses', label: 'Azure OpenAI responses' },
+		] );
+		expect(
+			fields.find( ( field ) => field.id === 'configurationOwner' ).elements
+		).toEqual( [
+			{
+				value: 'Settings > Flavor Agent',
+				label: 'Settings > Flavor Agent',
+			},
 		] );
 	} );
 
@@ -528,7 +568,7 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
-	test( 'registers action, post type, entity id, block path, and date filters for the feed', async () => {
+	test( 'registers provenance, action, post type, entity id, block path, and date filters for the feed', async () => {
 		await renderApp( [ createEntry() ] );
 
 		const fields = getDataViewsMockState().latestProps.fields;
@@ -545,6 +585,19 @@ describe( 'ActivityLogApp', () => {
 		const blockPathField = fields.find(
 			( field ) => field.id === 'blockPath'
 		);
+		const providerField = fields.find( ( field ) => field.id === 'provider' );
+		const providerPathField = fields.find(
+			( field ) => field.id === 'providerPath'
+		);
+		const configurationOwnerField = fields.find(
+			( field ) => field.id === 'configurationOwner'
+		);
+		const credentialSourceField = fields.find(
+			( field ) => field.id === 'credentialSource'
+		);
+		const selectedProviderField = fields.find(
+			( field ) => field.id === 'selectedProvider'
+		);
 
 		expect( getDataViewsMockState().latestProps.view.fields ).toEqual( [
 			'timestampDisplay',
@@ -552,6 +605,25 @@ describe( 'ActivityLogApp', () => {
 			'surface',
 		] );
 		expect( actionTypeField.filterBy.operators ).toEqual( [
+			'is',
+			'isNot',
+		] );
+		expect( providerField.enableSorting ).toBe( true );
+		expect( providerField.filterBy.operators ).toEqual( [ 'is', 'isNot' ] );
+		expect( providerPathField.enableSorting ).toBe( true );
+		expect( providerPathField.filterBy.operators ).toEqual( [ 'is', 'isNot' ] );
+		expect( configurationOwnerField.enableSorting ).toBe( true );
+		expect( configurationOwnerField.filterBy.operators ).toEqual( [
+			'is',
+			'isNot',
+		] );
+		expect( credentialSourceField.enableSorting ).toBe( true );
+		expect( credentialSourceField.filterBy.operators ).toEqual( [
+			'is',
+			'isNot',
+		] );
+		expect( selectedProviderField.enableSorting ).toBe( true );
+		expect( selectedProviderField.filterBy.operators ).toEqual( [
 			'is',
 			'isNot',
 		] );
@@ -574,5 +646,41 @@ describe( 'ActivityLogApp', () => {
 			'inThePast',
 			'over',
 		] );
+	} );
+
+	test( 'adds provenance filters to the activity request URL', async () => {
+		await renderApp( [ createEntry() ] );
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onChangeView( {
+				...getDataViewsMockState().latestProps.view,
+				filters: [
+					{
+						field: 'provider',
+						operator: 'is',
+						value: 'WordPress AI Client',
+					},
+					{
+						field: 'configurationOwner',
+						operator: 'is',
+						value: 'Settings > Connectors',
+					},
+				],
+			} );
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'provider=WordPress+AI+Client'
+		);
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'providerOperator=is'
+		);
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'configurationOwner=Settings+%3E+Connectors'
+		);
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'configurationOwnerOperator=is'
+		);
 	} );
 } );

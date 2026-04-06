@@ -1,6 +1,7 @@
 const LEGACY_FLAG_KEYS = Object.freeze( {
 	block: 'canRecommendBlocks',
 	pattern: 'canRecommendPatterns',
+	content: 'canRecommendContent',
 	template: 'canRecommendTemplates',
 	'template-part': 'canRecommendTemplateParts',
 	navigation: 'canRecommendNavigation',
@@ -11,6 +12,7 @@ const LEGACY_FLAG_KEYS = Object.freeze( {
 const STRUCTURED_SURFACE_KEYS = Object.freeze( {
 	block: 'block',
 	pattern: 'pattern',
+	content: 'content',
 	template: 'template',
 	'template-part': 'templatePart',
 	navigation: 'navigation',
@@ -75,6 +77,7 @@ function getDefaultActions( surface, data, reason ) {
 		[
 			'block',
 			'pattern',
+			'content',
 			'template',
 			'template-part',
 			'navigation',
@@ -112,6 +115,8 @@ function getDefaultMessage( surface, reason ) {
 	switch ( surface ) {
 		case 'block':
 			return 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.';
+		case 'content':
+			return 'Content recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'template':
 			return 'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
 		case 'template-part':

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\OpenAI\Provider;
 use WordPress\AI_Client\AI_Client;
 
 final class WordPressAIClient {
@@ -29,6 +30,7 @@ final class WordPressAIClient {
 	}
 
 	public static function chat( string $system_prompt, string $user_prompt, ?string $provider = null ): string|\WP_Error {
+		Provider::record_runtime_chat_metrics( null );
 		$prompt = self::make_prompt( $user_prompt );
 
 		if ( is_wp_error( $prompt ) ) {
@@ -61,13 +63,16 @@ final class WordPressAIClient {
 			);
 		}
 
+		$started_at = microtime( true );
 		$result = self::call_prompt_method( $prompt, 'generate_text' );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		if ( ! is_string( $result ) || '' === trim( $result ) ) {
+		$parsed = self::normalize_generated_text_result( $result, $started_at );
+
+		if ( '' === $parsed['text'] ) {
 			return new \WP_Error(
 				'empty_response',
 				'The WordPress AI client returned an empty response.',
@@ -75,7 +80,9 @@ final class WordPressAIClient {
 			);
 		}
 
-		return $result;
+		Provider::record_runtime_chat_metrics( $parsed['metrics'] );
+
+		return $parsed['text'];
 	}
 
 	public static function get_setup_message(): string {
@@ -181,5 +188,91 @@ final class WordPressAIClient {
 				[ 'status' => 500 ]
 			);
 		}
+	}
+
+	/**
+	 * @param string|array<string, mixed>|object $result
+	 * @return array{text: string, metrics: array<string, mixed>|null}
+	 */
+	private static function normalize_generated_text_result( mixed $result, float $started_at ): array {
+		$metrics = [
+			'latencyMs' => max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) ),
+		];
+
+		if ( is_string( $result ) ) {
+			return [
+				'text'    => trim( $result ),
+				'metrics' => $metrics,
+			];
+		}
+
+		if ( is_object( $result ) ) {
+			$result = get_object_vars( $result );
+		}
+
+		if ( ! is_array( $result ) ) {
+			return [
+				'text'    => '',
+				'metrics' => $metrics,
+			];
+		}
+
+		$text = isset( $result['text'] ) && is_string( $result['text'] )
+			? trim( $result['text'] )
+			: '';
+
+		if ( is_array( $result['tokenUsage'] ?? null ) ) {
+			$token_usage = [];
+
+			$total = self::normalize_metric_int( $result['tokenUsage']['total'] ?? null );
+			$input = self::normalize_metric_int( $result['tokenUsage']['input'] ?? null );
+			$output = self::normalize_metric_int( $result['tokenUsage']['output'] ?? null );
+
+			if ( null !== $total ) {
+				$token_usage['total'] = $total;
+			}
+
+			if ( null !== $input ) {
+				$token_usage['input'] = $input;
+			}
+
+			if ( null !== $output ) {
+				$token_usage['output'] = $output;
+			}
+
+			if ( [] !== $token_usage ) {
+				$metrics['tokenUsage'] = $token_usage;
+			}
+		}
+
+		$latency_ms = self::normalize_metric_int( $result['latencyMs'] ?? null );
+		if ( null !== $latency_ms ) {
+			$metrics['latencyMs'] = $latency_ms;
+		}
+
+		return [
+			'text'    => $text,
+			'metrics' => $metrics,
+		];
+	}
+
+	private static function normalize_metric_int( mixed $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value >= 0 ? $value : null;
+		}
+
+		if ( is_float( $value ) ) {
+			$normalized = (int) round( $value );
+
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		if ( is_string( $value ) && '' !== trim( $value ) && preg_match( '/^-?\d+$/', $value ) ) {
+			$normalized = (int) $value;
+
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		return null;
 	}
 }

@@ -64,19 +64,19 @@ final class Agent_Controller {
 	];
 
 	public static function register_routes(): void {
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-block',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_block' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_posts' ),
 				'args'                => [
 					'editorContext' => [
 						'required'          => true,
 						'type'              => 'object',
 						'description'       => 'Block context snapshot from the editor.',
-						'validate_callback' => fn( $value ) => is_array( $value ) || is_object( $value ),
+						'validate_callback' => static fn( mixed $value ): bool => \is_array( $value ) || \is_object( $value ),
 					],
 					'prompt'        => [
 						'required'          => false,
@@ -93,13 +93,13 @@ final class Agent_Controller {
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-content',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_content' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_posts' ),
 				'args'                => [
 					'mode'         => [
 						'required'          => false,
@@ -122,27 +122,33 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
+					'document'     => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 				],
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/sync-patterns',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_sync_patterns' ],
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'manage_options' ),
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-patterns',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_patterns' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_posts' ),
 				'args'                => [
 					'postType'            => [
 						'required'          => true,
@@ -174,17 +180,23 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
 					],
+					'document'            => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 				],
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-navigation',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_navigation' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
 					'menuId'           => [
 						'required'          => false,
@@ -195,24 +207,30 @@ final class Agent_Controller {
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => [ __CLASS__, 'sanitize_block_markup' ],
-						'validate_callback' => static fn( $value ): bool => is_string( $value ),
+						'validate_callback' => static fn( mixed $value ): bool => \is_string( $value ),
 					],
 					'prompt'           => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'document'         => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 				],
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-style',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_style' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
 					'scope'        => [
 						'required'          => true,
@@ -235,19 +253,19 @@ final class Agent_Controller {
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-template',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_template' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
 					'templateRef'         => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
-						'validate_callback' => static fn( $value ): bool => is_string( $value ) && $value !== '',
+						'validate_callback' => static fn( mixed $value ): bool => \is_string( $value ) && $value !== '',
 					],
 					'templateType'        => [
 						'required'          => false,
@@ -281,19 +299,19 @@ final class Agent_Controller {
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/recommend-template-part',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_recommend_template_part' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
 					'templatePartRef'     => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
-						'validate_callback' => static fn( $value ): bool => is_string( $value ) && $value !== '',
+						'validate_callback' => static fn( mixed $value ): bool => \is_string( $value ) && $value !== '',
 					],
 					'prompt'              => [
 						'required'          => false,
@@ -316,7 +334,7 @@ final class Agent_Controller {
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/activity',
 			[
@@ -334,7 +352,7 @@ final class Agent_Controller {
 							'required'          => false,
 							'type'              => 'boolean',
 							'default'           => false,
-							'sanitize_callback' => static fn( $value ): bool => in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
+							'sanitize_callback' => static fn( mixed $value ): bool => \in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
 						],
 						'surface'               => [
 							'required'          => false,
@@ -356,16 +374,41 @@ final class Agent_Controller {
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 						],
-						'postType'              => [
-							'required'          => false,
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						],
-						'entityId'              => [
-							'required'          => false,
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						],
+					'postType'              => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'provider'              => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'providerPath'          => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'configurationOwner'    => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'credentialSource'      => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'selectedProvider'      => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'entityId'              => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
 						'blockPath'             => [
 							'required'          => false,
 							'type'              => 'string',
@@ -418,15 +461,40 @@ final class Agent_Controller {
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'postTypeOperator'      => [
-							'required'          => false,
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						],
-						'entityIdOperator'      => [
-							'required'          => false,
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
+					'postTypeOperator'      => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'providerOperator'      => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'providerPathOperator'  => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'configurationOwnerOperator' => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'credentialSourceOperator' => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'selectedProviderOperator' => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'entityIdOperator'      => [
+						'required'          => false,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
 						],
 						'blockPathOperator'     => [
 							'required'          => false,
@@ -492,7 +560,7 @@ final class Agent_Controller {
 			]
 		);
 
-		register_rest_route(
+		\register_rest_route(
 			self::NAMESPACE,
 			'/activity/(?P<id>[A-Za-z0-9._:-]+)/undo',
 			[
@@ -521,30 +589,30 @@ final class Agent_Controller {
 		);
 	}
 
-	public static function validate_string_array( $value ): bool {
-		return is_array( $value );
+	public static function validate_string_array( mixed $value ): bool {
+		return \is_array( $value );
 	}
 
-	public static function validate_structured_value( $value ): bool {
-		return is_array( $value ) || is_object( $value );
+	public static function validate_structured_value( mixed $value ): bool {
+		return \is_array( $value ) || \is_object( $value );
 	}
 
 	/**
 	 * @param mixed $value
 	 * @return string[]
 	 */
-	public static function sanitize_string_array( $value ): array {
+	public static function sanitize_string_array( mixed $value ): array {
 		return StringArray::sanitize( $value );
 	}
 
-	public static function sanitize_structured_value( $value ): array {
+	public static function sanitize_structured_value( mixed $value ): array {
 		$sanitized = Serializer::normalize_structured_value( $value );
 
-		return is_array( $sanitized ) ? $sanitized : [];
+		return \is_array( $sanitized ) ? $sanitized : [];
 	}
 
-	public static function sanitize_block_markup( $value ): string {
-		return is_string( $value ) ? trim( $value ) : '';
+	public static function sanitize_block_markup( mixed $value ): string {
+		return \is_string( $value ) ? \trim( $value ) : '';
 	}
 
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
@@ -556,7 +624,7 @@ final class Agent_Controller {
 			]
 		);
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 
@@ -576,41 +644,69 @@ final class Agent_Controller {
 		$input = [];
 
 		$mode = $request->get_param( 'mode' );
-		if ( is_string( $mode ) && $mode !== '' ) {
+		if ( \is_string( $mode ) && $mode !== '' ) {
 			$input['mode'] = $mode;
 		}
 
 		$prompt = $request->get_param( 'prompt' );
-		if ( is_string( $prompt ) && $prompt !== '' ) {
+		if ( \is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = self::sanitize_block_markup( $prompt );
 		}
 
 		$voice_profile = $request->get_param( 'voiceProfile' );
-		if ( is_string( $voice_profile ) && $voice_profile !== '' ) {
+		if ( \is_string( $voice_profile ) && $voice_profile !== '' ) {
 			$input['voiceProfile'] = self::sanitize_block_markup( $voice_profile );
 		}
 
 		$post_context = $request->get_param( 'postContext' );
-		if ( is_array( $post_context ) || is_object( $post_context ) ) {
+		if ( \is_array( $post_context ) || \is_object( $post_context ) ) {
 			$input['postContext'] = self::sanitize_structured_value( $post_context );
 		}
 
 		$result = ContentAbilities::recommend_content( $input );
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
+			self::persist_request_diagnostic_failure_activity(
+				'content',
+				$result,
+				self::sanitize_activity_document( $request->get_param( 'document' ) ),
+				[
+					'mode' => isset( $input['mode'] ) ? (string) $input['mode'] : 'draft',
+				],
+				array_merge(
+					$input,
+					[
+						'prompt' => isset( $input['prompt'] ) ? (string) $input['prompt'] : '',
+					]
+				)
+			);
+
 			return $result;
 		}
 
-		return new \WP_REST_Response(
-			self::append_request_meta_for_route( $result, 'recommend-content' ),
-			200
+		$payload = self::append_request_meta_for_route( $result, 'recommend-content' );
+		self::persist_request_diagnostic_activity(
+			'content',
+			$payload,
+			self::sanitize_activity_document( $request->get_param( 'document' ) ),
+			[
+				'mode' => isset( $input['mode'] ) ? (string) $input['mode'] : 'draft',
+			],
+			array_merge(
+				$input,
+				[
+					'prompt' => isset( $input['prompt'] ) ? (string) $input['prompt'] : '',
+				]
+			)
 		);
+
+		return new \WP_REST_Response( $payload, 200 );
 	}
 
 	public static function handle_sync_patterns( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$result = PatternIndex::sync();
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 
@@ -626,22 +722,22 @@ final class Agent_Controller {
 		];
 
 		$template_type = $request->get_param( 'templateType' );
-		if ( is_string( $template_type ) && $template_type !== '' ) {
+		if ( \is_string( $template_type ) && $template_type !== '' ) {
 			$input['templateType'] = $template_type;
 		}
 
 		$block_context = $request->get_param( 'blockContext' );
-		if ( is_array( $block_context ) && ! empty( $block_context ) ) {
+		if ( \is_array( $block_context ) && ! empty( $block_context ) ) {
 			$input['blockContext'] = $block_context;
 		}
 
 		$insertion_context = $request->get_param( 'insertionContext' );
-		if ( is_array( $insertion_context ) && ! empty( $insertion_context ) ) {
+		if ( \is_array( $insertion_context ) && ! empty( $insertion_context ) ) {
 			$input['insertionContext'] = $insertion_context;
 		}
 
 		$prompt = $request->get_param( 'prompt' );
-		if ( is_string( $prompt ) && $prompt !== '' ) {
+		if ( \is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = $prompt;
 		}
 
@@ -653,14 +749,32 @@ final class Agent_Controller {
 
 		$result = PatternAbilities::recommend_patterns( $input );
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
+			self::persist_request_diagnostic_failure_activity(
+				'pattern',
+				$result,
+				self::sanitize_activity_document( $request->get_param( 'document' ) ),
+				[
+					'postType' => isset( $input['postType'] ) ? (string) $input['postType'] : '',
+				],
+				$input
+			);
+
 			return $result;
 		}
 
-		return new \WP_REST_Response(
-			self::append_request_meta_for_route( $result, 'recommend-patterns' ),
-			200
+		$payload = self::append_request_meta_for_route( $result, 'recommend-patterns' );
+		self::persist_request_diagnostic_activity(
+			'pattern',
+			$payload,
+			self::sanitize_activity_document( $request->get_param( 'document' ) ),
+			[
+				'postType' => isset( $input['postType'] ) ? (string) $input['postType'] : '',
+			],
+			$input
 		);
+
+		return new \WP_REST_Response( $payload, 200 );
 	}
 
 	/**
@@ -668,7 +782,7 @@ final class Agent_Controller {
 	 */
 	public static function handle_recommend_navigation( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$input   = [];
-		$menu_id = max( 0, (int) $request->get_param( 'menuId' ) );
+		$menu_id = \max( 0, (int) $request->get_param( 'menuId' ) );
 
 		if ( $menu_id > 0 ) {
 			$input['menuId'] = $menu_id;
@@ -682,20 +796,42 @@ final class Agent_Controller {
 		}
 
 		$prompt = $request->get_param( 'prompt' );
-		if ( is_string( $prompt ) && $prompt !== '' ) {
+		if ( \is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = $prompt;
 		}
 
 		$result = NavigationAbilities::recommend_navigation( $input );
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
+			self::persist_request_diagnostic_failure_activity(
+				'navigation',
+				$result,
+				self::sanitize_activity_document( $request->get_param( 'document' ) ),
+				[
+					'clientId'  => sanitize_text_field( (string) $request->get_param( 'blockClientId' ) ),
+					'blockName' => 'core/navigation',
+					'menuId'    => $menu_id > 0 ? $menu_id : 0,
+				],
+				$input
+			);
+
 			return $result;
 		}
 
-		return new \WP_REST_Response(
-			self::append_request_meta_for_route( $result, 'recommend-navigation' ),
-			200
+		$payload = self::append_request_meta_for_route( $result, 'recommend-navigation' );
+		self::persist_request_diagnostic_activity(
+			'navigation',
+			$payload,
+			self::sanitize_activity_document( $request->get_param( 'document' ) ),
+			[
+				'clientId'  => sanitize_text_field( (string) $request->get_param( 'blockClientId' ) ),
+				'blockName' => 'core/navigation',
+				'menuId'    => $menu_id > 0 ? $menu_id : 0,
+			],
+			$input
 		);
+
+		return new \WP_REST_Response( $payload, 200 );
 	}
 
 	/**
@@ -705,7 +841,7 @@ final class Agent_Controller {
 	private static function append_request_meta_for_route( array $payload, string $route_key ): array {
 		$route_definition = self::REQUEST_META_ROUTES[ $route_key ] ?? null;
 
-		if ( ! is_array( $route_definition ) ) {
+		if ( ! \is_array( $route_definition ) ) {
 			return $payload;
 		}
 
@@ -713,7 +849,7 @@ final class Agent_Controller {
 			? Provider::active_chat_request_meta()
 			: [];
 
-		if ( ! empty( $route_definition['ability'] ) && is_string( $route_definition['ability'] ) ) {
+		if ( ! empty( $route_definition['ability'] ) && \is_string( $route_definition['ability'] ) ) {
 			$request_meta['ability'] = $route_definition['ability'];
 		}
 
@@ -721,6 +857,215 @@ final class Agent_Controller {
 		$payload['requestMeta'] = $request_meta;
 
 		return $payload;
+	}
+
+	/**
+	 * @param mixed $value
+	 * @return array<string, mixed>|null
+	 */
+	private static function sanitize_activity_document( mixed $value ): ?array {
+		if ( ! \is_array( $value ) && ! \is_object( $value ) ) {
+			return null;
+		}
+
+		$document  = self::sanitize_structured_value( $value );
+		$scope_key = trim( (string) ( $document['scopeKey'] ?? '' ) );
+
+		if ( '' === $scope_key ) {
+			return null;
+		}
+
+		return [
+			'scopeKey'   => $scope_key,
+			'postType'   => trim( (string) ( $document['postType'] ?? '' ) ),
+			'entityId'   => trim( (string) ( $document['entityId'] ?? '' ) ),
+			'entityKind' => trim( (string) ( $document['entityKind'] ?? '' ) ),
+			'entityName' => trim( (string) ( $document['entityName'] ?? '' ) ),
+			'stylesheet' => trim( (string) ( $document['stylesheet'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @param array<string, mixed>|null $document
+	 * @param array<string, mixed> $target
+	 * @param array<string, mixed> $request_context
+	 */
+	private static function persist_request_diagnostic_activity(
+		string $surface,
+		array $payload,
+		?array $document,
+		array $target,
+		array $request_context
+	): void {
+		if ( ! \is_array( $document ) || '' === trim( (string) ( $document['scopeKey'] ?? '' ) ) ) {
+			return;
+		}
+
+		$reference = self::build_request_diagnostic_reference( $surface, $target, $document );
+
+		ActivityRepository::create(
+			[
+				'type'            => 'request_diagnostic',
+				'surface'         => $surface,
+				'target'          => array_merge( $target, [ 'requestRef' => $reference ] ),
+				'suggestion'      => self::build_request_diagnostic_title( $surface, $payload ),
+				'before'          => [
+					'prompt' => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+				],
+				'after'           => [
+					'prompt'          => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'resultCount'     => self::get_request_result_count( $surface, $payload ),
+					'explanation'     => trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
+					'requestContext'  => $request_context,
+				],
+				'request'         => [
+					'prompt'    => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference' => $reference,
+					'ai'        => \is_array( $payload['requestMeta'] ?? null ) ? $payload['requestMeta'] : [],
+				],
+				'document'        => $document,
+				'executionResult' => 'review',
+				'undo'            => [
+					'canUndo'   => false,
+					'status'    => 'review',
+					'error'     => null,
+					'updatedAt' => gmdate( 'c' ),
+				],
+				'timestamp'       => gmdate( 'c' ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed>|null $document
+	 * @param array<string, mixed> $target
+	 * @param array<string, mixed> $request_context
+	 */
+	private static function persist_request_diagnostic_failure_activity(
+		string $surface,
+		\WP_Error $error,
+		?array $document,
+		array $target,
+		array $request_context
+	): void {
+		if ( ! \is_array( $document ) || '' === trim( (string) ( $document['scopeKey'] ?? '' ) ) ) {
+			return;
+		}
+
+		$reference = self::build_request_diagnostic_reference( $surface, $target, $document );
+		$message   = trim( (string) $error->get_error_message() );
+
+		ActivityRepository::create(
+			[
+				'id'              => '',
+				'type'            => 'request_diagnostic',
+				'surface'         => $surface,
+				'target'          => array_merge( $target, [ 'requestRef' => $reference ] ),
+				'suggestion'      => self::build_failed_request_diagnostic_title( $surface, $message ),
+				'before'          => [
+					'prompt' => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+				],
+				'after'           => [
+					'prompt'         => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'resultCount'    => 0,
+					'requestContext' => $request_context,
+				],
+				'request'         => [
+					'prompt'    => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'reference' => $reference,
+					'error'     => [
+						'code'    => trim( (string) $error->get_error_code() ),
+						'message' => $message,
+						'data'    => $error->get_error_data(),
+					],
+				],
+				'document'        => $document,
+				'executionResult' => 'review',
+				'undo'            => [
+					'canUndo'   => false,
+					'status'    => 'failed',
+					'error'     => $message,
+					'updatedAt' => gmdate( 'c' ),
+				],
+				'timestamp'       => gmdate( 'c' ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private static function build_request_diagnostic_title( string $surface, array $payload ): string {
+		if ( 'content' === $surface ) {
+			$title = trim( (string) ( $payload['title'] ?? '' ) );
+
+			if ( '' !== $title ) {
+				return $title;
+			}
+
+			$summary = trim( (string) ( $payload['summary'] ?? '' ) );
+
+			return '' !== $summary ? $summary : 'Content recommendation request';
+		}
+
+		if ( 'navigation' === $surface ) {
+			$suggestions = \is_array( $payload['suggestions'] ?? null ) ? $payload['suggestions'] : [];
+			$label       = trim( (string) ( $suggestions[0]['label'] ?? '' ) );
+
+			return '' !== $label ? $label : 'Navigation recommendation request';
+		}
+
+		if ( 'pattern' === $surface ) {
+			$recommendations = \is_array( $payload['recommendations'] ?? null ) ? $payload['recommendations'] : [];
+			$label           = trim( (string) ( $recommendations[0]['title'] ?? $recommendations[0]['name'] ?? '' ) );
+
+			return '' !== $label ? $label : 'Pattern recommendation request';
+		}
+
+		return 'AI request diagnostic';
+	}
+
+	private static function build_failed_request_diagnostic_title( string $surface, string $message ): string {
+		$label = match ( $surface ) {
+			'content' => 'Content request failed',
+			'navigation' => 'Navigation request failed',
+			'pattern' => 'Pattern request failed',
+			default => 'AI request failed',
+		};
+
+		return '' !== $message ? $label . ': ' . $message : $label;
+	}
+
+	/**
+	 * @param array<string, mixed> $target
+	 * @param array<string, mixed> $document
+	 */
+	private static function build_request_diagnostic_reference( string $surface, array $target, array $document ): string {
+		$scope_key = trim( (string) ( $document['scopeKey'] ?? '' ) );
+
+		return match ( $surface ) {
+			'navigation' => sprintf(
+				'navigation:%s:%s',
+				$scope_key,
+				trim( (string) ( $target['clientId'] ?? 'unknown' ) )
+			),
+			'pattern' => sprintf( 'pattern:%s', $scope_key ),
+			'content' => sprintf( 'content:%s', $scope_key ),
+			default => sprintf( '%s:%s', $surface, $scope_key ),
+		};
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private static function get_request_result_count( string $surface, array $payload ): int {
+		return match ( $surface ) {
+			'navigation' => \is_array( $payload['suggestions'] ?? null ) ? count( $payload['suggestions'] ) : 0,
+			'pattern' => \is_array( $payload['recommendations'] ?? null ) ? count( $payload['recommendations'] ) : 0,
+			'content' => trim( (string) ( $payload['content'] ?? '' ) ) !== '' ? 1 : 0,
+			default => 0,
+		};
 	}
 
 	/**
@@ -732,12 +1077,12 @@ final class Agent_Controller {
 		];
 
 		$template_type = $request->get_param( 'templateType' );
-		if ( is_string( $template_type ) && $template_type !== '' ) {
+		if ( \is_string( $template_type ) && $template_type !== '' ) {
 			$input['templateType'] = $template_type;
 		}
 
 		$prompt = $request->get_param( 'prompt' );
-		if ( is_string( $prompt ) && $prompt !== '' ) {
+		if ( \is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = $prompt;
 		}
 
@@ -748,18 +1093,18 @@ final class Agent_Controller {
 		}
 
 		$editor_slots = $request->get_param( 'editorSlots' );
-		if ( is_array( $editor_slots ) || is_object( $editor_slots ) ) {
+		if ( \is_array( $editor_slots ) || \is_object( $editor_slots ) ) {
 			$input['editorSlots'] = self::sanitize_structured_value( $editor_slots );
 		}
 
 		$editor_structure = $request->get_param( 'editorStructure' );
-		if ( is_array( $editor_structure ) || is_object( $editor_structure ) ) {
+		if ( \is_array( $editor_structure ) || \is_object( $editor_structure ) ) {
 			$input['editorStructure'] = self::sanitize_structured_value( $editor_structure );
 		}
 
 		$result = TemplateAbilities::recommend_template( $input );
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 
@@ -783,13 +1128,13 @@ final class Agent_Controller {
 		];
 
 		$prompt = $request->get_param( 'prompt' );
-		if ( is_string( $prompt ) && $prompt !== '' ) {
+		if ( \is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = $prompt;
 		}
 
 		$result = StyleAbilities::recommend_style( $input );
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 
@@ -808,7 +1153,7 @@ final class Agent_Controller {
 		];
 
 		$prompt = $request->get_param( 'prompt' );
-		if ( is_string( $prompt ) && $prompt !== '' ) {
+		if ( \is_string( $prompt ) && $prompt !== '' ) {
 			$input['prompt'] = $prompt;
 		}
 
@@ -819,13 +1164,13 @@ final class Agent_Controller {
 		}
 
 		$editor_structure = $request->get_param( 'editorStructure' );
-		if ( is_array( $editor_structure ) || is_object( $editor_structure ) ) {
+		if ( \is_array( $editor_structure ) || \is_object( $editor_structure ) ) {
 			$input['editorStructure'] = self::sanitize_structured_value( $editor_structure );
 		}
 
 		$result = TemplateAbilities::recommend_template_part( $input );
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 
@@ -841,7 +1186,7 @@ final class Agent_Controller {
 		}
 
 		$is_global_request = true === $request->get_param( 'global' )
-			|| '' === trim( (string) $request->get_param( 'scopeKey' ) );
+			|| '' === \trim( (string) $request->get_param( 'scopeKey' ) );
 
 		if ( $is_global_request ) {
 			$result = ActivityRepository::query_admin(
@@ -853,6 +1198,16 @@ final class Agent_Controller {
 					'statusOperator'        => $request->get_param( 'statusOperator' ),
 					'postType'              => $request->get_param( 'postType' ),
 					'postTypeOperator'      => $request->get_param( 'postTypeOperator' ),
+					'provider'              => $request->get_param( 'provider' ),
+					'providerOperator'      => $request->get_param( 'providerOperator' ),
+					'providerPath'          => $request->get_param( 'providerPath' ),
+					'providerPathOperator'  => $request->get_param( 'providerPathOperator' ),
+					'configurationOwner'    => $request->get_param( 'configurationOwner' ),
+					'configurationOwnerOperator' => $request->get_param( 'configurationOwnerOperator' ),
+					'credentialSource'      => $request->get_param( 'credentialSource' ),
+					'credentialSourceOperator' => $request->get_param( 'credentialSourceOperator' ),
+					'selectedProvider'      => $request->get_param( 'selectedProvider' ),
+					'selectedProviderOperator' => $request->get_param( 'selectedProviderOperator' ),
 					'entityId'              => $request->get_param( 'entityId' ),
 					'entityIdOperator'      => $request->get_param( 'entityIdOperator' ),
 					'blockPath'             => $request->get_param( 'blockPath' ),
@@ -905,7 +1260,7 @@ final class Agent_Controller {
 
 		$entry = $request->get_param( 'entry' );
 
-		if ( ! is_array( $entry ) && ! is_object( $entry ) ) {
+		if ( ! \is_array( $entry ) && ! \is_object( $entry ) ) {
 			return new \WP_Error(
 				'flavor_agent_activity_invalid_entry',
 				'Flavor Agent activity entries must be structured objects.',
@@ -917,7 +1272,7 @@ final class Agent_Controller {
 			self::sanitize_structured_value( $entry )
 		);
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 
@@ -943,7 +1298,7 @@ final class Agent_Controller {
 				: null
 		);
 
-		if ( is_wp_error( $result ) ) {
+		if ( \is_wp_error( $result ) ) {
 			return $result;
 		}
 

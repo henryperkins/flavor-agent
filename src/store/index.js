@@ -60,6 +60,13 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 const DEFAULT_STATE = {
 	blockRecommendations: {},
 	blockRequestState: {},
+	contentRecommendation: null,
+	contentStatus: 'idle',
+	contentError: null,
+	contentMode: 'draft',
+	contentRequestPrompt: '',
+	contentRequestToken: 0,
+	contentResultToken: 0,
 	navigationRecommendations: [],
 	navigationExplanation: '',
 	navigationStatus: 'idle',
@@ -154,6 +161,14 @@ const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
 		surface: 'block',
 		advisoryOnly: false,
 		allowsInlineApply: true,
+		previewRequired: false,
+		readyState: 'advisory-ready',
+		stages: SHARED_PANEL_SEQUENCE,
+	} ),
+	content: Object.freeze( {
+		surface: 'content',
+		advisoryOnly: true,
+		allowsInlineApply: false,
 		previewRequired: false,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
@@ -385,6 +400,12 @@ function getNavigationHasResult( state, blockClientId = null ) {
 	);
 }
 
+function getContentHasResult( state ) {
+	return Boolean(
+		state.contentStatus === 'ready' && state.contentRecommendation
+	);
+}
+
 function getBlockHasResult( state, clientId ) {
 	const requestState = getStoredBlockRequestState( state, clientId );
 
@@ -604,6 +625,10 @@ function buildActivityDocument( scope ) {
 	};
 }
 
+function getRequestDocumentFromScope( scope ) {
+	return buildActivityDocument( scope );
+}
+
 function alignActivityEntriesToScope( entries, scope ) {
 	const document = buildActivityDocument( scope );
 
@@ -766,6 +791,27 @@ function mergeActivityEntries( ...entrySets ) {
 function refreshActivitySession( localDispatch, scopeKey, entries ) {
 	localDispatch( actions.setActivitySession( scopeKey, entries ) );
 	writePersistedActivityLog( scopeKey, entries );
+}
+
+async function reloadScopedActivitySession( localDispatch, registry, select ) {
+	const scope = getCurrentActivityScope( registry );
+	const scopeKey = getScopeKey( scope ) || select.getActivityScopeKey?.() || null;
+
+	if ( ! scopeKey ) {
+		return;
+	}
+
+	try {
+		const serverEntries = await fetchServerActivityEntries( scopeKey );
+		const mergedEntries = mergeActivityEntries(
+			serverEntries,
+			( select.getActivityLog?.() || [] ).filter( isLocalActivityEntry )
+		);
+
+		refreshActivitySession( localDispatch, scopeKey, mergedEntries );
+	} catch {
+		// Keep the current scoped cache when the server activity reload fails.
+	}
 }
 
 async function fetchServerActivityEntries( scopeKey ) {
@@ -1476,7 +1522,7 @@ async function runAbortableRecommendationRequest( {
 			} );
 
 			clearAbortController( abortKey, abortId, controller );
-			onSuccess( {
+			await onSuccess?.( {
 				dispatch,
 				input,
 				result,
@@ -1496,7 +1542,7 @@ async function runAbortableRecommendationRequest( {
 			}
 
 			clearAbortController( abortKey, abortId, controller );
-			onError( {
+			await onError?.( {
 				dispatch,
 				err,
 				input,
@@ -1594,6 +1640,52 @@ const actions = {
 
 	clearUndoError() {
 		return { type: 'CLEAR_UNDO_ERROR' };
+	},
+
+	setContentStatus( status, error = null, requestToken = null ) {
+		return {
+			type: 'SET_CONTENT_STATUS',
+			status,
+			error,
+			requestToken,
+		};
+	},
+
+	setContentRecommendation(
+		payload,
+		prompt = '',
+		mode = 'draft',
+		requestToken = null
+	) {
+		return {
+			type: 'SET_CONTENT_RECOMMENDATION',
+			payload,
+			prompt,
+			mode,
+			requestToken,
+		};
+	},
+
+	setContentMode( mode = 'draft' ) {
+		return {
+			type: 'SET_CONTENT_MODE',
+			mode,
+		};
+	},
+
+	clearContentError() {
+		return { type: 'CLEAR_CONTENT_ERROR' };
+	},
+
+	clearContentRecommendation() {
+		return ( { dispatch } ) => {
+			if ( actions._contentAbort ) {
+				actions._contentAbort.abort();
+				actions._contentAbort = null;
+			}
+
+			dispatch( { type: 'CLEAR_CONTENT_RECOMMENDATION' } );
+		};
 	},
 
 	loadActivitySession( options = {} ) {
@@ -2012,9 +2104,17 @@ const actions = {
 	},
 
 	fetchPatternRecommendations( input ) {
-		return ( { dispatch, select } ) =>
+		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_patternAbort',
+				buildRequest: ( { input: requestInput } ) => ({
+					requestData: {
+						...( requestInput || {} ),
+						document: getRequestDocumentFromScope(
+							getCurrentActivityScope( registry )
+						),
+					},
+				}),
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-patterns',
 				input,
@@ -2027,6 +2127,11 @@ const actions = {
 								'Pattern recommendation request failed.'
 						)
 					);
+					return reloadScopedActivitySession(
+						localDispatch,
+						registry,
+						select
+					);
 				},
 				onLoading: ( { dispatch: localDispatch } ) => {
 					localDispatch( actions.setPatternStatus( 'loading' ) );
@@ -2038,13 +2143,86 @@ const actions = {
 						)
 					);
 					localDispatch( actions.setPatternStatus( 'ready' ) );
+					return reloadScopedActivitySession(
+						localDispatch,
+						registry,
+						select
+					);
+				},
+				select,
+			} );
+	},
+
+	fetchContentRecommendations( input ) {
+		return ( { dispatch, registry, select } ) =>
+			runAbortableRecommendationRequest( {
+				abortKey: '_contentAbort',
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => ( {
+					requestData: {
+						...( requestInput || {} ),
+						document: getRequestDocumentFromScope(
+							getCurrentActivityScope( registry )
+						),
+					},
+					requestToken:
+						( registrySelect.getContentRequestToken?.() || 0 ) + 1,
+				} ),
+				dispatch,
+				endpoint: '/flavor-agent/v1/recommend-content',
+				input,
+				onError: ( {
+					dispatch: localDispatch,
+					err,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setContentStatus(
+							'error',
+							err?.message ||
+								'Content recommendation request failed.',
+							requestToken
+						)
+					);
+					return reloadScopedActivitySession(
+						localDispatch,
+						registry,
+						select
+					);
+				},
+				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+					localDispatch(
+						actions.setContentStatus( 'loading', null, requestToken )
+					);
+				},
+				onSuccess: ( {
+					dispatch: localDispatch,
+					requestData,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setContentRecommendation(
+							result,
+							requestData.prompt || '',
+							requestData.mode || 'draft',
+							requestToken
+						)
+					);
+					return reloadScopedActivitySession(
+						localDispatch,
+						registry,
+						select
+					);
 				},
 				select,
 			} );
 	},
 
 	fetchNavigationRecommendations( input ) {
-		return ( { dispatch, select } ) =>
+		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_navigationAbort',
 				buildRequest: ( {
@@ -2063,7 +2241,12 @@ const actions = {
 					return {
 						blockClientId,
 						contextSignature,
-						requestData,
+						requestData: {
+							...requestData,
+							document: getRequestDocumentFromScope(
+								getCurrentActivityScope( registry )
+							),
+						},
 						requestToken,
 					};
 				},
@@ -2096,6 +2279,11 @@ const actions = {
 							blockClientId
 						)
 					);
+					return reloadScopedActivitySession(
+						localDispatch,
+						registry,
+						select
+					);
 				},
 				onLoading: ( {
 					blockClientId,
@@ -2127,6 +2315,11 @@ const actions = {
 							requestToken,
 							contextSignature
 						)
+					);
+					return reloadScopedActivitySession(
+						localDispatch,
+						registry,
+						select
 					);
 				},
 				select,
@@ -3588,6 +3781,64 @@ function reducer( state = DEFAULT_STATE, action ) {
 				patternStatus: action.status,
 				patternError: action.error ?? null,
 			};
+		case 'SET_CONTENT_STATUS':
+			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				contentStatus: action.status,
+				contentError: action.error ?? null,
+				contentRequestToken:
+					action.requestToken ?? state.contentRequestToken,
+				contentRecommendation:
+					action.status === 'loading'
+						? null
+						: state.contentRecommendation,
+			};
+		case 'SET_CONTENT_RECOMMENDATION':
+			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				contentRecommendation: action.payload || null,
+				contentRequestPrompt: action.prompt ?? '',
+				contentMode: action.mode || 'draft',
+				contentRequestToken:
+					action.requestToken ?? state.contentRequestToken,
+				contentResultToken: state.contentResultToken + 1,
+				contentStatus: 'ready',
+				contentError: null,
+			};
+		case 'SET_CONTENT_MODE':
+			return {
+				...state,
+				contentMode: [ 'draft', 'edit', 'critique' ].includes( action.mode )
+					? action.mode
+					: 'draft',
+			};
+		case 'CLEAR_CONTENT_ERROR':
+			return {
+				...state,
+				contentStatus:
+					state.contentStatus === 'error'
+						? 'idle'
+						: state.contentStatus,
+				contentError: null,
+			};
+		case 'CLEAR_CONTENT_RECOMMENDATION':
+			return {
+				...state,
+				contentRecommendation: null,
+				contentStatus: 'idle',
+				contentError: null,
+				contentRequestPrompt: '',
+				contentRequestToken: state.contentRequestToken + 1,
+				contentResultToken: state.contentResultToken + 1,
+			};
 		case 'SET_PATTERN_RECS':
 			return {
 				...state,
@@ -4109,6 +4360,14 @@ const selectors = {
 	getPatternBadge: ( state ) => state.patternBadge,
 	getPatternError: ( state ) => state.patternError,
 	isPatternLoading: ( state ) => state.patternStatus === 'loading',
+	getContentRecommendation: ( state ) => state.contentRecommendation,
+	getContentStatus: ( state ) => state.contentStatus,
+	getContentError: ( state ) => state.contentError,
+	getContentMode: ( state ) => state.contentMode,
+	getContentRequestPrompt: ( state ) => state.contentRequestPrompt,
+	getContentRequestToken: ( state ) => state.contentRequestToken,
+	getContentResultToken: ( state ) => state.contentResultToken,
+	isContentLoading: ( state ) => state.contentStatus === 'loading',
 	getNavigationRecommendations: ( state, blockClientId = null ) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? []
@@ -4285,6 +4544,22 @@ const selectors = {
 			hasSuggestions:
 				selectors.getNavigationRecommendations( state, blockClientId )
 					.length > 0,
+			...options,
+		} ),
+	getContentInteractionState: ( state, options = {} ) =>
+		getNormalizedInteractionState( 'content', {
+			requestStatus: state.contentStatus,
+			requestError: normalizeStringMessage( state.contentError ),
+			hasResult: getContentHasResult( state ),
+			hasSuggestions: Boolean(
+				state.contentRecommendation?.content ||
+					state.contentRecommendation?.summary ||
+					state.contentRecommendation?.title ||
+					( Array.isArray( state.contentRecommendation?.notes ) &&
+						state.contentRecommendation.notes.length > 0 ) ||
+					( Array.isArray( state.contentRecommendation?.issues ) &&
+						state.contentRecommendation.issues.length > 0 )
+			),
 			...options,
 		} ),
 	getTemplateInteractionState: ( state, options = {} ) =>

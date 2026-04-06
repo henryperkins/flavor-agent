@@ -136,6 +136,38 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 90, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
 	}
 
+	public function test_rank_records_usage_metrics_for_direct_responses_calls(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => 'ranked output',
+					'usage'       => [
+						'total_tokens'  => 90,
+						'input_tokens'  => 25,
+						'output_tokens' => 65,
+					],
+				]
+			),
+		];
+
+		$result = ResponsesClient::rank( 'system prompt', 'user prompt' );
+		$meta = Provider::active_chat_request_meta();
+
+		$this->assertSame( 'ranked output', $result );
+		$this->assertSame( 90, $meta['tokenUsage']['total'] ?? null );
+		$this->assertSame( 25, $meta['tokenUsage']['input'] ?? null );
+		$this->assertSame( 65, $meta['tokenUsage']['output'] ?? null );
+		$this->assertIsInt( $meta['latencyMs'] ?? null );
+	}
+
 	public function test_rank_returns_a_retryable_rate_limit_error_without_sleeping(): void {
 		WordPressTestState::$options               = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',

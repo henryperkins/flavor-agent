@@ -70,6 +70,8 @@ final class ResponsesClient extends BaseHttpClient {
 	 * @return string|\WP_Error The assistant's text response.
 	 */
 	public static function rank( string $instructions, string $input ): string|\WP_Error {
+		Provider::record_runtime_chat_metrics( null );
+
 		$config = Provider::chat_configuration();
 
 		if ( Provider::is_connector( $config['provider'] ) || 'wordpress_ai_client' === $config['provider'] ) {
@@ -116,6 +118,7 @@ final class ResponsesClient extends BaseHttpClient {
 	 * @return string|\WP_Error The text content from the response.
 	 */
 	private static function request( string $url, array $headers, string $body, string $label ): string|\WP_Error {
+		$started_at = microtime( true );
 		$response = self::post_json_with_retry(
 			$url,
 			$headers,
@@ -130,22 +133,81 @@ final class ResponsesClient extends BaseHttpClient {
 
 		$status = $response['status'];
 		$data   = $response['data'];
+		$metrics = self::extract_response_metrics(
+			is_array( $data ) ? $data : [],
+			$started_at
+		);
 
 		if ( $status !== 200 ) {
+			Provider::record_runtime_chat_metrics( $metrics );
 			$msg = is_array( $data ) ? ( $data['error']['message'] ?? "{$label} returned HTTP {$status}" ) : "{$label} returned HTTP {$status}";
 			return new \WP_Error( 'responses_error', $msg, [ 'status' => 502 ] );
 		}
 
 		if ( JSON_ERROR_NONE !== $response['json_error'] ) {
+			Provider::record_runtime_chat_metrics( $metrics );
 			return new \WP_Error( 'responses_parse_error', 'Failed to parse Responses API response.', [ 'status' => 502 ] );
 		}
 
 		$text = ConfigurationValidator::extract_response_text( is_array( $data ) ? $data : [] );
 
 		if ( empty( $text ) ) {
+			Provider::record_runtime_chat_metrics( $metrics );
 			return new \WP_Error( 'empty_response', "{$label} returned no text.", [ 'status' => 502 ] );
 		}
 
+		Provider::record_runtime_chat_metrics( $metrics );
+
 		return $text;
+	}
+
+	/**
+	 * @param array<string, mixed> $data
+	 * @return array{tokenUsage: array<string, int>, latencyMs: int}
+	 */
+	private static function extract_response_metrics( array $data, float $started_at ): array {
+		$usage = is_array( $data['usage'] ?? null ) ? $data['usage'] : [];
+		$token_usage = [];
+
+		$total = self::normalize_metric_int( $usage['total_tokens'] ?? $usage['totalTokens'] ?? null );
+		$input = self::normalize_metric_int( $usage['input_tokens'] ?? $usage['inputTokens'] ?? null );
+		$output = self::normalize_metric_int( $usage['output_tokens'] ?? $usage['outputTokens'] ?? null );
+
+		if ( null !== $total ) {
+			$token_usage['total'] = $total;
+		}
+
+		if ( null !== $input ) {
+			$token_usage['input'] = $input;
+		}
+
+		if ( null !== $output ) {
+			$token_usage['output'] = $output;
+		}
+
+		return [
+			'tokenUsage' => $token_usage,
+			'latencyMs'  => max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) ),
+		];
+	}
+
+	private static function normalize_metric_int( $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value >= 0 ? $value : null;
+		}
+
+		if ( is_float( $value ) ) {
+			$normalized = (int) round( $value );
+
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		if ( is_string( $value ) && '' !== trim( $value ) && preg_match( '/^-?\d+$/', $value ) ) {
+			$normalized = (int) $value;
+
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		return null;
 	}
 }

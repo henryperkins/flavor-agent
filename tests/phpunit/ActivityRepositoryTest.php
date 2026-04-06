@@ -257,6 +257,34 @@ final class ActivityRepositoryTest extends TestCase {
 				'100'
 			)
 		);
+		Repository::create(
+			[
+				'id'              => 'activity-review',
+				'type'            => 'request_diagnostic',
+				'surface'         => 'pattern',
+				'target'          => [
+					'postType'   => 'post',
+					'requestRef' => 'pattern:post:42',
+				],
+				'suggestion'      => 'Pattern recommendation request',
+				'before'          => [],
+				'after'           => [],
+				'request'         => [
+					'prompt'    => 'Find cleaner patterns.',
+					'reference' => 'pattern:post:42',
+				],
+				'document'        => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+				'executionResult' => 'review',
+				'undo'            => [
+					'status' => 'review',
+				],
+				'timestamp'       => '2026-03-24T10:00:05Z',
+			]
+		);
 
 		Repository::update_undo_status( 'activity-undone', 'undone' );
 		Repository::update_undo_status(
@@ -276,10 +304,10 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertCount( 2, $result['entries'] ?? [] );
 		$this->assertSame(
 			[
-				'total'   => 5,
+				'total'   => 6,
 				'applied' => 1,
 				'undone'  => 1,
-				'review'  => 3,
+				'review'  => 4,
 			],
 			$result['summary'] ?? []
 		);
@@ -310,17 +338,81 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'blocked', $result['entries'][0]['status'] ?? null );
 	}
 
+	public function test_query_admin_marks_failed_request_diagnostics_as_failed(): void {
+		Repository::install();
+
+		Repository::create(
+			[
+				'id'              => 'content-request-failed',
+				'type'            => 'request_diagnostic',
+				'surface'         => 'content',
+				'target'          => [
+					'requestRef' => 'content:post:42',
+				],
+				'suggestion'      => 'Content request failed: Missing draft context.',
+				'before'          => [],
+				'after'           => [],
+				'request'         => [
+					'prompt'    => 'Critique this draft.',
+					'reference' => 'content:post:42',
+				],
+				'document'        => [
+					'scopeKey' => 'post:42',
+					'postType' => 'post',
+					'entityId' => '42',
+				],
+				'executionResult' => 'review',
+				'undo'            => [
+					'status' => 'failed',
+					'error'  => 'Missing draft context.',
+				],
+				'timestamp'       => '2026-03-24T10:00:05Z',
+			]
+		);
+
+		$result = Repository::query_admin( [] );
+
+		$this->assertSame( 'failed', $result['entries'][0]['status'] ?? null );
+	}
+
 	public function test_query_admin_returns_filter_options_for_the_full_filtered_result_set(): void {
 		Repository::install();
 
 		WordPressTestState::$current_user_id = 7;
 		Repository::create(
-			$this->build_block_entry( 'activity-block', '2026-03-24T10:00:00Z' )
+			$this->build_block_entry_with_request_meta(
+				'activity-block',
+				'2026-03-24T10:00:00Z',
+				[
+					'backendLabel'          => 'WordPress AI Client',
+					'providerLabel'         => 'WordPress AI Client',
+					'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+					'ownerLabel'            => 'Settings > Connectors',
+					'credentialSourceLabel' => 'Provider-managed',
+					'selectedProviderLabel' => 'Azure OpenAI',
+				]
+			)
 		);
 
 		WordPressTestState::$current_user_id = 11;
 		Repository::create(
-			$this->build_template_entry( 'activity-template', '2026-03-24T10:00:01Z' )
+			array_merge(
+				$this->build_template_entry( 'activity-template', '2026-03-24T10:00:01Z' ),
+				[
+					'request' => [
+						'prompt'    => 'Make the page feel more editorial.',
+						'reference' => 'template:theme//home:3',
+						'ai'        => [
+							'backendLabel'          => 'Azure OpenAI responses',
+							'providerLabel'         => 'Azure OpenAI',
+							'pathLabel'             => 'Azure OpenAI via Settings > Flavor Agent',
+							'ownerLabel'            => 'Settings > Flavor Agent',
+							'credentialSourceLabel' => 'Settings > Flavor Agent',
+							'selectedProviderLabel' => 'Azure OpenAI',
+						],
+					],
+				]
+			)
 		);
 
 		$result = Repository::query_admin(
@@ -382,6 +474,32 @@ final class ActivityRepositoryTest extends TestCase {
 				],
 			],
 			$result['filterOptions']['userId'] ?? []
+		);
+		$this->assertSame(
+			[
+				[
+					'value' => 'Azure OpenAI responses',
+					'label' => 'Azure OpenAI responses',
+				],
+				[
+					'value' => 'WordPress AI Client',
+					'label' => 'WordPress AI Client',
+				],
+			],
+			$result['filterOptions']['provider'] ?? []
+		);
+		$this->assertSame(
+			[
+				[
+					'value' => 'Azure OpenAI via Settings > Flavor Agent',
+					'label' => 'Azure OpenAI via Settings > Flavor Agent',
+				],
+				[
+					'value' => 'WordPress AI Client via Settings > Connectors',
+					'label' => 'WordPress AI Client via Settings > Connectors',
+				],
+			],
+			$result['filterOptions']['providerPath'] ?? []
 		);
 	}
 
@@ -525,6 +643,61 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame(
 			[ 'activity-assign' ],
 			array_column( $filtered_result['entries'] ?? [], 'id' )
+		);
+	}
+
+	public function test_query_admin_supports_provider_filters_and_sorting(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry_with_request_meta(
+				'activity-azure',
+				'2026-03-24T10:00:00Z',
+				[
+					'backendLabel'          => 'Azure OpenAI responses',
+					'providerLabel'         => 'Azure OpenAI',
+					'pathLabel'             => 'Azure OpenAI via Settings > Flavor Agent',
+					'ownerLabel'            => 'Settings > Flavor Agent',
+					'credentialSourceLabel' => 'Settings > Flavor Agent',
+					'selectedProviderLabel' => 'Azure OpenAI',
+				]
+			)
+		);
+		Repository::create(
+			$this->build_block_entry_with_request_meta(
+				'activity-connector',
+				'2026-03-24T10:00:01Z',
+				[
+					'backendLabel'          => 'WordPress AI Client',
+					'providerLabel'         => 'WordPress AI Client',
+					'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+					'ownerLabel'            => 'Settings > Connectors',
+					'credentialSourceLabel' => 'Provider-managed',
+					'selectedProviderLabel' => 'Azure OpenAI',
+				]
+			)
+		);
+
+		$filtered_result = Repository::query_admin(
+			[
+				'provider'         => 'WordPress AI Client',
+				'providerOperator' => 'is',
+			]
+		);
+		$sorted_result = Repository::query_admin(
+			[
+				'sortField'     => 'configurationOwner',
+				'sortDirection' => 'asc',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-connector' ],
+			array_column( $filtered_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame(
+			[ 'activity-connector', 'activity-azure' ],
+			array_column( $sorted_result['entries'] ?? [], 'id' )
 		);
 	}
 
@@ -859,6 +1032,21 @@ final class ActivityRepositoryTest extends TestCase {
 			],
 			'timestamp'  => $timestamp,
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $request_meta
+	 * @return array<string, mixed>
+	 */
+	private function build_block_entry_with_request_meta(
+		string $id,
+		string $timestamp,
+		array $request_meta
+	): array {
+		$entry = $this->build_block_entry( $id, $timestamp );
+		$entry['request']['ai'] = $request_meta;
+
+		return $entry;
 	}
 
 	/**

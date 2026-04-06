@@ -75,6 +75,74 @@ describe( 'activity log utils', () => {
 		expect( entries[ 1 ].statusLabel ).toBe( 'Applied' );
 	} );
 
+	test( 'normalizeActivityEntries renders request diagnostics as review-only rows', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				type: 'request_diagnostic',
+				surface: 'navigation',
+				suggestion: 'Group utility links',
+				target: {
+					clientId: 'nav-1',
+					blockName: 'core/navigation',
+				},
+				document: {
+					scopeKey: 'wp_template:theme//home',
+					postType: 'wp_template',
+					entityId: 'theme//home',
+				},
+				executionResult: 'review',
+				undo: {
+					status: 'review',
+					canUndo: false,
+					error: null,
+					updatedAt: '2026-03-26T10:00:00Z',
+					undoneAt: null,
+				},
+				request: {
+					reference: 'navigation:wp_template:theme//home:nav-1',
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			status: 'review',
+			statusLabel: 'Review',
+			activityTypeLabel: 'Record request',
+			operationType: 'request-diagnostic',
+			operationTypeLabel: 'Request diagnostic',
+			surfaceLabel: 'Navigation',
+		} );
+	} );
+
+	test( 'normalizeActivityEntries marks failed request diagnostics as request failures', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				type: 'request_diagnostic',
+				surface: 'content',
+				suggestion: 'Content request failed: Missing draft context.',
+				undo: {
+					status: 'failed',
+					canUndo: false,
+					error: 'Missing draft context.',
+					updatedAt: '2026-03-26T10:00:00Z',
+					undoneAt: null,
+				},
+				request: {
+					prompt: 'Critique this post.',
+					reference: 'content:post:42',
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			status: 'failed',
+			statusLabel: 'Request failed',
+			undoStatusLabel: 'Undo unavailable',
+			undoReason: 'Missing draft context.',
+			entity: 'Content',
+		} );
+	} );
+
 	test( 'normalizeActivityEntries derives operation, document, path, and diff metadata', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {
@@ -118,6 +186,8 @@ describe( 'activity log utils', () => {
 			configurationOwner: 'Settings > Flavor Agent',
 			credentialSource: 'Settings > Flavor Agent',
 			selectedProvider: 'Azure OpenAI',
+			connector: 'Not recorded',
+			connectorPlugin: 'Not recorded',
 			requestAbility: 'flavor-agent/recommend-block',
 			requestRoute: 'POST /flavor-agent/v1/recommend-block',
 			undoReason:
@@ -126,6 +196,8 @@ describe( 'activity log utils', () => {
 		expect( entries[ 0 ].stateDiff ).toContain(
 			'~ content: Before copy → After copy'
 		);
+		expect( entries[ 0 ].tokenUsage ).toBe( 'Not recorded' );
+		expect( entries[ 0 ].latency ).toBe( 'Not recorded' );
 	} );
 
 	test( 'normalizeActivityEntries records fallback provenance and blocked undo reason', () => {
@@ -155,6 +227,49 @@ describe( 'activity log utils', () => {
 			provider: 'WordPress AI Client',
 			requestFallback: 'Fallback from selected Azure OpenAI.',
 			undoReason: 'Undo blocked by newer AI actions.',
+		} );
+	} );
+
+	test( 'normalizeActivityEntries exposes connector identity from stored request metadata', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				request: {
+					ai: {
+						backendLabel: 'Anthropic',
+						connectorLabel: 'Anthropic',
+						connectorPluginSlug: 'ai-services-anthropic',
+					},
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			provider: 'Anthropic',
+			connector: 'Anthropic',
+			connectorPlugin: 'ai-services-anthropic',
+		} );
+	} );
+
+	test( 'normalizeActivityEntries formats token usage and latency from request.ai metrics', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				request: {
+					ai: {
+						backendLabel: 'Azure OpenAI responses',
+						tokenUsage: {
+							total: 96,
+							input: 40,
+							output: 56,
+						},
+						latencyMs: 275,
+					},
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			tokenUsage: '96 total tokens',
+			latency: '275 ms',
 		} );
 	} );
 

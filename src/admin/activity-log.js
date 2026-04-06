@@ -238,6 +238,31 @@ function getActivityRequestUrl( bootData, view ) {
 		'postType',
 		getViewFilter( view, 'postType' )
 	);
+	appendExplicitFilter(
+		params,
+		'provider',
+		getViewFilter( view, 'provider' )
+	);
+	appendExplicitFilter(
+		params,
+		'providerPath',
+		getViewFilter( view, 'providerPath' )
+	);
+	appendExplicitFilter(
+		params,
+		'configurationOwner',
+		getViewFilter( view, 'configurationOwner' )
+	);
+	appendExplicitFilter(
+		params,
+		'credentialSource',
+		getViewFilter( view, 'credentialSource' )
+	);
+	appendExplicitFilter(
+		params,
+		'selectedProvider',
+		getViewFilter( view, 'selectedProvider' )
+	);
 	appendExplicitFilter( params, 'userId', getViewFilter( view, 'userId' ) );
 	appendExplicitFilter(
 		params,
@@ -463,6 +488,18 @@ function getDetailFields() {
 			readOnly: true,
 		},
 		{
+			id: 'connector',
+			label: 'Connector',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'connectorPlugin',
+			label: 'Connector plugin',
+			type: 'text',
+			readOnly: true,
+		},
+		{
 			id: 'requestFallback',
 			label: 'Fallback',
 			type: 'text',
@@ -598,6 +635,8 @@ function getDetailForm() {
 					'configurationOwner',
 					'credentialSource',
 					'selectedProvider',
+					'connector',
+					'connectorPlugin',
 					'requestFallback',
 					'tokenUsage',
 					'latency',
@@ -861,6 +900,21 @@ export function ActivityLogApp( { bootData } ) {
 		const postTypeElements =
 			getServerFilterOptions( responseData, 'postType' ) ||
 			buildSelectElements( responseData.entries, 'postType' );
+		const providerElements =
+			getServerFilterOptions( responseData, 'provider' ) ||
+			buildSelectElements( responseData.entries, 'provider' );
+		const providerPathElements =
+			getServerFilterOptions( responseData, 'providerPath' ) ||
+			buildSelectElements( responseData.entries, 'providerPath' );
+		const configurationOwnerElements =
+			getServerFilterOptions( responseData, 'configurationOwner' ) ||
+			buildSelectElements( responseData.entries, 'configurationOwner' );
+		const credentialSourceElements =
+			getServerFilterOptions( responseData, 'credentialSource' ) ||
+			buildSelectElements( responseData.entries, 'credentialSource' );
+		const selectedProviderElements =
+			getServerFilterOptions( responseData, 'selectedProvider' ) ||
+			buildSelectElements( responseData.entries, 'selectedProvider' );
 		const userElements =
 			getServerFilterOptions( responseData, 'userId' ) ||
 			buildSelectElements( responseData.entries, 'userId', {
@@ -970,6 +1024,7 @@ export function ActivityLogApp( { bootData } ) {
 				enableSorting: false,
 				elements: [
 					{ value: 'applied', label: 'Applied' },
+					{ value: 'review', label: 'Review' },
 					{ value: 'undone', label: 'Undone' },
 					{ value: 'blocked', label: 'Undo blocked' },
 					{ value: 'failed', label: 'Undo unavailable' },
@@ -1036,8 +1091,12 @@ export function ActivityLogApp( { bootData } ) {
 				id: 'provider',
 				label: 'Provider',
 				type: 'text',
-				enableSorting: false,
+				enableSorting: true,
 				enableGlobalSearch: true,
+				elements: providerElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
 			},
 			{
 				id: 'model',
@@ -1045,6 +1104,50 @@ export function ActivityLogApp( { bootData } ) {
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
+			},
+			{
+				id: 'providerPath',
+				label: 'Provider path',
+				type: 'text',
+				enableSorting: true,
+				enableGlobalSearch: true,
+				elements: providerPathElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
+			},
+			{
+				id: 'configurationOwner',
+				label: 'Configured in',
+				type: 'text',
+				enableSorting: true,
+				enableGlobalSearch: true,
+				elements: configurationOwnerElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
+			},
+			{
+				id: 'credentialSource',
+				label: 'Credential source',
+				type: 'text',
+				enableSorting: true,
+				enableGlobalSearch: true,
+				elements: credentialSourceElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
+			},
+			{
+				id: 'selectedProvider',
+				label: 'Selected provider',
+				type: 'text',
+				enableSorting: true,
+				enableGlobalSearch: true,
+				elements: selectedProviderElements,
+				filterBy: {
+					operators: [ 'is', 'isNot' ],
+				},
 			},
 			{
 				id: 'activityTypeLabel',

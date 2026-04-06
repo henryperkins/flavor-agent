@@ -61,8 +61,8 @@ final class Permissions {
 		string $entity_type = ''
 	): string {
 		if (
-			in_array( $surface, [ 'template', 'template-part', 'global-styles', 'style-book' ], true )
-			|| in_array( $entity_type, [ 'template', 'template-part', 'global-styles', 'style-book' ], true )
+			in_array( $surface, [ 'template', 'template-part', 'global-styles', 'style-book', 'navigation' ], true )
+			|| in_array( $entity_type, [ 'template', 'template-part', 'global-styles', 'style-book', 'navigation' ], true )
 			|| str_starts_with( $scope_key, 'wp_template:' )
 			|| str_starts_with( $scope_key, 'wp_template_part:' )
 			|| str_starts_with( $scope_key, 'global_styles:' )

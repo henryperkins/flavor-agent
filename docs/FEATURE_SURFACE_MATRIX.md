@@ -28,6 +28,7 @@ Use this together with `docs/features/README.md` for per-surface flows and `docs
 | Surface | Where it lives | Gating model | What it provides | Reference |
 |---|---|---|---|---|
 | WordPress Abilities API | Server-registered abilities under the `flavor-agent` category; hydrated by core on supported WordPress 7.0+ admin screens | Each ability is gated by capability and, where relevant, backend availability | Thirteen structured abilities for recommendations, content drafting/critique, listings, docs grounding, theme tokens, style intelligence, and backend status | `docs/reference/abilities-and-routes.md` |
+| Helper abilities and diagnostics | Server-registered helper abilities plus the settings-driven readiness/status contract | Per-ability capability gates, plus Cloudflare and provider/backend gating where relevant | Block introspection, pattern and template-part listings, theme tokens, backend readiness, and trusted WordPress docs search | `docs/features/helper-abilities.md` |
 | Flavor Agent REST API | Routes under `flavor-agent/v1` consumed by the `flavor-agent` data store and admin scripts | Per-route capability callbacks plus route-specific validation and sanitization | First-party request/response path for recommendations, server-backed activity, and manual pattern sync | `docs/reference/abilities-and-routes.md` |
 
 ## Quick Mapping

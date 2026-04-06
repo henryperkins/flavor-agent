@@ -47,7 +47,8 @@ describe( 'store action thunks', () => {
 		window.sessionStorage.clear();
 		actions._activitySessionLoadToken = 0;
 		actions._activitySessionRetryTimer = null;
-		actions._blockRecommendationAbort = null;
+	actions._blockRecommendationAbort = null;
+		actions._contentAbort = null;
 		actions._navigationAbort = null;
 		actions._patternAbort = null;
 		actions._templateAbort = null;
@@ -74,15 +75,15 @@ describe( 'store action thunks', () => {
 		jest.useRealTimers();
 	} );
 
-	test( 'fetchBlockRecommendations reads request state from thunk selectors', async () => {
-		apiFetch.mockResolvedValue( {
-			payload: {
-				settings: [],
-				styles: [],
-				block: [],
-				explanation: 'Mocked response',
-			},
-		} );
+		test( 'fetchBlockRecommendations reads request state from thunk selectors', async () => {
+			apiFetch.mockResolvedValue( {
+				payload: {
+					settings: [],
+					styles: [],
+					block: [ { label: 'Rewrite intro' } ],
+					explanation: 'Mocked response',
+				},
+			} );
 
 		const dispatch = jest.fn();
 		const select = {
@@ -140,10 +141,27 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
-	test( 'fetchNavigationRecommendations reads request token from thunk selectors', async () => {
-		apiFetch.mockResolvedValue( {
-			suggestions: [ { label: 'Group utility links' } ],
-			explanation: 'Mocked navigation response',
+		test( 'fetchNavigationRecommendations reads request token from thunk selectors', async () => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-navigation' &&
+				method === 'POST'
+			) {
+				return Promise.resolve( {
+					suggestions: [ { label: 'Group utility links' } ],
+					explanation: 'Mocked navigation response',
+				} );
+			}
+
+			if (
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( { entries: [] } );
+			}
+
+			return Promise.reject( new Error( `Unexpected apiFetch: ${ path }` ) );
 		} );
 
 		const dispatch = jest.fn();
@@ -161,18 +179,36 @@ describe( 'store action thunks', () => {
 
 		await actions.fetchNavigationRecommendations( input )( {
 			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'wp_template',
+								getCurrentPostId: () => 'theme//home',
+						  }
+						: {}
+				),
+			},
 			select,
 		} );
 
 		expect( select.getNavigationRequestToken ).toHaveBeenCalled();
 		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/flavor-agent/v1/recommend-navigation',
-				method: 'POST',
-				data: {
-					menuId: 42,
-					navigationMarkup:
-						'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
+				expect.objectContaining( {
+					path: '/flavor-agent/v1/recommend-navigation',
+					method: 'POST',
+					data: {
+						document: {
+							scopeKey: 'wp_template:theme//home',
+							postType: 'wp_template',
+							entityId: 'theme//home',
+							entityKind: '',
+							entityName: '',
+							stylesheet: '',
+						},
+						menuId: 42,
+						navigationMarkup:
+							'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
 					prompt: 'Simplify the header menu.',
 				},
 			} )
@@ -257,8 +293,25 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
-	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
-		apiFetch.mockRejectedValue( new Error( 'Network blew up.' ) );
+		test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-navigation' &&
+				method === 'POST'
+			) {
+				return Promise.reject( new Error( 'Network blew up.' ) );
+			}
+
+			if (
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( { entries: [] } );
+			}
+
+			return Promise.reject( new Error( `Unexpected apiFetch: ${ path }` ) );
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
@@ -272,6 +325,16 @@ describe( 'store action thunks', () => {
 
 		await actions.fetchNavigationRecommendations( input )( {
 			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'wp_template',
+								getCurrentPostId: () => 'theme//home',
+						  }
+						: {}
+				),
+			},
 			select,
 		} );
 
@@ -426,7 +489,16 @@ describe( 'store action thunks', () => {
 	test( 'fetchPatternRecommendations aborts the previous request and ignores abort errors', async () => {
 		const previousAbort = jest.fn();
 		actions._patternAbort = { abort: previousAbort };
-		apiFetch.mockRejectedValue( { name: 'AbortError' } );
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-patterns' &&
+				method === 'POST'
+			) {
+				return Promise.reject( { name: 'AbortError' } );
+			}
+
+			return Promise.reject( new Error( `Unexpected apiFetch: ${ path }` ) );
+		} );
 
 		const dispatch = jest.fn();
 
@@ -435,6 +507,16 @@ describe( 'store action thunks', () => {
 			prompt: 'Find cleaner pattern options.',
 		} )( {
 			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
 			select: {},
 		} );
 
@@ -444,6 +526,111 @@ describe( 'store action thunks', () => {
 			actions.setPatternStatus( 'loading' )
 		);
 		expect( actions._patternAbort ).toBeNull();
+	} );
+
+	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-content' &&
+				method === 'POST'
+			) {
+				return Promise.resolve( {
+					mode: 'edit',
+					title: 'Retail floors to agent workflows',
+					summary: 'Lead with the progression and tighten the opener.',
+					content: 'Retail floors. WordPress themes. Cloud platforms.',
+					notes: [ 'Keep the first paragraph shorter.' ],
+					issues: [],
+				} );
+			}
+
+			if (
+				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( { entries: [] } );
+			}
+
+			return Promise.reject( new Error( `Unexpected apiFetch: ${ path }` ) );
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getContentRequestToken: jest.fn().mockReturnValue( 2 ),
+		};
+
+		await actions.fetchContentRecommendations( {
+			mode: 'edit',
+			prompt: 'Tighten the opener and keep the rhythm brisk.',
+			postContext: {
+				postType: 'post',
+				title: 'Working draft',
+				content: 'Retail floors. WordPress themes.',
+			},
+		} )( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-content',
+				method: 'POST',
+				data: {
+					mode: 'edit',
+					prompt: 'Tighten the opener and keep the rhythm brisk.',
+					postContext: {
+						postType: 'post',
+						title: 'Working draft',
+						content: 'Retail floors. WordPress themes.',
+					},
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+						entityKind: '',
+						entityName: '',
+						stylesheet: '',
+					},
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setContentStatus( 'loading', null, 3 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setContentRecommendation(
+				{
+					mode: 'edit',
+					title: 'Retail floors to agent workflows',
+					summary: 'Lead with the progression and tighten the opener.',
+					content: 'Retail floors. WordPress themes. Cloud platforms.',
+					notes: [ 'Keep the first paragraph shorter.' ],
+					issues: [],
+				},
+				'Tighten the opener and keep the rhythm brisk.',
+				'edit',
+				3
+			)
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			3,
+			actions.setActivitySession( 'post:42', [] )
+		);
 	} );
 
 	test( 'fetchStyleBookRecommendations stores block-scoped request metadata without posting the context signature', async () => {

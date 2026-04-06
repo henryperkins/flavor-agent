@@ -645,6 +645,11 @@ final class Repository {
 				'postType',
 				'userId',
 				'operationType',
+				'provider',
+				'providerPath',
+				'configurationOwner',
+				'credentialSource',
+				'selectedProvider',
 			],
 			true
 		) ) {
@@ -752,12 +757,27 @@ final class Repository {
 		}
 
 		$resolved_statuses = array_fill( 0, count( $rows ), 'applied' );
+		$review_indexes     = [];
+
+		foreach ( $rows as $index => $row ) {
+			if ( self::is_review_only_row( $row ) ) {
+				$resolved_statuses[ $index ] = 'failed' === self::get_admin_row_undo_status( $row )
+					? 'failed'
+					: 'review';
+				$review_indexes[ $index ]    = true;
+			}
+		}
 
 		foreach ( $entity_indexes as $indexes ) {
 			$has_active_newer_entry = false;
 
 			for ( $index = count( $indexes ) - 1; $index >= 0; --$index ) {
 				$entry_index = $indexes[ $index ];
+
+				if ( isset( $review_indexes[ $entry_index ] ) ) {
+					continue;
+				}
+
 				$undo_status = self::get_admin_row_undo_status( $rows[ $entry_index ] );
 
 				if ( 'undone' === $undo_status ) {
@@ -855,6 +875,11 @@ final class Repository {
 				'userLabel'          => $user_label,
 				'operationType'      => $operation_type,
 				'operationTypeLabel' => $operation_label,
+				'provider'           => $request_meta['provider'],
+				'providerPath'       => $request_meta['providerPath'],
+				'configurationOwner' => $request_meta['configurationOwner'],
+				'credentialSource'   => $request_meta['credentialSource'],
+				'selectedProvider'   => $request_meta['selectedProvider'],
 				'dayKey'             => $timestamp_data['dayKey'],
 				'timestampUnix'      => $timestamp_data['timestampUnix'],
 				'timestamp'          => self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
@@ -899,12 +924,22 @@ final class Repository {
 		$post_type_operator      = self::normalize_filter_operator( $filters['postTypeOperator'] ?? 'is' );
 		$user_id_operator        = self::normalize_filter_operator( $filters['userIdOperator'] ?? 'is' );
 		$operation_type_operator = self::normalize_filter_operator( $filters['operationTypeOperator'] ?? 'is' );
+		$provider_operator       = self::normalize_filter_operator( $filters['providerOperator'] ?? 'is' );
+		$provider_path_operator  = self::normalize_filter_operator( $filters['providerPathOperator'] ?? 'is' );
+		$configuration_owner_operator = self::normalize_filter_operator( $filters['configurationOwnerOperator'] ?? 'is' );
+		$credential_source_operator = self::normalize_filter_operator( $filters['credentialSourceOperator'] ?? 'is' );
+		$selected_provider_operator = self::normalize_filter_operator( $filters['selectedProviderOperator'] ?? 'is' );
 		$entity_id_operator      = self::normalize_text_filter_operator( $filters['entityIdOperator'] ?? 'contains' );
 		$block_path_operator     = self::normalize_text_filter_operator( $filters['blockPathOperator'] ?? 'contains' );
 		$surface                 = trim( (string) ( $filters['surface'] ?? '' ) );
 		$status                  = trim( (string) ( $filters['status'] ?? '' ) );
 		$post_type               = trim( (string) ( $filters['postType'] ?? '' ) );
 		$operation_type          = trim( (string) ( $filters['operationType'] ?? '' ) );
+		$provider                = trim( (string) ( $filters['provider'] ?? '' ) );
+		$provider_path           = trim( (string) ( $filters['providerPath'] ?? '' ) );
+		$configuration_owner     = trim( (string) ( $filters['configurationOwner'] ?? '' ) );
+		$credential_source       = trim( (string) ( $filters['credentialSource'] ?? '' ) );
+		$selected_provider       = trim( (string) ( $filters['selectedProvider'] ?? '' ) );
 		$entity_id               = trim( (string) ( $filters['entityId'] ?? '' ) );
 		$block_path              = trim( (string) ( $filters['blockPath'] ?? '' ) );
 		$user_id                 = self::normalize_optional_int( $filters['userId'] ?? null );
@@ -919,12 +954,22 @@ final class Repository {
 					$post_type_operator,
 					$user_id_operator,
 					$operation_type_operator,
+					$provider_operator,
+					$provider_path_operator,
+					$configuration_owner_operator,
+					$credential_source_operator,
+					$selected_provider_operator,
 					$entity_id_operator,
 					$block_path_operator,
 					$surface,
 					$status,
 					$post_type,
 					$operation_type,
+					$provider,
+					$provider_path,
+					$configuration_owner,
+					$credential_source,
+					$selected_provider,
 					$entity_id,
 					$block_path,
 					$user_id,
@@ -993,6 +1038,61 @@ final class Repository {
 							(string) ( $meta['operationType'] ?? '' ),
 							$operation_type,
 							$operation_type_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $provider
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['provider'] ?? '' ),
+							$provider,
+							$provider_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $provider_path
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['providerPath'] ?? '' ),
+							$provider_path,
+							$provider_path_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $configuration_owner
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['configurationOwner'] ?? '' ),
+							$configuration_owner,
+							$configuration_owner_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $credential_source
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['credentialSource'] ?? '' ),
+							$credential_source,
+							$credential_source_operator
+						)
+					) {
+						return false;
+					}
+
+					if (
+						'' !== $selected_provider
+						&& ! self::matches_explicit_filter(
+							(string) ( $meta['selectedProvider'] ?? '' ),
+							$selected_provider,
+							$selected_provider_operator
 						)
 					) {
 						return false;
@@ -1071,6 +1171,36 @@ final class Repository {
 							(string) ( $right_meta['operationType'] ?? '' )
 						);
 						break;
+					case 'provider':
+						$result = strcmp(
+							(string) ( $left_meta['provider'] ?? '' ),
+							(string) ( $right_meta['provider'] ?? '' )
+						);
+						break;
+					case 'providerPath':
+						$result = strcmp(
+							(string) ( $left_meta['providerPath'] ?? '' ),
+							(string) ( $right_meta['providerPath'] ?? '' )
+						);
+						break;
+					case 'configurationOwner':
+						$result = strcmp(
+							(string) ( $left_meta['configurationOwner'] ?? '' ),
+							(string) ( $right_meta['configurationOwner'] ?? '' )
+						);
+						break;
+					case 'credentialSource':
+						$result = strcmp(
+							(string) ( $left_meta['credentialSource'] ?? '' ),
+							(string) ( $right_meta['credentialSource'] ?? '' )
+						);
+						break;
+					case 'selectedProvider':
+						$result = strcmp(
+							(string) ( $left_meta['selectedProvider'] ?? '' ),
+							(string) ( $right_meta['selectedProvider'] ?? '' )
+						);
+						break;
 					default:
 						$result = strcmp(
 							(string) ( $left_meta['timestamp'] ?? '' ),
@@ -1105,6 +1235,11 @@ final class Repository {
 
 		foreach ( $records as $record ) {
 			$status = (string) ( $record['meta']['status'] ?? '' );
+
+			if ( 'review' === $status ) {
+				++$summary['review'];
+				continue;
+			}
 
 			if ( 'applied' === $status ) {
 				++$summary['applied'];
@@ -1142,7 +1277,12 @@ final class Repository {
 	 *   surface: array<int, array{value: string, label: string}>,
 	 *   operationType: array<int, array{value: string, label: string}>,
 	 *   postType: array<int, array{value: string, label: string}>,
-	 *   userId: array<int, array{value: string, label: string}>
+	 *   userId: array<int, array{value: string, label: string}>,
+	 *   provider: array<int, array{value: string, label: string}>,
+	 *   providerPath: array<int, array{value: string, label: string}>,
+	 *   configurationOwner: array<int, array{value: string, label: string}>,
+	 *   credentialSource: array<int, array{value: string, label: string}>,
+	 *   selectedProvider: array<int, array{value: string, label: string}>
 	 * }
 	 */
 	private static function build_admin_filter_options(
@@ -1186,6 +1326,51 @@ final class Repository {
 				),
 				'userId',
 				'userLabel'
+			),
+			'provider'      => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'provider' ),
+					$timezone
+				),
+				'provider',
+				'provider'
+			),
+			'providerPath'  => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'providerPath' ),
+					$timezone
+				),
+				'providerPath',
+				'providerPath'
+			),
+			'configurationOwner' => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'configurationOwner' ),
+					$timezone
+				),
+				'configurationOwner',
+				'configurationOwner'
+			),
+			'credentialSource' => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'credentialSource' ),
+					$timezone
+				),
+				'credentialSource',
+				'credentialSource'
+			),
+			'selectedProvider' => self::collect_admin_filter_options(
+				self::filter_admin_records(
+					$records,
+					self::without_admin_filter( $filters, 'selectedProvider' ),
+					$timezone
+				),
+				'selectedProvider',
+				'selectedProvider'
 			),
 		];
 	}
@@ -1266,7 +1451,17 @@ final class Repository {
 		$undo   = Serializer::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' );
 		$status = trim( (string) ( $undo['status'] ?? 'available' ) );
 
-		return in_array( $status, [ 'undone', 'failed' ], true ) ? $status : 'available';
+		return in_array( $status, [ 'undone', 'failed', 'review' ], true ) ? $status : 'available';
+	}
+
+	/**
+	 * @param array<string, mixed> $row
+	 */
+	private static function is_review_only_row( array $row ): bool {
+		$activity_type    = trim( (string) ( $row['activity_type'] ?? '' ) );
+		$execution_result = trim( (string) ( $row['execution_result'] ?? '' ) );
+
+		return 'request_diagnostic' === $activity_type || 'review' === $execution_result;
 	}
 
 	/**
@@ -1324,6 +1519,13 @@ final class Repository {
 		string $surface,
 		string $activity_type
 	): array {
+		if ( 'request_diagnostic' === $activity_type ) {
+			return [
+				'value' => 'request-diagnostic',
+				'label' => 'Request diagnostic',
+			];
+		}
+
 		$primary_operation = self::get_admin_primary_operation( $before, $after );
 		$operation_type    = trim( (string) ( $primary_operation['type'] ?? '' ) );
 
@@ -1460,13 +1662,15 @@ final class Repository {
 
 	/**
 	 * @param array<string, mixed> $request
-	 * @return array{provider: string, model: string}
+	 * @return array{provider: string, model: string, providerPath: string, configurationOwner: string, credentialSource: string, selectedProvider: string}
 	 */
 	private static function get_admin_request_meta( array $request ): array {
 		return [
 			'provider' => self::get_first_string(
 				$request,
 				[
+					[ 'ai', 'backendLabel' ],
+					[ 'ai', 'providerLabel' ],
 					[ 'provider' ],
 					[ 'providerName' ],
 					[ 'metadata', 'provider' ],
@@ -1477,11 +1681,43 @@ final class Repository {
 			'model'    => self::get_first_string(
 				$request,
 				[
+					[ 'ai', 'model' ],
 					[ 'model' ],
 					[ 'modelName' ],
 					[ 'metadata', 'model' ],
-					[ 'ai', 'model' ],
 					[ 'result', 'model' ],
+				]
+			),
+			'providerPath' => self::get_first_string(
+				$request,
+				[
+					[ 'ai', 'pathLabel' ],
+					[ 'pathLabel' ],
+				]
+			),
+			'configurationOwner' => self::get_first_string(
+				$request,
+				[
+					[ 'ai', 'ownerLabel' ],
+					[ 'ownerLabel' ],
+				]
+			),
+			'credentialSource' => self::get_first_string(
+				$request,
+				[
+					[ 'ai', 'credentialSourceLabel' ],
+					[ 'ai', 'credentialSource' ],
+					[ 'credentialSourceLabel' ],
+					[ 'credentialSource' ],
+				]
+			),
+			'selectedProvider' => self::get_first_string(
+				$request,
+				[
+					[ 'ai', 'selectedProviderLabel' ],
+					[ 'ai', 'selectedProvider' ],
+					[ 'selectedProviderLabel' ],
+					[ 'selectedProvider' ],
 				]
 			),
 		];
@@ -1853,6 +2089,7 @@ final class Repository {
 
 	private static function format_status_label( string $status ): string {
 		return match ( $status ) {
+			'review'  => 'Review',
 			'undone'  => 'Undone',
 			'blocked' => 'Undo blocked',
 			'failed'  => 'Undo unavailable',
@@ -1862,6 +2099,9 @@ final class Repository {
 
 	private static function format_surface_label( string $surface ): string {
 		return match ( $surface ) {
+			'content'       => 'Content',
+			'navigation'    => 'Navigation',
+			'pattern'       => 'Pattern',
 			'template'      => 'Template',
 			'template-part' => 'Template part',
 			'global-styles' => 'Global Styles',

@@ -53,6 +53,7 @@ function normalizeUndoStatus( status ) {
 		case 'available':
 		case 'blocked':
 		case 'failed':
+		case 'review':
 		case 'undone':
 			return status;
 		default:
@@ -81,6 +82,8 @@ function buildUndoState( timestamp, undo = {} ) {
 		error:
 			status === 'blocked'
 				? undo?.error || ORDERED_UNDO_BLOCKED_ERROR
+				: status === 'review'
+				? null
 				: undo?.error ?? null,
 		updatedAt,
 		undoneAt,
@@ -542,6 +545,13 @@ export function getActivityEntityKey( entry ) {
 	}
 
 	const surface = String( entry?.surface || '' );
+	const activityType = String( entry?.type || '' );
+
+	if ( activityType === 'request_diagnostic' ) {
+		return `request:${ surface }:${ String(
+			entry?.request?.reference || entry?.id || ''
+		) }`;
+	}
 
 	if ( surface === 'template' ) {
 		return `template:${ String( entry?.target?.templateRef || '' ) }`;
@@ -665,6 +675,13 @@ export function getResolvedActivityUndoState(
 
 	const baseUndo = getPreliminaryUndoState( entry, runtimeUndoState );
 
+	if ( baseUndo.status === 'review' ) {
+		return {
+			...baseUndo,
+			canUndo: false,
+		};
+	}
+
 	if ( baseUndo.status === 'undone' ) {
 		return {
 			...baseUndo,
@@ -717,6 +734,13 @@ export function getResolvedActivityEntries(
 					: getPreliminaryUndoState( entry );
 
 			if ( resolvedUndo?.status === 'undone' ) {
+				return {
+					...resolvedUndo,
+					canUndo: false,
+				};
+			}
+
+			if ( resolvedUndo?.status === 'review' ) {
 				return {
 					...resolvedUndo,
 					canUndo: false,

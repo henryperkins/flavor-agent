@@ -26,6 +26,13 @@ final class Provider {
 	private static bool $has_fresh_runtime_chat_configuration = false;
 
 	/**
+	 * @var array<string, mixed>|null
+	 */
+	private static ?array $last_runtime_chat_metrics = null;
+
+	private static bool $has_fresh_runtime_chat_metrics = false;
+
+	/**
 	 * @return array<string, string>
 	 */
 	public static function direct_choices(): array {
@@ -328,6 +335,9 @@ final class Provider {
 	 * @return array{
 	 *   selectedProvider: string,
 	 *   selectedProviderLabel: string,
+	 *   connectorId: string,
+	 *   connectorLabel: string,
+	 *   connectorPluginSlug: string,
 	 *   provider: string,
 	 *   providerLabel: string,
 	 *   backendLabel: string,
@@ -353,6 +363,8 @@ final class Provider {
 			(string) ( $config['provider'] ?? $selected_provider )
 		);
 		$provider_label    = self::provider_label_for_request_meta( $provider );
+		$connector_meta    = self::connector_meta_for_request_meta( $provider );
+		$metrics           = self::active_chat_metrics();
 		$backend_label     = trim( (string) ( $config['label'] ?? $provider_label ) );
 		$model             = trim( (string) ( $config['model'] ?? '' ) );
 		$used_fallback     = $provider !== $selected_provider;
@@ -413,6 +425,9 @@ final class Provider {
 		return [
 			'selectedProvider'      => $selected_provider,
 			'selectedProviderLabel' => self::provider_label_for_request_meta( $selected_provider ),
+			'connectorId'           => $connector_meta['id'],
+			'connectorLabel'        => $connector_meta['label'],
+			'connectorPluginSlug'   => $connector_meta['pluginSlug'],
 			'provider'              => $provider,
 			'providerLabel'         => $provider_label,
 			'backendLabel'          => '' !== $backend_label ? $backend_label : $provider_label,
@@ -422,8 +437,22 @@ final class Provider {
 			'pathLabel'             => $path_label,
 			'credentialSource'      => $credential_source,
 			'credentialSourceLabel' => $credential_label,
+			'tokenUsage'            => $metrics['tokenUsage'],
+			'latencyMs'             => $metrics['latencyMs'],
 			'usedFallback'          => $used_fallback,
 		];
+	}
+
+	/**
+	 * @param array<string, mixed>|null $metrics
+	 */
+	public static function record_runtime_chat_metrics( ?array $metrics ): void {
+		$normalized = self::normalize_runtime_chat_metrics( $metrics );
+
+		self::$last_runtime_chat_metrics = null !== $normalized
+			? $normalized
+			: null;
+		self::$has_fresh_runtime_chat_metrics = true;
 	}
 
 	public static function active_embedding_model(): ?string {
@@ -467,6 +496,36 @@ final class Provider {
 		return self::label( $provider );
 	}
 
+	/**
+	 * @return array{id: string, label: string, pluginSlug: string}
+	 */
+	private static function connector_meta_for_request_meta( string $provider ): array {
+		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+			return [
+				'id'         => self::WORDPRESS_AI_CLIENT_PROVIDER,
+				'label'      => 'WordPress AI Client',
+				'pluginSlug' => '',
+			];
+		}
+
+		if ( ! self::is_connector( $provider ) ) {
+			return [
+				'id'         => '',
+				'label'      => '',
+				'pluginSlug' => '',
+			];
+		}
+
+		$connector = self::registered_connectors()[ $provider ] ?? null;
+		$plugin    = is_array( $connector['plugin'] ?? null ) ? $connector['plugin'] : [];
+
+		return [
+			'id'         => $provider,
+			'label'      => self::provider_label_for_request_meta( $provider ),
+			'pluginSlug' => is_string( $plugin['slug'] ?? null ) ? sanitize_key( $plugin['slug'] ) : '',
+		];
+	}
+
 	private static function credential_source_label_for_request_meta( string $source ): string {
 		return match ( $source ) {
 			'plugin_override' => 'Settings > Flavor Agent',
@@ -476,6 +535,80 @@ final class Provider {
 			'provider_managed' => 'Provider-managed',
 			default => 'Not recorded',
 		};
+	}
+
+	/**
+	 * @return array{tokenUsage: array<string, int>, latencyMs: int}|array{tokenUsage: array<string, int>, latencyMs: null}
+	 */
+	private static function active_chat_metrics(): array {
+		if ( self::$has_fresh_runtime_chat_metrics ) {
+			self::$has_fresh_runtime_chat_metrics = false;
+
+			return self::$last_runtime_chat_metrics ?? [
+				'tokenUsage' => [],
+				'latencyMs'  => null,
+			];
+		}
+
+		return [
+			'tokenUsage' => [],
+			'latencyMs'  => null,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed>|null $metrics
+	 * @return array{tokenUsage: array<string, int>, latencyMs: int}|null
+	 */
+	private static function normalize_runtime_chat_metrics( ?array $metrics ): ?array {
+		if ( ! is_array( $metrics ) ) {
+			return null;
+		}
+
+		$token_usage = [];
+
+		if ( is_array( $metrics['tokenUsage'] ?? null ) ) {
+			$total = self::normalize_runtime_metric_int( $metrics['tokenUsage']['total'] ?? null );
+			$input = self::normalize_runtime_metric_int( $metrics['tokenUsage']['input'] ?? null );
+			$output = self::normalize_runtime_metric_int( $metrics['tokenUsage']['output'] ?? null );
+
+			if ( null !== $total ) {
+				$token_usage['total'] = $total;
+			}
+
+			if ( null !== $input ) {
+				$token_usage['input'] = $input;
+			}
+
+			if ( null !== $output ) {
+				$token_usage['output'] = $output;
+			}
+		}
+
+		$latency_ms = self::normalize_runtime_metric_int( $metrics['latencyMs'] ?? null );
+
+		if ( [] === $token_usage && null === $latency_ms ) {
+			return null;
+		}
+
+		return [
+			'tokenUsage' => $token_usage,
+			'latencyMs'  => null !== $latency_ms ? $latency_ms : null,
+		];
+	}
+
+	private static function normalize_runtime_metric_int( $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value >= 0 ? $value : null;
+		}
+
+		if ( is_string( $value ) && '' !== trim( $value ) && preg_match( '/^-?\d+$/', $value ) ) {
+			$normalized = (int) $value;
+
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		return null;
 	}
 
 	/**

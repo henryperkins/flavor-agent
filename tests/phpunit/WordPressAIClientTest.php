@@ -83,4 +83,29 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 	}
+
+	public function test_chat_records_token_and_latency_metrics_when_the_ai_client_returns_structured_metadata(): void {
+		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$ai_client_generate_text_result = [
+			'text'       => '{"explanation":"Use the accent color."}',
+			'tokenUsage' => [
+				'total'  => 42,
+				'input'  => 12,
+				'output' => 30,
+			],
+			'latencyMs'  => 321,
+		];
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertSame( 42, $meta['tokenUsage']['total'] ?? null );
+		$this->assertSame( 12, $meta['tokenUsage']['input'] ?? null );
+		$this->assertSame( 30, $meta['tokenUsage']['output'] ?? null );
+		$this->assertSame( 321, $meta['latencyMs'] ?? null );
+	}
 }

@@ -47,8 +47,12 @@ function getFallbackLabel( entry ) {
 }
 
 function getStatusLabel( entry ) {
-	if ( isDiagnosticEntry( entry ) ) {
+	if ( isDiagnosticEntry( entry ) && entry?.undo?.status !== 'failed' ) {
 		return 'Review';
+	}
+
+	if ( isDiagnosticEntry( entry ) && entry?.undo?.status === 'failed' ) {
+		return 'Request failed';
 	}
 
 	if (
@@ -81,6 +85,18 @@ function getStatusLabel( entry ) {
 
 function describeActivity( entry ) {
 	if ( isDiagnosticEntry( entry ) ) {
+		if ( entry?.surface === 'content' ) {
+			return 'Content request diagnostic';
+		}
+
+		if ( entry?.surface === 'navigation' ) {
+			return 'Navigation request diagnostic';
+		}
+
+		if ( entry?.surface === 'pattern' ) {
+			return 'Pattern request diagnostic';
+		}
+
 		return entry?.target?.blockName
 			? `Block request diagnostic · ${ entry.target.blockName.replace(
 					'core/',

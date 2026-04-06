@@ -80,6 +80,9 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( Provider::AZURE, $meta['provider'] );
 		$this->assertSame( 'Azure OpenAI', $meta['providerLabel'] );
 		$this->assertSame( 'gpt-5.3-chat', $meta['model'] );
+		$this->assertSame( '', $meta['connectorId'] );
+		$this->assertSame( '', $meta['connectorLabel'] );
+		$this->assertSame( '', $meta['connectorPluginSlug'] );
 		$this->assertSame( 'flavor_agent', $meta['owner'] );
 		$this->assertSame( 'Settings > Flavor Agent', $meta['ownerLabel'] );
 		$this->assertSame(
@@ -123,6 +126,35 @@ final class ProviderTest extends TestCase {
 			'OpenAI Native model in Settings > Flavor Agent, API key in Settings > Connectors',
 			$meta['pathLabel']
 		);
+		$this->assertSame( '', $meta['connectorId'] );
+		$this->assertSame( '', $meta['connectorLabel'] );
+		$this->assertSame( '', $meta['connectorPluginSlug'] );
 		$this->assertSame( 'connector_database', $meta['credentialSource'] );
+	}
+
+	public function test_active_chat_request_meta_reports_connector_identity_for_connector_provider(): void {
+		WordPressTestState::$options = [
+			Provider::OPTION_NAME => 'anthropic',
+		];
+		WordPressTestState::$connectors = [
+			'anthropic' => [
+				'type'           => 'ai_provider',
+				'name'           => 'Anthropic',
+				'authentication' => [
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+				'plugin'         => [
+					'slug' => 'ai-services-anthropic',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		Provider::chat_configuration();
+		$meta = Provider::active_chat_request_meta();
+
+		$this->assertSame( 'anthropic', $meta['connectorId'] );
+		$this->assertSame( 'Anthropic', $meta['connectorLabel'] );
+		$this->assertSame( 'ai-services-anthropic', $meta['connectorPluginSlug'] );
 	}
 }

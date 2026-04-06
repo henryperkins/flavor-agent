@@ -276,6 +276,8 @@ function formatDocumentLabel( postType = '', entityId = '' ) {
 
 function formatActivityTypeLabel( activityType = '' ) {
 	switch ( activityType ) {
+		case 'request_diagnostic':
+			return 'Record request';
 		case 'apply_suggestion':
 			return 'Apply block suggestion';
 		case 'apply_template_suggestion':
@@ -526,6 +528,13 @@ function deriveOperationType( entry ) {
 	const primaryOperation = getPrimaryOperation( entry );
 	const operationType = String( primaryOperation?.type || '' );
 
+	if ( entry?.type === 'request_diagnostic' ) {
+		return {
+			value: 'request-diagnostic',
+			label: 'Request diagnostic',
+		};
+	}
+
 	if (
 		operationType === 'insert_pattern' ||
 		operationType === 'insert_block'
@@ -589,6 +598,12 @@ function getBlockPathLabel( entry ) {
 
 export function formatSurfaceLabel( surface = '' ) {
 	switch ( surface ) {
+		case 'content':
+			return 'Content';
+		case 'navigation':
+			return 'Navigation';
+		case 'pattern':
+			return 'Pattern';
 		case 'template':
 			return 'Template';
 		case 'template-part':
@@ -667,6 +682,16 @@ function getRequestDiagnostics( request = {} ) {
 		[ 'selectedProviderLabel' ],
 		[ 'selectedProvider' ],
 	] );
+	const connector = getFirstString( request, [
+		[ 'ai', 'connectorLabel' ],
+		[ 'ai', 'connectorId' ],
+		[ 'connectorLabel' ],
+		[ 'connectorId' ],
+	] );
+	const connectorPlugin = getFirstString( request, [
+		[ 'ai', 'connectorPluginSlug' ],
+		[ 'connectorPluginSlug' ],
+	] );
 	const requestAbility = getFirstString( request, [
 		[ 'ai', 'ability' ],
 		[ 'ability' ],
@@ -679,6 +704,7 @@ function getRequestDiagnostics( request = {} ) {
 		readPath( request, [ 'ai', 'usedFallback' ] ) ?? request?.usedFallback
 	);
 	const totalTokens = getFirstNumber( request, [
+		[ 'ai', 'tokenUsage', 'total' ],
 		[ 'tokenUsage', 'total' ],
 		[ 'usage', 'total_tokens' ],
 		[ 'usage', 'totalTokens' ],
@@ -686,16 +712,19 @@ function getRequestDiagnostics( request = {} ) {
 		[ 'totalTokens' ],
 	] );
 	const inputTokens = getFirstNumber( request, [
+		[ 'ai', 'tokenUsage', 'input' ],
 		[ 'tokenUsage', 'input' ],
 		[ 'usage', 'input_tokens' ],
 		[ 'usage', 'inputTokens' ],
 	] );
 	const outputTokens = getFirstNumber( request, [
+		[ 'ai', 'tokenUsage', 'output' ],
 		[ 'tokenUsage', 'output' ],
 		[ 'usage', 'output_tokens' ],
 		[ 'usage', 'outputTokens' ],
 	] );
 	const latencyMs = getFirstNumber( request, [
+		[ 'ai', 'latencyMs' ],
 		[ 'latencyMs' ],
 		[ 'durationMs' ],
 		[ 'timing', 'latencyMs' ],
@@ -722,6 +751,8 @@ function getRequestDiagnostics( request = {} ) {
 		configurationOwner: configurationOwner || EMPTY_VALUE,
 		credentialSource: credentialSource || EMPTY_VALUE,
 		selectedProvider: selectedProvider || EMPTY_VALUE,
+		connector: connector || EMPTY_VALUE,
+		connectorPlugin: connectorPlugin || EMPTY_VALUE,
 		requestAbility: requestAbility || EMPTY_VALUE,
 		requestRoute: requestRoute || EMPTY_VALUE,
 		usedFallback,
@@ -798,6 +829,18 @@ function getActivityEntityLabel( entry ) {
 		return `Template ${ entry?.target?.templateRef || EMPTY_VALUE }`;
 	}
 
+	if ( entry?.surface === 'content' ) {
+		return 'Content';
+	}
+
+	if ( entry?.surface === 'navigation' ) {
+		return 'Navigation';
+	}
+
+	if ( entry?.surface === 'pattern' ) {
+		return 'Pattern';
+	}
+
 	if ( entry?.surface === 'template-part' ) {
 		return `Template part ${
 			entry?.target?.templatePartRef || EMPTY_VALUE
@@ -845,9 +888,23 @@ export function getActivityStatus( entry, allEntries = [] ) {
 		typeof entry?.status === 'string' ? entry.status.trim() : '';
 
 	if (
-		[ 'applied', 'undone', 'blocked', 'failed' ].includes( explicitStatus )
+		[ 'applied', 'review', 'undone', 'blocked', 'failed' ].includes(
+			explicitStatus
+		)
 	) {
 		return explicitStatus;
+	}
+
+	if (
+		entry?.type === 'request_diagnostic' ||
+		entry?.executionResult === 'review' ||
+		entry?.undo?.status === 'review'
+	) {
+		if ( entry?.undo?.status === 'failed' ) {
+			return 'failed';
+		}
+
+		return 'review';
 	}
 
 	const resolvedUndo = getResolvedActivityUndoState( entry, allEntries );
@@ -869,14 +926,22 @@ export function getActivityStatusLabel( entry, allEntries = [] ) {
 		typeof entry === 'string'
 			? entry
 			: getActivityStatus( entry, allEntries );
+	const isFailedRequestDiagnostic =
+		typeof entry === 'object' &&
+		entry?.type === 'request_diagnostic' &&
+		status === 'failed';
 
 	switch ( status ) {
+		case 'review':
+			return 'Review';
+		case 'failed':
+			return isFailedRequestDiagnostic
+				? 'Request failed'
+				: 'Undo unavailable';
 		case 'undone':
 			return 'Undone';
 		case 'blocked':
 			return 'Undo blocked';
-		case 'failed':
-			return 'Undo unavailable';
 		default:
 			return 'Applied';
 	}
@@ -1188,7 +1253,7 @@ export function normalizeActivityEntry(
 		day: dayKey,
 		timestampDisplay,
 		status,
-		statusLabel: getActivityStatusLabel( status ),
+		statusLabel: getActivityStatusLabel( entry, allEntries ),
 		surface: String( entry?.surface || '' ),
 		surfaceLabel: formatSurfaceLabel( entry?.surface ),
 		activityType: String( entry?.type || '' ) || EMPTY_VALUE,
@@ -1224,6 +1289,8 @@ export function normalizeActivityEntry(
 		configurationOwner: diagnostics.configurationOwner,
 		credentialSource: diagnostics.credentialSource,
 		selectedProvider: diagnostics.selectedProvider,
+		connector: diagnostics.connector,
+		connectorPlugin: diagnostics.connectorPlugin,
 		requestAbility: diagnostics.requestAbility,
 		requestRoute: diagnostics.requestRoute,
 		beforeSummary: summarizeActivityState( entry?.before ),

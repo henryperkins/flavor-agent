@@ -260,12 +260,38 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Azure OpenAI responses · gpt-5.4-mini'
 		);
-		expect( getContainer().textContent ).toContain( 'Review' );
+		expect( getContainer().textContent ).toContain( 'Request failed' );
 		expect( getContainer().textContent ).toContain(
 			'Flavor Agent returned 1 style, but none in the block lane.'
 		);
 		expect( getContainer().textContent ).not.toContain(
 			'Undo unavailable'
+		);
+	} );
+
+	test( 'renders surface-aware request diagnostic labels for request-only surfaces', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'content-diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion: 'Content request complete',
+							surface: 'content',
+							undo: {
+								canUndo: false,
+								status: 'review',
+								error: null,
+							},
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'Content request diagnostic'
 		);
 	} );
 
