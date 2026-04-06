@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Patterns;
 
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
+use FlavorAgent\AzureOpenAI\EmbeddingSignature;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\OpenAI\Provider;
@@ -18,6 +19,14 @@ final class PatternIndex {
 	private const LOCK_TTL       = 300;
 	private const COOLDOWN       = 300;
 	private const BATCH_SIZE     = 100;
+	private const COMPATIBILITY_STALE_REASONS = [
+		'embedding_signature_changed',
+		'qdrant_url_changed',
+		'openai_endpoint_changed',
+		'collection_name_changed',
+		'collection_missing',
+		'collection_size_mismatch',
+	];
 
 	/** Increment when the embedding text template changes. */
 	public const EMBEDDING_RECIPE_VERSION = 2;
@@ -34,10 +43,18 @@ final class PatternIndex {
 			'openai_provider'      => '',
 			'openai_endpoint'      => '',
 			'embedding_model'      => '',
+			'embedding_dimension'  => 0,
+			'embedding_signature'  => '',
 			'last_synced_at'       => null,
 			'last_attempt_at'      => null,
 			'indexed_count'        => 0,
 			'last_error'           => null,
+			'last_error_code'      => '',
+			'last_error_status'    => 0,
+			'last_error_retryable' => false,
+			'last_error_retry_after' => null,
+			'stale_reason'         => '',
+			'stale_reasons'        => [],
 			'pattern_fingerprints' => [],
 		];
 
@@ -47,18 +64,16 @@ final class PatternIndex {
 	public static function get_runtime_state(): array {
 		$state = self::get_state();
 
-		if ( $state['status'] !== 'ready' ) {
+		if ( $state['status'] !== 'ready' && ! self::has_usable_index( $state ) ) {
 			return $state;
 		}
 
-		$is_stale = $state['qdrant_url'] !== get_option( 'flavor_agent_qdrant_url', '' )
-			|| $state['qdrant_collection'] !== QdrantClient::get_collection_name()
-			|| $state['openai_provider'] !== Provider::embedding_configuration()['provider']
-			|| $state['openai_endpoint'] !== Provider::embedding_configuration()['endpoint']
-			|| $state['embedding_model'] !== ( Provider::active_embedding_model() ?? '' );
+		$stale_reasons = self::detect_runtime_stale_reasons( $state );
 
-		if ( $is_stale ) {
-			$state['status'] = 'stale';
+		if ( ! empty( $stale_reasons ) ) {
+			$state['status']        = 'stale';
+			$state['stale_reason']  = $stale_reasons[0];
+			$state['stale_reasons'] = $stale_reasons;
 			self::save_state( $state );
 		}
 
@@ -70,6 +85,17 @@ final class PatternIndex {
 	}
 
 	public static function save_state( array $state ): void {
+		$state['embedding_dimension'] = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+		$state['embedding_signature'] = (string) ( $state['embedding_signature'] ?? '' );
+		$state['last_error_code']      = (string) ( $state['last_error_code'] ?? '' );
+		$state['last_error_status']    = max( 0, (int) ( $state['last_error_status'] ?? 0 ) );
+		$state['last_error_retryable'] = ! empty( $state['last_error_retryable'] );
+		$state['last_error_retry_after'] = isset( $state['last_error_retry_after'] ) && $state['last_error_retry_after'] !== null
+			? max( 1, min( 60, (int) $state['last_error_retry_after'] ) )
+			: null;
+		$state['stale_reason']        = (string) ( $state['stale_reason'] ?? '' );
+		$state['stale_reasons']       = self::normalize_stale_reasons( $state );
+
 		update_option( self::STATE_OPTION, $state, false );
 	}
 
@@ -88,18 +114,62 @@ final class PatternIndex {
 			return;
 		}
 
-		$state['status'] = self::has_usable_index( $state ) ? 'stale' : 'uninitialized';
+		if ( self::has_usable_index( $state ) ) {
+			$state['status']        = 'stale';
+			$state['stale_reason']  = 'pattern_registry_changed';
+			$state['stale_reasons'] = [ 'pattern_registry_changed' ];
+		} else {
+			$state['status']        = 'uninitialized';
+			$state['stale_reason']  = '';
+			$state['stale_reasons'] = [];
+		}
+		self::save_state( $state );
+	}
+
+	public static function get_stale_reasons( array $state ): array {
+		return self::normalize_stale_reasons( $state );
+	}
+
+	public static function has_compatibility_drift( array $state ): bool {
+		return [] !== array_intersect(
+			self::get_stale_reasons( $state ),
+			self::COMPATIBILITY_STALE_REASONS
+		);
+	}
+
+	public static function has_retryable_error( array $state ): bool {
+		return ! empty( $state['last_error_retryable'] );
+	}
+
+	public static function mark_stale( array $reasons ): void {
+		$reasons = array_values(
+			array_filter(
+				array_unique(
+					array_map(
+						static fn( mixed $reason ): string => is_string( $reason ) ? $reason : '',
+						$reasons
+					)
+				)
+			)
+		);
+		$state   = self::get_state();
+
+		$state['status']        = 'stale';
+		$state['stale_reason']  = $reasons[0] ?? '';
+		$state['stale_reasons'] = $reasons;
+		$state                  = self::clear_error_metadata( $state );
+
 		self::save_state( $state );
 	}
 
 	public static function handle_registry_change( ...$args ): void {
-			self::mark_dirty();
-			self::schedule_sync( true );
+		self::mark_dirty();
+		self::schedule_sync( true );
 	}
 
 	public static function handle_dependency_change( ...$args ): void {
-			self::mark_dirty();
-			self::schedule_sync( true );
+		self::mark_dirty();
+		self::schedule_sync( true );
 	}
 
 	public static function activate(): void {
@@ -214,7 +284,7 @@ final class PatternIndex {
 	 * Schedule a single background sync event with cooldown protection.
 	 */
 	public static function schedule_sync( bool $force = false ): void {
-			$hook = self::CRON_HOOK;
+		$hook = self::CRON_HOOK;
 
 		if ( ! self::recommendation_backends_configured() ) {
 			return;
@@ -257,27 +327,80 @@ final class PatternIndex {
 		// Step 3: Read all registered patterns.
 		$patterns    = ServerCollector::for_patterns();
 		$fingerprint = self::compute_fingerprint( $patterns );
+		$state       = self::clear_error_metadata( self::get_state() );
+
+		$state['last_attempt_at'] = gmdate( 'c' );
+		self::save_state( $state );
+		$probe       = self::probe_active_embedding_signature();
+
+		if ( is_wp_error( $probe ) ) {
+			self::save_error_state( $probe );
+			return $probe;
+		}
 
 		// Steps 4-6: Determine if re-index is needed.
-		$state             = self::get_state();
 		$qdrant_url        = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_collection = QdrantClient::get_collection_name();
-		$embedding_config  = Provider::embedding_configuration();
-		$openai_provider   = $embedding_config['provider'];
-		$openai_endpoint   = $embedding_config['endpoint'];
-		$embedding_model   = $embedding_config['model'];
+		$qdrant_collection = QdrantClient::get_collection_name( $probe['signature'] );
+		$openai_provider   = $probe['signature']['provider'];
+		$openai_endpoint   = $probe['endpoint'];
+		$embedding_model   = $probe['signature']['model'];
+		$embedding_dimension = $probe['signature']['dimension'];
+		$embedding_signature = $probe['signature']['signature_hash'];
+		$previous_pattern_fingerprints = is_array( $state['pattern_fingerprints'] ?? null )
+			? $state['pattern_fingerprints']
+			: [];
+		$has_usable_index = self::has_usable_index( $state );
 
-		$needs_reindex = $state['status'] !== 'ready'
+		$needs_reindex = ! $has_usable_index
 			|| $state['fingerprint'] !== $fingerprint
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
+			|| $state['openai_endpoint'] !== $openai_endpoint
+			|| $state['embedding_signature'] !== $embedding_signature
+			|| empty( $previous_pattern_fingerprints );
+
+		$needs_state_refresh = $needs_reindex
+			|| $state['status'] !== 'ready'
 			|| $state['openai_provider'] !== $openai_provider
 			|| $state['openai_endpoint'] !== $openai_endpoint
-			|| $state['embedding_model'] !== $embedding_model;
+			|| $state['embedding_model'] !== $embedding_model
+			|| (int) $state['embedding_dimension'] !== $embedding_dimension
+			|| $state['embedding_signature'] !== $embedding_signature
+			|| ! empty( self::get_stale_reasons( $state ) );
 
-		if ( ! $needs_reindex ) {
+		if ( ! $needs_state_refresh ) {
 			return [
 				'indexed'     => $state['indexed_count'],
+				'removed'     => 0,
+				'fingerprint' => $fingerprint,
+				'status'      => 'ready',
+			];
+		}
+
+		if ( ! $needs_reindex ) {
+			self::save_state(
+				array_merge(
+					$state,
+					[
+						'status'              => 'ready',
+						'fingerprint'         => $fingerprint,
+						'qdrant_url'          => $qdrant_url,
+						'qdrant_collection'   => $qdrant_collection,
+						'openai_provider'     => $openai_provider,
+						'openai_endpoint'     => $openai_endpoint,
+						'embedding_model'     => $embedding_model,
+						'embedding_dimension' => $embedding_dimension,
+						'embedding_signature' => $embedding_signature,
+						'last_synced_at'      => gmdate( 'c' ),
+						'last_error'          => null,
+						'stale_reason'        => '',
+						'stale_reasons'       => [],
+					]
+				)
+			);
+
+			return [
+				'indexed'     => 0,
 				'removed'     => 0,
 				'fingerprint' => $fingerprint,
 				'status'      => 'ready',
@@ -292,34 +415,31 @@ final class PatternIndex {
 			$current_pattern_fingerprints[ $uuid ] = self::compute_pattern_fingerprint( $pattern );
 		}
 
-		$previous_pattern_fingerprints = is_array( $state['pattern_fingerprints'] ?? null )
-			? $state['pattern_fingerprints']
-			: [];
-		$requires_full_reindex         = ! self::has_usable_index( $state )
+		$requires_full_reindex         = ! $has_usable_index
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
-			|| $state['openai_provider'] !== $openai_provider
-			|| $state['openai_endpoint'] !== $openai_endpoint
-			|| $state['embedding_model'] !== $embedding_model
+			|| $state['embedding_signature'] !== $embedding_signature
 			|| empty( $previous_pattern_fingerprints );
 
 		// Step 7: Mark indexing before remote work starts.
 		$state['status']          = 'indexing';
 		$state['last_attempt_at'] = gmdate( 'c' );
 		$state['last_error']      = null;
+		$state['stale_reason']    = '';
+		$state['stale_reasons']   = [];
 		self::save_state( $state );
 
 		// Step 2: Ensure collection.
-		$ensure = QdrantClient::ensure_collection();
+		$ensure = QdrantClient::ensure_collection( $qdrant_collection, $embedding_dimension );
 		if ( is_wp_error( $ensure ) ) {
-			self::save_error_state( $ensure->get_error_message() );
+			self::save_error_state( $ensure );
 			return $ensure;
 		}
 
 		// Step 8: Diff existing vs. current.
-		$existing_ids = QdrantClient::scroll_ids();
+		$existing_ids = QdrantClient::scroll_ids( $qdrant_collection );
 		if ( is_wp_error( $existing_ids ) ) {
-			self::save_error_state( $existing_ids->get_error_message() );
+			self::save_error_state( $existing_ids );
 			return $existing_ids;
 		}
 
@@ -353,7 +473,7 @@ final class PatternIndex {
 			if ( count( $batch_texts ) >= self::BATCH_SIZE ) {
 				$points = self::embed_and_build_points( $batch_texts, $batch_uuids, $current );
 				if ( is_wp_error( $points ) ) {
-					self::save_error_state( $points->get_error_message() );
+					self::save_error_state( $points );
 					return $points;
 				}
 				$all_points  = array_merge( $all_points, $points );
@@ -365,7 +485,7 @@ final class PatternIndex {
 		if ( ! empty( $batch_texts ) ) {
 			$points = self::embed_and_build_points( $batch_texts, $batch_uuids, $current );
 			if ( is_wp_error( $points ) ) {
-				self::save_error_state( $points->get_error_message() );
+				self::save_error_state( $points );
 				return $points;
 			}
 			$all_points = array_merge( $all_points, $points );
@@ -373,18 +493,18 @@ final class PatternIndex {
 
 		// Upsert in batches.
 		foreach ( array_chunk( $all_points, self::BATCH_SIZE ) as $batch ) {
-			$upsert = QdrantClient::upsert_points( $batch );
+			$upsert = QdrantClient::upsert_points( $batch, $qdrant_collection );
 			if ( is_wp_error( $upsert ) ) {
-				self::save_error_state( $upsert->get_error_message() );
+				self::save_error_state( $upsert );
 				return $upsert;
 			}
 		}
 
 		// Delete removed points.
 		if ( ! empty( $to_delete ) ) {
-			$delete = QdrantClient::delete_points( $to_delete );
+			$delete = QdrantClient::delete_points( $to_delete, $qdrant_collection );
 			if ( is_wp_error( $delete ) ) {
-				self::save_error_state( $delete->get_error_message() );
+				self::save_error_state( $delete );
 				return $delete;
 			}
 		}
@@ -399,10 +519,14 @@ final class PatternIndex {
 				'openai_provider'      => $openai_provider,
 				'openai_endpoint'      => $openai_endpoint,
 				'embedding_model'      => $embedding_model,
+				'embedding_dimension'  => $embedding_dimension,
+				'embedding_signature'  => $embedding_signature,
 				'last_synced_at'       => gmdate( 'c' ),
 				'last_attempt_at'      => $state['last_attempt_at'],
 				'indexed_count'        => count( $current ),
 				'last_error'           => null,
+				'stale_reason'         => '',
+				'stale_reasons'        => [],
 				'pattern_fingerprints' => $current_pattern_fingerprints,
 			]
 		);
@@ -446,11 +570,150 @@ final class PatternIndex {
 		return $points;
 	}
 
-	private static function save_error_state( string $error ): void {
-		$state               = self::get_state();
-		$state['status']     = 'error';
-		$state['last_error'] = $error;
+	/**
+	 * @return array{signature: array{provider: string, model: string, dimension: int, signature_hash: string}, endpoint: string}|\WP_Error
+	 */
+	private static function probe_active_embedding_signature(): array|\WP_Error {
+		$vector = EmbeddingClient::embed( 'flavor agent pattern index signature probe' );
+
+		if ( is_wp_error( $vector ) ) {
+			return $vector;
+		}
+
+		$embedding_config = \FlavorAgent\OpenAI\Provider::embedding_configuration();
+
+		return [
+			'signature' => EmbeddingSignature::from_configuration( $embedding_config, count( $vector ) ),
+			'endpoint'  => (string) ( $embedding_config['endpoint'] ?? '' ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 * @return string[]
+	 */
+	private static function detect_runtime_stale_reasons( array $state ): array {
+		$current_config = \FlavorAgent\OpenAI\Provider::embedding_configuration();
+		$reasons        = [];
+
+		if ( (string) ( $state['qdrant_url'] ?? '' ) !== (string) get_option( 'flavor_agent_qdrant_url', '' ) ) {
+			$reasons[] = 'qdrant_url_changed';
+		}
+
+		if (
+			(string) ( $state['openai_provider'] ?? '' ) !== (string) ( $current_config['provider'] ?? '' )
+			|| (string) ( $state['embedding_model'] ?? '' ) !== (string) ( $current_config['model'] ?? '' )
+		) {
+			$reasons[] = 'embedding_signature_changed';
+		}
+
+		if ( (string) ( $state['openai_endpoint'] ?? '' ) !== (string) ( $current_config['endpoint'] ?? '' ) ) {
+			$reasons[] = 'openai_endpoint_changed';
+		}
+
+		$current_dimension = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+		$expected_collection = QdrantClient::get_collection_name(
+			EmbeddingSignature::from_configuration( $current_config, $current_dimension )
+		);
+
+		if ( (string) ( $state['qdrant_collection'] ?? '' ) !== $expected_collection ) {
+			$reasons[] = 'collection_name_changed';
+		}
+
+		return array_values( array_unique( $reasons ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 * @return string[]
+	 */
+	private static function normalize_stale_reasons( array $state ): array {
+		$reasons = [];
+
+		if ( isset( $state['stale_reasons'] ) && is_array( $state['stale_reasons'] ) ) {
+			foreach ( $state['stale_reasons'] as $reason ) {
+				if ( is_string( $reason ) && '' !== $reason ) {
+					$reasons[] = $reason;
+				}
+			}
+		}
+
+		if (
+			[] === $reasons
+			&& isset( $state['stale_reason'] )
+			&& is_string( $state['stale_reason'] )
+			&& '' !== $state['stale_reason']
+		) {
+			$reasons[] = $state['stale_reason'];
+		}
+
+		return array_values( array_unique( $reasons ) );
+	}
+
+	private static function save_error_state( string|\WP_Error $error ): void {
+		$state = self::get_state();
+
+		if ( is_wp_error( $error ) ) {
+			$data                           = $error->get_error_data();
+			$state['last_error']           = $error->get_error_message();
+			$state['last_error_code']      = (string) $error->get_error_code();
+			$state['last_error_status']    = is_array( $data ) ? max( 0, (int) ( $data['status'] ?? 0 ) ) : 0;
+			$state['last_error_retryable'] = is_array( $data ) && ! empty( $data['retryable'] );
+			$state['last_error_retry_after'] = is_array( $data ) && isset( $data['retry_after'] ) && $data['retry_after'] !== null
+				? max( 1, min( 60, (int) $data['retry_after'] ) )
+				: null;
+		} else {
+			$state               = self::clear_error_metadata( $state );
+			$state['last_error'] = $error;
+		}
+
+		$state['status']        = 'error';
+		$state['stale_reason']  = '';
+		$state['stale_reasons'] = [];
 		self::save_state( $state );
+
+		if ( is_wp_error( $error ) ) {
+			self::schedule_retry_for_error( $error );
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $state
+	 * @return array<string, mixed>
+	 */
+	private static function clear_error_metadata( array $state ): array {
+		$state['last_error']             = null;
+		$state['last_error_code']        = '';
+		$state['last_error_status']      = 0;
+		$state['last_error_retryable']   = false;
+		$state['last_error_retry_after'] = null;
+
+		return $state;
+	}
+
+	private static function schedule_retry_for_error( \WP_Error $error ): void {
+		$data = $error->get_error_data();
+
+		if ( ! is_array( $data ) || empty( $data['retryable'] ) || ! self::recommendation_backends_configured() ) {
+			return;
+		}
+
+		$retry_after = isset( $data['retry_after'] ) && $data['retry_after'] !== null
+			? max( 1, min( 60, (int) $data['retry_after'] ) )
+			: 5;
+		$hook        = self::CRON_HOOK;
+		$target_time = time() + $retry_after;
+		$scheduled   = wp_next_scheduled( $hook );
+
+		if ( false !== $scheduled && $scheduled <= $target_time ) {
+			return;
+		}
+
+		if ( false !== $scheduled ) {
+			wp_clear_scheduled_hook( $hook );
+		}
+
+		wp_schedule_single_event( $target_time, $hook );
 	}
 
 	private static function compute_pattern_fingerprint( array $pattern ): string {

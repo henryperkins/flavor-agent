@@ -37,6 +37,14 @@ No other transitions are accepted. The `update_undo_status()` method rejects any
 
 Persisted server state remains one-way: `update_undo_status()` only writes `undone` and `failed`.
 
+Even those writes are only valid while the persisted server state is still `available`. Terminal rewrites are rejected with HTTP `409`, including:
+
+- `undone -> failed`
+- `failed -> failed`
+- `failed -> undone`
+
+When the client receives `409 flavor_agent_activity_invalid_undo_transition` while persisting an undo change, it treats that response as a reconciliation signal rather than an automatic permanent failure. The store refreshes the server-backed activity entry and adopts the persisted terminal state when it already exists there.
+
 At runtime, the client can still resolve an entry back to effectively `available` when the live editor or style state shows the recorded "after" snapshot has been reapplied again (for example after a native redo). That runtime revival is computed from current editor/style state; it is not a persisted `undo.status` transition back to `available`.
 
 ## Ordered Undo Rule
@@ -74,6 +82,12 @@ When a `POST /activity` create request arrives for an entry that already exists 
 
 - If the existing entry is `available` and the incoming entry is `failed` or `undone`, the server updates the existing row with the incoming undo state
 - This handles the case where the client's original create response was lost but a local undo was already applied
+
+Undo sync retries follow a similar reconciliation model:
+
+- transient failures keep the local entry pending with `persistence.syncType = "undo"`
+- `409 flavor_agent_activity_undo_blocked` is treated as an authoritative non-retryable failure
+- `409 flavor_agent_activity_invalid_undo_transition` triggers a server refresh so the client can adopt the already-persisted `undone` or `failed` state instead of inventing a new local failure
 
 ## Scope Hydration Retry
 

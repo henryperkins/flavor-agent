@@ -99,20 +99,46 @@ final class NavigationAbilitiesTest extends TestCase {
 			'menuItems'            => [
 				[
 					'type'  => 'navigation-link',
+					'path'  => [ 0 ],
+					'depth' => 0,
 					'label' => 'Home',
 					'url'   => '/',
 				],
 				[
 					'type'     => 'navigation-submenu',
+					'path'     => [ 1 ],
+					'depth'    => 0,
 					'label'    => 'About',
 					'url'      => '/about',
 					'children' => [
 						[
 							'type'  => 'navigation-link',
+							'path'  => [ 1, 0 ],
+							'depth' => 1,
 							'label' => 'Team',
 							'url'   => '/about/team',
 						],
 					],
+				],
+			],
+			'targetInventory'      => [
+				[
+					'path'  => [ 0 ],
+					'label' => 'Home',
+					'type'  => 'navigation-link',
+					'depth' => 0,
+				],
+				[
+					'path'  => [ 1 ],
+					'label' => 'About',
+					'type'  => 'navigation-submenu',
+					'depth' => 0,
+				],
+				[
+					'path'  => [ 1, 0 ],
+					'label' => 'Team',
+					'type'  => 'navigation-link',
+					'depth' => 1,
 				],
 			],
 			'overlayTemplateParts' => [
@@ -153,6 +179,8 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( '"Home"', $prompt );
 		$this->assertStringContainsString( '"About"', $prompt );
 		$this->assertStringContainsString( '"Team"', $prompt );
+		$this->assertStringContainsString( '## Current Menu Target Inventory', $prompt );
+		$this->assertStringContainsString( '[1, 0] `navigation-link` "Team" depth=1', $prompt );
 		$this->assertStringContainsString( '## Structure Summary', $prompt );
 		$this->assertStringContainsString( '`topLevelCount`: 2', $prompt );
 		$this->assertStringContainsString( '## Navigation Overlay Template Parts', $prompt );
@@ -204,6 +232,23 @@ final class NavigationAbilitiesTest extends TestCase {
 	}
 
 	public function test_parse_response_validates_suggestion_categories(): void {
+		$context = [
+			'targetInventory' => [
+				[
+					'path'  => [ 0 ],
+					'label' => 'Home',
+					'type'  => 'navigation-link',
+					'depth' => 0,
+				],
+				[
+					'path'  => [ 1 ],
+					'label' => 'About',
+					'type'  => 'navigation-submenu',
+					'depth' => 0,
+				],
+			],
+		];
+
 		$raw = wp_json_encode(
 			[
 				'suggestions' => [
@@ -213,9 +258,10 @@ final class NavigationAbilitiesTest extends TestCase {
 						'category'    => 'structure',
 						'changes'     => [
 							[
-								'type'   => 'group',
-								'target' => 'About, Team links',
-								'detail' => 'Create About submenu containing Team.',
+								'type'       => 'group',
+								'targetPath' => [ 1 ],
+								'target'     => 'About submenu',
+								'detail'     => 'Create About submenu containing Team.',
 							],
 						],
 					],
@@ -225,9 +271,10 @@ final class NavigationAbilitiesTest extends TestCase {
 						'category'    => 'nonexistent',
 						'changes'     => [
 							[
-								'type'   => 'reorder',
-								'target' => 'Something',
-								'detail' => 'Move it.',
+								'type'       => 'reorder',
+								'targetPath' => [ 0 ],
+								'target'     => 'Home link',
+								'detail'     => 'Move it.',
 							],
 						],
 					],
@@ -236,10 +283,11 @@ final class NavigationAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = NavigationPrompt::parse_response( $raw, [] );
+		$result = NavigationPrompt::parse_response( $raw, $context );
 
 		$this->assertCount( 2, $result['suggestions'] );
 		$this->assertSame( 'structure', $result['suggestions'][0]['category'] );
+		$this->assertSame( [ 1 ], $result['suggestions'][0]['changes'][0]['targetPath'] );
 		// Invalid category falls back to 'structure'.
 		$this->assertSame( 'structure', $result['suggestions'][1]['category'] );
 		$this->assertSame( 'Grouping simplifies the top-level menu.', $result['explanation'] );
@@ -333,6 +381,44 @@ final class NavigationAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_rejects_structural_changes_for_unknown_target_paths(): void {
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Unknown target path',
+						'description' => 'This should be dropped.',
+						'category'    => 'structure',
+						'changes'     => [
+							[
+								'type'       => 'group',
+								'targetPath' => [ 9 ],
+								'target'     => 'Missing branch',
+								'detail'     => 'Group this branch.',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = NavigationPrompt::parse_response(
+			$raw,
+			[
+				'targetInventory' => [
+					[
+						'path'  => [ 0 ],
+						'label' => 'Home',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['suggestions'] );
+	}
+
 	public function test_parse_response_handles_malformed_json(): void {
 		$result = NavigationPrompt::parse_response( 'not json at all', [] );
 
@@ -377,9 +463,10 @@ final class NavigationAbilitiesTest extends TestCase {
 				'category'    => 'structure',
 				'changes'     => [
 					[
-						'type'   => 'reorder',
-						'target' => "Item {$i}",
-						'detail' => "Move item {$i}.",
+						'type'       => 'reorder',
+						'targetPath' => [ $i - 1 ],
+						'target'     => "Item {$i}",
+						'detail'     => "Move item {$i}.",
 					],
 				],
 			];
@@ -391,7 +478,18 @@ final class NavigationAbilitiesTest extends TestCase {
 				'explanation' => 'Five suggestions submitted.',
 			]
 		);
-		$result = NavigationPrompt::parse_response( $raw, [] );
+		$result = NavigationPrompt::parse_response(
+			$raw,
+			[
+				'targetInventory' => [
+					[ 'path' => [ 0 ], 'label' => 'Item 1', 'type' => 'navigation-link', 'depth' => 0 ],
+					[ 'path' => [ 1 ], 'label' => 'Item 2', 'type' => 'navigation-link', 'depth' => 0 ],
+					[ 'path' => [ 2 ], 'label' => 'Item 3', 'type' => 'navigation-link', 'depth' => 0 ],
+					[ 'path' => [ 3 ], 'label' => 'Item 4', 'type' => 'navigation-link', 'depth' => 0 ],
+					[ 'path' => [ 4 ], 'label' => 'Item 5', 'type' => 'navigation-link', 'depth' => 0 ],
+				],
+			]
+		);
 
 		$this->assertCount( 3, $result['suggestions'] );
 	}
@@ -411,6 +509,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'group', $system );
 		$this->assertStringContainsString( 'add-submenu', $system );
 		$this->assertStringContainsString( 'set-attribute', $system );
+		$this->assertStringContainsString( 'targetPath', $system );
 		$this->assertStringContainsString( 'overlayMenu', $system );
 		$this->assertStringContainsString( 'openSubmenusOnClick', $system );
 	}

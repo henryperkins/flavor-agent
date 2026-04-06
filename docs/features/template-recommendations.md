@@ -21,7 +21,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
-- Non-executable ideas stay visible in the shared advisory shell instead of disappearing when deterministic validation cannot produce an apply contract
+- Only suggestions with validated executable operations survive server-side parsing; advisory summaries stay aligned with those operations instead of acting as a fallback path
 
 ## End-To-End Flow
 
@@ -145,12 +145,15 @@ Review Before Apply
 - `before_block_path`
 - `after_block_path`
 
-Anchored template insertion is limited to validated top-level template paths gathered by `ServerCollector::for_template()`. Every template `insert_pattern` operation must include an explicit placement. Anchored insertions also require a validated `targetPath`, and legacy implicit insertions are rejected by `TemplatePrompt::parse_response()` and `validateTemplateOperationSequence()`.
+Anchored template insertion is limited to validated top-level anchors gathered by `ServerCollector::for_template()` and the editor structure payload. Every template `insert_pattern` operation must include an explicit placement. `start` and `end` require matching live insertion anchors, while `before_block_path` and `after_block_path` also require a validated `targetPath`. Legacy implicit insertions are rejected by `TemplatePrompt::parse_response()` and `validateTemplateOperationSequence()`.
+
+Each suggestion may include at most one `insert_pattern` operation. The server derives `patternSuggestions` from validated insert operations only and rejects responses that keep only advisory pattern names after validation.
 
 ## Guardrails And Failure Modes
 
 - The surface is hidden outside `wp_template` editing
 - Any invalid operation causes the entire apply to fail before mutation; there is no partial apply path
+- Suggestions without a final validated `operations[]` list are dropped before they reach the UI
 - Free-form template rewrites are intentionally out of scope
 - Only the newest valid tail entry is undoable; older entries are blocked until newer still-applied actions are undone
 

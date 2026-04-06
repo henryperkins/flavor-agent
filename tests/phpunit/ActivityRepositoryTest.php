@@ -584,6 +584,22 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'undone', $older['undo']['status'] ?? null );
 	}
 
+	public function test_update_undo_status_rejects_terminal_state_rewrites(): void {
+		Repository::install();
+
+		Repository::create( $this->build_template_entry( 'activity-1', '2026-03-24T10:00:00Z' ) );
+
+		$undone = Repository::update_undo_status( 'activity-1', 'undone' );
+
+		$this->assertIsArray( $undone );
+		$this->assertSame( 'undone', $undone['undo']['status'] ?? null );
+
+		$rewrite = Repository::update_undo_status( 'activity-1', 'failed', 'Undo failed.' );
+
+		$this->assertInstanceOf( \WP_Error::class, $rewrite );
+		$this->assertSame( 'flavor_agent_activity_invalid_undo_transition', $rewrite->get_error_code() );
+	}
+
 	public function test_ordered_undo_check_works_with_many_entries_for_same_entity(): void {
 		Repository::install();
 
@@ -635,6 +651,62 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame(
 			'2026-03-24T10:05:00+00:00',
 			$merged['undo']['updatedAt'] ?? null
+		);
+	}
+
+	public function test_query_admin_filters_hours_by_timestamp_across_day_boundaries(): void {
+		$timezone_names = [
+			'Pacific/Kiritimati',
+			'Asia/Tokyo',
+			'Europe/London',
+			'America/New_York',
+			'Pacific/Honolulu',
+		];
+		$selected       = null;
+
+		foreach ( $timezone_names as $timezone_name ) {
+			$local_now = new \DateTimeImmutable( 'now', new \DateTimeZone( $timezone_name ) );
+
+			if ( (int) $local_now->format( 'G' ) < 6 ) {
+				$selected = [
+					'name' => $timezone_name,
+					'now'  => $local_now,
+				];
+				break;
+			}
+		}
+
+		if ( null === $selected ) {
+			$this->markTestSkipped( 'No test timezone produced a local time within the first six hours of the day.' );
+		}
+
+		WordPressTestState::$options['timezone_string'] = $selected['name'];
+		$get_timestamp_data = new \ReflectionMethod( Repository::class, 'get_timestamp_data' );
+		$get_timestamp_data->setAccessible( true );
+		$matches_day_filter = new \ReflectionMethod( Repository::class, 'matches_day_filter' );
+		$matches_day_filter->setAccessible( true );
+
+		$recent_meta = $get_timestamp_data->invoke(
+			null,
+			$selected['now']->sub( new \DateInterval( 'PT5H' ) )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'c' ),
+			new \DateTimeZone( $selected['name'] )
+		);
+		$older_meta  = $get_timestamp_data->invoke(
+			null,
+			$selected['now']->sub( new \DateInterval( 'PT7H' ) )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'c' ),
+			new \DateTimeZone( $selected['name'] )
+		);
+		$filters     = [
+			'dayOperator'      => 'inThePast',
+			'dayRelativeValue' => 6,
+			'dayRelativeUnit'  => 'hours',
+		];
+
+		$this->assertTrue(
+			(bool) $matches_day_filter->invoke( null, $recent_meta, $filters, new \DateTimeZone( $selected['name'] ) )
+		);
+		$this->assertFalse(
+			(bool) $matches_day_filter->invoke( null, $older_meta, $filters, new \DateTimeZone( $selected['name'] ) )
 		);
 	}
 

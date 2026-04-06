@@ -675,6 +675,14 @@ function getApiErrorMessage( error, fallback = 'Request failed.' ) {
 		: fallback;
 }
 
+function getApiErrorCode( error ) {
+	return typeof error?.code === 'string' && error.code
+		? error.code
+		: typeof error?.data?.code === 'string' && error.data.code
+			? error.data.code
+			: '';
+}
+
 function buildActivityQueryPath( {
 	scopeKey,
 	surface = '',
@@ -838,6 +846,25 @@ function isRetryableActivitySyncError( error ) {
 	return status >= 500;
 }
 
+function isRetryableRateLimitError( error ) {
+	if ( error?.data?.retryable === true ) {
+		return true;
+	}
+	return getApiErrorStatus( error ) === 429;
+}
+
+function getRetryAfterSeconds( error ) {
+	const retryAfter = error?.data?.retry_after ?? error?.retry_after;
+	if ( Number.isInteger( retryAfter ) && retryAfter > 0 ) {
+		return Math.min( retryAfter, 60 );
+	}
+	return 5;
+}
+
+function sleep( ms ) {
+	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
+}
+
 function isNonRetryableUndoSyncError( entry, error ) {
 	if (
 		! isServerBackedActivityEntry( entry ) &&
@@ -847,12 +874,24 @@ function isNonRetryableUndoSyncError( entry, error ) {
 	}
 
 	const status = getApiErrorStatus( error );
+	const code = getApiErrorCode( error );
 
 	if ( status < 400 || status >= 500 ) {
 		return false;
 	}
 
+	if ( status === 409 && code === 'flavor_agent_activity_invalid_undo_transition' ) {
+		return false;
+	}
+
 	return ! isRetryableActivitySyncError( error );
+}
+
+function isUndoSyncConflictError( error ) {
+	return (
+		getApiErrorStatus( error ) === 409 &&
+		getApiErrorCode( error ) === 'flavor_agent_activity_invalid_undo_transition'
+	);
 }
 
 function buildNonRetryableUndoSyncEntry(
@@ -902,6 +941,18 @@ async function persistPendingActivityEntries( entries = [] ) {
 		try {
 			persistedEntries.push( await persistPendingActivityEntry( entry ) );
 		} catch ( error ) {
+			if ( isUndoSyncConflictError( error ) ) {
+				const reconciledEntry = await reconcileActivityEntryFromServer(
+					entry,
+					entry?.document?.scopeKey || null
+				);
+
+				if ( reconciledEntry ) {
+					persistedEntries.push( reconciledEntry );
+					continue;
+				}
+			}
+
 			if ( isNonRetryableUndoSyncError( entry, error ) ) {
 				terminalEntries.push(
 					buildNonRetryableUndoSyncEntry( entry, error )
@@ -918,6 +969,19 @@ async function persistPendingActivityEntries( entries = [] ) {
 		failedEntries,
 		terminalEntries,
 	};
+}
+
+async function reconcileActivityEntryFromServer( entry, scopeKey ) {
+	if ( ! entry?.id || ! scopeKey ) {
+		return null;
+	}
+
+	const serverEntries = await fetchServerActivityEntries( scopeKey );
+
+	return (
+		serverEntries.find( ( serverEntry ) => serverEntry?.id === entry.id ) ||
+		null
+	);
 }
 
 async function recordActivityEntry( localDispatch, select, entry ) {
@@ -1298,6 +1362,23 @@ function getNextLastUndoneActivityId( currentValue, action ) {
 	return currentValue;
 }
 
+function clearAbortController( abortKey, abortId, controller ) {
+	if ( abortId === null ) {
+		if ( actions[ abortKey ] === controller ) {
+			actions[ abortKey ] = null;
+		}
+	} else if ( isPlainObject( actions[ abortKey ] ) ) {
+		const currentAbortControllers = { ...actions[ abortKey ] };
+		if ( currentAbortControllers[ abortId ] === controller ) {
+			delete currentAbortControllers[ abortId ];
+			actions[ abortKey ] =
+				Object.keys( currentAbortControllers ).length > 0
+					? currentAbortControllers
+					: null;
+		}
+	}
+}
+
 function getEmptySuggestionResponse() {
 	return {
 		suggestions: [],
@@ -1345,46 +1426,48 @@ async function runAbortableRecommendationRequest( {
 	request.requestData = requestData;
 	onLoading?.( { dispatch, input, ...request } );
 
-	try {
-		const result = await apiFetch( {
-			path: endpoint,
-			method: 'POST',
-			data: requestData,
-			signal: controller.signal,
-		} );
+		let lastError = null;
+	const maxRetries = 1;
 
-		onSuccess( {
-			dispatch,
-			input,
-			result,
-			...request,
-		} );
-	} catch ( err ) {
-		if ( err?.name === 'AbortError' ) {
+	for ( let attempt = 0; attempt <= maxRetries; attempt++ ) {
+		try {
+			const result = await apiFetch( {
+				path: endpoint,
+				method: 'POST',
+				data: requestData,
+				signal: controller.signal,
+			} );
+
+			clearAbortController( abortKey, abortId, controller );
+			onSuccess( {
+				dispatch,
+				input,
+				result,
+				...request,
+			} );
 			return;
-		}
+		} catch ( err ) {
+			lastError = err;
 
-		onError( {
-			dispatch,
-			err,
-			input,
-			...request,
-		} );
-	} finally {
-		if ( abortId === null ) {
-			if ( actions[ abortKey ] === controller ) {
-				actions[ abortKey ] = null;
+			if ( err?.name === 'AbortError' ) {
+				clearAbortController( abortKey, abortId, controller );
+				return;
 			}
-		} else if ( isPlainObject( actions[ abortKey ] ) ) {
-			const currentAbortControllers = { ...actions[ abortKey ] };
 
-			if ( currentAbortControllers[ abortId ] === controller ) {
-				delete currentAbortControllers[ abortId ];
-				actions[ abortKey ] =
-					Object.keys( currentAbortControllers ).length > 0
-						? currentAbortControllers
-						: null;
+			if ( attempt < maxRetries && isRetryableRateLimitError( err ) ) {
+				const retryAfter = getRetryAfterSeconds( err );
+				await sleep( retryAfter * 1000 );
+				continue;
 			}
+
+			clearAbortController( abortKey, abortId, controller );
+			onError( {
+				dispatch,
+				err,
+				input,
+				...request,
+			} );
+			return;
 		}
 	}
 }
@@ -1513,7 +1596,8 @@ const actions = {
 				const mergedEntries = mergeActivityEntries(
 					serverEntries,
 					persistedEntries,
-					failedEntries
+					failedEntries,
+					terminalEntries
 				);
 
 				if ( actions._activitySessionLoadToken !== requestToken ) {
@@ -2191,7 +2275,63 @@ const actions = {
 				getScopeKey( scope ) ||
 				select.getActivityScopeKey?.() ||
 				null;
+			const reconcileUndoConflict = async ( syncError, timestamp ) => {
+				if ( ! isUndoSyncConflictError( syncError ) || ! scopeKey ) {
+					return null;
+				}
 
+				try {
+					const reconciledEntry = await reconcileActivityEntryFromServer(
+						activity,
+						scopeKey
+					);
+
+					if ( ! reconciledEntry ) {
+						return null;
+					}
+
+					const reconciledEntries = mergeActivityEntries(
+						select.getActivityLog?.() || [],
+						[ reconciledEntry ]
+					);
+
+					refreshActivitySession(
+						localDispatch,
+						scopeKey,
+						reconciledEntries
+					);
+
+					const reconciledUndo = reconciledEntry?.undo || {};
+
+					if ( reconciledUndo.status === 'undone' ) {
+						return {
+							ok: true,
+							timestamp:
+								reconciledUndo.updatedAt ||
+								reconciledUndo.undoneAt ||
+								timestamp,
+							entry: reconciledEntry,
+						};
+					}
+
+					if ( reconciledUndo.status === 'failed' ) {
+						return {
+							ok: false,
+							timestamp:
+								reconciledUndo.updatedAt || timestamp,
+							error:
+								reconciledUndo.error ||
+								'This AI action can no longer be undone automatically.',
+							entry: reconciledEntry,
+						};
+					}
+				} catch {
+					return null;
+				}
+
+				return null;
+			};
+			
 			if ( scopeKey && isServerBackedActivityEntry( activity ) ) {
 				try {
 					const serverEntries =
@@ -2307,6 +2447,15 @@ const actions = {
 						timestamp,
 					};
 				} catch ( syncError ) {
+					const reconciledResult = await reconcileUndoConflict(
+						syncError,
+						timestamp
+					);
+
+					if ( reconciledResult ) {
+						return reconciledResult;
+					}
+
 					if ( isNonRetryableUndoSyncError( activity, syncError ) ) {
 						const terminalEntry = buildNonRetryableUndoSyncEntry(
 							activity,

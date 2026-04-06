@@ -56,6 +56,7 @@ final class NavigationContextCollector {
 			: $saved_source['inner'];
 
 		$menu_items        = $this->navigation_parser->extract_menu_items( $inner );
+		$target_inventory  = $this->navigation_parser->build_target_inventory( $menu_items );
 		$attributes        = $this->navigation_parser->collect_navigation_attributes( $nav_attrs );
 		$location          = $menu_id > 0 ? $this->infer_navigation_location( $menu_id ) : 'unknown';
 		$overlay_parts     = $this->template_repository->for_template_parts( 'navigation-overlay', false );
@@ -73,6 +74,7 @@ final class NavigationContextCollector {
 			],
 			'attributes'           => $attributes,
 			'menuItems'            => $menu_items,
+			'targetInventory'      => $target_inventory,
 			'menuItemCount'        => $this->navigation_parser->count_menu_items_recursive( $menu_items ),
 			'maxDepth'             => $this->navigation_parser->measure_menu_depth( $menu_items ),
 			'structureSummary'     => $structure_summary,
@@ -106,7 +108,9 @@ final class NavigationContextCollector {
 				continue;
 			}
 
-			if ( str_contains( $content, '"ref":' . $menu_id ) || str_contains( $content, '"ref": ' . $menu_id ) ) {
+			$blocks = parse_blocks( $content );
+
+			if ( $this->navigation_parser->blocks_reference_navigation( $blocks, $menu_id ) ) {
 				return $area;
 			}
 		}

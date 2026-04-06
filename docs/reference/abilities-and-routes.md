@@ -271,6 +271,7 @@ Use it when you need to answer:
       "changes": [
         {
           "type": "flatten",
+          "targetPath": [2],
           "target": "Resources submenu",
           "detail": "Promote the two most-used links to the top level."
         }
@@ -328,7 +329,10 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 ## Route Notes
 
 - The recommendation routes sanitize and normalize structured inputs before handing them to the ability layer
-- Template recommendation requests carry an editor-collected `editorStructure` with the top-level block tree; the server normalizes it and derives insertion anchors for validated operations. Template-part requests carry server-collected executable targets, insertion anchors, and structural constraints before any apply affordance is shown
+- `POST /flavor-agent/v1/recommend-patterns` does not accept `editorStructure`; the current pattern route contract ignores it
+- Template recommendation requests carry an editor-collected `editorStructure` with the top-level block tree; the server normalizes it and derives insertion anchors for validated operations
+- Template-part requests also accept `editorStructure` for editor-collected override context, then combine it with server-collected executable targets, insertion anchors, and structural constraints before any apply affordance is shown
+- Navigation response groups now validate structural `changes[].targetPath` values against the current menu target inventory instead of trusting free-form target text alone
 - Activity permissions are contextual: post-like scopes use `edit_posts` or `edit_post`, while template and template-part scopes use `edit_theme_options`
 - Manual sync is intentionally admin-only because it mutates shared vector-index state
 

@@ -863,6 +863,20 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_get_pattern_sync_reason_label_handles_collection_rebuild_reasons(): void {
+		$method = new ReflectionMethod( Settings::class, 'get_pattern_sync_reason_label' );
+		$method->setAccessible( true );
+
+		$this->assertSame(
+			'Pattern index collection is missing and needs a rebuild.',
+			$method->invoke( null, 'collection_missing' )
+		);
+		$this->assertSame(
+			'Pattern index collection vector size no longer matches the active embedding configuration.',
+			$method->invoke( null, 'collection_size_mismatch' )
+		);
+	}
+
 	private function reset_validation_state(): void {
 		$azure_state = new ReflectionProperty( Settings::class, 'azure_validation_state' );
 		$azure_state->setAccessible( true );

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
@@ -123,6 +124,75 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'uninitialized', PatternIndex::get_state()['status'] );
 	}
 
+	public function test_runtime_state_marks_legacy_collection_names_stale_with_a_compatibility_reason(): void {
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'               => 'ready',
+					'qdrant_url'           => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection'    => 'flavor-agent-patterns-legacy',
+					'openai_provider'      => Provider::NATIVE,
+					'openai_endpoint'      => 'https://api.openai.com',
+					'embedding_model'      => 'text-embedding-3-large',
+					'embedding_dimension'  => 2,
+					'embedding_signature'  => EmbeddingClient::build_signature_for_dimension( 2 )['signature_hash'],
+					'last_synced_at'       => '2026-03-24T00:00:00+00:00',
+					'stale_reason'         => '',
+					'stale_reasons'        => [],
+					'pattern_fingerprints' => [],
+				]
+			)
+		);
+
+		$state = PatternIndex::get_runtime_state();
+
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'collection_name_changed', $state['stale_reasons'] );
+		$this->assertTrue( PatternIndex::has_compatibility_drift( $state ) );
+	}
+
+	public function test_runtime_state_treats_embedding_endpoint_drift_as_compatibility_drift(): void {
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'               => 'ready',
+					'qdrant_url'           => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection'    => QdrantClient::get_collection_name(
+						EmbeddingClient::build_signature_for_dimension( 2 )
+					),
+					'openai_provider'      => Provider::NATIVE,
+					'openai_endpoint'      => 'https://old.example.test',
+					'embedding_model'      => 'text-embedding-3-large',
+					'embedding_dimension'  => 2,
+					'embedding_signature'  => EmbeddingClient::build_signature_for_dimension( 2 )['signature_hash'],
+					'last_synced_at'       => '2026-03-24T00:00:00+00:00',
+					'stale_reason'         => '',
+					'stale_reasons'        => [],
+					'pattern_fingerprints' => [],
+				]
+			)
+		);
+
+		$state = PatternIndex::get_runtime_state();
+
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'openai_endpoint_changed', $state['stale_reasons'] );
+		$this->assertTrue( PatternIndex::has_compatibility_drift( $state ) );
+	}
+
+	public function test_collection_name_changes_when_embedding_signature_changes(): void {
+		$small = QdrantClient::get_collection_name(
+			EmbeddingClient::build_signature_for_dimension( 2 )
+		);
+		$large = QdrantClient::get_collection_name(
+			EmbeddingClient::build_signature_for_dimension( 3 )
+		);
+
+		$this->assertNotSame( $small, $large );
+	}
+
 	public function test_schedule_sync_requires_backends_and_respects_existing_events_cooldown_and_force(): void {
 		WordPressTestState::$options = [];
 
@@ -167,6 +237,7 @@ final class PatternIndexTest extends TestCase {
 		$patterns = $this->current_patterns();
 
 		$this->save_ready_state_for_patterns( $patterns );
+		$this->queue_signature_probe();
 
 		$result = PatternIndex::sync();
 
@@ -180,13 +251,14 @@ final class PatternIndexTest extends TestCase {
 			$result
 		);
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
-		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sync_performs_full_reindex_when_no_usable_index_exists(): void {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 		$this->register_pattern( 'theme/footer-callout', $this->pattern_fixture( 'theme/footer-callout', 'Footer Callout', 'Footer copy' ) );
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection( false );
 		$this->queue_scroll( [] );
 		$this->queue_embeddings(
@@ -252,6 +324,7 @@ final class PatternIndexTest extends TestCase {
 			]
 		);
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection();
 		$this->queue_scroll(
 			[
@@ -288,14 +361,62 @@ final class PatternIndexTest extends TestCase {
 	public function test_sync_persists_error_state_when_collection_creation_fails(): void {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection( false, false );
 
 		$this->assert_sync_failure( 'qdrant_create_error', 'Collection create failed' );
 	}
 
+	public function test_sync_schedules_retry_when_signature_probe_is_rate_limited(): void {
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [ 'code' => 429 ],
+			'headers'  => [ 'retry-after' => '17' ],
+			'body'     => wp_json_encode(
+				[
+					'error' => [
+						'message' => 'Embedding probe rate limited',
+					],
+				]
+			),
+		];
+
+		$this->assert_retryable_sync_failure( 'rate_limited', 'Embedding probe rate limited', 17 );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_sync_schedules_retry_when_qdrant_collection_creation_is_rate_limited(): void {
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+
+		$this->queue_signature_probe();
+		WordPressTestState::$remote_get_responses[] = $this->qdrant_response(
+			404,
+			[
+				'status' => [
+					'error' => 'Collection not found',
+				],
+			]
+		);
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [ 'code' => 429 ],
+			'headers'  => [ 'retry-after' => '11' ],
+			'body'     => wp_json_encode(
+				[
+					'status' => [
+						'error' => 'Collection create rate limited',
+					],
+				]
+			),
+		];
+
+		$this->assert_retryable_sync_failure( 'qdrant_rate_limited', 'Collection create rate limited', 11 );
+	}
+
 	public function test_sync_persists_error_state_when_scroll_fails(): void {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection();
 		$this->queue_qdrant_error( '/points/scroll', 'POST', 'qdrant_scroll_error', 'Scroll failed' );
 
@@ -305,6 +426,7 @@ final class PatternIndexTest extends TestCase {
 	public function test_sync_persists_error_state_when_embedding_fails(): void {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection();
 		$this->queue_scroll( [] );
 		WordPressTestState::$remote_post_responses[] = [
@@ -324,6 +446,7 @@ final class PatternIndexTest extends TestCase {
 	public function test_sync_persists_error_state_when_upsert_fails(): void {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection();
 		$this->queue_scroll( [] );
 		$this->queue_embeddings(
@@ -361,6 +484,7 @@ final class PatternIndexTest extends TestCase {
 			]
 		);
 
+		$this->queue_signature_probe();
 		$this->queue_ensure_collection();
 		$this->queue_scroll(
 			[
@@ -429,6 +553,7 @@ final class PatternIndexTest extends TestCase {
 	 */
 	private function save_ready_state_for_patterns( array $patterns, array $overrides = [] ): void {
 		$embedding_config     = Provider::embedding_configuration();
+		$embedding_signature  = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
 		$pattern_fingerprints = [];
 
 		foreach ( $patterns as $pattern ) {
@@ -443,14 +568,18 @@ final class PatternIndexTest extends TestCase {
 					'status'               => 'ready',
 					'fingerprint'          => PatternIndex::compute_fingerprint( $patterns ),
 					'qdrant_url'           => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'    => QdrantClient::get_collection_name(),
-					'openai_provider'      => Provider::get(),
+					'qdrant_collection'    => QdrantClient::get_collection_name( $embedding_signature ),
+					'openai_provider'      => $embedding_config['provider'],
 					'openai_endpoint'      => $embedding_config['endpoint'],
 					'embedding_model'      => $embedding_config['model'],
+					'embedding_dimension'  => 2,
+					'embedding_signature'  => $embedding_signature['signature_hash'],
 					'last_synced_at'       => '2026-03-24T00:00:00+00:00',
 					'last_attempt_at'      => '2000-01-01T00:00:00+00:00',
 					'indexed_count'        => count( $patterns ),
 					'last_error'           => null,
+					'stale_reason'         => '',
+					'stale_reasons'        => [],
 					'pattern_fingerprints' => $pattern_fingerprints,
 				],
 				$overrides
@@ -464,7 +593,16 @@ final class PatternIndexTest extends TestCase {
 			$collection_exists
 				? [
 					'status' => 'ok',
-					'result' => [],
+					'result' => [
+						'config' => [
+							'params' => [
+								'vectors' => [
+									'size'     => 2,
+									'distance' => 'Cosine',
+								],
+							],
+						],
+					],
 				]
 				: [
 					'status' => [
@@ -527,6 +665,14 @@ final class PatternIndexTest extends TestCase {
 		];
 	}
 
+	private function queue_signature_probe(): void {
+		$this->queue_embeddings(
+			[
+				[ 0.01, 0.02 ],
+			]
+		);
+	}
+
 	private function queue_qdrant_success( string $url_suffix, string $method ): void {
 		WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
 			200,
@@ -571,9 +717,11 @@ final class PatternIndexTest extends TestCase {
 	}
 
 	private function collection_url(): string {
+		$embedding_signature = EmbeddingClient::build_signature_for_dimension( 2 );
+
 		return rtrim( (string) get_option( 'flavor_agent_qdrant_url', '' ), '/' )
 			. '/collections/'
-			. QdrantClient::get_collection_name();
+			. QdrantClient::get_collection_name( $embedding_signature );
 	}
 
 	private function assert_sync_failure( string $expected_code, string $expected_message ): void {
@@ -585,6 +733,33 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( $expected_message, $result->get_error_message() );
 		$this->assertSame( 'error', $state['status'] );
 		$this->assertSame( $expected_message, $state['last_error'] );
+		$this->assertSame( $expected_code, $state['last_error_code'] );
+		$this->assertFalse( (bool) $state['last_error_retryable'] );
+		$this->assertNull( $state['last_error_retry_after'] );
+		$this->assertSame( [], WordPressTestState::$scheduled_events );
+	}
+
+	private function assert_retryable_sync_failure( string $expected_code, string $expected_message, int $retry_after ): void {
+		$before = time();
+		$result = PatternIndex::sync();
+		$after  = time();
+		$state  = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $expected_code, $result->get_error_code() );
+		$this->assertSame( $expected_message, $result->get_error_message() );
+		$this->assertSame( 'error', $state['status'] );
+		$this->assertSame( $expected_message, $state['last_error'] );
+		$this->assertSame( $expected_code, $state['last_error_code'] );
+		$this->assertSame( 429, $state['last_error_status'] );
+		$this->assertTrue( PatternIndex::has_retryable_error( $state ) );
+		$this->assertSame( $retry_after, $state['last_error_retry_after'] );
+		$this->assertNotNull( $state['last_attempt_at'] );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$scheduled = WordPressTestState::$scheduled_events[ PatternIndex::CRON_HOOK ]['timestamp'];
+		$this->assertGreaterThanOrEqual( $before + $retry_after, $scheduled );
+		$this->assertLessThanOrEqual( $after + $retry_after, $scheduled );
 	}
 
 	/**

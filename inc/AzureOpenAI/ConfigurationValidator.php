@@ -21,6 +21,33 @@ final class ConfigurationValidator {
 		string $fallback_message,
 		string $expected_shape
 	): true|\WP_Error {
+		$result = self::validate_with_response(
+			$url,
+			$headers,
+			$model,
+			$body,
+			$error_code,
+			$fallback_message,
+			$expected_shape
+		);
+
+		return is_wp_error( $result ) ? $result : true;
+	}
+
+	/**
+	 * @param array<string, mixed> $body
+	 * @param array<string, string> $headers
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function validate_with_response(
+		string $url,
+		array $headers,
+		string $model,
+		array $body,
+		string $error_code,
+		string $fallback_message,
+		string $expected_shape
+	): array|\WP_Error {
 		$url             = trim( $url );
 		$model           = trim( $model );
 		$has_auth_header = false;
@@ -105,7 +132,7 @@ final class ConfigurationValidator {
 			);
 		}
 
-		return true;
+		return $data;
 	}
 
 	public static function normalize_transport_error( \WP_Error $error, string $label, string $url, int $timeout ): \WP_Error {

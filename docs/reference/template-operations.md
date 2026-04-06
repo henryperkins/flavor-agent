@@ -23,6 +23,8 @@ The server-side prompt parser is the first validation boundary, and `src/utils/t
 | `replace_template_part` | Replace one template part with another | `currentSlug`, `slug`, `area` |
 | `insert_pattern` | Insert a registered pattern into the template | `patternName`, `placement` |
 
+Each template suggestion may contain at most one `insert_pattern` operation.
+
 ### Placements
 
 All `insert_pattern` operations require a `placement` value:
@@ -36,7 +38,15 @@ All `insert_pattern` operations require a `placement` value:
 
 Implicit template insertions are invalid. If `placement` is omitted, the suggestion stays non-executable and the client does not fall back to the editor's current insertion point.
 
+`patternSuggestions` is an advisory summary derived from validated `insert_pattern` operations. It is not a fallback path that keeps otherwise non-executable template suggestions alive.
+
 ### Anchor Validation
+
+Template insertions are only executable when the requested placement is present in the current editor-collected top-level anchor inventory.
+
+- `start` requires a live `start` insertion anchor
+- `end` requires a live `end` insertion anchor
+- `before_block_path` and `after_block_path` require a live anchored path from `editorStructure.topLevelBlockTree`
 
 When `placement` is `before_block_path` or `after_block_path`, the server:
 
@@ -75,6 +85,8 @@ Same four placements as template operations: `start`, `end`, `before_block_path`
 
 ### Validation Constraints
 
+- `insert_pattern` with `placement = start` requires a live `start` insertion anchor
+- `insert_pattern` with `placement = end` requires a live `end` insertion anchor
 - `replace_block_with_pattern` requires that the target block at `targetPath` matches `expectedBlockName` and that `replace_block_with_pattern` is in the target's `allowedOperations`
 - `remove_block` requires the same target match and `remove_block` in `allowedOperations`
 - The server builds executable targets with per-block `allowedOperations` lists from the template-part's block tree before validation

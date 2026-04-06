@@ -120,6 +120,12 @@ final class TemplatePromptTest extends TestCase {
 					'name' => 'theme/hero',
 				],
 			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+			],
 		];
 
 		$raw = wp_json_encode(
@@ -204,7 +210,7 @@ final class TemplatePromptTest extends TestCase {
 		);
 	}
 
-	public function test_parse_response_derives_template_part_operations_from_legacy_template_fields_and_keeps_pattern_summaries_advisory(): void {
+	public function test_parse_response_derives_template_part_operations_from_legacy_template_fields_without_keeping_advisory_pattern_summaries(): void {
 		$context = [
 			'assignedParts'  => [
 				[
@@ -293,7 +299,7 @@ final class TemplatePromptTest extends TestCase {
 			$result['suggestions'][0]['templateParts']
 		);
 		$this->assertSame(
-			[ 'theme/hero' ],
+			[],
 			$result['suggestions'][0]['patternSuggestions']
 		);
 	}
@@ -529,7 +535,7 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
 
-	public function test_parse_response_keeps_legacy_pattern_summaries_as_advisory_only(): void {
+	public function test_parse_response_rejects_legacy_pattern_summaries_without_executable_operations(): void {
 		$context = [
 			'assignedParts'  => [],
 			'availableParts' => [],
@@ -560,18 +566,199 @@ final class TemplatePromptTest extends TestCase {
 
 		$result = TemplatePrompt::parse_response( $raw, $context );
 
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_rejects_multiple_insert_pattern_operations(): void {
+		$context = [
+			'assignedParts'  => [],
+			'availableParts' => [],
+			'allowedAreas'   => [],
+			'emptyAreas'     => [],
+			'patterns'       => [
+				[
+					'name' => 'theme/hero',
+				],
+				[
+					'name' => 'theme/cta',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Too many pattern inserts',
+						'description' => 'Only one insert should be allowed.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'start',
+							],
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/cta',
+								'placement'   => 'end',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_rejects_template_start_pattern_insertions_without_a_live_start_anchor(): void {
+		$context = [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [],
+			'emptyAreas'               => [],
+			'patterns'                 => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'end',
+					'label'     => 'End of template',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Insert a hero first',
+						'description' => 'Place a hero at the top of the template.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'start',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_accepts_template_start_pattern_insertions_when_a_live_start_anchor_exists(): void {
+		$context = [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [],
+			'emptyAreas'               => [],
+			'patterns'                 => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Insert a hero first',
+						'description' => 'Place a hero at the top of the template.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'start',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
 		$this->assertIsArray( $result );
 		$this->assertSame(
 			[
 				[
-					'label'              => 'Too many pattern inserts',
-					'description'        => 'Legacy summaries should not imply multiple inserts.',
-					'operations'         => [],
-					'templateParts'      => [],
-					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+					'type'        => 'insert_pattern',
+					'patternName' => 'theme/hero',
+					'placement'   => 'start',
 				],
 			],
-			$result['suggestions']
+			$result['suggestions'][0]['operations'] ?? []
+		);
+	}
+
+	public function test_parse_response_rejects_template_end_pattern_insertions_without_a_live_end_anchor(): void {
+		$context = [
+			'assignedParts'            => [],
+			'availableParts'           => [],
+			'allowedAreas'             => [],
+			'emptyAreas'               => [],
+			'patterns'                 => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Insert a hero last',
+						'description' => 'Place a hero at the end of the template.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/hero',
+								'placement'   => 'end',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_build_system_documents_the_single_insert_pattern_limit(): void {
+		$system = TemplatePrompt::build_system();
+
+		$this->assertStringContainsString(
+			'Each suggestion may contain at most one insert_pattern operation.',
+			$system
 		);
 	}
 

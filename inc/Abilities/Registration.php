@@ -578,7 +578,32 @@ final class Registration {
 				'output_schema'       => [
 					'type'       => 'object',
 					'properties' => [
-						'suggestions' => [ 'type' => 'array' ],
+						'suggestions' => [
+							'type'  => 'array',
+							'items' => [
+								'type'       => 'object',
+								'properties' => [
+									'label'       => [ 'type' => 'string' ],
+									'description' => [ 'type' => 'string' ],
+									'category'    => [ 'type' => 'string' ],
+									'changes'     => [
+										'type'  => 'array',
+										'items' => [
+											'type'       => 'object',
+											'properties' => [
+												'type'       => [ 'type' => 'string' ],
+												'target'     => [ 'type' => 'string' ],
+												'detail'     => [ 'type' => 'string' ],
+												'targetPath' => [
+													'type'  => 'array',
+													'items' => [ 'type' => 'integer' ],
+												],
+											],
+										],
+									],
+								],
+							],
+						],
 						'explanation' => [ 'type' => 'string' ],
 					],
 				],

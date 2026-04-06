@@ -30,7 +30,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `buildNavigationFetchInput()` extracts the prompt, menu ID, and/or serialized navigation markup
 3. `fetchNavigationRecommendations()` in the `flavor-agent` store posts the request to `POST /flavor-agent/v1/recommend-navigation`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_navigation()` adapts the request to `FlavorAgent\Abilities\NavigationAbilities::recommend_navigation()`
-5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, overlay context, and overlay template-part metadata, builds prompt text through `FlavorAgent\LLM\NavigationPrompt`, optionally adds WordPress docs grounding, and calls `ResponsesClient::rank()`
+5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, builds prompt text through `FlavorAgent\LLM\NavigationPrompt`, optionally adds WordPress docs grounding, and calls `ResponsesClient::rank()`
 6. The parsed response returns advisory suggestion groups plus an explanation string
 7. The store caches the result against the current block client ID and the UI renders suggestion cards and per-change rows
 
@@ -39,12 +39,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Suggest navigation structure improvements
 - Suggest overlay-related changes when the current block uses or implies overlay behavior
 - Suggest accessibility-oriented navigation changes
-- Ground those suggestions against current location, overlay, and structure summaries instead of only raw menu items
+- Ground those suggestions against current location, overlay, structure summaries, and real current menu target paths instead of only raw menu items
 - Reset and re-fetch as the selected navigation block or its serialized context changes
 
 ## Guardrails And Failure Modes
 
 - This surface is advisory-only through v1.0; there is no validated apply contract
+- Structural change groups are still advisory, but the backend now rejects any structural `changes[].targetPath` that does not map to the current menu inventory
 - It does not write activity entries and does not participate in inline undo
 - The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
 - The panel clears stale results when the selected block changes or when the navigation context signature changes

@@ -19,7 +19,7 @@ final class Serializer {
 
 		return [
 			'id'              => self::normalize_string( $entry['id'] ?? '' ),
-			'schemaVersion'   => self::normalize_positive_int( $entry['schemaVersion'] ?? 1, 1 ),
+			'schemaVersion'   => self::normalize_non_negative_int( $entry['schemaVersion'] ?? 1, 1 ),
 			'type'            => self::normalize_string( $entry['type'] ?? '' ),
 			'surface'         => self::normalize_string( $entry['surface'] ?? '' ),
 			'target'          => self::normalize_structured_value( $entry['target'] ?? [] ),
@@ -179,11 +179,11 @@ final class Serializer {
 			self::decode_json( isset( $row['undo_state'] ) ? (string) $row['undo_state'] : '' ),
 			$timestamp
 		);
-		$user_id   = self::normalize_positive_int( $row['user_id'] ?? 0, 0 );
+		$user_id   = self::normalize_non_negative_int( $row['user_id'] ?? 0, 0 );
 
 		return [
 			'id'              => self::normalize_string( $row['activity_id'] ?? '' ),
-			'schemaVersion'   => self::normalize_positive_int( $row['schema_version'] ?? 1, 1 ),
+			'schemaVersion'   => self::normalize_non_negative_int( $row['schema_version'] ?? 1, 1 ),
 			'type'            => self::normalize_string( $row['activity_type'] ?? '' ),
 			'surface'         => self::normalize_string( $row['surface'] ?? '' ),
 			'target'          => self::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' ),
@@ -274,7 +274,7 @@ final class Serializer {
 		return '' === $string ? null : $string;
 	}
 
-	private static function normalize_positive_int( $value, int $fallback ): int {
+	private static function normalize_non_negative_int( $value, int $fallback ): int {
 		$normalized = (int) $value;
 
 		return $normalized >= 0 ? $normalized : $fallback;

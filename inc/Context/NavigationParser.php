@@ -12,8 +12,19 @@ final class NavigationParser {
 	 */
 	public function find_navigation_block( array $blocks ): ?array {
 		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
 			if ( ( $block['blockName'] ?? '' ) === 'core/navigation' ) {
 				return $block;
+			}
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+			$match        = $this->find_navigation_block( $inner_blocks );
+
+			if ( is_array( $match ) ) {
+				return $match;
 			}
 		}
 
@@ -64,10 +75,14 @@ final class NavigationParser {
 	 * @param array<int, mixed> $blocks Parsed inner blocks of a navigation.
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function extract_menu_items( array $blocks ): array {
+	public function extract_menu_items( array $blocks, array $parent_path = [], int $depth = 0 ): array {
 		$items = [];
 
-		foreach ( $blocks as $block ) {
+		foreach ( $blocks as $index => $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
 			$name  = $block['blockName'] ?? '';
 			$attrs = $block['attrs'] ?? [];
 			$inner = $block['innerBlocks'] ?? [];
@@ -76,8 +91,11 @@ final class NavigationParser {
 				continue;
 			}
 
+			$path = array_merge( $parent_path, [ (int) $index ] );
 			$item = [
-				'type' => $this->simplify_block_name( $name ),
+				'type'  => $this->simplify_block_name( $name ),
+				'path'  => $path,
+				'depth' => $depth,
 			];
 
 			if ( 'core/navigation-link' === $name || 'core/navigation-submenu' === $name ) {
@@ -92,13 +110,25 @@ final class NavigationParser {
 			}
 
 			if ( is_array( $inner ) && count( $inner ) > 0 ) {
-				$item['children'] = $this->extract_menu_items( $inner );
+				$item['children'] = $this->extract_menu_items( $inner, $path, $depth + 1 );
 			}
 
 			$items[] = $item;
 		}
 
 		return $items;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $items
+	 * @return array<int, array{path: array<int, int>, label: string, type: string, depth: int}>
+	 */
+	public function build_target_inventory( array $items ): array {
+		$inventory = [];
+
+		$this->walk_target_inventory( $items, $inventory );
+
+		return $inventory;
 	}
 
 	/**
@@ -179,6 +209,33 @@ final class NavigationParser {
 		return $summary;
 	}
 
+	/**
+	 * @param array<int, mixed> $blocks
+	 */
+	public function blocks_reference_navigation( array $blocks, int $menu_id ): bool {
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			if (
+				( $block['blockName'] ?? '' ) === 'core/navigation'
+				&& isset( $block['attrs']['ref'] )
+				&& (int) $block['attrs']['ref'] === $menu_id
+			) {
+				return true;
+			}
+
+			$inner_blocks = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+
+			if ( [] !== $inner_blocks && $this->blocks_reference_navigation( $inner_blocks, $menu_id ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private function simplify_block_name( string $name ): string {
 		if ( str_starts_with( $name, 'core/' ) ) {
 			return substr( $name, 5 );
@@ -192,6 +249,58 @@ final class NavigationParser {
 	 */
 	private function extract_string_attr( array $attrs, string $key, string $default_value ): string {
 		return isset( $attrs[ $key ] ) && is_string( $attrs[ $key ] ) ? $attrs[ $key ] : $default_value;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $items
+	 * @param array<int, array{path: array<int, int>, label: string, type: string, depth: int}> $inventory
+	 */
+	private function walk_target_inventory( array $items, array &$inventory ): void {
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+
+			$path = $this->sanitize_target_path( $item['path'] ?? null );
+
+			if ( null === $path ) {
+				continue;
+			}
+
+			$inventory[] = [
+				'path'  => $path,
+				'label' => sanitize_text_field( (string) ( $item['label'] ?? '' ) ),
+				'type'  => sanitize_key( (string) ( $item['type'] ?? '' ) ),
+				'depth' => isset( $item['depth'] ) ? max( 0, (int) $item['depth'] ) : count( $path ) - 1,
+			];
+
+			$children = is_array( $item['children'] ?? null ) ? $item['children'] : [];
+
+			if ( [] !== $children ) {
+				$this->walk_target_inventory( $children, $inventory );
+			}
+		}
+	}
+
+	/**
+	 * @return array<int, int>|null
+	 */
+	private function sanitize_target_path( mixed $path ): ?array {
+		if ( ! is_array( $path ) || [] === $path ) {
+			return null;
+		}
+
+		$normalized = [];
+
+		foreach ( $path as $segment ) {
+			if ( ! is_numeric( $segment ) ) {
+				return null;
+			}
+
+			$normalized[] = max( 0, (int) $segment );
+		}
+
+		return $normalized;
 	}
 
 	/**

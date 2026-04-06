@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\PatternAbilities;
+use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\OpenAI\Provider;
@@ -110,6 +111,27 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
+	public function test_recommend_patterns_schedules_sync_for_uninitialized_index_for_non_admin_callers(): void {
+		$this->configure_backends();
+
+		$this->save_index_state(
+			[
+				'status'         => 'uninitialized',
+				'last_synced_at' => null,
+			]
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+	}
+
 	public function test_recommend_patterns_returns_index_warming_while_indexing_without_usable_index(): void {
 		$this->configure_backends();
 		WordPressTestState::$capabilities = [ 'manage_options' => true ];
@@ -152,6 +174,108 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'index_unavailable', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_recommend_patterns_returns_index_warming_for_retryable_error_state_without_usable_index(): void {
+		$this->configure_backends();
+
+		$this->save_index_state(
+			[
+				'status'               => 'error',
+				'last_synced_at'       => null,
+				'last_error'           => 'Rate limited.',
+				'last_error_code'      => 'rate_limited',
+				'last_error_status'    => 429,
+				'last_error_retryable' => true,
+				'last_error_retry_after' => 7,
+			]
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_recommend_patterns_does_not_use_a_stale_index_when_collection_compatibility_changed(): void {
+		$this->configure_backends();
+		WordPressTestState::$capabilities = [ 'manage_options' => true ];
+
+		$this->save_index_state(
+			[
+				'status'         => 'stale',
+				'last_synced_at' => '2026-03-24T00:00:00+00:00',
+				'stale_reason'   => 'collection_name_changed',
+				'stale_reasons'  => [ 'collection_name_changed' ],
+			]
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_recommend_patterns_schedules_sync_for_compatibility_drift_for_non_admin_callers(): void {
+		$this->configure_backends();
+
+		$this->save_index_state(
+			[
+				'status'         => 'stale',
+				'last_synced_at' => '2026-03-24T00:00:00+00:00',
+				'stale_reason'   => 'collection_name_changed',
+				'stale_reasons'  => [ 'collection_name_changed' ],
+			]
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_recommend_patterns_does_not_use_a_stale_index_when_only_the_embedding_endpoint_changed(): void {
+		$this->configure_backends();
+		WordPressTestState::$capabilities = [ 'manage_options' => true ];
+
+		$this->save_index_state(
+			[
+				'status'         => 'stale',
+				'last_synced_at' => '2026-03-24T00:00:00+00:00',
+				'stale_reason'   => 'openai_endpoint_changed',
+				'stale_reasons'  => [ 'openai_endpoint_changed' ],
+			]
+		);
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
@@ -271,6 +395,114 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'hasOverrides', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'theme/header-utility', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'theme/invisible-pattern', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_rejects_live_search_when_query_vector_signature_changes(): void {
+		$this->configure_backends();
+		WordPressTestState::$capabilities = [ 'manage_options' => true ];
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34, 0.56 ] ),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+
+		$state = PatternIndex::get_state();
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
+	}
+
+	public function test_recommend_patterns_rejects_live_search_when_query_vector_signature_changes_for_non_admins_and_schedules_sync(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34, 0.56 ] ),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$state = PatternIndex::get_state();
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
+	}
+
+	public function test_recommend_patterns_marks_index_stale_and_rebuilds_when_collection_is_missing_before_search(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+		];
+		WordPressTestState::$remote_get_response = [
+			'response' => [ 'code' => 404 ],
+			'body'     => wp_json_encode(
+				[
+					'status' => [
+						'error' => 'Collection not found',
+					],
+				]
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+
+		$state = PatternIndex::get_state();
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'collection_missing', $state['stale_reasons'] );
+	}
+
+	public function test_recommend_patterns_marks_index_stale_and_rebuilds_when_collection_size_mismatches_before_search(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+		];
+		WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 3 );
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_warming', $result->get_error_code() );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+
+		$state = PatternIndex::get_state();
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertContains( 'collection_size_mismatch', $state['stale_reasons'] );
 	}
 
 	public function test_recommend_patterns_returns_parse_error_for_malformed_ranking_json(): void {
@@ -575,7 +807,8 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	private function save_index_state( array $overrides = [] ): void {
-		$embedding_config = Provider::embedding_configuration();
+		$embedding_config    = Provider::embedding_configuration();
+		$embedding_signature = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
 
 		PatternIndex::save_state(
 			array_merge(
@@ -584,19 +817,31 @@ final class PatternAbilitiesTest extends TestCase {
 					'status'               => 'ready',
 					'fingerprint'          => 'fingerprint-123',
 					'qdrant_url'           => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'    => QdrantClient::get_collection_name(),
-					'openai_provider'      => Provider::get(),
+					'qdrant_collection'    => QdrantClient::get_collection_name( $embedding_signature ),
+					'openai_provider'      => $embedding_config['provider'],
 					'openai_endpoint'      => $embedding_config['endpoint'],
 					'embedding_model'      => $embedding_config['model'],
+					'embedding_dimension'  => 2,
+					'embedding_signature'  => $embedding_signature['signature_hash'],
 					'last_synced_at'       => '2026-03-24T00:00:00+00:00',
 					'last_attempt_at'      => '2000-01-01T00:00:00+00:00',
 					'indexed_count'        => 3,
 					'last_error'           => null,
+					'last_error_code'      => '',
+					'last_error_status'    => 0,
+					'last_error_retryable' => false,
+					'last_error_retry_after' => null,
+					'stale_reason'         => '',
+					'stale_reasons'        => [],
 					'pattern_fingerprints' => [],
 				],
 				$overrides
 			)
 		);
+
+		if ( [] === WordPressTestState::$remote_get_responses ) {
+			WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 2 );
+		}
 	}
 
 	private function register_pattern( string $name, array $properties ): void {
@@ -634,6 +879,30 @@ final class PatternAbilitiesTest extends TestCase {
 					'status' => 'ok',
 					'result' => [
 						'points' => $points,
+					],
+				]
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function qdrant_collection_response( int $dimension ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'status' => 'ok',
+					'result' => [
+						'config' => [
+							'params' => [
+								'vectors' => [
+									'size'     => $dimension,
+									'distance' => 'Cosine',
+								],
+							],
+						],
 					],
 				]
 			),

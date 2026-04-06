@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\OpenAI\Provider;
@@ -319,6 +320,36 @@ final class AgentControllerTest extends TestCase {
 			'POST /flavor-agent/v1/recommend-patterns'
 		);
 	}
+
+	public function test_handle_recommend_patterns_preserves_warming_error_for_retryable_bootstrap_failures(): void {
+		$this->configure_pattern_recommendation_backends();
+
+		PatternIndex::save_state(
+			array_merge(
+				PatternIndex::get_state(),
+				[
+					'status'               => 'error',
+					'last_synced_at'       => null,
+					'last_error'           => 'Rate limited.',
+					'last_error_code'      => 'rate_limited',
+					'last_error_status'    => 429,
+					'last_error_retryable' => true,
+					'last_error_retry_after' => 9,
+				]
+			)
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
+		$request->set_param( 'postType', 'page' );
+
+		$response = Agent_Controller::handle_recommend_patterns( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'index_warming', $response->get_error_code() );
+		$this->assertSame( 503, $response->get_error_data()['status'] ?? null );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+	}
+
 
 	public function test_handle_recommend_template_visible_filter_applies_before_candidate_cap(): void {
 		// Register 31 typed patterns so the 31st falls outside the
@@ -907,6 +938,59 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_recommend_template_part_forwards_editor_structure_overrides(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'ok',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
+		$request->set_param( 'templatePartRef', 'theme//header' );
+		$request->set_param(
+			'editorStructure',
+			[
+				'currentPatternOverrides' => [
+					'hasOverrides' => true,
+					'blockCount'   => 1,
+					'blocks'       => [
+						[
+							'path'               => [ 0, 1 ],
+							'name'               => 'core/navigation',
+							'label'              => 'Navigation',
+							'overrideAttributes' => [ 'overlayMenu' ],
+						],
+					],
+				],
+			]
+		);
+
+		Agent_Controller::handle_recommend_template_part( $request );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'## Current Pattern Override Blocks',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Path 1 > 2 - `Navigation`',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
 	public function test_handle_recommend_navigation_forwards_selected_navigation_context(): void {
 		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
@@ -930,9 +1014,10 @@ final class AgentControllerTest extends TestCase {
 									'category'    => 'structure',
 									'changes'     => [
 										[
-											'type'   => 'group',
-											'target' => 'Contact and Account',
-											'detail' => 'Move them into a single submenu to simplify the top level.',
+											'type'       => 'group',
+											'targetPath' => [ 1 ],
+											'target'     => 'Contact link',
+											'detail'     => 'Move it into a single submenu to simplify the top level.',
 										],
 									],
 								],
@@ -987,6 +1072,10 @@ final class AgentControllerTest extends TestCase {
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(
+			'## Current Menu Target Inventory',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
 			'## Overlay Context',
 			(string) ( $request_body['input'] ?? '' )
 		);
@@ -1004,6 +1093,9 @@ final class AgentControllerTest extends TestCase {
 	public function test_handle_sync_patterns_appends_sync_route_metadata(): void {
 		$this->configure_pattern_recommendation_backends();
 		$this->save_ready_pattern_index_state();
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+		];
 
 		$request  = new \WP_REST_Request( 'POST', '/flavor-agent/v1/sync-patterns' );
 		$response = Agent_Controller::handle_sync_patterns( $request );
@@ -1253,26 +1345,71 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	private function save_ready_pattern_index_state(): void {
-		$patterns         = ServerCollector::for_patterns();
-		$embedding_config = Provider::embedding_configuration();
+		$patterns             = ServerCollector::for_patterns();
+		$embedding_config     = Provider::embedding_configuration();
+		$embedding_signature  = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
+		$pattern_fingerprints = [];
+		$normalize_list       = static function ( array $values ): string {
+			$values = array_values(
+				array_filter(
+					array_map( 'strval', $values ),
+					static fn( string $value ): bool => $value !== ''
+				)
+			);
+			sort( $values );
+
+			return implode( ',', $values );
+		};
+
+		foreach ( $patterns as $pattern ) {
+			$pattern_fingerprints[ PatternIndex::pattern_uuid( (string) $pattern['name'] ) ] =
+				md5(
+					implode(
+						'|',
+						[
+							(string) ( $pattern['name'] ?? '' ),
+							(string) ( $pattern['title'] ?? '' ),
+							(string) ( $pattern['description'] ?? '' ),
+							$normalize_list( (array) ( $pattern['categories'] ?? [] ) ),
+							$normalize_list( (array) ( $pattern['blockTypes'] ?? [] ) ),
+							$normalize_list( (array) ( $pattern['templateTypes'] ?? [] ) ),
+							'0|0|0|',
+							md5( (string) ( $pattern['content'] ?? '' ) ),
+							(string) PatternIndex::EMBEDDING_RECIPE_VERSION,
+						]
+					)
+				);
+		}
 
 		PatternIndex::save_state(
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'            => 'ready',
-					'fingerprint'       => PatternIndex::compute_fingerprint( $patterns ),
-					'qdrant_url'        => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection' => QdrantClient::get_collection_name(),
-					'openai_provider'   => $embedding_config['provider'],
-					'openai_endpoint'   => $embedding_config['endpoint'],
-					'embedding_model'   => $embedding_config['model'],
-					'last_synced_at'    => '2026-03-24T00:00:00+00:00',
-					'last_attempt_at'   => '2026-03-24T00:00:00+00:00',
-					'indexed_count'     => count( $patterns ),
+					'status'              => 'ready',
+					'fingerprint'         => PatternIndex::compute_fingerprint( $patterns ),
+					'qdrant_url'          => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection'   => QdrantClient::get_collection_name( $embedding_signature ),
+					'openai_provider'     => $embedding_config['provider'],
+					'openai_endpoint'     => $embedding_config['endpoint'],
+					'embedding_model'     => $embedding_config['model'],
+					'embedding_dimension' => 2,
+					'embedding_signature' => $embedding_signature['signature_hash'],
+					'last_synced_at'      => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'     => '2026-03-24T00:00:00+00:00',
+					'indexed_count'        => count( $patterns ),
+					'last_error'           => null,
+					'last_error_code'      => '',
+					'last_error_status'    => 0,
+					'last_error_retryable' => false,
+					'last_error_retry_after' => null,
+					'pattern_fingerprints' => $pattern_fingerprints,
 				]
 			)
 		);
+
+		if ( [] === WordPressTestState::$remote_get_responses ) {
+			WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 2 );
+		}
 	}
 
 	private function stub_successful_llm_response(): void {
@@ -1319,6 +1456,30 @@ final class AgentControllerTest extends TestCase {
 						'points' => $points,
 					],
 				]
+			),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function qdrant_collection_response( int $dimension ): array {
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'status' => 'ok',
+					'result' => [
+						'config' => [
+							'params' => [
+								'vectors' => [
+									'size'     => $dimension,
+									'distance' => 'Cosine',
+								],
+							],
+						],
+					],
+				],
 			),
 		];
 	}

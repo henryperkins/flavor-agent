@@ -70,6 +70,7 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
 Rules:
 - operations[] MUST be the executable source of truth for the suggestion.
 - Supported operation types are ONLY: assign_template_part, replace_template_part, insert_pattern.
+- Each suggestion may contain at most one insert_pattern operation.
 - assign_template_part MUST include slug and area.
 - assign_template_part MUST target an area from the Explicitly Empty Areas list and must not replace an already assigned template part.
 - replace_template_part MUST include currentSlug, slug, and area.
@@ -489,6 +490,7 @@ SYSTEM;
 		$empty_area_lookup     = self::build_empty_area_lookup( $context );
 		$pattern_lookup        = self::build_pattern_lookup( $context );
 		$template_block_lookup = self::build_template_block_lookup( $context );
+		$insertion_anchor_lookup = self::build_insertion_anchor_lookup( $context );
 
 		$suggestions = self::validate_template_suggestions(
 			$data['suggestions'],
@@ -497,7 +499,8 @@ SYSTEM;
 			$allowed_area_lookup,
 			$empty_area_lookup,
 			$pattern_lookup,
-			$template_block_lookup
+			$template_block_lookup,
+			$insertion_anchor_lookup
 		);
 
 		if ( count( $suggestions ) === 0 ) {
@@ -525,6 +528,7 @@ SYSTEM;
 	 * @param array $empty_area_lookup Explicitly empty area lookup.
 	 * @param array $pattern_lookup Candidate pattern lookup.
 	 * @param array<string, array<string, mixed>> $template_block_lookup Template top-level block lookup keyed by path.
+	 * @param array<string, array<string, mixed>> $insertion_anchor_lookup Template insertion anchor lookup keyed by placement.
 	 * @return array Sanitized suggestions.
 	 */
 	private static function validate_template_suggestions(
@@ -534,7 +538,8 @@ SYSTEM;
 		array $allowed_area_lookup,
 		array $empty_area_lookup,
 		array $pattern_lookup,
-		array $template_block_lookup
+		array $template_block_lookup,
+		array $insertion_anchor_lookup
 	): array {
 		$valid = [];
 
@@ -569,7 +574,8 @@ SYSTEM;
 				$allowed_area_lookup,
 				$empty_area_lookup,
 				$pattern_lookup,
-				$template_block_lookup
+				$template_block_lookup,
+				$insertion_anchor_lookup
 			);
 			$validated_operations          = $validated_operations_result['operations'];
 
@@ -592,21 +598,24 @@ SYSTEM;
 				$validated_operations = $derived_operations['operations'];
 			}
 
-				$entry['operations']         = $validated_operations;
-				$entry['templateParts']      = self::summarize_template_parts_from_operations(
-					$validated_operations,
-					$validated_template_parts
-				);
-				$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
-					$validated_operations,
-					$validated_pattern_suggestions
-				);
+			if ( count( $validated_operations ) === 0 ) {
+				continue;
+			}
+
+			$entry['operations']         = $validated_operations;
+			$entry['templateParts']      = self::summarize_template_parts_from_operations(
+				$validated_operations,
+				$validated_template_parts
+			);
+			$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
+				$validated_operations
+			);
 
 			if (
-					count( $entry['operations'] ) === 0
-					&& count( $entry['templateParts'] ) === 0
-					&& count( $entry['patternSuggestions'] ) === 0
-				) {
+				count( $entry['operations'] ) === 0
+				&& count( $entry['templateParts'] ) === 0
+				&& count( $entry['patternSuggestions'] ) === 0
+			) {
 				continue;
 			}
 
@@ -805,6 +814,30 @@ SYSTEM;
 	}
 
 	/**
+	 * @param array $context Template context used to build the prompt.
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_insertion_anchor_lookup( array $context ): array {
+		$lookup = [];
+
+		foreach ( is_array( $context['topLevelInsertionAnchors'] ?? null ) ? $context['topLevelInsertionAnchors'] : [] as $anchor ) {
+			if ( ! is_array( $anchor ) ) {
+				continue;
+			}
+
+			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+
+			if ( '' === $placement ) {
+				continue;
+			}
+
+			$lookup[ $placement ] = $anchor;
+		}
+
+		return $lookup;
+	}
+
+	/**
 	 * @param array<string, mixed> $target_node
 	 * @return array<string, mixed>
 	 */
@@ -915,6 +948,7 @@ SYSTEM;
 	 * @param array $empty_area_lookup Explicitly empty area lookup.
 	 * @param array $pattern_lookup Candidate pattern lookup.
 	 * @param array<string, array<string, mixed>> $template_block_lookup Template top-level block lookup.
+	 * @param array<string, array<string, mixed>> $insertion_anchor_lookup Template insertion anchor lookup.
 	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool}
 	 */
 	private static function validate_template_operations(
@@ -924,7 +958,8 @@ SYSTEM;
 		array $allowed_area_lookup,
 		array $empty_area_lookup,
 		array $pattern_lookup,
-		array $template_block_lookup
+		array $template_block_lookup,
+		array $insertion_anchor_lookup
 	): array {
 		$valid = [];
 		$state = self::build_template_operation_state( $assigned_part_lookup, $empty_area_lookup );
@@ -1071,6 +1106,13 @@ SYSTEM;
 							$target_path === null ||
 							! isset( $template_block_lookup[ self::block_path_key( $target_path ) ] )
 						)
+					) {
+						continue 2;
+					}
+
+					if (
+						in_array( $placement, [ self::TEMPLATE_PLACEMENT_START, self::TEMPLATE_PLACEMENT_END ], true ) &&
+						! isset( $insertion_anchor_lookup[ $placement ] )
 					) {
 						continue 2;
 					}
@@ -1230,10 +1272,9 @@ SYSTEM;
 
 	/**
 	 * @param array<int, array<string, string>> $operations
-	 * @param string[] $pattern_suggestions
 	 * @return string[]
 	 */
-	private static function summarize_pattern_suggestions_from_operations( array $operations, array $pattern_suggestions = [] ): array {
+	private static function summarize_pattern_suggestions_from_operations( array $operations ): array {
 		$summaries = [];
 
 		foreach ( $operations as $operation ) {
@@ -1248,14 +1289,6 @@ SYSTEM;
 			$pattern_name = sanitize_text_field( (string) ( $operation['patternName'] ?? '' ) );
 
 			if ( $pattern_name !== '' ) {
-				$summaries[ $pattern_name ] = $pattern_name;
-			}
-		}
-
-		foreach ( $pattern_suggestions as $pattern_name ) {
-			$pattern_name = sanitize_text_field( (string) $pattern_name );
-
-			if ( '' !== $pattern_name ) {
 				$summaries[ $pattern_name ] = $pattern_name;
 			}
 		}

@@ -70,25 +70,29 @@ final class PatternAbilities {
 				break;
 
 			case 'stale':
+				if ( PatternIndex::has_compatibility_drift( $state ) ) {
+					PatternIndex::schedule_sync();
+					return new \WP_Error(
+						'index_warming',
+						'Pattern catalog is rebuilding because the embedding or vector-store configuration changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+						[ 'status' => 503 ]
+					);
+				}
+
 				if ( ! $has_usable_index ) {
-					if ( current_user_can( 'manage_options' ) ) {
-						PatternIndex::schedule_sync();
-					}
+					PatternIndex::schedule_sync();
 					return new \WP_Error(
 						'index_warming',
 						'Pattern catalog is building. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
 						[ 'status' => 503 ]
 					);
 				}
-				if ( current_user_can( 'manage_options' ) ) {
-					PatternIndex::schedule_sync();
-				}
+
+				PatternIndex::schedule_sync();
 				break;
 
 			case 'uninitialized':
-				if ( current_user_can( 'manage_options' ) ) {
-					PatternIndex::schedule_sync();
-				}
+				PatternIndex::schedule_sync();
 				return new \WP_Error(
 					'index_warming',
 					'Pattern catalog is building. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
@@ -103,20 +107,29 @@ final class PatternAbilities {
 						[ 'status' => 503 ]
 					);
 				}
+
 				break;
 
 			case 'error':
 			default:
 				if ( ! $has_usable_index ) {
+					if ( PatternIndex::has_retryable_error( $state ) ) {
+						PatternIndex::schedule_sync();
+						return new \WP_Error(
+							'index_warming',
+							'Pattern catalog is building. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+							[ 'status' => 503 ]
+						);
+					}
+
 					return new \WP_Error(
 						'index_unavailable',
 						'Pattern catalog sync failed. Review the last sync error in Settings > Flavor Agent.',
 						[ 'status' => 503 ]
 					);
 				}
-				if ( current_user_can( 'manage_options' ) ) {
-					PatternIndex::schedule_sync();
-				}
+
+				PatternIndex::schedule_sync();
 				break;
 		}
 
@@ -166,8 +179,67 @@ final class PatternAbilities {
 			return $query_vector;
 		}
 
+		$active_signature  = EmbeddingClient::build_signature_for_dimension( count( $query_vector ) );
+		$expected_collection = QdrantClient::get_collection_name( $active_signature );
+
+		if (
+			(string) ( $state['embedding_signature'] ?? '' ) !== (string) $active_signature['signature_hash']
+			|| (string) ( $state['qdrant_collection'] ?? '' ) !== $expected_collection
+		) {
+			PatternIndex::mark_stale(
+				[
+					'embedding_signature_changed',
+					'collection_name_changed',
+				]
+			);
+
+			PatternIndex::schedule_sync();
+
+			return new \WP_Error(
+				'index_warming',
+				'Pattern catalog is rebuilding because the active embedding signature changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+				[ 'status' => 503 ]
+			);
+		}
+
+		$collection_validation = QdrantClient::validate_collection_compatibility(
+			(string) $state['qdrant_collection'],
+			count( $query_vector )
+		);
+
+		if ( is_wp_error( $collection_validation ) ) {
+			if ( 'qdrant_collection_missing' === $collection_validation->get_error_code() ) {
+				PatternIndex::mark_stale( [ 'collection_missing' ] );
+				PatternIndex::schedule_sync();
+
+				return new \WP_Error(
+					'index_warming',
+					'Pattern catalog is rebuilding because the active Qdrant collection is missing. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+					[ 'status' => 503 ]
+				);
+			}
+
+			if ( 'qdrant_collection_size_mismatch' === $collection_validation->get_error_code() ) {
+				PatternIndex::mark_stale( [ 'collection_size_mismatch' ] );
+				PatternIndex::schedule_sync();
+
+				return new \WP_Error(
+					'index_warming',
+					'Pattern catalog is rebuilding because the active Qdrant collection is incompatible with the current embedding size. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+					[ 'status' => 503 ]
+				);
+			}
+
+			return $collection_validation;
+		}
+
 		// Step 4: Two-pass Qdrant retrieval.
-		$pass_a = QdrantClient::search( $query_vector, $semantic_limit );
+		$pass_a = QdrantClient::search(
+			$query_vector,
+			$semantic_limit,
+			[],
+			(string) $state['qdrant_collection']
+		);
 		if ( is_wp_error( $pass_a ) ) {
 			return $pass_a;
 		}
@@ -192,7 +264,8 @@ final class PatternAbilities {
 			$pass_b = QdrantClient::search(
 				$query_vector,
 				$structural_limit,
-				[ 'should' => $should_clauses ]
+				[ 'should' => $should_clauses ],
+				(string) $state['qdrant_collection']
 			);
 			if ( is_wp_error( $pass_b ) ) {
 				return $pass_b;

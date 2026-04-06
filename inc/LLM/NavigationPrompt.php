@@ -30,8 +30,14 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
       "category": "structure|overlay|accessibility",
       "changes": [
         {
-          "type": "reorder|group|ungroup|add-submenu|flatten|set-attribute",
+          "type": "reorder|group|ungroup|add-submenu|flatten",
+          "targetPath": [1],
           "target": "Description of what to change",
+          "detail": "Specific recommendation"
+        },
+        {
+          "type": "set-attribute",
+          "target": "overlayMenu",
           "detail": "Specific recommendation"
         }
       ]
@@ -43,6 +49,8 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
 Rules:
 - category MUST be one of: structure, overlay, accessibility.
 - changes[].type MUST be one of: reorder, group, ungroup, add-submenu, flatten, set-attribute.
+- Structural changes (reorder, group, ungroup, add-submenu, flatten) MUST include targetPath.
+- Structural changes MUST use a real targetPath from the Current Menu Target Inventory list.
 - set-attribute changes should reference real core/navigation block attributes (overlayMenu, openSubmenusOnClick, hasIcon, icon, maxNestingLevel, showSubmenuIcon).
 - In WordPress 7.0+, navigation overlays are a first-class template-part area (navigation-overlay). When overlay template parts exist, prefer referencing them over suggesting inline overlay configuration.
 - Do not suggest adding menu items that do not exist in the current structure. Suggest reorganization of what is already there.
@@ -114,6 +122,11 @@ SYSTEM;
 			$sections[] = "## Menu Structure\n" . self::format_menu_items( $items, 0 );
 		} else {
 			$sections[] = "## Menu Structure\nNo menu items found. The navigation block may use a Page List or be empty.";
+		}
+
+		$target_inventory = is_array( $context['targetInventory'] ?? null ) ? $context['targetInventory'] : [];
+		if ( count( $target_inventory ) > 0 ) {
+			$sections[] = "## Current Menu Target Inventory\n" . self::format_target_inventory( $target_inventory );
 		}
 
 		$structure_summary = is_array( $context['structureSummary'] ?? null ) ? $context['structureSummary'] : [];
@@ -245,7 +258,7 @@ SYSTEM;
 			? $data['suggestions']
 			: [];
 
-		$valid = self::validate_suggestions( $suggestions );
+		$valid = self::validate_suggestions( $suggestions, self::build_target_lookup( $context ) );
 
 		return [
 			'suggestions' => array_slice( $valid, 0, 3 ),
@@ -257,11 +270,13 @@ SYSTEM;
 	 * Validate and sanitize individual suggestions.
 	 *
 	 * @param array $suggestions Raw suggestions from LLM.
+	 * @param array<string, true> $target_lookup Lookup of valid current menu target paths.
 	 * @return array Validated suggestions.
 	 */
-	private static function validate_suggestions( array $suggestions ): array {
+	private static function validate_suggestions( array $suggestions, array $target_lookup ): array {
 		$allowed_categories = [ 'structure', 'overlay', 'accessibility' ];
 		$allowed_types      = [ 'reorder', 'group', 'ungroup', 'add-submenu', 'flatten', 'set-attribute' ];
+		$structural_types   = [ 'reorder', 'group', 'ungroup', 'add-submenu', 'flatten' ];
 		$allowed_attributes = [
 			'overlayMenu'         => true,
 			'openSubmenusOnClick' => true,
@@ -308,19 +323,44 @@ SYSTEM;
 						? sanitize_key( $change['type'] )
 						: '';
 					$target = sanitize_text_field( (string) ( $change['target'] ?? '' ) );
+					$detail = sanitize_text_field( (string) ( $change['detail'] ?? '' ) );
 
 					if ( ! in_array( $type, $allowed_types, true ) ) {
 						continue;
 					}
 
-					if ( $type === 'set-attribute' && ! isset( $allowed_attributes[ $target ] ) ) {
+					if ( $target === '' || $detail === '' ) {
+						continue;
+					}
+
+					if ( $type === 'set-attribute' ) {
+						if ( ! isset( $allowed_attributes[ $target ] ) ) {
+							continue;
+						}
+
+						$changes[] = [
+							'type'   => $type,
+							'target' => $target,
+							'detail' => $detail,
+						];
+						continue;
+					}
+
+					$target_path = self::sanitize_target_path( $change['targetPath'] ?? null );
+
+					if (
+						! in_array( $type, $structural_types, true )
+						|| null === $target_path
+						|| ! isset( $target_lookup[ self::target_path_key( $target_path ) ] )
+					) {
 						continue;
 					}
 
 					$changes[] = [
 						'type'   => $type,
+						'targetPath' => $target_path,
 						'target' => $target,
-						'detail' => sanitize_text_field( (string) ( $change['detail'] ?? '' ) ),
+						'detail' => $detail,
 					];
 				}
 			}
@@ -355,8 +395,12 @@ SYSTEM;
 			$type  = (string) ( $item['type'] ?? 'unknown' );
 			$label = (string) ( $item['label'] ?? '' );
 			$url   = (string) ( $item['url'] ?? '' );
+			$path  = self::sanitize_target_path( $item['path'] ?? null );
 
 			$line = "{$indent}- [{$type}]";
+			if ( null !== $path ) {
+				$line .= ' ' . self::format_target_path( $path );
+			}
 			if ( $label !== '' ) {
 				$line .= " \"{$label}\"";
 			}
@@ -373,6 +417,133 @@ SYSTEM;
 		}
 
 		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $target_inventory
+	 */
+	private static function format_target_inventory( array $target_inventory ): string {
+		$lines = [];
+
+		foreach ( $target_inventory as $target ) {
+			if ( ! is_array( $target ) ) {
+				continue;
+			}
+
+			$path  = self::sanitize_target_path( $target['path'] ?? null );
+			$type  = sanitize_key( (string) ( $target['type'] ?? '' ) );
+			$label = sanitize_text_field( (string) ( $target['label'] ?? '' ) );
+			$depth = isset( $target['depth'] ) ? max( 0, (int) $target['depth'] ) : 0;
+
+			if ( null === $path ) {
+				continue;
+			}
+
+			$line = '- ' . self::format_target_path( $path );
+
+			if ( $type !== '' ) {
+				$line .= " `{$type}`";
+			}
+
+			if ( $label !== '' ) {
+				$line .= " \"{$label}\"";
+			}
+
+			$line .= ' depth=' . $depth;
+			$lines[] = $line;
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @return array<string, true>
+	 */
+	private static function build_target_lookup( array $context ): array {
+		$lookup          = [];
+		$target_inventory = is_array( $context['targetInventory'] ?? null ) ? $context['targetInventory'] : [];
+
+		if ( [] === $target_inventory ) {
+			$target_inventory = self::flatten_menu_items(
+				is_array( $context['menuItems'] ?? null ) ? $context['menuItems'] : []
+			);
+		}
+
+		foreach ( $target_inventory as $target ) {
+			if ( ! is_array( $target ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_target_path( $target['path'] ?? null );
+
+			if ( null === $path ) {
+				continue;
+			}
+
+			$lookup[ self::target_path_key( $path ) ] = true;
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $items
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function flatten_menu_items( array $items ): array {
+		$flattened = [];
+
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+
+			$flattened[] = $item;
+
+			$children = is_array( $item['children'] ?? null ) ? $item['children'] : [];
+
+			if ( [] !== $children ) {
+				$flattened = array_merge( $flattened, self::flatten_menu_items( $children ) );
+			}
+		}
+
+		return $flattened;
+	}
+
+	/**
+	 * @return array<int, int>|null
+	 */
+	private static function sanitize_target_path( mixed $path ): ?array {
+		if ( ! is_array( $path ) || [] === $path ) {
+			return null;
+		}
+
+		$normalized = [];
+
+		foreach ( $path as $segment ) {
+			if ( ! is_numeric( $segment ) ) {
+				return null;
+			}
+
+			$normalized[] = max( 0, (int) $segment );
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<int, int> $path
+	 */
+	private static function format_target_path( array $path ): string {
+		return '[' . implode( ', ', $path ) . ']';
+	}
+
+	/**
+	 * @param array<int, int> $path
+	 */
+	private static function target_path_key( array $path ): string {
+		return implode( '.', $path );
 	}
 
 	/**

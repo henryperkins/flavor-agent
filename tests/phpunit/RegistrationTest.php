@@ -150,6 +150,10 @@ final class RegistrationTest extends TestCase {
 			'object',
 			$list_ability['output_schema']['properties']['patterns']['items']['properties']['patternOverrides']['type'] ?? null
 		);
+		$this->assertArrayNotHasKey(
+			'editorStructure',
+			$recommend_ability['input_schema']['properties'] ?? []
+		);
 	}
 
 	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {
@@ -269,6 +273,10 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$ability['input_schema']['properties']['visiblePatternNames']['items']['type'] ?? null
 		);
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['editorStructure']['type'] ?? null
+		);
 
 		$suggestion = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
 
@@ -308,6 +316,27 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$suggestion['properties']['operations']['items']['properties']['expectedBlockName']['type'] ?? null
+		);
+	}
+
+	public function test_register_abilities_exposes_navigation_change_target_paths(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-navigation'] ?? null;
+
+		$this->assertIsArray( $ability );
+		$this->assertSame(
+			'array',
+			$ability['output_schema']['properties']['suggestions']['items']['properties']['changes']['type'] ?? null
+		);
+		$this->assertSame(
+			'array',
+			$ability['output_schema']['properties']['suggestions']['items']['properties']['changes']['items']['properties']['targetPath']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['output_schema']['properties']['suggestions']['items']['properties']['changes']['items']['properties']['targetPath']['items']['type'] ?? null
 		);
 	}
 

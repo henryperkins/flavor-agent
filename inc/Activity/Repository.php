@@ -338,6 +338,15 @@ final class Repository {
 		}
 
 		$current_entry = Serializer::hydrate_row( $current_row );
+		$current_undo  = is_array( $current_entry['undo'] ?? null ) ? $current_entry['undo'] : [];
+
+		if ( 'available' !== (string) ( $current_undo['status'] ?? '' ) ) {
+			return new \WP_Error(
+				'flavor_agent_activity_invalid_undo_transition',
+				'Flavor Agent only allows undo status changes from the available state.',
+				[ 'status' => 409 ]
+			);
+		}
 
 		if ( 'undone' === $status && ! self::is_ordered_undo_eligible( $current_row ) ) {
 			return new \WP_Error(
@@ -668,6 +677,8 @@ final class Repository {
 		$surface     = trim( (string) ( $filters['surface'] ?? '' ) );
 		$entity_type = trim( (string) ( $filters['entityType'] ?? '' ) );
 		$entity_ref  = trim( (string) ( $filters['entityRef'] ?? '' ) );
+		$user_id     = self::normalize_optional_int( $filters['userId'] ?? null );
+		$timezone    = self::resolve_activity_timezone();
 
 		if ( '' !== $scope_key ) {
 			$conditions[] = 'document_scope_key = %s';
@@ -690,6 +701,17 @@ final class Repository {
 		if ( '' !== $entity_ref ) {
 			$conditions[] = 'entity_ref = %s';
 			$args[]       = $entity_ref;
+		}
+
+		if ( null !== $user_id ) {
+			$user_id_operator = self::normalize_filter_operator( $filters['userIdOperator'] ?? 'is' );
+			$conditions[]     = 'isNot' === $user_id_operator ? 'user_id <> %d' : 'user_id = %d';
+			$args[]           = $user_id;
+		}
+
+		foreach ( self::build_admin_day_sql_filters( $filters, $timezone ) as $filter ) {
+			$conditions[] = $filter['clause'];
+			$args         = array_merge( $args, $filter['args'] );
 		}
 
 		$sql = 'SELECT * FROM ' . self::table_name();
@@ -834,6 +856,7 @@ final class Repository {
 				'operationType'      => $operation_type,
 				'operationTypeLabel' => $operation_label,
 				'dayKey'             => $timestamp_data['dayKey'],
+				'timestampUnix'      => $timestamp_data['timestampUnix'],
 				'timestamp'          => self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
 				'searchText'         => implode(
 					' ',
@@ -1491,13 +1514,13 @@ final class Repository {
 	}
 
 	private static function mysql_datetime_to_timestamp( string $value ): string {
-		$timestamp = strtotime( $value );
-
-		if ( false === $timestamp ) {
+		try {
+			$date = new \DateTimeImmutable( $value, new \DateTimeZone( 'UTC' ) );
+		} catch ( \Exception $exception ) {
 			return gmdate( 'c' );
 		}
 
-		return gmdate( 'c', $timestamp );
+		return gmdate( 'c', $date->getTimestamp() );
 	}
 
 	private static function resolve_admin_user_label( int $user_id ): string {
@@ -1521,7 +1544,7 @@ final class Repository {
 	}
 
 	/**
-	 * @return array{dayKey: string}
+	 * @return array{dayKey: string, timestampUnix: int}
 	 */
 	private static function get_timestamp_data(
 		string $timestamp,
@@ -1536,7 +1559,8 @@ final class Repository {
 		$localized = $date->setTimezone( $timezone );
 
 		return [
-			'dayKey' => $localized->format( 'Y-m-d' ),
+			'dayKey'        => $localized->format( 'Y-m-d' ),
+			'timestampUnix' => $localized->getTimestamp(),
 		];
 	}
 
@@ -1561,12 +1585,13 @@ final class Repository {
 			case 'over':
 				$relative_value = self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
 				$relative_unit  = trim( (string) ( $filters['dayRelativeUnit'] ?? 'days' ) );
+				$entry_time     = (int) ( $meta['timestampUnix'] ?? 0 );
 
-				if ( null === $relative_value || $relative_value <= 0 ) {
+				if ( null === $relative_value || $relative_value <= 0 || $entry_time <= 0 ) {
 					return true;
 				}
 
-				$threshold = self::resolve_relative_day_threshold(
+				$threshold = self::resolve_relative_threshold_timestamp(
 					$relative_value,
 					$relative_unit,
 					$timezone
@@ -1577,8 +1602,8 @@ final class Repository {
 				}
 
 				return 'inThePast' === $day_operator
-					? $entry_day >= $threshold
-					: $entry_day < $threshold;
+					? $entry_time >= $threshold
+					: $entry_time < $threshold;
 			case 'before':
 			case 'after':
 			case 'between':
@@ -1611,11 +1636,11 @@ final class Repository {
 		}
 	}
 
-	private static function resolve_relative_day_threshold(
+	private static function resolve_relative_threshold_timestamp(
 		int $value,
 		string $unit,
 		\DateTimeZone $timezone
-	): ?string {
+	): ?int {
 		$interval_spec = match ( $unit ) {
 			'hours'  => 'PT' . $value . 'H',
 			'weeks'  => 'P' . $value . 'W',
@@ -1631,7 +1656,122 @@ final class Repository {
 			return null;
 		}
 
-		return $now->sub( $interval )->format( 'Y-m-d' );
+		return $now->sub( $interval )->getTimestamp();
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array{clause: string, args: array<int, string>}>
+	 */
+	private static function build_admin_day_sql_filters( array $filters, \DateTimeZone $timezone ): array {
+		$day_operator = trim( (string) ( $filters['dayOperator'] ?? 'on' ) );
+		$filters_sql  = [];
+
+		switch ( $day_operator ) {
+			case 'inThePast':
+			case 'over':
+				$relative_value = self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
+				$relative_unit  = trim( (string) ( $filters['dayRelativeUnit'] ?? 'days' ) );
+
+				if ( null === $relative_value || $relative_value <= 0 ) {
+					return [];
+				}
+
+				$threshold = self::resolve_relative_threshold_timestamp(
+					$relative_value,
+					$relative_unit,
+					$timezone
+				);
+
+				if ( null === $threshold ) {
+					return [];
+				}
+
+				$filters_sql[] = [
+					'clause' => 'created_at ' . ( 'inThePast' === $day_operator ? '>=' : '<' ) . ' %s',
+					'args'   => [ gmdate( 'Y-m-d H:i:s', $threshold ) ],
+				];
+				return $filters_sql;
+			case 'between':
+				$day_start = trim( (string) ( $filters['day'] ?? '' ) );
+				$day_end   = trim( (string) ( $filters['dayEnd'] ?? '' ) );
+
+				if ( '' === $day_start || '' === $day_end ) {
+					return [];
+				}
+
+				$start_bounds = self::resolve_local_day_bounds( $day_start, $timezone );
+				$end_bounds   = self::resolve_local_day_bounds( $day_end, $timezone );
+
+				if ( null === $start_bounds || null === $end_bounds || $start_bounds['start'] > $end_bounds['start'] ) {
+					return [];
+				}
+
+				$filters_sql[] = [
+					'clause' => 'created_at >= %s AND created_at < %s',
+					'args'   => [
+						gmdate( 'Y-m-d H:i:s', $start_bounds['start'] ),
+						gmdate( 'Y-m-d H:i:s', $end_bounds['end'] ),
+					],
+				];
+				return $filters_sql;
+			case 'before':
+			case 'after':
+			case 'on':
+			default:
+				$day = trim( (string) ( $filters['day'] ?? '' ) );
+
+				if ( '' === $day ) {
+					return [];
+				}
+
+				$bounds = self::resolve_local_day_bounds( $day, $timezone );
+
+				if ( null === $bounds ) {
+					return [];
+				}
+
+				if ( 'before' === $day_operator ) {
+					$filters_sql[] = [
+						'clause' => 'created_at < %s',
+						'args'   => [ gmdate( 'Y-m-d H:i:s', $bounds['start'] ) ],
+					];
+					return $filters_sql;
+				}
+
+				if ( 'after' === $day_operator ) {
+					$filters_sql[] = [
+						'clause' => 'created_at >= %s',
+						'args'   => [ gmdate( 'Y-m-d H:i:s', $bounds['end'] ) ],
+					];
+					return $filters_sql;
+				}
+
+				$filters_sql[] = [
+					'clause' => 'created_at >= %s AND created_at < %s',
+					'args'   => [
+						gmdate( 'Y-m-d H:i:s', $bounds['start'] ),
+						gmdate( 'Y-m-d H:i:s', $bounds['end'] ),
+					],
+				];
+				return $filters_sql;
+		}
+	}
+
+	/**
+	 * @return array{start: int, end: int}|null
+	 */
+	private static function resolve_local_day_bounds( string $day, \DateTimeZone $timezone ): ?array {
+		try {
+			$start = new \DateTimeImmutable( $day . ' 00:00:00', $timezone );
+		} catch ( \Exception $exception ) {
+			return null;
+		}
+
+		return [
+			'start' => $start->getTimestamp(),
+			'end'   => $start->modify( '+1 day' )->getTimestamp(),
+		];
 	}
 
 	private static function normalize_search_text( $search ): string {

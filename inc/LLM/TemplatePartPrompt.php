@@ -693,6 +693,13 @@ SYSTEM;
 						continue 2;
 					}
 
+					if (
+						in_array( $placement, [ 'start', 'end' ], true )
+						&& ! isset( $insertion_anchor_lookup[ $placement ] )
+					) {
+						continue 2;
+					}
+
 						$normalized = [
 							'type'        => 'insert_pattern',
 							'patternName' => $pattern_name,

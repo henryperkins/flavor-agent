@@ -919,6 +919,17 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
+	public function test_sanitize_excerpt_truncates_utf8_text_without_breaking_characters(): void {
+		$method = new \ReflectionMethod( AISearchClient::class, 'sanitize_excerpt' );
+		$method->setAccessible( true );
+		$text   = str_repeat( 'é', 400 );
+		$result = $method->invoke( null, $text );
+
+		$this->assertSame( 360, function_exists( 'mb_strlen' ) ? mb_strlen( $result, 'UTF-8' ) : strlen( $result ) );
+		$this->assertStringEndsWith( '...', $result );
+		$this->assertStringNotContainsString( "\xef\xbf\xbd", $result );
+	}
+
 	public function test_resolve_entity_key_prefers_explicit_entity_key_before_legacy_query_inference(): void {
 		$this->assertSame(
 			'core/navigation',

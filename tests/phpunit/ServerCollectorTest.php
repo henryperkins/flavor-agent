@@ -788,6 +788,50 @@ final class ServerCollectorTest extends TestCase {
 			[ 'Home', 'Contact' ],
 			array_column( $result['menuItems'] ?? [], 'label' )
 		);
+		$this->assertSame(
+			[
+				[
+					'path'  => [ 0 ],
+					'label' => 'Home',
+					'type'  => 'navigation-link',
+					'depth' => 0,
+				],
+				[
+					'path'  => [ 1 ],
+					'label' => 'Contact',
+					'type'  => 'navigation-link',
+					'depth' => 0,
+				],
+			],
+			$result['targetInventory'] ?? null
+		);
+	}
+
+	public function test_for_navigation_location_inference_matches_menu_refs_exactly(): void {
+		WordPressTestState::$posts[12]                                        = (object) [
+			'ID'           => 12,
+			'post_type'    => 'wp_navigation',
+			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->',
+		];
+		WordPressTestState::$block_templates['wp_template_part']              = [
+			(object) [
+				'slug'    => 'header',
+				'title'   => 'Header',
+				'area'    => 'header',
+				'content' => '<!-- wp:group --><!-- wp:navigation {"ref":123} /--><!-- /wp:group -->',
+			],
+			(object) [
+				'slug'    => 'footer',
+				'title'   => 'Footer',
+				'area'    => 'footer',
+				'content' => '<!-- wp:group --><!-- wp:navigation {"ref":12} /--><!-- /wp:group -->',
+			],
+		];
+
+		$result = ServerCollector::for_navigation( 12 );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'footer', $result['location'] ?? null );
 	}
 
 	public function test_for_navigation_preserves_an_explicitly_empty_live_navigation_structure(): void {

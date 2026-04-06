@@ -929,7 +929,7 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
-	test( 'loadActivitySession drops a local undo retry after an authoritative server rejection', async () => {
+	test( 'loadActivitySession preserves an authoritative terminal undo failure across a successful server refresh', async () => {
 		const pendingEntry = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -969,6 +969,7 @@ describe( 'store action thunks', () => {
 				updatedAt: '2026-03-24T10:00:00Z',
 			},
 		};
+		const expectedTerminalError = 'Undo blocked by newer AI actions.';
 		const dispatch = jest.fn();
 		const select = {
 			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
@@ -1020,7 +1021,20 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( dispatch ).toHaveBeenCalledWith(
-			actions.setActivitySession( 'post:42', [ serverEntry ] )
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
+					id: 'activity-1',
+					persistence: expect.objectContaining( {
+						status: 'server',
+						syncType: null,
+					} ),
+					undo: expect.objectContaining( {
+						status: 'failed',
+						canUndo: false,
+						error: expectedTerminalError,
+					} ),
+				} ),
+			] )
 		);
 		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
 			expect.objectContaining( {
@@ -1030,8 +1044,9 @@ describe( 'store action thunks', () => {
 					syncType: null,
 				} ),
 				undo: expect.objectContaining( {
-					status: 'available',
-					canUndo: true,
+					status: 'failed',
+					canUndo: false,
+					error: expectedTerminalError,
 				} ),
 			} ),
 		] );
@@ -1840,6 +1855,124 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'undoActivity reconciles terminal 409 undo conflicts against server state instead of marking the action failed locally', async () => {
+		const localActivity = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			before: {
+				attributes: {
+					content: 'Old copy',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'New copy',
+				},
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'server',
+			},
+		};
+		const reconciledServerEntry = {
+			...localActivity,
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				updatedAt: '2026-03-24T10:00:02Z',
+				undoneAt: '2026-03-24T10:00:02Z',
+			},
+		};
+
+		apiFetch
+			.mockResolvedValueOnce( {
+				entries: [ localActivity ],
+			} )
+			.mockRejectedValueOnce( {
+				code: 'flavor_agent_activity_invalid_undo_transition',
+				message: 'Flavor Agent only allows undo status changes from the available state.',
+				data: {
+					status: 409,
+					code: 'flavor_agent_activity_invalid_undo_transition',
+				},
+			} )
+			.mockResolvedValueOnce( {
+				entries: [ reconciledServerEntry ],
+			} );
+
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest
+				.fn()
+				.mockReturnValueOnce( [ localActivity ] )
+				.mockReturnValue( [ reconciledServerEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( {
+								clientId: 'block-1',
+								name: 'core/paragraph',
+								attributes: {
+									content: 'New copy',
+								},
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'New copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-1' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: true,
+			} )
+		);
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'SET_UNDO_STATE',
+				status: 'error',
+				activityId: 'activity-1',
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
+					id: 'activity-1',
+					undo: expect.objectContaining( {
+						status: 'undone',
+					} ),
+				} ),
+			] )
+		);
+	} );
+
 	test( 'undoActivity delegates template rollback to template-actions helpers', async () => {
 		undoTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,
@@ -2360,5 +2493,90 @@ describe( 'store action thunks', () => {
 			ok: false,
 			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
 		} );
+	} );
+
+	test( 'loadActivitySession reconciles pending undo sync 409 conflicts against the server entry', async () => {
+		const pendingUndoEntry = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: false,
+				status: 'undone',
+				updatedAt: '2026-03-24T10:00:01Z',
+				undoneAt: '2026-03-24T10:00:01Z',
+			},
+			persistence: {
+				status: 'local',
+				syncType: 'undo',
+				updatedAt: '2026-03-24T10:00:01Z',
+			},
+		};
+		const persistedUndoEntry = {
+			...pendingUndoEntry,
+			persistence: {
+				status: 'server',
+				syncType: null,
+				updatedAt: '2026-03-24T10:00:02Z',
+			},
+		};
+
+		apiFetch
+			.mockRejectedValueOnce( {
+				code: 'flavor_agent_activity_invalid_undo_transition',
+				message: 'Flavor Agent only allows undo status changes from the available state.',
+				data: {
+					status: 409,
+					code: 'flavor_agent_activity_invalid_undo_transition',
+				},
+			} )
+			.mockResolvedValueOnce( {
+				entries: [ persistedUndoEntry ],
+			} )
+			.mockResolvedValueOnce( {
+				entries: [ persistedUndoEntry ],
+			} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingUndoEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
+					id: 'activity-1',
+					undo: expect.objectContaining( {
+						status: 'undone',
+					} ),
+					persistence: expect.objectContaining( {
+						status: 'server',
+					} ),
+				} ),
+			] )
+		);
 	} );
 } );

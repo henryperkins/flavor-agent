@@ -793,6 +793,19 @@ final class Settings {
 		};
 	}
 
+	private static function get_pattern_sync_reason_label( string $reason ): string {
+		return match ( $reason ) {
+			'embedding_signature_changed' => __( 'Embedding provider, model, or vector size changed.', 'flavor-agent' ),
+			'collection_name_changed' => __( 'Pattern index collection naming changed and needs a rebuild.', 'flavor-agent' ),
+			'collection_missing' => __( 'Pattern index collection is missing and needs a rebuild.', 'flavor-agent' ),
+			'collection_size_mismatch' => __( 'Pattern index collection vector size no longer matches the active embedding configuration.', 'flavor-agent' ),
+			'qdrant_url_changed' => __( 'Qdrant endpoint changed.', 'flavor-agent' ),
+			'openai_endpoint_changed' => __( 'Embedding endpoint changed.', 'flavor-agent' ),
+			'pattern_registry_changed' => __( 'Registered patterns changed.', 'flavor-agent' ),
+			default => $reason,
+		};
+	}
+
 	private static function get_prewarm_status_label( string $status ): string {
 		return match ( $status ) {
 			'never'     => __( 'Never run', 'flavor-agent' ),
@@ -1791,8 +1804,25 @@ final class Settings {
 				);
 				self::render_sync_metric(
 					__( 'Qdrant Collection', 'flavor-agent' ),
-					$state['qdrant_collection'] ? (string) $state['qdrant_collection'] : QdrantClient::get_collection_name()
+					$state['qdrant_collection']
+						? (string) $state['qdrant_collection']
+						: QdrantClient::get_collection_name(
+							[
+								'signature_hash' => (string) ( $state['embedding_signature'] ?? '' ),
+							]
+						)
 				);
+				self::render_sync_metric(
+					__( 'Embedding Dimension', 'flavor-agent' ),
+					(string) max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) )
+				);
+
+				if ( ! empty( $state['stale_reason'] ) ) {
+					self::render_sync_metric(
+						__( 'Refresh Reason', 'flavor-agent' ),
+						self::get_pattern_sync_reason_label( (string) $state['stale_reason'] )
+					);
+				}
 
 				if ( $state['last_error'] ) {
 					self::render_sync_metric(

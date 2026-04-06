@@ -431,6 +431,86 @@ final class TemplatePartPromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_rejects_start_insertions_without_a_start_anchor(): void {
+		$context = [
+			'blockTree'        => [],
+			'patterns'         => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'insertionAnchors' => [
+				[
+					'placement' => 'end',
+					'label'     => 'End of template part',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Insert at start',
+						'description' => 'This should fail without a start anchor.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-utility',
+								'placement'   => 'start',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_rejects_end_insertions_without_an_end_anchor(): void {
+		$context = [
+			'blockTree'        => [],
+			'patterns'         => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'insertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template part',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Insert at end',
+						'description' => 'This should fail without an end anchor.',
+						'operations'  => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-utility',
+								'placement'   => 'end',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
 	public function test_parse_response_rejects_responses_without_actionable_suggestions(): void {
 		$context = [
 			'blockTree' => [

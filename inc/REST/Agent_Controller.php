@@ -170,12 +170,6 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
 					],
-					'editorStructure'     => [
-						'required'          => false,
-						'type'              => 'object',
-						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
-						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
-					],
 				],
 			]
 		);
@@ -307,6 +301,12 @@ final class Agent_Controller {
 						'type'              => 'array',
 						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
+					],
+					'editorStructure'     => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
 				],
 			]

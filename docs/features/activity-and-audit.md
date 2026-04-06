@@ -35,11 +35,13 @@ Navigation recommendations and pattern recommendations do not currently create F
 - Show ordered undo state, including applied, available, undone, blocked, failed, and pending-sync states
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provider ownership, credential-source, ability/route, and undo-reason details
+- Filter audit entries by relative time using true timestamp windows for `inThePast` and `over`, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
 ## Ordered Undo Rules
 
 - Undo is tail-ordered: older entries are blocked while newer still-applied AI actions remain
+- Server-side undo transitions are one-way from `available` only; terminal rows cannot be rewritten to a different terminal state
 - Block undo is path-plus-attribute based
 - Template and template-part undo rely on stable locators plus persisted post-apply snapshots
 - Global Styles and Style Book undo both rely on the active `root/globalStyles` entity id plus the persisted post-apply user config snapshot; Style Book also validates the recorded target block before restoring styles

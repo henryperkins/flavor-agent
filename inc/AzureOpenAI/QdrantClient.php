@@ -8,9 +8,11 @@ final class QdrantClient {
 
 	private const COLLECTION_PREFIX      = 'flavor-agent-patterns';
 	private const COLLECTION_HASH_LENGTH = 16;
-	private const VECTOR_SIZE            = 3072;
 
-	public static function get_collection_name(): string {
+	/**
+	 * @param array{signature_hash?: string}|null $embedding_signature
+	 */
+	public static function get_collection_name( ?array $embedding_signature = null ): string {
 		$scope      = [
 			'home_url'    => untrailingslashit( home_url( '/' ) ),
 			'blog_id'     => (string) get_current_blog_id(),
@@ -22,8 +24,11 @@ final class QdrantClient {
 			0,
 			self::COLLECTION_HASH_LENGTH
 		);
+		$signature  = EmbeddingSignature::short_hash(
+			$embedding_signature ?? EmbeddingSignature::from_runtime( 0 )
+		);
 
-		return self::COLLECTION_PREFIX . '-' . $hash;
+		return self::COLLECTION_PREFIX . '-' . $hash . '-' . $signature;
 	}
 
 	public static function validate_configuration(
@@ -101,26 +106,20 @@ final class QdrantClient {
 	/**
 	 * Ensure the Qdrant collection exists, creating it if missing.
 	 */
-	public static function ensure_collection(): true|\WP_Error {
-		$url = self::collection_url();
+	public static function ensure_collection( string $collection_name, int $vector_size ): true|\WP_Error {
+		$url = self::collection_url( $collection_name );
 
 		if ( is_wp_error( $url ) ) {
 			return $url;
 		}
 
-		$lookup = self::request(
-			'GET',
-			$url,
-			'get collection',
-			'qdrant_get_collection_error',
-			null,
-			[ 200, 404 ]
-		);
-		if ( is_wp_error( $lookup ) ) {
-			return $lookup;
-		}
+		$collection = self::get_collection_definition( $collection_name );
 
-		if ( $lookup['status'] === 404 ) {
+		if ( is_wp_error( $collection ) ) {
+			if ( 'qdrant_collection_missing' !== $collection->get_error_code() ) {
+				return $collection;
+			}
+
 			$created = self::request(
 				'PUT',
 				$url,
@@ -128,7 +127,7 @@ final class QdrantClient {
 				'qdrant_create_error',
 				[
 					'vectors' => [
-						'size'     => self::VECTOR_SIZE,
+						'size'     => $vector_size,
 						'distance' => 'Cosine',
 					],
 				]
@@ -136,9 +135,39 @@ final class QdrantClient {
 			if ( is_wp_error( $created ) ) {
 				return $created;
 			}
+		} else {
+			$existing_dimension = self::extract_collection_vector_size( $collection );
+
+			if ( is_wp_error( $existing_dimension ) ) {
+				return $existing_dimension;
+			}
+
+			if ( $existing_dimension !== $vector_size ) {
+				return self::build_collection_size_mismatch_error( $collection_name, $existing_dimension, $vector_size );
+			}
 		}
 
-		return self::ensure_payload_indexes();
+		return self::ensure_payload_indexes( $collection_name );
+	}
+
+	public static function validate_collection_compatibility( string $collection_name, int $vector_size ): true|\WP_Error {
+		$collection = self::get_collection_definition( $collection_name );
+
+		if ( is_wp_error( $collection ) ) {
+			return $collection;
+		}
+
+		$existing_dimension = self::extract_collection_vector_size( $collection );
+
+		if ( is_wp_error( $existing_dimension ) ) {
+			return $existing_dimension;
+		}
+
+		if ( $existing_dimension !== $vector_size ) {
+			return self::build_collection_size_mismatch_error( $collection_name, $existing_dimension, $vector_size );
+		}
+
+		return true;
 	}
 
 	/**
@@ -146,8 +175,8 @@ final class QdrantClient {
 	 *
 	 * @param array[] $points Each with id, vector, payload.
 	 */
-	public static function upsert_points( array $points ): true|\WP_Error {
-		$url = self::collection_url();
+	public static function upsert_points( array $points, string $collection_name ): true|\WP_Error {
+		$url = self::collection_url( $collection_name );
 
 		if ( is_wp_error( $url ) ) {
 			return $url;
@@ -169,8 +198,8 @@ final class QdrantClient {
 	 *
 	 * @param string[] $ids UUIDs to remove.
 	 */
-	public static function delete_points( array $ids ): true|\WP_Error {
-		$url = self::collection_url();
+	public static function delete_points( array $ids, string $collection_name ): true|\WP_Error {
+		$url = self::collection_url( $collection_name );
 
 		if ( is_wp_error( $url ) ) {
 			return $url;
@@ -195,8 +224,10 @@ final class QdrantClient {
 	 * @param array   $filter Qdrant filter.
 	 * @return array|\WP_Error Array of point objects with score and payload.
 	 */
-	public static function search( array $vector, int $limit, array $filter = [] ): array|\WP_Error {
-		$url = self::collection_url();
+	public static function search( array $vector, int $limit, array $filter = [], ?string $collection_name = null ): array|\WP_Error {
+		$url = self::collection_url(
+			$collection_name ?? self::get_collection_name( EmbeddingSignature::from_runtime( count( $vector ) ) )
+		);
 
 		if ( is_wp_error( $url ) ) {
 			return $url;
@@ -245,8 +276,8 @@ final class QdrantClient {
 	 *
 	 * @return array|\WP_Error Map of uuid => pattern name.
 	 */
-	public static function scroll_ids(): array|\WP_Error {
-		$url = self::collection_url();
+	public static function scroll_ids( string $collection_name ): array|\WP_Error {
+		$url = self::collection_url( $collection_name );
 
 		if ( is_wp_error( $url ) ) {
 			return $url;
@@ -297,11 +328,11 @@ final class QdrantClient {
 		return $ids;
 	}
 
-	private static function ensure_payload_indexes(): true|\WP_Error {
+	private static function ensure_payload_indexes( string $collection_name ): true|\WP_Error {
 		// Leave the content payload unindexed by only creating keyword indexes
 		// for the structural filter fields the recommendation flow needs.
 		foreach ( [ 'blockTypes', 'templateTypes', 'categories' ] as $field ) {
-			$result = self::create_payload_index( $field, 'keyword' );
+			$result = self::create_payload_index( $collection_name, $field, 'keyword' );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
@@ -310,8 +341,8 @@ final class QdrantClient {
 		return true;
 	}
 
-	private static function create_payload_index( string $field, string $type ): true|\WP_Error {
-		$url = self::collection_url();
+	private static function create_payload_index( string $collection_name, string $field, string $type ): true|\WP_Error {
+		$url = self::collection_url( $collection_name );
 
 		if ( is_wp_error( $url ) ) {
 			return $url;
@@ -336,7 +367,7 @@ final class QdrantClient {
 		return true;
 	}
 
-	private static function collection_url(): string|\WP_Error {
+	private static function collection_url( string $collection_name ): string|\WP_Error {
 		$base = get_option( 'flavor_agent_qdrant_url', '' );
 		$key  = get_option( 'flavor_agent_qdrant_key', '' );
 
@@ -348,7 +379,89 @@ final class QdrantClient {
 			);
 		}
 
-		return rtrim( $base, '/' ) . '/collections/' . self::get_collection_name();
+		return rtrim( $base, '/' ) . '/collections/' . $collection_name;
+	}
+
+	/**
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function get_collection_definition( string $collection_name ): array|\WP_Error {
+		$url = self::collection_url( $collection_name );
+
+		if ( is_wp_error( $url ) ) {
+			return $url;
+		}
+
+		$lookup = self::request(
+			'GET',
+			$url,
+			'get collection',
+			'qdrant_get_collection_error',
+			null,
+			[ 200, 404 ]
+		);
+
+		if ( is_wp_error( $lookup ) ) {
+			return $lookup;
+		}
+
+		if ( 404 === $lookup['status'] ) {
+			return new \WP_Error(
+				'qdrant_collection_missing',
+				sprintf( 'Qdrant collection %s is missing.', $collection_name ),
+				[
+					'status'          => 404,
+					'collection_name' => $collection_name,
+				]
+			);
+		}
+
+		return is_array( $lookup['body']['result'] ?? null )
+			? $lookup['body']['result']
+			: [];
+	}
+
+	private static function build_collection_size_mismatch_error( string $collection_name, int $actual_dimension, int $expected_dimension ): \WP_Error {
+		return new \WP_Error(
+			'qdrant_collection_size_mismatch',
+			sprintf(
+				'Qdrant collection %1$s uses %2$d dimensions but the active embedding configuration requires %3$d.',
+				$collection_name,
+				$actual_dimension,
+				$expected_dimension
+			),
+			[
+				'status'             => 409,
+				'collection_name'    => $collection_name,
+				'expected_dimension' => $expected_dimension,
+				'actual_dimension'   => $actual_dimension,
+			]
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $collection
+	 */
+	private static function extract_collection_vector_size( array $collection ): int|\WP_Error {
+		$vector_config = $collection['config']['params']['vectors'] ?? null;
+
+		if ( is_array( $vector_config ) && isset( $vector_config['size'] ) ) {
+			return (int) $vector_config['size'];
+		}
+
+		if ( is_array( $vector_config ) ) {
+			foreach ( $vector_config as $definition ) {
+				if ( is_array( $definition ) && isset( $definition['size'] ) ) {
+					return (int) $definition['size'];
+				}
+			}
+		}
+
+		return new \WP_Error(
+			'qdrant_collection_parse_error',
+			'Failed to determine the Qdrant collection vector size.',
+			[ 'status' => 502 ]
+		);
 	}
 
 	private static function api_key(): string {
@@ -364,8 +477,7 @@ final class QdrantClient {
 		string $operation,
 		string $error_code,
 		?array $body = null,
-		array $accepted_statuses = [],
-		bool $is_retry = false
+		array $accepted_statuses = []
 	): array|\WP_Error {
 		$args = [
 			'method'  => $method,
@@ -387,12 +499,18 @@ final class QdrantClient {
 
 		$status = wp_remote_retrieve_response_code( $response );
 
-		if ( $status === 429 && ! $is_retry ) {
-			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
-			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
-			sleep( min( $retry_after, 10 ) );
+		if ( 429 === $status ) {
+			$raw_body = wp_remote_retrieve_body( $response );
+			$data     = json_decode( $raw_body, true );
+			$message  = is_array( $data )
+				? ( $data['status']['error'] ?? $data['error'] ?? $data['message'] ?? "Qdrant {$operation} is temporarily rate limited." )
+				: "Qdrant {$operation} is temporarily rate limited.";
 
-			return self::request( $method, $url, $operation, $error_code, $body, $accepted_statuses, true );
+			return BaseHttpClient::build_retryable_rate_limit_error(
+				'qdrant_rate_limited',
+				(string) $message,
+				wp_remote_retrieve_header( $response, 'retry-after' )
+			);
 		}
 
 		$raw_body = wp_remote_retrieve_body( $response );

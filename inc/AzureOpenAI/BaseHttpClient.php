@@ -6,6 +6,8 @@ namespace FlavorAgent\AzureOpenAI;
 
 abstract class BaseHttpClient {
 
+	private const MAX_RETRY_AFTER_SECONDS = 60;
+
 	/**
 	 * @param array<string, string> $headers
 	 * @return array{status: int, data: mixed, json_error: int}|\WP_Error
@@ -15,8 +17,7 @@ abstract class BaseHttpClient {
 		array $headers,
 		string $body,
 		string $label,
-		int $timeout,
-		bool $is_retry = false
+		int $timeout
 	): array|\WP_Error {
 		$response = wp_remote_post(
 			$url,
@@ -37,22 +38,69 @@ abstract class BaseHttpClient {
 		}
 
 		$status = wp_remote_retrieve_response_code( $response );
+		$data   = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		if ( 429 === $status && ! $is_retry ) {
-			// Preserve the existing one-shot retry behavior for transient rate limits.
-			$retry_after_header = wp_remote_retrieve_header( $response, 'retry-after' );
-			$retry_after        = (int) ( false !== $retry_after_header ? $retry_after_header : 2 );
-			sleep( min( $retry_after, 10 ) );
+		if ( 429 === $status ) {
+			$message = is_array( $data ) && isset( $data['error']['message'] ) && is_string( $data['error']['message'] )
+				? $data['error']['message']
+				: "{$label} is temporarily rate limited.";
 
-			return self::post_json_with_retry( $url, $headers, $body, $label, $timeout, true );
+			return self::build_retryable_rate_limit_error(
+				'rate_limited',
+				$message,
+				wp_remote_retrieve_header( $response, 'retry-after' )
+			);
 		}
-
-		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		return [
 			'status'     => $status,
 			'data'       => $data,
 			'json_error' => json_last_error(),
 		];
+	}
+
+	public static function parse_retry_after_header( string|false $header, ?int $now = null ): ?int {
+		if ( false === $header ) {
+			return null;
+		}
+
+		$header = trim( $header );
+
+		if ( '' === $header ) {
+			return null;
+		}
+
+		if ( preg_match( '/^\d+$/', $header ) ) {
+			return max( 1, min( self::MAX_RETRY_AFTER_SECONDS, (int) $header ) );
+		}
+
+		$retry_at = strtotime( $header );
+
+		if ( false === $retry_at ) {
+			return null;
+		}
+
+		$delay = $retry_at - ( $now ?? time() );
+
+		return max( 1, min( self::MAX_RETRY_AFTER_SECONDS, $delay ) );
+	}
+
+	public static function build_retryable_rate_limit_error(
+		string $code,
+		string $message,
+		string|false $header
+	): \WP_Error {
+		$retry_after = self::parse_retry_after_header( $header );
+
+		return new \WP_Error(
+			$code,
+			$message,
+			[
+				'status'          => 429,
+				'retryable'       => true,
+				'retry_after'     => $retry_after,
+				'retry_after_raw' => false !== $header ? trim( $header ) : null,
+			]
+		);
 	}
 }
