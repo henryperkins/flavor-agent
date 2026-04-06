@@ -6,7 +6,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Recommendations`
 - Scope: only while editing a `wp_template` entity
-- UI shape: settings-backed capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, suggestion cards, preview-before-apply, recent activity, and inline undo
+- UI shape: settings-backed capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, preview-before-apply, recent activity, and inline undo
 
 ## Surfacing Conditions
 
@@ -17,9 +17,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo and history
+- Learned-once sequence: prompt -> featured recommendation -> grouped lanes -> review where needed -> apply where allowed -> undo and history
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
+- The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
 - Only suggestions with validated executable operations survive server-side parsing; advisory summaries stay aligned with those operations instead of acting as a fallback path
 
@@ -163,7 +164,7 @@ Each suggestion may include at most one `insert_pattern` operation. The server d
 |---|---|---|
 | UI shell | `TemplateRecommender()` in `src/templates/TemplateRecommender.js` | Renders the panel, entity links, preview flow, activity, and undo |
 | Input builder | `buildTemplateFetchInput()` in `src/templates/template-recommender-helpers.js` | Normalizes the request payload |
-| Context helpers | `buildEditorTemplateSlotSnapshot()` and `collectVisiblePatternNames()` | Capture slot state and invalidation boundaries |
+| Context helpers | `buildEditorTemplateSlotSnapshot()` and `getVisiblePatternNames()` | Capture slot state and invalidation boundaries |
 | Store request | `fetchTemplateRecommendations()` in `src/store/index.js` | Sends the recommendation request |
 | Store apply | `applyTemplateSuggestion()` in `src/store/index.js` | Runs deterministic apply and records activity |
 | Deterministic executor | `applyTemplateSuggestionOperations()` in `src/utils/template-actions.js` | Validates and executes the structured operation set |

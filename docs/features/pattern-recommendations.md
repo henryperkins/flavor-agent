@@ -21,7 +21,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## End-To-End Flow
 
-1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, the current visible pattern set, and the normalized `wp_block` entity contract returned by `usePostTypeEntityContract()`
+1. `PatternRecommender()` in `src/patterns/PatternRecommender.js` builds a base input from post type, template type, and the current visible pattern set. The normalized `wp_block` entity contract from `usePostTypeEntityContract()` is resolved separately and used during the inserter-patching phase to align the recommended category slug
 2. The component triggers `fetchPatternRecommendations()` on editor load and on debounced inserter-search changes
 3. The store posts the request to `POST /flavor-agent/v1/recommend-patterns`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`

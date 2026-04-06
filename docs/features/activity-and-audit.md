@@ -32,7 +32,7 @@ Navigation recommendations and pattern recommendations do not currently create F
 - Persist block, template, template-part, Global Styles, and Style Book apply events to a shared server-backed activity store
 - Hydrate activity back into editor-scoped history when the current entity changes
 - Preserve machine-readable AI request provenance so audit views can explain which backend actually handled a recommendation and where that configuration lives
-- Show ordered undo state, including applied, available, undone, blocked, failed, and pending-sync states
+- Show ordered undo state: undo status values are `available`, `undone`, `blocked`, and `failed`; persistence sync states (`server`/`local` with `syncType` of `undo` or `create`) are tracked separately
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provider ownership, credential-source, ability/route, and undo-reason details
 - Filter audit entries by relative time using true timestamp windows for `inThePast` and `over`, including hour-based filters that cross midnight correctly

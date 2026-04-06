@@ -7,7 +7,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Global Styles location: Site Editor Global Styles sidebar while the active complementary area is `edit-site/global-styles`
 - Global Styles mounts: portal into `.editor-global-styles-sidebar__panel`, with `PluginDocumentSettingPanel` fallback named `AI Style Suggestions`
 - Style Book location: Site Editor Styles sidebar while the native Style Book example is active
-- Style Book mounts: portal into the same styles sidebar slot, with `PluginDocumentSettingPanel` fallback named `AI Style Suggestions`
+- Style Book mounts: portal into the same styles sidebar slot, with `PluginDocumentSettingPanel` fallback named `AI Style Book Suggestions`
 - Global Styles scope contract: the current `root/globalStyles` entity resolved from `core.__experimentalGetCurrentGlobalStylesId()` plus `getEditedEntityRecord( 'root', 'globalStyles', id )`
 - Style Book scope contract: the same `root/globalStyles` entity plus the active Style Book target block name/title
 - Shared identifiers: JS surfaces `global-styles` and `style-book`, localized capability keys `globalStyles` and `styleBook`, activity scope keys `global_styles:<id>` and `style_book:<id>:<blockName>`
@@ -22,11 +22,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo and history
+- Learned-once sequence: scope/freshness -> prompt -> featured recommendation -> grouped lanes -> review where needed -> apply where allowed -> undo and history
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Global Styles suggestions move `idle -> loading -> advisory-ready` when results arrive, then `preview-ready` only after the user explicitly opens review on an executable suggestion
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
-- Global Styles and Style Book now share the same scope badges, suggestion-card hierarchy, compact operation previews, and inline apply/undo notice placement inside the active suggestion or review shell
+- Global Styles and Style Book now share the same scope badges, prompt shell, featured recommendation hero, `Review first` / `Manual ideas` lanes, compact operation previews, and inline apply/undo notice placement inside the active review shell
 
 ## End-To-End Flow
 
@@ -179,8 +179,8 @@ User opens the Site Editor Styles sidebar
 
 | Layer | Function / class | Role |
 |---|---|---|
-| UI shell | `GlobalStylesRecommender()` in `src/global-styles/GlobalStylesRecommender.js` | Renders the Global Styles panel, review flow, activity, and undo |
-| UI shell | `StyleBookRecommender()` in `src/style-book/StyleBookRecommender.js` | Renders the Style Book panel, review flow, activity, and undo |
+| UI shell | `GlobalStylesRecommender()` in `src/global-styles/GlobalStylesRecommender.js` | Renders the Global Styles panel, prompt, featured recommendation, grouped lanes, review flow, activity, and undo |
+| UI shell | `StyleBookRecommender()` in `src/style-book/StyleBookRecommender.js` | Renders the Style Book panel, prompt, featured recommendation, grouped lanes, review flow, activity, and undo |
 | Scope/runtime helpers | `getGlobalStylesUserConfig()` in `src/utils/style-operations.js` | Resolves the current `root/globalStyles` entity and available variations |
 | Input builder | `buildRequestInput()` in `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js` | Normalizes the recommendation request payload |
 | Store request | `fetchGlobalStylesRecommendations()` / `fetchStyleBookRecommendations()` in `src/store/index.js` | Send the recommendation request |
