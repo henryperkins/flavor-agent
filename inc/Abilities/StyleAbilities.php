@@ -235,6 +235,7 @@ final class StyleAbilities {
 			: self::supported_style_paths();
 		$template_structure    = self::normalize_template_structure( $style_context['templateStructure'] ?? [] );
 		$template_visibility   = self::normalize_template_visibility( $style_context['templateVisibility'] ?? [] );
+		$design_semantics      = self::normalize_design_semantics( $style_context['designSemantics'] ?? [] );
 		$context               = [
 			'currentConfig'         => $current_config,
 			'mergedConfig'          => $merged_config,
@@ -262,6 +263,10 @@ final class StyleAbilities {
 
 		if ( [] !== $template_visibility ) {
 			$context['templateVisibility'] = $template_visibility;
+		}
+
+		if ( [] !== $design_semantics ) {
+			$context['designSemantics'] = $design_semantics;
 		}
 
 		$block_manifest_context = self::normalize_block_manifest_context( $block_manifest );
@@ -836,6 +841,21 @@ final class StyleAbilities {
 	}
 
 	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_design_semantics( mixed $semantics ): array {
+		$semantics = self::normalize_map( $semantics );
+
+		if ( [] === $semantics ) {
+			return [];
+		}
+
+		$normalized = self::sanitize_structured_context_value( $semantics );
+
+		return is_array( $normalized ) ? $normalized : [];
+	}
+
+	/**
 	 * @return array<string, mixed>|array<int, mixed>|bool|float|int|string|null
 	 */
 	private static function normalize_comparable_value( mixed $value ): array|bool|float|int|string|null {
@@ -860,6 +880,40 @@ final class StyleAbilities {
 		}
 
 		return $value;
+	}
+
+	/**
+	 * @return array<string, mixed>|array<int, mixed>|bool|float|int|string|null
+	 */
+	private static function sanitize_structured_context_value( mixed $value ): array|bool|float|int|string|null {
+		if ( is_object( $value ) ) {
+			$value = get_object_vars( $value );
+		}
+
+		if ( is_array( $value ) ) {
+			if ( self::is_list_array( $value ) ) {
+				return array_values(
+					array_map( [ self::class, 'sanitize_structured_context_value' ], $value )
+				);
+			}
+
+			$sanitized = [];
+
+			foreach ( $value as $key => $entry ) {
+				$sanitized[ (string) $key ] =
+					self::sanitize_structured_context_value( $entry );
+			}
+
+			return $sanitized;
+		}
+
+		if ( is_string( $value ) ) {
+			return sanitize_text_field( $value );
+		}
+
+		return is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value
+			? $value
+			: null;
 	}
 
 	/**

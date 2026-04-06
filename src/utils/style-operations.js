@@ -249,6 +249,7 @@ export function buildGlobalStylesRecommendationContextSignature( {
 	executionContract,
 	templateStructure,
 	templateVisibility,
+	designSemantics,
 } ) {
 	const includeVariations = scope?.surface !== 'style-book';
 
@@ -269,6 +270,9 @@ export function buildGlobalStylesRecommendationContextSignature( {
 				normalizeComparableTemplateStructure( templateStructure ),
 			templateVisibility: sortObjectKeysDeep(
 				normalizeOperationValue( templateVisibility || {} )
+			),
+			designSemantics: sortObjectKeysDeep(
+				normalizeOperationValue( designSemantics || {} )
 			),
 			themeTokenDiagnostics: sortObjectKeysDeep(
 				normalizeOperationValue( themeTokenDiagnostics || {} )

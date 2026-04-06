@@ -125,6 +125,48 @@ final class StylePromptTest extends TestCase {
 						],
 					],
 				],
+				'designSemantics'       => [
+					'surface'            => 'global-styles',
+					'templateType'       => 'home',
+					'sectionCount'       => 2,
+					'overallDensityHint' => 'balanced',
+					'locationSummary'    => [
+						[
+							'value' => 'header',
+							'count' => 1,
+						],
+						[
+							'value' => 'content',
+							'count' => 1,
+						],
+					],
+					'roleSummary'        => [
+						[
+							'value' => 'header-slot',
+							'count' => 1,
+						],
+						[
+							'value' => 'main-query',
+							'count' => 1,
+						],
+					],
+					'sections'           => [
+						[
+							'path'             => [ 0 ],
+							'block'            => 'core/template-part',
+							'label'            => 'Header slot',
+							'role'             => 'header-slot',
+							'location'         => 'header',
+							'templateArea'     => 'header',
+							'templatePartSlug' => 'header',
+							'childRoles'       => [ 'header-site-title' ],
+							'emphasisHint'     => 'primary',
+							'densityHint'      => 'airy',
+							'hiddenViewports'  => [],
+							'visibleViewports' => [],
+						],
+					],
+				],
 			],
 		];
 	}
@@ -151,6 +193,9 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( '#1 Midnight - Dark editorial palette', $prompt );
 		$this->assertStringContainsString( 'styles: {"color":{"background":"var:preset|color|accent"}}', $prompt );
 		$this->assertStringContainsString( '## Current template structure', $prompt );
+		$this->assertStringContainsString( '## Design semantic context', $prompt );
+		$this->assertStringContainsString( 'Overall density hint: balanced', $prompt );
+		$this->assertStringContainsString( 'template part `header`', $prompt );
 	}
 
 	public function test_build_user_includes_style_book_target_context(): void {
@@ -180,7 +225,58 @@ final class StylePromptTest extends TestCase {
 			],
 			'mergedStyles'  => [
 				'typography' => [
-					'fontSize' => 'var:preset|font-size|body',
+				'fontSize' => 'var:preset|font-size|body',
+			],
+		],
+		];
+		$context['styleContext']['designSemantics'] = [
+			'surface'              => 'style-book',
+			'templateType'         => 'home',
+			'targetBlockName'      => 'core/paragraph',
+			'targetBlockTitle'     => 'Paragraph',
+			'occurrenceCount'      => 1,
+			'sampledOccurrenceCount' => 1,
+			'omittedOccurrenceCount' => 0,
+			'confidence'           => 'high',
+			'dominantRole'         => 'footer-paragraph',
+			'dominantLocation'     => 'footer',
+			'densitySummary'       => [
+				[
+					'value' => 'balanced',
+					'count' => 1,
+				],
+			],
+			'emphasisSummary'      => [
+				[
+					'value' => 'supporting',
+					'count' => 1,
+				],
+			],
+			'occurrences'          => [
+				[
+					'path'             => [ 0, 1 ],
+					'block'            => 'core/paragraph',
+					'label'            => 'Footer paragraph',
+					'role'             => 'footer-paragraph',
+					'location'         => 'footer',
+					'templateArea'     => 'footer',
+					'templatePartSlug' => 'footer',
+					'emphasisHint'     => 'supporting',
+					'densityHint'      => 'balanced',
+					'nearbyBlocks'     => [
+						'before' => [
+							[
+								'block' => 'core/heading',
+								'label' => 'Heading',
+							],
+						],
+						'after'  => [
+							[
+								'block' => 'core/buttons',
+								'label' => 'Buttons',
+							],
+						],
+					],
 				],
 			],
 		];
@@ -196,6 +292,9 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( '## Target block supports', $prompt );
 		$this->assertStringContainsString( 'Inspector panels: {"color":true}', $prompt );
 		$this->assertStringContainsString( '"fontSize":"var:preset|font-size|body"', $prompt );
+		$this->assertStringContainsString( 'Matching template occurrences: 1', $prompt );
+		$this->assertStringContainsString( 'Dominant role hint: `footer-paragraph`', $prompt );
+		$this->assertStringContainsString( 'before `Heading`; after `Buttons`', $prompt );
 		$this->assertStringNotContainsString( '## Available theme style variations', $prompt );
 		$this->assertStringNotContainsString( 'Active variation:', $prompt );
 	}

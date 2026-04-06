@@ -14,6 +14,7 @@ import {
 	getBlockPatterns,
 	setBlockPatterns,
 	getBlockPatternCategories,
+	setBlockPatternCategories,
 	getAllowedPatterns,
 	getPatternAPIPath,
 	getPatternRuntimeDiagnostics,
@@ -204,6 +205,86 @@ describe( 'getBlockPatternCategories', () => {
 		mockBlockEditorStore( {} );
 
 		expect( getBlockPatternCategories() ).toEqual( [] );
+	} );
+} );
+
+describe( 'setBlockPatternCategories', () => {
+	beforeEach( () => {
+		mockRegistrySelect.mockReset();
+		mockRegistryDispatch.mockReset();
+	} );
+
+	test( 'supports future stable writes when WordPress provides blockPatternCategories', () => {
+		mockBlockEditorStore( {
+			blockPatternCategories: [ { name: 'featured', label: 'Featured' } ],
+			__experimentalBlockPatternCategories: [],
+		} );
+		const updateSettings = mockUpdateSettings();
+
+		const nextCategories = [
+			{ name: 'recommended', label: 'Recommended' },
+		];
+		setBlockPatternCategories( nextCategories );
+
+		expect( updateSettings ).toHaveBeenCalledWith( {
+			blockPatternCategories: nextCategories,
+		} );
+	} );
+
+	test( 'writes to experimental key when stable key is absent', () => {
+		mockBlockEditorStore( {
+			__experimentalBlockPatternCategories: [
+				{ name: 'featured', label: 'Featured' },
+			],
+		} );
+		const updateSettings = mockUpdateSettings();
+
+		const nextCategories = [
+			{ name: 'recommended', label: 'Recommended' },
+		];
+		setBlockPatternCategories( nextCategories );
+
+		expect( updateSettings ).toHaveBeenCalledWith( {
+			__experimentalBlockPatternCategories: nextCategories,
+		} );
+	} );
+
+	test( 'writes to __experimentalAdditionalBlockPatternCategories when that key is populated', () => {
+		mockBlockEditorStore( {
+			__experimentalAdditionalBlockPatternCategories: [
+				{ name: 'featured', label: 'Featured' },
+			],
+			__experimentalBlockPatternCategories: [
+				{ name: 'stale', label: 'Stale' },
+			],
+		} );
+		const updateSettings = mockUpdateSettings();
+
+		const nextCategories = [
+			{ name: 'recommended', label: 'Recommended' },
+		];
+		setBlockPatternCategories( nextCategories );
+
+		expect( updateSettings ).toHaveBeenCalledWith( {
+			__experimentalAdditionalBlockPatternCategories: nextCategories,
+		} );
+	} );
+
+	test( 'defaults to experimental key when neither categories key exists', () => {
+		mockBlockEditorStore( {} );
+		const updateSettings = mockUpdateSettings();
+
+		setBlockPatternCategories( [
+			{ name: 'recommended', label: 'Recommended' },
+		] );
+
+		expect( updateSettings ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				__experimentalBlockPatternCategories: [
+					{ name: 'recommended', label: 'Recommended' },
+				],
+			} )
+		);
 	} );
 } );
 

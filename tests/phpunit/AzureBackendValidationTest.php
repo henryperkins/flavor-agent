@@ -716,4 +716,59 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'qdrant_collection_size_mismatch', $result->get_error_code() );
 	}
+
+	public function test_qdrant_ensure_collection_indexes_traits_payloads(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'status' => 'ok',
+					'result' => [
+						'config' => [
+							'params' => [
+								'vectors' => [
+									'size'     => 2,
+									'distance' => 'Cosine',
+								],
+							],
+						],
+					],
+				]
+			),
+		];
+		WordPressTestState::$remote_post_responses = array_fill(
+			0,
+			4,
+			[
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode(
+					[
+						'status' => 'ok',
+						'result' => [],
+					]
+				),
+			]
+		);
+
+		$result = QdrantClient::ensure_collection( 'flavor-agent-patterns-test', 2 );
+
+		$this->assertTrue( $result );
+		$this->assertSame(
+			[ 'blockTypes', 'templateTypes', 'categories', 'traits' ],
+			array_map(
+				static function ( array $call ): ?string {
+					$body = json_decode( (string) ( $call['args']['body'] ?? '' ), true );
+
+					return is_array( $body ) ? ( $body['field_name'] ?? null ) : null;
+				},
+				WordPressTestState::$remote_post_calls
+			)
+		);
+	}
 }

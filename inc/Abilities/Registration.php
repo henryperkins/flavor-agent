@@ -192,6 +192,7 @@ final class Registration {
 								'attributes' => [ 'type' => 'object' ],
 							],
 						],
+						'insertionContext'    => self::pattern_insertion_context_schema(),
 						'templateType'        => [ 'type' => 'string' ],
 						'prompt'              => [ 'type' => 'string' ],
 						'visiblePatternNames' => [
@@ -215,6 +216,7 @@ final class Registration {
 									'reason'     => [ 'type' => 'string' ],
 									'categories' => [ 'type' => 'array' ],
 									'patternOverrides' => [ 'type' => 'object' ],
+									'overrideCapabilities' => self::pattern_override_capabilities_schema(),
 									'content'    => [ 'type' => 'string' ],
 								],
 							],
@@ -654,6 +656,7 @@ final class Registration {
 										'reason'      => [ 'type' => 'string' ],
 									]
 								),
+								'designSemantics'      => self::open_object_schema(),
 								'styleBookTarget'       => self::open_object_schema(
 									[
 										'blockName'     => [ 'type' => 'string' ],
@@ -964,6 +967,47 @@ final class Registration {
 		}
 
 		return self::open_object_schema( $properties );
+	}
+
+	private static function pattern_insertion_context_schema(): array {
+		return self::open_object_schema(
+			[
+				'rootBlock'        => [ 'type' => 'string' ],
+				'ancestors'        => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'nearbySiblings'   => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'templatePartArea' => [ 'type' => 'string' ],
+				'templatePartSlug' => [ 'type' => 'string' ],
+				'containerLayout'  => [ 'type' => 'string' ],
+			],
+			'Inserter-side structural context for pattern recommendations.'
+		);
+	}
+
+	private static function pattern_override_capabilities_schema(): array {
+		return self::open_object_schema(
+			[
+				'hasPatternOverrides'      => [ 'type' => 'boolean' ],
+				'overrideBlockCount'       => [ 'type' => 'integer' ],
+				'usesDefaultBinding'       => [ 'type' => 'boolean' ],
+				'hasBindableOverrides'     => [ 'type' => 'boolean' ],
+				'hasUnsupportedOverrides'  => [ 'type' => 'boolean' ],
+				'matchesNearbyBlock'       => [ 'type' => 'boolean' ],
+				'nearbyBlockOverlapAttrs'  => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'string' ],
+				],
+				'siblingOverrideCount'     => [ 'type' => 'integer' ],
+				'matchesNearbyCustomBlock' => [ 'type' => 'boolean' ],
+				'supportsCustomBlocks'     => [ 'type' => 'boolean' ],
+			],
+			'Resolved Pattern Overrides capabilities for the current recommendation context.'
+		);
 	}
 
 	private static function open_object_schema( array $properties = [], string $description = '' ): array {

@@ -150,7 +150,6 @@ beforeEach( () => {
 		clearNavigationRecommendations: mockClearNavigationRecommendations,
 		fetchNavigationRecommendations: mockFetchNavigationRecommendations,
 	} ) );
-
 } );
 
 afterEach( () => {

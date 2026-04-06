@@ -27,9 +27,7 @@ beforeEach( () => {
 	mockUseDispatch.mockImplementation( () => ( {
 		applySuggestion: mockApplySuggestion,
 	} ) );
-
 } );
-
 
 describe( 'SuggestionChips', () => {
 	test( 'renders named chip controls as an ARIA group', () => {
@@ -84,5 +82,36 @@ describe( 'SuggestionChips', () => {
 			getContainer().querySelector( '.flavor-agent-inline-feedback' )
 				?.textContent
 		).toBe( 'AppliedUse accent color' );
+	} );
+
+	test( 'disables an applied chip while inline feedback is visible', async () => {
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					] }
+				/>
+			);
+		} );
+
+		const chip = getContainer().querySelector( 'button' );
+
+		await act( async () => {
+			chip.click();
+			await Promise.resolve();
+		} );
+
+		expect( chip.disabled ).toBe( true );
+		expect( chip.textContent ).toBe( 'Applied' );
+
+		chip.click();
+
+		expect( mockApplySuggestion ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

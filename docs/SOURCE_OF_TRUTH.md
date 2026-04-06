@@ -299,10 +299,10 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Trigger:** User opens the Style Book panel for a block type, types an optional prompt, and clicks "Get Style Suggestions".
 - **Context sent:** Resolved scope descriptor with `surface: "style-book"`, target block name and title, current block-scoped styles, merged config, theme-token source diagnostics, and theme tokens.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`, using the same `StylePrompt` and `StyleAbilities::recommend_style()` as Global Styles with surface-aware operation rules.
-- **Response:** Up to 4 suggestions with validated `operations`. Supported executable operations are `set_block_styles` (style-book surface only) and `set_theme_variation`.
+- **Response:** Up to 4 suggestions with validated `operations`. Supported executable operations are `set_block_styles` (style-book surface only).
 - **UI:** `src/style-book/StyleBookRecommender.js` portals into the Style Book panel using `src/style-book/dom.js` for target resolution. Uses the same shared prompt -> suggestions -> explanation -> review -> apply -> undo/history model.
-- **Apply:** Deterministic client helpers validate block-scoped style paths, preset requirements, and still-available theme variations before updating the active `root/globalStyles` entity. Applied changes persist before/after config plus operation metadata for scoped undo.
-- **Guardrails:** `set_styles` is rejected on the style-book surface. `set_block_styles.blockName` must exactly match the target block in scope. Same raw CSS, `customCSS`, and unsupported-path guardrails as Global Styles.
+- **Apply:** Deterministic client helpers validate block-scoped style paths and preset requirements before updating the active `root/globalStyles` entity. Applied changes persist before/after config plus operation metadata for scoped undo.
+- **Guardrails:** `set_styles` is rejected on the style-book surface. `set_theme_variation` is also rejected on the style-book surface. `set_block_styles.blockName` must exactly match the target block in scope. Same raw CSS, `customCSS`, and unsupported-path guardrails as Global Styles.
 
 #### Shared Inline Review Model
 

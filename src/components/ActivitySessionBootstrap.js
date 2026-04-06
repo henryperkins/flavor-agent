@@ -15,7 +15,7 @@ export default function ActivitySessionBootstrap() {
 			? {
 					isActive: false,
 					target: null,
-				  }
+			  }
 			: getStyleBookUiState( document )
 	);
 	const editorState = useSelect( ( select ) => {

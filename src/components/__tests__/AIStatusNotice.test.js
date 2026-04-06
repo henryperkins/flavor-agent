@@ -10,7 +10,6 @@ import AIStatusNotice from '../AIStatusNotice';
 
 const { getContainer, getRoot } = setupReactTest();
 
-
 describe( 'AIStatusNotice', () => {
 	test( 'renders nothing without a notice payload', () => {
 		act( () => {
@@ -39,7 +38,9 @@ describe( 'AIStatusNotice', () => {
 			);
 		} );
 
-		expect( getContainer().textContent ).toContain( 'Applied Refresh hero.' );
+		expect( getContainer().textContent ).toContain(
+			'Applied Refresh hero.'
+		);
 		expect( getContainer().textContent ).toContain( 'Undo' );
 
 		const buttons = getContainer().querySelectorAll( 'button' );

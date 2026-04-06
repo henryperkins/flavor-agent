@@ -679,8 +679,8 @@ function getApiErrorCode( error ) {
 	return typeof error?.code === 'string' && error.code
 		? error.code
 		: typeof error?.data?.code === 'string' && error.data.code
-			? error.data.code
-			: '';
+		? error.data.code
+		: '';
 }
 
 function buildActivityQueryPath( {
@@ -880,7 +880,10 @@ function isNonRetryableUndoSyncError( entry, error ) {
 		return false;
 	}
 
-	if ( status === 409 && code === 'flavor_agent_activity_invalid_undo_transition' ) {
+	if (
+		status === 409 &&
+		code === 'flavor_agent_activity_invalid_undo_transition'
+	) {
 		return false;
 	}
 
@@ -890,7 +893,8 @@ function isNonRetryableUndoSyncError( entry, error ) {
 function isUndoSyncConflictError( error ) {
 	return (
 		getApiErrorStatus( error ) === 409 &&
-		getApiErrorCode( error ) === 'flavor_agent_activity_invalid_undo_transition'
+		getApiErrorCode( error ) ===
+			'flavor_agent_activity_invalid_undo_transition'
 	);
 }
 
@@ -1426,7 +1430,7 @@ async function runAbortableRecommendationRequest( {
 	request.requestData = requestData;
 	onLoading?.( { dispatch, input, ...request } );
 
-		let lastError = null;
+	let lastError = null;
 	const maxRetries = 1;
 
 	for ( let attempt = 0; attempt <= maxRetries; attempt++ ) {
@@ -2281,10 +2285,11 @@ const actions = {
 				}
 
 				try {
-					const reconciledEntry = await reconcileActivityEntryFromServer(
-						activity,
-						scopeKey
-					);
+					const reconciledEntry =
+						await reconcileActivityEntryFromServer(
+							activity,
+							scopeKey
+						);
 
 					if ( ! reconciledEntry ) {
 						return null;
@@ -2317,8 +2322,7 @@ const actions = {
 					if ( reconciledUndo.status === 'failed' ) {
 						return {
 							ok: false,
-							timestamp:
-								reconciledUndo.updatedAt || timestamp,
+							timestamp: reconciledUndo.updatedAt || timestamp,
 							error:
 								reconciledUndo.error ||
 								'This AI action can no longer be undone automatically.',
@@ -2331,7 +2335,7 @@ const actions = {
 
 				return null;
 			};
-			
+
 			if ( scopeKey && isServerBackedActivityEntry( activity ) ) {
 				try {
 					const serverEntries =

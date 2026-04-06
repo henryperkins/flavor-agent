@@ -130,6 +130,15 @@ export function getBlockPatternCategories() {
 	return Array.isArray( categories ) ? categories : [];
 }
 
+export function setBlockPatternCategories( categories ) {
+	const settings = getSettings();
+	const key = resolveCategoriesKey( settings );
+
+	registryDispatch( blockEditorStore ).updateSettings( {
+		[ key ]: categories,
+	} );
+}
+
 export function getAllowedPatterns( rootClientId = null, blockEditor ) {
 	return resolveAllowedPatternsResult( rootClientId, blockEditor ).value;
 }

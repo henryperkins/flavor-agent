@@ -19,7 +19,11 @@ import {
 	buildGlobalStylesExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
 } from '../context/theme-tokens';
-import { collectViewportVisibilitySummary } from '../utils/editor-context-metadata';
+import {
+	buildTemplateStructureSnapshot,
+	collectViewportVisibilitySummary,
+} from '../utils/editor-context-metadata';
+import { buildGlobalStyleDesignSemantics } from '../utils/style-design-semantics';
 import {
 	findStylesSidebarMountNode,
 	getStyleBookUiState,
@@ -91,42 +95,6 @@ function formatOperation( operation = {} ) {
 	return 'Review this change before applying it.';
 }
 
-function buildTemplateStructureSnapshot( blocks = [], depth = 0 ) {
-	if ( ! Array.isArray( blocks ) ) {
-		return [];
-	}
-
-	return blocks
-		.map( ( block ) => {
-			if ( ! block || typeof block !== 'object' ) {
-				return null;
-			}
-
-			const name =
-				typeof block?.name === 'string' ? block.name.trim() : '';
-
-			if ( ! name ) {
-				return null;
-			}
-
-			const snapshot = { name };
-
-			if ( depth < 1 ) {
-				const innerBlocks = buildTemplateStructureSnapshot(
-					block?.innerBlocks,
-					depth + 1
-				);
-
-				if ( innerBlocks.length > 0 ) {
-					snapshot.innerBlocks = innerBlocks;
-				}
-			}
-
-			return snapshot;
-		} )
-		.filter( Boolean );
-}
-
 function buildRequestInput( {
 	scope,
 	prompt,
@@ -135,6 +103,7 @@ function buildRequestInput( {
 	availableVariations,
 	templateStructure,
 	templateVisibility,
+	designSemantics,
 	contextSignature,
 	themeTokenDiagnostics,
 } ) {
@@ -159,6 +128,7 @@ function buildRequestInput( {
 			availableVariations,
 			templateStructure,
 			templateVisibility,
+			designSemantics,
 			themeTokenDiagnostics,
 		},
 		contextSignature,
@@ -483,6 +453,7 @@ export default function GlobalStylesRecommender() {
 		availableVariations,
 		templateStructure,
 		templateVisibility,
+		designSemantics,
 		rawSuggestions,
 		currentExplanation,
 		currentResultContextSignature,
@@ -578,6 +549,9 @@ export default function GlobalStylesRecommender() {
 			templateStructure: buildTemplateStructureSnapshot( editedBlocks ),
 			templateVisibility:
 				collectViewportVisibilitySummary( editedBlocks ),
+			designSemantics: buildGlobalStyleDesignSemantics( editedBlocks, {
+				templateType,
+			} ),
 			rawSuggestions: mappedSuggestions,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
 			currentResultContextSignature:
@@ -608,6 +582,7 @@ export default function GlobalStylesRecommender() {
 			availableVariations,
 			templateStructure,
 			templateVisibility,
+			designSemantics,
 			themeTokenDiagnostics,
 			executionContract,
 		} );
@@ -819,6 +794,7 @@ export default function GlobalStylesRecommender() {
 				availableVariations,
 				templateStructure,
 				templateVisibility,
+				designSemantics,
 				contextSignature: recommendationContextSignature,
 				themeTokenDiagnostics,
 			} )
@@ -826,6 +802,7 @@ export default function GlobalStylesRecommender() {
 	}, [
 		availableVariations,
 		currentConfig,
+		designSemantics,
 		fetchGlobalStylesRecommendations,
 		mergedConfig,
 		prompt,

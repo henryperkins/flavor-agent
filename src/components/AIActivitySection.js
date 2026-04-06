@@ -18,7 +18,9 @@ function getExecutionSummary( entry ) {
 	}
 
 	const parts = [
-		requestMeta.backendLabel || requestMeta.providerLabel || requestMeta.provider,
+		requestMeta.backendLabel ||
+			requestMeta.providerLabel ||
+			requestMeta.provider,
 		requestMeta.model,
 	].filter( Boolean );
 

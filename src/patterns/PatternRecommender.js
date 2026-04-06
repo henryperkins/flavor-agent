@@ -25,12 +25,24 @@ import {
 } from '@wordpress/element';
 
 import CapabilityNotice from '../components/CapabilityNotice';
-import { getBlockPatterns, setBlockPatterns } from './pattern-settings';
+import {
+	getBlockPatternCategories,
+	getBlockPatterns,
+	setBlockPatternCategories,
+	setBlockPatterns,
+} from './pattern-settings';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
-import { patchPatternMetadata } from './recommendation-utils';
+import {
+	patchPatternCategoryRegistry,
+	patchPatternMetadata,
+} from './recommendation-utils';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { usePostTypeEntityContract } from '../utils/editor-entity-contracts';
+import {
+	getTemplatePartAreaLookup,
+	inferTemplatePartArea,
+} from '../utils/template-part-areas';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 
@@ -38,34 +50,145 @@ const SEARCH_DEBOUNCE_MS = 400;
 const OBSERVER_TIMEOUT_MS = 3000;
 const NOTICE_SLOT_CLASS = 'flavor-agent-pattern-notice-slot';
 
-/**
- * Module-level map preserving original metadata for rollback.
- * Key: pattern name, Value: { description, keywords, categories }
- */
-const originalMetadata = new Map();
+function getRegistryVersion( entries, prefix, includeLabel = false ) {
+	if ( ! Array.isArray( entries ) ) {
+		return `${ prefix }:none`;
+	}
+
+	return `${ prefix }:${ entries
+		.map( ( entry, index ) => {
+			const name =
+				typeof entry?.name === 'string' && entry.name
+					? entry.name
+					: `index-${ index }`;
+
+			if ( ! includeLabel ) {
+				return name;
+			}
+
+			const label = typeof entry?.label === 'string' ? entry.label : '';
+
+			return `${ name }:${ label }`;
+		} )
+		.join( '|' ) }`;
+}
+
+function createPatchState() {
+	return {
+		originalMetadata: new Map(),
+		categoryOwnership: {
+			injectedCategories: new Set(),
+			registry: null,
+		},
+	};
+}
+
+function getNonEmptyString( value ) {
+	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
+}
+
+function buildAncestorEntries( editor, inserterRootClientId ) {
+	if ( ! inserterRootClientId ) {
+		return [];
+	}
+
+	const ancestors = [];
+	let parentId = inserterRootClientId;
+
+	while ( parentId ) {
+		ancestors.unshift( {
+			clientId: parentId,
+			blockName: editor.getBlockName?.( parentId ) || '',
+			attributes: editor.getBlockAttributes?.( parentId ) || {},
+		} );
+		parentId = editor.getBlockRootClientId?.( parentId ) ?? null;
+	}
+
+	return ancestors;
+}
+
+function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
+	const ancestorEntries = buildAncestorEntries(
+		editor,
+		inserterRootClientId
+	);
+	const rootEntry = ancestorEntries[ ancestorEntries.length - 1 ] || null;
+	const areaLookup = getTemplatePartAreaLookup();
+	const nearestTemplatePart = [ ...ancestorEntries ]
+		.reverse()
+		.find( ( entry ) => entry.blockName === 'core/template-part' );
+	const templatePartArea = nearestTemplatePart
+		? inferTemplatePartArea( nearestTemplatePart.attributes, areaLookup )
+		: '';
+	const templatePartSlug = getNonEmptyString(
+		nearestTemplatePart?.attributes?.slug
+	);
+	const containerLayout = getNonEmptyString(
+		rootEntry?.attributes?.layout?.type
+	);
+	const siblingOrder = editor.getBlockOrder?.( inserterRootClientId ) || [];
+	const insertIndex = insertionPoint?.index ?? siblingOrder.length;
+	const nearbySiblings = [];
+	const start = Math.max( 0, insertIndex - 3 );
+	const end = Math.min( siblingOrder.length, insertIndex + 3 );
+
+	for ( let i = start; i < end; i++ ) {
+		const name = editor.getBlockName?.( siblingOrder[ i ] );
+
+		if ( name ) {
+			nearbySiblings.push( name );
+		}
+	}
+
+	return {
+		rootBlock: rootEntry?.blockName || null,
+		ancestors: ancestorEntries
+			.map( ( entry ) => entry.blockName )
+			.filter( Boolean ),
+		nearbySiblings,
+		...( templatePartArea ? { templatePartArea } : {} ),
+		...( templatePartSlug ? { templatePartSlug } : {} ),
+		...( containerLayout ? { containerLayout } : {} ),
+	};
+}
 
 /**
  * Read-modify-write on block patterns via compatibility adapter.
  *
- * @param {Array} recommendations Current recommendation set.
+ * @param {Array}  recommendations     Current recommendation set.
+ * @param {string} recommendedCategory Recommended category slug.
+ * @param {Object} patchState          Surface-local rollback state.
  *
  * @return {void}
  */
-function patchInserterPatterns( recommendations, recommendedCategory ) {
+function patchInserterPatterns(
+	recommendations,
+	recommendedCategory,
+	patchState
+) {
 	const patterns = getBlockPatterns();
 
 	if ( patterns.length === 0 ) {
 		return;
 	}
 
+	const categories = getBlockPatternCategories();
 	const patched = patchPatternMetadata(
 		patterns,
 		recommendations,
-		originalMetadata,
+		patchState.originalMetadata,
 		recommendedCategory
 	);
 
 	setBlockPatterns( patched );
+	setBlockPatternCategories(
+		patchPatternCategoryRegistry(
+			categories,
+			recommendations,
+			patchState.categoryOwnership,
+			recommendedCategory
+		)
+	);
 }
 
 export default function PatternRecommender() {
@@ -107,6 +230,23 @@ export default function PatternRecommender() {
 				?.rootClientId ?? null
 		);
 	}, [] );
+	const insertionContext = useSelect(
+		( select ) => {
+			const editor = select( blockEditorStore );
+			const insertionPoint = editor.getBlockInsertionPoint?.();
+
+			if ( ! insertionPoint ) {
+				return null;
+			}
+
+			return buildInsertionContext(
+				editor,
+				inserterRootClientId,
+				insertionPoint
+			);
+		},
+		[ inserterRootClientId ]
+	);
 	const visiblePatternNames = useSelect(
 		( select ) => {
 			return getVisiblePatternNames(
@@ -120,15 +260,54 @@ export default function PatternRecommender() {
 		const settings = select( blockEditorStore ).getSettings?.() || {};
 
 		if ( Array.isArray( settings.blockPatterns ) ) {
-			return `stable:${ settings.blockPatterns.length }`;
+			return getRegistryVersion( settings.blockPatterns, 'stable' );
 		}
 
 		if ( Array.isArray( settings.__experimentalAdditionalBlockPatterns ) ) {
-			return `experimental-additional:${ settings.__experimentalAdditionalBlockPatterns.length }`;
+			return getRegistryVersion(
+				settings.__experimentalAdditionalBlockPatterns,
+				'experimental-additional'
+			);
 		}
 
 		if ( Array.isArray( settings.__experimentalBlockPatterns ) ) {
-			return `experimental:${ settings.__experimentalBlockPatterns.length }`;
+			return getRegistryVersion(
+				settings.__experimentalBlockPatterns,
+				'experimental'
+			);
+		}
+
+		return 'none:0';
+	}, [] );
+	const categoryRegistryVersion = useSelect( ( select ) => {
+		const settings = select( blockEditorStore ).getSettings?.() || {};
+
+		if ( Array.isArray( settings.blockPatternCategories ) ) {
+			return getRegistryVersion(
+				settings.blockPatternCategories,
+				'stable',
+				true
+			);
+		}
+
+		if (
+			Array.isArray(
+				settings.__experimentalAdditionalBlockPatternCategories
+			)
+		) {
+			return getRegistryVersion(
+				settings.__experimentalAdditionalBlockPatternCategories,
+				'experimental-additional',
+				true
+			);
+		}
+
+		if ( Array.isArray( settings.__experimentalBlockPatternCategories ) ) {
+			return getRegistryVersion(
+				settings.__experimentalBlockPatternCategories,
+				'experimental',
+				true
+			);
 		}
 
 		return 'none:0';
@@ -138,6 +317,7 @@ export default function PatternRecommender() {
 		[]
 	);
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
+	const patchStateRef = useRef( createPatchState() );
 	const observerRef = useRef( null );
 	const listenerRef = useRef( null );
 	const debounceRef = useRef( null );
@@ -160,8 +340,12 @@ export default function PatternRecommender() {
 			input.templateType = templateType;
 		}
 
+		if ( insertionContext ) {
+			input.insertionContext = insertionContext;
+		}
+
 		return input;
-	}, [ postType, templateType, visiblePatternNames ] );
+	}, [ postType, templateType, visiblePatternNames, insertionContext ] );
 
 	useEffect( () => {
 		if ( ! canRecommend || ! postType ) {
@@ -179,11 +363,13 @@ export default function PatternRecommender() {
 	useEffect( () => {
 		patchInserterPatterns(
 			recommendations,
-			patternContract.recommendedPatternCategory
+			patternContract.recommendedPatternCategory,
+			patchStateRef.current
 		);
 	}, [
 		recommendations,
 		patternRegistryVersion,
+		categoryRegistryVersion,
 		patternContract.recommendedPatternCategory,
 	] );
 
@@ -289,6 +475,10 @@ export default function PatternRecommender() {
 					input.blockContext = { blockName: selectedBlockName };
 				}
 
+				if ( insertionContext ) {
+					input.insertionContext = insertionContext;
+				}
+
 				fetchPatternRecommendations( input );
 			}, SEARCH_DEBOUNCE_MS );
 		},
@@ -296,6 +486,7 @@ export default function PatternRecommender() {
 			postType,
 			buildBaseInput,
 			selectedBlockName,
+			insertionContext,
 			fetchPatternRecommendations,
 		]
 	);

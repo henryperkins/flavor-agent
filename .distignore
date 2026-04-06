@@ -29,6 +29,7 @@ phpunit.xml.dist
 plugin-check.md
 playwright.config.js
 playwright.wp70.config.js
+repomix*.json
 scripts
 src
 STATUS.md

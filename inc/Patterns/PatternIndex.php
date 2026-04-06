@@ -29,7 +29,7 @@ final class PatternIndex {
 	];
 
 	/** Increment when the embedding text template changes. */
-	public const EMBEDDING_RECIPE_VERSION = 2;
+	public const EMBEDDING_RECIPE_VERSION = 3;
 
 	/** Fixed UUID v5 namespace (DNS namespace from RFC 4122). */
 	private const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -233,6 +233,11 @@ final class PatternIndex {
 			$parts[] = 'Template types: ' . implode( ', ', $tt );
 		}
 
+		$traits = self::infer_layout_traits( $pattern );
+		if ( ! empty( $traits ) ) {
+			$parts[] = 'Layout traits: ' . implode( ', ', $traits );
+		}
+
 		$pattern_overrides = is_array( $pattern['patternOverrides'] ?? null )
 			? $pattern['patternOverrides']
 			: [];
@@ -261,6 +266,96 @@ final class PatternIndex {
 		}
 
 		return implode( "\n", array_filter( $parts ) );
+	}
+
+	/**
+	 * Infer layout characteristics from pattern content and metadata.
+	 *
+	 * @return string[] Layout trait labels for embedding enrichment and LLM ranking.
+	 */
+	public static function infer_layout_traits( array $pattern ): array {
+		$content    = $pattern['content'] ?? '';
+		$categories = $pattern['categories'] ?? [];
+		$traits     = [];
+
+		// Layout archetype from block content.
+		if ( str_contains( $content, 'wp:cover' ) ) {
+			$traits[] = 'hero-banner';
+		}
+		if ( str_contains( $content, 'wp:columns' ) ) {
+			$traits[] = 'multi-column';
+		}
+		if ( str_contains( $content, 'wp:gallery' ) ) {
+			$traits[] = 'gallery';
+		}
+		if ( str_contains( $content, 'wp:buttons' ) ) {
+			$traits[] = 'call-to-action';
+		}
+		if ( str_contains( $content, 'wp:query' ) ) {
+			$traits[] = 'query-loop';
+		}
+		if ( str_contains( $content, 'wp:media-text' ) ) {
+			$traits[] = 'media-text';
+		}
+		if ( str_contains( $content, 'wp:navigation' ) ) {
+			$traits[] = 'navigation';
+		}
+		if ( str_contains( $content, 'wp:search' ) ) {
+			$traits[] = 'search';
+		}
+		if ( str_contains( $content, 'wp:site-logo' ) || str_contains( $content, 'wp:site-title' ) ) {
+			$traits[] = 'branding';
+		}
+		if ( str_contains( $content, 'wp:social-links' ) ) {
+			$traits[] = 'social';
+		}
+
+		// Complexity from block count.
+		$block_count = substr_count( $content, '<!-- wp:' );
+		if ( $block_count <= 3 ) {
+			$traits[] = 'simple';
+		} elseif ( $block_count <= 10 ) {
+			$traits[] = 'moderate-complexity';
+		} else {
+			$traits[] = 'complex';
+		}
+
+		// Media density.
+		$media_markers = [ 'wp:image', 'wp:video', 'wp:gallery', 'wp:cover', 'wp:media-text' ];
+		$media_count   = 0;
+		foreach ( $media_markers as $marker ) {
+			$media_count += substr_count( $content, $marker );
+		}
+		if ( $media_count >= 3 ) {
+			$traits[] = 'media-rich';
+		} elseif ( $media_count === 0 ) {
+			$traits[] = 'text-focused';
+		} else {
+			$traits[] = 'mixed-content';
+		}
+
+		// Category-inferred intent.
+		$category_set = array_flip( $categories );
+		if ( isset( $category_set['header'] ) || isset( $category_set['footer'] ) ) {
+			$traits[] = 'site-chrome';
+		}
+		if ( isset( $category_set['testimonials'] ) ) {
+			$traits[] = 'testimonial';
+		}
+		if ( isset( $category_set['team'] ) || isset( $category_set['about'] ) ) {
+			$traits[] = 'team-or-about';
+		}
+		if ( isset( $category_set['portfolio'] ) || isset( $category_set['featured'] ) ) {
+			$traits[] = 'showcase';
+		}
+		if ( isset( $category_set['pricing'] ) ) {
+			$traits[] = 'pricing';
+		}
+		if ( isset( $category_set['contact'] ) ) {
+			$traits[] = 'contact';
+		}
+
+		return array_values( array_unique( $traits ) );
 	}
 
 	/**
@@ -562,6 +657,7 @@ final class PatternIndex {
 					'blockTypes'    => $p['blockTypes'] ?? [],
 					'templateTypes' => $p['templateTypes'] ?? [],
 					'patternOverrides' => $p['patternOverrides'] ?? [],
+					'traits'        => self::infer_layout_traits( $p ),
 					'content'       => $p['content'] ?? '',
 				],
 			];

@@ -70,9 +70,10 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'Categories: marketing, featured', $lines[2] );
 		$this->assertSame( 'Block types: core/group, core/heading', $lines[3] );
 		$this->assertSame( 'Template types: home, front-page', $lines[4] );
-		$this->assertSame( 'Pattern overrides: yes', $lines[5] );
-		$this->assertSame( 'Override-ready core/heading: content', $lines[6] );
-		$this->assertSame( str_repeat( 'x', 500 ), $lines[7] );
+		$this->assertSame( 'Layout traits: simple, text-focused, showcase', $lines[5] );
+		$this->assertSame( 'Pattern overrides: yes', $lines[6] );
+		$this->assertSame( 'Override-ready core/heading: content', $lines[7] );
+		$this->assertSame( str_repeat( 'x', 500 ), $lines[8] );
 	}
 
 	public function test_compute_fingerprint_changes_when_pattern_override_metadata_changes(): void {
@@ -624,7 +625,7 @@ final class PatternIndexTest extends TestCase {
 		}
 
 		if ( $collection_exists || $creation_succeeds ) {
-			for ( $i = 0; $i < 3; $i++ ) {
+			for ( $i = 0; $i < 4; $i++ ) {
 				$this->queue_qdrant_success( '/index', 'PUT' );
 			}
 		}

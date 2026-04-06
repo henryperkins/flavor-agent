@@ -146,6 +146,9 @@ const {
 const {
 	collectViewportVisibilitySummary,
 } = require( '../../utils/editor-context-metadata' );
+const {
+	buildGlobalStyleDesignSemantics,
+} = require( '../../utils/style-design-semantics' );
 
 import GlobalStylesRecommender from '../GlobalStylesRecommender';
 
@@ -204,6 +207,10 @@ function createEditedBlocks() {
 	return [
 		{
 			name: 'core/template-part',
+			attributes: {
+				slug: 'header',
+				area: 'header',
+			},
 			innerBlocks: [
 				{
 					name: 'core/site-title',
@@ -246,6 +253,12 @@ function getCurrentThemeTokenDiagnostics() {
 	);
 }
 
+function buildExpectedDesignSemantics( blocks = currentEditedBlocks ) {
+	return buildGlobalStyleDesignSemantics( blocks, {
+		templateType: 'home',
+	} );
+}
+
 function buildContextSignature(
 	globalStylesData,
 	themeTokenDiagnostics = getCurrentThemeTokenDiagnostics(),
@@ -264,9 +277,9 @@ function buildContextSignature(
 		mergedConfig: globalStylesData.mergedConfig,
 		availableVariations: globalStylesData.variations,
 		templateStructure: buildExpectedTemplateStructure(),
-		templateVisibility: collectViewportVisibilitySummary(
-			currentEditedBlocks
-		),
+		templateVisibility:
+			collectViewportVisibilitySummary( currentEditedBlocks ),
+		designSemantics: buildExpectedDesignSemantics(),
 		themeTokenDiagnostics,
 		executionContract,
 	} );
@@ -434,7 +447,6 @@ beforeEach( () => {
 		undoActivity: mockUndoActivity,
 	} ) );
 
-
 	sidebar = document.createElement( 'div' );
 	sidebar.className = 'editor-global-styles-sidebar__panel';
 	document.body.appendChild( sidebar );
@@ -522,6 +534,7 @@ describe( 'GlobalStylesRecommender', () => {
 						blockCount: 0,
 						blocks: [],
 					},
+					designSemantics: buildExpectedDesignSemantics(),
 					themeTokenDiagnostics: {
 						source: 'stable',
 						settingsKey: 'features',
@@ -563,6 +576,7 @@ describe( 'GlobalStylesRecommender', () => {
 						blockCount: 0,
 						blocks: [],
 					},
+					designSemantics: buildExpectedDesignSemantics(),
 					themeTokenDiagnostics: {
 						source: 'stable',
 						settingsKey: 'features',
@@ -829,6 +843,80 @@ describe( 'GlobalStylesRecommender', () => {
 				],
 			},
 		];
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
+			1
+		);
+		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+	} );
+
+	test( 'clears stale results after template semantic context changes without structure drift', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Use accent canvas',
+					description:
+						'Apply the accent preset to the site background.',
+					category: 'color',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Prefer accent palette values.',
+			status: 'ready',
+			resultRef: '17',
+			contextSignature: buildContextSignature(
+				createGlobalStylesData( '17' )
+			),
+		};
+
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+
+		currentEditedBlocks = [
+			{
+				name: 'core/template-part',
+				attributes: {
+					slug: 'footer',
+					area: 'footer',
+				},
+				innerBlocks: [
+					{
+						name: 'core/site-title',
+						innerBlocks: [],
+					},
+				],
+			},
+			{
+				name: 'core/group',
+				innerBlocks: [
+					{
+						name: 'core/query-title',
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+
+		expect( buildExpectedTemplateStructure() ).toEqual( [
+			{
+				name: 'core/template-part',
+				innerBlocks: [ { name: 'core/site-title' } ],
+			},
+			{
+				name: 'core/group',
+				innerBlocks: [ { name: 'core/query-title' } ],
+			},
+		] );
 
 		act( () => {
 			getRoot().render( <GlobalStylesRecommender /> );

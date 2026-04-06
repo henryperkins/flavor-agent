@@ -104,5 +104,5 @@ describe( 'InserterBadge', () => {
 		expect(
 			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
 		).toBe( false );
-		} );
+	} );
 } );

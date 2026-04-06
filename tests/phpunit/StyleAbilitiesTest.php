@@ -188,6 +188,29 @@ final class StyleAbilitiesTest extends TestCase {
 					'currentConfig'         => [ 'styles' => [] ],
 					'mergedConfig'          => [ 'styles' => [] ],
 					'availableVariations'   => [],
+					'templateStructure'     => [
+						[
+							'name'        => 'core/template-part',
+							'innerBlocks' => [
+								[
+									'name' => 'core/site-title',
+								],
+							],
+						],
+					],
+					'templateVisibility'    => [
+						'hasVisibilityRules' => true,
+						'blockCount'         => 1,
+						'blocks'             => [
+							[
+								'path'             => [ 0 ],
+								'name'             => 'core/template-part',
+								'label'            => 'Header template part',
+								'hiddenViewports'  => [ 'mobile' ],
+								'visibleViewports' => [ 'desktop' ],
+							],
+						],
+					],
 					'themeTokenDiagnostics' => [
 						'source'      => 'stable',
 						'settingsKey' => 'features',
@@ -417,6 +440,56 @@ final class StyleAbilitiesTest extends TestCase {
 					'currentConfig'         => [ 'styles' => [] ],
 					'mergedConfig'          => [ 'styles' => [] ],
 					'availableVariations'   => [],
+					'templateStructure'     => [
+						[
+							'name'        => 'core/template-part',
+							'innerBlocks' => [
+								[
+									'name' => 'core/site-title',
+								],
+							],
+						],
+					],
+					'templateVisibility'    => [
+						'hasVisibilityRules' => true,
+						'blockCount'         => 1,
+						'blocks'             => [
+							[
+								'path'             => [ 0 ],
+								'name'             => 'core/template-part',
+								'label'            => 'Header template part',
+								'hiddenViewports'  => [ 'mobile' ],
+								'visibleViewports' => [ 'desktop' ],
+							],
+						],
+					],
+					'designSemantics'      => [
+						'surface'          => 'style-book',
+						'targetBlockName'  => 'core/paragraph',
+						'occurrenceCount'  => 1,
+						'confidence'       => 'high',
+						'dominantRole'     => 'footer-paragraph',
+						'dominantLocation' => 'footer',
+						'occurrences'      => [
+							[
+								'path'             => [ 0, 1 ],
+								'block'            => 'core/paragraph',
+								'label'            => 'Footer paragraph',
+								'role'             => 'footer-paragraph',
+								'location'         => 'footer',
+								'templateArea'     => 'footer',
+								'templatePartSlug' => 'footer',
+								'nearbyBlocks'     => [
+									'before' => [
+										[
+											'block' => 'core/heading',
+											'label' => 'Heading',
+										],
+									],
+								],
+							],
+						],
+					],
 					'themeTokenDiagnostics' => [
 						'source'      => 'stable',
 						'settingsKey' => 'features',
@@ -470,6 +543,26 @@ final class StyleAbilitiesTest extends TestCase {
 			'Primary intro copy block.',
 			(string) ( $request_body['input'] ?? '' )
 		);
+		$this->assertStringContainsString(
+			'## Current template structure',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Viewport visibility constraints',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Design semantic context',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Dominant role hint: `footer-paragraph`',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'hidden on `mobile`',
+			(string) ( $request_body['input'] ?? '' )
+		);
 		$this->assertStringNotContainsString(
 			'## Available theme style variations',
 			(string) ( $request_body['input'] ?? '' )
@@ -513,6 +606,31 @@ final class StyleAbilitiesTest extends TestCase {
 							[
 								'name' => 'core/site-title',
 							],
+							],
+						],
+					],
+				'designSemantics'       => [
+					'surface'            => 'global-styles',
+					'templateType'       => 'home',
+					'overallDensityHint' => 'balanced',
+					'locationSummary'    => [
+						[
+							'value' => 'header',
+							'count' => 1,
+						],
+					],
+					'sections'           => [
+						[
+							'path'             => [ 0 ],
+							'block'            => 'core/template-part',
+							'label'            => 'Header slot',
+							'role'             => 'header-slot',
+							'location'         => 'header',
+							'templateArea'     => 'header',
+							'templatePartSlug' => 'header',
+							'childRoles'       => [ 'header-site-title' ],
+							'emphasisHint'     => 'primary',
+							'densityHint'      => 'airy',
 						],
 					],
 				],
@@ -560,6 +678,8 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( '## WordPress Developer Guidance', (string) ( $request_body['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Template slug: theme-slug//home', (string) ( $request_body['input'] ?? '' ) );
 		$this->assertStringContainsString( '## Current template structure', (string) ( $request_body['input'] ?? '' ) );
+		$this->assertStringContainsString( '## Design semantic context', (string) ( $request_body['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Overall density hint: balanced', (string) ( $request_body['input'] ?? '' ) );
 	}
 
 	public function test_supported_block_style_paths_follow_registered_block_supports(): void {

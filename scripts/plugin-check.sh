@@ -6,7 +6,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 plugin_dir="$(cd -- "${script_dir}/.." && pwd)"
 plugin_slug="${PLUGIN_SLUG:-$(basename "${plugin_dir}")}"
 wp_root="${WP_PLUGIN_CHECK_PATH:-$(cd -- "${plugin_dir}/../../.." && pwd)}"
-distignore_file="${plugin_dir}/.distignore"
+prepare_release_script="${script_dir}/prepare-release.sh"
 plugins_dir="${wp_root}/wp-content/plugins"
 staged_plugin_dir=''
 
@@ -28,33 +28,21 @@ cleanup() {
 
 stage_plugin() {
 	staged_plugin_dir="$(mktemp -d "${plugins_dir}/${plugin_slug}-plugin-check-XXXXXX")"
+	bash "${prepare_release_script}" "${staged_plugin_dir}"
+}
 
-	if command -v rsync >/dev/null 2>&1; then
-		rsync_args=( -a )
-		if [[ -f "${distignore_file}" ]]; then
-			rsync_args+=( "--exclude-from=${distignore_file}" )
-		fi
-
-		rsync "${rsync_args[@]}" "${plugin_dir}/" "${staged_plugin_dir}/"
-		return
-	fi
-
-	tar_args=( -cf - )
-	if [[ -f "${distignore_file}" ]]; then
-		tar_args+=( "--exclude-from=${distignore_file}" )
-	fi
-
+describe_stage() {
+	echo "Plugin Check staged release: ${staged_plugin_dir}" >&2
+	echo "Plugin Check will scan these files:" >&2
 	(
-		cd -- "${plugin_dir}"
-		tar "${tar_args[@]}" .
-	) | (
 		cd -- "${staged_plugin_dir}"
-		tar -xf -
-	)
+		find . -type f | sort | sed 's#^\./# - #'
+	) >&2
 }
 
 trap cleanup EXIT
 stage_plugin
+describe_stage
 
 args=(
 	plugin

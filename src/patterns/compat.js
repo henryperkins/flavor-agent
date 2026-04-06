@@ -10,6 +10,7 @@ export {
 	getBlockPatterns,
 	setBlockPatterns,
 	getBlockPatternCategories,
+	setBlockPatternCategories,
 	getAllowedPatterns,
 	getPatternAPIPath,
 	getPatternRuntimeDiagnostics,

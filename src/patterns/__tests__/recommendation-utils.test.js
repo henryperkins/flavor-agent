@@ -1,7 +1,15 @@
 import {
 	getPatternBadgeReason,
+	patchPatternCategoryRegistry,
 	patchPatternMetadata,
 } from '../recommendation-utils';
+
+function createCategoryOwnership() {
+	return {
+		injectedCategories: new Set(),
+		registry: null,
+	};
+}
 
 describe( 'patchPatternMetadata', () => {
 	it( 'restores original metadata when recommendations are cleared', () => {
@@ -166,5 +174,88 @@ describe( 'getPatternBadgeReason', () => {
 				},
 			] )
 		).toBeNull();
+	} );
+} );
+
+describe( 'patchPatternCategoryRegistry', () => {
+	it( 'adds the recommended category when recommendations exist', () => {
+		const categoryOwnership = createCategoryOwnership();
+
+		expect(
+			patchPatternCategoryRegistry(
+				[ { name: 'featured', label: 'Featured' } ],
+				[ { name: 'theme/hero', score: 0.98 } ],
+				categoryOwnership,
+				'recommended'
+			)
+		).toEqual( [
+			{ name: 'featured', label: 'Featured' },
+			{ name: 'recommended', label: 'Recommended' },
+		] );
+		expect(
+			categoryOwnership.injectedCategories.has( 'recommended' )
+		).toBe( true );
+	} );
+
+	it( 'removes a category it previously injected once recommendations clear', () => {
+		const categoryOwnership = createCategoryOwnership();
+		const patched = patchPatternCategoryRegistry(
+			[ { name: 'featured', label: 'Featured' } ],
+			[ { name: 'theme/hero', score: 0.98 } ],
+			categoryOwnership,
+			'recommended'
+		);
+
+		expect(
+			patchPatternCategoryRegistry(
+				patched,
+				[],
+				categoryOwnership,
+				'recommended'
+			)
+		).toEqual( [ { name: 'featured', label: 'Featured' } ] );
+	} );
+
+	it( 'preserves an existing recommended category when recommendations clear', () => {
+		const categoryOwnership = createCategoryOwnership();
+
+		expect(
+			patchPatternCategoryRegistry(
+				[ { name: 'recommended', label: 'Recommended' } ],
+				[],
+				categoryOwnership,
+				'recommended'
+			)
+		).toEqual( [ { name: 'recommended', label: 'Recommended' } ] );
+	} );
+
+	it( 'drops injected ownership when the registry changes under it', () => {
+		const categoryOwnership = createCategoryOwnership();
+
+		patchPatternCategoryRegistry(
+			[ { name: 'featured', label: 'Featured' } ],
+			[ { name: 'theme/hero', score: 0.98 } ],
+			categoryOwnership,
+			'recommended'
+		);
+
+		expect(
+			patchPatternCategoryRegistry(
+				[
+					{ name: 'featured', label: 'Featured' },
+					{ name: 'recommended', label: 'Recommended' },
+				],
+				[],
+				categoryOwnership,
+				'recommended'
+			)
+		).toEqual( [
+			{ name: 'featured', label: 'Featured' },
+			{ name: 'recommended', label: 'Recommended' },
+		] );
+		expect( categoryOwnership.registry ).toBeNull();
+		expect(
+			categoryOwnership.injectedCategories.has( 'recommended' )
+		).toBe( false );
 	} );
 } );

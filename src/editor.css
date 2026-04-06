@@ -1088,9 +1088,8 @@
   font-weight: 700;
   line-height: 1;
   text-align: center;
-  cursor: default;
   z-index: 100;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .flavor-agent-inserter-badge--loading {

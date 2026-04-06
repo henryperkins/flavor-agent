@@ -276,7 +276,9 @@ function getVisibleTitles() {
 
 function getSummaryCardValue( label ) {
 	const summaryCard = Array.from(
-		getContainer().querySelectorAll( '.flavor-agent-activity-log__summary-item' )
+		getContainer().querySelectorAll(
+			'.flavor-agent-activity-log__summary-item'
+		)
 	).find( ( element ) => element.textContent.includes( label ) );
 
 	return summaryCard?.querySelector(
@@ -314,7 +316,9 @@ describe( 'ActivityLogApp', () => {
 			} )
 		);
 		expect( getVisibleTitles() ).toEqual( [ 'First activity entry' ] );
-		expect( getContainer().textContent ).not.toContain( 'No matching activity' );
+		expect( getContainer().textContent ).not.toContain(
+			'No matching activity'
+		);
 	} );
 
 	test( 'renders summary cards from the server response instead of the visible page size', async () => {
@@ -367,7 +371,9 @@ describe( 'ActivityLogApp', () => {
 		await flushEffects();
 
 		expect( getVisibleTitles() ).toEqual( [ 'Beta entry', 'Alpha entry' ] );
-		expect( getContainer().textContent ).not.toContain( 'No matching activity' );
+		expect( getContainer().textContent ).not.toContain(
+			'No matching activity'
+		);
 		expect( readPersistedActivityView( window.localStorage ).page ).toBe(
 			1
 		);
@@ -512,9 +518,9 @@ describe( 'ActivityLogApp', () => {
 
 		expect( getDataViewsMockState().latestProps.actions ).toBeUndefined();
 
-		const targetLink = Array.from( getContainer().querySelectorAll( 'a' ) ).find(
-			( element ) => element.textContent === 'Open post'
-		);
+		const targetLink = Array.from(
+			getContainer().querySelectorAll( 'a' )
+		).find( ( element ) => element.textContent === 'Open post' );
 
 		expect( targetLink ).toBeDefined();
 		expect( targetLink.getAttribute( 'href' ) ).toBe(

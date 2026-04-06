@@ -72,7 +72,13 @@ function formatTemplatePartLabel( slug, area ) {
 }
 
 function formatBlockPath( path = [] ) {
-	return `Path ${ path.join( ' > ' ) }`;
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
+		return '';
+	}
+
+	return `Path ${ path
+		.map( ( value ) => Number( value ) + 1 )
+		.join( ' > ' ) }`;
 }
 
 function deriveTemplatePartArea(
@@ -1116,7 +1122,7 @@ function TemplatePartOperationPreviewRow( { operation } ) {
 				<code>
 					{ operation.targetPath
 						? formatBlockPath( operation.targetPath )
-						: operation.placement }
+						: formatPlacementLabel( operation.placement ) }
 				</code>
 				.
 			</div>

@@ -397,6 +397,84 @@ describe( 'TemplatePartRecommender', () => {
 		).toBeNull();
 	} );
 
+	test( 'formats template-part preview paths with one-based labels', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Add utility links',
+						description:
+							'Insert a utility-links pattern after the navigation group.',
+						operations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/utility-links',
+								placement: 'after_block_path',
+								targetPath: [ 0, 1 ],
+							},
+						],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: 'Add utility links-0',
+				templatePartStatus: 'ready',
+			},
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
+			{
+				name: 'theme/utility-links',
+				title: 'Utility Links',
+			},
+		] );
+
+		await renderPanel();
+
+		expect( hasText( 'After target block (Path 1 > 2)' ) ).toBe( true );
+		expect(
+			getContainer().textContent.replace( /\s+/g, ' ' )
+		).toContain( 'relative to Path 1 > 2.' );
+		expect( hasText( 'Path 0 > 1' ) ).toBe( false );
+	} );
+
+	test( 'formats template-part start placements without raw tokens', async () => {
+		currentState = createState( {
+			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Add hero pattern',
+						description:
+							'Insert a hero pattern at the start of the template part.',
+						operations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/hero',
+								placement: 'start',
+							},
+						],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey: 'Add hero pattern-0',
+				templatePartStatus: 'ready',
+			},
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+			},
+		] );
+
+		await renderPanel();
+
+		expect( hasText( 'Start of this template part' ) ).toBe( true );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'code' ) ).some(
+				( element ) => element.textContent === 'start'
+			)
+		).toBe( false );
+	} );
+
 	test( 'shows an undo action on apply success notices and dispatches undo for the latest template-part activity', async () => {
 		currentState = createState( {
 			store: {

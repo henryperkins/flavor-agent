@@ -10,6 +10,42 @@ function getInnerBlocks( block = {} ) {
 	return Array.isArray( block?.innerBlocks ) ? block.innerBlocks : [];
 }
 
+export function buildTemplateStructureSnapshot( blocks = [], depth = 0 ) {
+	if ( ! Array.isArray( blocks ) ) {
+		return [];
+	}
+
+	return blocks
+		.map( ( block ) => {
+			if ( ! block || typeof block !== 'object' ) {
+				return null;
+			}
+
+			const name =
+				typeof block?.name === 'string' ? block.name.trim() : '';
+
+			if ( ! name ) {
+				return null;
+			}
+
+			const snapshot = { name };
+
+			if ( depth < 1 ) {
+				const innerBlocks = buildTemplateStructureSnapshot(
+					getInnerBlocks( block ),
+					depth + 1
+				);
+
+				if ( innerBlocks.length > 0 ) {
+					snapshot.innerBlocks = innerBlocks;
+				}
+			}
+
+			return snapshot;
+		} )
+		.filter( Boolean );
+}
+
 function humanizeBlockName( blockName = '' ) {
 	if ( ! blockName ) {
 		return 'Block';

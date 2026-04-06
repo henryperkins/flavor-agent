@@ -248,8 +248,8 @@ export function BlockRecommendationsContent( {
 			undoStatus,
 		]
 	);
-	const { executableBlockSuggestions, advisoryBlockSuggestions } = useMemo(
-		() => {
+	const { executableBlockSuggestions, advisoryBlockSuggestions } =
+		useMemo( () => {
 			const blockContext = recommendations?.blockContext || {};
 			const executable = [];
 			const advisory = [];
@@ -271,9 +271,7 @@ export function BlockRecommendationsContent( {
 				executableBlockSuggestions: executable,
 				advisoryBlockSuggestions: advisory,
 			};
-		},
-		[ blockSuggestions, recommendations?.blockContext ]
-	);
+		}, [ blockSuggestions, recommendations?.blockContext ] );
 
 	useEffect( () => {
 		setPrompt( '' );
@@ -397,8 +395,8 @@ export function BlockRecommendationsContent( {
 					</div>
 					<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
 						One-click apply stays available when Flavor Agent can
-						safely change this block&apos;s local attributes. Broader
-						structural and replacement ideas stay advisory.
+						safely change this block&apos;s local attributes.
+						Broader structural and replacement ideas stay advisory.
 					</p>
 					<SuggestionChips
 						clientId={ clientId }

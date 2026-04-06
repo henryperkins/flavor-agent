@@ -9,6 +9,7 @@
   "main": "build/index.js",
   "scripts": {
     "build": "wp-scripts build",
+    "dist": "bash scripts/build-dist.sh",
     "start": "wp-scripts start",
     "lint:js": "wp-scripts lint-js src/",
     "lint:plugin": "bash scripts/plugin-check.sh",

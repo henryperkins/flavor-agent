@@ -271,7 +271,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'Last Selected Block' );
 		expect( getContainer().textContent ).toContain( 'Get Suggestions' );
 		expect(
-			getContainer().querySelector( '[data-panel-title="AI Recommendations"]' )
+			getContainer().querySelector(
+				'[data-panel-title="AI Recommendations"]'
+			)
 		).not.toBeNull();
 	} );
 
@@ -354,8 +356,12 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Settings > Flavor Agent' );
-		expect( getContainer().textContent ).toContain( 'Settings > Connectors' );
+		expect( getContainer().textContent ).toContain(
+			'Settings > Flavor Agent'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Settings > Connectors'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
 		);
@@ -473,7 +479,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect( getContainer().textContent ).toContain( 'Block suggestions' );
-		expect( getContainer().textContent ).toContain( 'Advisory suggestions' );
+		expect( getContainer().textContent ).toContain(
+			'Advisory suggestions'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);
@@ -522,7 +530,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Advisory suggestions' );
+		expect( getContainer().textContent ).toContain(
+			'Advisory suggestions'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);
@@ -575,7 +585,9 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Advisory suggestions' );
+		expect( getContainer().textContent ).toContain(
+			'Advisory suggestions'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);

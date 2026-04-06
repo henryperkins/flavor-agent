@@ -120,6 +120,12 @@ const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 const {
 	buildGlobalStylesRecommendationContextSignature,
 } = require( '../../utils/style-operations' );
+const {
+	collectViewportVisibilitySummary,
+} = require( '../../utils/editor-context-metadata' );
+const {
+	buildStyleBookDesignSemantics,
+} = require( '../../utils/style-design-semantics' );
 
 import StyleBookRecommender from '../StyleBookRecommender';
 
@@ -133,6 +139,7 @@ let currentStoreState = null;
 let currentStyleBookUiState = null;
 let styleBookUiSubscriber = null;
 let currentEditedTemplateId = null;
+let currentEditedBlocks = null;
 
 function createStyleVariations() {
 	return [
@@ -193,6 +200,66 @@ function createGlobalStylesData( globalStylesId = '17' ) {
 	};
 }
 
+function createEditedBlocks() {
+	return [
+		{
+			name: 'core/template-part',
+			attributes: {
+				slug: 'footer',
+				area: 'footer',
+			},
+			innerBlocks: [
+				{
+					name: 'core/heading',
+					innerBlocks: [],
+				},
+				{
+					name: 'core/paragraph',
+					innerBlocks: [],
+				},
+				{
+					name: 'core/site-title',
+					innerBlocks: [],
+				},
+			],
+		},
+		{
+			name: 'core/group',
+			innerBlocks: [
+				{
+					name: 'core/query-title',
+					innerBlocks: [],
+				},
+			],
+		},
+	];
+}
+
+function buildExpectedTemplateStructure() {
+	return [
+		{
+			name: 'core/template-part',
+			innerBlocks: [
+				{ name: 'core/heading' },
+				{ name: 'core/paragraph' },
+				{ name: 'core/site-title' },
+			],
+		},
+		{
+			name: 'core/group',
+			innerBlocks: [ { name: 'core/query-title' } ],
+		},
+	];
+}
+
+function buildExpectedDesignSemantics( blocks = currentEditedBlocks ) {
+	return buildStyleBookDesignSemantics( blocks, {
+		blockName: 'core/paragraph',
+		blockTitle: 'Paragraph',
+		templateType: 'home',
+	} );
+}
+
 function buildContextSignature() {
 	return buildGlobalStylesRecommendationContextSignature( {
 		scope: {
@@ -205,6 +272,10 @@ function buildContextSignature() {
 		},
 		currentConfig: currentGlobalStylesData.userConfig,
 		mergedConfig: currentGlobalStylesData.mergedConfig,
+		templateStructure: buildExpectedTemplateStructure(),
+		templateVisibility:
+			collectViewportVisibilitySummary( currentEditedBlocks ),
+		designSemantics: buildExpectedDesignSemantics(),
 		themeTokenDiagnostics: currentBlockEditorSettings.__diagnostics || {},
 		executionContract:
 			currentBlockEditorSettings.__executionContract ||
@@ -235,6 +306,7 @@ beforeEach( () => {
 	};
 	currentGlobalStylesData = createGlobalStylesData();
 	currentEditedTemplateId = 'theme//home';
+	currentEditedBlocks = createEditedBlocks();
 	currentStoreState = {
 		activityLog: [],
 		recommendations: [],
@@ -278,6 +350,7 @@ beforeEach( () => {
 			if ( storeName === 'core/block-editor' ) {
 				return {
 					getSettings: () => currentBlockEditorSettings,
+					getBlocks: () => currentEditedBlocks,
 				};
 			}
 
@@ -347,7 +420,6 @@ beforeEach( () => {
 		undoActivity: mockUndoActivity,
 	} ) );
 
-
 	sidebar = document.createElement( 'div' );
 	sidebar.className = 'editor-global-styles-sidebar__panel';
 	document.body.appendChild( sidebar );
@@ -403,6 +475,13 @@ describe( 'StyleBookRecommender', () => {
 				styleContext: expect.objectContaining( {
 					currentConfig: currentGlobalStylesData.userConfig,
 					mergedConfig: currentGlobalStylesData.mergedConfig,
+					templateStructure: buildExpectedTemplateStructure(),
+					templateVisibility: {
+						hasVisibilityRules: false,
+						blockCount: 0,
+						blocks: [],
+					},
+					designSemantics: buildExpectedDesignSemantics(),
 					styleBookTarget: {
 						blockName: 'core/paragraph',
 						blockTitle: 'Paragraph',
@@ -526,5 +605,135 @@ describe( 'StyleBookRecommender', () => {
 		} );
 
 		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'clears stale recommendations after template viewport visibility changes', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Tighten paragraph rhythm',
+					description: 'Keep the example more compact.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Existing explanation',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Tighten paragraph rhythm' );
+		expect( mockClearStyleBookRecommendations ).not.toHaveBeenCalled();
+
+		currentEditedBlocks = [
+			{
+				name: 'core/template-part',
+				attributes: {
+					metadata: {
+						blockVisibility: {
+							viewport: {
+								mobile: false,
+								desktop: true,
+							},
+						},
+					},
+				},
+				innerBlocks: [
+					{
+						name: 'core/site-title',
+						innerBlocks: [],
+					},
+				],
+			},
+			{
+				name: 'core/group',
+				innerBlocks: [
+					{
+						name: 'core/query-title',
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( sidebar.textContent ).not.toContain( 'Tighten paragraph rhythm' );
+	} );
+
+	test( 'clears stale recommendations after surrounding semantic context changes without structure drift', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					label: 'Tighten paragraph rhythm',
+					description: 'Keep the example more compact.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Existing explanation',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( sidebar.textContent ).toContain( 'Tighten paragraph rhythm' );
+		expect( mockClearStyleBookRecommendations ).not.toHaveBeenCalled();
+
+		currentEditedBlocks = [
+			{
+				name: 'core/template-part',
+				attributes: {
+					slug: 'header',
+					area: 'header',
+				},
+				innerBlocks: [
+					{
+						name: 'core/heading',
+						innerBlocks: [],
+					},
+					{
+						name: 'core/paragraph',
+						innerBlocks: [],
+					},
+					{
+						name: 'core/site-title',
+						innerBlocks: [],
+					},
+				],
+			},
+			{
+				name: 'core/group',
+				innerBlocks: [
+					{
+						name: 'core/query-title',
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( sidebar.textContent ).not.toContain( 'Tighten paragraph rhythm' );
 	} );
 } );

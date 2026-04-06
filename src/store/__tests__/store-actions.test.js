@@ -1902,7 +1902,8 @@ describe( 'store action thunks', () => {
 			} )
 			.mockRejectedValueOnce( {
 				code: 'flavor_agent_activity_invalid_undo_transition',
-				message: 'Flavor Agent only allows undo status changes from the available state.',
+				message:
+					'Flavor Agent only allows undo status changes from the available state.',
 				data: {
 					status: 409,
 					code: 'flavor_agent_activity_invalid_undo_transition',
@@ -2530,7 +2531,8 @@ describe( 'store action thunks', () => {
 		apiFetch
 			.mockRejectedValueOnce( {
 				code: 'flavor_agent_activity_invalid_undo_transition',
-				message: 'Flavor Agent only allows undo status changes from the available state.',
+				message:
+					'Flavor Agent only allows undo status changes from the available state.',
 				data: {
 					status: 409,
 					code: 'flavor_agent_activity_invalid_undo_transition',

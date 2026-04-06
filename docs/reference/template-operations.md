@@ -117,7 +117,7 @@ Defined in `inc/LLM/StylePrompt.php`. These operations target Global Styles or S
 
 Validated `set_styles` and `set_block_styles` operations are enriched with:
 
-- `valueType` — `preset` or `literal`
+- `valueType` — `preset` or `freeform`
 - `presetType`, `presetSlug`, `cssVar` — when the value resolves to a theme preset
 
 ## Primary Source Files

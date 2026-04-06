@@ -36,7 +36,6 @@ beforeEach( () => {
 	} );
 } );
 
-
 function renderComponent( suggestions ) {
 	act( () => {
 		getRoot().render(
@@ -108,7 +107,9 @@ describe( 'StylesRecommendations', () => {
 	test( 'does not show hint when no delegated panels have suggestions', () => {
 		renderComponent( [ makeSuggestion( 'shadow' ) ] );
 
-		expect( getContainer().textContent ).not.toContain( 'Native Style Panels' );
+		expect( getContainer().textContent ).not.toContain(
+			'Native Style Panels'
+		);
 	} );
 
 	test( 'renders style variations separately', () => {

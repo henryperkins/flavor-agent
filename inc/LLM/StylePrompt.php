@@ -74,6 +74,9 @@ Return ONLY a JSON object with this exact shape:
 	- set_theme_variation MUST reference an Available variation by index and title.
 	- If a request cannot be executed safely, return an advisory suggestion with tone=advisory and an empty operations array.
 	- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented WordPress Global Styles capabilities or theme.json standards.
+	- When Design semantic context is provided, use it to fit the recommendation to the surface's job and nearby structure (for example, supporting footer text vs primary header or content surfaces).
+	- Treat mixed or low-confidence design semantic context as a hint, not a fact. Do not over-commit to a single role when the provided occurrences vary.
+	- Do not invent section roles, density, emphasis, or tone requirements when they are not evidenced by the provided design semantic context, viewport visibility constraints, or the user instruction.
 	- When Viewport Visibility Constraints are provided, treat hidden-on-mobile or hidden-on-desktop blocks as conditional surfaces. Do not recommend styling them as the primary experience for viewports where they are hidden, and mention the constraint when it materially changes the advice.
 	- Do not invent viewport visibility constraints when none are listed.
 	- Prefer 1-4 suggestions.
@@ -89,6 +92,7 @@ SYSTEM;
 		$style_book_target  = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
 		$block_manifest     = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
 		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$design_semantics   = is_array( $style_context['designSemantics'] ?? null ) ? $style_context['designSemantics'] : [];
 		$template_visibility = is_array( $style_context['templateVisibility'] ?? null ) ? $style_context['templateVisibility'] : [];
 		$surface            = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
 		$sections           = [];
@@ -274,6 +278,19 @@ SYSTEM;
 			$sections[] = wp_json_encode( $template_structure );
 		}
 
+		if ( [] !== $design_semantics ) {
+			$design_semantic_lines = self::format_design_semantics_summary( $design_semantics );
+
+			if ( [] !== $design_semantic_lines ) {
+				$sections[] = '';
+				$sections[] = '## Design semantic context';
+
+				foreach ( $design_semantic_lines as $design_semantic_line ) {
+					$sections[] = $design_semantic_line;
+				}
+			}
+		}
+
 		$sections[] = '';
 		$sections[] = '## Viewport visibility constraints';
 		$sections[] = self::format_template_visibility_summary( $template_visibility );
@@ -396,6 +413,263 @@ SYSTEM;
 		);
 
 		return 'Path ' . implode( ' > ', $segments );
+	}
+
+	/**
+	 * @param array<string, mixed> $design_semantics
+	 * @return string[]
+	 */
+	private static function format_design_semantics_summary( array $design_semantics ): array {
+		$surface = sanitize_key( (string) ( $design_semantics['surface'] ?? '' ) );
+
+		if ( 'style-book' === $surface ) {
+			return self::format_style_book_design_semantics( $design_semantics );
+		}
+
+		return self::format_global_style_design_semantics( $design_semantics );
+	}
+
+	/**
+	 * @param array<string, mixed> $design_semantics
+	 * @return string[]
+	 */
+	private static function format_global_style_design_semantics( array $design_semantics ): array {
+		$lines = [];
+
+		if ( ! empty( $design_semantics['overallDensityHint'] ) ) {
+			$lines[] = 'Overall density hint: ' . sanitize_text_field( (string) $design_semantics['overallDensityHint'] );
+		}
+
+		if ( ! empty( $design_semantics['locationSummary'] ) ) {
+			$lines[] = 'Location summary: ' . self::format_semantic_count_summary( $design_semantics['locationSummary'] );
+		}
+
+		if ( ! empty( $design_semantics['roleSummary'] ) ) {
+			$lines[] = 'Role summary: ' . self::format_semantic_count_summary( $design_semantics['roleSummary'] );
+		}
+
+		$sections = is_array( $design_semantics['sections'] ?? null ) ? $design_semantics['sections'] : [];
+
+		foreach ( array_slice( $sections, 0, 4 ) as $section ) {
+			if ( ! is_array( $section ) ) {
+				continue;
+			}
+
+			$details = [];
+
+			if ( ! empty( $section['role'] ) ) {
+				$details[] = 'role `' . sanitize_text_field( (string) $section['role'] ) . '`';
+			}
+
+			if ( ! empty( $section['location'] ) ) {
+				$details[] = 'location `' . sanitize_text_field( (string) $section['location'] ) . '`';
+			}
+
+			if ( ! empty( $section['templatePartSlug'] ) ) {
+				$details[] = 'template part `' . sanitize_text_field( (string) $section['templatePartSlug'] ) . '`';
+			}
+
+			if ( ! empty( $section['emphasisHint'] ) ) {
+				$details[] = 'emphasis `' . sanitize_text_field( (string) $section['emphasisHint'] ) . '`';
+			}
+
+			if ( ! empty( $section['densityHint'] ) ) {
+				$details[] = 'density `' . sanitize_text_field( (string) $section['densityHint'] ) . '`';
+			}
+
+			if ( ! empty( $section['childRoles'] ) && is_array( $section['childRoles'] ) ) {
+				$details[] = 'child roles `' . implode(
+					'`, `',
+					array_map( 'sanitize_text_field', array_slice( $section['childRoles'], 0, 4 ) )
+				) . '`';
+			}
+
+			$visibility = self::format_semantic_visibility_details( $section );
+
+			if ( $visibility !== '' ) {
+				$details[] = $visibility;
+			}
+
+			$lines[] = sprintf(
+				'- %s - `%s`%s',
+				self::format_visibility_path( $section['path'] ?? null ),
+				sanitize_text_field( (string) ( $section['label'] ?? ( $section['block'] ?? 'Section' ) ) ),
+				[] !== $details ? ': ' . implode( '; ', $details ) : ''
+			);
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * @param array<string, mixed> $design_semantics
+	 * @return string[]
+	 */
+	private static function format_style_book_design_semantics( array $design_semantics ): array {
+		$lines = [];
+
+		if ( isset( $design_semantics['occurrenceCount'] ) ) {
+			$lines[] = 'Matching template occurrences: ' . max( 0, (int) $design_semantics['occurrenceCount'] );
+		}
+
+		if ( ! empty( $design_semantics['confidence'] ) ) {
+			$lines[] = 'Semantic confidence: ' . sanitize_text_field( (string) $design_semantics['confidence'] );
+		}
+
+		if ( ! empty( $design_semantics['dominantRole'] ) ) {
+			$lines[] = 'Dominant role hint: `' . sanitize_text_field( (string) $design_semantics['dominantRole'] ) . '`';
+		}
+
+		if ( ! empty( $design_semantics['dominantLocation'] ) ) {
+			$lines[] = 'Dominant location hint: `' . sanitize_text_field( (string) $design_semantics['dominantLocation'] ) . '`';
+		}
+
+		if ( ! empty( $design_semantics['densitySummary'] ) ) {
+			$lines[] = 'Density summary: ' . self::format_semantic_count_summary( $design_semantics['densitySummary'] );
+		}
+
+		if ( ! empty( $design_semantics['emphasisSummary'] ) ) {
+			$lines[] = 'Emphasis summary: ' . self::format_semantic_count_summary( $design_semantics['emphasisSummary'] );
+		}
+
+		$occurrences = is_array( $design_semantics['occurrences'] ?? null ) ? $design_semantics['occurrences'] : [];
+
+		foreach ( array_slice( $occurrences, 0, 3 ) as $occurrence ) {
+			if ( ! is_array( $occurrence ) ) {
+				continue;
+			}
+
+			$details = [];
+
+			if ( ! empty( $occurrence['role'] ) ) {
+				$details[] = 'role `' . sanitize_text_field( (string) $occurrence['role'] ) . '`';
+			}
+
+			if ( ! empty( $occurrence['location'] ) ) {
+				$details[] = 'location `' . sanitize_text_field( (string) $occurrence['location'] ) . '`';
+			}
+
+			if ( ! empty( $occurrence['templatePartSlug'] ) ) {
+				$details[] = 'template part `' . sanitize_text_field( (string) $occurrence['templatePartSlug'] ) . '`';
+			}
+
+			if ( ! empty( $occurrence['emphasisHint'] ) ) {
+				$details[] = 'emphasis `' . sanitize_text_field( (string) $occurrence['emphasisHint'] ) . '`';
+			}
+
+			if ( ! empty( $occurrence['densityHint'] ) ) {
+				$details[] = 'density `' . sanitize_text_field( (string) $occurrence['densityHint'] ) . '`';
+			}
+
+			$visibility = self::format_semantic_visibility_details( $occurrence );
+
+			if ( $visibility !== '' ) {
+				$details[] = $visibility;
+			}
+
+			$nearby = self::format_semantic_nearby_blocks( $occurrence['nearbyBlocks'] ?? [] );
+
+			if ( $nearby !== '' ) {
+				$details[] = $nearby;
+			}
+
+			$lines[] = sprintf(
+				'- %s - `%s`%s',
+				self::format_visibility_path( $occurrence['path'] ?? null ),
+				sanitize_text_field( (string) ( $occurrence['label'] ?? ( $occurrence['block'] ?? 'Occurrence' ) ) ),
+				[] !== $details ? ': ' . implode( '; ', $details ) : ''
+			);
+		}
+
+		if ( ! empty( $design_semantics['omittedOccurrenceCount'] ) ) {
+			$lines[] = sprintf(
+				'- %d additional matching occurrences omitted from the summary.',
+				max( 0, (int) $design_semantics['omittedOccurrenceCount'] )
+			);
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * @param mixed $summary
+	 */
+	private static function format_semantic_count_summary( mixed $summary ): string {
+		$parts = [];
+
+		foreach ( is_array( $summary ) ? array_slice( $summary, 0, 4 ) : [] as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+
+			$value = sanitize_text_field( (string) ( $entry['value'] ?? '' ) );
+			$count = max( 0, (int) ( $entry['count'] ?? 0 ) );
+
+			if ( $value === '' || $count === 0 ) {
+				continue;
+			}
+
+			$parts[] = sprintf( '`%s` (%d)', $value, $count );
+		}
+
+		return [] !== $parts ? implode( ', ', $parts ) : 'None detected.';
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 */
+	private static function format_semantic_visibility_details( array $entry ): string {
+		$details = [];
+		$hidden  = is_array( $entry['hiddenViewports'] ?? null ) ? $entry['hiddenViewports'] : [];
+		$visible = is_array( $entry['visibleViewports'] ?? null ) ? $entry['visibleViewports'] : [];
+
+		if ( [] !== $hidden ) {
+			$details[] = 'hidden on `' . implode(
+				'`, `',
+				array_map( 'sanitize_text_field', $hidden )
+			) . '`';
+		}
+
+		if ( [] !== $visible ) {
+			$details[] = 'visible on `' . implode(
+				'`, `',
+				array_map( 'sanitize_text_field', $visible )
+			) . '`';
+		}
+
+		return implode( '; ', $details );
+	}
+
+	/**
+	 * @param mixed $nearby_blocks
+	 */
+	private static function format_semantic_nearby_blocks( mixed $nearby_blocks ): string {
+		$nearby_blocks = is_array( $nearby_blocks ) ? $nearby_blocks : [];
+		$parts         = [];
+
+		foreach ( [ 'before', 'after' ] as $direction ) {
+			$labels = [];
+
+			foreach ( is_array( $nearby_blocks[ $direction ] ?? null ) ? $nearby_blocks[ $direction ] : [] as $entry ) {
+				if ( ! is_array( $entry ) ) {
+					continue;
+				}
+
+				$labels[] = sanitize_text_field(
+					(string) ( $entry['label'] ?? ( $entry['block'] ?? '' ) )
+				);
+			}
+
+			$labels = array_values( array_filter( $labels ) );
+
+			if ( [] === $labels ) {
+				continue;
+			}
+
+			$parts[] = $direction . ' `' . implode( '`, `', array_slice( $labels, 0, 2 ) ) . '`';
+		}
+
+		return implode( '; ', $parts );
 	}
 
 	public static function parse_response( string $raw, array $context ): array|\WP_Error {

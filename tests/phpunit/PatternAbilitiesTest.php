@@ -594,6 +594,225 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'overlay styling, and inner content layout controls', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
+	public function test_recommend_patterns_adds_trait_should_clauses_from_insertion_context(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/header-utility',
+						0.71,
+						[
+							'traits' => [ 'simple', 'site-chrome' ],
+						]
+					),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/header-utility',
+						0.79,
+						[
+							'traits' => [ 'simple', 'site-chrome' ],
+						]
+					),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/header-utility',
+								'score'  => 0.83,
+								'reason' => 'Fits the constrained header area.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'         => 'page',
+				'insertionContext' => [
+					'rootBlock'        => 'core/group',
+					'ancestors'        => [ 'core/template-part', 'core/group' ],
+					'nearbySiblings'   => [ 'core/site-logo', 'core/navigation' ],
+					'templatePartArea' => 'header',
+					'templatePartSlug' => 'site-header',
+					'containerLayout'  => 'flex',
+				],
+			]
+		);
+
+		$this->assertSame( [ 'theme/header-utility' ], array_column( $result['recommendations'], 'name' ) );
+
+		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$this->assertStringContainsString(
+			'in the header template-part area',
+			(string) ( $embedding_request['input'][0] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'using the site-header template part',
+			(string) ( $embedding_request['input'][0] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'with a flex container layout',
+			(string) ( $embedding_request['input'][0] ?? '' )
+		);
+
+		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertSame(
+			[
+				[
+					'key'   => 'traits',
+					'match' => [ 'value' => 'simple' ],
+				],
+				[
+					'key'   => 'traits',
+					'match' => [ 'value' => 'site-chrome' ],
+				],
+			],
+			$structural_request['filter']['should'] ?? null
+		);
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$this->assertStringContainsString( 'Template-part area: header', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Template-part slug: site-header', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Container layout: flex', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( '"traits"', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_exposes_core_override_overlap_and_deduped_sibling_counts(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		$this->register_block_type( 'core/image' );
+		$this->register_block_type( 'core/heading' );
+		$this->register_block_type( 'core/button' );
+		$this->register_block_type( 'core/paragraph' );
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/override-ready',
+						0.81,
+						[
+							'patternOverrides' => [
+								'hasOverrides'          => true,
+								'blockCount'            => 4,
+								'blockNames'            => [ 'core/image', 'core/heading', 'core/button', 'core/paragraph' ],
+								'bindableAttributes'    => [
+									'core/image'     => [ 'url', 'alt' ],
+									'core/heading'   => [ 'content' ],
+									'core/button'    => [ 'text', 'url' ],
+									'core/paragraph' => [ 'content' ],
+								],
+								'overrideAttributes'    => [
+									'core/image'     => [ 'url', 'alt' ],
+									'core/heading'   => [ 'content' ],
+									'core/button'    => [ 'text', 'url' ],
+									'core/paragraph' => [ 'content' ],
+								],
+								'usesDefaultBinding'    => true,
+								'unsupportedAttributes' => [],
+							],
+						]
+					),
+					$this->pattern_point( 'theme/plain-pattern', 0.82 ),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/override-ready',
+						0.83,
+						[
+							'patternOverrides' => [
+								'hasOverrides'          => true,
+								'blockCount'            => 4,
+								'blockNames'            => [ 'core/image', 'core/heading', 'core/button', 'core/paragraph' ],
+								'bindableAttributes'    => [
+									'core/image'     => [ 'url', 'alt' ],
+									'core/heading'   => [ 'content' ],
+									'core/button'    => [ 'text', 'url' ],
+									'core/paragraph' => [ 'content' ],
+								],
+								'overrideAttributes'    => [
+									'core/image'     => [ 'url', 'alt' ],
+									'core/heading'   => [ 'content' ],
+									'core/button'    => [ 'text', 'url' ],
+									'core/paragraph' => [ 'content' ],
+								],
+								'usesDefaultBinding'    => true,
+								'unsupportedAttributes' => [],
+							],
+						]
+					),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/override-ready',
+								'score'  => 0.9,
+								'reason' => 'Fits the media-heavy layout.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'         => 'page',
+				'blockContext'     => [
+					'blockName' => 'core/image',
+				],
+				'insertionContext' => [
+					'nearbySiblings' => [
+						'core/heading',
+						'core/heading',
+						'core/button',
+						'core/paragraph',
+						'core/image',
+						'core/button',
+					],
+				],
+			]
+		);
+
+		$this->assertSame( [ 'theme/override-ready' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertStringContainsString(
+			'Supports Pattern Overrides for core/image (url, alt).',
+			(string) ( $result['recommendations'][0]['reason'] ?? '' )
+		);
+		$this->assertTrue( (bool) ( $result['recommendations'][0]['overrideCapabilities']['matchesNearbyBlock'] ?? false ) );
+		$this->assertSame(
+			[ 'url', 'alt' ],
+			$result['recommendations'][0]['overrideCapabilities']['nearbyBlockOverlapAttrs'] ?? null
+		);
+		$this->assertSame(
+			4,
+			$result['recommendations'][0]['overrideCapabilities']['siblingOverrideCount'] ?? null
+		);
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$this->assertStringContainsString( 'matchesNearbyBlock', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'nearbyBlockOverlapAttrs', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( '"siblingOverrideCount":4', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
 	public function test_recommend_patterns_sharpens_custom_block_override_reasons_without_widening_scope(): void {
 		$this->configure_backends();
 		$this->save_index_state();
@@ -846,6 +1065,10 @@ final class PatternAbilitiesTest extends TestCase {
 
 	private function register_pattern( string $name, array $properties ): void {
 		\WP_Block_Patterns_Registry::get_instance()->register( $name, $properties );
+	}
+
+	private function register_block_type( string $name, array $settings = [] ): void {
+		\WP_Block_Type_Registry::get_instance()->register( $name, $settings );
 	}
 
 	/**

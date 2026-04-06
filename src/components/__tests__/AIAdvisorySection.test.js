@@ -29,6 +29,8 @@ describe( 'AIAdvisorySection', () => {
 			'These suggestions stay advisory-only.'
 		);
 		expect( getContainer().textContent ).toContain( 'First advisory idea' );
-		expect( getContainer().textContent ).toContain( 'Second advisory idea' );
+		expect( getContainer().textContent ).toContain(
+			'Second advisory idea'
+		);
 	} );
 } );

@@ -735,10 +735,7 @@ function getUndoReason( status, resolvedUndo = null, entry = null ) {
 		return 'This is the newest still-applied AI action for this entity.';
 	}
 
-	if (
-		typeof entry?.undo?.error === 'string' &&
-		entry.undo.error.trim()
-	) {
+	if ( typeof entry?.undo?.error === 'string' && entry.undo.error.trim() ) {
 		return entry.undo.error.trim();
 	}
 
@@ -1239,19 +1236,18 @@ export function normalizeActivityEntry(
 		undoError:
 			typeof entry?.undo?.error === 'string' && entry.undo.error.trim()
 				? entry.undo.error.trim()
-				: (
-			status === 'blocked' &&
-			typeof resolvedUndo?.error !== 'string'
+				: status === 'blocked' &&
+				  typeof resolvedUndo?.error !== 'string'
 				? ORDERED_UNDO_BLOCKED_ERROR
-				: EMPTY_VALUE
-				),
+				: EMPTY_VALUE,
 		undoReason: getUndoReason( status, resolvedUndo, entry ),
 		provider: diagnostics.provider,
 		model: diagnostics.model,
 		tokenUsage: diagnostics.tokenUsageLabel,
 		latency: diagnostics.latencyLabel,
 		requestFallback:
-			diagnostics.usedFallback && diagnostics.selectedProvider !== EMPTY_VALUE
+			diagnostics.usedFallback &&
+			diagnostics.selectedProvider !== EMPTY_VALUE
 				? `Fallback from selected ${ diagnostics.selectedProvider }.`
 				: EMPTY_VALUE,
 		targetUrl: targetLink.url,

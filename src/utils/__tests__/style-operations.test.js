@@ -707,6 +707,97 @@ describe( 'style-operations', () => {
 		expect( firstSignature ).toBe( secondSignature );
 	} );
 
+	test( 'buildGlobalStylesRecommendationContextSignature changes when design semantic context changes', () => {
+		const baseArgs = {
+			scope: {
+				surface: 'global-styles',
+				scopeKey: 'global_styles:17',
+				globalStylesId: '17',
+				stylesheet: 'theme-slug',
+				templateSlug: 'theme-slug//home',
+				templateType: 'home',
+			},
+			currentConfig: {
+				settings: {},
+				styles: {
+					color: {
+						background: 'var:preset|color|base',
+					},
+				},
+			},
+			mergedConfig: {
+				settings: {},
+				styles: {
+					color: {
+						background: 'var:preset|color|base',
+						text: 'var:preset|color|contrast',
+					},
+				},
+			},
+			availableVariations: [],
+			templateStructure: [
+				{
+					name: 'core/template-part',
+					innerBlocks: [ { name: 'core/site-title' } ],
+				},
+			],
+			templateVisibility: {
+				hasVisibilityRules: false,
+				blockCount: 0,
+				blocks: [],
+			},
+			themeTokenDiagnostics: {
+				source: 'stable',
+			},
+			executionContract: {
+				supportedStylePaths: [
+					{
+						path: [ 'color', 'background' ],
+						valueSource: 'color',
+					},
+				],
+				presetSlugs: {
+					color: [ 'accent', 'base', 'contrast' ],
+				},
+			},
+		};
+
+		const firstSignature = buildGlobalStylesRecommendationContextSignature(
+			{
+				...baseArgs,
+				designSemantics: {
+					surface: 'global-styles',
+					sections: [
+						{
+							path: [ 0 ],
+							role: 'header-slot',
+							location: 'header',
+							templatePartSlug: 'header',
+						},
+					],
+				},
+			}
+		);
+		const secondSignature = buildGlobalStylesRecommendationContextSignature(
+			{
+				...baseArgs,
+				designSemantics: {
+					surface: 'global-styles',
+					sections: [
+						{
+							path: [ 0 ],
+							role: 'footer-slot',
+							location: 'footer',
+							templatePartSlug: 'footer',
+						},
+					],
+				},
+			}
+		);
+
+		expect( firstSignature ).not.toBe( secondSignature );
+	} );
+
 	test( 'undo helpers require the current config to still match the applied state', () => {
 		const activity = {
 			target: {

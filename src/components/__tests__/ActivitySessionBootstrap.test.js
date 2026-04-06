@@ -78,9 +78,7 @@ beforeEach( () => {
 	mockUseDispatch.mockImplementation( () => ( {
 		loadActivitySession: mockLoadActivitySession,
 	} ) );
-
 } );
-
 
 describe( 'ActivitySessionBootstrap', () => {
 	test( 'only enables unsaved activity migration on an in-place unsaved-to-saved transition', () => {

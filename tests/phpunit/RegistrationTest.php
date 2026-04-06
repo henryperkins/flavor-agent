@@ -148,6 +148,34 @@ final class RegistrationTest extends TestCase {
 		);
 		$this->assertSame(
 			'object',
+			$recommend_ability['input_schema']['properties']['insertionContext']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$recommend_ability['input_schema']['properties']['insertionContext']['properties']['ancestors']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$recommend_ability['input_schema']['properties']['insertionContext']['properties']['templatePartArea']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['overrideCapabilities']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['overrideCapabilities']['properties']['matchesNearbyBlock']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['overrideCapabilities']['properties']['nearbyBlockOverlapAttrs']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['overrideCapabilities']['properties']['siblingOverrideCount']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
 			$list_ability['output_schema']['properties']['patterns']['items']['properties']['patternOverrides']['type'] ?? null
 		);
 		$this->assertArrayNotHasKey(

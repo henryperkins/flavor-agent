@@ -44,6 +44,7 @@ export default function SuggestionChips( { clientId, suggestions, label } ) {
 							variant={ wasApplied ? 'primary' : 'secondary' }
 							size="small"
 							onClick={ () => void handleApply( s ) }
+							disabled={ wasApplied }
 							title={ s.description || s.label }
 							icon={ wasApplied ? check : undefined }
 							className={ `flavor-agent-chip${

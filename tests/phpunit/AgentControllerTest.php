@@ -321,6 +321,76 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_recommend_patterns_passes_insertion_context_through_to_ranking(): void {
+		$this->configure_pattern_recommendation_backends();
+		$this->save_ready_pattern_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/header-utility', 0.71 ),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/header-utility', 0.79 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/header-utility',
+								'score'  => 0.84,
+								'reason' => 'Fits the header structure.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
+		$request->set_param( 'postType', 'page' );
+		$request->set_param(
+			'insertionContext',
+			[
+				'rootBlock'        => 'core/group',
+				'ancestors'        => [ 'core/template-part', 'core/group' ],
+				'nearbySiblings'   => [ 'core/site-logo', 'core/navigation' ],
+				'templatePartArea' => 'header',
+				'templatePartSlug' => 'site-header',
+				'containerLayout'  => 'flex',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ranking_request = json_decode(
+			(string) ( WordPressTestState::$remote_post_calls[3]['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $ranking_request );
+		$this->assertStringContainsString(
+			'Template-part area: header',
+			(string) ( $ranking_request['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Template-part slug: site-header',
+			(string) ( $ranking_request['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Container layout: flex',
+			(string) ( $ranking_request['input'] ?? '' )
+		);
+	}
+
 	public function test_handle_recommend_patterns_preserves_warming_error_for_retryable_bootstrap_failures(): void {
 		$this->configure_pattern_recommendation_backends();
 

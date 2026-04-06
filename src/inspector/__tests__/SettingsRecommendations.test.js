@@ -36,7 +36,6 @@ beforeEach( () => {
 	} );
 } );
 
-
 function renderComponent( suggestions ) {
 	act( () => {
 		getRoot().render(

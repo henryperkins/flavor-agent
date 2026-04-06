@@ -83,8 +83,7 @@ describe( 'activity log utils', () => {
 						backendLabel: 'Azure OpenAI responses',
 						providerLabel: 'Azure OpenAI',
 						model: 'gpt-5.3-chat',
-						pathLabel:
-							'Azure OpenAI via Settings > Flavor Agent',
+						pathLabel: 'Azure OpenAI via Settings > Flavor Agent',
 						ownerLabel: 'Settings > Flavor Agent',
 						credentialSourceLabel: 'Settings > Flavor Agent',
 						selectedProviderLabel: 'Azure OpenAI',

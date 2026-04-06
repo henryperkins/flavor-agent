@@ -150,7 +150,9 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Fallback from selected Azure OpenAI.'
 		);
-		expect( getContainer().textContent ).toContain( 'Global Styles action' );
+		expect( getContainer().textContent ).toContain(
+			'Global Styles action'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Style Book action · Paragraph'
 		);

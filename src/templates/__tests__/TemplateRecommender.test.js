@@ -535,7 +535,9 @@ describe( 'TemplateRecommender', () => {
 
 		await act( async () => {
 			Array.from( getContainer().querySelectorAll( 'button' ) )
-				.find( ( element ) => element.textContent === 'Get Suggestions' )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
 				.click();
 		} );
 

@@ -19,6 +19,11 @@ import {
 	buildBlockStyleExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
 } from '../context/theme-tokens';
+import {
+	buildTemplateStructureSnapshot,
+	collectViewportVisibilitySummary,
+} from '../utils/editor-context-metadata';
+import { buildStyleBookDesignSemantics } from '../utils/style-design-semantics';
 import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
@@ -103,6 +108,9 @@ function buildRequestInput( {
 	blockDescription,
 	currentStyles,
 	mergedStyles,
+	templateStructure,
+	templateVisibility,
+	designSemantics,
 	contextSignature,
 } ) {
 	const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
@@ -133,6 +141,9 @@ function buildRequestInput( {
 				currentStyles,
 				mergedStyles,
 			},
+			templateStructure,
+			templateVisibility,
+			designSemantics,
 		},
 		contextSignature,
 		...( normalizedPrompt ? { prompt: normalizedPrompt } : {} ),
@@ -455,6 +466,9 @@ export default function StyleBookRecommender() {
 		mergedConfig,
 		currentStyles,
 		mergedStyles,
+		templateStructure,
+		templateVisibility,
+		designSemantics,
 		rawSuggestions,
 		currentExplanation,
 		currentResultContextSignature,
@@ -473,6 +487,7 @@ export default function StyleBookRecommender() {
 		( select ) => {
 			const interfaceStore = select( 'core/interface' );
 			const editSite = select( 'core/edit-site' );
+			const blockEditor = select( 'core/block-editor' );
 			const blocksStore = select( 'core/blocks' );
 			const store = select( STORE_NAME );
 			const activeComplementaryArea =
@@ -535,6 +550,7 @@ export default function StyleBookRecommender() {
 				...suggestion,
 				suggestionKey: getSuggestionKey( suggestion, index ),
 			} ) );
+			const editedBlocks = blockEditor?.getBlocks?.() || [];
 
 			return {
 				isGlobalStylesActive:
@@ -561,6 +577,19 @@ export default function StyleBookRecommender() {
 				mergedStyles: getBlockStyleBranch(
 					globalStylesData?.mergedConfig || {},
 					blockName
+				),
+				templateStructure: buildTemplateStructureSnapshot(
+					editedBlocks
+				),
+				templateVisibility:
+					collectViewportVisibilitySummary( editedBlocks ),
+				designSemantics: buildStyleBookDesignSemantics(
+					editedBlocks,
+					{
+						blockName,
+						blockTitle,
+						templateType,
+					}
 				),
 				rawSuggestions: mappedSuggestions,
 				currentExplanation: store?.getStyleBookExplanation?.() || '',
@@ -601,6 +630,9 @@ export default function StyleBookRecommender() {
 			scope,
 			currentConfig,
 			mergedConfig,
+			templateStructure,
+			templateVisibility,
+			designSemantics,
 			themeTokenDiagnostics,
 			executionContract,
 		} );
@@ -835,6 +867,9 @@ export default function StyleBookRecommender() {
 				blockDescription: blockType?.description || '',
 				currentStyles,
 				mergedStyles,
+				templateStructure,
+				templateVisibility,
+				designSemantics,
 				contextSignature: recommendationContextSignature,
 			} )
 		);
@@ -842,12 +877,15 @@ export default function StyleBookRecommender() {
 		blockType,
 		currentConfig,
 		currentStyles,
+		designSemantics,
 		fetchStyleBookRecommendations,
 		mergedConfig,
 		mergedStyles,
 		prompt,
 		recommendationContextSignature,
 		scope,
+		templateStructure,
+		templateVisibility,
 		themeTokenDiagnostics,
 	] );
 

@@ -158,6 +158,10 @@ final class Agent_Controller {
 						'required' => false,
 						'type'     => 'object',
 					],
+					'insertionContext'    => [
+						'required' => false,
+						'type'     => 'object',
+					],
 					'prompt'              => [
 						'required'          => false,
 						'type'              => 'string',
@@ -629,6 +633,11 @@ final class Agent_Controller {
 		$block_context = $request->get_param( 'blockContext' );
 		if ( is_array( $block_context ) && ! empty( $block_context ) ) {
 			$input['blockContext'] = $block_context;
+		}
+
+		$insertion_context = $request->get_param( 'insertionContext' );
+		if ( is_array( $insertion_context ) && ! empty( $insertion_context ) ) {
+			$input['insertionContext'] = $insertion_context;
 		}
 
 		$prompt = $request->get_param( 'prompt' );
