@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-07
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -13,7 +13,7 @@ Use these documents together:
 3. `STATUS.md` -- current verified state and known issues
 4. `docs/FEATURE_SURFACE_MATRIX.md` -- feature locations, surfacing conditions, and apply/undo matrix
 5. `docs/features/README.md` -- deep-dive user-flow documentation for each shipped surface
-6. `docs/reference/` -- canonical programmatic contract docs (abilities-and-routes, shared-internals, provider-precedence, template-operations, activity-state-machine)
+6. `docs/reference/` -- canonical programmatic and shared-surface contract docs (abilities-and-routes, shared-internals, recommendation-ui-consistency, provider-precedence, template-operations, activity-state-machine)
 7. `docs/flavor-agent-readme.md` -- editor-flow and architecture companion
 8. `docs/2026-03-25-roadmap-aligned-execution-plan.md` -- active forward plan
 
@@ -31,13 +31,13 @@ When a recommendation surface is in scope but unavailable, the native UI now sta
 
 Seven first-party recommendation surfaces exist today:
 
-1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector sidebar tabs.
-2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through the native block inserter with a "Recommended" category.
-3. **Template Compositor** -- Reviewable template-part and pattern composition suggestions for Site Editor templates with a narrow confirm-before-apply path.
+1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector sidebar tabs, including a projection-only Styles tab and embedded navigation guidance when the selected block is `core/navigation`.
+2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through the native block inserter with a "Recommended" category; intentionally ranking/browse-only.
+3. **Template Recommendations** -- Review-before-apply template-part and pattern composition suggestions for Site Editor templates.
 4. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
 5. **Global Styles Recommender** -- Site Editor Global Styles suggestions bounded to native theme-supported style paths and registered style variations.
 6. **Style Book Recommender** -- Per-block style suggestions in the Style Book panel, bounded to block-scoped style paths and theme-backed values.
-7. **Navigation Inspector** -- Advisory navigation structure, overlay, and accessibility guidance for selected `core/navigation` blocks in the native Inspector.
+7. **Navigation Recommendations** -- Advisory navigation structure, overlay, and accessibility guidance nested inside block recommendations for selected `core/navigation` blocks.
 
 The plugin also ships one first-party admin audit surface at `Settings > AI Activity` and one programmatic content lane exposed through REST + Abilities, but not yet mounted in a first-party Gutenberg panel.
 
@@ -151,7 +151,8 @@ flavor-agent/
     tokens.css              Shared design tokens for plugin UI
     editor.css              Editor-side styles for shipped surfaces
     admin/
-      sync-button.js        Settings-screen pattern sync trigger
+      settings-page.js      Settings-screen entrypoint
+      settings-page-controller.js Settings-screen sync, live status, and section-state controller
       activity-log.js       DataViews/DataForm admin audit screen
       activity-log.css      Activity page styling layered on top of wp-admin and DataViews
       activity-log-utils.js Activity-entry normalization and admin view helpers
@@ -184,7 +185,7 @@ flavor-agent/
       BlockRecommendationsPanel.js Block-level prompt and suggestion panel
       NavigationRecommendations.js Navigation advisory panel for `core/navigation`
       SettingsRecommendations.js Settings tab suggestion cards
-      StylesRecommendations.js Appearance tab + style variation pills
+      StylesRecommendations.js Projection-only Appearance tab + style variation pills
       SuggestionChips.js    Compact chips for sub-panel injection
       group-by-panel.js     Panel-grouping helpers
       panel-delegation.js   Inspector panel routing for block vs navigation surfaces
@@ -321,8 +322,9 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Context sent:** Block name, attributes, styles, supports, inspector panels, editing mode, content/config attributes, child count, structural identity (role, location, position), sibling blocks, ancestor chain, theme tokens, WordPress docs guidance (cache-only).
 - **LLM:** `ChatClient::chat()`; prefers the direct plugin-managed provider when configured and otherwise falls back to the WordPress AI Client / Connectors path.
 - **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`.
-- **Apply:** One-click per suggestion. Safe deep-merge for `metadata` and `style` keys. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
-- **Guards:** Content-only blocks receive only content-attribute suggestions. Disabled blocks receive no suggestions. `blockVisibility` (boolean and viewport-object forms) respected.
+- **UI:** The main panel follows the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Apply now` lane, `Manual ideas` advisory section, and recent activity. The `styles` Inspector tab is projection-only, and selected `core/navigation` blocks append a nested advisory-only navigation subsection.
+- **Apply:** Safe local block updates remain one-click. Safe deep-merge for `metadata` and `style` keys preserves unrelated attributes. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
+- **Guards:** Content-only blocks limit executable changes to content-safe attributes, may still surface broader advisory block ideas, suppress style projections, and keep `blockVisibility` (boolean and viewport-object forms) within the allowed contract. Disabled blocks receive no suggestions.
 
 #### Pattern Recommendations
 
@@ -331,6 +333,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Inserter integration:** Via `compat.js`, probes future stable pattern settings first for forward compatibility, but current Gutenberg trunk / WordPress 7.0 still resolves through `__experimentalAdditionalBlockPatterns` and `__experimentalBlockPatterns`. The adapter patches whichever path the editor actually exposes to add the "Recommended" category, enriched descriptions, and extracted keywords.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
+- **Model:** This is intentionally a ranking/browse-only surface. Flavor Agent patches ordering and summary state inside the native inserter, but does not add its own review, apply, undo, or activity contract.
 
 #### Template Recommendations
 
@@ -338,8 +341,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Context sent:** Template ref, type, assigned template-part slots, empty areas, available (unassigned) template parts, top-level block tree, executable top-level insertion anchors, candidate patterns (typed + generic, filtered by client-side `visiblePatternNames` when available, max 30), template-global `visiblePatternNames` when available, theme tokens, WordPress docs guidance.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
 - **Response:** Max 3 suggestions, each with validated structured operations. Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`, where template pattern insertion may now include `start`, `end`, `before_block_path`, or `after_block_path` placement metadata.
-- **UI:** Entity mentions in text become clickable links: template-part slugs/areas highlight blocks in canvas; pattern names open the inserter pre-filtered. The panel now uses the shared Epic 2 review model: prompt -> suggestions -> explanation -> review -> apply -> undo/history, with shared advisory/status/review components.
-- **Apply:** Deterministic client executor now validates template suggestions against a working-state copy before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, anchored pattern insertion resolves validated top-level template paths before inserting parsed pattern blocks, legacy insertion still resolves the current insertion point, and applied operations persist stable undo locators plus recorded post-apply snapshots for inserted subtrees.
+- **UI:** Entity mentions in text become clickable links: template-part slugs/areas highlight blocks in canvas; pattern names open the inserter pre-filtered. The panel uses the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Review first` / `Manual ideas` lanes, a lower review panel, and recent activity.
+- **Apply:** Deterministic client executor validates template suggestions against a working-state copy before mutating. Template-part assignment/replacement updates existing `core/template-part` blocks, and pattern insertion resolves only validated `start`, `end`, `before_block_path`, or `after_block_path` anchors before inserting parsed pattern blocks. Implicit insertions are rejected. Applied operations persist stable undo locators plus recorded post-apply snapshots for inserted subtrees.
 - **Guardrails:** Free-form template tree rewrites are intentionally out of scope. If any operation fails validation, the entire apply is rejected before mutation.
 
 #### Template Part Recommendations
@@ -348,7 +351,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Context sent:** Template-part ref, slug, inferred area, structural summaries, executable operation targets, executable insertion anchors, structural constraints, candidate patterns (filtered by request `visiblePatternNames` when available), theme tokens, and cache-backed WordPress docs guidance.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
 - **Response:** Max 3 suggestions, each with `label`, `description`, `blockHints`, `patternSuggestions`, optional validated `operations`, and `explanation`. Supported executable operations are `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with bounded placement at `start`, `end`, `before_block_path`, or `after_block_path` where applicable.
-- **UI:** `src/template-parts/TemplatePartRecommender.js` renders a store-backed document settings panel with advisory links, shared preview-confirm-apply framing for validated operations, shared status notices, and recent activity. Non-deterministic ideas stay visible through the same advisory shell instead of disappearing.
+- **UI:** `src/template-parts/TemplatePartRecommender.js` renders a store-backed document settings panel with the same `Review first` / `Manual ideas` split, advisory links, shared lower review panel, shared status notices, and recent activity. Non-deterministic ideas stay visible through the same advisory shell instead of disappearing.
 - **Apply:** Deterministic client executor validates template-part operations before mutation, inserts parsed pattern blocks at the exact resolved root/path location, supports bounded targeted replacement/removal, and records stable undo metadata plus post-apply snapshots for refresh-safe undo.
 - **Guardrails:** Unsupported or ambiguous suggestions stay advisory-only. There is still no free-form rewrite path; all executable operations must resolve to explicit validated placements and block-path targets before mutation.
 
@@ -358,7 +361,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Context sent:** Resolved Global Styles scope descriptor, current user config, current merged config, available theme style variations, theme-token source diagnostics, theme tokens, and supported site-level style paths.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`.
 - **Response:** Up to 4 suggestions, each with `label`, `description`, `category`, `tone`, optional validated `operations`, and `explanation`. Supported executable operations are `set_styles` (global-styles surface only) and `set_theme_variation`.
-- **UI:** `src/global-styles/GlobalStylesRecommender.js` portals into the native Global Styles sidebar when available and falls back to a document settings panel when the sidebar slot is missing. It uses the shared prompt -> suggestions -> explanation -> review -> apply -> undo/history model.
+- **UI:** `src/global-styles/GlobalStylesRecommender.js` is portal-first in the native Global Styles sidebar and falls back to a document settings panel when the sidebar slot is missing. It uses the shared full-surface shell with `Review first` / `Manual ideas`, a lower review panel, and scoped recent activity.
 - **Apply:** Deterministic client helpers validate supported paths, preset requirements, and still-available theme variations before updating the active `root/globalStyles` entity through `editEntityRecord()`. Applied changes persist before/after user config plus operation metadata for scoped undo.
 - **Guardrails:** Raw CSS, `customCSS`, unsupported style paths, arbitrary preset-less values where a preset family is required, width/height transforms, and pseudo-element-only operations remain out of scope for the first Epic 3 slice.
 
@@ -368,7 +371,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Context sent:** Resolved scope descriptor with `surface: "style-book"`, target block name and title, current block-scoped styles, merged config, theme-token source diagnostics, and theme tokens.
 - **LLM:** Provider-selected responses backend via `ResponsesClient::rank()`, using the same `StylePrompt` and `StyleAbilities::recommend_style()` as Global Styles with surface-aware operation rules.
 - **Response:** Up to 4 suggestions with validated `operations`. Supported executable operations are `set_block_styles` (style-book surface only).
-- **UI:** `src/style-book/StyleBookRecommender.js` portals into the Style Book panel using `src/style-book/dom.js` for target resolution. Uses the same shared prompt -> suggestions -> explanation -> review -> apply -> undo/history model.
+- **UI:** `src/style-book/StyleBookRecommender.js` is portal-first in the Style Book panel using `src/style-book/dom.js` for target resolution. It uses the same shared full-surface shell with `Review first` / `Manual ideas`, a lower review panel, and scoped recent activity.
 - **Apply:** Deterministic client helpers validate block-scoped style paths and preset requirements before updating the active `root/globalStyles` entity. Applied changes persist before/after config plus operation metadata for scoped undo.
 - **Guardrails:** `set_styles` is rejected on the style-book surface. `set_theme_variation` is also rejected on the style-book surface. `set_block_styles.blockName` must exactly match the target block in scope. Same raw CSS, `customCSS`, and unsupported-path guardrails as Global Styles.
 
@@ -382,17 +385,17 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### Shared Inline Review Model
 
-- **Sequence:** Block, navigation, template, template-part, Global Styles, and Style Book surfaces now all follow one learned-once order: prompt -> suggestions -> explanation -> review where needed -> apply where allowed -> undo/history.
+- **Sequence:** The recommendation surfaces now share one vocabulary and shell order, but not one mutation contract.
 - **Normalized states:** The shared editor-side vocabulary is `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, and `error`.
-- **Surface mapping:** Block can move directly from `advisory-ready` to `success` for safe local attribute updates; navigation stops at `advisory-ready`; template, template-part, Global Styles, and Style Book must explicitly enter `preview-ready` before any mutation occurs.
-- **Shared UI:** `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` now own the common review/status framing, while `AIActivitySection` remains the shared undo/history block.
+- **Surface mapping:** The main block panel is direct-apply for safe local block updates. Template, template-part, Global Styles, and Style Book are review-before-apply surfaces. Navigation is an advisory-only nested subsection. The block Styles tab is a projection-only sub-surface of the current block request. Pattern recommendations remain ranking/browse-only in the native inserter.
+- **Shared UI:** `SurfaceScopeBar`, `RecommendationHero`, `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` now own the common scope/status/review framing, while `AIActivitySection` remains the shared undo/history block on executable surfaces.
 - **Notes future-proofing:** `src/review/notes-adapter.js` is a shape-only adapter for future Notes/comment projection. It normalizes shared review evidence but is not wired into runtime UI and does not depend on unstable editor APIs.
 
 #### AI Activity And Undo
 
 - **Schema:** Block, template, template-part, Global Styles, and Style Book apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
 - **Persistence:** Activity records are persisted through the server-backed activity repository when available and are hydrated back into the editor-side storage adapter keyed by the current post, template, template-part, or Global Styles scope reference. The same repository now also supports recent unscoped/admin reads for privileged users. Template, template-part, and Global Styles activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
-- **UI:** The Block Inspector, Navigation section, Template Compositor, Template Part panel, Global Styles panel, and Style Book panel now share the same status vocabulary and review framing. Executable surfaces show inline `Undo` on the latest applied action plus a `Recent AI Actions` section with the last few records. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported surfaces through a `DataViews` activity feed and a read-only `DataForm` details panel.
+- **UI:** The Block Inspector, Template Recommendations panel, Template Part panel, Global Styles panel, and Style Book panel share the same status vocabulary, recent-activity shell, and inline undo treatment. Navigation shares the advisory/status framing but remains activity-free because it is advisory-only, and pattern recommendations remain outside the activity contract. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported executable surfaces through a `DataViews` activity feed and a read-only `DataForm` details panel.
 - **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template assignment/replacement undo resolves the current block from a stable area/slug locator, template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot, Global Styles and Style Book undo only stays available while the active `root/globalStyles` entity still matches the recorded post-apply user config. The admin audit view applies the same ordered-tail rule when it marks older entries as blocked by newer still-applied actions.
 
 #### Admin Activity Page
@@ -529,7 +532,7 @@ User selects block -> InspectorInjector renders AI panel
            -> Prompt::enforce_block_context_rules()
         <- JSON response: { settings, styles, block, explanation }
   -> store: SET_BLOCK_RECOMMENDATIONS
-  -> UI: SettingsRecommendations, StylesRecommendations, SuggestionChips
+  -> UI: main block panel lanes + StylesRecommendations projection + SuggestionChips
   -> User clicks "Apply" on a suggestion
      -> store thunk: applySuggestion(clientId, suggestion)
         -> update-helpers.js: buildSafeAttributeUpdates()
@@ -576,10 +579,10 @@ User editing wp_template in Site Editor
            -> TemplatePrompt::parse_response() (validates against context, normalizes executable operations)
         <- JSON response: { suggestions, explanation }
   -> store: SET_TEMPLATE_RECS
-  -> UI: TemplateSuggestionCards with LinkedText entity links + preview state
+  -> UI: RecommendationHero + `Review first` / `Manual ideas` lanes + linked entity text + review state
      -> Template-part links -> selectBlockBySlugOrArea()
      -> Pattern links -> openInserterForPattern()
-  -> User clicks "Preview Apply" and then "Confirm Apply"
+  -> User opens review on an executable suggestion and clicks "Confirm Apply"
      -> store thunk: applyTemplateSuggestion(suggestion)
         -> template-actions.js: prepareTemplateSuggestionOperations()
            -> validate template-part slugs, areas, current assignments, pattern names, insertion point
@@ -629,7 +632,7 @@ User editing wp_template_part in Site Editor
            -> TemplatePartPrompt::parse_response() (validates block hints, pattern names, placements)
         <- JSON response: { suggestions, explanation }
   -> store saves request/result state for current templatePartRef
-  -> UI renders advisory links plus preview-confirm-apply for validated start/end insert_pattern operations
+  -> UI renders advisory links plus preview-confirm-apply for validated bounded operations
   -> applyTemplatePartSuggestion()
      -> validateTemplatePartOperationSequence()
      -> applyTemplatePartSuggestionOperations()
@@ -703,7 +706,7 @@ Current high-signal coverage map:
 
 | Area | Representative files | What's Covered |
 | ---- | -------------------- | -------------- |
-| Store state and activity orchestration | `src/store/__tests__/activity-history.test.js`, `activity-history-state.test.js`, `store-actions.test.js`, `template-apply-state.test.js`, `pattern-status.test.js`, `navigation-request-state.test.js` | Request lifecycle, stale-result rejection, activity hydration, undo coordination, and executable-surface reducer state |
+| Store state and activity orchestration | `src/store/__tests__/activity-history.test.js`, `activity-history-state.test.js`, `store-actions.test.js`, `template-apply-state.test.js`, `pattern-status.test.js`, `navigation-request-state.test.js` | Request lifecycle, stale-result rejection, activity hydration, undo coordination, and shared request/apply reducer state |
 | Inspector flows | `src/inspector/__tests__/BlockRecommendationsPanel.test.js`, `SettingsRecommendations.test.js`, `StylesRecommendations.test.js`, `NavigationRecommendations.test.js`, `InspectorInjector.test.js`, `panel-delegation.test.js`, `SuggestionChips.test.js`, `src/inspector/suggestion-keys.test.js` | Panel rendering, capability gating, delegated sub-panel behavior, navigation framing, and key generation |
 | Pattern inserter integration | `src/patterns/__tests__/PatternRecommender.test.js`, `InserterBadge.test.js`, `compat.test.js`, `recommendation-utils.test.js`, `find-inserter-search-input.test.js`, `inserter-badge-state.test.js` | Inserter DOM discovery, compat negotiation, metadata patching, badge state, and fetcher lifecycle |
 | Template and style surfaces | `src/templates/__tests__/TemplateRecommender.test.js`, `template-recommender-helpers.test.js`, `src/template-parts/__tests__/TemplatePartRecommender.test.js`, `src/global-styles/__tests__/GlobalStylesRecommender.test.js`, `src/style-book/__tests__/StyleBookRecommender.test.js` | Site Editor rendering, suggestion lifecycle, operation helpers, scope resolution, and panel portal behavior |
@@ -770,6 +773,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/features/style-and-theme-intelligence.md`                    | Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo | **Current**                    |
 | `docs/reference/abilities-and-routes.md`                           | Canonical ability and REST contract reference                                                              | **Current**                    |
 | `docs/reference/shared-internals.md`                               | Shared store utilities, UI components, and context helpers                                                  | **Current**                    |
+| `docs/reference/recommendation-ui-consistency.md`                  | Cross-surface interaction-model split, shared taxonomy, and intentional recommendation-surface exceptions  | **Current**                    |
 | `docs/reference/provider-precedence.md`                            | AI backend selection and credential fallback chain                                                         | **Current**                    |
 | `docs/reference/template-operations.md`                            | Operation type vocabulary and validation rules per surface                                                 | **Current**                    |
 | `docs/reference/activity-state-machine.md`                         | Undo states, transitions, ordered undo, and pruning                                                        | **Current**                    |
@@ -818,12 +822,12 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 ## Key Technical Decisions
 
 1. **Shared provider selection, split execution paths**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both ride the same `Provider` selection layer, which can use Azure OpenAI, OpenAI Native, a configured connector-backed provider, or the generic WordPress AI Client fallback when no direct chat backend is configured. Pattern embeddings remain plugin-managed even when chat is connector-backed.
-2. **Narrow approval model**: Block suggestions still apply inline on click, but template suggestions use an explicit preview-confirm-apply step. There is no separate multi-stage approval workspace or diff-review pipeline.
+2. **Narrow approval model**: Block suggestions still apply inline on click, template/template-part/Global Styles/Style Book suggestions require review first, navigation stays advisory-only, and pattern recommendations stay ranking/browse-only. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.
 5. **Cache-only docs grounding**: WordPress docs are not fetched on every recommendation request. Cache is warmed via explicit `search-wordpress-docs` calls, async prewarm jobs, prior queries, or first-request misses that queue follow-up warming. This avoids latency on the critical path.
 6. **Abilities API is additive**: The REST API remains the primary runtime path. Abilities API registration is a parallel exposure for external agents. Neither depends on the other.
-7. **Store is the contract boundary for executable surfaces**: Block, pattern, template, template-part, Global Styles, and Style Book UI read through `@wordpress/data` selectors and store thunks handle REST calls, error state, stale-request rejection, and activity/undo coordination.
+7. **Store is the contract boundary for first-party recommendation surfaces**: Block, pattern, navigation, template, template-part, Global Styles, and Style Book UI read through `@wordpress/data` selectors and store thunks handle REST calls, ranking/request state, stale-request rejection, and activity/undo coordination where those contracts exist.
 8. **Navigation is advisory-only through v1.0**: The inspector surface is intentionally guidance-only until a bounded previewable/undoable executor earns its own milestone.
 9. **Client-side `@wordpress/core-abilities` usage stays deferred for v1**: First-party JS continues to use feature-specific stores and REST endpoints; client-side abilities remain an external-agent/admin integration surface rather than the editor runtime baseline.
 10. **Pattern Overrides, expanded `contentOnly`, and first-style extras stay bounded**: Pattern Overrides-aware ranking, broader `contentOnly` structural semantics, width/height preset transforms, and pseudo-element-aware token extraction are all deferred until later bounded milestones rather than being treated as ambient WP 7.0 work.

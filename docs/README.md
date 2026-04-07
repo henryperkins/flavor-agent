@@ -53,6 +53,7 @@ Read these documents in this order:
 6. `docs/reference/`
    - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
+   - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `template-operations.md` — operation types, placements, and validation rules per surface.
    - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
@@ -86,6 +87,7 @@ Each top-level doc has one job:
 5. `docs/reference/` answers:
    - `abilities-and-routes.md` — Which ability or route owns a contract? Which permissions and backend gates apply?
    - `shared-internals.md` — Which cross-cutting store utilities, shared UI components, and context helpers do the surfaces share?
+   - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
    - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
    - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?
@@ -119,7 +121,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic contracts: `docs/reference/` (abilities-and-routes, shared-internals, provider-precedence, template-operations, activity-state-machine)
+5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, provider-precedence, template-operations, activity-state-machine)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. Way forward: `docs/2026-03-25-roadmap-aligned-execution-plan.md`
 

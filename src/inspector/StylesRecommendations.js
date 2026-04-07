@@ -110,7 +110,7 @@ export default function StylesRecommendations({
 			<div className="flavor-agent-panel">
 				<SurfacePanelIntro
 					eyebrow="Block Styles"
-					introCopy="One-click apply stays available for safe block-level style changes. Suggestions stay grouped beside the native controls they map to."
+					introCopy="This panel projects the current block request's safe style results beside the native controls they map to. Ask for new suggestions from the main AI Recommendations panel."
 					className="flavor-agent-style-surface__intro"
 				>
 					<div className="flavor-agent-style-surface__meta">

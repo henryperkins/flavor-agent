@@ -4,6 +4,8 @@
  * Fetches AI-ranked pattern recommendations and patches the native
  * block inserter's pattern data so recommended patterns appear in
  * a "Recommended" category with contextual descriptions.
+ * This surface intentionally stays ranking/browse-only and does not
+ * participate in the apply/review/undo recommendation model.
  *
  * Two modes:
  * - Passive: fetches on editor load using postType

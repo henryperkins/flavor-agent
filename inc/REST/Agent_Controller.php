@@ -710,6 +710,8 @@ final class Agent_Controller {
 			return $result;
 		}
 
+		$result['runtimeState'] = PatternIndex::get_runtime_state();
+
 		return new \WP_REST_Response(
 			self::append_request_meta_for_route( $result, 'sync-patterns' ),
 			200

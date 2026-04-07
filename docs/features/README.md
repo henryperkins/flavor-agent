@@ -15,6 +15,7 @@ Use these docs when you need exact answers for:
 2. one of the surface docs in this directory - exact end-to-end behavior for that feature
 3. `docs/reference/abilities-and-routes.md` - exact ability and REST contracts
 4. `docs/reference/shared-internals.md` - cross-cutting store utilities, shared UI components, and context helpers referenced by multiple surfaces
+5. `docs/reference/recommendation-ui-consistency.md` - shared surface taxonomy, interaction-model split, and intentional UI exceptions
 
 ## Surface Docs
 
@@ -47,4 +48,5 @@ When a shipped surface changes, update:
 1. the matching feature doc here
 2. `docs/FEATURE_SURFACE_MATRIX.md`
 3. `docs/reference/abilities-and-routes.md` when the contract changed
-4. `STATUS.md` if verified behavior changed
+4. `docs/reference/recommendation-ui-consistency.md` when the interaction model, shared taxonomy, or intentional exceptions change
+5. `STATUS.md` if verified behavior changed

@@ -132,6 +132,10 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_provider_support  = [];
 			self::$ai_client_generate_text_result = '';
 
+			$GLOBALS['wp_settings_fields']   = [];
+			$GLOBALS['wp_settings_sections'] = [];
+			$GLOBALS['wp_registered_settings'] = [];
+
 			\WP_Block_Type_Registry::get_instance()->reset();
 			\WP_Block_Patterns_Registry::get_instance()->reset();
 		}
@@ -934,6 +938,24 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'sanitize_html_class' ) ) {
+		function sanitize_html_class( string $class, string $fallback = '' ): string {
+			$sanitized = preg_replace( '/[^A-Za-z0-9_-]/', '', $class ) ?? '';
+
+			if ( '' === $sanitized ) {
+				return $fallback;
+			}
+
+			return $sanitized;
+		}
+	}
+
+	if ( ! function_exists( 'wp_kses_post' ) ) {
+		function wp_kses_post( string $content ): string {
+			return $content;
+		}
+	}
+
 	if ( ! function_exists( 'admin_url' ) ) {
 		function admin_url( string $path = '' ): string {
 			$normalized = ltrim( $path, '/' );
@@ -1186,9 +1208,54 @@ namespace {
 	if ( ! function_exists( 'settings_fields' ) ) {
 		function settings_fields( string $option_group ): void {
 			printf(
-				'<input type="hidden" name="option_page" value="%s" />',
+				'<input type="hidden" name="option_page" value="%s" /><input type="hidden" name="action" value="update" />',
 				esc_attr( $option_group )
 			);
+		}
+	}
+
+	if ( ! function_exists( 'register_setting' ) ) {
+		function register_setting( string $option_group, string $option_name, array $args = [] ): void {
+			$GLOBALS['wp_registered_settings'][ $option_name ] = array_merge(
+				$args,
+				[
+					'option_group' => $option_group,
+					'option_name'  => $option_name,
+				]
+			);
+		}
+	}
+
+	if ( ! function_exists( 'add_settings_section' ) ) {
+		function add_settings_section(
+			string $id,
+			string $title,
+			callable $callback,
+			string $page
+		): void {
+			$GLOBALS['wp_settings_sections'][ $page ][ $id ] = [
+				'id'       => $id,
+				'title'    => $title,
+				'callback' => $callback,
+			];
+		}
+	}
+
+	if ( ! function_exists( 'add_settings_field' ) ) {
+		function add_settings_field(
+			string $id,
+			string $title,
+			callable $callback,
+			string $page,
+			string $section = 'default',
+			array $args = []
+		): void {
+			$GLOBALS['wp_settings_fields'][ $page ][ $section ][ $id ] = [
+				'id'       => $id,
+				'title'    => $title,
+				'callback' => $callback,
+				'args'     => $args,
+			];
 		}
 	}
 

@@ -549,6 +549,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Apply now');
 		expect(getContainer().textContent).toContain('Manual ideas');
+		expect(getContainer().textContent).toContain('Advisory only');
 		expect(getContainer().textContent).toContain('Recommended Next Step');
 		expect(getContainer().textContent).toContain('Wrap this block in a Group');
 		expect(getContainer().textContent).toContain(
@@ -613,6 +614,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect(getContainer().textContent).toContain('Manual ideas');
+		expect(getContainer().textContent).toContain('Advisory only');
 		expect(getContainer().textContent).toContain('Wrap this block in a Group');
 		expect(mockSuggestionChips).not.toHaveBeenCalled();
 	});
@@ -674,6 +676,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect(getContainer().textContent).toContain('Manual ideas');
+		expect(getContainer().textContent).toContain('Advisory only');
 		expect(getContainer().textContent).toContain('Wrap this block in a Group');
 		expect(getContainer().textContent).toContain(
 			'Replace with a callout pattern'

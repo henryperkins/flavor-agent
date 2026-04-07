@@ -2,7 +2,7 @@
 
 Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the native Gutenberg editor and wp-admin surfaces.
 
-This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`.
+This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`. For the current shared-surface taxonomy and intentional exceptions, use `docs/reference/recommendation-ui-consistency.md`.
 
 It currently has seven primary editor experiences:
 
@@ -16,7 +16,7 @@ It currently has seven primary editor experiences:
 
 It also ships the AI Activity admin audit surface in wp-admin and a programmatic content-lane scaffold with no first-party post-editor UI yet.
 
-There is no separate approval sidebar in the current codebase. Block suggestions apply inline in the Inspector, pattern recommendations patch the native inserter, navigation remains advisory-only in the Inspector, and template, template-part, Global Styles, and Style Book suggestions use review-confirm-apply flows inside the relevant Site Editor sidebar or document settings panel when the returned operations are validated. Block, template, template-part, Global Styles, and Style Book applies also write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data.
+There is no separate approval sidebar in the current codebase. The seven surfaces intentionally split into three interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and the block Styles tab is projection-only rather than a standalone request surface. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data.
 
 ## Current Architecture
 
@@ -83,6 +83,8 @@ The request includes:
 
 The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
 
+This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. The Styles tab is only a projection of the current block request, and selected `core/navigation` blocks add a nested advisory-only `Recommended Next Changes` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
+
 ### Pattern Recommendations
 
 Pattern recommendations are exposed through `POST /flavor-agent/v1/recommend-patterns` and the `flavor-agent/recommend-patterns` ability.
@@ -104,6 +106,8 @@ The server behavior is:
 
 `visiblePatternNames` is now derived from the active inserter root, so nested insertion contexts only receive patterns WordPress already allows in that specific surface.
 
+This surface is intentionally ranking/browse-only. Flavor Agent reports loading, empty, error, and count state inside the inserter, but the user still inserts patterns through core UI and there is no Flavor Agent review/apply/undo contract here.
+
 ### Template Recommendations
 
 Template recommendations are exposed through `POST /flavor-agent/v1/recommend-template` and the `flavor-agent/recommend-template` ability.
@@ -111,9 +115,10 @@ Template recommendations are exposed through `POST /flavor-agent/v1/recommend-te
 The client behavior is:
 
 - Available only while editing a `wp_template` entity in the Site Editor.
-- Suggestions can be previewed before apply; the user explicitly confirms each validated operation set before the template is mutated.
+- Suggestions use the shared featured-hero plus `Review first` / `Manual ideas` split; the user explicitly opens review and confirms each validated operation set before the template is mutated.
 - Supported executable operations are `assign_template_part`, `replace_template_part`, and `insert_pattern`.
 - Template candidate patterns are narrowed by current inserter-root `visiblePatternNames` when the editor exposes that context.
+- Same-template drift keeps prior results visible as stale reference material and disables review/apply until refresh.
 
 The server behavior is:
 
@@ -131,8 +136,9 @@ The client behavior is:
 - Available only while editing a `wp_template_part` entity in the Site Editor.
 - Uses a dedicated `PluginDocumentSettingPanel` implemented in `src/template-parts/TemplatePartRecommender.js`.
 - Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
-- Renders advisory suggestion cards with block-focus links and pattern-browse links, and surfaces preview/apply controls only for validated executable suggestions.
+- Uses the shared featured-hero plus `Review first` / `Manual ideas` split, renders advisory links for focus blocks and patterns, and surfaces review/apply controls only for validated executable suggestions.
 - Supports validated bounded operations: `insert_pattern`, `replace_block_with_pattern`, and `remove_block`, with `start`, `end`, `before_block_path`, and `after_block_path` placement where applicable.
+- Same-scope drift preserves stale results for reference and disables review/apply until refresh.
 
 The server behavior is:
 
@@ -150,9 +156,9 @@ Global Styles and Style Book recommendations are exposed through `POST /flavor-a
 The client behavior is:
 
 - Available only while the Site Editor Styles sidebar is active for the current `root/globalStyles` entity; Style Book additionally requires an active example target block.
-- Prefers native Styles sidebar mounts and falls back to `PluginDocumentSettingPanel` shells implemented in `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js`.
+- Prefers portal-first native Styles sidebar mounts and falls back to `PluginDocumentSettingPanel` shells implemented in `src/global-styles/GlobalStylesRecommender.js` and `src/style-book/StyleBookRecommender.js`.
 - Uses the shared `flavor-agent` data store for request state, preview state, apply state, editor-scoped activity hydration, and undo.
-- Renders advisory or executable suggestion cards, with preview/apply controls only for validated `set_styles`, `set_block_styles`, and `set_theme_variation` operations.
+- Uses the shared featured-hero plus `Review first` / `Manual ideas` split, generic `Confirm Apply` review CTA, and scoped stale/refresh treatment. Preview/apply controls only appear for validated `set_styles`, `set_block_styles`, and `set_theme_variation` operations.
 
 The server behavior is:
 
@@ -195,7 +201,7 @@ Configured options:
 
 `flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native chat and embedding model IDs in its own settings either way.
 
-The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and reports the current pattern index status.
+The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
 
 ## Abilities Status
 

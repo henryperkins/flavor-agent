@@ -112,6 +112,8 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						) }
 				</InspectorControls>
 
+				{ /* The Styles tab projects safe style results from the main
+				   block request rather than owning its own request lifecycle. */ }
 				{ hasStyleRecs && (
 					<InspectorControls group="styles">
 						<StylesRecommendations

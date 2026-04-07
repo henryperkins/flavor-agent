@@ -18,6 +18,7 @@ import {
 	getLiveBlockContextSignature,
 } from '../context/collector';
 import AIActivitySection from '../components/AIActivitySection';
+import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
@@ -581,12 +582,16 @@ export function BlockRecommendationsContent({
 			)}
 
 			{advisoryBlockSuggestions.length > 0 && (
-				<RecommendationLane
+				<AIAdvisorySection
 					title={MANUAL_IDEAS_LABEL}
-					tone={MANUAL_IDEAS_LABEL}
 					count={advisoryBlockSuggestions.length}
 					countNoun="suggestion"
-					description="These ideas need manual follow-through or a broader review flow, so Flavor Agent keeps them advisory."
+					initialOpen
+					description={
+						isStaleResult
+							? 'These ideas are shown for reference from the last request. Refresh before acting on them against the current block.'
+							: 'These ideas need manual follow-through or a broader review flow, so Flavor Agent keeps them advisory.'
+					}
 				>
 					{advisoryBlockSuggestions.map((suggestion) => (
 						<AdvisorySuggestionCard
@@ -594,7 +599,7 @@ export function BlockRecommendationsContent({
 							suggestion={suggestion}
 						/>
 					))}
-				</RecommendationLane>
+				</AIAdvisorySection>
 			)}
 
 			<NavigationRecommendations clientId={clientId} embedded />

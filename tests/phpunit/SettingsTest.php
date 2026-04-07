@@ -782,7 +782,7 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Key source:',
+			'Current effective key source:',
 			$output
 		);
 		$this->assertStringContainsString(
@@ -867,21 +867,67 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Set up the AI stack in one pass.',
+			'Flavor Agent Settings',
 			$output
 		);
 		$this->assertStringContainsString(
-			'Where credentials live',
+			'Where To Configure What',
 			$output
 		);
 		$this->assertStringContainsString(
-			'Settings &gt; Connectors stores shared provider credentials.',
+			'Use Connectors for shared provider credentials.',
 			$output
 		);
 		$this->assertStringContainsString(
-			'Pattern Sync',
+			'Sync Pattern Catalog',
 			$output
 		);
+		$this->assertStringContainsString(
+			'name="flavor_agent_settings_feedback_key"',
+			$output
+		);
+		$this->assertStringContainsString(
+			'name="_wp_http_referer"',
+			$output
+		);
+	}
+
+	public function test_render_page_consumes_request_scoped_feedback_only_for_the_matching_user(): void {
+		WordPressTestState::$current_user_id = 1;
+		$_POST                              = [
+			'option_page'                         => 'flavor_agent_settings',
+			'flavor_agent_settings_feedback_key' => 'token-user-1',
+		];
+
+		Settings::sanitize_openai_provider( 'openai_native' );
+
+		$_POST = [];
+		$_GET  = [
+			'settings-updated'                    => 'true',
+			'flavor_agent_settings_feedback_key' => 'token-user-1',
+		];
+
+		WordPressTestState::$current_user_id = 2;
+		ob_start();
+		Settings::render_page();
+		$other_user_output = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString(
+			'Chat provider saved.',
+			$other_user_output
+		);
+		$this->assertNotEmpty( WordPressTestState::$transients );
+
+		WordPressTestState::$current_user_id = 1;
+		ob_start();
+		Settings::render_page();
+		$matching_user_output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'Chat provider saved.',
+			$matching_user_output
+		);
+		$this->assertSame( [], WordPressTestState::$transients );
 	}
 
 	public function test_sanitize_azure_reasoning_effort_accepts_xhigh(): void {

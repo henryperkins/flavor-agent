@@ -59,7 +59,7 @@ Minimal module (2 exports) that resolves activity entry targets to live editor b
 
 ## Shared UI Components
 
-Four shared components form a consistent UI contract across all recommendation surfaces. Every surface uses the same capability gating and status feedback pattern; executable surfaces share the same review-before-apply and advisory-only section components.
+Several shared components form the current recommendation-surface shell. `CapabilityNotice`, `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` carry the core capability/status/review contract; `SurfacePanelIntro`, `SurfaceScopeBar`, `SurfaceComposer`, `RecommendationHero`, `RecommendationLane`, and `AIActivitySection` provide the rest of the reusable full-panel framing. Use `docs/reference/recommendation-ui-consistency.md` when you need the exact per-surface composition rules and intentional exceptions.
 
 ### `src/components/CapabilityNotice.js`
 
@@ -79,11 +79,11 @@ Renders a contextual `<Notice>` with a configurable tone (`info`, `warning`, `er
 
 ### `src/components/AIAdvisorySection.js`
 
-Renders a styled section container for non-executable, advisory-only AI suggestions (e.g. structural recommendations, pattern replacement ideas). Displays a title, an optional advisory-status pill, a formatted count pill, optional description, optional meta slot, and a body slot for child content.
+Renders a styled section container for non-executable, advisory-only AI suggestions (e.g. structural recommendations, pattern replacement ideas). Displays a title, an optional advisory-status pill, a formatted count pill, optional description, optional meta slot, and a body slot for child content. This is now the standard advisory shell for the main block, template, template-part, Style Book, and Global Styles surfaces.
 
 **Props:** `title`, `advisoryLabel`, `count`, `countLabel`, `countNoun`, `description`, `meta`, `children`, `className`
 
-**Consumers:** Template, Template-Part, Navigation (3 surfaces)
+**Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book (5 surfaces)
 
 ### `src/components/AIReviewSection.js`
 
@@ -92,6 +92,31 @@ Renders a review-before-apply confirmation panel for executable AI operations. D
 **Props:** `title`, `statusLabel`, `count`, `countLabel`, `countNoun`, `summary`, `children`, `hint`, `confirmLabel`, `cancelLabel`, `onConfirm`, `onCancel`, `confirmDisabled`, `className`
 
 **Consumers:** Template, Template-Part, Global Styles, Style Book (4 surfaces)
+
+### `src/components/SurfacePanelIntro.js`, `SurfaceScopeBar.js`, and `SurfaceComposer.js`
+
+These components provide the reusable top-of-panel shell for the full recommendation surfaces.
+
+- `SurfacePanelIntro.js` renders the short surface-specific intro copy block.
+- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
+- `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling.
+
+**Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book (5 surfaces); the block style projection subpanel only reuses `SurfacePanelIntro` and `SurfaceScopeBar`
+
+### `src/components/RecommendationHero.js` and `RecommendationLane.js`
+
+These components provide the shared suggestion presentation layers used before review/apply or advisory follow-through:
+
+- `RecommendationHero.js` renders the featured next recommendation at the top of a fresh result set.
+- `RecommendationLane.js` renders grouped executable or lightweight embedded suggestions below the hero.
+
+**Consumers:** Block Inspector, Navigation, Template, Template-Part, Global Styles, Style Book (6 surfaces); the block style projection subpanel reuses `RecommendationLane` without the hero
+
+### `src/components/AIActivitySection.js`
+
+Renders the shared recent-actions list for executable surfaces, including ordered undo state, provider/runtime metadata, and inline undo availability.
+
+**Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book, admin-adjacent activity helpers (5 editor surfaces plus shared activity utilities)
 
 ## Context Helpers
 

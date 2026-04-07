@@ -27,6 +27,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Global Styles suggestions move `idle -> loading -> advisory-ready` when results arrive, then `preview-ready` only after the user explicitly opens review on an executable suggestion
 - Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
 - Global Styles and Style Book now share the same scope badges, prompt shell, featured recommendation hero, `Review first` / `Manual ideas` lanes, compact operation previews, and inline apply/undo notice placement inside the active review shell
+- These surfaces intentionally stay portal-first when the native Styles sidebar is available and only fall back to document panels when that sidebar mount point cannot be resolved
 
 ## End-To-End Flow
 

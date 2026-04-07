@@ -7,16 +7,16 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Primary surface: native block Inspector panel titled `AI Recommendations`
 - Injection point: `editor.BlockEdit` filter registered in `src/inspector/InspectorInjector.js`
 - Fallback surface: document settings panel titled `AI Recommendations` with the eyebrow `Last Selected Block` when the current selection clears but the last selected block still exists
-- Secondary surfaces after a successful request:
+- Secondary surfaces after a successful block request:
   - `SettingsRecommendations` in the default Inspector group
-  - `StylesRecommendations` in the `styles` group, with grouped section framing for block-level style rows and registered style variations
+  - `StylesRecommendations` in the `styles` group, as a projection-only view of the current block request's safe style results, with grouped section framing for block-level style rows and registered style variations
   - compact `SuggestionChips` injected into sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, filter, and background, with lightweight applied feedback rendered directly beside the matching chip group
 
 ## Surfacing Conditions
 
 - The selected block must exist and its editing mode must not be `disabled`
 - The main panel still renders when recommendations are unavailable, but fetch is disabled when `window.flavorAgentData.canRecommendBlocks` is false
-- Content-restricted blocks stay visible and show an informational notice; only content-safe suggestions are allowed
+- Content-restricted blocks stay visible and show an informational notice; executable suggestions are limited to content-safe attributes, broader block ideas may remain advisory-only, and style projections are suppressed
 - A selected `core/navigation` block adds the navigation guidance section inside the same panel
 
 ## Shared Interaction Model
@@ -25,9 +25,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
 - Fresh results now surface one featured next step before the grouped `Apply now` and `Manual ideas` lanes
+- Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract
 - Block recommendations are the only recommendation surface that now retains stale client-side results; stale results stay visible for reference, executable chips are demoted/disabled, and `SurfaceScopeBar` exposes an explicit `Refresh` action
 - The panel now states that inline apply is the exception for safe local block updates, while structural surfaces keep the same status/history framing but require preview first
-- Style suggestions preserve one-click apply in both the Styles tab and delegated native style sub-panels, but success feedback now sits next to the clicked row or chip group instead of relying only on a transient button flash
+- The embedded navigation section remains a subordinate exception: it keeps its own request state and `Recommended Next Changes` wrapper because it is nested inside block recommendations rather than acting as a peer surface
+- Style suggestions preserve one-click apply in both the Styles tab and delegated native style sub-panels, but the Styles tab remains projection-only and the actual request composer stays in the main block panel
 - `Recent AI Actions` and inline undo use the same shared activity treatment as the template and template-part surfaces
 
 ## End-To-End Flow
@@ -186,7 +188,7 @@ User selects block + prompt
 ## Guardrails And Failure Modes
 
 - Disabled blocks do not render the surface at all
-- Content-only editing mode limits suggestions to content-safe attributes
+- Content-only editing mode limits executable suggestions to content-safe attributes, though broader manual guidance can still remain visible
 - Visibility state in `attributes.metadata.blockVisibility` is respected during prompt building and post-parse enforcement
 - If no allowed attribute updates remain after validation, the suggestion is not applied
 - Undo is blocked if the block moved, disappeared, or changed after the AI apply

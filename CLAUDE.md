@@ -115,11 +115,12 @@ PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.
 | `utils/editor-entity-contracts.js`          | Dual-store entity resolution, post-type field definitions, and view contract hook                                             |
 | `utils/capability-flags.js`                 | Surface capability flag derivation from localized bootstrap data                                                              |
 | `utils/format-count.js`                     | Count formatting, humanization, and CSS class-name join micro-utilities                                                       |
-| `admin/sync-button.js`                      | Settings page: manual pattern index sync button                                                                               |
+| `admin/settings-page.js`                   | Settings-page admin entrypoint: styles + bootstraps the settings controller                                                   |
+| `admin/settings-page-controller.js`        | Settings page: sync panel interactions, live status updates, and accordion persistence                                        |
 | `admin/activity-log.js`                     | `Settings > AI Activity` DataViews/DataForm audit app                                                                         |
 | `admin/activity-log-utils.js`               | Activity-log formatting, filters, summary cards, and admin links                                                              |
 
-**Webpack** has three entry points: `src/index.js` (editor), `src/admin/sync-button.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page).
+**Webpack** has three entry points: `src/index.js` (editor), `src/admin/settings-page.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page).
 
 ## Key Integration Points
 

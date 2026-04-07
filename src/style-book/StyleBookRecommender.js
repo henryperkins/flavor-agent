@@ -1010,6 +1010,8 @@ export default function StyleBookRecommender() {
 		/>
 	);
 
+	// Use the native Styles sidebar when available and fall back to a
+	// document panel only when the sidebar mount point is unavailable.
 	if ( portalNode ) {
 		return createPortal( panel, portalNode );
 	}

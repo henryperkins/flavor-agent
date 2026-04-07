@@ -6,7 +6,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: inside the block `AI Recommendations` panel
 - Scope: only for selected `core/navigation` blocks
-- UI shape: advisory-only nested subsection with its own prompt and request state, a featured recommendation first, then grouped `Manual` category lanes and per-change detail rows
+- UI shape: advisory-only nested subsection with its own prompt and request state, framed as `Recommended Next Changes`, with a featured recommendation first and grouped shared-`Manual ideas` category lanes and per-change detail rows
 
 ## Surfacing Conditions
 
@@ -18,11 +18,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: prompt -> featured recommendation -> grouped manual lanes
+- Learned-once sequence: scope/freshness -> prompt -> status -> featured recommendation -> grouped manual lanes
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Navigation uses the same advisory/status shell as the executable surfaces but intentionally stops at `advisory-ready`
+- The subsection keeps `Recommended Next Changes` as its wrapper title because it is an embedded next-step flow inside block recommendations, but the actual advisory taxonomy uses the shared `Manual ideas` tone
 - The first returned suggestion is promoted as the recommended next navigation change; remaining ideas are grouped by category (`Structure`, `Overlay`, `Accessibility`)
 - There is no preview or apply path here; the user reviews the grouped changes and edits navigation manually
+- When the current navigation context drifts, the subsection keeps the previous result visible as stale reference material and exposes a refresh action instead of silently clearing it
 - Because navigation remains advisory-only through v1.0, it does not create activity entries and does not participate in inline undo (see `docs/features/activity-and-audit.md` for the activity contract)
 
 ## End-To-End Flow
@@ -49,7 +51,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Structural change groups are still advisory, but the backend now rejects any structural `changes[].targetPath` that does not map to the current menu inventory
 - It does not write activity entries and does not participate in inline undo
 - The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
-- The panel clears stale results when the selected block changes or when the navigation context signature changes; unlike block recommendations, it does not retain stale results or expose a refresh affordance
+- The panel clears results when the selected block changes to a different navigation scope, but when the same selected navigation block drifts in place it now preserves the previous result as stale reference material and exposes a refresh affordance
 - If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled
 
 ## Primary Functions And Handlers

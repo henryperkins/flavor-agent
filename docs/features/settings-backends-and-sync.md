@@ -45,9 +45,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Pattern Sync Flow
 
 1. The admin clicks the `Sync Pattern Catalog` button
-2. `src/admin/sync-button.js` posts to `POST /flavor-agent/v1/sync-patterns`
+2. `src/admin/settings-page-controller.js` posts to `POST /flavor-agent/v1/sync-patterns`
 3. `FlavorAgent\REST\Agent_Controller::handle_sync_patterns()` calls `FlavorAgent\Patterns\PatternIndex::sync()`
-4. The UI reports indexed, removed, and status counts inline on the settings page
+4. The settings-page controller updates the sync badge, summary, metrics, and inline notice from the returned runtime state without a full reload
 
 ## Primary Functions And Handlers
 
@@ -59,7 +59,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Backend status | `InfraAbilities::check_status()` | Returns backend inventory and currently available abilities |
 | Theme tokens | `InfraAbilities::get_theme_tokens()` | Exposes the current theme token snapshot through an ability |
 | Docs grounding | `WordPressDocsAbilities::search_wordpress_docs()` | Exposes trusted developer-doc grounding through an ability |
-| Manual sync UI | `src/admin/sync-button.js` | Calls the sync route and renders the result |
+| Manual sync UI | `src/admin/settings-page.js` + `src/admin/settings-page-controller.js` | Owns settings-page sync interactions, live status updates, and section-open persistence |
 | Pattern sync backend | `PatternIndex::sync()` | Rebuilds the vector-backed pattern catalog |
 
 ## Guardrails And Failure Modes
@@ -87,6 +87,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - `inc/Abilities/SurfaceCapabilities.php` — shared surface readiness checks; see `docs/reference/shared-internals.md`
 - `inc/Patterns/PatternIndex.php`
 - `inc/Cloudflare/AISearchClient.php`
-- `src/admin/sync-button.js`
+- `src/admin/settings-page.js`
+- `src/admin/settings-page-controller.js`
 - `src/utils/capability-flags.js` — client-side surface capability flag derivation; see `docs/reference/shared-internals.md`
 - `inc/REST/Agent_Controller.php`

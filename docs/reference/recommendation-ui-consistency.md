@@ -29,7 +29,7 @@ The most complete executable surfaces follow the same broad skeleton:
 7. review-before-apply section when required
 8. recent activity and undo
 
-That pattern is strongest in Style Book and Global Styles, mostly present in Template and Template-Part, now present in the main Block panel, and intentionally absent from the Pattern inserter affordance and the lightweight block style subpanel.
+That pattern is strongest in Style Book and Global Styles, mostly present in Template and Template-Part, now present in the main Block panel, and intentionally absent from the Pattern inserter affordance and the projection-only block style subpanel.
 
 ## Prompt-Layer Contract
 
@@ -47,33 +47,34 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 `StylesRecommendations.js` is a sub-surface inside the block inspector, so it is listed separately from the main block panel.
 
-| Surface                        | `RecommendationLane` | `RecommendationHero` | `AIReviewSection` | `AIActivitySection` | `SurfaceComposer` | `SurfacePanelIntro` | `SurfaceScopeBar` | `AIStatusNotice` | `CapabilityNotice` | Notes                                                                                |
-| ------------------------------ | -------------------- | -------------------- | ----------------- | ------------------- | ----------------- | ------------------- | ----------------- | ---------------- | ------------------ | ------------------------------------------------------------------------------------ |
-| Block inspector main panel     | Yes                  | Yes                  | No                | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | One-click apply plus stale-result hero and embedded navigation subsection            |
-| Block inspector style subpanel | Yes                  | No                   | No                | No                  | No                | Yes                 | No                | Yes              | No                 | Lightweight embedded style rows and variation buttons plus shared apply-error notice |
-| Pattern inserter affordance    | No                   | No                   | No                | No                  | No                | No                  | No                | No               | Yes                | Injected loading, empty, error, success, and setup notices only                      |
-| Template                       | Yes                  | Yes                  | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Also uses `AIAdvisorySection`                                                        |
-| Template-part                  | Yes                  | Yes                  | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Also uses `AIAdvisorySection`                                                        |
-| Style Book                     | Yes                  | Yes                  | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Most standardized panel flow                                                         |
-| Global Styles                  | Yes                  | Yes                  | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Mirrors Style Book almost exactly                                                    |
+| Surface                        | `RecommendationLane` | `RecommendationHero` | `AIAdvisorySection` | `AIReviewSection` | `AIActivitySection` | `SurfaceComposer` | `SurfacePanelIntro` | `SurfaceScopeBar` | `AIStatusNotice` | `CapabilityNotice` | Notes                                                                                |
+| ------------------------------ | -------------------- | -------------------- | ------------------- | ----------------- | ------------------- | ----------------- | ------------------- | ----------------- | ---------------- | ------------------ | ------------------------------------------------------------------------------------ |
+| Block inspector main panel     | Yes                  | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | One-click apply plus stale-result hero and embedded navigation subsection            |
+| Block inspector style subpanel | Yes                  | No                   | No                  | No                | No                  | No                | Yes                 | Yes (stale only)  | Yes              | No                 | Projection-only style rows and variation buttons plus shared apply-error notice      |
+| Pattern inserter affordance    | No                   | No                   | No                  | No                | No                  | No                | No                  | No                | No               | Yes                | Injected loading, empty, error, success, and setup notices only                      |
+| Template                       | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Preview-first structural surface                                                     |
+| Template-part                  | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Preview-first structural surface                                                     |
+| Style Book                     | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Portal-first Styles sidebar surface                                                  |
+| Global Styles                  | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Portal-first Styles sidebar surface                                                  |
 
 ## Executable And Advisory Lane Copy
 
 | Surface                        | Executable lane                                            | Advisory lane                           | Card or badge labels                                                                                  | Copy pattern                                           |
 | ------------------------------ | ---------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Block inspector main panel     | `Apply now` with tone `Apply now` or `Stale`               | `Manual ideas` with tone `Manual ideas` | Hero uses `Apply now` or `Manual ideas`                                                               | Clear direct-apply wording for local block attributes  |
+| Block inspector main panel     | `Apply now` with tone `Apply now` or `Stale`               | `Manual ideas` via `AIAdvisorySection`   | Hero uses `Apply now` or `Manual ideas`; advisory section now also shows `Advisory only`              | Clear direct-apply wording for local block attributes  |
 | Block inspector style subpanel | `Style Variations`, per-panel lanes, `Native Style Panels` | None                                    | Rows and delegated panel lane use `Apply now`                                                         | Direct apply beside native controls                    |
 | Pattern inserter               | None                                                       | None                                    | Summary and state notices use `Flavor Agent`, recommendation count pills, and retry text when needed  | Ranking affordance, not lane-based                     |
-| Template                       | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, and `Review open`; button uses `Review` / `Reviewing` | Preview-confirm flow with bounded advisory fallbacks   |
-| Template-part                  | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, and `Review open`; button uses `Review` / `Reviewing` | Best match for a true advisory-first structure surface |
-| Style Book                     | `Review first` with tone `Review first`                    | `Manual ideas` with tone `Manual ideas` | Card badges use `Review first`, `Manual ideas`, and `Review open`                                     | Cleanest standardized style-surface vocabulary         |
-| Global Styles                  | `Review first` with tone `Review first`                    | `Manual ideas` with tone `Manual ideas` | Card badges use `Review first`, `Manual ideas`, and `Review open`                                     | Mirrors Style Book vocabulary                          |
+| Template                       | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Preview-confirm flow with bounded advisory fallbacks   |
+| Template-part                  | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Best match for a true advisory-first structure surface |
+| Style Book                     | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card badges use `Review first`, `Manual ideas`, `Advisory only`, and `Review open`                    | Cleanest standardized style-surface vocabulary         |
+| Global Styles                  | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card badges use `Review first`, `Manual ideas`, `Advisory only`, and `Review open`                    | Mirrors Style Book vocabulary                          |
 
 ### Copy Inconsistencies
 
 - The main recommendation surfaces now share the same three user-facing labels: `Apply now`, `Review first`, and `Manual ideas`.
-- Template and Template-Part now share the same tone-pill treatment and inline entity linking in explanation and description copy, but they still render advisory lanes through `AIAdvisorySection` while Style Book and Global Styles use `RecommendationLane`.
-- Block styles remains a lightweight embedded surface and still skips the explicit executable/manual lane split used by the larger panels.
+- The advisory badge policy is now standardized through `AIAdvisorySection`; full-panel advisory surfaces all show `Advisory only` unless a future surface has a documented reason to suppress it.
+- Navigation keeps `Recommended Next Changes` as its wrapper title, but that is now a documented embedded-surface exception rather than a second advisory taxonomy.
+- Block styles remains a projection-only embedded surface and still skips the full executable/manual split used by the larger panels.
 
 ## Review-Before-Apply Contract
 
@@ -99,7 +100,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | Surface                        | Activity history | Undo model                                                                                        | Stale-result handling                                                                                                               |
 | ------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Block inspector main panel     | Yes              | Shared latest-valid tail undo; block snapshot must still match                                    | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
-| Block inspector style subpanel | No               | No surface-level undo                                                                             | No scope bar or stale hero, but stale execution is blocked by the shared store-level freshness guard and surfaced as an apply error |
+| Block inspector style subpanel | No               | No surface-level undo                                                                             | Keeps stale results visible inside the projection surface, shows a stale scope bar, disables direct apply, and swaps row CTA copy to refresh-only |
 | Pattern inserter               | No               | No Flavor Agent undo                                                                              | No stale UI                                                                                                                         |
 | Template                       | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
 | Template-part                  | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
@@ -113,7 +114,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 ### Consistency Gaps
 
 - Block, Template, Template-Part, Style Book, and Global Styles now share the same stale-result model: preserve the previous result, mark it stale, disable execution, and offer refresh.
-- Block styles now shares the same store-level stale-apply guard as the other executable surfaces, even though it still omits scope freshness UI and activity history.
+- Block styles now shares the same stale-result preservation model as the other executable surfaces, but it still omits its own composer and activity history because it is projection-only.
 - Pattern still exposes no activity or undo affordance, which keeps it separate from the fuller recommendation surfaces even though its loading, empty, error, and success states are now explicit.
 
 ## Prompting And Composer Gaps
@@ -121,18 +122,26 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 | Surface                        | Starter prompts | Secondary helper text           | Submit hint | Scope bar |
 | ------------------------------ | --------------- | ------------------------------- | ----------- | --------- |
 | Block inspector main panel     | Yes             | Yes                             | Yes         | Yes       |
-| Block inspector style subpanel | No              | Intro only                      | No          | No        |
+| Block inspector style subpanel | No              | Intro only                      | No          | Yes (stale only) |
 | Pattern inserter               | No              | No                              | No          | No        |
 | Template                       | Yes             | Yes                             | Yes         | Yes       |
 | Template-part                  | Yes             | Yes                             | Yes         | Yes       |
-| Style Book                     | Yes             | Yes when no matching result yet | No          | Yes       |
-| Global Styles                  | Yes             | Yes when no matching result yet | No          | Yes       |
+| Style Book                     | Yes             | Yes when no matching result yet | Yes         | Yes       |
+| Global Styles                  | Yes             | Yes when no matching result yet | Yes         | Yes       |
 
-### Main UX Gaps
+### Intentional Loading Differences
 
-- Pattern remains a useful but much thinner AI surface. It now exposes explicit loading, empty, error, and success states, but it still behaves like ranking assistance rather than a full recommendation workflow.
-- Block styles is intentionally lightweight, but it means the block surface is split across two different interaction models.
-- The main Block panel now shares the full shell framing, but it still differs intentionally by keeping one-click apply and rendering navigation guidance as a subordinate embedded section.
+- Template and Template-Part keep explicit `Analyzing … structure…` notices because the user is waiting on structural validation that may or may not yield executable operations.
+- Block, Style Book, and Global Styles rely on the composer button's loading label while the rest of the surface shell stays visible, which is acceptable because those panels keep the active scope and lane context on screen during the request.
+- Pattern remains a thin ranking surface and uses inserter-local loading, empty, error, and success notices rather than the shared panel status shell.
+
+### Resolved Product-Model Decisions
+
+- Block advisory suggestions now use `AIAdvisorySection`. The block panel remains a direct-apply exception only for executable local block updates.
+- Navigation keeps `Recommended Next Changes` as an embedded wrapper title, but the actual advisory taxonomy is the shared `Manual ideas` tone. Treat this as an intentional nested-surface exception, not drift.
+- The Styles tab remains projection-only. It mirrors safe style results from the main block request and intentionally does not own its own composer, idle state, capability notice, or activity history.
+- Pattern recommendations remain ranking/browse-only and intentionally stay outside the lane/review/apply/undo contract.
+- Style Book and Global Styles remain portal-first Styles-sidebar surfaces with document-panel fallback; some mount-context divergence from inspector/document panels is expected and acceptable.
 
 ## Recommended Normalization Pass
 

@@ -449,9 +449,7 @@ function GlobalStylesPanel( {
 					onConfirm={ onApply }
 					onCancel={ onCancelReview }
 					confirmDisabled={ isApplying || isStale }
-					confirmLabel={
-						isApplying ? 'Applying…' : 'Confirm Apply'
-					}
+					confirmLabel={ isApplying ? 'Applying…' : 'Confirm Apply' }
 					className="flavor-agent-style-review"
 					hint={ reviewHint }
 				>
@@ -952,6 +950,8 @@ export default function GlobalStylesRecommender() {
 		/>
 	);
 
+	// Use the native Styles sidebar when available and fall back to a
+	// document panel only when the sidebar mount point is unavailable.
 	if ( portalNode ) {
 		return createPortal( panel, portalNode );
 	}

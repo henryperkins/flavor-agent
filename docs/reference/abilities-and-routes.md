@@ -56,7 +56,7 @@ Use it when you need to answer:
 | `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` for scoped reads; `ActivityRepository::query_admin()` for global admin reads | Scoped queries power editor/theme history; global admin reads return pagination, summary, and filter-option metadata for the audit page |
 | `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
-| `POST /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/sync-button.js` | `PatternIndex::sync()` | Manual admin-only pattern catalog rebuild |
+| `POST /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/settings-page-controller.js` | `PatternIndex::sync()` | Manual admin-only pattern catalog rebuild with live settings-panel state refresh |
 
 ## Example Contracts
 
