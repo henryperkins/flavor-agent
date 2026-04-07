@@ -134,6 +134,35 @@ describe( 'AIAdvisorySection', () => {
 		expect( getContainer().textContent ).not.toContain( 'Show' );
 	} );
 
+	test( 'flattens nested arrays and fragments while preserving numeric children for overflow counts', () => {
+		act( () => {
+			getRoot().render(
+				<AIAdvisorySection
+					title="Many items"
+					count={ 4 }
+					countNoun="item"
+					initialOpen
+					maxVisible={ 2 }
+				>
+					<>
+						<div>Item 1</div>
+						{ [ 0, <div key="two">Item 2</div>, false, null ] }
+						<>
+							<div>Item 3</div>
+						</>
+					</>
+				</AIAdvisorySection>
+			);
+		} );
+
+		const text = getContainer().textContent;
+		expect( text ).toContain( 'Item 1' );
+		expect( text ).toContain( '0' );
+		expect( text ).not.toContain( 'Item 2' );
+		expect( text ).not.toContain( 'Item 3' );
+		expect( text ).toContain( 'Show 2 more' );
+	} );
+
 	test( 'resets overflow back to collapsed when a new advisory result set is rendered', () => {
 		const items = Array.from( { length: 8 }, ( _, i ) => (
 			<div key={ `first-${ i }` }>First { i + 1 }</div>

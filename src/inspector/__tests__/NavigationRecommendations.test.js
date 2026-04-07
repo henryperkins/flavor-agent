@@ -76,6 +76,11 @@ function createSelectors() {
 					? getState().store.navigationStatus
 					: 'idle'
 			),
+			getNavigationRequestPrompt: jest.fn( ( clientId ) =>
+				getState().store.navigationBlockClientId === clientId
+					? getState().store.navigationRequestPrompt || ''
+					: ''
+			),
 			getNavigationBlockClientId: jest.fn(
 				() => getState().store.navigationBlockClientId
 			),
@@ -138,6 +143,7 @@ beforeEach( () => {
 			navigationExplanation: '',
 			navigationError: null,
 			navigationStatus: 'idle',
+			navigationRequestPrompt: '',
 			navigationContextSignature: null,
 		},
 	};
@@ -172,6 +178,7 @@ beforeEach( () => {
 			navigationExplanation: '',
 			navigationError: null,
 			navigationStatus: 'idle',
+			navigationRequestPrompt: '',
 			navigationContextSignature: null,
 		};
 	} );
@@ -331,7 +338,7 @@ describe( 'NavigationRecommendations', () => {
 		);
 	} );
 
-	test( 'does not render stale navigation results when the stored context signature mismatches', () => {
+	test( 'keeps stale navigation results visible and refreshable when the stored context signature mismatches', () => {
 		currentState.blockEditor.blocks = {
 			'nav-1': {
 				clientId: 'nav-1',
@@ -348,14 +355,34 @@ describe( 'NavigationRecommendations', () => {
 			navigationExplanation: 'Existing guidance.',
 			navigationError: null,
 			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the footer navigation.',
 			navigationContextSignature: 'stale-signature',
 		};
 		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
 
 		renderComponent();
 
-		expect( getContainer().textContent ).not.toContain(
-			'Group utility links'
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
+		expect( getContainer().textContent ).toContain(
+			'These ideas are shown for reference from the last request. Refresh before using them to change the current navigation block.'
+		);
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Refresh' );
+
+		act( () => {
+			refreshButton.click();
+		} );
+
+		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				blockClientId: 'nav-1',
+				menuId: 42,
+				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
+				prompt: 'Simplify the footer navigation.',
+				contextSignature: expect.any( String ),
+			} )
 		);
 	} );
 
@@ -386,7 +413,7 @@ describe( 'NavigationRecommendations', () => {
 		expect( getContainer().textContent ).toContain( 'Menu ID 42' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
-			'Context has changed since the last request.'
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
 		);
 	} );
 
@@ -417,11 +444,13 @@ describe( 'NavigationRecommendations', () => {
 		expect( getContainer().textContent ).toContain( 'Menu ID 42' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
-			'Context has changed since the last request.'
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
 		);
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
 		expect( getContainer().textContent ).not.toContain(
 			'Navigation Recommendations'
 		);
+		expect( getContainer().textContent ).toContain( 'Refresh' );
 	} );
 
 	test( 'shows the navigation intro copy on first render', () => {
@@ -568,8 +597,9 @@ describe( 'NavigationRecommendations', () => {
 		expect( getContainer().textContent ).toContain( 'Navigation Block' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
-			'Context has changed since the last request.'
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
 		);
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
 	} );
 
 	test( 'buildNavigationFetchInput includes a trimmed prompt when present', () => {

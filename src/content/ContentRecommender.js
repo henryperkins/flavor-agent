@@ -10,22 +10,63 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
-import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
 const SUPPORTED_POST_TYPES = new Set( [ 'post', 'page' ] );
 const CONTENT_MODES = [ 'draft', 'edit', 'critique' ];
+const CONTENT_MODE_CONFIG = {
+	draft: {
+		label: 'Draft',
+		title: 'Start a fresh draft',
+		placeholder: 'Describe the angle, audience, or structure you want.',
+		helperText: 'Works from a title, short brief, or rough outline.',
+		fetchLabel: 'Generate Draft',
+		starterPrompts: [
+			'Draft an opening that gets to the point faster.',
+			'Sketch a sharper structure for this piece.',
+			'Write a cleaner closing section.',
+		],
+	},
+	edit: {
+		label: 'Edit',
+		title: 'Refine what is already here',
+		placeholder: 'Describe the revision pass you want.',
+		helperText: 'Best when this post already has copy you want to tighten.',
+		fetchLabel: 'Revise Draft',
+		starterPrompts: [
+			'Tighten the pacing and transitions.',
+			'Cut repetition and sharpen the voice.',
+			'Make each section pull its weight.',
+		],
+	},
+	critique: {
+		label: 'Critique',
+		title: 'Stress-test the draft',
+		placeholder: 'Describe the critique you want.',
+		helperText: 'Flags weak lines, clarity gaps, and structural drift.',
+		fetchLabel: 'Run Critique',
+		starterPrompts: [
+			'Point out the weakest lines and why they miss.',
+			'Critique the structure for drift or repetition.',
+			'Flag anything that sounds vague or generic.',
+		],
+	},
+};
+
+function getContentModeConfig( mode = 'draft' ) {
+	return CONTENT_MODE_CONFIG[ mode ] || CONTENT_MODE_CONFIG.draft;
+}
 
 function formatModeLabel( mode = '' ) {
-	switch ( mode ) {
-		case 'edit':
-			return 'Edit';
-		case 'critique':
-			return 'Critique';
-		default:
-			return 'Draft';
-	}
+	return getContentModeConfig( mode ).label;
+}
+
+function formatContextLabel( value = '' ) {
+	return String( value )
+		.trim()
+		.replace( /[_-]+/g, ' ' )
+		.replace( /\b\w/g, ( character ) => character.toUpperCase() );
 }
 
 function hasRecommendationOutput( recommendation ) {
@@ -130,6 +171,15 @@ export default function ContentRecommender() {
 	const hasResult =
 		contentStatus === 'ready' && Boolean( contentRecommendation );
 	const hasOutput = hasResult && hasRecommendationOutput( contentRecommendation );
+	const activeMode = getContentModeConfig( contentMode );
+	const documentTypeLabel =
+		formatContextLabel( postContext.postType ) || 'Post';
+	const documentStatusLabel = formatContextLabel( postContext.status );
+	const documentNoun = documentTypeLabel.toLowerCase();
+	const hasDocumentTitle = Boolean( postContext.title.trim() );
+	const documentTitle = hasDocumentTitle
+		? postContext.title.trim()
+		: `Untitled ${ documentNoun }`;
 	const statusNotice = useSelect(
 		( select ) =>
 			select( STORE_NAME ).getSurfaceStatusNotice( 'content', {
@@ -172,114 +222,127 @@ export default function ContentRecommender() {
 			name="flavor-agent-content-recommender"
 			title="Content Recommendations"
 		>
-			<SurfacePanelIntro
-				eyebrow="Content Recommendations"
-				introCopy="Draft, edit, or critique the current post without leaving the editor. Flavor Agent records each request in the scoped activity history, including failed attempts."
-				meta={
-					<span className="flavor-agent-pill">
-						{ postContext.postType }
-					</span>
-				}
-			/>
-
-			{ ! canRecommend && <CapabilityNotice surface="content" /> }
-
-			{ canRecommend && (
-				<>
-					<SurfaceScopeBar
-						scopeLabel="Current document"
-						scopeValue={ postContext.title || `#${ postContext.postId }` }
-						meta={ formatModeLabel( contentMode ) }
-					/>
-					<div className="flavor-agent-panel__group flavor-agent-panel__group-body">
-						<ButtonGroup className="flavor-agent-panel__composer-starters">
-							{ CONTENT_MODES.map( ( mode ) => (
-								<Button
-									key={ mode }
-									variant={
-										mode === contentMode ? 'primary' : 'secondary'
-									}
-									onClick={ () => setContentMode( mode ) }
-								>
-									{ formatModeLabel( mode ) }
-								</Button>
-							) ) }
-						</ButtonGroup>
+			<div className="flavor-agent-panel flavor-agent-content-recommender">
+				<SurfacePanelIntro
+					eyebrow={ documentTypeLabel }
+					introCopy="Draft from a brief, tighten the current copy, or run a critique without leaving the editor."
+					meta={
+						documentStatusLabel ? (
+							<span className="flavor-agent-pill flavor-agent-pill--hero">
+								{ documentStatusLabel }
+							</span>
+						) : null
+					}
+				>
+					<div
+						className={ `flavor-agent-content-recommender__document-title${
+							hasDocumentTitle ? '' : ' is-untitled'
+						}` }
+					>
+						{ documentTitle }
 					</div>
-					<SurfaceComposer
-						prompt={ prompt }
-						onPromptChange={ setPrompt }
-						label="What should Flavor Agent do with this post?"
-						placeholder="Ask for a new draft, a tighter edit, or a critique of the current content."
-						helperText="Draft can work from a title or brief. Edit and critique work best when the current post content already has material to work from."
-						rows={ 4 }
-						onFetch={ handleFetch }
-						fetchLabel={ `${ formatModeLabel( contentMode ) } Content` }
-						loadingLabel="Requesting content…"
-						isLoading={ contentStatus === 'loading' }
-						starterPrompts={ [
-							'Draft an opening that gets to the point faster.',
-							'Edit this post for tighter rhythm and cleaner transitions.',
-							'Critique the current draft and flag any lines that drift.',
-						] }
-					/>
-					<AIStatusNotice
-						notice={ statusNotice }
-						onDismiss={ clearContentError }
-					/>
+				</SurfacePanelIntro>
 
-					{ hasResult && (
-						<RecommendationHero
-							eyebrow="Latest Content Recommendation"
-							title={
-								contentRecommendation?.title ||
-								`${ formatModeLabel(
+				{ ! canRecommend && <CapabilityNotice surface="content" /> }
+
+				{ canRecommend && (
+					<>
+						<SurfaceComposer
+							title={ activeMode.title }
+							meta={
+								<ButtonGroup
+									className="flavor-agent-content-recommender__modes"
+									aria-label="Content mode"
+								>
+									{ CONTENT_MODES.map( ( mode ) => (
+										<Button
+											key={ mode }
+											variant="secondary"
+											size="small"
+											aria-pressed={ mode === contentMode }
+											className={ `flavor-agent-content-recommender__mode-button${
+												mode === contentMode ? ' is-active' : ''
+											}` }
+											onClick={ () => setContentMode( mode ) }
+										>
+											{ formatModeLabel( mode ) }
+										</Button>
+									) ) }
+								</ButtonGroup>
+							}
+							prompt={ prompt }
+							onPromptChange={ setPrompt }
+							label={ `What should Flavor Agent do with this ${ documentNoun }?` }
+							hideLabelFromVision
+							placeholder={ activeMode.placeholder }
+							helperText={ activeMode.helperText }
+							rows={ 4 }
+							onFetch={ handleFetch }
+							fetchLabel={ activeMode.fetchLabel }
+							loadingLabel="Requesting content…"
+							isLoading={ contentStatus === 'loading' }
+							className="flavor-agent-content-recommender__composer"
+							starterPromptsLayout="stacked"
+							starterPrompts={ activeMode.starterPrompts }
+						/>
+						<AIStatusNotice
+							notice={ statusNotice }
+							onDismiss={ clearContentError }
+						/>
+
+						{ hasResult && (
+							<RecommendationHero
+								eyebrow="Latest Content Recommendation"
+								title={
+									contentRecommendation?.title ||
+									`${ formatModeLabel(
+										contentRecommendation?.mode || contentMode
+									) } result`
+								}
+								description={ contentRecommendation?.summary || '' }
+								tone={ formatModeLabel(
 									contentRecommendation?.mode || contentMode
-								) } result`
-							}
-							description={ contentRecommendation?.summary || '' }
-							tone={ formatModeLabel(
-								contentRecommendation?.mode || contentMode
-							) }
-						>
-							<ContentBody content={ contentRecommendation?.content || '' } />
-						</RecommendationHero>
-					)}
+								) }
+							>
+								<ContentBody content={ contentRecommendation?.content || '' } />
+							</RecommendationHero>
+						)}
 
-					{ ( Array.isArray( contentRecommendation?.notes ) &&
-						contentRecommendation.notes.length > 0 ) ||
-					( Array.isArray( contentRecommendation?.issues ) &&
-						contentRecommendation.issues.length > 0 ) ? (
-						<AIAdvisorySection
-							title="Editorial Notes"
-							advisoryLabel="Review"
-							count={
-								( contentRecommendation?.notes || [] ).length +
-								( contentRecommendation?.issues || [] ).length
-							}
-							countNoun="note"
-							initialOpen={ true }
-						>
-							{ ( contentRecommendation?.notes || [] ).map( ( note, index ) => (
-								<div className="flavor-agent-card" key={ `note-${ index }` }>
-									<p className="flavor-agent-card__description">{ note }</p>
-								</div>
-							) ) }
-							{ ( contentRecommendation?.issues || [] ).map( ( issue, index ) => (
-								<ContentIssueCard key={ `issue-${ index }` } issue={ issue } />
-							) ) }
-						</AIAdvisorySection>
-					) : null }
+						{ ( Array.isArray( contentRecommendation?.notes ) &&
+							contentRecommendation.notes.length > 0 ) ||
+						( Array.isArray( contentRecommendation?.issues ) &&
+							contentRecommendation.issues.length > 0 ) ? (
+							<AIAdvisorySection
+								title="Editorial Notes"
+								advisoryLabel="Review"
+								count={
+									( contentRecommendation?.notes || [] ).length +
+									( contentRecommendation?.issues || [] ).length
+								}
+								countNoun="note"
+								initialOpen={ true }
+							>
+								{ ( contentRecommendation?.notes || [] ).map( ( note, index ) => (
+									<div className="flavor-agent-card" key={ `note-${ index }` }>
+										<p className="flavor-agent-card__description">{ note }</p>
+									</div>
+								) ) }
+								{ ( contentRecommendation?.issues || [] ).map( ( issue, index ) => (
+									<ContentIssueCard key={ `issue-${ index }` } issue={ issue } />
+								) ) }
+							</AIAdvisorySection>
+						) : null }
 
-					<AIActivitySection
-						title="Recent Content Requests"
-						description="Flavor Agent keeps request-only history for this document, including failed requests that still need attention."
-						entries={ activityEntries }
-						initialOpen={ false }
-						maxVisible={ 4 }
-					/>
-				</>
-			) }
+						<AIActivitySection
+							title="Recent Content Requests"
+							description={ `Flavor Agent keeps request history for this ${ documentNoun }, including failed attempts.` }
+							entries={ activityEntries }
+							initialOpen={ false }
+							maxVisible={ 4 }
+						/>
+					</>
+				) }
+			</div>
 		</PluginDocumentSettingPanel>
 	);
 }

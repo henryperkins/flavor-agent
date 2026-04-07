@@ -22,6 +22,7 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import {
 	APPLY_NOW_LABEL,
 	REFRESH_ACTION_LABEL,
+	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import groupByPanel from './group-by-panel';
 import {
@@ -152,7 +153,7 @@ export default function StylesRecommendations({
 				{variationSuggestions.length > 0 && (
 					<RecommendationLane
 						title="Style Variations"
-						tone={isStale ? 'Stale' : APPLY_NOW_LABEL}
+						tone={isStale ? STALE_STATUS_LABEL : APPLY_NOW_LABEL}
 						count={variationSuggestions.length}
 						countNoun="variation"
 						description={
@@ -205,7 +206,7 @@ export default function StylesRecommendations({
 					<RecommendationLane
 						key={panel}
 						title={panelLabel(panel)}
-						tone={isStale ? 'Stale' : APPLY_NOW_LABEL}
+						tone={isStale ? STALE_STATUS_LABEL : APPLY_NOW_LABEL}
 						count={items.length}
 						countNoun="suggestion"
 						description={
@@ -223,6 +224,7 @@ export default function StylesRecommendations({
 									onApply={() => void handleApply(s, key)}
 									applied={appliedKey === key}
 									disabled={isStale}
+									isStale={isStale}
 								/>
 							);
 						})}
@@ -232,7 +234,7 @@ export default function StylesRecommendations({
 				{delegatedSuggestions.length > 0 && (
 					<RecommendationLane
 						title="Native Style Panels"
-						tone={isStale ? 'Stale' : APPLY_NOW_LABEL}
+						tone={isStale ? STALE_STATUS_LABEL : APPLY_NOW_LABEL}
 						count={delegatedPanelTitles.length}
 						countNoun="panel"
 						description={
@@ -259,7 +261,13 @@ export default function StylesRecommendations({
 	);
 }
 
-function StyleSuggestionRow({ suggestion, onApply, applied, disabled = false }) {
+function StyleSuggestionRow({
+	suggestion,
+	onApply,
+	applied,
+	disabled = false,
+	isStale = false,
+}) {
 	const { label, description, preview, cssVar, confidence } = suggestion;
 	const previewLabel = preview && !isColor(preview) ? preview : '';
 	const confidenceLabel =
@@ -290,8 +298,12 @@ function StyleSuggestionRow({ suggestion, onApply, applied, disabled = false }) 
 					<div className="flavor-agent-style-row__header">
 						<div className="flavor-agent-style-row__label">{label}</div>
 						<div className="flavor-agent-style-card__badges">
-							<span className="flavor-agent-pill">
-								{ APPLY_NOW_LABEL }
+							<span
+								className={`flavor-agent-pill${
+									isStale ? ' flavor-agent-pill--stale' : ''
+								}`}
+							>
+								{isStale ? STALE_STATUS_LABEL : APPLY_NOW_LABEL}
 							</span>
 							{confidenceLabel && (
 								<span className="flavor-agent-pill">{confidenceLabel}</span>
@@ -313,17 +325,23 @@ function StyleSuggestionRow({ suggestion, onApply, applied, disabled = false }) 
 					)}
 				</div>
 
-				<Button
-					variant="tertiary"
-					size="small"
-					onClick={disabled ? undefined : onApply}
-					icon={applied ? check : arrowRight}
-					label={applied ? 'Applied' : 'Apply'}
-					className={`flavor-agent-card__apply${
-						applied ? ' flavor-agent-card__apply--applied' : ''
-					} flavor-agent-style-row__apply`}
-					disabled={applied || disabled}
-				/>
+				{isStale ? (
+					<span className="flavor-agent-pill flavor-agent-pill--stale flavor-agent-style-row__apply">
+						Refresh first
+					</span>
+				) : (
+					<Button
+						variant="tertiary"
+						size="small"
+						onClick={disabled ? undefined : onApply}
+						icon={applied ? check : arrowRight}
+						label={applied ? 'Applied' : 'Apply'}
+						className={`flavor-agent-card__apply${
+							applied ? ' flavor-agent-card__apply--applied' : ''
+						} flavor-agent-style-row__apply`}
+						disabled={applied || disabled}
+					/>
+				)}
 			</div>
 
 			{applied && <InlineActionFeedback message={`${label}.`} />}

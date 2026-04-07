@@ -761,6 +761,25 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		);
 	});
 
+	test('clarifies that content-restricted blocks can still surface manual guidance', () => {
+		currentState = createState({
+			blockEditor: {
+				editingModes: {
+					'block-1': 'contentOnly',
+				},
+			},
+		});
+
+		renderContent();
+
+		expect(getContainer().textContent).toContain(
+			'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.'
+		);
+		expect(getContainer().textContent).not.toContain(
+			'Only content edits are available.'
+		);
+	});
+
 	test('renders embedded navigation after the block lanes when navigation guidance is present', () => {
 		mockShouldRenderNavigationRecommendations = true;
 		currentState = createState({

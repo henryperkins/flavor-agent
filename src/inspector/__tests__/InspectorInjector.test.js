@@ -45,7 +45,9 @@ jest.mock( '../SettingsRecommendations', () => ( props ) => (
 ) );
 
 jest.mock( '../StylesRecommendations', () => ( props ) => (
-	<div>{ `Styles ${ props.suggestions.length }${ props.isStale ? ' stale' : '' }` }</div>
+	<div>{ `Styles ${ props.suggestions.length }${
+		props.isStale ? ' stale' : ''
+	}` }</div>
 ) );
 
 jest.mock( '../SuggestionChips', () => ( props ) => (
@@ -82,6 +84,8 @@ beforeEach( () => {
 	currentState = {
 		blockEditor: {
 			editingMode: 'default',
+			parentIds: [],
+			editingModes: {},
 		},
 		store: {
 			blockRecommendations: {
@@ -104,8 +108,10 @@ beforeEach( () => {
 		mapSelect( ( storeName ) => {
 			if ( storeName === 'core/block-editor' ) {
 				return {
-					getBlockEditingMode: () =>
+					getBlockEditingMode: ( clientId ) =>
+						getState().blockEditor.editingModes?.[ clientId ] ??
 						getState().blockEditor.editingMode,
+					getBlockParents: () => getState().blockEditor.parentIds,
 				};
 			}
 
@@ -173,5 +179,24 @@ describe( 'InspectorInjector', () => {
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).not.toContain( 'Settings 1' );
 		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
+	} );
+
+	test( 'does not mount styles recommendations when the block is inside a contentOnly parent', () => {
+		currentState = {
+			...getState(),
+			blockEditor: {
+				...getState().blockEditor,
+				parentIds: [ 'parent-1' ],
+				editingModes: {
+					'parent-1': 'contentOnly',
+				},
+			},
+		};
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Block Panel' );
+		expect( getContainer().textContent ).toContain( 'Settings 1' );
+		expect( getContainer().textContent ).not.toContain( 'Styles 1' );
 	} );
 } );

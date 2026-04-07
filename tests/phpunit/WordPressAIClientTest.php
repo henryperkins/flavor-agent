@@ -84,6 +84,21 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 	}
 
+	public function test_chat_applies_reasoning_effort_when_the_prompt_builder_supports_it(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			null,
+			'high'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+	}
+
 	public function test_chat_records_token_and_latency_metrics_when_the_ai_client_returns_structured_metadata(): void {
 		WordPressTestState::$ai_client_supported = true;
 		WordPressTestState::$ai_client_generate_text_result = [

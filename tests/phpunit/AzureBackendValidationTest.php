@@ -133,7 +133,33 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 'system prompt', $request_body['instructions'] ?? null );
 		$this->assertSame( 'user prompt', $request_body['input'] ?? null );
 		$this->assertSame( 'medium', $request_body['reasoning']['effort'] ?? null );
-		$this->assertSame( 90, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
+		$this->assertSame( 180, WordPressTestState::$last_remote_post['args']['timeout'] ?? null );
+	}
+
+	public function test_rank_uses_configured_azure_reasoning_effort(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+			'flavor_agent_azure_reasoning_effort' => 'xhigh',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => 'ranked output',
+				]
+			),
+		];
+
+		$result = ResponsesClient::rank( 'system prompt', 'user prompt' );
+
+		$this->assertSame( 'ranked output', $result );
+		$request_body = json_decode( (string) WordPressTestState::$last_remote_post['args']['body'], true );
+		$this->assertIsArray( $request_body );
+		$this->assertSame( 'xhigh', $request_body['reasoning']['effort'] ?? null );
 	}
 
 	public function test_rank_records_usage_metrics_for_direct_responses_calls(): void {
@@ -281,11 +307,44 @@ final class AzureBackendValidationTest extends TestCase {
 
 		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
 
-		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
 
 		$this->assertSame( 'connector ranked output', $result );
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_rank_uses_saved_reasoning_effort_for_selected_connector_providers(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_openai_provider'         => 'anthropic',
+			'flavor_agent_azure_reasoning_effort' => 'xhigh',
+		];
+
+		WordPressTestState::$connectors = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+
+		WordPressTestState::$ai_client_generate_text_result = 'connector ranked output';
+
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt' );
+
+		$this->assertSame( 'connector ranked output', $result );
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( 'xhigh', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
@@ -521,6 +580,21 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_rank_uses_saved_reasoning_effort_for_wordpress_ai_client_fallback(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_reasoning_effort' => 'high',
+		];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = 'WordPress AI client fallback output';
+
+		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+
+		$this->assertSame( 'WordPress AI client fallback output', $result );
+		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_openai_native_rank_falls_back_to_openai_env_var(): void {
 		putenv( 'OPENAI_API_KEY=env-native-key' );
 
@@ -568,7 +642,7 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'http_request_failed', $result->get_error_code() );
 		$this->assertStringContainsString(
-			'Azure OpenAI responses request timed out after 90 seconds while contacting example.openai.azure.com.',
+			'Azure OpenAI responses request timed out after 180 seconds while contacting example.openai.azure.com.',
 			$result->get_error_message()
 		);
 	}

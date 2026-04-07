@@ -41,6 +41,8 @@ const BLOCK_COMPOSER_HELPER_TEXT =
 	'Flavor Agent keeps one-click apply limited to safe local block attribute changes.';
 const CONTENT_ONLY_COMPOSER_HELPER_TEXT =
 	'Flavor Agent will stay within editable content for this block and avoid style or settings changes.';
+const CONTENT_ONLY_NOTICE_TEXT =
+	'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.';
 const DEFAULT_BLOCK_STARTER_PROMPTS = [
 	'Improve clarity and spacing',
 	'Make this feel more editorial',
@@ -498,7 +500,7 @@ export function BlockRecommendationsContent({
 					isDismissible={false}
 					className="flavor-agent-content-notice"
 				>
-					This block is content-restricted. Only content edits are available.
+					{CONTENT_ONLY_NOTICE_TEXT}
 				</Notice>
 			)}
 

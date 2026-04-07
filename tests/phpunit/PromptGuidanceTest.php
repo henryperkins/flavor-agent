@@ -325,4 +325,39 @@ final class PromptGuidanceTest extends TestCase {
 			$prompt
 		);
 	}
+
+	public function test_block_prompt_limits_large_theme_token_collections_to_sixty_items(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'       => [
+					'name' => 'core/group',
+				],
+				'themeTokens' => [
+					'colors'    => $this->buildTokenSequence( 'color', 65 ),
+					'fontSizes' => $this->buildTokenSequence( 'font-size', 65 ),
+					'spacing'   => $this->buildTokenSequence( 'spacing', 65 ),
+					'shadows'   => $this->buildTokenSequence( 'shadow', 65 ),
+				],
+			]
+		);
+
+		$this->assertStringContainsString( 'color-59', $prompt );
+		$this->assertStringNotContainsString( 'color-60', $prompt );
+		$this->assertStringContainsString( 'font-size-59', $prompt );
+		$this->assertStringNotContainsString( 'font-size-60', $prompt );
+		$this->assertStringContainsString( 'spacing-59', $prompt );
+		$this->assertStringNotContainsString( 'spacing-60', $prompt );
+		$this->assertStringContainsString( 'shadow-59', $prompt );
+		$this->assertStringNotContainsString( 'shadow-60', $prompt );
+	}
+
+	private function buildTokenSequence( string $prefix, int $count ): array {
+		$tokens = [];
+
+		for ( $index = 0; $index < $count; $index++ ) {
+			$tokens[] = sprintf( '%s-%02d', $prefix, $index );
+		}
+
+		return $tokens;
+	}
 }

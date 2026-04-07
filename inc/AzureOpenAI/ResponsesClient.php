@@ -9,8 +9,8 @@ use FlavorAgent\OpenAI\Provider;
 
 final class ResponsesClient extends BaseHttpClient {
 
-	private const REASONING_EFFORT = 'medium';
-	private const REQUEST_TIMEOUT  = 90;
+	private const DEFAULT_REASONING_EFFORT = 'medium';
+	private const REQUEST_TIMEOUT          = 180;
 
 	public static function validate_configuration(
 		?string $endpoint = null,
@@ -56,7 +56,7 @@ final class ResponsesClient extends BaseHttpClient {
 			[
 				'input'             => 'validation',
 				'max_output_tokens' => 16,
-				'reasoning'         => self::reasoning_options(),
+				'reasoning'         => self::reasoning_options( null, $provider ),
 			],
 			'responses_validation_error',
 			$config['label'],
@@ -69,16 +69,19 @@ final class ResponsesClient extends BaseHttpClient {
 	 *
 	 * @return string|\WP_Error The assistant's text response.
 	 */
-	public static function rank( string $instructions, string $input ): string|\WP_Error {
+	public static function rank( string $instructions, string $input, ?string $reasoning_effort = null ): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
 
-		$config = Provider::chat_configuration();
+		$config                    = Provider::chat_configuration();
+		$provider                  = is_string( $config['provider'] ?? null ) ? $config['provider'] : null;
+		$resolved_reasoning_effort = self::resolve_reasoning_effort( $reasoning_effort, $provider );
 
 		if ( Provider::is_connector( $config['provider'] ) || 'wordpress_ai_client' === $config['provider'] ) {
 			return WordPressAIClient::chat(
 				$instructions,
 				$input,
-				Provider::is_connector( $config['provider'] ) ? $config['provider'] : null
+				Provider::is_connector( $config['provider'] ) ? $config['provider'] : null,
+				$resolved_reasoning_effort
 			);
 		}
 
@@ -98,7 +101,7 @@ final class ResponsesClient extends BaseHttpClient {
 				'model'        => $config['model'],
 				'instructions' => $instructions,
 				'input'        => $input,
-				'reasoning'    => self::reasoning_options(),
+				'reasoning'    => self::reasoning_options( $resolved_reasoning_effort, $provider ),
 			]
 		);
 
@@ -108,10 +111,49 @@ final class ResponsesClient extends BaseHttpClient {
 	/**
 	 * @return array{effort: string}
 	 */
-	private static function reasoning_options(): array {
+	private static function reasoning_options( ?string $reasoning_effort = null, ?string $provider = null ): array {
 		return [
-			'effort' => self::REASONING_EFFORT,
+			'effort' => self::resolve_reasoning_effort( $reasoning_effort, $provider ),
 		];
+	}
+
+	private static function resolve_reasoning_effort( ?string $reasoning_effort, ?string $provider = null ): string {
+		if ( is_string( $reasoning_effort ) && $reasoning_effort !== '' ) {
+			return self::sanitize_reasoning_effort( $reasoning_effort ) ?? self::DEFAULT_REASONING_EFFORT;
+		}
+
+		if (
+			Provider::is_azure( $provider )
+			|| Provider::is_connector( $provider )
+			|| 'wordpress_ai_client' === $provider
+		) {
+			return self::saved_reasoning_effort();
+		}
+
+		return self::DEFAULT_REASONING_EFFORT;
+	}
+
+	private static function saved_reasoning_effort(): string {
+		$candidate = self::sanitize_reasoning_effort(
+			(string) get_option(
+				'flavor_agent_azure_reasoning_effort',
+				self::DEFAULT_REASONING_EFFORT
+			)
+		);
+
+		return $candidate ?? self::DEFAULT_REASONING_EFFORT;
+	}
+
+	private static function sanitize_reasoning_effort( ?string $reasoning_effort ): ?string {
+		if ( ! is_string( $reasoning_effort ) || $reasoning_effort === '' ) {
+			return null;
+		}
+
+		$candidate = sanitize_key( $reasoning_effort );
+
+		return in_array( $candidate, [ 'low', 'medium', 'high', 'xhigh' ], true )
+			? $candidate
+			: null;
 	}
 
 	/**

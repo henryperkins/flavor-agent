@@ -19,6 +19,9 @@ final class Settings {
 
 	private const OPTION_GROUP = 'flavor_agent_settings';
 	private const PAGE_SLUG    = 'flavor-agent';
+	private const GROUP_CHAT   = 'chat';
+	private const GROUP_PATTERNS = 'patterns';
+	private const GROUP_DOCS   = 'docs';
 
 	/**
 	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
@@ -120,6 +123,15 @@ final class Settings {
 		);
 		register_setting(
 			self::OPTION_GROUP,
+			'flavor_agent_azure_reasoning_effort',
+			[
+				'type'              => 'string',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_azure_reasoning_effort' ],
+				'default'           => 'medium',
+			]
+		);
+		register_setting(
+			self::OPTION_GROUP,
 			'flavor_agent_openai_native_api_key',
 			[
 				'type'              => 'string',
@@ -165,7 +177,24 @@ final class Settings {
 				'default'           => '',
 			]
 		);
-
+		register_setting(
+			self::OPTION_GROUP,
+			'flavor_agent_pattern_recommendation_threshold',
+			[
+				'type'              => 'number',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_pattern_recommendation_threshold' ],
+				'default'           => 0.3,
+			]
+		);
+		register_setting(
+			self::OPTION_GROUP,
+			'flavor_agent_pattern_max_recommendations',
+			[
+				'type'              => 'integer',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_pattern_max_recommendations' ],
+				'default'           => 8,
+			]
+		);
 		// Cloudflare AI Search.
 		register_setting(
 			self::OPTION_GROUP,
@@ -233,6 +262,12 @@ final class Settings {
 			[ __CLASS__, 'render_qdrant_section' ],
 			self::PAGE_SLUG
 		);
+		add_settings_section(
+			'flavor_agent_pattern_recommendations',
+			'Pattern Recommendations',
+			[ __CLASS__, 'render_pattern_recommendations_section' ],
+			self::PAGE_SLUG
+		);
 
 		add_settings_section(
 			'flavor_agent_cloudflare',
@@ -249,6 +284,7 @@ final class Settings {
 			'flavor_agent_openai_provider',
 			[
 				'option'      => Provider::OPTION_NAME,
+				'label_for'   => Provider::OPTION_NAME,
 				'choices'     => Provider::choices( Provider::get() ),
 				'description' => 'Flavor Agent tries this provider first for chat-backed surfaces.',
 			]
@@ -264,6 +300,7 @@ final class Settings {
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_openai_endpoint',
+				'label_for'   => 'flavor_agent_azure_openai_endpoint',
 				'type'        => 'url',
 				'placeholder' => 'https://my-resource.openai.azure.com/',
 				'description' => 'Azure resource endpoint.',
@@ -277,6 +314,7 @@ final class Settings {
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_openai_key',
+				'label_for'   => 'flavor_agent_azure_openai_key',
 				'type'        => 'password',
 				'placeholder' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
 				'description' => 'Key 1 or Key 2 from the Azure resource.',
@@ -290,6 +328,7 @@ final class Settings {
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_embedding_deployment',
+				'label_for'   => 'flavor_agent_azure_embedding_deployment',
 				'placeholder' => 'text-embedding-3-large',
 				'description' => 'Azure deployment name for embeddings.',
 			]
@@ -302,8 +341,28 @@ final class Settings {
 			'flavor_agent_azure',
 			[
 				'option'      => 'flavor_agent_azure_chat_deployment',
+				'label_for'   => 'flavor_agent_azure_chat_deployment',
 				'placeholder' => 'gpt-5.4',
 				'description' => 'Azure deployment name for chat and responses.',
+			]
+		);
+		add_settings_field(
+			'flavor_agent_azure_reasoning_effort',
+			'Reasoning Effort',
+			[ __CLASS__, 'render_select_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_azure',
+			[
+				'option'      => 'flavor_agent_azure_reasoning_effort',
+				'label_for'   => 'flavor_agent_azure_reasoning_effort',
+				'default'     => 'medium',
+				'choices'     => [
+					'low'    => 'Low',
+					'medium' => 'Medium',
+					'high'   => 'High',
+					'xhigh'  => 'XHigh',
+				],
+				'description' => 'Default reasoning effort for Azure OpenAI ranking calls. Connector-backed providers and WordPress AI Client fallback flows pass it through when the prompt builder exposes a reasoning control.',
 			]
 		);
 
@@ -317,6 +376,7 @@ final class Settings {
 			'flavor_agent_openai_native',
 			[
 				'option'      => 'flavor_agent_openai_native_api_key',
+				'label_for'   => 'flavor_agent_openai_native_api_key',
 				'type'        => 'password',
 				'placeholder' => 'sk-...',
 				'description' => 'Leave blank to reuse the OpenAI connector key or <code>OPENAI_API_KEY</code>.',
@@ -330,6 +390,7 @@ final class Settings {
 			'flavor_agent_openai_native',
 			[
 				'option'      => 'flavor_agent_openai_native_embedding_model',
+				'label_for'   => 'flavor_agent_openai_native_embedding_model',
 				'placeholder' => 'text-embedding-3-large',
 				'description' => 'OpenAI model ID for pattern embeddings.',
 			]
@@ -342,6 +403,7 @@ final class Settings {
 			'flavor_agent_openai_native',
 			[
 				'option'      => 'flavor_agent_openai_native_chat_model',
+				'label_for'   => 'flavor_agent_openai_native_chat_model',
 				'placeholder' => 'gpt-5.4',
 				'description' => 'OpenAI model ID for chat and ranking.',
 			]
@@ -357,6 +419,7 @@ final class Settings {
 			'flavor_agent_qdrant',
 			[
 				'option'      => 'flavor_agent_qdrant_url',
+				'label_for'   => 'flavor_agent_qdrant_url',
 				'type'        => 'url',
 				'placeholder' => 'https://my-cluster.cloud.qdrant.io:6333',
 				'description' => 'Cluster URL including port.',
@@ -370,12 +433,48 @@ final class Settings {
 			'flavor_agent_qdrant',
 			[
 				'option'      => 'flavor_agent_qdrant_key',
+				'label_for'   => 'flavor_agent_qdrant_key',
 				'type'        => 'password',
 				'placeholder' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
 				'description' => 'Key with read and write access to the collection.',
 			]
 		);
-
+		add_settings_field(
+			'flavor_agent_pattern_recommendation_threshold',
+			'Ranking Threshold',
+			[ __CLASS__, 'render_text_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_pattern_recommendations',
+			[
+				'option'      => 'flavor_agent_pattern_recommendation_threshold',
+				'label_for'   => 'flavor_agent_pattern_recommendation_threshold',
+				'type'        => 'number',
+				'default'     => '0.3',
+				'step'        => '0.01',
+				'min'         => '0',
+				'max'         => '1',
+				'placeholder' => '0.30',
+				'description' => '0.00&ndash;1.00. Higher values drop weaker recommendations after reranking.',
+			]
+		);
+		add_settings_field(
+			'flavor_agent_pattern_max_recommendations',
+			'Max Results',
+			[ __CLASS__, 'render_text_field' ],
+			self::PAGE_SLUG,
+			'flavor_agent_pattern_recommendations',
+			[
+				'option'      => 'flavor_agent_pattern_max_recommendations',
+				'label_for'   => 'flavor_agent_pattern_max_recommendations',
+				'type'        => 'number',
+				'default'     => '8',
+				'step'        => '1',
+				'min'         => '1',
+				'max'         => '12',
+				'placeholder' => '8',
+				'description' => '1&ndash;12 pattern recommendations returned to the inserter.',
+			]
+		);
 		// --- Cloudflare AI Search fields ---
 
 		add_settings_field(
@@ -386,6 +485,7 @@ final class Settings {
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_account_id',
+				'label_for'   => 'flavor_agent_cloudflare_ai_search_account_id',
 				'placeholder' => 'e.g. 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
 				'description' => 'Cloudflare account ID.',
 			]
@@ -398,6 +498,7 @@ final class Settings {
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_instance_id',
+				'label_for'   => 'flavor_agent_cloudflare_ai_search_instance_id',
 				'placeholder' => 'wordpress-developer-docs',
 				'description' => 'AI Search instance slug.',
 			]
@@ -410,6 +511,7 @@ final class Settings {
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_api_token',
+				'label_for'   => 'flavor_agent_cloudflare_ai_search_api_token',
 				'type'        => 'password',
 				'placeholder' => 'Cloudflare API token',
 				'description' => 'Needs <strong>AI Search Run</strong> or <strong>AI Search Edit</strong>.',
@@ -423,6 +525,7 @@ final class Settings {
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_max_results',
+				'label_for'   => 'flavor_agent_cloudflare_ai_search_max_results',
 				'type'        => 'number',
 				'placeholder' => '4',
 				'description' => '1&ndash;8 docs per request. Higher values add latency.',
@@ -910,6 +1013,16 @@ final class Settings {
 		);
 	}
 
+	public static function render_pattern_recommendations_section(): void {
+		self::render_settings_help(
+			__( 'Tuning notes', 'flavor-agent' ),
+			[
+				__( 'These controls only affect pattern recommendation ranking inside the inserter.', 'flavor-agent' ),
+				__( 'Raise the threshold only if weak matches are surfacing too often.', 'flavor-agent' ),
+			]
+		);
+	}
+
 	public static function render_cloudflare_section(): void {
 		self::render_settings_help(
 			__( 'Grounding notes', 'flavor-agent' ),
@@ -930,14 +1043,35 @@ final class Settings {
 		$type        = $args['type'] ?? 'text';
 		$placeholder = $args['placeholder'] ?? '';
 		$description = $args['description'] ?? '';
-		$value       = (string) get_option( $option, '' );
+		$default     = (string) ( $args['default'] ?? '' );
+		$value       = (string) get_option( $option, $default );
+		$constraints = '';
+
+		foreach ( [ 'step', 'min', 'max' ] as $attribute ) {
+			if ( ! array_key_exists( $attribute, $args ) ) {
+				continue;
+			}
+
+			$attribute_value = (string) $args[ $attribute ];
+
+			if ( '' === $attribute_value ) {
+				continue;
+			}
+
+			$constraints .= sprintf(
+				' %s="%s"',
+				$attribute,
+				esc_attr( $attribute_value )
+			);
+		}
 
 		printf(
-			'<input type="%s" name="%s" value="%s" class="regular-text flavor-agent-settings-field" autocomplete="off" placeholder="%s" />',
+			'<input type="%s" name="%s" value="%s" class="regular-text flavor-agent-settings-field" autocomplete="off" placeholder="%s"%s />',
 			esc_attr( $type ),
 			esc_attr( $option ),
 			esc_attr( $value ),
-			esc_attr( $placeholder )
+			esc_attr( $placeholder ),
+			$constraints
 		);
 
 		if ( $description ) {
@@ -949,9 +1083,10 @@ final class Settings {
 		$option      = (string) ( $args['option'] ?? '' );
 		$choices     = is_array( $args['choices'] ?? null ) ? $args['choices'] : [];
 		$description = (string) ( $args['description'] ?? '' );
+		$default     = (string) ( $args['default'] ?? '' );
 		$value       = (string) get_option(
 			$option,
-			$option === Provider::OPTION_NAME ? Provider::AZURE : ''
+			$option === Provider::OPTION_NAME ? Provider::AZURE : $default
 		);
 
 		printf(
@@ -977,6 +1112,22 @@ final class Settings {
 
 	public static function sanitize_grounding_result_count( mixed $value ): int {
 		return max( 1, min( 8, (int) $value ) );
+	}
+
+	public static function sanitize_pattern_recommendation_threshold( mixed $value ): float {
+		$threshold = (float) $value;
+
+		return max( 0.0, min( 1.0, round( $threshold, 2 ) ) );
+	}
+
+	public static function sanitize_pattern_max_recommendations( mixed $value ): int {
+		return max( 1, min( 12, (int) $value ) );
+	}
+
+	public static function sanitize_azure_reasoning_effort( mixed $value ): string {
+		$effort = sanitize_key( (string) $value );
+
+		return in_array( $effort, [ 'low', 'medium', 'high', 'xhigh' ], true ) ? $effort : 'medium';
 	}
 
 	public static function sanitize_openai_provider( mixed $value ): string {

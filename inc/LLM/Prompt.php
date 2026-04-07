@@ -228,51 +228,51 @@ SYSTEM;
 		$parts[] = '## Theme Tokens';
 
 		if ( ! empty( $tokens['colors'] ) ) {
-			$parts[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 20 ) );
+			$parts[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['colorPresets'] ) ) {
-			$parts[] = 'Color preset details: ' . wp_json_encode( array_slice( (array) $tokens['colorPresets'], 0, 20 ) );
+			$parts[] = 'Color preset details: ' . wp_json_encode( array_slice( (array) $tokens['colorPresets'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['gradients'] ) ) {
-			$parts[] = 'Gradients: ' . implode( ', ', array_slice( (array) $tokens['gradients'], 0, 20 ) );
+			$parts[] = 'Gradients: ' . implode( ', ', array_slice( (array) $tokens['gradients'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['gradientPresets'] ) ) {
-			$parts[] = 'Gradient preset details: ' . wp_json_encode( array_slice( (array) $tokens['gradientPresets'], 0, 20 ) );
+			$parts[] = 'Gradient preset details: ' . wp_json_encode( array_slice( (array) $tokens['gradientPresets'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['fontSizes'] ) ) {
-			$parts[] = 'Font sizes: ' . implode( ', ', (array) $tokens['fontSizes'] );
+			$parts[] = 'Font sizes: ' . implode( ', ', array_slice( (array) $tokens['fontSizes'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['fontSizePresets'] ) ) {
-			$parts[] = 'Font size preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontSizePresets'], 0, 20 ) );
+			$parts[] = 'Font size preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontSizePresets'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['fontFamilies'] ) ) {
-			$parts[] = 'Font families: ' . implode( ', ', (array) $tokens['fontFamilies'] );
+			$parts[] = 'Font families: ' . implode( ', ', array_slice( (array) $tokens['fontFamilies'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['fontFamilyPresets'] ) ) {
-			$parts[] = 'Font family preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontFamilyPresets'], 0, 20 ) );
+			$parts[] = 'Font family preset details: ' . wp_json_encode( array_slice( (array) $tokens['fontFamilyPresets'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['spacing'] ) ) {
-			$parts[] = 'Spacing: ' . implode( ', ', (array) $tokens['spacing'] );
+			$parts[] = 'Spacing: ' . implode( ', ', array_slice( (array) $tokens['spacing'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['spacingPresets'] ) ) {
-			$parts[] = 'Spacing preset details: ' . wp_json_encode( array_slice( (array) $tokens['spacingPresets'], 0, 20 ) );
+			$parts[] = 'Spacing preset details: ' . wp_json_encode( array_slice( (array) $tokens['spacingPresets'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['shadows'] ) ) {
-			$parts[] = 'Shadows: ' . implode( ', ', (array) $tokens['shadows'] );
+			$parts[] = 'Shadows: ' . implode( ', ', array_slice( (array) $tokens['shadows'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['shadowPresets'] ) ) {
-			$parts[] = 'Shadow preset details: ' . wp_json_encode( array_slice( (array) $tokens['shadowPresets'], 0, 20 ) );
+			$parts[] = 'Shadow preset details: ' . wp_json_encode( array_slice( (array) $tokens['shadowPresets'], 0, 60 ) );
 		}
 
 		if ( ! empty( $tokens['duotone'] ) ) {

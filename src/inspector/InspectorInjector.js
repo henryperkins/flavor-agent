@@ -27,31 +27,42 @@ import {
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
 		const { clientId, isSelected } = props;
-		const { recommendations, editingMode, status, storedContextSignature } =
-			useSelect(
-				( sel ) => {
-					const editor = sel( blockEditorStore );
-					const store = sel( STORE_NAME );
+		const {
+			recommendations,
+			editingMode,
+			isInsideContentOnly,
+			status,
+			storedContextSignature,
+		} = useSelect(
+			( sel ) => {
+				const editor = sel( blockEditorStore );
+				const store = sel( STORE_NAME );
+				const parentIds = editor.getBlockParents?.( clientId ) || [];
 
-					return {
-						recommendations:
-							store.getBlockRecommendations( clientId ),
-						status: store.getBlockStatus( clientId ),
-						storedContextSignature:
-							store.getBlockRecommendationContextSignature(
-								clientId
-							),
-						editingMode: editor.getBlockEditingMode( clientId ),
-					};
-				},
-				[ clientId ]
-			);
+				return {
+					recommendations: store.getBlockRecommendations( clientId ),
+					status: store.getBlockStatus( clientId ),
+					storedContextSignature:
+						store.getBlockRecommendationContextSignature(
+							clientId
+						),
+					editingMode: editor.getBlockEditingMode( clientId ),
+					isInsideContentOnly: parentIds.some(
+						( parentId ) =>
+							editor.getBlockEditingMode?.( parentId ) ===
+							'contentOnly'
+					),
+				};
+			},
+			[ clientId ]
+		);
 		const liveContextSignature = useSelect(
 			( select ) => getLiveBlockContextSignature( select, clientId ),
 			[ clientId ]
 		);
 		const isDisabled = editingMode === 'disabled';
-		const hasStoredResult = status === 'ready' && Boolean( recommendations );
+		const hasStoredResult =
+			status === 'ready' && Boolean( recommendations );
 		const hasMatchingResult =
 			hasStoredResult &&
 			( ! storedContextSignature ||
@@ -60,11 +71,17 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			hasStoredResult &&
 			Boolean( storedContextSignature ) &&
 			storedContextSignature !== liveContextSignature;
+		const isContentRestricted =
+			editingMode === 'contentOnly' || isInsideContentOnly;
 		const visibleRecommendations = hasMatchingResult
 			? recommendations
 			: null;
 		const visibleStyleRecommendations =
-			hasMatchingResult || isStaleResult
+			! isContentRestricted && ( hasMatchingResult || isStaleResult )
+				? recommendations?.styles || []
+				: [];
+		const visibleDelegatedStyleRecommendations =
+			! isContentRestricted && hasMatchingResult
 				? recommendations?.styles || []
 				: [];
 
@@ -75,7 +92,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 		const hasInlineRecs =
 			visibleRecommendations &&
 			( visibleRecommendations.settings?.length > 0 ||
-				visibleRecommendations.styles?.length > 0 ||
+				visibleDelegatedStyleRecommendations.length > 0 ||
 				visibleRecommendations.block?.length > 0 );
 		const hasStyleRecs = visibleStyleRecommendations.length > 0;
 
@@ -120,7 +137,9 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								key={ `styles-${ config.group }` }
 								{ ...config }
 								clientId={ clientId }
-								suggestions={ visibleRecommendations.styles }
+								suggestions={
+									visibleDelegatedStyleRecommendations
+								}
 							/>
 						) ) }
 					</>

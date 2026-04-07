@@ -270,7 +270,10 @@ describe('StylesRecommendations', () => {
 		);
 
 		expect(outlineButton?.disabled).toBe(true);
-		expect(applyButton?.disabled).toBe(true);
+		expect(applyButton).toBeUndefined();
+		expect(getContainer().textContent).not.toContain('Apply now');
+		expect(getContainer().textContent).toContain('Refresh first');
+		expect(getContainer().textContent).toContain('Stale');
 		expect(mockApplySuggestion).not.toHaveBeenCalled();
 	});
 

@@ -485,6 +485,9 @@ export default function TemplateRecommender() {
 				undoSuccessMessage: hasUndoSuccess
 					? `Undid ${lastUndoneTemplateActivity?.suggestion || 'suggestion'}.`
 					: '',
+				emptyMessage: hasResult
+					? 'No template suggestions were returned for this request.'
+					: '',
 				onUndoDismissAction: Boolean(undoError),
 			});
 		},
@@ -735,7 +738,6 @@ export default function TemplateRecommender() {
 						count={advisorySuggestionCards.length}
 						countNoun="suggestion"
 						initialOpen
-						advisoryLabel=""
 						description={
 							showSecondaryGuidance
 								? 'These ideas stay visible for review, but Flavor Agent could not validate a deterministic structural mutation for them.'

@@ -201,6 +201,17 @@ function createSelectors() {
 					};
 				}
 
+				if ( options.emptyMessage ) {
+					return {
+						source: 'empty',
+						tone: 'info',
+						message:
+							options.requestStatus === 'loading'
+								? ''
+								: options.emptyMessage,
+					};
+				}
+
 				return null;
 			} ),
 			getTemplateApplyError: jest.fn(
@@ -619,6 +630,9 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Current' ) ).toBe( true );
 		expect( hasText( 'Stale' ) ).toBe( false );
 		expect( hasText( 'Add hero intro' ) ).toBe( false );
+		expect(
+			hasText( 'No template suggestions were returned for this request.' )
+		).toBe( true );
 	} );
 
 	test( 'keeps advisory template suggestions expanded when they are returned', async () => {
@@ -641,6 +655,7 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 
 		expect( hasText( 'Manual ideas' ) ).toBe( true );
+		expect( hasText( 'Advisory only' ) ).toBe( true );
 		expect( hasText( 'Explore an editorial collage' ) ).toBe( true );
 		expect( hasText( 'Suggested Patterns' ) ).toBe( true );
 		expect( hasText( 'Footer' ) ).toBe( true );

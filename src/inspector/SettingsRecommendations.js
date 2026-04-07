@@ -9,7 +9,9 @@ import { Icon, check, arrowRight } from '@wordpress/icons';
 
 import InlineActionFeedback from '../components/InlineActionFeedback';
 import RecommendationLane from '../components/RecommendationLane';
+import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import { STORE_NAME } from '../store';
+import { formatCount } from '../utils/format-count';
 import groupByPanel from './group-by-panel';
 import { DELEGATED_SETTINGS_PANELS } from './panel-delegation';
 import { getSuggestionKey } from './suggestion-keys';
@@ -42,17 +44,40 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 		return null;
 	}
 
+	const groupedEntries = Object.entries( grouped );
+	const visibleSuggestionCount = groupedEntries.reduce(
+		( total, [ , items ] ) => total + items.length,
+		0
+	);
+
 	return (
 		<PanelBody title="AI Settings" initialOpen>
 			<div className="flavor-agent-panel">
-				{ Object.entries( grouped ).map( ( [ panel, items ] ) => (
+				<SurfacePanelIntro
+					eyebrow="Block Settings"
+					introCopy="Settings suggestions stay grouped with the native controls they change so local apply actions remain easy to verify."
+					meta={
+						<>
+							<span className="flavor-agent-pill">
+								{ formatCount( visibleSuggestionCount, 'suggestion' ) }
+							</span>
+							{ groupedEntries.length > 1 && (
+								<span className="flavor-agent-pill">
+									{ formatCount( groupedEntries.length, 'panel' ) }
+								</span>
+							) }
+						</>
+					}
+				/>
+
+				{ groupedEntries.map( ( [ panel, items ] ) => (
 					<RecommendationLane
 						key={ panel }
 						title={ panelLabel( panel ) }
 						tone="Apply now"
 						count={ items.length }
 						countNoun="suggestion"
-						description="Flavor Agent can apply these local settings changes directly inside this panel."
+						description="These suggestions map directly to the native settings in this panel."
 					>
 						{ items.map( ( suggestion ) => {
 							const key = getSuggestionKey( suggestion );

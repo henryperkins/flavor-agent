@@ -889,7 +889,6 @@ export default function TemplatePartRecommender() {
 						count={advisorySuggestionCards.length}
 						countNoun="suggestion"
 						initialOpen
-						advisoryLabel=""
 						description={
 							showSecondaryGuidance
 								? 'These suggestions stay visible, but Flavor Agent could not validate an exact deterministic operation sequence for them.'

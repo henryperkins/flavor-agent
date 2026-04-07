@@ -539,6 +539,8 @@ function getSurfaceStatusNotice(surface, options = {}) {
 		};
 	}
 
+	// Stale notices stay surface-owned so each surface can pair the stale copy
+	// with the right disabled-action behavior for its interaction model.
 	const isStale = options.isStale === true;
 
 	if (isStale) {

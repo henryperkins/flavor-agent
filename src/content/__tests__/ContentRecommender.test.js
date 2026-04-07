@@ -122,7 +122,13 @@ describe( 'ContentRecommender', () => {
 			getRoot().render( <ContentRecommender /> );
 		} );
 
-		expect( getContainer().textContent ).toContain( 'Content Recommendations' );
+		const text = getContainer().textContent;
+
+		expect( text ).toContain( 'Post' );
+		expect( text ).toContain( 'Working draft' );
+		expect( text ).toContain( 'Start a fresh draft' );
+		expect( text ).toContain( 'Generate Draft' );
+		expect( text ).not.toContain( 'Current document' );
 
 		const textarea = getContainer().querySelector( 'textarea' );
 		act( () => {
@@ -132,7 +138,7 @@ describe( 'ContentRecommender', () => {
 
 		const fetchButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Draft Content' );
+		).find( ( button ) => button.textContent === 'Generate Draft' );
 
 		act( () => {
 			fetchButton.click();
@@ -150,6 +156,30 @@ describe( 'ContentRecommender', () => {
 				status: 'draft',
 			},
 		} );
+	} );
+
+	test( 'uses the mode switcher instead of the old scope strip', () => {
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		const modeButtons = Array.from( getContainer().querySelectorAll( 'button' ) );
+		const draftButton = modeButtons.find(
+			( button ) => button.textContent === 'Draft'
+		);
+		const editButton = modeButtons.find(
+			( button ) => button.textContent === 'Edit'
+		);
+
+		expect( draftButton.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
+		expect( editButton.getAttribute( 'aria-pressed' ) ).toBe( 'false' );
+
+		act( () => {
+			editButton.click();
+		} );
+
+		expect( mockSetContentMode ).toHaveBeenCalledWith( 'edit' );
+		expect( getContainer().textContent ).not.toContain( 'Current document' );
 	} );
 
 	test( 'does not render for unsupported editor entities', () => {

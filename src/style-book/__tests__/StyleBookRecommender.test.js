@@ -536,6 +536,10 @@ describe( 'StyleBookRecommender', () => {
 			( candidate ) => candidate.textContent === 'Get Style Suggestions'
 		);
 
+		expect( sidebar.textContent ).toContain(
+			'Press Cmd/Ctrl+Enter to submit.'
+		);
+
 		act( () => {
 			const descriptor = Object.getOwnPropertyDescriptor(
 				window.HTMLTextAreaElement.prototype,
@@ -786,7 +790,7 @@ describe( 'StyleBookRecommender', () => {
 			expect.objectContaining( {
 				title: 'Review Before Apply',
 				statusLabel: 'Review first',
-				confirmLabel: 'Apply Style Change',
+				confirmLabel: 'Confirm Apply',
 				onCancel: expect.any( Function ),
 				onConfirm: expect.any( Function ),
 			} )

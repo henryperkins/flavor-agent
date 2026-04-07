@@ -157,6 +157,26 @@ describe( 'SurfaceComposer', () => {
 		);
 	} );
 
+	test( 'adds a stacked starter prompt layout class when requested', () => {
+		act( () => {
+			getRoot().render(
+				<SurfaceComposer
+					prompt=""
+					onPromptChange={ mockOnPromptChange }
+					onFetch={ mockOnFetch }
+					starterPromptsLayout="stacked"
+					starterPrompts={ [ 'Draft a stronger opening.' ] }
+				/>
+			);
+		} );
+
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-panel__composer-starters--stacked'
+			)
+		).not.toBeNull();
+	} );
+
 	test( 'submits with cmd/ctrl-enter when the shortcut is enabled', () => {
 		act( () => {
 			getRoot().render(

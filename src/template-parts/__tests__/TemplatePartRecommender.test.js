@@ -511,6 +511,7 @@ describe('TemplatePartRecommender', () => {
 		await renderPanel();
 
 		expect(hasText('Manual ideas')).toBe(true);
+		expect(hasText('Advisory only')).toBe(true);
 		expect(hasText('Introduce utility links')).toBe(true);
 		expect(hasText('Browse pattern')).toBe(true);
 	});

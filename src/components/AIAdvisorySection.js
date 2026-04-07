@@ -1,13 +1,46 @@
 import { Button } from '@wordpress/components';
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import {
+	Fragment,
+	isValidElement,
+	useEffect,
+	useMemo,
+	useState,
+} from '@wordpress/element';
 
 import { formatCount, joinClassNames } from '../utils/format-count';
-import {
-	ADVISORY_ONLY_LABEL,
-	MANUAL_IDEAS_LABEL,
-} from './surface-labels';
+import { ADVISORY_ONLY_LABEL, MANUAL_IDEAS_LABEL } from './surface-labels';
 
 const DEFAULT_VISIBLE_COUNT = 5;
+
+function normalizeChildren( children ) {
+	const normalizedChildren = [];
+
+	const appendChild = ( child ) => {
+		if ( Array.isArray( child ) ) {
+			child.forEach( appendChild );
+			return;
+		}
+
+		if (
+			child === null ||
+			child === undefined ||
+			typeof child === 'boolean'
+		) {
+			return;
+		}
+
+		if ( isValidElement( child ) && child.type === Fragment ) {
+			appendChild( child.props?.children );
+			return;
+		}
+
+		normalizedChildren.push( child );
+	};
+
+	appendChild( children );
+
+	return normalizedChildren;
+}
 
 export default function AIAdvisorySection( {
 	title = MANUAL_IDEAS_LABEL,
@@ -25,17 +58,10 @@ export default function AIAdvisorySection( {
 	const [ isOpen, setIsOpen ] = useState( initialOpen );
 	const [ showAll, setShowAll ] = useState( false );
 	const resolvedCountLabel = countLabel || formatCount( count, countNoun );
-	const childArray = useMemo( () => {
-		if ( Array.isArray( children ) ) {
-			return children.filter( Boolean );
-		}
-
-		if ( children ) {
-			return [ children ];
-		}
-
-		return [];
-	}, [ children ] );
+	const childArray = useMemo(
+		() => normalizeChildren( children ),
+		[ children ]
+	);
 	const advisoryContentKey = useMemo(
 		() =>
 			JSON.stringify( {

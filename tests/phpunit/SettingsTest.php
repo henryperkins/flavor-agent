@@ -840,6 +840,27 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'Google (Settings &gt; Connectors)', $output );
 	}
 
+	public function test_render_text_field_outputs_numeric_constraints(): void {
+		ob_start();
+		Settings::render_text_field(
+			[
+				'option'  => 'flavor_agent_pattern_recommendation_threshold',
+				'type'    => 'number',
+				'default' => '0.3',
+				'step'    => '0.01',
+				'min'     => '0',
+				'max'     => '1',
+			]
+		);
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'type="number"', $output );
+		$this->assertStringContainsString( 'value="0.3"', $output );
+		$this->assertStringContainsString( 'step="0.01"', $output );
+		$this->assertStringContainsString( 'min="0"', $output );
+		$this->assertStringContainsString( 'max="1"', $output );
+	}
+
 	public function test_render_page_renders_compact_settings_page_guidance(): void {
 		ob_start();
 		Settings::render_page();
@@ -861,6 +882,11 @@ final class SettingsTest extends TestCase {
 			'Pattern Sync',
 			$output
 		);
+	}
+
+	public function test_sanitize_azure_reasoning_effort_accepts_xhigh(): void {
+		$this->assertSame( 'xhigh', Settings::sanitize_azure_reasoning_effort( 'xhigh' ) );
+		$this->assertSame( 'medium', Settings::sanitize_azure_reasoning_effort( 'invalid' ) );
 	}
 
 	public function test_get_pattern_sync_reason_label_handles_collection_rebuild_reasons(): void {

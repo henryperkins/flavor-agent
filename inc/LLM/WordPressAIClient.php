@@ -10,6 +10,7 @@ use WordPress\AI_Client\AI_Client;
 final class WordPressAIClient {
 
 	private const SETUP_MESSAGE = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const REASONING_EFFORTS = [ 'low', 'medium', 'high', 'xhigh' ];
 
 	public static function is_supported( ?string $provider = null ): bool {
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
@@ -29,7 +30,7 @@ final class WordPressAIClient {
 		return ! is_wp_error( $supported ) && (bool) $supported;
 	}
 
-	public static function chat( string $system_prompt, string $user_prompt, ?string $provider = null ): string|\WP_Error {
+	public static function chat( string $system_prompt, string $user_prompt, ?string $provider = null, ?string $reasoning_effort = null ): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
 		$prompt = self::make_prompt( $user_prompt );
 
@@ -44,6 +45,12 @@ final class WordPressAIClient {
 		}
 
 		$prompt = self::apply_system_instruction( $prompt, $system_prompt );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		$prompt = self::apply_reasoning_effort( $prompt, $reasoning_effort );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -168,6 +175,66 @@ final class WordPressAIClient {
 		}
 
 		return $updated_prompt;
+	}
+
+	/**
+	 * @return object|\WP_Error
+	 */
+	private static function apply_reasoning_effort( object $prompt, ?string $reasoning_effort ) {
+		$reasoning_effort = is_string( $reasoning_effort ) ? sanitize_key( $reasoning_effort ) : '';
+
+		if ( ! in_array( $reasoning_effort, self::REASONING_EFFORTS, true ) ) {
+			return $prompt;
+		}
+
+		$candidates = [
+			[
+				'method'    => 'using_reasoning_effort',
+				'arguments' => [ $reasoning_effort ],
+			],
+			[
+				'method'    => 'using_reasoning',
+				'arguments' => [ $reasoning_effort ],
+			],
+			[
+				'method'    => 'using_reasoning',
+				'arguments' => [
+					[
+						'effort' => $reasoning_effort,
+					],
+				],
+			],
+		];
+
+		foreach ( $candidates as $candidate ) {
+			$method = (string) $candidate['method'];
+
+			if ( ! is_callable( [ $prompt, $method ] ) ) {
+				continue;
+			}
+
+			try {
+				$updated_prompt = $prompt->{$method}( ...$candidate['arguments'] );
+			} catch ( \Throwable $throwable ) {
+				continue;
+			}
+
+			if ( is_wp_error( $updated_prompt ) ) {
+				return $updated_prompt;
+			}
+
+			if ( ! is_object( $updated_prompt ) ) {
+				return new \WP_Error(
+					'wp_ai_client_invalid_prompt',
+					'WordPress AI Client did not return a prompt builder.',
+					[ 'status' => 500 ]
+				);
+			}
+
+			return $updated_prompt;
+		}
+
+		return $prompt;
 	}
 
 	private static function call_prompt_method( object $prompt, string $method, array $arguments = [] ): mixed {

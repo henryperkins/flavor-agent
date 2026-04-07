@@ -373,6 +373,7 @@ function GlobalStylesPanel( {
 				] }
 				fetchLabel="Get Style Suggestions"
 				loadingLabel="Thinking…"
+				submitHint="Press Cmd/Ctrl+Enter to submit."
 				isLoading={ isLoading }
 				disabled={ ! capabilityAvailable }
 			/>
@@ -429,7 +430,6 @@ function GlobalStylesPanel( {
 					count={ manualSuggestions.length }
 					countNoun="suggestion"
 					initialOpen
-					advisoryLabel=""
 					description={
 						showSecondaryGuidance
 							? 'These ideas stay advisory until Flavor Agent can express them as safe theme-backed operations.'
@@ -450,7 +450,7 @@ function GlobalStylesPanel( {
 					onCancel={ onCancelReview }
 					confirmDisabled={ isApplying || isStale }
 					confirmLabel={
-						isApplying ? 'Applying…' : 'Apply Style Change'
+						isApplying ? 'Applying…' : 'Confirm Apply'
 					}
 					className="flavor-agent-style-review"
 					hint={ reviewHint }

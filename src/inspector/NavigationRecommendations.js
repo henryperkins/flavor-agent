@@ -18,6 +18,10 @@ import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
+import {
+	MANUAL_IDEAS_LABEL,
+	STALE_STATUS_LABEL,
+} from '../components/surface-labels';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
 function formatChangeType( type ) {
@@ -178,6 +182,7 @@ export default function NavigationRecommendations( {
 		explanation,
 		error,
 		isLoading,
+		requestPrompt,
 		status,
 		resultBlockClientId,
 		currentResultContextSignature,
@@ -192,6 +197,7 @@ export default function NavigationRecommendations( {
 				explanation: store.getNavigationExplanation( clientId ),
 				error: store.getNavigationError( clientId ),
 				isLoading: store.isNavigationLoading( clientId ),
+				requestPrompt: store.getNavigationRequestPrompt( clientId ),
 				status: store.getNavigationStatus( clientId ),
 				resultBlockClientId: store.getNavigationBlockClientId(),
 				currentResultContextSignature:
@@ -224,20 +230,31 @@ export default function NavigationRecommendations( {
 			} ),
 		[ clientId, navigationBlock ]
 	);
+	const hasStoredResult =
+		resultBlockClientId === clientId && status === 'ready';
 	const hasMatchingResult =
-		resultBlockClientId === clientId &&
-		status === 'ready' &&
+		hasStoredResult &&
 		( ! currentResultContextSignature ||
 			currentResultContextSignature === recommendationContextSignature );
-	const hasResult = resultBlockClientId === clientId && status === 'ready';
-	const hasSuggestions = hasMatchingResult && recommendations.length > 0;
-	const featuredSuggestion = hasSuggestions ? recommendations[ 0 ] : null;
+	const isStaleResult =
+		hasStoredResult &&
+		Boolean( currentResultContextSignature ) &&
+		currentResultContextSignature !== recommendationContextSignature;
+	const visibleRecommendations = useMemo(
+		() => ( hasMatchingResult || isStaleResult ? recommendations : [] ),
+		[ hasMatchingResult, isStaleResult, recommendations ]
+	);
+	const hasResult = hasMatchingResult || isStaleResult;
+	const hasSuggestions = visibleRecommendations.length > 0;
+	const featuredSuggestion = hasSuggestions
+		? visibleRecommendations[ 0 ]
+		: null;
 	const groupedSuggestions = useMemo(
 		() =>
 			groupNavigationSuggestions(
-				hasSuggestions ? recommendations.slice( 1 ) : []
+				hasSuggestions ? visibleRecommendations.slice( 1 ) : []
 			),
-		[ hasSuggestions, recommendations ]
+		[ hasSuggestions, visibleRecommendations ]
 	);
 	const { interactionState, statusNotice } = useSelect(
 		( select ) => {
@@ -249,8 +266,9 @@ export default function NavigationRecommendations( {
 				statusNotice: store.getSurfaceStatusNotice( 'navigation', {
 					requestStatus: status,
 					requestError: error,
+					isStale: isStaleResult,
 					hasResult: hasMatchingResult,
-					hasSuggestions,
+					hasSuggestions: hasMatchingResult && hasSuggestions,
 					emptyMessage:
 						hasMatchingResult && ! hasSuggestions
 							? 'No navigation suggestions were returned for the current prompt.'
@@ -259,7 +277,14 @@ export default function NavigationRecommendations( {
 				} ),
 			};
 		},
-		[ clientId, error, hasMatchingResult, hasSuggestions, status ]
+		[
+			clientId,
+			error,
+			hasMatchingResult,
+			hasSuggestions,
+			isStaleResult,
+			status,
+		]
 	);
 
 	useEffect( () => {
@@ -288,12 +313,47 @@ export default function NavigationRecommendations( {
 		recommendationContextSignature,
 		requestInput,
 	] );
+	const handleRefresh = useCallback( () => {
+		const refreshInput = buildNavigationFetchInput( {
+			block: navigationBlock,
+			blockClientId: clientId,
+			prompt: prompt.trim() || requestPrompt,
+		} );
+
+		if ( canRecommend && refreshInput ) {
+			fetchNavigationRecommendations( {
+				...refreshInput,
+				contextSignature: recommendationContextSignature,
+			} );
+		}
+	}, [
+		canRecommend,
+		clientId,
+		fetchNavigationRecommendations,
+		navigationBlock,
+		prompt,
+		recommendationContextSignature,
+		requestPrompt,
+	] );
 
 	if ( navigationBlock?.name !== 'core/navigation' ) {
 		return null;
 	}
 
 	const menuId = Number( navigationBlock?.attributes?.ref || 0 );
+	const laneTone = isStaleResult ? STALE_STATUS_LABEL : MANUAL_IDEAS_LABEL;
+	let laneDescription =
+		'Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack.';
+
+	if ( interactionState === 'advisory-ready' ) {
+		laneDescription =
+			'Navigation recommendations stay advisory here. Make accepted changes manually in the editor.';
+	}
+
+	if ( isStaleResult ) {
+		laneDescription =
+			'These ideas are shown for reference from the last request. Refresh before using them to change the current navigation block.';
+	}
 
 	return (
 		<>
@@ -323,19 +383,28 @@ export default function NavigationRecommendations( {
 							}
 							isFresh={ hasMatchingResult }
 							hasResult={ hasResult }
+							staleReason={
+								isStaleResult
+									? 'This navigation changed after the last request. Refresh before relying on the previous guidance.'
+									: ''
+							}
+							onRefresh={
+								isStaleResult ? handleRefresh : undefined
+							}
+							isRefreshing={ isLoading }
 						/>
 					) }
 
 					<RecommendationLane
 						title="Recommended Next Changes"
-						tone="Manual"
-						count={ hasSuggestions ? recommendations.length : null }
-						countNoun="idea"
-						description={
-							interactionState === 'advisory-ready'
-								? 'Navigation recommendations stay advisory here. Make accepted changes manually in the editor.'
-								: 'Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack.'
+						tone={ laneTone }
+						count={
+							hasSuggestions
+								? visibleRecommendations.length
+								: null
 						}
+						countNoun="idea"
+						description={ laneDescription }
 					>
 						<SurfaceComposer
 							title={
@@ -370,7 +439,7 @@ export default function NavigationRecommendations( {
 							}
 						/>
 
-						{ hasMatchingResult && explanation && (
+						{ hasResult && explanation && (
 							<p className="flavor-agent-explanation flavor-agent-panel__note">
 								{ explanation }
 							</p>
@@ -385,8 +454,12 @@ export default function NavigationRecommendations( {
 								description={
 									featuredSuggestion?.description || ''
 								}
-								tone="Manual"
-								why="Start with this change first, then work through the supporting ideas below."
+								tone={ laneTone }
+								why={
+									isStaleResult
+										? 'These ideas came from the previous navigation state. Refresh before using them as your next step.'
+										: 'Start with this change first, then work through the supporting ideas below.'
+								}
 							>
 								<NavigationSuggestionCard
 									suggestion={ featuredSuggestion }
@@ -401,10 +474,14 @@ export default function NavigationRecommendations( {
 									title={ `${ formatCategoryLabel(
 										category
 									) } Changes` }
-									tone="Manual"
+									tone={ laneTone }
 									count={ items.length }
 									countNoun="idea"
-									description="Make these accepted changes manually in the navigation block."
+									description={
+										isStaleResult
+											? 'These accepted changes came from the previous request. Refresh before following them in the current navigation block.'
+											: 'Make these accepted changes manually in the navigation block.'
+									}
 								>
 									{ items.map( ( suggestion, index ) => (
 										<NavigationSuggestionCard

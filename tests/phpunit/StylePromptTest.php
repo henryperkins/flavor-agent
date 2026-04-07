@@ -762,4 +762,41 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame( 'dashed', $result['suggestions'][0]['operations'][2]['value'] ?? null );
 		$this->assertSame( '2px', $result['suggestions'][0]['operations'][3]['value'] ?? null );
 	}
+
+	public function test_parse_response_rejects_numeric_border_lengths_that_the_client_cannot_apply(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Round the frame',
+							'description' => 'Numeric border lengths should be downgraded.',
+							'category'    => 'border',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'border', 'radius' ],
+									'value'     => 12,
+									'valueType' => 'freeform',
+								],
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'border', 'width' ],
+									'value'     => 2,
+									'valueType' => 'freeform',
+								],
+							],
+						],
+					],
+					'explanation' => 'Client and server validation must stay aligned.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [], $result['suggestions'][0]['operations'] );
+	}
 }

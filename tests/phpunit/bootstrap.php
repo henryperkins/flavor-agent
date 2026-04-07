@@ -168,6 +168,22 @@ namespace WordPress\AI_Client {
 			return $this;
 		}
 
+		public function using_reasoning_effort( $reasoning ): self {
+			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
+				? (string) ( $reasoning['effort'] ?? '' )
+				: (string) $reasoning;
+
+			return $this;
+		}
+
+		public function using_reasoning( $reasoning ): self {
+			WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
+				? (string) ( $reasoning['effort'] ?? '' )
+				: (string) $reasoning;
+
+			return $this;
+		}
+
 		public function is_supported_for_text_generation(): bool {
 			$provider = WordPressTestState::$last_ai_client_prompt['provider'] ?? '';
 
@@ -203,6 +219,15 @@ namespace {
 						return $this;
 					case 'using_provider':
 						WordPressTestState::$last_ai_client_prompt['provider'] = (string) ( $arguments[0] ?? '' );
+
+						return $this;
+					case 'using_reasoning_effort':
+					case 'using_reasoning':
+						$reasoning = $arguments[0] ?? '';
+
+						WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
+							? (string) ( $reasoning['effort'] ?? '' )
+							: (string) $reasoning;
 
 						return $this;
 					case 'is_supported_for_text_generation':

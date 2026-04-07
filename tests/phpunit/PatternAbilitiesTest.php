@@ -360,11 +360,19 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
 		$this->assertStringContainsString(
-			'Recommend patterns for a page post near a core/template-part/header block in a home template.',
+			'[POST TYPE]' . "\n" . 'page',
 			(string) ( $embedding_request['input'][0] ?? '' )
 		);
 		$this->assertStringContainsString(
-			'Make the intro more editorial.',
+			'[BLOCK CONTEXT]' . "\n" . 'core/template-part/header',
+			(string) ( $embedding_request['input'][0] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'[TEMPLATE TYPE]' . "\n" . 'home',
+			(string) ( $embedding_request['input'][0] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'[USER INSTRUCTION]' . "\n" . 'Make the intro more editorial.',
 			(string) ( $embedding_request['input'][0] ?? '' )
 		);
 
@@ -393,8 +401,10 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'theme/footer-callout', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'patternOverrides', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'hasOverrides', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( '## Visible Pattern Scope', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'theme/header-utility', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'theme/invisible-pattern', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertSame( 'medium', $ranking_request['reasoning']['effort'] ?? null );
 	}
 
 	public function test_recommend_patterns_rejects_live_search_when_query_vector_signature_changes(): void {
@@ -655,21 +665,25 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
 		$this->assertStringContainsString(
-			'in the header template-part area',
+			'Template-part area: header',
 			(string) ( $embedding_request['input'][0] ?? '' )
 		);
 		$this->assertStringContainsString(
-			'using the site-header template part',
+			'Template-part slug: site-header',
 			(string) ( $embedding_request['input'][0] ?? '' )
 		);
 		$this->assertStringContainsString(
-			'with a flex container layout',
+			'Container layout: flex',
 			(string) ( $embedding_request['input'][0] ?? '' )
 		);
 
 		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
 		$this->assertSame(
 			[
+				[
+					'key'   => 'blockTypes',
+					'match' => [ 'value' => 'core/group' ],
+				],
 				[
 					'key'   => 'traits',
 					'match' => [ 'value' => 'simple' ],
@@ -687,6 +701,222 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'Template-part slug: site-header', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Container layout: flex', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( '"traits"', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'structureSummary', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'contentBlockCount', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_uses_root_level_structural_fallbacks_when_only_insertion_context_is_present(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/root-section',
+						0.73,
+						[
+							'templateTypes' => [ 'page' ],
+							'traits'        => [ 'moderate-complexity' ],
+						]
+					),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/root-section',
+						0.81,
+						[
+							'templateTypes' => [ 'page' ],
+							'traits'        => [ 'moderate-complexity' ],
+						]
+					),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/root-section',
+								'score'  => 0.86,
+								'reason' => 'Fits a root-level page insertion.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'         => 'page',
+				'insertionContext' => [],
+			]
+		);
+
+		$this->assertSame( [ 'theme/root-section' ], array_column( $result['recommendations'], 'name' ) );
+
+		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $embedding_request['input'][0] ?? '' ) );
+
+		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertSame(
+			[
+				[
+					'key'   => 'templateTypes',
+					'match' => [ 'value' => 'page' ],
+				],
+				[
+					'key'   => 'traits',
+					'match' => [ 'value' => 'moderate-complexity' ],
+				],
+			],
+			$structural_request['filter']['should'] ?? null
+		);
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_uses_single_and_singular_root_level_hints_for_post_contexts(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/post-feature',
+						0.73,
+						[
+							'templateTypes' => [ 'singular' ],
+							'traits'        => [ 'moderate-complexity' ],
+						]
+					),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/post-feature',
+						0.81,
+						[
+							'templateTypes' => [ 'singular' ],
+							'traits'        => [ 'moderate-complexity' ],
+						]
+					),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/post-feature',
+								'score'  => 0.88,
+								'reason' => 'Fits a root-level post insertion.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'         => 'post',
+				'insertionContext' => [],
+			]
+		);
+
+		$this->assertSame( [ 'theme/post-feature' ], array_column( $result['recommendations'], 'name' ) );
+
+		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertSame(
+			[
+				[
+					'key'   => 'templateTypes',
+					'match' => [ 'value' => 'single' ],
+				],
+				[
+					'key'   => 'templateTypes',
+					'match' => [ 'value' => 'singular' ],
+				],
+				[
+					'key'   => 'traits',
+					'match' => [ 'value' => 'moderate-complexity' ],
+				],
+			],
+			$structural_request['filter']['should'] ?? null
+		);
+	}
+
+	public function test_recommend_patterns_skips_singular_root_level_hints_for_internal_post_types(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/template-part-shell',
+						0.73,
+						[
+							'traits' => [ 'moderate-complexity' ],
+						]
+					),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'theme/template-part-shell',
+						0.81,
+						[
+							'traits' => [ 'moderate-complexity' ],
+						]
+					),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/template-part-shell',
+								'score'  => 0.84,
+								'reason' => 'Fits the root-level template-part shell.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType'         => 'wp_template_part',
+				'insertionContext' => [],
+			]
+		);
+
+		$this->assertSame( [ 'theme/template-part-shell' ], array_column( $result['recommendations'], 'name' ) );
+
+		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertSame(
+			[
+				[
+					'key'   => 'traits',
+					'match' => [ 'value' => 'moderate-complexity' ],
+				],
+			],
+			$structural_request['filter']['should'] ?? null
+		);
 	}
 
 	public function test_recommend_patterns_exposes_core_override_overlap_and_deduped_sibling_counts(): void {
@@ -996,6 +1226,108 @@ final class PatternAbilitiesTest extends TestCase {
 				'theme/pattern-2',
 				'theme/pattern-1',
 			],
+			array_column( $result['recommendations'], 'name' )
+		);
+	}
+
+	public function test_recommend_patterns_respects_configured_score_threshold(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold'] = 0.75;
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/pattern-a', 0.91 ),
+					$this->pattern_point( 'theme/pattern-b', 0.89 ),
+					$this->pattern_point( 'theme/pattern-c', 0.88 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/pattern-a',
+								'score'  => 0.91,
+								'reason' => 'Strong fit.',
+							],
+							[
+								'name'   => 'theme/pattern-b',
+								'score'  => 0.79,
+								'reason' => 'Still a fit.',
+							],
+							[
+								'name'   => 'theme/pattern-c',
+								'score'  => 0.74,
+								'reason' => 'Below threshold.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertSame(
+			[ 'theme/pattern-a', 'theme/pattern-b' ],
+			array_column( $result['recommendations'], 'name' )
+		);
+	}
+
+	public function test_recommend_patterns_respects_configured_max_results(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$options['flavor_agent_pattern_max_recommendations'] = 2;
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/pattern-a', 0.91 ),
+					$this->pattern_point( 'theme/pattern-b', 0.89 ),
+					$this->pattern_point( 'theme/pattern-c', 0.88 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/pattern-a',
+								'score'  => 0.91,
+								'reason' => 'Strong fit.',
+							],
+							[
+								'name'   => 'theme/pattern-b',
+								'score'  => 0.89,
+								'reason' => 'Strong fit.',
+							],
+							[
+								'name'   => 'theme/pattern-c',
+								'score'  => 0.88,
+								'reason' => 'Strong fit.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = PatternAbilities::recommend_patterns(
+			[
+				'postType' => 'page',
+			]
+		);
+
+		$this->assertSame(
+			[ 'theme/pattern-a', 'theme/pattern-b' ],
 			array_column( $result['recommendations'], 'name' )
 		);
 	}

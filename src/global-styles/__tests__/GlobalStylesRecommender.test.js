@@ -518,6 +518,9 @@ describe( 'GlobalStylesRecommender', () => {
 
 		expect( textarea ).not.toBeNull();
 		expect( button ).not.toBeNull();
+		expect( sidebar.textContent ).toContain(
+			'Press Cmd/Ctrl+Enter to submit.'
+		);
 
 		act( () => {
 			const descriptor = Object.getOwnPropertyDescriptor(
@@ -1252,7 +1255,7 @@ describe( 'GlobalStylesRecommender', () => {
 			expect.objectContaining( {
 				title: 'Review Before Apply',
 				statusLabel: 'Review first',
-				confirmLabel: 'Apply Style Change',
+				confirmLabel: 'Confirm Apply',
 				onCancel: expect.any( Function ),
 				onConfirm: expect.any( Function ),
 			} )

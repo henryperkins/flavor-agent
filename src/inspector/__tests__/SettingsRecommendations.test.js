@@ -61,6 +61,22 @@ function makeSuggestion( panel, label = `Suggestion for ${ panel }` ) {
 }
 
 describe( 'SettingsRecommendations', () => {
+	test( 'renders shared settings framing and counts', () => {
+		renderComponent( [
+			makeSuggestion( 'general' ),
+			makeSuggestion( 'layout' ),
+		] );
+
+		const text = getContainer().textContent;
+
+		expect( text ).toContain( 'Block Settings' );
+		expect( text ).toContain(
+			'Settings suggestions stay grouped with the native controls they change so local apply actions remain easy to verify.'
+		);
+		expect( text ).toContain( '2 suggestions' );
+		expect( text ).toContain( '2 panels' );
+	} );
+
 	test( 'does not render suggestions for delegated settings panels', () => {
 		const delegated = [
 			makeSuggestion( 'position' ),

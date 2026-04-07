@@ -33,7 +33,12 @@ final class PatternAbilities {
 	private const TOTAL_OVERRIDE_BONUS_CAP         = 0.05;
 	private const MAX_NEARBY_SIBLING_BLOCK_TYPES   = 4;
 	private const MAX_LLM_CANDIDATES        = 12;
-	private const MAX_RECOMMENDATIONS       = 8;
+	private const DEFAULT_MAX_RECOMMENDATIONS           = 8;
+	private const DEFAULT_RECOMMENDATION_SCORE_THRESHOLD = 0.3;
+	private const MAX_LLM_INPUT_CHARS                   = 24000;
+	private const MAX_LLM_STRUCTURE_BLOCKS             = 14;
+	private const MAX_LLM_STRUCTURE_LINES              = 18;
+	private const MAX_LLM_CONTENT_PREVIEW_CHARS        = 240;
 
 	public static function list_patterns( mixed $input ): array {
 		$input          = self::normalize_input( $input );
@@ -147,7 +152,7 @@ final class PatternAbilities {
 			? sanitize_text_field( $block_context['blockName'] )
 			: '';
 		$template_type    = isset( $input['templateType'] ) && is_string( $input['templateType'] )
-			? sanitize_key( $input['templateType'] )
+			? sanitize_text_field( $input['templateType'] )
 			: '';
 		$prompt           = isset( $input['prompt'] ) && is_string( $input['prompt'] )
 			? sanitize_textarea_field( $input['prompt'] )
@@ -167,6 +172,13 @@ final class PatternAbilities {
 		$container_layout     = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
 			? sanitize_key( $insertion_context['containerLayout'] )
 			: '';
+		$has_insertion_context = array_key_exists( 'insertionContext', $input )
+			|| $root_block !== ''
+			|| ! empty( $ancestors )
+			|| ! empty( $nearby_siblings )
+			|| $template_part_area !== ''
+			|| $template_part_slug !== ''
+			|| $container_layout !== '';
 		$is_custom_block_context = self::is_custom_block_name( $block_name );
 		$visible_lookup   = is_array( $visible_pattern_names )
 			? array_fill_keys( $visible_pattern_names, true )
@@ -182,31 +194,19 @@ final class PatternAbilities {
 			$prompt
 		);
 
-		$query = "Recommend patterns for a {$post_type} post";
-		if ( $block_name !== '' ) {
-			$query .= " near a {$block_name} block";
-		}
-		if ( $template_type ) {
-			$query .= " in a {$template_type} template";
-		}
-		if ( $root_block !== '' ) {
-			$query .= " inside a {$root_block} container";
-		}
-		if ( ! empty( $nearby_siblings ) ) {
-			$query .= ' with nearby ' . implode( ', ', array_slice( $nearby_siblings, 0, 4 ) );
-		}
-		if ( $template_part_area !== '' ) {
-			$query .= " in the {$template_part_area} template-part area";
-		}
-		if ( $template_part_slug !== '' ) {
-			$query .= " using the {$template_part_slug} template part";
-		}
-		if ( $container_layout !== '' ) {
-			$query .= " with a {$container_layout} container layout";
-		}
-		if ( $prompt ) {
-			$query .= ". {$prompt}";
-		}
+		$query = self::build_embedding_query(
+			$post_type,
+			$block_name,
+			$template_type,
+			$prompt,
+			$root_block,
+			$ancestors,
+			$nearby_siblings,
+			$template_part_area,
+			$template_part_slug,
+			$container_layout,
+			$has_insertion_context
+		);
 
 		// Step 3: Embed query.
 		$query_vector = EmbeddingClient::embed( $query );
@@ -280,32 +280,16 @@ final class PatternAbilities {
 		}
 
 		$pass_b         = [];
-		$should_clauses = [];
-
-		if ( $template_type ) {
-			$should_clauses[] = [
-				'key'   => 'templateTypes',
-				'match' => [ 'value' => $template_type ],
-			];
-		}
-		if ( $block_name !== '' ) {
-			$should_clauses[] = [
-				'key'   => 'blockTypes',
-				'match' => [ 'value' => $block_name ],
-			];
-		}
-		if ( self::is_constrained_insertion_area( $root_block, $ancestors, $template_part_area ) ) {
-			$should_clauses[] = [
-				'key'   => 'traits',
-				'match' => [ 'value' => 'simple' ],
-			];
-		}
-		if ( in_array( $template_part_area, [ 'header', 'footer' ], true ) ) {
-			$should_clauses[] = [
-				'key'   => 'traits',
-				'match' => [ 'value' => 'site-chrome' ],
-			];
-		}
+		$should_clauses = self::build_structural_should_clauses(
+			$post_type,
+			$block_name,
+			$template_type,
+			$root_block,
+			$ancestors,
+			$nearby_siblings,
+			$template_part_area,
+			$has_insertion_context
+		);
 
 		if ( ! empty( $should_clauses ) ) {
 			$pass_b = QdrantClient::search(
@@ -320,13 +304,15 @@ final class PatternAbilities {
 		}
 
 		// Union, dedupe by payload.name, keep best score.
-		$candidates = [];
+		$candidates               = [];
+		$retrieved_candidate_names = [];
 		foreach ( array_merge( $pass_a, $pass_b ) as $point ) {
 			$name  = $point['payload']['name'] ?? '';
 			$score = $point['score'] ?? 0.0;
 			if ( $name === '' ) {
 				continue;
 			}
+			$retrieved_candidate_names[ $name ] = true;
 			if ( $visible_lookup && ! isset( $visible_lookup[ $name ] ) ) {
 				continue;
 			}
@@ -375,54 +361,25 @@ final class PatternAbilities {
 		}
 
 		// Step 5: Rank via Responses API.
-		$candidates_for_llm = [];
-		foreach ( $candidates as $name => $c ) {
-			$candidate_entry = [
-				'name'          => $name,
-				'title'         => $c['payload']['title'] ?? '',
-				'description'   => $c['payload']['description'] ?? '',
-				'categories'    => $c['payload']['categories'] ?? [],
-				'blockTypes'    => $c['payload']['blockTypes'] ?? [],
-				'templateTypes' => $c['payload']['templateTypes'] ?? [],
-				'patternOverrides' => $c['payload']['patternOverrides'] ?? [
-					'hasOverrides' => false,
-				],
-				'overrideCapabilities' => self::build_override_capabilities(
-					is_array( $c['payload']['patternOverrides'] ?? null ) ? $c['payload']['patternOverrides'] : [],
-					is_array( $c['rankingHint'] ?? null ) ? $c['rankingHint'] : []
-				),
-				'rankingHints'  => self::prepare_candidate_ranking_hint_for_llm(
-					is_array( $c['rankingHint'] ?? null ) ? $c['rankingHint'] : []
-				),
-				'content'       => substr( $c['payload']['content'] ?? '', 0, 500 ),
-			];
-
-			$traits = is_array( $c['payload']['traits'] ?? null ) ? $c['payload']['traits'] : [];
-			if ( ! empty( $traits ) ) {
-				$candidate_entry['traits'] = $traits;
-			}
-
-			$candidates_for_llm[] = $candidate_entry;
-		}
-
-		$llm_input = "## Editing Context\n"
-			. "Post type: {$post_type}\n"
-			. ( $block_name !== '' ? "Block context: {$block_name}\n" : '' )
-			. ( $template_type ? "Template type: {$template_type}\n" : '' )
-			. ( $prompt ? "User instruction: {$prompt}\n" : '' )
-			. self::build_insertion_context_section(
-				$root_block,
-				$ancestors,
-				$nearby_siblings,
-				$template_part_area,
-				$template_part_slug,
-				$container_layout
-			)
-			. self::build_custom_block_context_section( $block_name, $is_custom_block_context )
-			. self::build_design_summary_section()
-			. self::build_wordpress_docs_guidance_section( $docs_guidance )
-			. "\n## Candidate Patterns\n"
-			. wp_json_encode( $candidates_for_llm, JSON_PRETTY_PRINT );
+		$llm_input = self::build_ranking_input(
+			$post_type,
+			$block_name,
+			$template_type,
+			$prompt,
+			$root_block,
+			$ancestors,
+			$nearby_siblings,
+			$template_part_area,
+			$template_part_slug,
+			$container_layout,
+			$block_name,
+			$has_insertion_context,
+			$is_custom_block_context,
+			$docs_guidance,
+			$visible_pattern_names,
+			count( $retrieved_candidate_names ),
+			$candidates
+		);
 
 		$ranked = ResponsesClient::rank( self::ranking_system_prompt(), $llm_input );
 		if ( is_wp_error( $ranked ) ) {
@@ -442,18 +399,24 @@ final class PatternAbilities {
 		}
 
 		$recommendations = [];
-		foreach ( array_slice( (array) $data['recommendations'], 0, self::MAX_RECOMMENDATIONS ) as $rec ) {
+		$max_recommendations = self::max_recommendations();
+		$score_threshold     = self::recommendation_score_threshold();
+		foreach ( (array) $data['recommendations'] as $rec ) {
+			if ( count( $recommendations ) >= $max_recommendations ) {
+				break;
+			}
 			$name = $rec['name'] ?? '';
 			if ( ! isset( $candidates[ $name ] ) ) {
 				continue;
 			}
 
-			$payload = $candidates[ $name ]['payload'];
+			$payload       = $candidates[ $name ]['payload'];
+			$overrides     = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
 			$ranking_hint = is_array( $candidates[ $name ]['rankingHint'] ?? null )
 				? $candidates[ $name ]['rankingHint']
 				: [];
 			$score   = isset( $rec['score'] ) ? max( 0.0, min( 1.0, (float) $rec['score'] ) ) : 0.0;
-			if ( $score < 0.3 ) {
+			if ( $score < $score_threshold ) {
 				continue;
 			}
 			$reason = self::append_pattern_override_reason_hint(
@@ -466,11 +429,9 @@ final class PatternAbilities {
 				'score'      => $score,
 				'reason'     => $reason,
 				'categories' => $payload['categories'] ?? [],
-				'patternOverrides' => $payload['patternOverrides'] ?? [
-					'hasOverrides' => false,
-				],
+				'patternOverrides' => $overrides,
 				'overrideCapabilities' => self::build_override_capabilities(
-					is_array( $payload['patternOverrides'] ?? null ) ? $payload['patternOverrides'] : [],
+					$overrides,
 					$ranking_hint
 				),
 				'content'    => $payload['content'] ?? '',
@@ -529,7 +490,6 @@ Respond with a JSON object (no markdown fences, no text outside the JSON):
 
 Rules:
 - Score 0.0 to 1.0 where 1.0 = perfect fit for the context.
-- Omit patterns scoring below 0.3.
 - Order by score descending.
 - Consider: post type conventions, block proximity, template structure,
   category relevance, and the user's stated intent.
@@ -540,8 +500,11 @@ Rules:
   recommending patterns that duplicate adjacent content.
 - When a Design Summary is provided, prefer patterns whose visual character
   (density, media usage, layout structure) matches the site's design
-  vocabulary. Pattern traits like media-rich, text-focused, simple, complex
-  are signals for this.
+  vocabulary. Pattern traits, structureSummary, and contentBlockCount are
+  the primary layout signals.
+- When a Visible Pattern Scope section is provided, the candidate list is
+  already filtered to the patterns WordPress allows at that insertion
+  point. Rank only within that allowed subset.
 - Prefer patterns when their Pattern Overrides metadata overlaps the nearby
   block's bindable fields or nearby sibling block types. This applies to
   both core and custom blocks.
@@ -555,8 +518,9 @@ Rules:
 - When Pattern Overrides metadata materially strengthens the recommendation,
   mention that briefly in the reason.
 - Return only name, score, and reason per pattern. Title, categories,
-  and content are attached from the source data.
-- Return at most 8 recommendations.
+  traits, structureSummary, contentPreview, and Pattern Overrides metadata
+  are attached from the source data.
+- Return only the strongest matches and keep the list concise.
 SYSTEM;
 	}
 
@@ -585,9 +549,12 @@ SYSTEM;
 		array $nearby_siblings,
 		string $template_part_area = '',
 		string $template_part_slug = '',
-		string $container_layout = ''
+		string $container_layout = '',
+		bool $has_insertion_context = false
 	): string {
 		if (
+			! $has_insertion_context
+			&&
 			$root_block === ''
 			&& empty( $ancestors )
 			&& empty( $nearby_siblings )
@@ -625,9 +592,12 @@ SYSTEM;
 		}
 
 		$is_constrained = self::is_constrained_insertion_area( $root_block, $ancestors, $template_part_area );
+		$is_root_level  = self::is_root_insertion_area( $root_block, $ancestors, $template_part_area );
 
 		if ( $is_constrained ) {
 			$lines[] = 'Area type: constrained (prefer compact patterns)';
+		} elseif ( $is_root_level ) {
+			$lines[] = 'Area type: root-level (broader section patterns can fit)';
 		}
 
 		return "\n## Insertion Context\n" . implode( "\n", $lines ) . "\n";
@@ -730,18 +700,22 @@ SYSTEM;
 		}
 
 		$category_counts = [];
+		$trait_counts    = [];
 
 		foreach ( $candidates as $candidate ) {
 			$categories = $candidate['payload']['categories'] ?? [];
 			$primary    = $categories[0] ?? '_uncategorized';
+			$traits     = is_array( $candidate['payload']['traits'] ?? null ) ? $candidate['payload']['traits'] : [];
+			$primary_trait = $traits[0] ?? '_untyped';
 
 			$category_counts[ $primary ] = ( $category_counts[ $primary ] ?? 0 ) + 1;
+			$trait_counts[ $primary_trait ] = ( $trait_counts[ $primary_trait ] ?? 0 ) + 1;
 		}
 
 		$threshold      = max( 3, (int) ceil( $max * 0.4 ) );
 		$needs_diversity = false;
 
-		foreach ( $category_counts as $count ) {
+		foreach ( array_merge( array_values( $category_counts ), array_values( $trait_counts ) ) as $count ) {
 			if ( $count > $threshold ) {
 				$needs_diversity = true;
 				break;
@@ -754,6 +728,7 @@ SYSTEM;
 
 		$picked          = [];
 		$category_picked = [];
+		$trait_picked    = [];
 		$overflow        = [];
 
 		foreach ( $candidates as $name => $candidate ) {
@@ -763,11 +738,15 @@ SYSTEM;
 
 			$categories    = $candidate['payload']['categories'] ?? [];
 			$primary       = $categories[0] ?? '_uncategorized';
+			$traits        = is_array( $candidate['payload']['traits'] ?? null ) ? $candidate['payload']['traits'] : [];
+			$primary_trait = $traits[0] ?? '_untyped';
 			$current_count = $category_picked[ $primary ] ?? 0;
+			$current_trait_count = $trait_picked[ $primary_trait ] ?? 0;
 
-			if ( $current_count < $threshold ) {
+			if ( $current_count < $threshold && $current_trait_count < $threshold ) {
 				$picked[ $name ]             = $candidate;
 				$category_picked[ $primary ] = $current_count + 1;
+				$trait_picked[ $primary_trait ] = $current_trait_count + 1;
 			} else {
 				$overflow[ $name ] = $candidate;
 			}
@@ -786,6 +765,10 @@ SYSTEM;
 
 	private static function is_custom_block_name( string $block_name ): bool {
 		return $block_name !== '' && ! str_starts_with( $block_name, 'core/' );
+	}
+
+	private static function is_root_insertion_area( string $root_block, array $ancestors, string $template_part_area ): bool {
+		return $root_block === '' && empty( $ancestors ) && $template_part_area === '';
 	}
 
 	private static function is_constrained_insertion_area( string $root_block, array $ancestors, string $template_part_area ): bool {
@@ -916,9 +899,7 @@ SYSTEM;
 	 * @return array<string, mixed>
 	 */
 	private static function build_candidate_ranking_hint( array $payload, string $block_name, array $nearby_siblings, bool $is_custom_block_context ): array {
-		$pattern_overrides = is_array( $payload['patternOverrides'] ?? null )
-			? $payload['patternOverrides']
-			: [];
+		$pattern_overrides = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
 		$override_attributes_map = self::sanitize_override_attribute_map( $pattern_overrides['overrideAttributes'] ?? [] );
 		$override_block_names = array_values(
 			array_unique(
@@ -1060,7 +1041,8 @@ SYSTEM;
 	 * @return array<string, mixed>
 	 */
 	private static function build_override_capabilities( array $pattern_overrides, array $ranking_hint ): array {
-		$override_attributes = is_array( $pattern_overrides['overrideAttributes'] ?? null )
+		$pattern_overrides      = self::normalize_pattern_overrides_metadata( $pattern_overrides );
+		$override_attributes    = is_array( $pattern_overrides['overrideAttributes'] ?? null )
 			? $pattern_overrides['overrideAttributes']
 			: [];
 		$unsupported_attributes = is_array( $pattern_overrides['unsupportedAttributes'] ?? null )
@@ -1079,6 +1061,506 @@ SYSTEM;
 			'matchesNearbyCustomBlock' => ! empty( $ranking_hint['matchesNearbyCustomBlock'] ),
 			'supportsCustomBlocks'    => ! empty( $ranking_hint['supportsCustomBlocks'] ),
 		];
+	}
+
+	private static function build_embedding_query(
+		string $post_type,
+		string $block_name,
+		string $template_type,
+		string $prompt,
+		string $root_block,
+		array $ancestors,
+		array $nearby_siblings,
+		string $template_part_area,
+		string $template_part_slug,
+		string $container_layout,
+		bool $has_insertion_context
+	): string {
+		$sections = [
+			"[TASK]\nRecommend WordPress block patterns for the current editing context.",
+			"[POST TYPE]\n{$post_type}",
+		];
+
+		if ( $block_name !== '' ) {
+			$sections[] = "[BLOCK CONTEXT]\n{$block_name}";
+		}
+
+		if ( $template_type !== '' ) {
+			$sections[] = "[TEMPLATE TYPE]\n{$template_type}";
+		}
+
+		if ( $has_insertion_context ) {
+			$context_lines = [];
+
+			if ( $root_block !== '' ) {
+				$context_lines[] = "Container: {$root_block}";
+			}
+
+			if ( ! empty( $ancestors ) ) {
+				$context_lines[] = 'Ancestors: ' . implode( ' > ', array_slice( $ancestors, 0, 6 ) );
+			}
+
+			if ( ! empty( $nearby_siblings ) ) {
+				$context_lines[] = 'Nearby blocks: ' . implode( ', ', array_slice( $nearby_siblings, 0, 6 ) );
+			}
+
+			if ( $template_part_area !== '' ) {
+				$context_lines[] = "Template-part area: {$template_part_area}";
+			}
+
+			if ( $template_part_slug !== '' ) {
+				$context_lines[] = "Template-part slug: {$template_part_slug}";
+			}
+
+			if ( $container_layout !== '' ) {
+				$context_lines[] = "Container layout: {$container_layout}";
+			}
+
+			if ( self::is_constrained_insertion_area( $root_block, $ancestors, $template_part_area ) ) {
+				$context_lines[] = 'Area type: constrained';
+			} elseif ( self::is_root_insertion_area( $root_block, $ancestors, $template_part_area ) ) {
+				$context_lines[] = 'Area type: root-level';
+			}
+
+			if ( ! empty( $context_lines ) ) {
+				$sections[] = "[INSERTION CONTEXT]\n" . implode( "\n", $context_lines );
+			}
+		}
+
+		if ( $prompt !== '' ) {
+			$sections[] = "[USER INSTRUCTION]\n{$prompt}";
+		}
+
+		return implode( "\n\n", $sections );
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function build_structural_should_clauses(
+		string $post_type,
+		string $block_name,
+		string $template_type,
+		string $root_block,
+		array $ancestors,
+		array $nearby_siblings,
+		string $template_part_area,
+		bool $has_insertion_context
+	): array {
+		$clauses = [];
+
+		if ( $template_type !== '' ) {
+			$clauses[] = [
+				'key'   => 'templateTypes',
+				'match' => [ 'value' => $template_type ],
+			];
+		}
+
+		if ( $block_name !== '' ) {
+			$clauses[] = [
+				'key'   => 'blockTypes',
+				'match' => [ 'value' => $block_name ],
+			];
+		}
+
+		if ( $root_block !== '' ) {
+			$clauses[] = [
+				'key'   => 'blockTypes',
+				'match' => [ 'value' => $root_block ],
+			];
+		}
+
+		if ( self::is_constrained_insertion_area( $root_block, $ancestors, $template_part_area ) ) {
+			$clauses[] = [
+				'key'   => 'traits',
+				'match' => [ 'value' => 'simple' ],
+			];
+		}
+
+		if ( in_array( $template_part_area, [ 'header', 'footer' ], true ) ) {
+			$clauses[] = [
+				'key'   => 'traits',
+				'match' => [ 'value' => 'site-chrome' ],
+			];
+		}
+
+		if (
+			$has_insertion_context
+			&& $template_type === ''
+			&& self::is_root_insertion_area( $root_block, $ancestors, $template_part_area )
+		) {
+			foreach ( self::derive_template_type_hints_from_post_type( $post_type ) as $template_hint ) {
+				$clauses[] = [
+					'key'   => 'templateTypes',
+					'match' => [ 'value' => $template_hint ],
+				];
+			}
+
+			if ( empty( $nearby_siblings ) ) {
+				$clauses[] = [
+					'key'   => 'traits',
+					'match' => [ 'value' => 'moderate-complexity' ],
+				];
+			}
+		}
+
+		$deduped = [];
+		$seen    = [];
+
+		foreach ( $clauses as $clause ) {
+			$key   = is_string( $clause['key'] ?? null ) ? $clause['key'] : '';
+			$value = is_string( $clause['match']['value'] ?? null ) ? $clause['match']['value'] : '';
+
+			if ( $key === '' || $value === '' ) {
+				continue;
+			}
+
+			$signature = $key . ':' . $value;
+
+			if ( isset( $seen[ $signature ] ) ) {
+				continue;
+			}
+
+			$seen[ $signature ] = true;
+			$deduped[]          = $clause;
+		}
+
+		return $deduped;
+	}
+
+	/**
+	 * @return string[]
+	 */
+	private static function derive_template_type_hints_from_post_type( string $post_type ): array {
+		$post_type = sanitize_key( $post_type );
+
+		if ( $post_type === 'page' ) {
+			return [ 'page' ];
+		}
+
+		if ( $post_type === '' || self::is_internal_root_pattern_context_post_type( $post_type ) ) {
+			return [];
+		}
+
+		return [ 'single', 'singular' ];
+	}
+
+	private static function is_internal_root_pattern_context_post_type( string $post_type ): bool {
+		return str_starts_with( $post_type, 'wp_' )
+			|| in_array( $post_type, [ 'global_styles' ], true );
+	}
+
+	/**
+	 * @param array<string, array{payload: array<string, mixed>, rankingHint?: array<string, mixed>}> $candidates
+	 */
+	private static function build_ranking_input(
+		string $post_type,
+		string $block_name,
+		string $template_type,
+		string $prompt,
+		string $root_block,
+		array $ancestors,
+		array $nearby_siblings,
+		string $template_part_area,
+		string $template_part_slug,
+		string $container_layout,
+		string $custom_block_name,
+		bool $has_insertion_context,
+		bool $is_custom_block_context,
+		array $docs_guidance,
+		?array $visible_pattern_names,
+		int $retrieved_candidate_count,
+		array $candidates
+	): string {
+		$base_input = "## Editing Context\n"
+			. "Post type: {$post_type}\n"
+			. ( $block_name !== '' ? "Block context: {$block_name}\n" : '' )
+			. ( $template_type !== '' ? "Template type: {$template_type}\n" : '' )
+			. ( $prompt !== '' ? "User instruction: {$prompt}\n" : '' )
+			. self::build_insertion_context_section(
+				$root_block,
+				$ancestors,
+				$nearby_siblings,
+				$template_part_area,
+				$template_part_slug,
+				$container_layout,
+				$has_insertion_context
+			)
+			. self::build_custom_block_context_section( $custom_block_name, $is_custom_block_context )
+			. self::build_design_summary_section()
+			. self::build_wordpress_docs_guidance_section( $docs_guidance );
+
+		$candidate_entries = self::build_candidates_for_llm( $candidates );
+		$total_candidates  = count( $candidate_entries );
+		$shown_candidates  = $total_candidates;
+
+		for ( $i = 0; $i < 2; $i++ ) {
+			$meta = self::build_candidate_budget_section( $shown_candidates, $total_candidates )
+				. self::build_visible_pattern_scope_section(
+					$visible_pattern_names,
+					$shown_candidates,
+					$total_candidates,
+					$retrieved_candidate_count
+				);
+			$available = self::MAX_LLM_INPUT_CHARS - strlen( $base_input . $meta . "\n## Candidate Patterns\n" );
+			$selected  = self::select_candidates_for_budget( $candidate_entries, $available );
+			$shown_candidates = count( $selected );
+		}
+
+		$meta = self::build_candidate_budget_section( $shown_candidates, $total_candidates )
+			. self::build_visible_pattern_scope_section(
+				$visible_pattern_names,
+				$shown_candidates,
+				$total_candidates,
+				$retrieved_candidate_count
+			);
+		$selected = self::select_candidates_for_budget(
+			$candidate_entries,
+			self::MAX_LLM_INPUT_CHARS - strlen( $base_input . $meta . "\n## Candidate Patterns\n" )
+		);
+		$candidates_json = wp_json_encode( $selected );
+
+		return $base_input
+			. $meta
+			. "\n## Candidate Patterns\n"
+			. ( false !== $candidates_json ? $candidates_json : '[]' );
+	}
+
+	/**
+	 * @param array<string, array{payload: array<string, mixed>, rankingHint?: array<string, mixed>}> $candidates
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function build_candidates_for_llm( array $candidates ): array {
+		$entries = [];
+
+		foreach ( $candidates as $name => $candidate ) {
+			$payload         = is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [];
+			$ranking_hint    = is_array( $candidate['rankingHint'] ?? null ) ? $candidate['rankingHint'] : [];
+			$pattern_overrides = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
+			$content         = is_string( $payload['content'] ?? null ) ? $payload['content'] : '';
+			$traits          = is_array( $payload['traits'] ?? null ) ? StringArray::sanitize( $payload['traits'] ) : [];
+			$structure       = self::build_pattern_structure_summary( $content );
+			$content_preview = self::build_pattern_content_preview( $content );
+
+			$entry = [
+				'name'                 => $name,
+				'title'                => $payload['title'] ?? '',
+				'description'          => $payload['description'] ?? '',
+				'categories'           => $payload['categories'] ?? [],
+				'blockTypes'           => $payload['blockTypes'] ?? [],
+				'templateTypes'        => $payload['templateTypes'] ?? [],
+				'traits'               => $traits,
+				'patternOverrides'     => $pattern_overrides,
+				'overrideCapabilities' => self::build_override_capabilities(
+					$pattern_overrides,
+					$ranking_hint
+				),
+				'rankingHints'         => self::prepare_candidate_ranking_hint_for_llm( $ranking_hint ),
+				'contentBlockCount'    => self::count_pattern_blocks( $content ),
+			];
+
+			if ( $structure !== '' ) {
+				$entry['structureSummary'] = $structure;
+			}
+
+			if ( $content_preview !== '' ) {
+				$entry['contentPreview'] = $content_preview;
+			}
+
+			$entries[] = $entry;
+		}
+
+		return $entries;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $candidate_entries
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function select_candidates_for_budget( array $candidate_entries, int $available_chars ): array {
+		if ( $available_chars <= 0 ) {
+			return [];
+		}
+
+		$selected = [];
+
+		foreach ( $candidate_entries as $entry ) {
+			$trial = array_merge( $selected, [ $entry ] );
+			$json  = wp_json_encode( $trial );
+
+			if ( false === $json ) {
+				continue;
+			}
+
+			if ( strlen( $json ) <= $available_chars ) {
+				$selected[] = $entry;
+				continue;
+			}
+
+			if ( [] === $selected ) {
+				$selected[] = self::shrink_candidate_entry_for_budget( $entry );
+			}
+
+			break;
+		}
+
+		return $selected;
+	}
+
+	/**
+	 * @param array<string, mixed> $entry
+	 * @return array<string, mixed>
+	 */
+	private static function shrink_candidate_entry_for_budget( array $entry ): array {
+		if ( isset( $entry['structureSummary'] ) && is_string( $entry['structureSummary'] ) ) {
+			$entry['structureSummary'] = self::truncate_text( $entry['structureSummary'], 320 );
+		}
+
+		if ( isset( $entry['contentPreview'] ) && is_string( $entry['contentPreview'] ) ) {
+			$entry['contentPreview'] = self::truncate_text( $entry['contentPreview'], 120 );
+		}
+
+		return $entry;
+	}
+
+	private static function build_candidate_budget_section( int $shown_candidates, int $total_candidates ): string {
+		if ( $shown_candidates >= $total_candidates ) {
+			return '';
+		}
+
+		return "\n## Candidate Budget\n"
+			. "Candidates shown to rank: {$shown_candidates} of {$total_candidates}\n";
+	}
+
+	private static function build_visible_pattern_scope_section(
+		?array $visible_pattern_names,
+		int $shown_candidates,
+		int $total_candidates,
+		int $retrieved_candidate_count
+	): string {
+		if ( ! is_array( $visible_pattern_names ) ) {
+			return '';
+		}
+
+		return "\n## Visible Pattern Scope\n"
+			. 'Allowed patterns at this insertion point: ' . count( array_unique( StringArray::sanitize( $visible_pattern_names ) ) ) . "\n"
+			. "Unique retrieved candidates before visibility filtering: {$retrieved_candidate_count}\n"
+			. "Candidates shown to rank: {$shown_candidates} of {$total_candidates}\n"
+			. "Only allowed patterns appear in the candidate list below.\n";
+	}
+
+	private static function build_pattern_structure_summary( string $content ): string {
+		if ( $content === '' ) {
+			return '';
+		}
+
+		$blocks = parse_blocks( $content );
+
+		if ( [] === $blocks ) {
+			return '';
+		}
+
+		$lines       = [];
+		$seen_blocks = 0;
+		self::collect_pattern_structure_lines( $blocks, 0, $lines, $seen_blocks );
+
+		if ( [] === $lines ) {
+			return '';
+		}
+
+		$total_blocks = self::count_pattern_blocks( $content );
+
+		if ( $total_blocks > $seen_blocks ) {
+			$lines[] = sprintf(
+				'... %d more block%s',
+				$total_blocks - $seen_blocks,
+				1 === ( $total_blocks - $seen_blocks ) ? '' : 's'
+			);
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $blocks
+	 * @param string[]                         $lines
+	 */
+	private static function collect_pattern_structure_lines( array $blocks, int $depth, array &$lines, int &$seen_blocks ): void {
+		foreach ( $blocks as $block ) {
+			if (
+				$seen_blocks >= self::MAX_LLM_STRUCTURE_BLOCKS
+				|| count( $lines ) >= self::MAX_LLM_STRUCTURE_LINES
+			) {
+				return;
+			}
+
+			$block_name = is_string( $block['blockName'] ?? null ) ? $block['blockName'] : 'unknown';
+			$lines[]    = str_repeat( '  ', min( 4, $depth ) ) . '- ' . $block_name;
+			$seen_blocks++;
+
+			if ( is_array( $block['innerBlocks'] ?? null ) && ! empty( $block['innerBlocks'] ) ) {
+				self::collect_pattern_structure_lines( $block['innerBlocks'], $depth + 1, $lines, $seen_blocks );
+			}
+		}
+	}
+
+	private static function build_pattern_content_preview( string $content ): string {
+		$preview = trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( $content ) ) );
+
+		if ( $preview === '' ) {
+			return '';
+		}
+
+		return self::truncate_text( $preview, self::MAX_LLM_CONTENT_PREVIEW_CHARS );
+	}
+
+	private static function count_pattern_blocks( string $content ): int {
+		return max( 0, substr_count( $content, '<!-- wp:' ) );
+	}
+
+	private static function truncate_text( string $text, int $limit ): string {
+		if ( $limit <= 0 || strlen( $text ) <= $limit ) {
+			return $text;
+		}
+
+		return rtrim( substr( $text, 0, $limit - 3 ) ) . '...';
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_pattern_overrides_metadata( mixed $pattern_overrides ): array {
+		if ( ! is_array( $pattern_overrides ) ) {
+			$pattern_overrides = [];
+		}
+
+		return [
+			'hasOverrides'          => ! empty( $pattern_overrides['hasOverrides'] ),
+			'blockCount'            => max( 0, (int) ( $pattern_overrides['blockCount'] ?? 0 ) ),
+			'blockNames'            => StringArray::sanitize( $pattern_overrides['blockNames'] ?? [] ),
+			'bindableAttributes'    => self::sanitize_override_attribute_map( $pattern_overrides['bindableAttributes'] ?? [] ),
+			'overrideAttributes'    => self::sanitize_override_attribute_map( $pattern_overrides['overrideAttributes'] ?? [] ),
+			'usesDefaultBinding'    => ! empty( $pattern_overrides['usesDefaultBinding'] ),
+			'unsupportedAttributes' => self::sanitize_override_attribute_map( $pattern_overrides['unsupportedAttributes'] ?? [] ),
+		];
+	}
+
+	private static function recommendation_score_threshold(): float {
+		$value = (float) get_option(
+			'flavor_agent_pattern_recommendation_threshold',
+			self::DEFAULT_RECOMMENDATION_SCORE_THRESHOLD
+		);
+
+		return max( 0.0, min( 1.0, $value ) );
+	}
+
+	private static function max_recommendations(): int {
+		$value = (int) get_option(
+			'flavor_agent_pattern_max_recommendations',
+			self::DEFAULT_MAX_RECOMMENDATIONS
+		);
+
+		return max( 1, min( self::MAX_LLM_CANDIDATES, $value ) );
 	}
 
 	/**

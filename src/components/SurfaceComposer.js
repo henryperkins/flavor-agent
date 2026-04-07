@@ -37,6 +37,7 @@ export default function SurfaceComposer( {
 	eyebrow = '',
 	helperText = '',
 	starterPrompts = [],
+	starterPromptsLayout = 'wrap',
 	submitShortcut = 'mod+enter',
 	submitHint = '',
 	onStarterPromptClick = null,
@@ -122,7 +123,12 @@ export default function SurfaceComposer( {
 
 			{ starterPrompts.length > 0 && (
 				<div
-					className="flavor-agent-panel__composer-starters"
+					className={ joinClassNames(
+						'flavor-agent-panel__composer-starters',
+						starterPromptsLayout === 'stacked'
+							? 'flavor-agent-panel__composer-starters--stacked'
+							: ''
+					) }
 					role="group"
 					aria-label="Starter prompts"
 				>
