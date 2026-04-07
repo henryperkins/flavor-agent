@@ -12,6 +12,7 @@ import {
 
 import { formatCount } from '../utils/format-count';
 import AIActivitySection from '../components/AIActivitySection';
+import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
@@ -20,6 +21,11 @@ import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
+import {
+	MANUAL_IDEAS_LABEL,
+	REVIEW_LANE_LABEL,
+	REVIEW_SECTION_TITLE,
+} from '../components/surface-labels';
 import {
 	buildBlockStyleExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
@@ -166,7 +172,9 @@ function formatBadgeLabel( value = '' ) {
 }
 
 function getToneLabel( suggestion ) {
-	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual ideas';
+	return suggestion?.tone === 'executable'
+		? REVIEW_LANE_LABEL
+		: MANUAL_IDEAS_LABEL;
 }
 
 function OperationList( {
@@ -339,7 +347,7 @@ function StyleBookPanel( {
 						</span>
 					) }
 					<span className="flavor-agent-pill">
-						Review before apply
+						{ REVIEW_LANE_LABEL }
 					</span>
 					{ suggestions.length > 0 && (
 						<span className="flavor-agent-pill">
@@ -418,8 +426,8 @@ function StyleBookPanel( {
 
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Review first"
-					tone="Review first"
+					title={ REVIEW_LANE_LABEL }
+					tone={ REVIEW_LANE_LABEL }
 					count={ executableSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -433,11 +441,12 @@ function StyleBookPanel( {
 			) }
 
 			{ manualSuggestions.length > 0 && (
-				<RecommendationLane
-					title="Manual ideas"
-					tone="Manual ideas"
+				<AIAdvisorySection
+					title={ MANUAL_IDEAS_LABEL }
 					count={ manualSuggestions.length }
 					countNoun="suggestion"
+					initialOpen
+					advisoryLabel=""
 					description={
 						showSecondaryGuidance
 							? 'These ideas stay advisory until Flavor Agent can express them as safe theme-backed block style operations.'
@@ -445,13 +454,13 @@ function StyleBookPanel( {
 					}
 				>
 					{ manualSuggestions.map( renderSuggestionCard ) }
-				</RecommendationLane>
+				</AIAdvisorySection>
 			) }
 
 			{ selectedSuggestion && (
 				<AIReviewSection
-					title="Review Before Apply"
-					statusLabel="Review first"
+					title={ REVIEW_SECTION_TITLE }
+					statusLabel={ REVIEW_LANE_LABEL }
 					count={ selectedSuggestion.operations?.length || 0 }
 					summary={ selectedSuggestion.description }
 					onConfirm={ onApply }

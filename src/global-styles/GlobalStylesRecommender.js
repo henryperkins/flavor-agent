@@ -12,6 +12,7 @@ import {
 
 import { formatCount } from '../utils/format-count';
 import AIActivitySection from '../components/AIActivitySection';
+import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIReviewSection from '../components/AIReviewSection';
 import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
@@ -20,6 +21,11 @@ import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
+import {
+	MANUAL_IDEAS_LABEL,
+	REVIEW_LANE_LABEL,
+	REVIEW_SECTION_TITLE,
+} from '../components/surface-labels';
 import {
 	buildGlobalStylesExecutionContractFromSettings,
 	collectThemeTokenDiagnosticsFromSettings,
@@ -152,7 +158,9 @@ function formatBadgeLabel( value = '' ) {
 }
 
 function getToneLabel( suggestion ) {
-	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual ideas';
+	return suggestion?.tone === 'executable'
+		? REVIEW_LANE_LABEL
+		: MANUAL_IDEAS_LABEL;
 }
 
 function OperationList( {
@@ -311,7 +319,7 @@ function GlobalStylesPanel( {
 				<div className="flavor-agent-style-surface__meta">
 					<span className="flavor-agent-pill">Global Styles</span>
 					<span className="flavor-agent-pill">
-						Review before apply
+						{ REVIEW_LANE_LABEL }
 					</span>
 					{ visibilityConstraintCount > 0 && (
 						<span className="flavor-agent-pill">
@@ -401,8 +409,8 @@ function GlobalStylesPanel( {
 
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Review first"
-					tone="Review first"
+					title={ REVIEW_LANE_LABEL }
+					tone={ REVIEW_LANE_LABEL }
 					count={ executableSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -416,11 +424,12 @@ function GlobalStylesPanel( {
 			) }
 
 			{ manualSuggestions.length > 0 && (
-				<RecommendationLane
-					title="Manual ideas"
-					tone="Manual ideas"
+				<AIAdvisorySection
+					title={ MANUAL_IDEAS_LABEL }
 					count={ manualSuggestions.length }
 					countNoun="suggestion"
+					initialOpen
+					advisoryLabel=""
 					description={
 						showSecondaryGuidance
 							? 'These ideas stay advisory until Flavor Agent can express them as safe theme-backed operations.'
@@ -428,13 +437,13 @@ function GlobalStylesPanel( {
 					}
 				>
 					{ manualSuggestions.map( renderSuggestionCard ) }
-				</RecommendationLane>
+				</AIAdvisorySection>
 			) }
 
 			{ selectedSuggestion && (
 				<AIReviewSection
-					title="Review Before Apply"
-					statusLabel="Review first"
+					title={ REVIEW_SECTION_TITLE }
+					statusLabel={ REVIEW_LANE_LABEL }
 					count={ selectedSuggestion.operations?.length || 0 }
 					summary={ selectedSuggestion.description }
 					onConfirm={ onApply }
@@ -696,7 +705,7 @@ export default function GlobalStylesRecommender() {
 
 	const isLoading = status === 'loading';
 	const isApplying = applyStatus === 'applying' || undoStatus === 'undoing';
-	const notice = buildNotice
+	const baseNotice = buildNotice
 		? buildNotice( {
 				requestError: currentError,
 				applyError: currentApplyError,
@@ -722,6 +731,22 @@ export default function GlobalStylesRecommender() {
 					'Review a theme-backed change before applying it.',
 		  } )
 		: null;
+	let fallbackNotice = null;
+
+	if ( ! scope ) {
+		fallbackNotice = {
+			source: 'scope',
+			tone: 'info',
+			message:
+				'Flavor Agent could not resolve the current Global Styles scope. Refresh the Styles sidebar before requesting recommendations.',
+			isDismissible: false,
+			actionType: null,
+			actionLabel: '',
+			actionDisabled: false,
+		};
+	}
+
+	const notice = baseNotice || fallbackNotice;
 	const isStyleBookActive = Boolean( styleBookUiState?.isActive );
 
 	useEffect( () => {

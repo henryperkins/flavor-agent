@@ -51,24 +51,33 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			[ clientId ]
 		);
 		const isDisabled = editingMode === 'disabled';
+		const hasStoredResult = status === 'ready' && Boolean( recommendations );
 		const hasMatchingResult =
-			status === 'ready' &&
-			Boolean( recommendations ) &&
+			hasStoredResult &&
 			( ! storedContextSignature ||
 				storedContextSignature === liveContextSignature );
+		const isStaleResult =
+			hasStoredResult &&
+			Boolean( storedContextSignature ) &&
+			storedContextSignature !== liveContextSignature;
 		const visibleRecommendations = hasMatchingResult
 			? recommendations
 			: null;
+		const visibleStyleRecommendations =
+			hasMatchingResult || isStaleResult
+				? recommendations?.styles || []
+				: [];
 
 		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;
 		}
 
-		const hasRecs =
+		const hasInlineRecs =
 			visibleRecommendations &&
 			( visibleRecommendations.settings?.length > 0 ||
 				visibleRecommendations.styles?.length > 0 ||
 				visibleRecommendations.block?.length > 0 );
+		const hasStyleRecs = visibleStyleRecommendations.length > 0;
 
 		return (
 			<>
@@ -77,7 +86,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				<InspectorControls>
 					<BlockRecommendationsPanel clientId={ clientId } />
 
-					{ hasRecs &&
+					{ hasInlineRecs &&
 						visibleRecommendations.settings?.length > 0 && (
 							<SettingsRecommendations
 								clientId={ clientId }
@@ -86,16 +95,17 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						) }
 				</InspectorControls>
 
-				{ hasRecs && visibleRecommendations.styles?.length > 0 && (
+				{ hasStyleRecs && (
 					<InspectorControls group="styles">
 						<StylesRecommendations
 							clientId={ clientId }
-							suggestions={ visibleRecommendations.styles }
+							suggestions={ visibleStyleRecommendations }
+							isStale={ isStaleResult }
 						/>
 					</InspectorControls>
 				) }
 
-				{ hasRecs && (
+				{ hasInlineRecs && (
 					<>
 						{ SETTINGS_PANEL_DELEGATIONS.map( ( config ) => (
 							<SubPanelSuggestions

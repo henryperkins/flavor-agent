@@ -21,6 +21,11 @@ import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
+import {
+	MANUAL_IDEAS_LABEL,
+	REVIEW_LANE_LABEL,
+	REVIEW_SECTION_TITLE,
+} from '../components/surface-labels';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
 import {
@@ -837,7 +842,9 @@ export default function TemplatePartRecommender() {
 						}
 						description={featuredSuggestionCard.description || ''}
 						tone={
-							featuredSuggestionCard.canApply ? 'Review first' : 'Manual ideas'
+							featuredSuggestionCard.canApply
+								? REVIEW_LANE_LABEL
+								: MANUAL_IDEAS_LABEL
 						}
 						why={
 							featuredSuggestionCard.canApply
@@ -849,8 +856,8 @@ export default function TemplatePartRecommender() {
 
 				{canRecommend && executableSuggestionCards.length > 0 && (
 					<RecommendationLane
-						title="Review first"
-						tone="Review first"
+						title={REVIEW_LANE_LABEL}
+						tone={REVIEW_LANE_LABEL}
 						count={executableSuggestionCards.length}
 						countNoun="suggestion"
 						description="Preview the validated operations below before Flavor Agent mutates the template part."
@@ -878,7 +885,7 @@ export default function TemplatePartRecommender() {
 
 				{canRecommend && advisorySuggestionCards.length > 0 && (
 					<AIAdvisorySection
-						title="Manual ideas"
+						title={MANUAL_IDEAS_LABEL}
 						count={advisorySuggestionCards.length}
 						countNoun="suggestion"
 						initialOpen
@@ -912,8 +919,8 @@ export default function TemplatePartRecommender() {
 
 				{canRecommend && selectedSuggestion && (
 					<AIReviewSection
-						title="Review Before Apply"
-						statusLabel="Review first"
+						title={REVIEW_SECTION_TITLE}
+						statusLabel={REVIEW_LANE_LABEL}
 						count={selectedSuggestion.operations?.length || 0}
 						countNoun="operation"
 						summary={
@@ -998,7 +1005,9 @@ function TemplatePartSuggestionCard({
 					<div className="flavor-agent-card__label">{suggestion.label}</div>
 					<div className="flavor-agent-card__meta">
 						<span className="flavor-agent-pill">
-							{suggestion.canApply ? 'Review first' : 'Manual ideas'}
+							{suggestion.canApply
+								? REVIEW_LANE_LABEL
+								: MANUAL_IDEAS_LABEL}
 						</span>
 						{summaryParts.length > 0 && (
 							<span className="flavor-agent-pill">

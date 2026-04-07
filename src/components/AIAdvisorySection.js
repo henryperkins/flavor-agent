@@ -2,12 +2,16 @@ import { Button } from '@wordpress/components';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 
 import { formatCount, joinClassNames } from '../utils/format-count';
+import {
+	ADVISORY_ONLY_LABEL,
+	MANUAL_IDEAS_LABEL,
+} from './surface-labels';
 
 const DEFAULT_VISIBLE_COUNT = 5;
 
 export default function AIAdvisorySection( {
-	title = 'Advisory Guidance',
-	advisoryLabel = 'Advisory only',
+	title = MANUAL_IDEAS_LABEL,
+	advisoryLabel = ADVISORY_ONLY_LABEL,
 	count = null,
 	countLabel = '',
 	countNoun = 'suggestion',

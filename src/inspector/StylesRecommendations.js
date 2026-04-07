@@ -5,15 +5,24 @@
  */
 import { PanelBody, Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
+import { useCallback } from '@wordpress/element';
 import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import AIStatusNotice from '../components/AIStatusNotice';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import { formatCount } from '../utils/format-count';
-import { getLiveBlockContextSignature } from '../context/collector';
+import {
+	collectBlockContext,
+	getLiveBlockContextSignature,
+} from '../context/collector';
 import InlineActionFeedback from '../components/InlineActionFeedback';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import {
+	APPLY_NOW_LABEL,
+	REFRESH_ACTION_LABEL,
+} from '../components/surface-labels';
 import groupByPanel from './group-by-panel';
 import {
 	DELEGATED_STYLE_PANELS,
@@ -31,24 +40,43 @@ function buildStyleFeedback(suggestion, key) {
 	};
 }
 
-export default function StylesRecommendations({ clientId, suggestions }) {
-	const { applySuggestion, clearBlockError } = useDispatch(STORE_NAME);
+export default function StylesRecommendations({
+	clientId,
+	suggestions,
+	isStale = false,
+}) {
+	const { applySuggestion, clearBlockError, fetchBlockRecommendations } =
+		useDispatch(STORE_NAME);
 	const liveContextSignature = useSelect(
 		(select) => getLiveBlockContextSignature(select, clientId),
 		[clientId]
 	);
-	const applyNotice = useSelect(
+	const { applyNotice, requestPrompt, isRefreshing } = useSelect(
 		(select) => {
 			const store = select(STORE_NAME);
 			const applyError = store.getBlockApplyError?.(clientId) || null;
 
-			return store.getSurfaceStatusNotice('block', {
-				applyError,
-				onApplyDismissAction: true,
-			});
+			return {
+				applyNotice: store.getSurfaceStatusNotice('block', {
+					applyError,
+					onApplyDismissAction: true,
+				}),
+				requestPrompt:
+					store.getBlockRecommendations?.(clientId)?.prompt || '',
+				isRefreshing: store.isBlockLoading?.(clientId) || false,
+			};
 		},
 		[clientId]
 	);
+	const handleRefresh = useCallback(() => {
+		const liveContext = collectBlockContext(clientId);
+
+		if (!liveContext) {
+			return;
+		}
+
+		fetchBlockRecommendations(clientId, liveContext, requestPrompt);
+	}, [clientId, fetchBlockRecommendations, requestPrompt]);
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback({
 		applySuggestion: (targetClientId, suggestion) =>
 			applySuggestion(targetClientId, suggestion, liveContextSignature),
@@ -109,20 +137,37 @@ export default function StylesRecommendations({ clientId, suggestions }) {
 					onDismiss={() => clearBlockError(clientId)}
 				/>
 
+				{isStale && (
+					<SurfaceScopeBar
+						scopeLabel="Block Styles"
+						isFresh={false}
+						hasResult
+						staleReason="These style suggestions were generated for an earlier block state. Refresh before applying anything from the Styles tab."
+						onRefresh={handleRefresh}
+						refreshLabel={REFRESH_ACTION_LABEL}
+						isRefreshing={isRefreshing}
+					/>
+				)}
+
 				{variationSuggestions.length > 0 && (
 					<RecommendationLane
 						title="Style Variations"
-						tone="Apply now"
+						tone={isStale ? 'Stale' : APPLY_NOW_LABEL}
 						count={variationSuggestions.length}
 						countNoun="variation"
-						description="Apply a registered style variation directly from the Styles tab when the current block exposes one."
+						description={
+							isStale
+								? 'These variations are shown for reference from the last request. Refresh before applying them.'
+								: 'Apply a registered style variation directly from the Styles tab when the current block exposes one.'
+						}
 					>
 						<ButtonGroup className="flavor-agent-style-variations">
 							{variationSuggestions.map((s) => {
 								const key = getSuggestionKey(s);
 								const applied = appliedKey === key;
 								const isCurrentStyle = Boolean(s.isCurrentStyle);
-								const isDisabled = isCurrentStyle || applied;
+								const isDisabled =
+									isCurrentStyle || applied || isStale;
 
 								return (
 									<Button
@@ -160,10 +205,14 @@ export default function StylesRecommendations({ clientId, suggestions }) {
 					<RecommendationLane
 						key={panel}
 						title={panelLabel(panel)}
-						tone="Apply now"
+						tone={isStale ? 'Stale' : APPLY_NOW_LABEL}
 						count={items.length}
 						countNoun="suggestion"
-						description="Flavor Agent keeps these style updates beside the native controls they map to."
+						description={
+							isStale
+								? 'These updates are shown for reference from the last request. Refresh before applying them.'
+								: 'Flavor Agent keeps these style updates beside the native controls they map to.'
+						}
 					>
 						{items.map((s) => {
 							const key = getSuggestionKey(s);
@@ -173,6 +222,7 @@ export default function StylesRecommendations({ clientId, suggestions }) {
 									suggestion={s}
 									onApply={() => void handleApply(s, key)}
 									applied={appliedKey === key}
+									disabled={isStale}
 								/>
 							);
 						})}
@@ -182,12 +232,18 @@ export default function StylesRecommendations({ clientId, suggestions }) {
 				{delegatedSuggestions.length > 0 && (
 					<RecommendationLane
 						title="Native Style Panels"
-						tone="Apply now"
+						tone={isStale ? 'Stale' : APPLY_NOW_LABEL}
 						count={delegatedPanelTitles.length}
 						countNoun="panel"
-						description={`More style suggestions appear directly inside the native ${delegatedPanelTitles.join(
-							', '
-						)} panels above so the action stays next to the matching control.`}
+						description={
+							isStale
+								? `Refresh first. Matching suggestions will reappear inside the native ${delegatedPanelTitles.join(
+										', '
+								  )} panels once the current block state is re-analyzed.`
+								: `More style suggestions appear directly inside the native ${delegatedPanelTitles.join(
+										', '
+								  )} panels above so the action stays next to the matching control.`
+						}
 					>
 						<div className="flavor-agent-style-surface__meta">
 							{delegatedPanelTitles.map((title) => (
@@ -203,7 +259,7 @@ export default function StylesRecommendations({ clientId, suggestions }) {
 	);
 }
 
-function StyleSuggestionRow({ suggestion, onApply, applied }) {
+function StyleSuggestionRow({ suggestion, onApply, applied, disabled = false }) {
 	const { label, description, preview, cssVar, confidence } = suggestion;
 	const previewLabel = preview && !isColor(preview) ? preview : '';
 	const confidenceLabel =
@@ -234,7 +290,9 @@ function StyleSuggestionRow({ suggestion, onApply, applied }) {
 					<div className="flavor-agent-style-row__header">
 						<div className="flavor-agent-style-row__label">{label}</div>
 						<div className="flavor-agent-style-card__badges">
-							<span className="flavor-agent-pill">Apply now</span>
+							<span className="flavor-agent-pill">
+								{ APPLY_NOW_LABEL }
+							</span>
 							{confidenceLabel && (
 								<span className="flavor-agent-pill">{confidenceLabel}</span>
 							)}
@@ -258,13 +316,13 @@ function StyleSuggestionRow({ suggestion, onApply, applied }) {
 				<Button
 					variant="tertiary"
 					size="small"
-					onClick={onApply}
+					onClick={disabled ? undefined : onApply}
 					icon={applied ? check : arrowRight}
 					label={applied ? 'Applied' : 'Apply'}
 					className={`flavor-agent-card__apply${
 						applied ? ' flavor-agent-card__apply--applied' : ''
 					} flavor-agent-style-row__apply`}
-					disabled={applied}
+					disabled={applied || disabled}
 				/>
 			</div>
 

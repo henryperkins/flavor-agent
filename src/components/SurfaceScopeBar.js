@@ -9,6 +9,11 @@
 import { Button } from '@wordpress/components';
 
 import { joinClassNames } from '../utils/format-count';
+import {
+	CURRENT_STATUS_LABEL,
+	REFRESH_ACTION_LABEL,
+	STALE_STATUS_LABEL,
+} from './surface-labels';
 
 export default function SurfaceScopeBar( {
 	scopeLabel = '',
@@ -17,7 +22,7 @@ export default function SurfaceScopeBar( {
 	hasResult = false,
 	staleMessage = 'Context has changed since the last request.',
 	staleReason = '',
-	refreshLabel = 'Refresh',
+	refreshLabel = REFRESH_ACTION_LABEL,
 	onRefresh,
 	isRefreshing = false,
 	className = '',
@@ -69,7 +74,7 @@ export default function SurfaceScopeBar( {
 								: 'flavor-agent-pill--stale'
 						) }
 					>
-						{ isFresh ? 'Current' : 'Stale' }
+						{ isFresh ? CURRENT_STATUS_LABEL : STALE_STATUS_LABEL }
 					</span>
 
 					{ ! isFresh && typeof onRefresh === 'function' && (

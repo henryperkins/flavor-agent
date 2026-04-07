@@ -45,7 +45,7 @@ jest.mock( '../SettingsRecommendations', () => ( props ) => (
 ) );
 
 jest.mock( '../StylesRecommendations', () => ( props ) => (
-	<div>{ `Styles ${ props.suggestions.length }` }</div>
+	<div>{ `Styles ${ props.suggestions.length }${ props.isStale ? ' stale' : '' }` }</div>
 ) );
 
 jest.mock( '../SuggestionChips', () => ( props ) => (
@@ -133,7 +133,7 @@ describe( 'InspectorInjector', () => {
 		expect( getContainer().textContent ).toContain( 'Styles 1' );
 	} );
 
-	test( 'hides stale block settings and style suggestions when context changes', () => {
+	test( 'keeps stale style suggestions visible while hiding stale settings suggestions when context changes', () => {
 		currentState = {
 			...getState(),
 			store: {
@@ -153,10 +153,10 @@ describe( 'InspectorInjector', () => {
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).not.toContain( 'Settings 1' );
-		expect( getContainer().textContent ).not.toContain( 'Styles 1' );
+		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
 	} );
 
-	test( 'drops previously fresh injected suggestions after a same-clientId block edit changes context', () => {
+	test( 'keeps the stale styles surface mounted after a same-clientId block edit changes context', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Settings 1' );
@@ -172,6 +172,6 @@ describe( 'InspectorInjector', () => {
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).not.toContain( 'Settings 1' );
-		expect( getContainer().textContent ).not.toContain( 'Styles 1' );
+		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
 	} );
 } );

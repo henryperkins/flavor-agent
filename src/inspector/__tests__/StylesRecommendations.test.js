@@ -1,6 +1,8 @@
 const mockApplySuggestion = jest.fn();
+const mockFetchBlockRecommendations = jest.fn();
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
+const mockCollectBlockContext = jest.fn();
 
 jest.mock('@wordpress/data', () => ({
 	useDispatch: (...args) => mockUseDispatch(...args),
@@ -22,6 +24,7 @@ jest.mock('../../store', () => ({
 }));
 
 jest.mock('../../context/collector', () => ({
+	collectBlockContext: (...args) => mockCollectBlockContext(...args),
 	getLiveBlockContextSignature: jest.fn(
 		(_select, clientId) => `live-context:${clientId}`
 	),
@@ -39,24 +42,31 @@ const { getContainer, getRoot } = setupReactTest();
 beforeEach(() => {
 	jest.clearAllMocks();
 	mockApplySuggestion.mockResolvedValue(true);
+	mockCollectBlockContext.mockReturnValue({
+		block: { name: 'core/paragraph' },
+	});
 	mockUseDispatch.mockReturnValue({
 		applySuggestion: mockApplySuggestion,
+		fetchBlockRecommendations: mockFetchBlockRecommendations,
 		clearBlockError: jest.fn(),
 	});
 	mockUseSelect.mockImplementation((callback) =>
 		callback(() => ({
 			getBlockApplyError: jest.fn(() => null),
 			getSurfaceStatusNotice: jest.fn(() => null),
+			getBlockRecommendations: jest.fn(() => ({ prompt: 'Warm up the palette' })),
+			isBlockLoading: jest.fn(() => false),
 		}))
 	);
 });
 
-function renderComponent(suggestions) {
+function renderComponent(suggestions, extraProps = {}) {
 	act(() => {
 		getRoot().render(
 			createElement(StylesRecommendations, {
 				clientId: 'block-1',
 				suggestions,
+				...extraProps,
 			})
 		);
 	});
@@ -212,6 +222,56 @@ describe('StylesRecommendations', () => {
 		expect(getContainer().textContent).toContain(
 			'This result is stale. Refresh recommendations before applying it.'
 		);
+	});
+
+	test('shows a stale banner and refreshes against the latest block context', () => {
+		renderComponent([makeSuggestion('shadow', 'Use softer shadow')], {
+			isStale: true,
+		});
+
+		expect(getContainer().textContent).toContain(
+			'earlier block state'
+		);
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll('button')
+		).find((button) => button.textContent === 'Refresh');
+
+		act(() => {
+			refreshButton.click();
+		});
+
+		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
+			'block-1',
+			{ block: { name: 'core/paragraph' } },
+			'Warm up the palette'
+		);
+	});
+
+	test('disables inline apply controls when stale suggestions are shown', () => {
+		const variation = {
+			label: 'Outline',
+			description: 'Outline style',
+			panel: 'general',
+			type: 'style_variation',
+			attributeUpdates: { className: 'is-style-outline' },
+		};
+
+		renderComponent([variation, makeSuggestion('shadow')], {
+			isStale: true,
+		});
+
+		const buttons = Array.from(getContainer().querySelectorAll('button'));
+		const outlineButton = buttons.find(
+			(button) => button.textContent === 'Outline'
+		);
+		const applyButton = buttons.find(
+			(button) => button.textContent === 'Apply'
+		);
+
+		expect(outlineButton?.disabled).toBe(true);
+		expect(applyButton?.disabled).toBe(true);
+		expect(mockApplySuggestion).not.toHaveBeenCalled();
 	});
 
 	test('keeps row feedback visible across rerenders with cloned suggestions', async () => {

@@ -25,6 +25,12 @@ import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
+import {
+	APPLY_NOW_LABEL,
+	MANUAL_IDEAS_LABEL,
+	REFRESH_ACTION_LABEL,
+	STALE_STATUS_LABEL,
+} from '../components/surface-labels';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
@@ -33,6 +39,18 @@ import { getSurfaceCapability } from '../utils/capability-flags';
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const BLOCK_COMPOSER_HELPER_TEXT =
 	'Flavor Agent keeps one-click apply limited to safe local block attribute changes.';
+const CONTENT_ONLY_COMPOSER_HELPER_TEXT =
+	'Flavor Agent will stay within editable content for this block and avoid style or settings changes.';
+const DEFAULT_BLOCK_STARTER_PROMPTS = [
+	'Improve clarity and spacing',
+	'Make this feel more editorial',
+	'Simplify the layout',
+];
+const CONTENT_ONLY_STARTER_PROMPTS = [
+	'Tighten the copy',
+	'Clarify the message',
+	'Make the content more concise',
+];
 
 export function findBlockPath(blocks, clientId, path = []) {
 	for (let index = 0; index < blocks.length; index++) {
@@ -187,7 +205,7 @@ function getFeaturedSuggestion(
 	if (executableBlockSuggestions.length > 0) {
 		return {
 			suggestion: executableBlockSuggestions[0],
-			tone: 'Apply now',
+			tone: APPLY_NOW_LABEL,
 			why: 'Flavor Agent can safely apply this directly on the current block.',
 		};
 	}
@@ -195,7 +213,7 @@ function getFeaturedSuggestion(
 	if (advisoryBlockSuggestions.length > 0) {
 		return {
 			suggestion: advisoryBlockSuggestions[0],
-			tone: 'Manual ideas',
+			tone: MANUAL_IDEAS_LABEL,
 			why: 'This is the strongest next move, but it still needs manual follow-through.',
 		};
 	}
@@ -441,6 +459,19 @@ export function BlockRecommendationsContent({
 		return null;
 	}
 
+	const composerHelperText = isContentRestricted
+		? CONTENT_ONLY_COMPOSER_HELPER_TEXT
+		: BLOCK_COMPOSER_HELPER_TEXT;
+	const composerStarterPrompts = isContentRestricted
+		? CONTENT_ONLY_STARTER_PROMPTS
+		: DEFAULT_BLOCK_STARTER_PROMPTS;
+	const composerLabel = isContentRestricted
+		? 'What do you want to improve about this content?'
+		: 'What do you want to improve about this block?';
+	const composerPlaceholder = isContentRestricted
+		? 'Describe the content change you want for this block.'
+		: 'Describe the outcome you want for this block.';
+
 	return (
 		<div className="flavor-agent-panel">
 			<SurfacePanelIntro eyebrow={eyebrow} introCopy={introCopy} />
@@ -454,7 +485,7 @@ export function BlockRecommendationsContent({
 						? 'This block changed after the last request. Refresh before applying anything from the previous result.'
 						: ''
 				}
-				refreshLabel="Refresh"
+				refreshLabel={REFRESH_ACTION_LABEL}
 				onRefresh={isStaleResult ? handleRefresh : undefined}
 				isRefreshing={isLoading}
 			/>
@@ -476,15 +507,11 @@ export function BlockRecommendationsContent({
 				prompt={prompt}
 				onPromptChange={setPrompt}
 				onFetch={handleFetch}
-				placeholder="Describe the outcome you want for this block."
-				label="What do you want to improve about this block?"
+				placeholder={composerPlaceholder}
+				label={composerLabel}
 				rows={3}
-				helperText={BLOCK_COMPOSER_HELPER_TEXT}
-				starterPrompts={[
-					'Improve clarity and spacing',
-					'Make this feel more editorial',
-					'Simplify the layout',
-				]}
+				helperText={composerHelperText}
+				starterPrompts={composerStarterPrompts}
 				submitHint="Press Cmd/Ctrl+Enter to submit."
 				fetchIcon={icon}
 				isLoading={isLoading}
@@ -511,9 +538,9 @@ export function BlockRecommendationsContent({
 				<RecommendationHero
 					title="Refresh recommendations for the current block"
 					description="Flavor Agent kept the previous result visible so you can compare it against the current block."
-					tone="Stale"
+					tone={STALE_STATUS_LABEL}
 					why="Apply actions stay disabled until you refresh against the live block context."
-					primaryActionLabel="Refresh"
+					primaryActionLabel={REFRESH_ACTION_LABEL}
 					onPrimaryAction={handleRefresh}
 					primaryActionDisabled={isLoading}
 				/>
@@ -532,8 +559,8 @@ export function BlockRecommendationsContent({
 
 			{executableBlockSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Apply now"
-					tone={isStaleResult ? 'Stale' : 'Apply now'}
+					title={APPLY_NOW_LABEL}
+					tone={isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL}
 					count={executableBlockSuggestions.length}
 					countNoun="suggestion"
 					description={
@@ -553,8 +580,8 @@ export function BlockRecommendationsContent({
 
 			{advisoryBlockSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Manual ideas"
-					tone="Manual ideas"
+					title={MANUAL_IDEAS_LABEL}
+					tone={MANUAL_IDEAS_LABEL}
 					count={advisoryBlockSuggestions.length}
 					countNoun="suggestion"
 					description="These ideas need manual follow-through or a broader review flow, so Flavor Agent keeps them advisory."

@@ -1,0 +1,9 @@
+export const APPLY_NOW_LABEL = 'Apply now';
+export const MANUAL_IDEAS_LABEL = 'Manual ideas';
+export const REVIEW_LANE_LABEL = 'Review first';
+export const REVIEW_SECTION_TITLE = 'Review Before Apply';
+export const ADVISORY_ONLY_LABEL = 'Advisory only';
+export const EXECUTABLE_LABEL = 'Executable';
+export const CURRENT_STATUS_LABEL = 'Current';
+export const STALE_STATUS_LABEL = 'Stale';
+export const REFRESH_ACTION_LABEL = 'Refresh';
