@@ -339,15 +339,22 @@ function extractActiveStyle( className, registeredStyles ) {
  *
  * @param {?string} rootClientId Root client ID, or null for top level.
  * @param {number}  maxDepth     Maximum tree depth to traverse.
+ * @param {number}  maxChildren  Maximum children per node (Infinity for unlimited).
  * @return {object[]}            Introspected child block tree.
  */
-export function introspectBlockTree( rootClientId = null, maxDepth = 10 ) {
+export function introspectBlockTree(
+	rootClientId = null,
+	maxDepth = 10,
+	maxChildren = Infinity
+) {
 	if ( maxDepth <= 0 ) {
 		return [];
 	}
 
 	const editor = select( blockEditorStore );
-	const childIds = editor.getBlockOrder( rootClientId || '' );
+	const childIds = editor
+		.getBlockOrder( rootClientId || '' )
+		.slice( 0, maxChildren );
 
 	return childIds
 		.map( ( clientId ) => {
@@ -356,7 +363,11 @@ export function introspectBlockTree( rootClientId = null, maxDepth = 10 ) {
 				return null;
 			}
 
-			const children = introspectBlockTree( clientId, maxDepth - 1 );
+			const children = introspectBlockTree(
+				clientId,
+				maxDepth - 1,
+				maxChildren
+			);
 
 			return {
 				...instance,

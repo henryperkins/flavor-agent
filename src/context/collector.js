@@ -13,10 +13,112 @@ import {
 	introspectBlockTree,
 	summarizeTree,
 } from './block-inspector';
+import {
+	annotateStructuralIdentity,
+	findBranchRoot,
+	findNodePath,
+	toStructuralSummary,
+} from '../utils/structural-identity';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
-import { buildStructuralContext } from '../utils/structural-identity';
 export { buildBlockRecommendationContextSignature };
+
+// ── Annotated tree cache ─────────────────────────────────────────────────────
+//
+// introspectBlockTree() + annotateStructuralIdentity() together are O(n) in the
+// block tree.  collectBlockContext is called on every block selection, so a
+// single shared annotated tree is built once per selection change and reused
+// for both the structural context pass and the structuralBranch summarizeTree
+// pass.
+
+/**
+ * Sort object keys recursively so structurally-identical values stringify
+ * consistently regardless of key insertion order.
+ *
+ * @param {unknown} value Comparable value.
+ * @return {unknown} Normalized comparable value.
+ */
+function normalizeComparableValue( value ) {
+	if ( Array.isArray( value ) ) {
+		return value.map( ( item ) => normalizeComparableValue( item ) );
+	}
+
+	if ( value && typeof value === 'object' ) {
+		return Object.fromEntries(
+			Object.entries( value )
+				.sort( ( [ leftKey ], [ rightKey ] ) =>
+					leftKey.localeCompare( rightKey )
+				)
+				.map( ( [ key, entryValue ] ) => [
+					key,
+					normalizeComparableValue( entryValue ),
+				] )
+		);
+	}
+
+	return value;
+}
+
+/**
+ * Build a stable fingerprint for the subset of tree data that affects
+ * structural identity. This keeps the cache correct when users edit
+ * identity-driving attributes without changing the tree shape.
+ *
+ * @param {object[]} tree Raw introspected tree.
+ * @return {string} Fingerprint.
+ */
+function fingerprintTree( tree ) {
+	function toIdentityInputs( nodes ) {
+		return ( Array.isArray( nodes ) ? nodes : [] ).map( ( node ) => ( {
+			clientId: node?.clientId || '',
+			name: node?.name || '',
+			currentAttributes: normalizeComparableValue(
+				node?.currentAttributes || {}
+			),
+			innerBlocks: toIdentityInputs( node?.innerBlocks || [] ),
+		} ) );
+	}
+
+	return JSON.stringify( toIdentityInputs( tree ) );
+}
+
+/**
+ * @typedef {Object} AnnotatedTreeCache
+ * @property {object[]} annotatedTree Cached annotated block tree.
+ * @property {string}   fingerprint   Tree structure fingerprint for staleness checks.
+ */
+
+/** @type {AnnotatedTreeCache|null} */
+let cachedAnnotatedTree = null;
+
+/**
+ * Invalidate the annotated-tree cache.  Call this whenever the block tree
+ * is known to have changed (e.g. after a block insert, delete, or move).
+ * The next call to getAnnotatedBlockTree() will rebuild from scratch.
+ */
+export function invalidateAnnotatedTreeCache() {
+	cachedAnnotatedTree = null;
+}
+
+/**
+ * Return the cached annotated block tree, rebuilding it if the tree structure
+ * has changed since the last call.
+ *
+ * @param {number} maxDepth Maximum introspection depth (passed to introspectBlockTree).
+ * @return {object[]} Annotated tree with structuralIdentity attached to every node.
+ */
+export function getAnnotatedBlockTree( maxDepth = 10 ) {
+	const rawTree = introspectBlockTree( null, maxDepth );
+	const fp = fingerprintTree( rawTree );
+
+	if ( cachedAnnotatedTree?.fingerprint === fp ) {
+		return cachedAnnotatedTree.annotatedTree;
+	}
+
+	const annotatedTree = annotateStructuralIdentity( rawTree );
+	cachedAnnotatedTree = { annotatedTree, fingerprint: fp };
+	return annotatedTree;
+}
 
 /**
  * Build a focused context for a single block's Inspector recommendations.
@@ -34,14 +136,29 @@ export function collectBlockContext( clientId ) {
 		return null;
 	}
 
-	const structural = buildStructuralContext(
-		introspectBlockTree(),
-		clientId
+	// Single annotated tree shared by both the structural context pass and
+	// the structuralBranch summarizeTree pass — no double annotation.
+	const annotatedTree = getAnnotatedBlockTree();
+	const path = findNodePath(
+		annotatedTree,
+		( n ) => n?.clientId === clientId
 	);
-	const themeTokens = collectThemeTokens();
-	const tokenSummary = summarizeTokens( themeTokens );
-	const structuralBranch = structural.branchRoot
-		? summarizeTree( [ structural.branchRoot ], {
+
+	let blockIdentity = {};
+	let structuralAncestors = [];
+	let branchRoot = null;
+
+	if ( path ) {
+		const selectedNode = path[ path.length - 1 ];
+		blockIdentity = selectedNode?.structuralIdentity || {};
+		structuralAncestors = path
+			.slice( 0, -1 )
+			.map( ( node ) => toStructuralSummary( node ) );
+		branchRoot = findBranchRoot( path );
+	}
+
+	const structuralBranch = branchRoot
+		? summarizeTree( [ branchRoot ], {
 				focusClientId: clientId,
 				includeBlockCapabilities: false,
 				includeStructuralIdentity: true,
@@ -49,6 +166,9 @@ export function collectBlockContext( clientId ) {
 				maxDepth: 3,
 		  } )
 		: [];
+
+	const themeTokens = collectThemeTokens();
+	const tokenSummary = summarizeTokens( themeTokens );
 
 	return {
 		block: {
@@ -67,11 +187,11 @@ export function collectBlockContext( clientId ) {
 			isInsideContentOnly: instance.isInsideContentOnly,
 			blockVisibility: instance.blockVisibility,
 			childCount: instance.childCount,
-			structuralIdentity: structural.blockIdentity,
+			structuralIdentity: blockIdentity,
 		},
 		siblingsBefore: getSiblingNames( clientId, 'before', 3 ),
 		siblingsAfter: getSiblingNames( clientId, 'after', 3 ),
-		structuralAncestors: structural.structuralAncestors,
+		structuralAncestors,
 		structuralBranch,
 		themeTokens: tokenSummary,
 	};

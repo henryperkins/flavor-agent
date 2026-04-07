@@ -474,7 +474,7 @@ export function toStructuralSummary( node ) {
 	return summary;
 }
 
-function findBranchRoot( path ) {
+export function findBranchRoot( path ) {
 	for ( let index = path.length - 1; index >= 0; index-- ) {
 		if ( path[ index ]?.name === 'core/template-part' ) {
 			return path[ index ];

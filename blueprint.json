@@ -1,0 +1,131 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"preferredVersions": {
+		"wp": "7.0-RC1",
+		"php": "8.2"
+	},
+	"features": {
+		"networking": true
+	},
+	"login": true,
+	"landingPage": "/wp-admin/post.php?post=1&action=edit",
+	"steps": [
+		{
+			"step": "installTheme",
+			"themeData": {
+				"resource": "wordpress.org/themes",
+				"slug": "twentytwentyfive"
+			},
+			"options": {
+				"activate": true
+			},
+			"progress": {
+				"weight": 2,
+				"caption": "Installing Twenty Twenty-Five theme"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "git:directory",
+				"url": "https://github.com/henryperkins/flavor-agent.git",
+				"ref": "master",
+				"refType": "branch",
+				"path": "/"
+			},
+			"options": {
+				"activate": true,
+				"targetFolderName": "flavor-agent"
+			},
+			"progress": {
+				"weight": 3,
+				"caption": "Installing Flavor Agent"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "gutenberg"
+			},
+			"options": {
+				"activate": true
+			},
+			"progress": {
+				"weight": 3,
+				"caption": "Installing Gutenberg"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "ai"
+			},
+			"options": {
+				"activate": true
+			},
+			"progress": {
+				"weight": 2,
+				"caption": "Installing AI plugin"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "enable-abilities-for-mcp"
+			},
+			"options": {
+				"activate": true
+			},
+			"progress": {
+				"weight": 2,
+				"caption": "Installing Enable Abilities for MCP"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "ai-provider-for-openai"
+			},
+			"options": {
+				"activate": true
+			},
+			"progress": {
+				"weight": 2,
+				"caption": "Installing AI Provider for OpenAI"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "ai-provider-for-ollama"
+			},
+			"options": {
+				"activate": true
+			},
+			"progress": {
+				"weight": 2,
+				"caption": "Installing AI Provider for Ollama"
+			}
+		},
+		{
+			"step": "setSiteOptions",
+			"options": {
+				"blogname": "Flavor Agent Demo",
+				"blogdescription": "AI-assisted recommendations in the WordPress editor"
+			}
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php\nrequire '/wordpress/wp-load.php';\n\n// Replace the default \"Hello world!\" post with demo block content.\nwp_update_post( [\n\t'ID'           => 1,\n\t'post_title'   => 'Flavor Agent Demo',\n\t'post_status'  => 'draft',\n\t'post_content' => <<<BLOCKS\n<!-- wp:heading {\"level\":2} -->\n<h2 class=\"wp-block-heading\">Welcome to Flavor Agent</h2>\n<!-- /wp:heading -->\n\n<!-- wp:paragraph -->\n<p>This post contains a variety of blocks so you can explore AI-assisted recommendations. Select any block and open the Inspector sidebar to see contextual suggestions for settings, styles, and content.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:columns -->\n<div class=\"wp-block-columns\"><!-- wp:column -->\n<div class=\"wp-block-column\"><!-- wp:cover {\"overlayColor\":\"accent-1\",\"isDark\":false} -->\n<div class=\"wp-block-cover is-light\"><span aria-hidden=\"true\" class=\"wp-block-cover__background has-accent-1-background-color has-background-dim-100 has-background-dim\"></span><div class=\"wp-block-cover__inner-container\"><!-- wp:paragraph {\"align\":\"center\"} -->\n<p class=\"has-text-align-center\">Try selecting this Cover block for layout and color recommendations.</p>\n<!-- /wp:paragraph --></div></div>\n<!-- /wp:cover -->\n\n<!-- wp:paragraph -->\n<p>A column with a cover and paragraph — try selecting these blocks to receive layout and typography recommendations.</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:column -->\n\n<!-- wp:column -->\n<div class=\"wp-block-column\"><!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">Key Features</h3>\n<!-- /wp:heading -->\n\n<!-- wp:list -->\n<ul class=\"wp-block-list\"><!-- wp:list-item -->\n<li>Block Inspector guidance</li>\n<!-- /wp:list-item -->\n\n<!-- wp:list-item -->\n<li>Pattern recommendations in the inserter</li>\n<!-- /wp:list-item -->\n\n<!-- wp:list-item -->\n<li>Template &amp; template-part composition</li>\n<!-- /wp:list-item -->\n\n<!-- wp:list-item -->\n<li>Navigation structure suggestions</li>\n<!-- /wp:list-item -->\n\n<!-- wp:list-item -->\n<li>Global Styles &amp; Style Book recommendations</li>\n<!-- /wp:list-item --></ul>\n<!-- /wp:list --></div>\n<!-- /wp:column --></div>\n<!-- /wp:columns -->\n\n<!-- wp:separator -->\n<hr class=\"wp-block-separator has-alpha-channel-opacity\"/>\n<!-- /wp:separator -->\n\n<!-- wp:group {\"layout\":{\"type\":\"constrained\"}} -->\n<div class=\"wp-block-group\"><!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">Getting Started</h3>\n<!-- /wp:heading -->\n\n<!-- wp:paragraph -->\n<p>Configure your AI provider under <strong>Settings → Flavor Agent</strong> to enable live recommendations. The plugin supports Azure OpenAI, OpenAI Native, and WordPress AI Client connectors.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:buttons -->\n<div class=\"wp-block-buttons\"><!-- wp:button {\"url\":\"/wp-admin/options-general.php?page=flavor-agent\"} -->\n<div class=\"wp-block-button\"><a class=\"wp-block-button__link wp-element-button\" href=\"/wp-admin/options-general.php?page=flavor-agent\">Configure Provider</a></div>\n<!-- /wp:button -->\n\n<!-- wp:button {\"url\":\"/wp-admin/options-general.php?page=flavor-agent-activity\",\"className\":\"is-style-outline\"} -->\n<div class=\"wp-block-button is-style-outline\"><a class=\"wp-block-button__link wp-element-button\" href=\"/wp-admin/options-general.php?page=flavor-agent-activity\">AI Activity Log</a></div>\n<!-- /wp:button --></div>\n<!-- /wp:buttons --></div>\n<!-- /wp:group -->\n\n<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><!-- wp:paragraph -->\n<p>Flavor Agent surfaces contextual AI suggestions without leaving the native WordPress editing experience.</p>\n<!-- /wp:paragraph --></blockquote>\n<!-- /wp:quote -->\nBLOCKS\n] );\n\necho 'Demo post updated.';\n",
+			"progress": {
+				"weight": 1,
+				"caption": "Creating demo content"
+			}
+		}
+	]
+}
