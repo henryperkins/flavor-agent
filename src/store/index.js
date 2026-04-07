@@ -55,6 +55,9 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	requestToken: 0,
 	contextSignature: null,
 	diagnostics: null,
+	applyStatus: 'idle',
+	applyError: null,
+	lastAppliedSuggestionKey: null,
 };
 
 const DEFAULT_STATE = {
@@ -147,109 +150,94 @@ const DEFAULT_STATE = {
 	styleBookLastAppliedOperations: [],
 };
 
-const SHARED_PANEL_SEQUENCE = Object.freeze( [
+const SHARED_PANEL_SEQUENCE = Object.freeze([
 	'prompt',
 	'suggestions',
 	'explanation',
 	'review',
 	'apply',
 	'undo-history',
-] );
+]);
 
-const SURFACE_INTERACTION_CONTRACT = Object.freeze( {
-	block: Object.freeze( {
+const SURFACE_INTERACTION_CONTRACT = Object.freeze({
+	block: Object.freeze({
 		surface: 'block',
 		advisoryOnly: false,
 		allowsInlineApply: true,
 		previewRequired: false,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-	content: Object.freeze( {
+	}),
+	content: Object.freeze({
 		surface: 'content',
 		advisoryOnly: true,
 		allowsInlineApply: false,
 		previewRequired: false,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-	navigation: Object.freeze( {
+	}),
+	navigation: Object.freeze({
 		surface: 'navigation',
 		advisoryOnly: true,
 		allowsInlineApply: false,
 		previewRequired: false,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-	template: Object.freeze( {
+	}),
+	template: Object.freeze({
 		surface: 'template',
 		advisoryOnly: false,
 		allowsInlineApply: false,
 		previewRequired: true,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-	'template-part': Object.freeze( {
+	}),
+	'template-part': Object.freeze({
 		surface: 'template-part',
 		advisoryOnly: false,
 		allowsInlineApply: false,
 		previewRequired: true,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-	'global-styles': Object.freeze( {
+	}),
+	'global-styles': Object.freeze({
 		surface: 'global-styles',
 		advisoryOnly: false,
 		allowsInlineApply: false,
 		previewRequired: true,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-	'style-book': Object.freeze( {
+	}),
+	'style-book': Object.freeze({
 		surface: 'style-book',
 		advisoryOnly: false,
 		allowsInlineApply: false,
 		previewRequired: true,
 		readyState: 'advisory-ready',
 		stages: SHARED_PANEL_SEQUENCE,
-	} ),
-} );
+	}),
+});
 
-function getSurfaceContract( surface ) {
-	return SURFACE_INTERACTION_CONTRACT[ surface ] || null;
+function getSurfaceContract(surface) {
+	return SURFACE_INTERACTION_CONTRACT[surface] || null;
 }
 
-function normalizeStringMessage( value ) {
+function normalizeStringMessage(value) {
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
-function normalizeRequestMeta( requestMeta = null ) {
-	return isPlainObject( requestMeta ) ? requestMeta : null;
+function normalizeRequestMeta(requestMeta = null) {
+	return isPlainObject(requestMeta) ? requestMeta : null;
 }
 
-function normalizeBlockRequestDiagnostics( diagnostics = null ) {
-	return isPlainObject( diagnostics ) ? diagnostics : null;
+function normalizeBlockRequestDiagnostics(diagnostics = null) {
+	return isPlainObject(diagnostics) ? diagnostics : null;
 }
 
-function logEmptyBlockRecommendationDiagnostics( diagnostics = null ) {
-	if (
-		! diagnostics?.hasEmptyBlockResult ||
-		typeof console === 'undefined' ||
-		typeof console.warn !== 'function'
-	) {
-		return;
-	}
+function attachRequestMetaToSuggestion(suggestion, requestMeta) {
+	const normalizedRequestMeta = normalizeRequestMeta(requestMeta);
 
-	console.warn(
-		'[Flavor Agent] Empty block recommendation lane',
-		diagnostics
-	);
-}
-
-function attachRequestMetaToSuggestion( suggestion, requestMeta ) {
-	const normalizedRequestMeta = normalizeRequestMeta( requestMeta );
-
-	if ( ! normalizedRequestMeta || ! isPlainObject( suggestion ) ) {
+	if (!normalizedRequestMeta || !isPlainObject(suggestion)) {
 		return suggestion;
 	}
 
@@ -259,38 +247,32 @@ function attachRequestMetaToSuggestion( suggestion, requestMeta ) {
 	};
 }
 
-function attachRequestMetaToSuggestionList( suggestions, requestMeta ) {
-	if ( ! Array.isArray( suggestions ) ) {
+function attachRequestMetaToSuggestionList(suggestions, requestMeta) {
+	if (!Array.isArray(suggestions)) {
 		return [];
 	}
 
-	return suggestions.map( ( suggestion ) =>
-		attachRequestMetaToSuggestion( suggestion, requestMeta )
+	return suggestions.map((suggestion) =>
+		attachRequestMetaToSuggestion(suggestion, requestMeta)
 	);
 }
 
-function attachRequestMetaToRecommendationPayload( payload = {} ) {
-	if ( ! isPlainObject( payload ) ) {
+function attachRequestMetaToRecommendationPayload(payload = {}) {
+	if (!isPlainObject(payload)) {
 		return payload;
 	}
 
-	const requestMeta = normalizeRequestMeta( payload.requestMeta );
+	const requestMeta = normalizeRequestMeta(payload.requestMeta);
 
-	if ( ! requestMeta ) {
+	if (!requestMeta) {
 		return payload;
 	}
 
 	return {
 		...payload,
-		settings: attachRequestMetaToSuggestionList(
-			payload.settings,
-			requestMeta
-		),
-		styles: attachRequestMetaToSuggestionList(
-			payload.styles,
-			requestMeta
-		),
-		block: attachRequestMetaToSuggestionList( payload.block, requestMeta ),
+		settings: attachRequestMetaToSuggestionList(payload.settings, requestMeta),
+		styles: attachRequestMetaToSuggestionList(payload.styles, requestMeta),
+		block: attachRequestMetaToSuggestionList(payload.block, requestMeta),
 		suggestions: attachRequestMetaToSuggestionList(
 			payload.suggestions,
 			requestMeta
@@ -303,20 +285,20 @@ function getNormalizedReadyState(
 	surface,
 	{ hasPreview = false, hasResult = false }
 ) {
-	const contract = getSurfaceContract( surface );
+	const contract = getSurfaceContract(surface);
 
-	if ( ! contract || ! hasResult ) {
+	if (!contract || !hasResult) {
 		return 'idle';
 	}
 
-	if ( contract.previewRequired && hasPreview ) {
+	if (contract.previewRequired && hasPreview) {
 		return 'preview-ready';
 	}
 
 	return contract.readyState;
 }
 
-function getNormalizedInteractionState( surface, options = {} ) {
+function getNormalizedInteractionState(surface, options = {}) {
 	const {
 		requestStatus = 'idle',
 		requestError = '',
@@ -331,43 +313,47 @@ function getNormalizedInteractionState( surface, options = {} ) {
 	} = options;
 
 	if (
-		normalizeStringMessage( requestError ) ||
-		normalizeStringMessage( applyError ) ||
-		normalizeStringMessage( undoError )
+		normalizeStringMessage(requestError) ||
+		normalizeStringMessage(applyError) ||
+		normalizeStringMessage(undoError)
 	) {
 		return 'error';
 	}
 
-	if ( undoStatus === 'undoing' ) {
+	if (undoStatus === 'undoing') {
 		return 'undoing';
 	}
 
-	if ( applyStatus === 'applying' ) {
+	if (applyStatus === 'applying') {
 		return 'applying';
 	}
 
-	if ( requestStatus === 'loading' ) {
+	if (requestStatus === 'loading') {
 		return 'loading';
 	}
 
-	if ( hasUndoSuccess || hasSuccess ) {
+	if (hasUndoSuccess || hasSuccess) {
 		return 'success';
 	}
 
-	return getNormalizedReadyState( surface, {
+	return getNormalizedReadyState(surface, {
 		hasPreview,
 		hasResult,
-	} );
+	});
 }
 
-function isSurfaceApplyAllowedForState( surface, options = {} ) {
-	const contract = getSurfaceContract( surface );
+function isSurfaceApplyAllowedForState(surface, options = {}) {
+	const contract = getSurfaceContract(surface);
 
-	if ( ! contract || contract.advisoryOnly ) {
+	if (!contract || contract.advisoryOnly) {
 		return false;
 	}
 
-	if ( contract.previewRequired ) {
+	if (options.isStale) {
+		return false;
+	}
+
+	if (contract.previewRequired) {
 		return Boolean(
 			options.hasPreview &&
 				options.hasOperations &&
@@ -375,16 +361,22 @@ function isSurfaceApplyAllowedForState( surface, options = {} ) {
 		);
 	}
 
-	return Boolean( options.hasResult );
+	return Boolean(options.hasResult);
 }
 
-function getBlockRequestError( state, clientId ) {
+function getBlockRequestError(state, clientId) {
 	return normalizeStringMessage(
-		getStoredBlockRequestState( state, clientId ).error
+		getStoredBlockRequestState(state, clientId).error
 	);
 }
 
-function getNavigationRequestError( state, blockClientId = null ) {
+function getBlockApplyError(state, clientId) {
+	return normalizeStringMessage(
+		getStoredBlockRequestState(state, clientId).applyError
+	);
+}
+
+function getNavigationRequestError(state, blockClientId = null) {
 	return normalizeStringMessage(
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? ''
@@ -392,89 +384,120 @@ function getNavigationRequestError( state, blockClientId = null ) {
 	);
 }
 
-function getNavigationHasResult( state, blockClientId = null ) {
+function getNavigationHasResult(state, blockClientId = null) {
 	return Boolean(
-		( ! blockClientId ||
-			state.navigationBlockClientId === blockClientId ) &&
+		(!blockClientId || state.navigationBlockClientId === blockClientId) &&
 			state.navigationStatus === 'ready'
 	);
 }
 
-function getContentHasResult( state ) {
+function getContentHasResult(state) {
 	return Boolean(
 		state.contentStatus === 'ready' && state.contentRecommendation
 	);
 }
 
-function getBlockHasResult( state, clientId ) {
-	const requestState = getStoredBlockRequestState( state, clientId );
+function getBlockHasResult(state, clientId) {
+	const requestState = getStoredBlockRequestState(state, clientId);
 
 	return Boolean(
-		requestState.status === 'ready' &&
-			state.blockRecommendations[ clientId ]
+		requestState.status === 'ready' && state.blockRecommendations[clientId]
 	);
 }
 
-function getTemplateHasResult( state ) {
-	return Boolean( state.templateStatus === 'ready' && state.templateRef );
+function getTemplateHasResult(state) {
+	return Boolean(state.templateRef);
 }
 
-function getTemplatePartHasResult( state ) {
-	return Boolean(
-		state.templatePartStatus === 'ready' && state.templatePartRef
-	);
+function getTemplatePartHasResult(state) {
+	return Boolean(state.templatePartRef);
 }
 
-function getGlobalStylesHasResult( state ) {
-	return Boolean(
-		state.globalStylesStatus === 'ready' && state.globalStylesEntityId
-	);
+function getGlobalStylesHasResult(state) {
+	return Boolean(state.globalStylesEntityId);
 }
 
-function getStyleBookHasResult( state ) {
-	return Boolean(
-		state.styleBookStatus === 'ready' && state.styleBookScopeKey
-	);
+function getStyleBookHasResult(state) {
+	return Boolean(state.styleBookScopeKey);
 }
 
-function getScopeKey( scope = null ) {
-	return normalizeStringMessage( scope?.scopeKey || scope?.key ) || null;
+function getScopeKey(scope = null) {
+	return normalizeStringMessage(scope?.scopeKey || scope?.key) || null;
 }
 
-function getSurfaceStatusNotice( surface, options = {} ) {
-	const requestError = normalizeStringMessage( options.requestError );
+function buildStaleApplyErrorMessage(surface) {
+	switch (surface) {
+		case 'template':
+			return 'This template result is stale. Refresh recommendations before applying it.';
+		case 'template-part':
+			return 'This template-part result is stale. Refresh recommendations before applying it.';
+		case 'global-styles':
+			return 'This Global Styles result is stale. Refresh recommendations before applying it.';
+		case 'style-book':
+			return 'This Style Book result is stale. Refresh recommendations before applying it.';
+		default:
+			return 'This result is stale. Refresh recommendations before applying it.';
+	}
+}
 
-	if ( requestError ) {
+function guardSurfaceApplyFreshness({
+	surface,
+	currentContextSignature = null,
+	getStoredContextSignature,
+	localDispatch,
+	setApplyState,
+}) {
+	const storedContextSignature = getStoredContextSignature?.() || null;
+
+	if (
+		!storedContextSignature ||
+		storedContextSignature === currentContextSignature
+	) {
+		return null;
+	}
+
+	const error = buildStaleApplyErrorMessage(surface);
+
+	localDispatch(setApplyState('error', error));
+
+	return {
+		ok: false,
+		error,
+	};
+}
+
+function getSurfaceStatusNotice(surface, options = {}) {
+	const requestError = normalizeStringMessage(options.requestError);
+
+	if (requestError) {
 		return {
 			source: 'request',
 			tone: 'error',
 			message: requestError,
-			isDismissible: Boolean( options.onDismissAction ),
+			isDismissible: Boolean(options.onDismissAction),
 			actionType: options.onDismissAction ? 'dismiss' : null,
 			actionLabel: '',
 			actionDisabled: false,
 		};
 	}
 
-	const undoError = normalizeStringMessage( options.undoError );
+	const undoError = normalizeStringMessage(options.undoError);
 
-	if ( undoError ) {
+	if (undoError) {
 		return {
 			source: 'undo',
 			tone: 'error',
 			message: undoError,
-			isDismissible: Boolean( options.onUndoDismissAction ),
+			isDismissible: Boolean(options.onUndoDismissAction),
 			actionType: options.onUndoDismissAction ? 'dismiss' : null,
 			actionLabel: '',
 			actionDisabled: false,
 		};
 	}
 
-	const undoSuccessMessage = normalizeStringMessage(
-		options.undoSuccessMessage
-	);
+	const undoSuccessMessage = normalizeStringMessage(options.undoSuccessMessage);
 
-	if ( undoSuccessMessage ) {
+	if (undoSuccessMessage) {
 		return {
 			source: 'undo',
 			tone: 'success',
@@ -486,15 +509,15 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 		};
 	}
 
-	const applyError = normalizeStringMessage( options.applyError );
+	const applyError = normalizeStringMessage(options.applyError);
 
-	if ( applyError ) {
+	if (applyError) {
 		return {
 			source: 'apply',
 			tone: 'error',
 			message: applyError,
-			isDismissible: false,
-			actionType: null,
+			isDismissible: Boolean(options.onApplyDismissAction),
+			actionType: options.onApplyDismissAction ? 'dismiss' : null,
 			actionLabel: '',
 			actionDisabled: false,
 		};
@@ -504,7 +527,7 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 		options.applySuccessMessage
 	);
 
-	if ( applySuccessMessage ) {
+	if (applySuccessMessage) {
 		return {
 			source: 'apply',
 			tone: 'success',
@@ -516,12 +539,18 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 		};
 	}
 
-	const interactionState = getNormalizedInteractionState( surface, options );
-	const emptyMessage = normalizeStringMessage( options.emptyMessage );
+	const isStale = options.isStale === true;
+
+	if (isStale) {
+		return null;
+	}
+
+	const interactionState = getNormalizedInteractionState(surface, options);
+	const emptyMessage = normalizeStringMessage(options.emptyMessage);
 
 	if (
 		options.hasResult &&
-		! options.hasSuggestions &&
+		!options.hasSuggestions &&
 		emptyMessage &&
 		interactionState !== 'loading'
 	) {
@@ -536,9 +565,9 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 		};
 	}
 
-	const advisoryMessage = normalizeStringMessage( options.advisoryMessage );
+	const advisoryMessage = normalizeStringMessage(options.advisoryMessage);
 
-	if ( interactionState === 'advisory-ready' && advisoryMessage ) {
+	if (interactionState === 'advisory-ready' && advisoryMessage) {
 		return {
 			source: 'advisory',
 			tone: 'info',
@@ -553,65 +582,64 @@ function getSurfaceStatusNotice( surface, options = {} ) {
 	return null;
 }
 
-function getStoredBlockRequestState( state, clientId ) {
-	return state.blockRequestState[ clientId ] || DEFAULT_BLOCK_REQUEST_STATE;
+function getStoredBlockRequestState(state, clientId) {
+	return state.blockRequestState[clientId] || DEFAULT_BLOCK_REQUEST_STATE;
 }
 
-function isStaleBlockRequest( state, clientId, requestToken ) {
-	if ( requestToken === null || requestToken === undefined ) {
+function isStaleBlockRequest(state, clientId, requestToken) {
+	if (requestToken === null || requestToken === undefined) {
 		return false;
 	}
 
 	return (
-		requestToken <
-		getStoredBlockRequestState( state, clientId ).requestToken
+		requestToken < getStoredBlockRequestState(state, clientId).requestToken
 	);
 }
 
-function isStaleTemplateRequest( state, requestToken ) {
-	if ( requestToken === null || requestToken === undefined ) {
+function isStaleTemplateRequest(state, requestToken) {
+	if (requestToken === null || requestToken === undefined) {
 		return false;
 	}
 
-	return requestToken < ( state.templateRequestToken || 0 );
+	return requestToken < (state.templateRequestToken || 0);
 }
 
-function isStaleTemplatePartRequest( state, requestToken ) {
-	if ( requestToken === null || requestToken === undefined ) {
+function isStaleTemplatePartRequest(state, requestToken) {
+	if (requestToken === null || requestToken === undefined) {
 		return false;
 	}
 
-	return requestToken < ( state.templatePartRequestToken || 0 );
+	return requestToken < (state.templatePartRequestToken || 0);
 }
 
-function isStaleNavigationRequest( state, requestToken ) {
-	if ( requestToken === null || requestToken === undefined ) {
+function isStaleNavigationRequest(state, requestToken) {
+	if (requestToken === null || requestToken === undefined) {
 		return false;
 	}
 
-	return requestToken < ( state.navigationRequestToken || 0 );
+	return requestToken < (state.navigationRequestToken || 0);
 }
 
-function isStaleGlobalStylesRequest( state, requestToken ) {
-	if ( requestToken === null || requestToken === undefined ) {
+function isStaleGlobalStylesRequest(state, requestToken) {
+	if (requestToken === null || requestToken === undefined) {
 		return false;
 	}
 
-	return requestToken < ( state.globalStylesRequestToken || 0 );
+	return requestToken < (state.globalStylesRequestToken || 0);
 }
 
-function isStaleStyleBookRequest( state, requestToken ) {
-	if ( requestToken === null || requestToken === undefined ) {
+function isStaleStyleBookRequest(state, requestToken) {
+	if (requestToken === null || requestToken === undefined) {
 		return false;
 	}
 
-	return requestToken < ( state.styleBookRequestToken || 0 );
+	return requestToken < (state.styleBookRequestToken || 0);
 }
 
-function buildActivityDocument( scope ) {
-	const scopeKey = getScopeKey( scope );
+function buildActivityDocument(scope) {
+	const scopeKey = getScopeKey(scope);
 
-	if ( ! scopeKey ) {
+	if (!scopeKey) {
 		return null;
 	}
 
@@ -625,18 +653,18 @@ function buildActivityDocument( scope ) {
 	};
 }
 
-function getRequestDocumentFromScope( scope ) {
-	return buildActivityDocument( scope );
+function getRequestDocumentFromScope(scope) {
+	return buildActivityDocument(scope);
 }
 
-function alignActivityEntriesToScope( entries, scope ) {
-	const document = buildActivityDocument( scope );
+function alignActivityEntriesToScope(entries, scope) {
+	const document = buildActivityDocument(scope);
 
-	if ( ! document ) {
-		return limitActivityLog( entries );
+	if (!document) {
+		return limitActivityLog(entries);
 	}
 
-	return limitActivityLog( entries ).map( ( entry ) =>
+	return limitActivityLog(entries).map((entry) =>
 		entry
 			? {
 					...entry,
@@ -653,9 +681,9 @@ function syncActivitySession(
 	{ allowUnsavedMigration = false } = {}
 ) {
 	const currentScopeKey = select.getActivityScopeKey?.() || null;
-	const nextScopeKey = getScopeKey( scope );
+	const nextScopeKey = getScopeKey(scope);
 
-	if ( currentScopeKey === nextScopeKey ) {
+	if (currentScopeKey === nextScopeKey) {
 		return select.getActivityLog?.() || [];
 	}
 
@@ -672,201 +700,197 @@ function syncActivitySession(
 			scope
 		);
 
-		localDispatch(
-			actions.setActivitySession( nextScopeKey, reassignedEntries )
-		);
-		writePersistedActivityLog( nextScopeKey, reassignedEntries );
+		localDispatch(actions.setActivitySession(nextScopeKey, reassignedEntries));
+		writePersistedActivityLog(nextScopeKey, reassignedEntries);
 
 		return reassignedEntries;
 	}
 
 	const cachedEntries = nextScopeKey
-		? readPersistedActivityLog( nextScopeKey )
+		? readPersistedActivityLog(nextScopeKey)
 		: [];
 
-	localDispatch( actions.setActivitySession( nextScopeKey, cachedEntries ) );
+	localDispatch(actions.setActivitySession(nextScopeKey, cachedEntries));
 
 	return cachedEntries;
 }
 
-function persistActivitySession( select ) {
+function persistActivitySession(select) {
 	const scopeKey = select.getActivityScopeKey?.() || null;
 
-	if ( ! scopeKey ) {
+	if (!scopeKey) {
 		return;
 	}
 
-	writePersistedActivityLog( scopeKey, select.getActivityLog?.() || [] );
+	writePersistedActivityLog(scopeKey, select.getActivityLog?.() || []);
 }
 
-function getApiErrorStatus( error ) {
-	const dataStatus = Number( error?.data?.status );
+function getApiErrorStatus(error) {
+	const dataStatus = Number(error?.data?.status);
 
-	if ( Number.isInteger( dataStatus ) && dataStatus > 0 ) {
+	if (Number.isInteger(dataStatus) && dataStatus > 0) {
 		return dataStatus;
 	}
 
-	const errorStatus = Number( error?.status );
+	const errorStatus = Number(error?.status);
 
-	if ( Number.isInteger( errorStatus ) && errorStatus > 0 ) {
+	if (Number.isInteger(errorStatus) && errorStatus > 0) {
 		return errorStatus;
 	}
 
-	const responseStatus = Number( error?.response?.status );
+	const responseStatus = Number(error?.response?.status);
 
-	return Number.isInteger( responseStatus ) && responseStatus > 0
+	return Number.isInteger(responseStatus) && responseStatus > 0
 		? responseStatus
 		: 0;
 }
 
-function getApiErrorMessage( error, fallback = 'Request failed.' ) {
+function getApiErrorMessage(error, fallback = 'Request failed.') {
 	return typeof error?.message === 'string' && error.message
 		? error.message
 		: fallback;
 }
 
-function getApiErrorCode( error ) {
-	if ( typeof error?.code === 'string' && error.code ) {
+function getApiErrorCode(error) {
+	if (typeof error?.code === 'string' && error.code) {
 		return error.code;
 	}
 
-	if ( typeof error?.data?.code === 'string' && error.data.code ) {
+	if (typeof error?.data?.code === 'string' && error.data.code) {
 		return error.data.code;
 	}
 
 	return '';
 }
 
-function buildActivityQueryPath( {
+function buildActivityQueryPath({
 	scopeKey,
 	surface = '',
 	entityType = '',
 	entityRef = '',
 	limit = null,
-} ) {
+}) {
 	const params = new URLSearchParams();
 
-	if ( scopeKey ) {
-		params.set( 'scopeKey', scopeKey );
+	if (scopeKey) {
+		params.set('scopeKey', scopeKey);
 	}
 
-	if ( surface ) {
-		params.set( 'surface', surface );
+	if (surface) {
+		params.set('surface', surface);
 	}
 
-	if ( entityType ) {
-		params.set( 'entityType', entityType );
+	if (entityType) {
+		params.set('entityType', entityType);
 	}
 
-	if ( entityRef ) {
-		params.set( 'entityRef', entityRef );
+	if (entityRef) {
+		params.set('entityRef', entityRef);
 	}
 
-	if ( Number.isInteger( limit ) && limit > 0 ) {
-		params.set( 'limit', String( limit ) );
+	if (Number.isInteger(limit) && limit > 0) {
+		params.set('limit', String(limit));
 	}
 
 	const query = params.toString();
 
 	return query
-		? `/flavor-agent/v1/activity?${ query }`
+		? `/flavor-agent/v1/activity?${query}`
 		: '/flavor-agent/v1/activity';
 }
 
-function mergeActivityEntries( ...entrySets ) {
+function mergeActivityEntries(...entrySets) {
 	const mergedEntries = new Map();
 
 	entrySets
 		.flat()
-		.filter( Boolean )
-		.forEach( ( entry ) => {
-			if ( entry?.id ) {
-				mergedEntries.set( entry.id, entry );
+		.filter(Boolean)
+		.forEach((entry) => {
+			if (entry?.id) {
+				mergedEntries.set(entry.id, entry);
 			}
-		} );
+		});
 
-	return limitActivityLog( [ ...mergedEntries.values() ] );
+	return limitActivityLog([...mergedEntries.values()]);
 }
 
-function refreshActivitySession( localDispatch, scopeKey, entries ) {
-	localDispatch( actions.setActivitySession( scopeKey, entries ) );
-	writePersistedActivityLog( scopeKey, entries );
+function refreshActivitySession(localDispatch, scopeKey, entries) {
+	localDispatch(actions.setActivitySession(scopeKey, entries));
+	writePersistedActivityLog(scopeKey, entries);
 }
 
-async function reloadScopedActivitySession( localDispatch, registry, select ) {
-	const scope = getCurrentActivityScope( registry );
-	const scopeKey = getScopeKey( scope ) || select.getActivityScopeKey?.() || null;
+async function reloadScopedActivitySession(localDispatch, registry, select) {
+	const scope = getCurrentActivityScope(registry);
+	const scopeKey = getScopeKey(scope) || select.getActivityScopeKey?.() || null;
 
-	if ( ! scopeKey ) {
+	if (!scopeKey) {
 		return;
 	}
 
 	try {
-		const serverEntries = await fetchServerActivityEntries( scopeKey );
+		const serverEntries = await fetchServerActivityEntries(scopeKey);
 		const mergedEntries = mergeActivityEntries(
 			serverEntries,
-			( select.getActivityLog?.() || [] ).filter( isLocalActivityEntry )
+			(select.getActivityLog?.() || []).filter(isLocalActivityEntry)
 		);
 
-		refreshActivitySession( localDispatch, scopeKey, mergedEntries );
+		refreshActivitySession(localDispatch, scopeKey, mergedEntries);
 	} catch {
 		// Keep the current scoped cache when the server activity reload fails.
 	}
 }
 
-async function fetchServerActivityEntries( scopeKey ) {
-	const response = await apiFetch( {
-		path: buildActivityQueryPath( {
+async function fetchServerActivityEntries(scopeKey) {
+	const response = await apiFetch({
+		path: buildActivityQueryPath({
 			scopeKey,
-		} ),
+		}),
 		method: 'GET',
-	} );
+	});
 
-	return limitActivityLog( response?.entries || [] );
+	return limitActivityLog(response?.entries || []);
 }
 
-function scheduleActivitySessionReload( options = {} ) {
-	if ( typeof window === 'undefined' ) {
+function scheduleActivitySessionReload(options = {}) {
+	if (typeof window === 'undefined') {
 		return;
 	}
 
-	if ( actions._activitySessionRetryTimer ) {
-		window.clearTimeout( actions._activitySessionRetryTimer );
+	if (actions._activitySessionRetryTimer) {
+		window.clearTimeout(actions._activitySessionRetryTimer);
 	}
 
-	actions._activitySessionRetryTimer = window.setTimeout( () => {
+	actions._activitySessionRetryTimer = window.setTimeout(() => {
 		actions._activitySessionRetryTimer = null;
 
-		const storeDispatch = window.wp?.data?.dispatch?.( STORE_NAME );
+		const storeDispatch = window.wp?.data?.dispatch?.(STORE_NAME);
 		const { scope: retryScope, ...retryOptions } = options || {};
 
-		if ( typeof storeDispatch?.loadActivitySession === 'function' ) {
-			storeDispatch.loadActivitySession( {
+		if (typeof storeDispatch?.loadActivitySession === 'function') {
+			storeDispatch.loadActivitySession({
 				...retryOptions,
-				...( getScopeKey( retryScope ) ? { scope: retryScope } : {} ),
+				...(getScopeKey(retryScope) ? { scope: retryScope } : {}),
 				retryIfScopeUnavailable: false,
-			} );
+			});
 		}
-	}, 150 );
+	}, 150);
 }
 
-async function persistServerActivityEntry( entry ) {
-	const response = await apiFetch( {
+async function persistServerActivityEntry(entry) {
+	const response = await apiFetch({
 		path: '/flavor-agent/v1/activity',
 		method: 'POST',
 		data: {
 			entry,
 		},
-	} );
+	});
 
 	return response?.entry || entry;
 }
 
-async function persistActivityUndoTransition( entry ) {
-	const response = await apiFetch( {
-		path: `/flavor-agent/v1/activity/${ encodeURIComponent(
-			entry.id
-		) }/undo`,
+async function persistActivityUndoTransition(entry) {
+	const response = await apiFetch({
+		path: `/flavor-agent/v1/activity/${encodeURIComponent(entry.id)}/undo`,
 		method: 'POST',
 		data: entry?.undo?.error
 			? {
@@ -876,15 +900,15 @@ async function persistActivityUndoTransition( entry ) {
 			: {
 					status: entry?.undo?.status,
 			  },
-	} );
+	});
 
 	return response?.entry || entry;
 }
 
-function shouldSyncUndoTransition( entry ) {
-	const pendingSyncType = getPendingActivitySyncType( entry );
+function shouldSyncUndoTransition(entry) {
+	const pendingSyncType = getPendingActivitySyncType(entry);
 
-	if ( pendingSyncType === 'undo' ) {
+	if (pendingSyncType === 'undo') {
 		return true;
 	}
 
@@ -903,72 +927,70 @@ function buildActivityPersistenceUpdate(
 	};
 }
 
-function buildUndoAuditSyncError( message ) {
-	return `${ message } Flavor Agent could not persist the activity audit update and will retry on the next activity sync.`;
+function buildUndoAuditSyncError(message) {
+	return `${message} Flavor Agent could not persist the activity audit update and will retry on the next activity sync.`;
 }
 
-function isServerBackedActivityEntry( entry ) {
+function isServerBackedActivityEntry(entry) {
 	return entry?.persistence?.status === 'server';
 }
 
-function isRetryableActivitySyncError( error ) {
-	const status = getApiErrorStatus( error );
+function isRetryableActivitySyncError(error) {
+	const status = getApiErrorStatus(error);
 
-	if ( status === 0 || status === 408 || status === 425 || status === 429 ) {
+	if (status === 0 || status === 408 || status === 425 || status === 429) {
 		return true;
 	}
 
 	return status >= 500;
 }
 
-function isRetryableRateLimitError( error ) {
-	if ( error?.data?.retryable === true ) {
+function isRetryableRateLimitError(error) {
+	if (error?.data?.retryable === true) {
 		return true;
 	}
-	return getApiErrorStatus( error ) === 429;
+	return getApiErrorStatus(error) === 429;
 }
 
-function getRetryAfterSeconds( error ) {
+function getRetryAfterSeconds(error) {
 	const retryAfter = error?.data?.retry_after ?? error?.retry_after;
-	if ( Number.isInteger( retryAfter ) && retryAfter > 0 ) {
-		return Math.min( retryAfter, 60 );
+	if (Number.isInteger(retryAfter) && retryAfter > 0) {
+		return Math.min(retryAfter, 60);
 	}
 	return 5;
 }
 
-function sleep( ms ) {
-	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isNonRetryableUndoSyncError( entry, error ) {
+function isNonRetryableUndoSyncError(entry, error) {
 	if (
-		! isServerBackedActivityEntry( entry ) &&
-		getPendingActivitySyncType( entry ) !== 'undo'
+		!isServerBackedActivityEntry(entry) &&
+		getPendingActivitySyncType(entry) !== 'undo'
 	) {
 		return false;
 	}
 
-	const status = getApiErrorStatus( error );
-	if ( status < 400 || status >= 500 ) {
+	const status = getApiErrorStatus(error);
+	if (status < 400 || status >= 500) {
 		return false;
 	}
 
 	if (
 		status === 409 &&
-		getApiErrorCode( error ) ===
-			'flavor_agent_activity_invalid_undo_transition'
+		getApiErrorCode(error) === 'flavor_agent_activity_invalid_undo_transition'
 	) {
 		return false;
 	}
 
-	return ! isRetryableActivitySyncError( error );
+	return !isRetryableActivitySyncError(error);
 }
 
-function isUndoSyncConflictError( error ) {
+function isUndoSyncConflictError(error) {
 	return (
-		getApiErrorStatus( error ) === 409 &&
-		getApiErrorCode( error ) ===
-			'flavor_agent_activity_invalid_undo_transition'
+		getApiErrorStatus(error) === 409 &&
+		getApiErrorCode(error) === 'flavor_agent_activity_invalid_undo_transition'
 	);
 }
 
@@ -985,41 +1007,37 @@ function buildNonRetryableUndoSyncEntry(
 	return {
 		...entry,
 		undo: {
-			...( entry?.undo || {} ),
+			...(entry?.undo || {}),
 			canUndo: false,
 			status: 'failed',
 			error: message,
 			updatedAt: timestamp,
 			undoneAt: null,
 		},
-		persistence: buildActivityPersistenceUpdate(
-			'server',
-			null,
-			timestamp
-		),
+		persistence: buildActivityPersistenceUpdate('server', null, timestamp),
 	};
 }
 
-async function persistPendingActivityEntry( entry ) {
-	switch ( getPendingActivitySyncType( entry ) ) {
+async function persistPendingActivityEntry(entry) {
+	switch (getPendingActivitySyncType(entry)) {
 		case 'undo':
-			return persistActivityUndoTransition( entry );
+			return persistActivityUndoTransition(entry);
 		case 'create':
 		default:
-			return persistServerActivityEntry( entry );
+			return persistServerActivityEntry(entry);
 	}
 }
 
-async function persistPendingActivityEntries( entries = [] ) {
+async function persistPendingActivityEntries(entries = []) {
 	const persistedEntries = [];
 	const failedEntries = [];
 	const terminalEntries = [];
 
-	for ( const entry of entries ) {
+	for (const entry of entries) {
 		try {
-			persistedEntries.push( await persistPendingActivityEntry( entry ) );
-		} catch ( error ) {
-			if ( isUndoSyncConflictError( error ) ) {
+			persistedEntries.push(await persistPendingActivityEntry(entry));
+		} catch (error) {
+			if (isUndoSyncConflictError(error)) {
 				let reconciledEntry = null;
 
 				try {
@@ -1031,20 +1049,18 @@ async function persistPendingActivityEntries( entries = [] ) {
 					reconciledEntry = null;
 				}
 
-				if ( reconciledEntry ) {
-					persistedEntries.push( reconciledEntry );
+				if (reconciledEntry) {
+					persistedEntries.push(reconciledEntry);
 					continue;
 				}
 			}
 
-			if ( isNonRetryableUndoSyncError( entry, error ) ) {
-				terminalEntries.push(
-					buildNonRetryableUndoSyncEntry( entry, error )
-				);
+			if (isNonRetryableUndoSyncError(entry, error)) {
+				terminalEntries.push(buildNonRetryableUndoSyncEntry(entry, error));
 				continue;
 			}
 
-			failedEntries.push( entry );
+			failedEntries.push(entry);
 		}
 	}
 
@@ -1055,65 +1071,60 @@ async function persistPendingActivityEntries( entries = [] ) {
 	};
 }
 
-async function reconcileActivityEntryFromServer( entry, scopeKey ) {
-	if ( ! entry?.id || ! scopeKey ) {
+async function reconcileActivityEntryFromServer(entry, scopeKey) {
+	if (!entry?.id || !scopeKey) {
 		return null;
 	}
 
-	const serverEntries = await fetchServerActivityEntries( scopeKey );
+	const serverEntries = await fetchServerActivityEntries(scopeKey);
 
 	return (
-		serverEntries.find( ( serverEntry ) => serverEntry?.id === entry.id ) ||
-		null
+		serverEntries.find((serverEntry) => serverEntry?.id === entry.id) || null
 	);
 }
 
-async function recordActivityEntry( localDispatch, select, entry ) {
+async function recordActivityEntry(localDispatch, select, entry) {
 	let nextEntry = entry;
 
-	if ( entry?.document?.scopeKey ) {
+	if (entry?.document?.scopeKey) {
 		try {
-			nextEntry = await persistServerActivityEntry( entry );
+			nextEntry = await persistServerActivityEntry(entry);
 		} catch {
 			nextEntry = entry;
 		}
 	}
 
-	localDispatch( actions.logActivity( nextEntry ) );
-	persistActivitySession( select );
+	localDispatch(actions.logActivity(nextEntry));
+	persistActivitySession(select);
 
 	return nextEntry;
 }
 
-function getEntityActivityEntries( activityLog, activity ) {
-	const entityKey = getActivityEntityKey( activity );
+function getEntityActivityEntries(activityLog, activity) {
+	const entityKey = getActivityEntityKey(activity);
 
-	if ( ! entityKey ) {
+	if (!entityKey) {
 		return [];
 	}
 
 	return activityLog.filter(
-		( entry ) => getActivityEntityKey( entry ) === entityKey
+		(entry) => getActivityEntityKey(entry) === entityKey
 	);
 }
 
-function findBlockPath( blocks, clientId, path = [] ) {
-	for ( let index = 0; index < blocks.length; index++ ) {
-		const block = blocks[ index ];
-		const nextPath = [ ...path, index ];
+function findBlockPath(blocks, clientId, path = []) {
+	for (let index = 0; index < blocks.length; index++) {
+		const block = blocks[index];
+		const nextPath = [...path, index];
 
-		if ( block?.clientId === clientId ) {
+		if (block?.clientId === clientId) {
 			return nextPath;
 		}
 
-		if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
-			const nestedPath = findBlockPath(
-				block.innerBlocks,
-				clientId,
-				nextPath
-			);
+		if (Array.isArray(block?.innerBlocks) && block.innerBlocks.length) {
+			const nestedPath = findBlockPath(block.innerBlocks, clientId, nextPath);
 
-			if ( nestedPath ) {
+			if (nestedPath) {
 				return nestedPath;
 			}
 		}
@@ -1122,7 +1133,7 @@ function findBlockPath( blocks, clientId, path = [] ) {
 	return null;
 }
 
-function buildBlockActivityEntry( {
+function buildBlockActivityEntry({
 	afterAttributes,
 	beforeAttributes,
 	blockContext,
@@ -1133,14 +1144,14 @@ function buildBlockActivityEntry( {
 	requestToken = 0,
 	scope = null,
 	suggestion,
-} ) {
-	return createActivityEntry( {
+}) {
+	return createActivityEntry({
 		type: 'apply_suggestion',
 		surface: 'block',
 		target: {
 			clientId,
 			blockName: blockContext?.name || '',
-			blockPath: Array.isArray( blockPath ) ? blockPath : [],
+			blockPath: Array.isArray(blockPath) ? blockPath : [],
 		},
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
@@ -1151,15 +1162,15 @@ function buildBlockActivityEntry( {
 			attributes: afterAttributes,
 		},
 		prompt: requestPrompt,
-		requestRef: `block:${ clientId }:${ requestToken }`,
+		requestRef: `block:${clientId}:${requestToken}`,
 		requestMeta,
-		document: buildActivityDocument( scope ),
-	} );
+		document: buildActivityDocument(scope),
+	});
 }
 
-function buildDocumentOperationBeforeState( operations = [] ) {
-	return operations.map( ( operation ) => {
-		switch ( operation?.type ) {
+function buildDocumentOperationBeforeState(operations = []) {
+	return operations.map((operation) => {
+		switch (operation?.type) {
 			case 'assign_template_part':
 			case 'replace_template_part':
 				return {
@@ -1179,7 +1190,7 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 					patternName: operation.patternName || '',
 					patternTitle: operation.patternTitle || '',
 					placement: operation.placement || '',
-					targetPath: Array.isArray( operation.targetPath )
+					targetPath: Array.isArray(operation.targetPath)
 						? operation.targetPath
 						: null,
 					expectedTarget:
@@ -1189,9 +1200,7 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 							: null,
 					targetBlockName: operation.targetBlockName || '',
 					rootLocator: operation.rootLocator || null,
-					index: Number.isInteger( operation.index )
-						? operation.index
-						: null,
+					index: Number.isInteger(operation.index) ? operation.index : null,
 				};
 
 			case 'replace_block_with_pattern':
@@ -1206,13 +1215,11 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 						typeof operation.expectedTarget === 'object'
 							? operation.expectedTarget
 							: null,
-					targetPath: Array.isArray( operation.targetPath )
+					targetPath: Array.isArray(operation.targetPath)
 						? operation.targetPath
 						: null,
 					rootLocator: operation.rootLocator || null,
-					index: Number.isInteger( operation.index )
-						? operation.index
-						: null,
+					index: Number.isInteger(operation.index) ? operation.index : null,
 				};
 
 			default:
@@ -1220,10 +1227,10 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 					type: operation?.type || 'unknown',
 				};
 		}
-	} );
+	});
 }
 
-function buildTemplateActivityEntry( {
+function buildTemplateActivityEntry({
 	operations,
 	requestPrompt = '',
 	requestMeta = null,
@@ -1231,8 +1238,8 @@ function buildTemplateActivityEntry( {
 	scope = null,
 	suggestion,
 	templateRef,
-} ) {
-	return createActivityEntry( {
+}) {
+	return createActivityEntry({
 		type: 'apply_template_suggestion',
 		surface: 'template',
 		target: {
@@ -1241,17 +1248,17 @@ function buildTemplateActivityEntry( {
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
 		before: {
-			operations: buildDocumentOperationBeforeState( operations ),
+			operations: buildDocumentOperationBeforeState(operations),
 		},
 		after: { operations },
 		prompt: requestPrompt,
-		requestRef: `template:${ templateRef || 'unknown' }:${ requestToken }`,
+		requestRef: `template:${templateRef || 'unknown'}:${requestToken}`,
 		requestMeta,
-		document: buildActivityDocument( scope ),
-	} );
+		document: buildActivityDocument(scope),
+	});
 }
 
-function buildTemplatePartActivityEntry( {
+function buildTemplatePartActivityEntry({
 	operations,
 	requestPrompt = '',
 	requestMeta = null,
@@ -1259,8 +1266,8 @@ function buildTemplatePartActivityEntry( {
 	scope = null,
 	suggestion,
 	templatePartRef,
-} ) {
-	return createActivityEntry( {
+}) {
+	return createActivityEntry({
 		type: 'apply_template_part_suggestion',
 		surface: 'template-part',
 		target: {
@@ -1269,19 +1276,17 @@ function buildTemplatePartActivityEntry( {
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
 		before: {
-			operations: buildDocumentOperationBeforeState( operations ),
+			operations: buildDocumentOperationBeforeState(operations),
 		},
 		after: { operations },
 		prompt: requestPrompt,
-		requestRef: `template-part:${
-			templatePartRef || 'unknown'
-		}:${ requestToken }`,
+		requestRef: `template-part:${templatePartRef || 'unknown'}:${requestToken}`,
 		requestMeta,
-		document: buildActivityDocument( scope ),
-	} );
+		document: buildActivityDocument(scope),
+	});
 }
 
-function buildGlobalStylesActivityEntry( {
+function buildGlobalStylesActivityEntry({
 	operations,
 	beforeConfig,
 	afterConfig,
@@ -1291,8 +1296,8 @@ function buildGlobalStylesActivityEntry( {
 	scope = null,
 	suggestion,
 	globalStylesId,
-} ) {
-	return createActivityEntry( {
+}) {
+	return createActivityEntry({
 		type: 'apply_global_styles_suggestion',
 		surface: 'global-styles',
 		target: {
@@ -1308,15 +1313,13 @@ function buildGlobalStylesActivityEntry( {
 			operations,
 		},
 		prompt: requestPrompt,
-		requestRef: `global-styles:${
-			globalStylesId || 'unknown'
-		}:${ requestToken }`,
+		requestRef: `global-styles:${globalStylesId || 'unknown'}:${requestToken}`,
 		requestMeta,
-		document: buildActivityDocument( scope ),
-	} );
+		document: buildActivityDocument(scope),
+	});
 }
 
-function buildStyleBookActivityEntry( {
+function buildStyleBookActivityEntry({
 	operations,
 	beforeConfig,
 	afterConfig,
@@ -1328,8 +1331,8 @@ function buildStyleBookActivityEntry( {
 	globalStylesId,
 	blockName,
 	blockTitle = '',
-} ) {
-	return createActivityEntry( {
+}) {
+	return createActivityEntry({
 		type: 'apply_style_book_suggestion',
 		surface: 'style-book',
 		target: {
@@ -1347,22 +1350,21 @@ function buildStyleBookActivityEntry( {
 			operations,
 		},
 		prompt: requestPrompt,
-		requestRef: `style-book:${ globalStylesId || 'unknown' }:${
+		requestRef: `style-book:${globalStylesId || 'unknown'}:${
 			blockName || 'unknown'
-		}:${ requestToken }`,
+		}:${requestToken}`,
 		requestMeta,
-		document: buildActivityDocument( scope ),
-	} );
+		document: buildActivityDocument(scope),
+	});
 }
 
-function undoBlockActivity( activity, registry ) {
+function undoBlockActivity(activity, registry) {
 	const target = activity?.target || {};
-	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
-	const blockEditorDispatch =
-		registry?.dispatch?.( 'core/block-editor' ) || {};
-	const resolvedBlock = resolveActivityBlock( blockEditorSelect, target );
+	const blockEditorSelect = registry?.select?.('core/block-editor') || {};
+	const blockEditorDispatch = registry?.dispatch?.('core/block-editor') || {};
+	const resolvedBlock = resolveActivityBlock(blockEditorSelect, target);
 
-	if ( ! resolvedBlock?.clientId ) {
+	if (!resolvedBlock?.clientId) {
 		return {
 			ok: false,
 			error: 'The original block target for this AI action is missing.',
@@ -1370,93 +1372,93 @@ function undoBlockActivity( activity, registry ) {
 	}
 
 	const currentAttributes =
-		blockEditorSelect.getBlockAttributes?.( resolvedBlock.clientId ) ||
+		blockEditorSelect.getBlockAttributes?.(resolvedBlock.clientId) ||
 		resolvedBlock.attributes ||
 		null;
 	const beforeAttributes = activity?.before?.attributes || {};
 	const afterAttributes = activity?.after?.attributes || {};
 
-	if ( target.blockName && resolvedBlock.name !== target.blockName ) {
+	if (target.blockName && resolvedBlock.name !== target.blockName) {
 		return {
 			ok: false,
-			error: 'The target block changed position or type and cannot be undone automatically.',
+			error:
+				'The target block changed position or type and cannot be undone automatically.',
 		};
 	}
 
-	if ( ! currentAttributes ) {
+	if (!currentAttributes) {
 		return {
 			ok: false,
 			error: 'The target block is no longer available to undo.',
 		};
 	}
 
-	if ( ! attributeSnapshotsMatch( afterAttributes, currentAttributes ) ) {
+	if (!attributeSnapshotsMatch(afterAttributes, currentAttributes)) {
 		return {
 			ok: false,
-			error: 'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+			error:
+				'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
 		};
 	}
 
-	if ( typeof blockEditorDispatch.updateBlockAttributes !== 'function' ) {
+	if (typeof blockEditorDispatch.updateBlockAttributes !== 'function') {
 		return {
 			ok: false,
-			error: 'The block editor could not restore the previous block attributes.',
+			error:
+				'The block editor could not restore the previous block attributes.',
 		};
 	}
 
 	blockEditorDispatch.updateBlockAttributes(
 		resolvedBlock.clientId,
-		buildUndoAttributeUpdates( beforeAttributes, afterAttributes )
+		buildUndoAttributeUpdates(beforeAttributes, afterAttributes)
 	);
 
 	return { ok: true };
 }
 
-function getActivityRuntimeUndoResolver( surface, registry ) {
-	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
+function getActivityRuntimeUndoResolver(surface, registry) {
+	const blockEditorSelect = registry?.select?.('core/block-editor') || {};
 
-	switch ( surface ) {
+	switch (surface) {
 		case 'template':
-			return ( entry ) =>
-				getTemplateActivityUndoState( entry, blockEditorSelect );
+			return (entry) => getTemplateActivityUndoState(entry, blockEditorSelect);
 		case 'template-part':
-			return ( entry ) =>
-				getTemplatePartActivityUndoState( entry, blockEditorSelect );
+			return (entry) =>
+				getTemplatePartActivityUndoState(entry, blockEditorSelect);
 		case 'global-styles':
 		case 'style-book':
-			return ( entry ) =>
-				getGlobalStylesActivityUndoState( entry, registry );
+			return (entry) => getGlobalStylesActivityUndoState(entry, registry);
 		case 'block':
-			return ( entry ) =>
-				getBlockActivityUndoState( entry, blockEditorSelect );
+			return (entry) => getBlockActivityUndoState(entry, blockEditorSelect);
 		default:
 			return null;
 	}
 }
 
-function getNextLastUndoneActivityId( currentValue, action ) {
-	if ( action.status === 'success' ) {
+function getNextLastUndoneActivityId(currentValue, action) {
+	if (action.status === 'success') {
 		return action.activityId ?? null;
 	}
 
-	if ( action.status === 'idle' ) {
+	if (action.status === 'idle') {
 		return null;
 	}
 
 	return currentValue;
 }
 
-function clearAbortController( abortKey, abortId, controller ) {
-	if ( abortId === null ) {
-		if ( actions[ abortKey ] === controller ) {
-			actions[ abortKey ] = null;
+function clearAbortController(abortKey, abortId, controller) {
+	if (abortId === null) {
+		if (actions[abortKey] === controller) {
+			actions[abortKey] = null;
 		}
-	} else if ( isPlainObject( actions[ abortKey ] ) ) {
-		const currentAbortControllers = { ...actions[ abortKey ] };
-		if ( currentAbortControllers[ abortId ] === controller ) {
-			delete currentAbortControllers[ abortId ];
-			actions[ abortKey ] =
-				Object.keys( currentAbortControllers ).length > 0
+	} else if (isPlainObject(actions[abortKey])) {
+		const currentAbortControllers = { ...actions[abortKey] };
+		if (currentAbortControllers[abortId] === controller) {
+			delete currentAbortControllers[abortId];
+			actions[abortKey] =
+				Object.keys(currentAbortControllers).length > 0
 					? currentAbortControllers
 					: null;
 		}
@@ -1470,9 +1472,9 @@ function getEmptySuggestionResponse() {
 	};
 }
 
-async function runAbortableRecommendationRequest( {
+async function runAbortableRecommendationRequest({
 	abortKey,
-	buildRequest = () => ( {} ),
+	buildRequest = () => ({}),
 	dispatch,
 	endpoint,
 	input,
@@ -1480,92 +1482,97 @@ async function runAbortableRecommendationRequest( {
 	onLoading,
 	onSuccess,
 	select,
-} ) {
+}) {
 	const request = {
-		...( buildRequest( { input, select } ) || {} ),
+		...(buildRequest({ input, select }) || {}),
 	};
 	const abortId =
 		request.abortId === null || request.abortId === undefined
 			? null
-			: String( request.abortId );
+			: String(request.abortId);
 	const requestData = request.requestData ?? input;
 	const controller = new AbortController();
 
-	if ( abortId === null ) {
-		if ( actions[ abortKey ] ) {
-			actions[ abortKey ].abort();
+	if (abortId === null) {
+		if (actions[abortKey]) {
+			actions[abortKey].abort();
 		}
 
-		actions[ abortKey ] = controller;
+		actions[abortKey] = controller;
 	} else {
-		const currentAbortControllers = isPlainObject( actions[ abortKey ] )
-			? actions[ abortKey ]
+		const currentAbortControllers = isPlainObject(actions[abortKey])
+			? actions[abortKey]
 			: {};
 
-		currentAbortControllers[ abortId ]?.abort?.();
-		currentAbortControllers[ abortId ] = controller;
-		actions[ abortKey ] = currentAbortControllers;
+		currentAbortControllers[abortId]?.abort?.();
+		currentAbortControllers[abortId] = controller;
+		actions[abortKey] = currentAbortControllers;
 	}
 
 	request.requestData = requestData;
-	onLoading?.( { dispatch, input, ...request } );
+	onLoading?.({ dispatch, input, ...request });
 
 	const maxRetries = 1;
 
-	for ( let attempt = 0; attempt <= maxRetries; attempt++ ) {
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
 		try {
-			const result = await apiFetch( {
+			const result = await apiFetch({
 				path: endpoint,
 				method: 'POST',
 				data: requestData,
 				signal: controller.signal,
-			} );
+			});
 
-			clearAbortController( abortKey, abortId, controller );
-			await onSuccess?.( {
+			clearAbortController(abortKey, abortId, controller);
+			await onSuccess?.({
 				dispatch,
 				input,
 				result,
 				...request,
-			} );
+			});
 			return;
-		} catch ( err ) {
-			if ( err?.name === 'AbortError' ) {
-				clearAbortController( abortKey, abortId, controller );
+		} catch (err) {
+			if (err?.name === 'AbortError') {
+				clearAbortController(abortKey, abortId, controller);
 				return;
 			}
 
-			if ( attempt < maxRetries && isRetryableRateLimitError( err ) ) {
-				const retryAfter = getRetryAfterSeconds( err );
-				await sleep( retryAfter * 1000 );
+			if (attempt < maxRetries && isRetryableRateLimitError(err)) {
+				const retryAfter = getRetryAfterSeconds(err);
+				await sleep(retryAfter * 1000);
 				continue;
 			}
 
-			clearAbortController( abortKey, abortId, controller );
-			await onError?.( {
+			clearAbortController(abortKey, abortId, controller);
+			await onError?.({
 				dispatch,
 				err,
 				input,
 				...request,
-			} );
+			});
 			return;
 		}
 	}
 }
 
 const actions = {
-	setBlockRequestState(
-		clientId,
-		status,
-		error = null,
-		requestToken = null
-	) {
+	setBlockRequestState(clientId, status, error = null, requestToken = null) {
 		return {
 			type: 'SET_BLOCK_REQUEST_STATE',
 			clientId,
 			status,
 			error,
 			requestToken,
+		};
+	},
+
+	setBlockApplyState(clientId, status, error = null, suggestionKey = null) {
+		return {
+			type: 'SET_BLOCK_APPLY_STATE',
+			clientId,
+			status,
+			error,
+			suggestionKey,
 		};
 	},
 
@@ -1586,21 +1593,21 @@ const actions = {
 		};
 	},
 
-	clearBlockRecommendations( clientId ) {
-		return ( { dispatch } ) => {
-			if ( isPlainObject( actions._blockRecommendationAbort ) ) {
-				actions._blockRecommendationAbort[ clientId ]?.abort?.();
+	clearBlockRecommendations(clientId) {
+		return ({ dispatch }) => {
+			if (isPlainObject(actions._blockRecommendationAbort)) {
+				actions._blockRecommendationAbort[clientId]?.abort?.();
 			}
 
-			dispatch( { type: 'CLEAR_BLOCK_RECS', clientId } );
+			dispatch({ type: 'CLEAR_BLOCK_RECS', clientId });
 		};
 	},
 
-	clearBlockError( clientId ) {
+	clearBlockError(clientId) {
 		return { type: 'CLEAR_BLOCK_ERROR', clientId };
 	},
 
-	setActivitySession( scopeKey = null, entries = [] ) {
+	setActivitySession(scopeKey = null, entries = []) {
 		return {
 			type: 'SET_ACTIVITY_SESSION',
 			scopeKey,
@@ -1608,11 +1615,11 @@ const actions = {
 		};
 	},
 
-	logActivity( entry ) {
+	logActivity(entry) {
 		return { type: 'LOG_ACTIVITY', entry };
 	},
 
-	setUndoState( status, error = null, activityId = null ) {
+	setUndoState(status, error = null, activityId = null) {
 		return {
 			type: 'SET_UNDO_STATE',
 			status,
@@ -1642,7 +1649,7 @@ const actions = {
 		return { type: 'CLEAR_UNDO_ERROR' };
 	},
 
-	setContentStatus( status, error = null, requestToken = null ) {
+	setContentStatus(status, error = null, requestToken = null) {
 		return {
 			type: 'SET_CONTENT_STATUS',
 			status,
@@ -1666,7 +1673,7 @@ const actions = {
 		};
 	},
 
-	setContentMode( mode = 'draft' ) {
+	setContentMode(mode = 'draft') {
 		return {
 			type: 'SET_CONTENT_MODE',
 			mode,
@@ -1678,56 +1685,47 @@ const actions = {
 	},
 
 	clearContentRecommendation() {
-		return ( { dispatch } ) => {
-			if ( actions._contentAbort ) {
+		return ({ dispatch }) => {
+			if (actions._contentAbort) {
 				actions._contentAbort.abort();
 				actions._contentAbort = null;
 			}
 
-			dispatch( { type: 'CLEAR_CONTENT_RECOMMENDATION' } );
+			dispatch({ type: 'CLEAR_CONTENT_RECOMMENDATION' });
 		};
 	},
 
-	loadActivitySession( options = {} ) {
-		return async ( { dispatch, registry, select } ) => {
-			const requestToken = ( actions._activitySessionLoadToken || 0 ) + 1;
+	loadActivitySession(options = {}) {
+		return async ({ dispatch, registry, select }) => {
+			const requestToken = (actions._activitySessionLoadToken || 0) + 1;
 			actions._activitySessionLoadToken = requestToken;
-			const scope = options?.scope || getCurrentActivityScope( registry );
-			const nextScopeKey = getScopeKey( scope );
+			const scope = options?.scope || getCurrentActivityScope(registry);
+			const nextScopeKey = getScopeKey(scope);
 
-			if ( ! nextScopeKey ) {
-				if ( options?.retryIfScopeUnavailable !== false ) {
-					scheduleActivitySessionReload( options );
+			if (!nextScopeKey) {
+				if (options?.retryIfScopeUnavailable !== false) {
+					scheduleActivitySessionReload(options);
 				}
 
-				syncActivitySession( dispatch, select, scope, {
-					allowUnsavedMigration:
-						options?.allowUnsavedMigration === true,
-				} );
+				syncActivitySession(dispatch, select, scope, {
+					allowUnsavedMigration: options?.allowUnsavedMigration === true,
+				});
 
 				return;
 			}
 
-			const workingEntries = syncActivitySession(
-				dispatch,
-				select,
-				scope,
-				{
-					allowUnsavedMigration:
-						options?.allowUnsavedMigration === true,
-				}
-			);
-			const pendingEntries =
-				workingEntries.filter( isLocalActivityEntry );
+			const workingEntries = syncActivitySession(dispatch, select, scope, {
+				allowUnsavedMigration: options?.allowUnsavedMigration === true,
+			});
+			const pendingEntries = workingEntries.filter(isLocalActivityEntry);
 			const { persistedEntries, failedEntries, terminalEntries } =
-				await persistPendingActivityEntries( pendingEntries );
+				await persistPendingActivityEntries(pendingEntries);
 			const terminalEntryIds = new Set(
-				terminalEntries.map( ( entry ) => entry?.id ).filter( Boolean )
+				terminalEntries.map((entry) => entry?.id).filter(Boolean)
 			);
 
 			try {
-				const serverEntries =
-					await fetchServerActivityEntries( nextScopeKey );
+				const serverEntries = await fetchServerActivityEntries(nextScopeKey);
 				const mergedEntries = mergeActivityEntries(
 					serverEntries,
 					persistedEntries,
@@ -1735,44 +1733,34 @@ const actions = {
 					terminalEntries
 				);
 
-				if ( actions._activitySessionLoadToken !== requestToken ) {
+				if (actions._activitySessionLoadToken !== requestToken) {
 					return;
 				}
 
-				refreshActivitySession( dispatch, nextScopeKey, mergedEntries );
+				refreshActivitySession(dispatch, nextScopeKey, mergedEntries);
 			} catch {
 				const fallbackEntries = mergeActivityEntries(
-					workingEntries.filter(
-						( entry ) => ! terminalEntryIds.has( entry?.id )
-					),
+					workingEntries.filter((entry) => !terminalEntryIds.has(entry?.id)),
 					persistedEntries,
 					failedEntries,
 					terminalEntries
 				);
 
-				if ( actions._activitySessionLoadToken !== requestToken ) {
+				if (actions._activitySessionLoadToken !== requestToken) {
 					return;
 				}
 
-				refreshActivitySession(
-					dispatch,
-					nextScopeKey,
-					fallbackEntries
-				);
+				refreshActivitySession(dispatch, nextScopeKey, fallbackEntries);
 			}
 		};
 	},
 
-	fetchBlockRecommendations( clientId, context, prompt = '' ) {
-		return ( { dispatch, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchBlockRecommendations(clientId, context, prompt = '') {
+		return ({ dispatch, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_blockRecommendationAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => {
-					const contextSignature =
-						requestInput?.contextSignature || null;
+				buildRequest: ({ input: requestInput, select: registrySelect }) => {
+					const contextSignature = requestInput?.contextSignature || null;
 
 					return {
 						abortId: requestInput?.clientId || null,
@@ -1784,9 +1772,8 @@ const actions = {
 							clientId: requestInput?.clientId || '',
 						},
 						requestToken:
-							( registrySelect.getBlockRequestToken?.(
-								requestInput?.clientId
-							) || 0 ) + 1,
+							(registrySelect.getBlockRequestToken?.(requestInput?.clientId) ||
+								0) + 1,
 					};
 				},
 				dispatch,
@@ -1794,27 +1781,23 @@ const actions = {
 				input: {
 					clientId,
 					context,
-					contextSignature:
-						buildBlockRecommendationContextSignature( context ),
+					contextSignature: buildBlockRecommendationContextSignature(context),
 					prompt,
 				},
-				onError: ( {
+				onError: ({
 					clientId: requestClientId,
 					contextSignature,
 					dispatch: localDispatch,
 					err,
 					requestData,
 					requestToken,
-				} ) => {
+				}) => {
 					localDispatch(
 						actions.setBlockRecommendations(
 							requestClientId,
 							{
-								blockName:
-									requestData.editorContext?.block?.name ||
-									'',
-								blockContext:
-									requestData.editorContext?.block || {},
+								blockName: requestData.editorContext?.block?.name || '',
+								blockContext: requestData.editorContext?.block || {},
 								prompt: requestData.prompt || '',
 								settings: [],
 								styles: [],
@@ -1837,11 +1820,11 @@ const actions = {
 						)
 					);
 				},
-				onLoading: ( {
+				onLoading: ({
 					clientId: requestClientId,
 					dispatch: localDispatch,
 					requestToken,
-				} ) => {
+				}) => {
 					localDispatch(
 						actions.setBlockRequestState(
 							requestClientId,
@@ -1851,39 +1834,33 @@ const actions = {
 						)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					clientId: requestClientId,
 					contextSignature,
 					dispatch: localDispatch,
 					requestData,
 					requestToken,
 					result,
-				} ) => {
+				}) => {
 					const payload = attachRequestMetaToRecommendationPayload(
 						result.payload || {}
 					);
-					const blockContext =
-						requestData.editorContext?.block || {};
+					const blockContext = requestData.editorContext?.block || {};
 					const sanitizedPayload = sanitizeRecommendationsForContext(
 						payload,
 						blockContext
 					);
-					const diagnosticsBase =
-						buildBlockRecommendationDiagnostics(
-							payload,
-							sanitizedPayload,
-							blockContext
-						);
-					const requestMeta = normalizeRequestMeta(
-						payload.requestMeta
+					const diagnosticsBase = buildBlockRecommendationDiagnostics(
+						payload,
+						sanitizedPayload,
+						blockContext
 					);
+					const requestMeta = normalizeRequestMeta(payload.requestMeta);
 					const diagnostics = diagnosticsBase
 						? {
 								...diagnosticsBase,
 								clientId: requestClientId,
-								blockName:
-									requestData.editorContext?.block?.name ||
-									'',
+								blockName: requestData.editorContext?.block?.name || '',
 								prompt: requestData.prompt || '',
 								requestToken,
 								timestamp: new Date().toISOString(),
@@ -1891,15 +1868,11 @@ const actions = {
 						  }
 						: null;
 
-					logEmptyBlockRecommendationDiagnostics( diagnostics );
-
 					localDispatch(
 						actions.setBlockRecommendations(
 							requestClientId,
 							{
-								blockName:
-									requestData.editorContext?.block?.name ||
-									'',
+								blockName: requestData.editorContext?.block?.name || '',
 								blockContext,
 								prompt: requestData.prompt || '',
 								...sanitizedPayload,
@@ -1921,34 +1894,44 @@ const actions = {
 					);
 				},
 				select,
-			} );
+			});
 	},
 
-	applySuggestion( clientId, suggestion ) {
-		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+	applySuggestion(clientId, suggestion, currentContextSignature = null) {
+		return async ({ dispatch: localDispatch, registry, select }) => {
+			const scope = getCurrentActivityScope(registry);
 			const applyErrorMessage =
 				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.';
 			const advisoryApplyMessage =
 				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.';
 
-			syncActivitySession( localDispatch, select, scope );
+			syncActivitySession(localDispatch, select, scope);
+
+			const staleApplyResult = guardSurfaceApplyFreshness({
+				surface: 'block',
+				currentContextSignature,
+				getStoredContextSignature: () =>
+					select.getBlockRecommendationContextSignature?.(clientId),
+				localDispatch,
+				setApplyState: (status, error) =>
+					actions.setBlockApplyState(clientId, status, error),
+			});
+
+			if (staleApplyResult) {
+				return false;
+			}
+
+			localDispatch(actions.setBlockApplyState(clientId, 'applying'));
 
 			const storedRecommendationPayload =
-				select.getBlockRecommendations( clientId ) || null;
+				select.getBlockRecommendations(clientId) || null;
 			const storedRecommendations = storedRecommendationPayload || {};
-			const failedApplyStatus =
-				select.getBlockStatus?.( clientId ) === 'ready' ||
-				Boolean( storedRecommendationPayload )
-					? 'ready'
-					: 'idle';
 			const blockContext = storedRecommendations.blockContext || {};
-			const blockEditorSelect =
-				registry?.select?.( 'core/block-editor' ) || {};
+			const blockEditorSelect = registry?.select?.('core/block-editor') || {};
 			const blockEditorDispatch =
-				registry?.dispatch?.( 'core/block-editor' ) || {};
+				registry?.dispatch?.('core/block-editor') || {};
 			const currentAttributes =
-				blockEditorSelect.getBlockAttributes?.( clientId ) || {};
+				blockEditorSelect.getBlockAttributes?.(clientId) || {};
 			const execution = getBlockSuggestionExecutionInfo(
 				suggestion,
 				blockContext
@@ -1958,19 +1941,14 @@ const actions = {
 			let didApply = false;
 			let isNoOp = false;
 
-			if ( execution.isAdvisoryOnly ) {
+			if (execution.isAdvisoryOnly) {
 				localDispatch(
-					actions.setBlockRequestState(
-						clientId,
-						failedApplyStatus,
-						advisoryApplyMessage,
-						select.getBlockRequestToken( clientId ) || 0
-					)
+					actions.setBlockApplyState(clientId, 'error', advisoryApplyMessage)
 				);
 				return false;
 			}
 
-			if ( Object.keys( allowedUpdates ).length > 0 ) {
+			if (Object.keys(allowedUpdates).length > 0) {
 				const safeUpdates = buildSafeAttributeUpdates(
 					currentAttributes,
 					allowedUpdates
@@ -1981,42 +1959,31 @@ const actions = {
 				};
 
 				if (
-					Object.keys( safeUpdates ).length > 0 &&
-					attributeSnapshotsMatch(
-						currentAttributes,
-						proposedNextAttributes
-					)
+					Object.keys(safeUpdates).length > 0 &&
+					attributeSnapshotsMatch(currentAttributes, proposedNextAttributes)
 				) {
 					isNoOp = true;
 				}
 
 				if (
-					Object.keys( safeUpdates ).length > 0 &&
-					! isNoOp &&
-					typeof blockEditorDispatch.updateBlockAttributes ===
-						'function'
+					Object.keys(safeUpdates).length > 0 &&
+					!isNoOp &&
+					typeof blockEditorDispatch.updateBlockAttributes === 'function'
 				) {
 					nextAttributes = proposedNextAttributes;
-					blockEditorDispatch.updateBlockAttributes(
-						clientId,
-						safeUpdates
-					);
+					blockEditorDispatch.updateBlockAttributes(clientId, safeUpdates);
 					didApply = true;
 				}
 			}
 
-			if ( ! didApply ) {
-				if ( isNoOp ) {
+			if (!didApply) {
+				if (isNoOp) {
+					localDispatch(actions.setBlockApplyState(clientId, 'idle'));
 					return false;
 				}
 
 				localDispatch(
-					actions.setBlockRequestState(
-						clientId,
-						failedApplyStatus,
-						applyErrorMessage,
-						select.getBlockRequestToken( clientId ) || 0
-					)
+					actions.setBlockApplyState(clientId, 'error', applyErrorMessage)
 				);
 				return false;
 			}
@@ -2024,7 +1991,7 @@ const actions = {
 			await recordActivityEntry(
 				localDispatch,
 				select,
-				buildBlockActivityEntry( {
+				buildBlockActivityEntry({
 					afterAttributes: nextAttributes || currentAttributes,
 					beforeAttributes: currentAttributes,
 					blockContext,
@@ -2038,21 +2005,30 @@ const actions = {
 						suggestion?.requestMeta ||
 						storedRecommendations.requestMeta ||
 						null,
-					requestToken: select.getBlockRequestToken( clientId ) || 0,
+					requestToken: select.getBlockRequestToken(clientId) || 0,
 					scope,
 					suggestion,
-				} )
+				})
+			);
+
+			localDispatch(
+				actions.setBlockApplyState(
+					clientId,
+					'success',
+					null,
+					suggestion?.suggestionKey || suggestion?.label || null
+				)
 			);
 
 			return true;
 		};
 	},
 
-	setPatternStatus( status, error = null ) {
+	setPatternStatus(status, error = null) {
 		return { type: 'SET_PATTERN_STATUS', status, error };
 	},
 
-	setPatternRecommendations( recommendations ) {
+	setPatternRecommendations(recommendations) {
 		return { type: 'SET_PATTERN_RECS', recommendations };
 	},
 
@@ -2093,116 +2069,92 @@ const actions = {
 	},
 
 	clearNavigationRecommendations() {
-		return ( { dispatch } ) => {
-			if ( actions._navigationAbort ) {
+		return ({ dispatch }) => {
+			if (actions._navigationAbort) {
 				actions._navigationAbort.abort();
 				actions._navigationAbort = null;
 			}
 
-			dispatch( { type: 'CLEAR_NAVIGATION_RECS' } );
+			dispatch({ type: 'CLEAR_NAVIGATION_RECS' });
 		};
 	},
 
-	fetchPatternRecommendations( input ) {
-		return ( { dispatch, registry, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchPatternRecommendations(input) {
+		return ({ dispatch, registry, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_patternAbort',
-				buildRequest: ( { input: requestInput } ) => ({
+				buildRequest: ({ input: requestInput }) => ({
 					requestData: {
-						...( requestInput || {} ),
+						...(requestInput || {}),
 						document: getRequestDocumentFromScope(
-							getCurrentActivityScope( registry )
+							getCurrentActivityScope(registry)
 						),
 					},
 				}),
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-patterns',
 				input,
-				onError: ( { dispatch: localDispatch, err } ) => {
-					localDispatch( actions.setPatternRecommendations( [] ) );
+				onError: ({ dispatch: localDispatch, err }) => {
+					localDispatch(actions.setPatternRecommendations([]));
 					localDispatch(
 						actions.setPatternStatus(
 							'error',
-							err?.message ||
-								'Pattern recommendation request failed.'
+							err?.message || 'Pattern recommendation request failed.'
 						)
 					);
-					return reloadScopedActivitySession(
-						localDispatch,
-						registry,
-						select
-					);
+					return reloadScopedActivitySession(localDispatch, registry, select);
 				},
-				onLoading: ( { dispatch: localDispatch } ) => {
-					localDispatch( actions.setPatternStatus( 'loading' ) );
+				onLoading: ({ dispatch: localDispatch }) => {
+					localDispatch(actions.setPatternStatus('loading'));
 				},
-				onSuccess: ( { dispatch: localDispatch, result } ) => {
+				onSuccess: ({ dispatch: localDispatch, result }) => {
 					localDispatch(
-						actions.setPatternRecommendations(
-							result.recommendations || []
-						)
+						actions.setPatternRecommendations(result.recommendations || [])
 					);
-					localDispatch( actions.setPatternStatus( 'ready' ) );
-					return reloadScopedActivitySession(
-						localDispatch,
-						registry,
-						select
-					);
+					localDispatch(actions.setPatternStatus('ready'));
+					return reloadScopedActivitySession(localDispatch, registry, select);
 				},
 				select,
-			} );
+			});
 	},
 
-	fetchContentRecommendations( input ) {
-		return ( { dispatch, registry, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchContentRecommendations(input) {
+		return ({ dispatch, registry, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_contentAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => ( {
+				buildRequest: ({ input: requestInput, select: registrySelect }) => ({
 					requestData: {
-						...( requestInput || {} ),
+						...(requestInput || {}),
 						document: getRequestDocumentFromScope(
-							getCurrentActivityScope( registry )
+							getCurrentActivityScope(registry)
 						),
 					},
-					requestToken:
-						( registrySelect.getContentRequestToken?.() || 0 ) + 1,
-				} ),
+					requestToken: (registrySelect.getContentRequestToken?.() || 0) + 1,
+				}),
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-content',
 				input,
-				onError: ( {
-					dispatch: localDispatch,
-					err,
-					requestToken,
-				} ) => {
+				onError: ({ dispatch: localDispatch, err, requestToken }) => {
 					localDispatch(
 						actions.setContentStatus(
 							'error',
-							err?.message ||
-								'Content recommendation request failed.',
+							err?.message || 'Content recommendation request failed.',
 							requestToken
 						)
 					);
-					return reloadScopedActivitySession(
-						localDispatch,
-						registry,
-						select
-					);
+					return reloadScopedActivitySession(localDispatch, registry, select);
 				},
-				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+				onLoading: ({ dispatch: localDispatch, requestToken }) => {
 					localDispatch(
-						actions.setContentStatus( 'loading', null, requestToken )
+						actions.setContentStatus('loading', null, requestToken)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					dispatch: localDispatch,
 					requestData,
 					requestToken,
 					result,
-				} ) => {
+				}) => {
 					localDispatch(
 						actions.setContentRecommendation(
 							result,
@@ -2211,27 +2163,19 @@ const actions = {
 							requestToken
 						)
 					);
-					return reloadScopedActivitySession(
-						localDispatch,
-						registry,
-						select
-					);
+					return reloadScopedActivitySession(localDispatch, registry, select);
 				},
 				select,
-			} );
+			});
 	},
 
-	fetchNavigationRecommendations( input ) {
-		return ( { dispatch, registry, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchNavigationRecommendations(input) {
+		return ({ dispatch, registry, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_navigationAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => {
+				buildRequest: ({ input: requestInput, select: registrySelect }) => {
 					const requestToken =
-						( registrySelect.getNavigationRequestToken?.() || 0 ) +
-						1;
+						(registrySelect.getNavigationRequestToken?.() || 0) + 1;
 					const {
 						blockClientId = null,
 						contextSignature = null,
@@ -2244,7 +2188,7 @@ const actions = {
 						requestData: {
 							...requestData,
 							document: getRequestDocumentFromScope(
-								getCurrentActivityScope( registry )
+								getCurrentActivityScope(registry)
 							),
 						},
 						requestToken,
@@ -2253,14 +2197,14 @@ const actions = {
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-navigation',
 				input,
-				onError: ( {
+				onError: ({
 					blockClientId,
 					contextSignature,
 					dispatch: localDispatch,
 					err,
 					requestData,
 					requestToken,
-				} ) => {
+				}) => {
 					localDispatch(
 						actions.setNavigationRecommendations(
 							blockClientId,
@@ -2273,23 +2217,18 @@ const actions = {
 					localDispatch(
 						actions.setNavigationStatus(
 							'error',
-							err?.message ||
-								'Navigation recommendation request failed.',
+							err?.message || 'Navigation recommendation request failed.',
 							requestToken,
 							blockClientId
 						)
 					);
-					return reloadScopedActivitySession(
-						localDispatch,
-						registry,
-						select
-					);
+					return reloadScopedActivitySession(localDispatch, registry, select);
 				},
-				onLoading: ( {
+				onLoading: ({
 					blockClientId,
 					dispatch: localDispatch,
 					requestToken,
-				} ) => {
+				}) => {
 					localDispatch(
 						actions.setNavigationStatus(
 							'loading',
@@ -2299,14 +2238,14 @@ const actions = {
 						)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					blockClientId,
 					contextSignature,
 					dispatch: localDispatch,
 					requestData,
 					requestToken,
 					result,
-				} ) => {
+				}) => {
 					localDispatch(
 						actions.setNavigationRecommendations(
 							blockClientId,
@@ -2316,17 +2255,13 @@ const actions = {
 							contextSignature
 						)
 					);
-					return reloadScopedActivitySession(
-						localDispatch,
-						registry,
-						select
-					);
+					return reloadScopedActivitySession(localDispatch, registry, select);
 				},
 				select,
-			} );
+			});
 	},
 
-	setTemplateStatus( status, error = null, requestToken = null ) {
+	setTemplateStatus(status, error = null, requestToken = null) {
 		return { type: 'SET_TEMPLATE_STATUS', status, error, requestToken };
 	},
 
@@ -2347,7 +2282,7 @@ const actions = {
 		};
 	},
 
-	setTemplateSelectedSuggestion( suggestionKey = null ) {
+	setTemplateSelectedSuggestion(suggestionKey = null) {
 		return {
 			type: 'SET_TEMPLATE_SELECTED_SUGGESTION',
 			suggestionKey,
@@ -2369,7 +2304,7 @@ const actions = {
 		};
 	},
 
-	setTemplatePartStatus( status, error = null, requestToken = null ) {
+	setTemplatePartStatus(status, error = null, requestToken = null) {
 		return {
 			type: 'SET_TEMPLATE_PART_STATUS',
 			status,
@@ -2395,7 +2330,7 @@ const actions = {
 		};
 	},
 
-	setTemplatePartSelectedSuggestion( suggestionKey = null ) {
+	setTemplatePartSelectedSuggestion(suggestionKey = null) {
 		return {
 			type: 'SET_TEMPLATE_PART_SELECTED_SUGGESTION',
 			suggestionKey,
@@ -2417,7 +2352,7 @@ const actions = {
 		};
 	},
 
-	setGlobalStylesStatus( status, error = null, requestToken = null ) {
+	setGlobalStylesStatus(status, error = null, requestToken = null) {
 		return {
 			type: 'SET_GLOBAL_STYLES_STATUS',
 			status,
@@ -2443,7 +2378,7 @@ const actions = {
 		};
 	},
 
-	setGlobalStylesSelectedSuggestion( suggestionKey = null ) {
+	setGlobalStylesSelectedSuggestion(suggestionKey = null) {
 		return {
 			type: 'SET_GLOBAL_STYLES_SELECTED_SUGGESTION',
 			suggestionKey,
@@ -2465,7 +2400,7 @@ const actions = {
 		};
 	},
 
-	setStyleBookStatus( status, error = null, requestToken = null ) {
+	setStyleBookStatus(status, error = null, requestToken = null) {
 		return {
 			type: 'SET_STYLE_BOOK_STATUS',
 			status,
@@ -2491,7 +2426,7 @@ const actions = {
 		};
 	},
 
-	setStyleBookSelectedSuggestion( suggestionKey = null ) {
+	setStyleBookSelectedSuggestion(suggestionKey = null) {
 		return {
 			type: 'SET_STYLE_BOOK_SELECTED_SUGGESTION',
 			suggestionKey,
@@ -2514,60 +2449,59 @@ const actions = {
 	},
 
 	clearTemplateRecommendations() {
-		return ( { dispatch } ) => {
-			if ( actions._templateAbort ) {
+		return ({ dispatch }) => {
+			if (actions._templateAbort) {
 				actions._templateAbort.abort();
 				actions._templateAbort = null;
 			}
 
-			dispatch( { type: 'CLEAR_TEMPLATE_RECS' } );
+			dispatch({ type: 'CLEAR_TEMPLATE_RECS' });
 		};
 	},
 
 	clearTemplatePartRecommendations() {
-		return ( { dispatch } ) => {
-			if ( actions._templatePartAbort ) {
+		return ({ dispatch }) => {
+			if (actions._templatePartAbort) {
 				actions._templatePartAbort.abort();
 				actions._templatePartAbort = null;
 			}
 
-			dispatch( { type: 'CLEAR_TEMPLATE_PART_RECS' } );
+			dispatch({ type: 'CLEAR_TEMPLATE_PART_RECS' });
 		};
 	},
 
 	clearGlobalStylesRecommendations() {
-		return ( { dispatch } ) => {
-			if ( actions._globalStylesAbort ) {
+		return ({ dispatch }) => {
+			if (actions._globalStylesAbort) {
 				actions._globalStylesAbort.abort();
 				actions._globalStylesAbort = null;
 			}
 
-			dispatch( { type: 'CLEAR_GLOBAL_STYLES_RECS' } );
+			dispatch({ type: 'CLEAR_GLOBAL_STYLES_RECS' });
 		};
 	},
 
 	clearStyleBookRecommendations() {
-		return ( { dispatch } ) => {
-			if ( actions._styleBookAbort ) {
+		return ({ dispatch }) => {
+			if (actions._styleBookAbort) {
 				actions._styleBookAbort.abort();
 				actions._styleBookAbort = null;
 			}
 
-			dispatch( { type: 'CLEAR_STYLE_BOOK_RECS' } );
+			dispatch({ type: 'CLEAR_STYLE_BOOK_RECS' });
 		};
 	},
 
-	undoActivity( activityId ) {
-		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+	undoActivity(activityId) {
+		return async ({ dispatch: localDispatch, registry, select }) => {
+			const scope = getCurrentActivityScope(registry);
 
-			syncActivitySession( localDispatch, select, scope );
+			syncActivitySession(localDispatch, select, scope);
 			let activityLog = select.getActivityLog?.() || [];
 			let activity =
-				activityLog.find( ( entry ) => entry?.id === activityId ) ||
-				null;
+				activityLog.find((entry) => entry?.id === activityId) || null;
 
-			if ( ! activity ) {
+			if (!activity) {
 				localDispatch(
 					actions.setUndoState(
 						'error',
@@ -2583,39 +2517,34 @@ const actions = {
 
 			const scopeKey =
 				activity?.document?.scopeKey ||
-				getScopeKey( scope ) ||
+				getScopeKey(scope) ||
 				select.getActivityScopeKey?.() ||
 				null;
-			const reconcileUndoConflict = async ( syncError, timestamp ) => {
-				if ( ! isUndoSyncConflictError( syncError ) || ! scopeKey ) {
+			const reconcileUndoConflict = async (syncError, timestamp) => {
+				if (!isUndoSyncConflictError(syncError) || !scopeKey) {
 					return null;
 				}
 
 				try {
-					const reconciledEntry =
-						await reconcileActivityEntryFromServer(
-							activity,
-							scopeKey
-						);
+					const reconciledEntry = await reconcileActivityEntryFromServer(
+						activity,
+						scopeKey
+					);
 
-					if ( ! reconciledEntry ) {
+					if (!reconciledEntry) {
 						return null;
 					}
 
 					const reconciledEntries = mergeActivityEntries(
 						select.getActivityLog?.() || [],
-						[ reconciledEntry ]
+						[reconciledEntry]
 					);
 
-					refreshActivitySession(
-						localDispatch,
-						scopeKey,
-						reconciledEntries
-					);
+					refreshActivitySession(localDispatch, scopeKey, reconciledEntries);
 
 					const reconciledUndo = reconciledEntry?.undo || {};
 
-					if ( reconciledUndo.status === 'undone' ) {
+					if (reconciledUndo.status === 'undone') {
 						return {
 							ok: true,
 							timestamp:
@@ -2626,7 +2555,7 @@ const actions = {
 						};
 					}
 
-					if ( reconciledUndo.status === 'failed' ) {
+					if (reconciledUndo.status === 'failed') {
 						return {
 							ok: false,
 							timestamp: reconciledUndo.updatedAt || timestamp,
@@ -2643,27 +2572,20 @@ const actions = {
 				return null;
 			};
 
-			if ( scopeKey && isServerBackedActivityEntry( activity ) ) {
+			if (scopeKey && isServerBackedActivityEntry(activity)) {
 				try {
-					const serverEntries =
-						await fetchServerActivityEntries( scopeKey );
+					const serverEntries = await fetchServerActivityEntries(scopeKey);
 					const refreshedEntries = mergeActivityEntries(
 						serverEntries,
-						activityLog.filter( isLocalActivityEntry )
+						activityLog.filter(isLocalActivityEntry)
 					);
 
-					refreshActivitySession(
-						localDispatch,
-						scopeKey,
-						refreshedEntries
-					);
+					refreshActivitySession(localDispatch, scopeKey, refreshedEntries);
 					activityLog = refreshedEntries;
 					activity =
-						activityLog.find(
-							( entry ) => entry?.id === activityId
-						) || null;
+						activityLog.find((entry) => entry?.id === activityId) || null;
 
-					if ( ! activity ) {
+					if (!activity) {
 						localDispatch(
 							actions.setUndoState(
 								'error',
@@ -2681,47 +2603,36 @@ const actions = {
 				}
 			}
 
-			const entityEntries = getEntityActivityEntries(
-				activityLog,
-				activity
-			);
+			const entityEntries = getEntityActivityEntries(activityLog, activity);
 			const runtimeUndoResolver = getActivityRuntimeUndoResolver(
 				activity?.surface,
 				registry
 			);
 			const resolvedActivity =
-				getResolvedActivityEntries(
-					entityEntries,
-					runtimeUndoResolver
-				).find( ( entry ) => entry?.id === activityId ) || null;
-			const currentPendingSyncType =
-				getPendingActivitySyncType( activity );
+				getResolvedActivityEntries(entityEntries, runtimeUndoResolver).find(
+					(entry) => entry?.id === activityId
+				) || null;
+			const currentPendingSyncType = getPendingActivitySyncType(activity);
 			const buildUndoTransitionEntry = (
 				status,
 				error = null,
 				timestamp = new Date().toISOString()
-			) => ( {
+			) => ({
 				...activity,
 				undo: {
-					...( activity.undo || {} ),
+					...(activity.undo || {}),
 					canUndo: false,
 					status,
 					error,
 					updatedAt: timestamp,
 					undoneAt:
-						status === 'undone'
-							? timestamp
-							: activity?.undo?.undoneAt || null,
+						status === 'undone' ? timestamp : activity?.undo?.undoneAt || null,
 				},
-			} );
-			const syncUndoStateChange = async ( status, error = null ) => {
+			});
+			const syncUndoStateChange = async (status, error = null) => {
 				const timestamp = new Date().toISOString();
-				const persistence = shouldSyncUndoTransition( activity )
-					? buildActivityPersistenceUpdate(
-							'server',
-							null,
-							timestamp
-					  )
+				const persistence = shouldSyncUndoTransition(activity)
+					? buildActivityPersistenceUpdate('server', null, timestamp)
 					: buildActivityPersistenceUpdate(
 							'local',
 							currentPendingSyncType || 'create',
@@ -2738,8 +2649,8 @@ const actions = {
 					)
 				);
 
-				if ( ! shouldSyncUndoTransition( activity ) ) {
-					persistActivitySession( select );
+				if (!shouldSyncUndoTransition(activity)) {
+					persistActivitySession(select);
 
 					return {
 						ok: true,
@@ -2749,25 +2660,25 @@ const actions = {
 
 				try {
 					await persistActivityUndoTransition(
-						buildUndoTransitionEntry( status, error, timestamp )
+						buildUndoTransitionEntry(status, error, timestamp)
 					);
-					persistActivitySession( select );
+					persistActivitySession(select);
 
 					return {
 						ok: true,
 						timestamp,
 					};
-				} catch ( syncError ) {
+				} catch (syncError) {
 					const reconciledResult = await reconcileUndoConflict(
 						syncError,
 						timestamp
 					);
 
-					if ( reconciledResult ) {
+					if (reconciledResult) {
 						return reconciledResult;
 					}
 
-					if ( isNonRetryableUndoSyncError( activity, syncError ) ) {
+					if (isNonRetryableUndoSyncError(activity, syncError)) {
 						const terminalEntry = buildNonRetryableUndoSyncEntry(
 							activity,
 							syncError,
@@ -2783,7 +2694,7 @@ const actions = {
 								terminalEntry.persistence
 							)
 						);
-						persistActivitySession( select );
+						persistActivitySession(select);
 
 						return {
 							ok: false,
@@ -2798,14 +2709,10 @@ const actions = {
 							status,
 							error,
 							timestamp,
-							buildActivityPersistenceUpdate(
-								'local',
-								'undo',
-								timestamp
-							)
+							buildActivityPersistenceUpdate('local', 'undo', timestamp)
 						)
 					);
-					persistActivitySession( select );
+					persistActivitySession(select);
 
 					return {
 						ok: false,
@@ -2815,29 +2722,23 @@ const actions = {
 			};
 			const resolvedUndo = resolvedActivity?.undo || activity?.undo || {};
 
-			if ( resolvedUndo?.status === 'undone' ) {
+			if (resolvedUndo?.status === 'undone') {
 				return {
 					ok: true,
 					alreadyUndone: true,
 				};
 			}
 
-			if ( resolvedUndo?.status === 'failed' ) {
+			if (resolvedUndo?.status === 'failed') {
 				const failureMessage =
 					resolvedUndo?.error ||
 					'This AI action can no longer be undone automatically.';
-				const syncResult = await syncUndoStateChange(
-					'failed',
-					failureMessage
-				);
+				const syncResult = await syncUndoStateChange('failed', failureMessage);
 				const surfacedError = syncResult.ok
 					? failureMessage
-					: syncResult.error ||
-					  buildUndoAuditSyncError( failureMessage );
+					: syncResult.error || buildUndoAuditSyncError(failureMessage);
 
-				localDispatch(
-					actions.setUndoState( 'error', surfacedError, activityId )
-				);
+				localDispatch(actions.setUndoState('error', surfacedError, activityId));
 
 				return {
 					ok: false,
@@ -2866,42 +2767,31 @@ const actions = {
 				};
 			}
 
-			localDispatch(
-				actions.setUndoState( 'undoing', null, activityId )
-			);
+			localDispatch(actions.setUndoState('undoing', null, activityId));
 
 			let result;
 
-			if ( activity.surface === 'template' ) {
-				result = undoTemplateSuggestionOperations( activity );
-			} else if ( activity.surface === 'template-part' ) {
-				result = undoTemplatePartSuggestionOperations( activity );
+			if (activity.surface === 'template') {
+				result = undoTemplateSuggestionOperations(activity);
+			} else if (activity.surface === 'template-part') {
+				result = undoTemplatePartSuggestionOperations(activity);
 			} else if (
 				activity.surface === 'global-styles' ||
 				activity.surface === 'style-book'
 			) {
-				result = undoGlobalStyleSuggestionOperations(
-					activity,
-					registry
-				);
+				result = undoGlobalStyleSuggestionOperations(activity, registry);
 			} else {
-				result = undoBlockActivity( activity, registry );
+				result = undoBlockActivity(activity, registry);
 			}
 
-			if ( ! result.ok ) {
+			if (!result.ok) {
 				const failureMessage = result.error || 'Undo failed.';
-				const syncResult = await syncUndoStateChange(
-					'failed',
-					failureMessage
-				);
+				const syncResult = await syncUndoStateChange('failed', failureMessage);
 				const surfacedError = syncResult.ok
 					? failureMessage
-					: syncResult.error ||
-					  buildUndoAuditSyncError( failureMessage );
+					: syncResult.error || buildUndoAuditSyncError(failureMessage);
 
-				localDispatch(
-					actions.setUndoState( 'error', surfacedError, activityId )
-				);
+				localDispatch(actions.setUndoState('error', surfacedError, activityId));
 
 				return {
 					...result,
@@ -2909,16 +2799,13 @@ const actions = {
 				};
 			}
 
-			const syncResult = await syncUndoStateChange( 'undone' );
+			const syncResult = await syncUndoStateChange('undone');
 
-			if ( ! syncResult.ok ) {
+			if (!syncResult.ok) {
 				const surfacedError =
-					syncResult.error ||
-					buildUndoAuditSyncError( 'Undo applied locally.' );
+					syncResult.error || buildUndoAuditSyncError('Undo applied locally.');
 
-				localDispatch(
-					actions.setUndoState( 'error', surfacedError, activityId )
-				);
+				localDispatch(actions.setUndoState('error', surfacedError, activityId));
 
 				return {
 					...result,
@@ -2927,33 +2814,40 @@ const actions = {
 				};
 			}
 
-			localDispatch(
-				actions.setUndoState( 'success', null, activityId )
-			);
+			localDispatch(actions.setUndoState('success', null, activityId));
 
 			return result;
 		};
 	},
 
-	applyTemplateSuggestion( suggestion ) {
-		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+	applyTemplateSuggestion(suggestion, currentContextSignature = null) {
+		return async ({ dispatch: localDispatch, registry, select }) => {
+			const scope = getCurrentActivityScope(registry);
 
-			syncActivitySession( localDispatch, select, scope );
+			syncActivitySession(localDispatch, select, scope);
 
-			localDispatch( actions.setTemplateApplyState( 'applying' ) );
+			const staleApplyResult = guardSurfaceApplyFreshness({
+				surface: 'template',
+				currentContextSignature,
+				getStoredContextSignature: select.getTemplateContextSignature,
+				localDispatch,
+				setApplyState: actions.setTemplateApplyState,
+			});
+
+			if (staleApplyResult) {
+				return staleApplyResult;
+			}
+
+			localDispatch(actions.setTemplateApplyState('applying'));
 
 			let result;
 
 			try {
-				result = applyTemplateSuggestionOperations( suggestion );
-			} catch ( err ) {
-				const message =
-					err?.message || 'Template apply failed unexpectedly.';
+				result = applyTemplateSuggestionOperations(suggestion);
+			} catch (err) {
+				const message = err?.message || 'Template apply failed unexpectedly.';
 
-				localDispatch(
-					actions.setTemplateApplyState( 'error', message )
-				);
+				localDispatch(actions.setTemplateApplyState('error', message));
 
 				return {
 					ok: false,
@@ -2961,7 +2855,7 @@ const actions = {
 				};
 			}
 
-			if ( ! result.ok ) {
+			if (!result.ok) {
 				localDispatch(
 					actions.setTemplateApplyState(
 						'error',
@@ -2977,7 +2871,7 @@ const actions = {
 			await recordActivityEntry(
 				localDispatch,
 				select,
-				buildTemplateActivityEntry( {
+				buildTemplateActivityEntry({
 					operations: result.operations,
 					requestPrompt: select.getTemplateRequestPrompt?.() || '',
 					requestMeta: suggestion?.requestMeta || null,
@@ -2985,7 +2879,7 @@ const actions = {
 					scope,
 					suggestion,
 					templateRef,
-				} )
+				})
 			);
 			localDispatch(
 				actions.setTemplateApplyState(
@@ -2999,25 +2893,35 @@ const actions = {
 		};
 	},
 
-	applyTemplatePartSuggestion( suggestion ) {
-		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+	applyTemplatePartSuggestion(suggestion, currentContextSignature = null) {
+		return async ({ dispatch: localDispatch, registry, select }) => {
+			const scope = getCurrentActivityScope(registry);
 
-			syncActivitySession( localDispatch, select, scope );
+			syncActivitySession(localDispatch, select, scope);
 
-			localDispatch( actions.setTemplatePartApplyState( 'applying' ) );
+			const staleApplyResult = guardSurfaceApplyFreshness({
+				surface: 'template-part',
+				currentContextSignature,
+				getStoredContextSignature: select.getTemplatePartContextSignature,
+				localDispatch,
+				setApplyState: actions.setTemplatePartApplyState,
+			});
+
+			if (staleApplyResult) {
+				return staleApplyResult;
+			}
+
+			localDispatch(actions.setTemplatePartApplyState('applying'));
 
 			let result;
 
 			try {
-				result = applyTemplatePartSuggestionOperations( suggestion );
-			} catch ( err ) {
+				result = applyTemplatePartSuggestionOperations(suggestion);
+			} catch (err) {
 				const message =
 					err?.message || 'Template-part apply failed unexpectedly.';
 
-				localDispatch(
-					actions.setTemplatePartApplyState( 'error', message )
-				);
+				localDispatch(actions.setTemplatePartApplyState('error', message));
 
 				return {
 					ok: false,
@@ -3025,7 +2929,7 @@ const actions = {
 				};
 			}
 
-			if ( ! result.ok ) {
+			if (!result.ok) {
 				localDispatch(
 					actions.setTemplatePartApplyState(
 						'error',
@@ -3041,16 +2945,15 @@ const actions = {
 			await recordActivityEntry(
 				localDispatch,
 				select,
-				buildTemplatePartActivityEntry( {
+				buildTemplatePartActivityEntry({
 					operations: result.operations,
-					requestPrompt:
-						select.getTemplatePartRequestPrompt?.() || '',
+					requestPrompt: select.getTemplatePartRequestPrompt?.() || '',
 					requestMeta: suggestion?.requestMeta || null,
 					requestToken: select.getTemplatePartResultToken?.() || 0,
 					scope,
 					suggestion,
 					templatePartRef,
-				} )
+				})
 			);
 			localDispatch(
 				actions.setTemplatePartApplyState(
@@ -3064,29 +2967,37 @@ const actions = {
 		};
 	},
 
-	applyGlobalStylesSuggestion( suggestion ) {
-		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+	applyGlobalStylesSuggestion(suggestion, currentContextSignature = null) {
+		return async ({ dispatch: localDispatch, registry, select }) => {
+			const scope = getCurrentActivityScope(registry);
 
-			syncActivitySession( localDispatch, select, scope );
+			syncActivitySession(localDispatch, select, scope);
 
-			localDispatch( actions.setGlobalStylesApplyState( 'applying' ) );
+			const staleApplyResult = guardSurfaceApplyFreshness({
+				surface: 'global-styles',
+				currentContextSignature,
+				getStoredContextSignature: select.getGlobalStylesContextSignature,
+				localDispatch,
+				setApplyState: actions.setGlobalStylesApplyState,
+			});
+
+			if (staleApplyResult) {
+				return staleApplyResult;
+			}
+
+			localDispatch(actions.setGlobalStylesApplyState('applying'));
 
 			let result;
 
 			try {
-				result = applyGlobalStyleSuggestionOperations(
-					suggestion,
-					registry,
-					{ surface: 'global-styles' }
-				);
-			} catch ( err ) {
+				result = applyGlobalStyleSuggestionOperations(suggestion, registry, {
+					surface: 'global-styles',
+				});
+			} catch (err) {
 				const message =
 					err?.message || 'Global Styles apply failed unexpectedly.';
 
-				localDispatch(
-					actions.setGlobalStylesApplyState( 'error', message )
-				);
+				localDispatch(actions.setGlobalStylesApplyState('error', message));
 
 				return {
 					ok: false,
@@ -3094,7 +3005,7 @@ const actions = {
 				};
 			}
 
-			if ( ! result.ok ) {
+			if (!result.ok) {
 				localDispatch(
 					actions.setGlobalStylesApplyState(
 						'error',
@@ -3108,18 +3019,17 @@ const actions = {
 			await recordActivityEntry(
 				localDispatch,
 				select,
-				buildGlobalStylesActivityEntry( {
+				buildGlobalStylesActivityEntry({
 					operations: result.operations,
 					beforeConfig: result.beforeConfig,
 					afterConfig: result.afterConfig,
-					requestPrompt:
-						select.getGlobalStylesRequestPrompt?.() || '',
+					requestPrompt: select.getGlobalStylesRequestPrompt?.() || '',
 					requestMeta: suggestion?.requestMeta || null,
 					requestToken: select.getGlobalStylesResultToken?.() || 0,
 					scope,
 					suggestion,
 					globalStylesId: result.globalStylesId,
-				} )
+				})
 			);
 			localDispatch(
 				actions.setGlobalStylesApplyState(
@@ -3134,29 +3044,36 @@ const actions = {
 		};
 	},
 
-	applyStyleBookSuggestion( suggestion ) {
-		return async ( { dispatch: localDispatch, registry, select } ) => {
-			const scope = getCurrentActivityScope( registry );
+	applyStyleBookSuggestion(suggestion, currentContextSignature = null) {
+		return async ({ dispatch: localDispatch, registry, select }) => {
+			const scope = getCurrentActivityScope(registry);
 
-			syncActivitySession( localDispatch, select, scope );
+			syncActivitySession(localDispatch, select, scope);
 
-			localDispatch( actions.setStyleBookApplyState( 'applying' ) );
+			const staleApplyResult = guardSurfaceApplyFreshness({
+				surface: 'style-book',
+				currentContextSignature,
+				getStoredContextSignature: select.getStyleBookContextSignature,
+				localDispatch,
+				setApplyState: actions.setStyleBookApplyState,
+			});
+
+			if (staleApplyResult) {
+				return staleApplyResult;
+			}
+
+			localDispatch(actions.setStyleBookApplyState('applying'));
 
 			let result;
 
 			try {
-				result = applyGlobalStyleSuggestionOperations(
-					suggestion,
-					registry,
-					{ surface: 'style-book' }
-				);
-			} catch ( err ) {
-				const message =
-					err?.message || 'Style Book apply failed unexpectedly.';
+				result = applyGlobalStyleSuggestionOperations(suggestion, registry, {
+					surface: 'style-book',
+				});
+			} catch (err) {
+				const message = err?.message || 'Style Book apply failed unexpectedly.';
 
-				localDispatch(
-					actions.setStyleBookApplyState( 'error', message )
-				);
+				localDispatch(actions.setStyleBookApplyState('error', message));
 
 				return {
 					ok: false,
@@ -3164,7 +3081,7 @@ const actions = {
 				};
 			}
 
-			if ( ! result.ok ) {
+			if (!result.ok) {
 				localDispatch(
 					actions.setStyleBookApplyState(
 						'error',
@@ -3178,7 +3095,7 @@ const actions = {
 			await recordActivityEntry(
 				localDispatch,
 				select,
-				buildStyleBookActivityEntry( {
+				buildStyleBookActivityEntry({
 					operations: result.operations,
 					beforeConfig: result.beforeConfig,
 					afterConfig: result.afterConfig,
@@ -3190,7 +3107,7 @@ const actions = {
 					globalStylesId: result.globalStylesId,
 					blockName: scope?.blockName || '',
 					blockTitle: scope?.blockTitle || '',
-				} )
+				})
 			);
 			localDispatch(
 				actions.setStyleBookApplyState(
@@ -3205,71 +3122,45 @@ const actions = {
 		};
 	},
 
-	fetchTemplateRecommendations( input ) {
-		return ( { dispatch, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchTemplateRecommendations(input) {
+		return ({ dispatch, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_templateAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => {
+				buildRequest: ({ input: requestInput, select: registrySelect }) => {
 					const { contextSignature = null, ...requestData } =
 						requestInput || {};
 
 					return {
 						contextSignature,
 						requestData,
-						requestToken:
-							( registrySelect.getTemplateRequestToken?.() ||
-								0 ) + 1,
+						requestToken: (registrySelect.getTemplateRequestToken?.() || 0) + 1,
 					};
 				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-template',
 				input,
-				onError: ( {
-					contextSignature,
-					dispatch: localDispatch,
-					err,
-					input: requestInput,
-					requestToken,
-				} ) => {
-					localDispatch(
-						actions.setTemplateRecommendations(
-							requestInput.templateRef,
-							getEmptySuggestionResponse(),
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature
-						)
-					);
+				onError: ({ dispatch: localDispatch, err, requestToken }) => {
 					localDispatch(
 						actions.setTemplateStatus(
 							'error',
-							err?.message ||
-								'Template recommendation request failed.',
+							err?.message || 'Template recommendation request failed.',
 							requestToken
 						)
 					);
 				},
-				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+				onLoading: ({ dispatch: localDispatch, requestToken }) => {
 					localDispatch(
-						actions.setTemplateStatus(
-							'loading',
-							null,
-							requestToken
-						)
+						actions.setTemplateStatus('loading', null, requestToken)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					contextSignature,
 					dispatch: localDispatch,
 					input: requestInput,
 					requestToken,
 					result,
-				} ) => {
-					const payload =
-						attachRequestMetaToRecommendationPayload( result );
+				}) => {
+					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
 						actions.setTemplateRecommendations(
@@ -3282,17 +3173,14 @@ const actions = {
 					);
 				},
 				select,
-			} );
+			});
 	},
 
-	fetchTemplatePartRecommendations( input ) {
-		return ( { dispatch, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchTemplatePartRecommendations(input) {
+		return ({ dispatch, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_templatePartAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => {
+				buildRequest: ({ input: requestInput, select: registrySelect }) => {
 					const { contextSignature = null, ...requestData } =
 						requestInput || {};
 
@@ -3300,56 +3188,34 @@ const actions = {
 						contextSignature,
 						requestData,
 						requestToken:
-							( registrySelect.getTemplatePartRequestToken?.() ||
-								0 ) + 1,
+							(registrySelect.getTemplatePartRequestToken?.() || 0) + 1,
 					};
 				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-template-part',
 				input,
-				onError: ( {
-					contextSignature,
-					dispatch: localDispatch,
-					err,
-					input: requestInput,
-					requestToken,
-				} ) => {
-					localDispatch(
-						actions.setTemplatePartRecommendations(
-							requestInput.templatePartRef,
-							getEmptySuggestionResponse(),
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature
-						)
-					);
+				onError: ({ dispatch: localDispatch, err, requestToken }) => {
 					localDispatch(
 						actions.setTemplatePartStatus(
 							'error',
-							err?.message ||
-								'Template-part recommendation request failed.',
+							err?.message || 'Template-part recommendation request failed.',
 							requestToken
 						)
 					);
 				},
-				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+				onLoading: ({ dispatch: localDispatch, requestToken }) => {
 					localDispatch(
-						actions.setTemplatePartStatus(
-							'loading',
-							null,
-							requestToken
-						)
+						actions.setTemplatePartStatus('loading', null, requestToken)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					contextSignature,
 					dispatch: localDispatch,
 					input: requestInput,
 					requestToken,
 					result,
-				} ) => {
-					const payload =
-						attachRequestMetaToRecommendationPayload( result );
+				}) => {
+					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
 						actions.setTemplatePartRecommendations(
@@ -3362,74 +3228,48 @@ const actions = {
 					);
 				},
 				select,
-			} );
+			});
 	},
 
-	fetchGlobalStylesRecommendations( input ) {
-		return ( { dispatch, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchGlobalStylesRecommendations(input) {
+		return ({ dispatch, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_globalStylesAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => {
-					const { contextSignature = null, ...requestData } =
-						requestInput;
+				buildRequest: ({ input: requestInput, select: registrySelect }) => {
+					const { contextSignature = null, ...requestData } = requestInput;
 
 					return {
 						contextSignature,
 						requestData,
 						requestToken:
-							( registrySelect.getGlobalStylesRequestToken?.() ||
-								0 ) + 1,
+							(registrySelect.getGlobalStylesRequestToken?.() || 0) + 1,
 					};
 				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-style',
 				input,
-				onError: ( {
-					contextSignature,
-					dispatch: localDispatch,
-					err,
-					input: requestInput,
-					requestToken,
-				} ) => {
-					localDispatch(
-						actions.setGlobalStylesRecommendations(
-							requestInput.scope,
-							getEmptySuggestionResponse(),
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature
-						)
-					);
+				onError: ({ dispatch: localDispatch, err, requestToken }) => {
 					localDispatch(
 						actions.setGlobalStylesStatus(
 							'error',
-							err?.message ||
-								'Global Styles recommendation request failed.',
+							err?.message || 'Global Styles recommendation request failed.',
 							requestToken
 						)
 					);
 				},
-				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+				onLoading: ({ dispatch: localDispatch, requestToken }) => {
 					localDispatch(
-						actions.setGlobalStylesStatus(
-							'loading',
-							null,
-							requestToken
-						)
+						actions.setGlobalStylesStatus('loading', null, requestToken)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					contextSignature,
 					dispatch: localDispatch,
 					input: requestInput,
 					requestToken,
 					result,
-				} ) => {
-					const payload =
-						attachRequestMetaToRecommendationPayload( result );
+				}) => {
+					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
 						actions.setGlobalStylesRecommendations(
@@ -3442,74 +3282,48 @@ const actions = {
 					);
 				},
 				select,
-			} );
+			});
 	},
 
-	fetchStyleBookRecommendations( input ) {
-		return ( { dispatch, select } ) =>
-			runAbortableRecommendationRequest( {
+	fetchStyleBookRecommendations(input) {
+		return ({ dispatch, select }) =>
+			runAbortableRecommendationRequest({
 				abortKey: '_styleBookAbort',
-				buildRequest: ( {
-					input: requestInput,
-					select: registrySelect,
-				} ) => {
-					const { contextSignature = null, ...requestData } =
-						requestInput;
+				buildRequest: ({ input: requestInput, select: registrySelect }) => {
+					const { contextSignature = null, ...requestData } = requestInput;
 
 					return {
 						contextSignature,
 						requestData,
 						requestToken:
-							( registrySelect.getStyleBookRequestToken?.() ||
-								0 ) + 1,
+							(registrySelect.getStyleBookRequestToken?.() || 0) + 1,
 					};
 				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-style',
 				input,
-				onError: ( {
-					contextSignature,
-					dispatch: localDispatch,
-					err,
-					input: requestInput,
-					requestToken,
-				} ) => {
-					localDispatch(
-						actions.setStyleBookRecommendations(
-							requestInput.scope,
-							getEmptySuggestionResponse(),
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature
-						)
-					);
+				onError: ({ dispatch: localDispatch, err, requestToken }) => {
 					localDispatch(
 						actions.setStyleBookStatus(
 							'error',
-							err?.message ||
-								'Style Book recommendation request failed.',
+							err?.message || 'Style Book recommendation request failed.',
 							requestToken
 						)
 					);
 				},
-				onLoading: ( { dispatch: localDispatch, requestToken } ) => {
+				onLoading: ({ dispatch: localDispatch, requestToken }) => {
 					localDispatch(
-						actions.setStyleBookStatus(
-							'loading',
-							null,
-							requestToken
-						)
+						actions.setStyleBookStatus('loading', null, requestToken)
 					);
 				},
-				onSuccess: ( {
+				onSuccess: ({
 					contextSignature,
 					dispatch: localDispatch,
 					input: requestInput,
 					requestToken,
 					result,
-				} ) => {
-					const payload =
-						attachRequestMetaToRecommendationPayload( result );
+				}) => {
+					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
 						actions.setStyleBookRecommendations(
@@ -3522,58 +3336,48 @@ const actions = {
 					);
 				},
 				select,
-			} );
+			});
 	},
 };
 
-function reducer( state = DEFAULT_STATE, action ) {
-	switch ( action.type ) {
+function reducer(state = DEFAULT_STATE, action) {
+	switch (action.type) {
 		case 'SET_BLOCK_REQUEST_STATE': {
-			if (
-				isStaleBlockRequest(
-					state,
-					action.clientId,
-					action.requestToken
-				)
-			) {
+			if (isStaleBlockRequest(state, action.clientId, action.requestToken)) {
 				return state;
 			}
 
-			const currentEntry = getStoredBlockRequestState(
-				state,
-				action.clientId
-			);
+			const currentEntry = getStoredBlockRequestState(state, action.clientId);
 
 			return {
 				...state,
 				blockRequestState: {
 					...state.blockRequestState,
-					[ action.clientId ]: {
+					[action.clientId]: {
 						...currentEntry,
 						status: action.status,
 						error: action.error ?? null,
 						diagnostics:
-							action.status === 'loading' ||
-							action.status === 'error'
+							action.status === 'loading' || action.status === 'error'
 								? null
 								: currentEntry.diagnostics ?? null,
 						contextSignature:
-							action.contextSignature ??
-							currentEntry.contextSignature,
-						requestToken:
-							action.requestToken ?? currentEntry.requestToken,
+							action.contextSignature ?? currentEntry.contextSignature,
+						applyStatus:
+							action.status === 'loading' ? 'idle' : currentEntry.applyStatus,
+						applyError:
+							action.status === 'loading' ? null : currentEntry.applyError,
+						lastAppliedSuggestionKey:
+							action.status === 'loading'
+								? null
+								: currentEntry.lastAppliedSuggestionKey,
+						requestToken: action.requestToken ?? currentEntry.requestToken,
 					},
 				},
 			};
 		}
 		case 'SET_BLOCK_RECS':
-			if (
-				isStaleBlockRequest(
-					state,
-					action.clientId,
-					action.requestToken
-				)
-			) {
+			if (isStaleBlockRequest(state, action.clientId, action.requestToken)) {
 				return state;
 			}
 
@@ -3581,25 +3385,45 @@ function reducer( state = DEFAULT_STATE, action ) {
 				...state,
 				blockRecommendations: {
 					...state.blockRecommendations,
-					[ action.clientId ]: action.recommendations,
+					[action.clientId]: action.recommendations,
 				},
 				blockRequestState: {
 					...state.blockRequestState,
-					[ action.clientId ]: {
-						...getStoredBlockRequestState( state, action.clientId ),
+					[action.clientId]: {
+						...getStoredBlockRequestState(state, action.clientId),
 						contextSignature: action.contextSignature ?? null,
-						diagnostics: normalizeBlockRequestDiagnostics(
-							action.diagnostics
-						),
+						diagnostics: normalizeBlockRequestDiagnostics(action.diagnostics),
+						applyStatus: 'idle',
+						applyError: null,
+						lastAppliedSuggestionKey: null,
 					},
 				},
 			};
+		case 'SET_BLOCK_APPLY_STATE': {
+			const currentEntry = getStoredBlockRequestState(state, action.clientId);
+
+			return {
+				...state,
+				blockRequestState: {
+					...state.blockRequestState,
+					[action.clientId]: {
+						...currentEntry,
+						applyStatus: action.status,
+						applyError: action.error ?? null,
+						lastAppliedSuggestionKey:
+							action.status === 'success'
+								? action.suggestionKey ?? null
+								: currentEntry.lastAppliedSuggestionKey,
+					},
+				},
+			};
+		}
 		case 'CLEAR_BLOCK_RECS': {
 			const nextRecommendations = { ...state.blockRecommendations };
 			const nextRequestState = { ...state.blockRequestState };
 
-			delete nextRecommendations[ action.clientId ];
-			delete nextRequestState[ action.clientId ];
+			delete nextRecommendations[action.clientId];
+			delete nextRequestState[action.clientId];
 
 			return {
 				...state,
@@ -3608,26 +3432,26 @@ function reducer( state = DEFAULT_STATE, action ) {
 			};
 		}
 		case 'CLEAR_BLOCK_ERROR': {
-			if ( ! state.blockRequestState[ action.clientId ] ) {
+			if (!state.blockRequestState[action.clientId]) {
 				return state;
 			}
 
-			const currentEntry = getStoredBlockRequestState(
-				state,
-				action.clientId
-			);
+			const currentEntry = getStoredBlockRequestState(state, action.clientId);
 
 			return {
 				...state,
 				blockRequestState: {
 					...state.blockRequestState,
-					[ action.clientId ]: {
+					[action.clientId]: {
 						...currentEntry,
 						status:
-							currentEntry.status === 'error'
-								? 'idle'
-								: currentEntry.status,
+							currentEntry.status === 'error' ? 'idle' : currentEntry.status,
 						error: null,
+						applyStatus:
+							currentEntry.applyStatus === 'error'
+								? 'idle'
+								: currentEntry.applyStatus,
+						applyError: null,
 					},
 				},
 			};
@@ -3636,7 +3460,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				activityScopeKey: action.scopeKey ?? null,
-				activityLog: limitActivityLog( action.entries ),
+				activityLog: limitActivityLog(action.entries),
 				undoStatus: 'idle',
 				undoError: null,
 				lastUndoneActivityId: null,
@@ -3644,10 +3468,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 		case 'LOG_ACTIVITY':
 			return {
 				...state,
-				activityLog: limitActivityLog( [
-					...state.activityLog,
-					action.entry,
-				] ),
+				activityLog: limitActivityLog([...state.activityLog, action.entry]),
 				undoStatus: 'idle',
 				undoError: null,
 				lastUndoneActivityId: null,
@@ -3665,38 +3486,32 @@ function reducer( state = DEFAULT_STATE, action ) {
 		case 'CLEAR_UNDO_ERROR':
 			return {
 				...state,
-				undoStatus:
-					state.undoStatus === 'error' ? 'idle' : state.undoStatus,
+				undoStatus: state.undoStatus === 'error' ? 'idle' : state.undoStatus,
 				undoError: null,
 			};
 		case 'UPDATE_ACTIVITY_UNDO_STATE': {
 			const matchedEntry =
-				state.activityLog.find(
-					( entry ) => entry?.id === action.activityId
-				) || null;
+				state.activityLog.find((entry) => entry?.id === action.activityId) ||
+				null;
 			const isTemplateUndone =
-				action.status === 'undone' &&
-				matchedEntry?.surface === 'template';
+				action.status === 'undone' && matchedEntry?.surface === 'template';
 			const isTemplatePartUndone =
-				action.status === 'undone' &&
-				matchedEntry?.surface === 'template-part';
+				action.status === 'undone' && matchedEntry?.surface === 'template-part';
 			const isGlobalStylesUndone =
-				action.status === 'undone' &&
-				matchedEntry?.surface === 'global-styles';
+				action.status === 'undone' && matchedEntry?.surface === 'global-styles';
 			const isStyleBookUndone =
-				action.status === 'undone' &&
-				matchedEntry?.surface === 'style-book';
+				action.status === 'undone' && matchedEntry?.surface === 'style-book';
 
 			return {
 				...state,
-				activityLog: state.activityLog.map( ( entry ) => {
-					if ( entry?.id !== action.activityId ) {
+				activityLog: state.activityLog.map((entry) => {
+					if (entry?.id !== action.activityId) {
 						return entry;
 					}
 
 					const nextPersistence = action.persistence
 						? {
-								...( entry.persistence || {} ),
+								...(entry.persistence || {}),
 								...action.persistence,
 								syncType:
 									action.persistence.status === 'server'
@@ -3704,9 +3519,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 										: action.persistence.syncType ||
 										  entry?.persistence?.syncType ||
 										  'undo',
-								updatedAt:
-									action.persistence.updatedAt ||
-									action.timestamp,
+								updatedAt: action.persistence.updatedAt || action.timestamp,
 						  }
 						: entry.persistence;
 
@@ -3724,13 +3537,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 						},
 						persistence: nextPersistence,
 					};
-				} ),
+				}),
 				templateApplyStatus: isTemplateUndone
 					? 'idle'
 					: state.templateApplyStatus,
-				templateApplyError: isTemplateUndone
-					? null
-					: state.templateApplyError,
+				templateApplyError: isTemplateUndone ? null : state.templateApplyError,
 				templateLastAppliedSuggestionKey: isTemplateUndone
 					? null
 					: state.templateLastAppliedSuggestionKey,
@@ -3782,7 +3593,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				patternError: action.error ?? null,
 			};
 		case 'SET_CONTENT_STATUS':
-			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
+			if (action.requestToken < (state.contentRequestToken || 0)) {
 				return state;
 			}
 
@@ -3790,15 +3601,12 @@ function reducer( state = DEFAULT_STATE, action ) {
 				...state,
 				contentStatus: action.status,
 				contentError: action.error ?? null,
-				contentRequestToken:
-					action.requestToken ?? state.contentRequestToken,
+				contentRequestToken: action.requestToken ?? state.contentRequestToken,
 				contentRecommendation:
-					action.status === 'loading'
-						? null
-						: state.contentRecommendation,
+					action.status === 'loading' ? null : state.contentRecommendation,
 			};
 		case 'SET_CONTENT_RECOMMENDATION':
-			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
+			if (action.requestToken < (state.contentRequestToken || 0)) {
 				return state;
 			}
 
@@ -3807,8 +3615,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				contentRecommendation: action.payload || null,
 				contentRequestPrompt: action.prompt ?? '',
 				contentMode: action.mode || 'draft',
-				contentRequestToken:
-					action.requestToken ?? state.contentRequestToken,
+				contentRequestToken: action.requestToken ?? state.contentRequestToken,
 				contentResultToken: state.contentResultToken + 1,
 				contentStatus: 'ready',
 				contentError: null,
@@ -3816,7 +3623,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 		case 'SET_CONTENT_MODE':
 			return {
 				...state,
-				contentMode: [ 'draft', 'edit', 'critique' ].includes( action.mode )
+				contentMode: ['draft', 'edit', 'critique'].includes(action.mode)
 					? action.mode
 					: 'draft',
 			};
@@ -3824,9 +3631,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				contentStatus:
-					state.contentStatus === 'error'
-						? 'idle'
-						: state.contentStatus,
+					state.contentStatus === 'error' ? 'idle' : state.contentStatus,
 				contentError: null,
 			};
 		case 'CLEAR_CONTENT_RECOMMENDATION':
@@ -3843,11 +3648,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				patternRecommendations: action.recommendations,
-				patternBadge: getPatternBadgeReason( action.recommendations ),
+				patternBadge: getPatternBadgeReason(action.recommendations),
 				patternError: null,
 			};
 		case 'SET_NAVIGATION_STATUS':
-			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
+			if (isStaleNavigationRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -3861,7 +3666,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 					action.blockClientId ?? state.navigationBlockClientId,
 			};
 		case 'SET_NAVIGATION_RECS':
-			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
+			if (isStaleNavigationRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -3882,9 +3687,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				navigationStatus:
-					state.navigationStatus === 'error'
-						? 'idle'
-						: state.navigationStatus,
+					state.navigationStatus === 'error' ? 'idle' : state.navigationStatus,
 				navigationError: null,
 			};
 		case 'CLEAR_NAVIGATION_RECS':
@@ -3901,7 +3704,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationResultToken: state.navigationResultToken + 1,
 			};
 		case 'SET_TEMPLATE_STATUS':
-			if ( isStaleTemplateRequest( state, action.requestToken ) ) {
+			if (isStaleTemplateRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -3909,20 +3712,12 @@ function reducer( state = DEFAULT_STATE, action ) {
 				...state,
 				templateStatus: action.status,
 				templateError: action.error ?? null,
-				templateRequestToken:
-					action.requestToken ?? state.templateRequestToken,
-				templateSelectedSuggestionKey:
-					action.status === 'loading'
-						? null
-						: state.templateSelectedSuggestionKey,
+				templateRequestToken: action.requestToken ?? state.templateRequestToken,
+				templateSelectedSuggestionKey: state.templateSelectedSuggestionKey,
 				templateApplyStatus:
-					action.status === 'loading'
-						? 'idle'
-						: state.templateApplyStatus,
+					action.status === 'loading' ? 'idle' : state.templateApplyStatus,
 				templateApplyError:
-					action.status === 'loading'
-						? null
-						: state.templateApplyError,
+					action.status === 'loading' ? null : state.templateApplyError,
 				templateLastAppliedSuggestionKey:
 					action.status === 'loading'
 						? null
@@ -3933,7 +3728,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.templateLastAppliedOperations,
 			};
 		case 'SET_TEMPLATE_RECS':
-			if ( isStaleTemplateRequest( state, action.requestToken ) ) {
+			if (isStaleTemplateRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -3944,8 +3739,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateRequestPrompt: action.prompt ?? '',
 				templateRef: action.templateRef,
 				templateContextSignature: action.contextSignature ?? null,
-				templateRequestToken:
-					action.requestToken ?? state.templateRequestToken,
+				templateRequestToken: action.requestToken ?? state.templateRequestToken,
 				templateResultToken: state.templateResultToken + 1,
 				templateStatus: 'ready',
 				templateError: null,
@@ -4001,7 +3795,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templateLastAppliedOperations: [],
 			};
 		case 'SET_GLOBAL_STYLES_STATUS':
-			if ( isStaleGlobalStylesRequest( state, action.requestToken ) ) {
+			if (isStaleGlobalStylesRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -4012,17 +3806,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 				globalStylesRequestToken:
 					action.requestToken ?? state.globalStylesRequestToken,
 				globalStylesSelectedSuggestionKey:
-					action.status === 'loading'
-						? null
-						: state.globalStylesSelectedSuggestionKey,
+					state.globalStylesSelectedSuggestionKey,
 				globalStylesApplyStatus:
-					action.status === 'loading'
-						? 'idle'
-						: state.globalStylesApplyStatus,
+					action.status === 'loading' ? 'idle' : state.globalStylesApplyStatus,
 				globalStylesApplyError:
-					action.status === 'loading'
-						? null
-						: state.globalStylesApplyError,
+					action.status === 'loading' ? null : state.globalStylesApplyError,
 				globalStylesLastAppliedSuggestionKey:
 					action.status === 'loading'
 						? null
@@ -4033,7 +3821,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.globalStylesLastAppliedOperations,
 			};
 		case 'SET_GLOBAL_STYLES_RECS':
-			if ( isStaleGlobalStylesRequest( state, action.requestToken ) ) {
+			if (isStaleGlobalStylesRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -4042,11 +3830,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 				globalStylesSuggestions: action.payload?.suggestions ?? [],
 				globalStylesExplanation: action.payload?.explanation ?? '',
 				globalStylesRequestPrompt: action.prompt ?? '',
-				globalStylesScopeKey: getScopeKey( action.scope ),
+				globalStylesScopeKey: getScopeKey(action.scope),
 				globalStylesEntityId:
-					action.scope?.globalStylesId ||
-					action.scope?.entityId ||
-					null,
+					action.scope?.globalStylesId || action.scope?.entityId || null,
 				globalStylesContextSignature: action.contextSignature ?? null,
 				globalStylesRequestToken:
 					action.requestToken ?? state.globalStylesRequestToken,
@@ -4087,7 +3873,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.globalStylesLastAppliedOperations,
 			};
 		case 'SET_STYLE_BOOK_STATUS':
-			if ( isStaleStyleBookRequest( state, action.requestToken ) ) {
+			if (isStaleStyleBookRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -4097,18 +3883,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 				styleBookError: action.error ?? null,
 				styleBookRequestToken:
 					action.requestToken ?? state.styleBookRequestToken,
-				styleBookSelectedSuggestionKey:
-					action.status === 'loading'
-						? null
-						: state.styleBookSelectedSuggestionKey,
+				styleBookSelectedSuggestionKey: state.styleBookSelectedSuggestionKey,
 				styleBookApplyStatus:
-					action.status === 'loading'
-						? 'idle'
-						: state.styleBookApplyStatus,
+					action.status === 'loading' ? 'idle' : state.styleBookApplyStatus,
 				styleBookApplyError:
-					action.status === 'loading'
-						? null
-						: state.styleBookApplyError,
+					action.status === 'loading' ? null : state.styleBookApplyError,
 				styleBookLastAppliedSuggestionKey:
 					action.status === 'loading'
 						? null
@@ -4119,7 +3898,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.styleBookLastAppliedOperations,
 			};
 		case 'SET_STYLE_BOOK_RECS':
-			if ( isStaleStyleBookRequest( state, action.requestToken ) ) {
+			if (isStaleStyleBookRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -4128,7 +3907,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 				styleBookSuggestions: action.payload?.suggestions ?? [],
 				styleBookExplanation: action.payload?.explanation ?? '',
 				styleBookRequestPrompt: action.prompt ?? '',
-				styleBookScopeKey: getScopeKey( action.scope ),
+				styleBookScopeKey: getScopeKey(action.scope),
 				styleBookGlobalStylesId: action.scope?.globalStylesId || null,
 				styleBookBlockName: action.scope?.blockName || null,
 				styleBookBlockTitle: action.scope?.blockTitle || '',
@@ -4172,7 +3951,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.styleBookLastAppliedOperations,
 			};
 		case 'SET_TEMPLATE_PART_STATUS':
-			if ( isStaleTemplatePartRequest( state, action.requestToken ) ) {
+			if (isStaleTemplatePartRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -4183,17 +3962,11 @@ function reducer( state = DEFAULT_STATE, action ) {
 				templatePartRequestToken:
 					action.requestToken ?? state.templatePartRequestToken,
 				templatePartSelectedSuggestionKey:
-					action.status === 'loading'
-						? null
-						: state.templatePartSelectedSuggestionKey,
+					state.templatePartSelectedSuggestionKey,
 				templatePartApplyStatus:
-					action.status === 'loading'
-						? 'idle'
-						: state.templatePartApplyStatus,
+					action.status === 'loading' ? 'idle' : state.templatePartApplyStatus,
 				templatePartApplyError:
-					action.status === 'loading'
-						? null
-						: state.templatePartApplyError,
+					action.status === 'loading' ? null : state.templatePartApplyError,
 				templatePartLastAppliedSuggestionKey:
 					action.status === 'loading'
 						? null
@@ -4204,7 +3977,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						: state.templatePartLastAppliedOperations,
 			};
 		case 'SET_TEMPLATE_PART_RECS':
-			if ( isStaleTemplatePartRequest( state, action.requestToken ) ) {
+			if (isStaleTemplatePartRequest(state, action.requestToken)) {
 				return state;
 			}
 
@@ -4317,320 +4090,323 @@ function reducer( state = DEFAULT_STATE, action ) {
 }
 
 const selectors = {
-	getBlockRequestState: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ),
-	getBlockStatus: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).status,
-	getBlockError: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).error,
-	getBlockRequestToken: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).requestToken,
-	getBlockRecommendationContextSignature: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).contextSignature,
-	getBlockRequestDiagnostics: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).diagnostics,
-	isBlockLoading: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).status === 'loading',
-	getStatus: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).status,
-	getError: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).error,
-	isLoading: ( state, clientId ) =>
-		getStoredBlockRequestState( state, clientId ).status === 'loading',
-	getBlockRecommendations: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ] || null,
-	getSettingsSuggestions: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ]?.settings || [],
-	getStylesSuggestions: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ]?.styles || [],
-	getBlockSuggestions: ( state, clientId ) =>
-		state.blockRecommendations[ clientId ]?.block || [],
-	getActivityScopeKey: ( state ) => state.activityScopeKey,
-	getActivityLog: ( state ) => state.activityLog,
-	getLatestAppliedActivity: ( state ) =>
-		getLatestAppliedActivity( state.activityLog ),
-	getLatestUndoableActivity: ( state ) =>
-		getLatestUndoableActivity( state.activityLog ),
-	getUndoStatus: ( state ) => state.undoStatus,
-	getUndoError: ( state ) => state.undoError,
-	isUndoing: ( state ) => state.undoStatus === 'undoing',
-	getLastUndoneActivityId: ( state ) => state.lastUndoneActivityId,
-	getPatternRecommendations: ( state ) => state.patternRecommendations,
-	getPatternStatus: ( state ) => state.patternStatus,
-	getPatternBadge: ( state ) => state.patternBadge,
-	getPatternError: ( state ) => state.patternError,
-	isPatternLoading: ( state ) => state.patternStatus === 'loading',
-	getContentRecommendation: ( state ) => state.contentRecommendation,
-	getContentStatus: ( state ) => state.contentStatus,
-	getContentError: ( state ) => state.contentError,
-	getContentMode: ( state ) => state.contentMode,
-	getContentRequestPrompt: ( state ) => state.contentRequestPrompt,
-	getContentRequestToken: ( state ) => state.contentRequestToken,
-	getContentResultToken: ( state ) => state.contentResultToken,
-	isContentLoading: ( state ) => state.contentStatus === 'loading',
-	getNavigationRecommendations: ( state, blockClientId = null ) =>
+	getBlockRequestState: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId),
+	getBlockStatus: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).status,
+	getBlockError: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).error,
+	getBlockRequestToken: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).requestToken,
+	getBlockRecommendationContextSignature: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).contextSignature,
+	getBlockRequestDiagnostics: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).diagnostics,
+	getBlockApplyStatus: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).applyStatus,
+	getBlockApplyError: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).applyError,
+	getBlockLastAppliedSuggestionKey: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).lastAppliedSuggestionKey,
+	isBlockLoading: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).status === 'loading',
+	isBlockApplying: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).applyStatus === 'applying',
+	getStatus: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).status,
+	getError: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).error,
+	isLoading: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).status === 'loading',
+	getBlockRecommendations: (state, clientId) =>
+		state.blockRecommendations[clientId] || null,
+	getSettingsSuggestions: (state, clientId) =>
+		state.blockRecommendations[clientId]?.settings || [],
+	getStylesSuggestions: (state, clientId) =>
+		state.blockRecommendations[clientId]?.styles || [],
+	getBlockSuggestions: (state, clientId) =>
+		state.blockRecommendations[clientId]?.block || [],
+	getActivityScopeKey: (state) => state.activityScopeKey,
+	getActivityLog: (state) => state.activityLog,
+	getLatestAppliedActivity: (state) =>
+		getLatestAppliedActivity(state.activityLog),
+	getLatestUndoableActivity: (state) =>
+		getLatestUndoableActivity(state.activityLog),
+	getUndoStatus: (state) => state.undoStatus,
+	getUndoError: (state) => state.undoError,
+	isUndoing: (state) => state.undoStatus === 'undoing',
+	getLastUndoneActivityId: (state) => state.lastUndoneActivityId,
+	getPatternRecommendations: (state) => state.patternRecommendations,
+	getPatternStatus: (state) => state.patternStatus,
+	getPatternBadge: (state) => state.patternBadge,
+	getPatternError: (state) => state.patternError,
+	isPatternLoading: (state) => state.patternStatus === 'loading',
+	getContentRecommendation: (state) => state.contentRecommendation,
+	getContentStatus: (state) => state.contentStatus,
+	getContentError: (state) => state.contentError,
+	getContentMode: (state) => state.contentMode,
+	getContentRequestPrompt: (state) => state.contentRequestPrompt,
+	getContentRequestToken: (state) => state.contentRequestToken,
+	getContentResultToken: (state) => state.contentResultToken,
+	isContentLoading: (state) => state.contentStatus === 'loading',
+	getNavigationRecommendations: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? []
 			: state.navigationRecommendations,
-	getNavigationExplanation: ( state, blockClientId = null ) =>
+	getNavigationExplanation: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? ''
 			: state.navigationExplanation,
-	getNavigationError: ( state, blockClientId = null ) =>
+	getNavigationError: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? null
 			: state.navigationError,
-	getNavigationStatus: ( state, blockClientId = null ) =>
+	getNavigationStatus: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? 'idle'
 			: state.navigationStatus,
-	getNavigationRequestPrompt: ( state, blockClientId = null ) =>
+	getNavigationRequestPrompt: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? ''
 			: state.navigationRequestPrompt,
-	getNavigationBlockClientId: ( state ) => state.navigationBlockClientId,
-	getNavigationContextSignature: ( state, blockClientId = null ) =>
+	getNavigationBlockClientId: (state) => state.navigationBlockClientId,
+	getNavigationContextSignature: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? null
 			: state.navigationContextSignature,
-	getNavigationRequestToken: ( state ) => state.navigationRequestToken,
-	getNavigationResultToken: ( state, blockClientId = null ) =>
+	getNavigationRequestToken: (state) => state.navigationRequestToken,
+	getNavigationResultToken: (state, blockClientId = null) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? 0
 			: state.navigationResultToken,
-	isNavigationLoading: ( state, blockClientId = null ) =>
-		( ! blockClientId ||
-			state.navigationBlockClientId === blockClientId ) &&
+	isNavigationLoading: (state, blockClientId = null) =>
+		(!blockClientId || state.navigationBlockClientId === blockClientId) &&
 		state.navigationStatus === 'loading',
-	getTemplateRecommendations: ( state ) => state.templateRecommendations,
-	getTemplateExplanation: ( state ) => state.templateExplanation,
-	getTemplateError: ( state ) => state.templateError,
-	getTemplateRequestPrompt: ( state ) => state.templateRequestPrompt,
-	getTemplateResultRef: ( state ) => state.templateRef,
-	getTemplateContextSignature: ( state ) => state.templateContextSignature,
-	getTemplateRequestToken: ( state ) => state.templateRequestToken,
-	getTemplateResultToken: ( state ) => state.templateResultToken,
-	isTemplateLoading: ( state ) => state.templateStatus === 'loading',
-	getTemplateStatus: ( state ) => state.templateStatus,
-	getTemplateSelectedSuggestionKey: ( state ) =>
+	getTemplateRecommendations: (state) => state.templateRecommendations,
+	getTemplateExplanation: (state) => state.templateExplanation,
+	getTemplateError: (state) => state.templateError,
+	getTemplateRequestPrompt: (state) => state.templateRequestPrompt,
+	getTemplateResultRef: (state) => state.templateRef,
+	getTemplateContextSignature: (state) => state.templateContextSignature,
+	getTemplateRequestToken: (state) => state.templateRequestToken,
+	getTemplateResultToken: (state) => state.templateResultToken,
+	isTemplateLoading: (state) => state.templateStatus === 'loading',
+	getTemplateStatus: (state) => state.templateStatus,
+	getTemplateSelectedSuggestionKey: (state) =>
 		state.templateSelectedSuggestionKey,
-	getTemplateApplyStatus: ( state ) => state.templateApplyStatus,
-	getTemplateApplyError: ( state ) => state.templateApplyError,
-	isTemplateApplying: ( state ) => state.templateApplyStatus === 'applying',
-	getTemplateLastAppliedSuggestionKey: ( state ) =>
+	getTemplateApplyStatus: (state) => state.templateApplyStatus,
+	getTemplateApplyError: (state) => state.templateApplyError,
+	isTemplateApplying: (state) => state.templateApplyStatus === 'applying',
+	getTemplateLastAppliedSuggestionKey: (state) =>
 		state.templateLastAppliedSuggestionKey,
-	getTemplateLastAppliedOperations: ( state ) =>
+	getTemplateLastAppliedOperations: (state) =>
 		state.templateLastAppliedOperations,
-	getTemplatePartRecommendations: ( state ) =>
-		state.templatePartRecommendations,
-	getTemplatePartExplanation: ( state ) => state.templatePartExplanation,
-	getTemplatePartError: ( state ) => state.templatePartError,
-	getTemplatePartRequestPrompt: ( state ) => state.templatePartRequestPrompt,
-	getTemplatePartResultRef: ( state ) => state.templatePartRef,
-	getTemplatePartContextSignature: ( state ) =>
+	getTemplatePartRecommendations: (state) => state.templatePartRecommendations,
+	getTemplatePartExplanation: (state) => state.templatePartExplanation,
+	getTemplatePartError: (state) => state.templatePartError,
+	getTemplatePartRequestPrompt: (state) => state.templatePartRequestPrompt,
+	getTemplatePartResultRef: (state) => state.templatePartRef,
+	getTemplatePartContextSignature: (state) =>
 		state.templatePartContextSignature,
-	getTemplatePartRequestToken: ( state ) => state.templatePartRequestToken,
-	getTemplatePartResultToken: ( state ) => state.templatePartResultToken,
-	isTemplatePartLoading: ( state ) => state.templatePartStatus === 'loading',
-	getTemplatePartStatus: ( state ) => state.templatePartStatus,
-	getTemplatePartSelectedSuggestionKey: ( state ) =>
+	getTemplatePartRequestToken: (state) => state.templatePartRequestToken,
+	getTemplatePartResultToken: (state) => state.templatePartResultToken,
+	isTemplatePartLoading: (state) => state.templatePartStatus === 'loading',
+	getTemplatePartStatus: (state) => state.templatePartStatus,
+	getTemplatePartSelectedSuggestionKey: (state) =>
 		state.templatePartSelectedSuggestionKey,
-	getTemplatePartApplyStatus: ( state ) => state.templatePartApplyStatus,
-	getTemplatePartApplyError: ( state ) => state.templatePartApplyError,
-	isTemplatePartApplying: ( state ) =>
+	getTemplatePartApplyStatus: (state) => state.templatePartApplyStatus,
+	getTemplatePartApplyError: (state) => state.templatePartApplyError,
+	isTemplatePartApplying: (state) =>
 		state.templatePartApplyStatus === 'applying',
-	getTemplatePartLastAppliedSuggestionKey: ( state ) =>
+	getTemplatePartLastAppliedSuggestionKey: (state) =>
 		state.templatePartLastAppliedSuggestionKey,
-	getTemplatePartLastAppliedOperations: ( state ) =>
+	getTemplatePartLastAppliedOperations: (state) =>
 		state.templatePartLastAppliedOperations,
-	getGlobalStylesRecommendations: ( state ) => state.globalStylesSuggestions,
-	getGlobalStylesExplanation: ( state ) => state.globalStylesExplanation,
-	getGlobalStylesError: ( state ) => state.globalStylesError,
-	getGlobalStylesRequestPrompt: ( state ) => state.globalStylesRequestPrompt,
-	getGlobalStylesResultRef: ( state ) => state.globalStylesEntityId,
-	getGlobalStylesScopeKey: ( state ) => state.globalStylesScopeKey,
-	getGlobalStylesContextSignature: ( state ) =>
+	getGlobalStylesRecommendations: (state) => state.globalStylesSuggestions,
+	getGlobalStylesExplanation: (state) => state.globalStylesExplanation,
+	getGlobalStylesError: (state) => state.globalStylesError,
+	getGlobalStylesRequestPrompt: (state) => state.globalStylesRequestPrompt,
+	getGlobalStylesResultRef: (state) => state.globalStylesEntityId,
+	getGlobalStylesScopeKey: (state) => state.globalStylesScopeKey,
+	getGlobalStylesContextSignature: (state) =>
 		state.globalStylesContextSignature,
-	getGlobalStylesRequestToken: ( state ) => state.globalStylesRequestToken,
-	getGlobalStylesResultToken: ( state ) => state.globalStylesResultToken,
-	isGlobalStylesLoading: ( state ) => state.globalStylesStatus === 'loading',
-	getGlobalStylesStatus: ( state ) => state.globalStylesStatus,
-	getGlobalStylesSelectedSuggestionKey: ( state ) =>
+	getGlobalStylesRequestToken: (state) => state.globalStylesRequestToken,
+	getGlobalStylesResultToken: (state) => state.globalStylesResultToken,
+	isGlobalStylesLoading: (state) => state.globalStylesStatus === 'loading',
+	getGlobalStylesStatus: (state) => state.globalStylesStatus,
+	getGlobalStylesSelectedSuggestionKey: (state) =>
 		state.globalStylesSelectedSuggestionKey,
-	getGlobalStylesApplyStatus: ( state ) => state.globalStylesApplyStatus,
-	getGlobalStylesApplyError: ( state ) => state.globalStylesApplyError,
-	isGlobalStylesApplying: ( state ) =>
+	getGlobalStylesApplyStatus: (state) => state.globalStylesApplyStatus,
+	getGlobalStylesApplyError: (state) => state.globalStylesApplyError,
+	isGlobalStylesApplying: (state) =>
 		state.globalStylesApplyStatus === 'applying',
-	getGlobalStylesLastAppliedSuggestionKey: ( state ) =>
+	getGlobalStylesLastAppliedSuggestionKey: (state) =>
 		state.globalStylesLastAppliedSuggestionKey,
-	getGlobalStylesLastAppliedOperations: ( state ) =>
+	getGlobalStylesLastAppliedOperations: (state) =>
 		state.globalStylesLastAppliedOperations,
-	getStyleBookRecommendations: ( state ) => state.styleBookSuggestions,
-	getStyleBookExplanation: ( state ) => state.styleBookExplanation,
-	getStyleBookError: ( state ) => state.styleBookError,
-	getStyleBookRequestPrompt: ( state ) => state.styleBookRequestPrompt,
-	getStyleBookResultRef: ( state ) => state.styleBookScopeKey,
-	getStyleBookScopeKey: ( state ) => state.styleBookScopeKey,
-	getStyleBookGlobalStylesId: ( state ) => state.styleBookGlobalStylesId,
-	getStyleBookBlockName: ( state ) => state.styleBookBlockName,
-	getStyleBookBlockTitle: ( state ) => state.styleBookBlockTitle,
-	getStyleBookContextSignature: ( state ) => state.styleBookContextSignature,
-	getStyleBookRequestToken: ( state ) => state.styleBookRequestToken,
-	getStyleBookResultToken: ( state ) => state.styleBookResultToken,
-	isStyleBookLoading: ( state ) => state.styleBookStatus === 'loading',
-	getStyleBookStatus: ( state ) => state.styleBookStatus,
-	getStyleBookSelectedSuggestionKey: ( state ) =>
+	getStyleBookRecommendations: (state) => state.styleBookSuggestions,
+	getStyleBookExplanation: (state) => state.styleBookExplanation,
+	getStyleBookError: (state) => state.styleBookError,
+	getStyleBookRequestPrompt: (state) => state.styleBookRequestPrompt,
+	getStyleBookResultRef: (state) => state.styleBookScopeKey,
+	getStyleBookScopeKey: (state) => state.styleBookScopeKey,
+	getStyleBookGlobalStylesId: (state) => state.styleBookGlobalStylesId,
+	getStyleBookBlockName: (state) => state.styleBookBlockName,
+	getStyleBookBlockTitle: (state) => state.styleBookBlockTitle,
+	getStyleBookContextSignature: (state) => state.styleBookContextSignature,
+	getStyleBookRequestToken: (state) => state.styleBookRequestToken,
+	getStyleBookResultToken: (state) => state.styleBookResultToken,
+	isStyleBookLoading: (state) => state.styleBookStatus === 'loading',
+	getStyleBookStatus: (state) => state.styleBookStatus,
+	getStyleBookSelectedSuggestionKey: (state) =>
 		state.styleBookSelectedSuggestionKey,
-	getStyleBookApplyStatus: ( state ) => state.styleBookApplyStatus,
-	getStyleBookApplyError: ( state ) => state.styleBookApplyError,
-	isStyleBookApplying: ( state ) => state.styleBookApplyStatus === 'applying',
-	getStyleBookLastAppliedSuggestionKey: ( state ) =>
+	getStyleBookApplyStatus: (state) => state.styleBookApplyStatus,
+	getStyleBookApplyError: (state) => state.styleBookApplyError,
+	isStyleBookApplying: (state) => state.styleBookApplyStatus === 'applying',
+	getStyleBookLastAppliedSuggestionKey: (state) =>
 		state.styleBookLastAppliedSuggestionKey,
-	getStyleBookLastAppliedOperations: ( state ) =>
+	getStyleBookLastAppliedOperations: (state) =>
 		state.styleBookLastAppliedOperations,
-	getSurfaceInteractionContract: ( state, surface ) => {
+	getSurfaceInteractionContract: (state, surface) => {
 		void state;
 
-		return getSurfaceContract( surface );
+		return getSurfaceContract(surface);
 	},
-	isSurfaceAdvisoryOnly: ( state, surface ) => {
+	isSurfaceAdvisoryOnly: (state, surface) => {
 		void state;
 
-		return Boolean( getSurfaceContract( surface )?.advisoryOnly );
+		return Boolean(getSurfaceContract(surface)?.advisoryOnly);
 	},
-	isSurfacePreviewRequired: ( state, surface ) => {
+	isSurfacePreviewRequired: (state, surface) => {
 		void state;
 
-		return Boolean( getSurfaceContract( surface )?.previewRequired );
+		return Boolean(getSurfaceContract(surface)?.previewRequired);
 	},
-	isSurfaceApplyAllowed: ( state, surface, options = {} ) => {
+	isSurfaceApplyAllowed: (state, surface, options = {}) => {
 		void state;
 
-		return isSurfaceApplyAllowedForState( surface, options );
+		return isSurfaceApplyAllowedForState(surface, options);
 	},
-	getSurfaceInteractionState: ( state, surface, options = {} ) => {
+	getSurfaceInteractionState: (state, surface, options = {}) => {
 		void state;
 
-		return getNormalizedInteractionState( surface, options );
+		return getNormalizedInteractionState(surface, options);
 	},
-	getSurfaceStatusNotice: ( state, surface, options = {} ) => {
+	getSurfaceStatusNotice: (state, surface, options = {}) => {
 		void state;
 
-		return getSurfaceStatusNotice( surface, options );
+		return getSurfaceStatusNotice(surface, options);
 	},
-	getBlockInteractionState: ( state, clientId, options = {} ) =>
-		getNormalizedInteractionState( 'block', {
-			requestStatus: getStoredBlockRequestState( state, clientId ).status,
-			requestError: getBlockRequestError( state, clientId ),
-			hasResult: getBlockHasResult( state, clientId ),
+	getBlockInteractionState: (state, clientId, options = {}) =>
+		getNormalizedInteractionState('block', {
+			requestStatus: getStoredBlockRequestState(state, clientId).status,
+			requestError: getBlockRequestError(state, clientId),
+			applyStatus: getStoredBlockRequestState(state, clientId).applyStatus,
+			applyError: getBlockApplyError(state, clientId),
+			hasResult: getBlockHasResult(state, clientId),
 			undoStatus: state.undoStatus,
-			undoError: normalizeStringMessage( options.undoError ),
-			hasSuccess: Boolean( options.hasSuccess ),
-			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			undoError: normalizeStringMessage(options.undoError),
+			hasSuccess: Boolean(options.hasSuccess),
+			hasUndoSuccess: Boolean(options.hasUndoSuccess),
 			...options,
-		} ),
-	getNavigationInteractionState: (
-		state,
-		blockClientId = null,
-		options = {}
-	) =>
-		getNormalizedInteractionState( 'navigation', {
+		}),
+	getNavigationInteractionState: (state, blockClientId = null, options = {}) =>
+		getNormalizedInteractionState('navigation', {
 			requestStatus:
 				blockClientId && state.navigationBlockClientId !== blockClientId
 					? 'idle'
 					: state.navigationStatus,
-			requestError: getNavigationRequestError( state, blockClientId ),
-			hasResult: getNavigationHasResult( state, blockClientId ),
+			requestError: getNavigationRequestError(state, blockClientId),
+			hasResult: getNavigationHasResult(state, blockClientId),
 			hasSuggestions:
-				selectors.getNavigationRecommendations( state, blockClientId )
-					.length > 0,
+				selectors.getNavigationRecommendations(state, blockClientId).length > 0,
 			...options,
-		} ),
-	getContentInteractionState: ( state, options = {} ) =>
-		getNormalizedInteractionState( 'content', {
+		}),
+	getContentInteractionState: (state, options = {}) =>
+		getNormalizedInteractionState('content', {
 			requestStatus: state.contentStatus,
-			requestError: normalizeStringMessage( state.contentError ),
-			hasResult: getContentHasResult( state ),
+			requestError: normalizeStringMessage(state.contentError),
+			hasResult: getContentHasResult(state),
 			hasSuggestions: Boolean(
 				state.contentRecommendation?.content ||
 					state.contentRecommendation?.summary ||
 					state.contentRecommendation?.title ||
-					( Array.isArray( state.contentRecommendation?.notes ) &&
-						state.contentRecommendation.notes.length > 0 ) ||
-					( Array.isArray( state.contentRecommendation?.issues ) &&
-						state.contentRecommendation.issues.length > 0 )
+					(Array.isArray(state.contentRecommendation?.notes) &&
+						state.contentRecommendation.notes.length > 0) ||
+					(Array.isArray(state.contentRecommendation?.issues) &&
+						state.contentRecommendation.issues.length > 0)
 			),
 			...options,
-		} ),
-	getTemplateInteractionState: ( state, options = {} ) =>
-		getNormalizedInteractionState( 'template', {
+		}),
+	getTemplateInteractionState: (state, options = {}) =>
+		getNormalizedInteractionState('template', {
 			requestStatus: state.templateStatus,
-			requestError: normalizeStringMessage( state.templateError ),
+			requestError: normalizeStringMessage(state.templateError),
 			applyStatus: state.templateApplyStatus,
-			applyError: normalizeStringMessage( state.templateApplyError ),
+			applyError: normalizeStringMessage(state.templateApplyError),
 			undoStatus: state.undoStatus,
-			undoError: normalizeStringMessage( options.undoError ),
-			hasResult: getTemplateHasResult( state ),
+			undoError: normalizeStringMessage(options.undoError),
+			hasResult: getTemplateHasResult(state),
 			hasPreview: Boolean(
 				options.hasPreview ?? state.templateSelectedSuggestionKey
 			),
-			hasSuccess: Boolean( options.hasSuccess ),
-			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			hasSuccess: Boolean(options.hasSuccess),
+			hasUndoSuccess: Boolean(options.hasUndoSuccess),
 			...options,
-		} ),
-	getTemplatePartInteractionState: ( state, options = {} ) =>
-		getNormalizedInteractionState( 'template-part', {
+		}),
+	getTemplatePartInteractionState: (state, options = {}) =>
+		getNormalizedInteractionState('template-part', {
 			requestStatus: state.templatePartStatus,
-			requestError: normalizeStringMessage( state.templatePartError ),
+			requestError: normalizeStringMessage(state.templatePartError),
 			applyStatus: state.templatePartApplyStatus,
-			applyError: normalizeStringMessage( state.templatePartApplyError ),
+			applyError: normalizeStringMessage(state.templatePartApplyError),
 			undoStatus: state.undoStatus,
-			undoError: normalizeStringMessage( options.undoError ),
-			hasResult: getTemplatePartHasResult( state ),
+			undoError: normalizeStringMessage(options.undoError),
+			hasResult: getTemplatePartHasResult(state),
 			hasPreview: Boolean(
 				options.hasPreview ?? state.templatePartSelectedSuggestionKey
 			),
-			hasSuccess: Boolean( options.hasSuccess ),
-			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			hasSuccess: Boolean(options.hasSuccess),
+			hasUndoSuccess: Boolean(options.hasUndoSuccess),
 			...options,
-		} ),
-	getGlobalStylesInteractionState: ( state, options = {} ) =>
-		getNormalizedInteractionState( 'global-styles', {
+		}),
+	getGlobalStylesInteractionState: (state, options = {}) =>
+		getNormalizedInteractionState('global-styles', {
 			requestStatus: state.globalStylesStatus,
-			requestError: normalizeStringMessage( state.globalStylesError ),
+			requestError: normalizeStringMessage(state.globalStylesError),
 			applyStatus: state.globalStylesApplyStatus,
-			applyError: normalizeStringMessage( state.globalStylesApplyError ),
+			applyError: normalizeStringMessage(state.globalStylesApplyError),
 			undoStatus: state.undoStatus,
-			undoError: normalizeStringMessage( options.undoError ),
-			hasResult: getGlobalStylesHasResult( state ),
+			undoError: normalizeStringMessage(options.undoError),
+			hasResult: getGlobalStylesHasResult(state),
 			hasPreview: Boolean(
 				options.hasPreview ?? state.globalStylesSelectedSuggestionKey
 			),
-			hasSuccess: Boolean( options.hasSuccess ),
-			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			hasSuccess: Boolean(options.hasSuccess),
+			hasUndoSuccess: Boolean(options.hasUndoSuccess),
 			...options,
-		} ),
-	getStyleBookInteractionState: ( state, options = {} ) =>
-		getNormalizedInteractionState( 'style-book', {
+		}),
+	getStyleBookInteractionState: (state, options = {}) =>
+		getNormalizedInteractionState('style-book', {
 			requestStatus: state.styleBookStatus,
-			requestError: normalizeStringMessage( state.styleBookError ),
+			requestError: normalizeStringMessage(state.styleBookError),
 			applyStatus: state.styleBookApplyStatus,
-			applyError: normalizeStringMessage( state.styleBookApplyError ),
+			applyError: normalizeStringMessage(state.styleBookApplyError),
 			undoStatus: state.undoStatus,
-			undoError: normalizeStringMessage( options.undoError ),
-			hasResult: getStyleBookHasResult( state ),
+			undoError: normalizeStringMessage(options.undoError),
+			hasResult: getStyleBookHasResult(state),
 			hasPreview: Boolean(
 				options.hasPreview ?? state.styleBookSelectedSuggestionKey
 			),
-			hasSuccess: Boolean( options.hasSuccess ),
-			hasUndoSuccess: Boolean( options.hasUndoSuccess ),
+			hasSuccess: Boolean(options.hasSuccess),
+			hasUndoSuccess: Boolean(options.hasUndoSuccess),
 			...options,
-		} ),
+		}),
 };
 
-const store = createReduxStore( STORE_NAME, { reducer, actions, selectors } );
+const store = createReduxStore(STORE_NAME, { reducer, actions, selectors });
 
-register( store );
+register(store);
 
 export { actions, reducer, selectors, STORE_NAME };
 export default store;

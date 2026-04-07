@@ -152,7 +152,7 @@ function formatBadgeLabel( value = '' ) {
 }
 
 function getToneLabel( suggestion ) {
-	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual';
+	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual ideas';
 }
 
 function OperationList( {
@@ -187,6 +187,7 @@ function GlobalStylesPanel( {
 	isLoading,
 	isApplying,
 	isUndoing,
+	isStale,
 	selectedSuggestion,
 	suggestions,
 	explanation,
@@ -211,8 +212,18 @@ function GlobalStylesPanel( {
 	const manualSuggestions = suggestions.filter(
 		( suggestion ) => suggestion?.tone !== 'executable'
 	);
-	const featuredSuggestion =
-		executableSuggestions[ 0 ] || manualSuggestions[ 0 ] || null;
+	const featuredSuggestion = isStale
+		? null
+		: executableSuggestions[ 0 ] || manualSuggestions[ 0 ] || null;
+	let reviewHint = '';
+
+	if ( isStale ) {
+		reviewHint =
+			'This review is stale. Refresh recommendations before applying these operations.';
+	} else if ( showSecondaryGuidance ) {
+		reviewHint =
+			'Only the operations shown here will run against the current Global Styles scope.';
+	}
 
 	const renderSuggestionCard = ( suggestion ) => (
 		<div
@@ -276,6 +287,7 @@ function GlobalStylesPanel( {
 								onReview( suggestion.suggestionKey )
 							}
 							className="flavor-agent-card__apply"
+							disabled={ isStale }
 						>
 							{ selectedSuggestion?.suggestionKey ===
 							suggestion.suggestionKey
@@ -320,6 +332,13 @@ function GlobalStylesPanel( {
 				scopeLabel="Global Styles"
 				isFresh={ hasMatchingResult }
 				hasResult={ hasResult }
+				staleReason={
+					isStale
+						? 'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+						: ''
+				}
+				onRefresh={ isStale ? onRequest : undefined }
+				isRefreshing={ isLoading }
 			/>
 			<AIStatusNotice
 				notice={ panelNotice }
@@ -351,12 +370,12 @@ function GlobalStylesPanel( {
 			/>
 
 			{ inlineNotice && ! selectedSuggestion && (
-					<AIStatusNotice
-						notice={ inlineNotice }
-						onAction={ onNoticeAction }
-						className="flavor-agent-style-feedback-notice"
-					/>
-				) }
+				<AIStatusNotice
+					notice={ inlineNotice }
+					onAction={ onNoticeAction }
+					className="flavor-agent-style-feedback-notice"
+				/>
+			) }
 
 			{ explanation && suggestions.length > 0 && (
 				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
@@ -382,7 +401,7 @@ function GlobalStylesPanel( {
 
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Review First"
+					title="Review first"
 					tone="Review first"
 					count={ executableSuggestions.length }
 					countNoun="suggestion"
@@ -398,8 +417,8 @@ function GlobalStylesPanel( {
 
 			{ manualSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Manual Ideas"
-					tone="Manual"
+					title="Manual ideas"
+					tone="Manual ideas"
 					count={ manualSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -415,21 +434,17 @@ function GlobalStylesPanel( {
 			{ selectedSuggestion && (
 				<AIReviewSection
 					title="Review Before Apply"
-					statusLabel="Executable"
+					statusLabel="Review first"
 					count={ selectedSuggestion.operations?.length || 0 }
 					summary={ selectedSuggestion.description }
 					onConfirm={ onApply }
 					onCancel={ onCancelReview }
-					confirmDisabled={ isApplying }
+					confirmDisabled={ isApplying || isStale }
 					confirmLabel={
 						isApplying ? 'Applying…' : 'Apply Style Change'
 					}
 					className="flavor-agent-style-review"
-					hint={
-						showSecondaryGuidance
-							? 'Only the operations shown here will run against the current Global Styles scope.'
-							: ''
-					}
+					hint={ reviewHint }
 				>
 					{ inlineNotice && (
 						<AIStatusNotice
@@ -628,24 +643,27 @@ export default function GlobalStylesRecommender() {
 			themeTokenDiagnostics,
 			executionContract,
 		} );
-	const hasMatchingResult = Boolean(
+	const hasStoredResultForScope = Boolean(
 		scope?.globalStylesId &&
 			currentResultRef === scope.globalStylesId &&
-			status === 'ready' &&
-			currentResultContextSignature &&
-			currentResultContextSignature === recommendationContextSignature
-	);
-	const suggestions = useMemo(
-		() => ( hasMatchingResult ? rawSuggestions : [] ),
-		[ hasMatchingResult, rawSuggestions ]
-	);
-	const explanation = hasMatchingResult ? currentExplanation : '';
-	const hasResult = Boolean(
-		scope?.globalStylesId &&
-			currentResultRef === scope.globalStylesId &&
-			status === 'ready' &&
 			currentResultContextSignature
 	);
+	const hasMatchingResult = Boolean(
+		hasStoredResultForScope &&
+			status === 'ready' &&
+			currentResultContextSignature === recommendationContextSignature
+	);
+	const isStaleResult = Boolean(
+		hasStoredResultForScope &&
+			currentResultContextSignature !== recommendationContextSignature
+	);
+	const suggestions = useMemo(
+		() => ( hasMatchingResult || isStaleResult ? rawSuggestions : [] ),
+		[ hasMatchingResult, isStaleResult, rawSuggestions ]
+	);
+	const explanation =
+		hasMatchingResult || isStaleResult ? currentExplanation : '';
+	const hasResult = hasMatchingResult || isStaleResult;
 	const selectedSuggestion = useMemo(
 		() =>
 			suggestions.find(
@@ -662,8 +680,7 @@ export default function GlobalStylesRecommender() {
 		() => getLatestUndoableActivity( activityEntries )?.id || null,
 		[ activityEntries ]
 	);
-	const showSecondaryGuidance =
-		! hasMatchingResult && activityEntries.length === 0;
+	const showSecondaryGuidance = ! hasResult && activityEntries.length === 0;
 	const hasApplySuccess =
 		applyStatus === 'success' &&
 		Boolean( latestGlobalStylesActivity ) &&
@@ -690,6 +707,8 @@ export default function GlobalStylesRecommender() {
 				applySuccessMessage: hasApplySuccess
 					? 'Flavor Agent applied the selected Global Styles change.'
 					: '',
+				requestStatus: status,
+				isStale: isStaleResult,
 				hasResult,
 				hasSuggestions: suggestions.length > 0,
 				hasPreview: Boolean( selectedSuggestion ),
@@ -799,21 +818,11 @@ export default function GlobalStylesRecommender() {
 			return;
 		}
 
-		const hasStoredResultForScope = Boolean(
-			currentGlobalStylesId &&
-				currentResultRef === currentGlobalStylesId &&
-				currentResultContextSignature
-		);
-		const shouldClearRecommendations =
-			entityChanged ||
-			( recommendationContextChanged &&
-				( hasStoredResultForScope || isLoading ) );
-
 		previousGlobalStylesId.current = currentGlobalStylesId;
 		previousRecommendationContextSignature.current =
 			recommendationContextSignature;
 
-		if ( ! shouldClearRecommendations ) {
+		if ( ! entityChanged ) {
 			return;
 		}
 
@@ -824,9 +833,6 @@ export default function GlobalStylesRecommender() {
 		}
 	}, [
 		clearGlobalStylesRecommendations,
-		currentResultContextSignature,
-		currentResultRef,
-		isLoading,
 		recommendationContextSignature,
 		scope?.globalStylesId,
 	] );
@@ -866,9 +872,16 @@ export default function GlobalStylesRecommender() {
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
-			applyGlobalStylesSuggestion( selectedSuggestion );
+			applyGlobalStylesSuggestion(
+				selectedSuggestion,
+				recommendationContextSignature
+			);
 		}
-	}, [ applyGlobalStylesSuggestion, selectedSuggestion ] );
+	}, [
+		applyGlobalStylesSuggestion,
+		recommendationContextSignature,
+		selectedSuggestion,
+	] );
 
 	const handleUndo = useCallback(
 		( activityId ) => {
@@ -891,6 +904,7 @@ export default function GlobalStylesRecommender() {
 			isLoading={ isLoading }
 			isApplying={ isApplying }
 			isUndoing={ undoStatus === 'undoing' }
+			isStale={ isStaleResult }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }

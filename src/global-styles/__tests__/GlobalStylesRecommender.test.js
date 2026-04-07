@@ -9,6 +9,7 @@ const mockGetGlobalStylesUserConfig = jest.fn();
 const mockGetGlobalStylesActivityUndoState = jest.fn();
 const mockRenderAIStatusNotice = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
+const mockRenderAIReviewSection = jest.fn();
 const mockGetStyleBookUiState = jest.fn();
 const mockSubscribeToStyleBookUi = jest.fn();
 let mockSurfaceCapability = null;
@@ -85,12 +86,36 @@ jest.mock( '../../components/AIActivitySection', () => {
 		} );
 	};
 } );
-jest.mock(
-	'../../components/AIReviewSection',
-	() =>
-		( { children } ) =>
-			children
-);
+jest.mock( '../../components/AIReviewSection', () => {
+	const { createElement } = require( '@wordpress/element' );
+
+	return ( props ) => {
+		mockRenderAIReviewSection( props );
+
+		return createElement(
+			'section',
+			{ 'data-review-section': 'true' },
+			createElement(
+				'div',
+				{ 'data-review-title': 'true' },
+				props.title || ''
+			),
+			createElement(
+				'div',
+				{ 'data-review-status': 'true' },
+				props.statusLabel || ''
+			),
+			props.summary
+				? createElement(
+						'div',
+						{ 'data-review-summary': 'true' },
+						props.summary
+				  )
+				: null,
+			props.children
+		);
+	};
+} );
 
 jest.mock( '../../utils/capability-flags', () => ( {
 	getSurfaceCapability: () =>
@@ -740,9 +765,14 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( sidebar.textContent ).toContain( 'Global Styles' );
 		expect( sidebar.textContent ).toContain( 'Stale' );
 		expect( sidebar.textContent ).toContain(
-			'Context has changed since the last request.'
+			'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
 		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect(
+			Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Review'
+			)?.disabled
+		).toBe( true );
 	} );
 
 	test( 'does not show the current scope badge when the latest Global Styles request failed', () => {
@@ -826,7 +856,7 @@ describe( 'GlobalStylesRecommender', () => {
 		);
 	} );
 
-	test( 'clears stale results after the active Global Styles config changes on the same entity', () => {
+	test( 'preserves stale results after the active Global Styles config changes on the same entity', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -872,16 +902,15 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
-			1
-		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
-		expect( sidebar.textContent ).not.toContain(
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain(
 			'Prefer accent palette values.'
 		);
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
-	test( 'clears stale results after template viewport visibility changes', () => {
+	test( 'preserves stale results after template viewport visibility changes', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -944,13 +973,12 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
-			1
-		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
-	test( 'clears stale results after template semantic context changes without structure drift', () => {
+	test( 'preserves stale results after template semantic context changes without structure drift', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -1018,13 +1046,12 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
-			1
-		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
-	test( 'clears stale results after block editor settings change the theme token diagnostics', () => {
+	test( 'preserves stale results after block editor settings change the theme token diagnostics', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -1065,16 +1092,15 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
-			1
-		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
-		expect( sidebar.textContent ).not.toContain(
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain(
 			'Prefer accent palette values.'
 		);
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
-	test( 'clears stale results after supported style paths change without diagnostics drift', () => {
+	test( 'preserves stale results after supported style paths change without diagnostics drift', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -1123,13 +1149,12 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
-			1
-		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
-	test( 'clears stale results after preset slugs change without diagnostics drift', () => {
+	test( 'preserves stale results after preset slugs change without diagnostics drift', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -1175,10 +1200,9 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
-		expect( mockClearGlobalStylesRecommendations ).toHaveBeenCalledTimes(
-			1
-		);
-		expect( sidebar.textContent ).not.toContain( 'Use accent canvas' );
+		expect( mockClearGlobalStylesRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
 	test( 'renders shared style card badges and review state for executable suggestions', () => {
@@ -1215,10 +1239,24 @@ describe( 'GlobalStylesRecommender', () => {
 			getRoot().render( <GlobalStylesRecommender /> );
 		} );
 
+		const reviewSection = sidebar.querySelector(
+			'[data-review-section="true"]'
+		);
+
+		expect( reviewSection ).not.toBeNull();
 		expect( sidebar.textContent ).toContain( 'Review first' );
 		expect( sidebar.textContent ).toContain( 'Color' );
 		expect( sidebar.textContent ).toContain( 'Review open' );
 		expect( sidebar.textContent ).toContain( 'color.background → accent' );
+		expect( mockRenderAIReviewSection ).toHaveBeenLastCalledWith(
+			expect.objectContaining( {
+				title: 'Review Before Apply',
+				statusLabel: 'Review first',
+				confirmLabel: 'Apply Style Change',
+				onCancel: expect.any( Function ),
+				onConfirm: expect.any( Function ),
+			} )
+		);
 		expect( sidebar.textContent ).not.toContain(
 			'Raw CSS and custom CSS are out of scope.'
 		);

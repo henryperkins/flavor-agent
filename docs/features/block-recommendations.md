@@ -21,7 +21,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Shared Interaction Model
 
-- Learned-once sequence: scope/freshness -> prompt -> featured recommendation -> grouped lanes -> undo and history
+- Learned-once sequence: intro -> scope/freshness -> prompt -> status -> featured recommendation -> grouped lanes -> embedded navigation when present -> undo and history
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
 - Fresh results now surface one featured next step before the grouped `Apply now` and `Manual ideas` lanes
@@ -196,7 +196,7 @@ User selects block + prompt
 | Layer | Function / class | Role |
 |---|---|---|
 | UI shell | `withAIRecommendations()` in `src/inspector/InspectorInjector.js` | Injects the panel into the native Inspector |
-| UI state | `BlockRecommendationsContent()` in `src/inspector/BlockRecommendationsPanel.js` | Renders scope/freshness, prompt, featured recommendation, grouped lanes, activity, and undo |
+| UI state | `BlockRecommendationsContent()` in `src/inspector/BlockRecommendationsPanel.js` | Renders intro, scope/freshness, prompt, status, featured recommendation, grouped lanes, embedded navigation, activity, and undo |
 | Context collection | `collectBlockContext()` in `src/context/collector.js` | Builds the client snapshot sent to the backend |
 | Store request | `fetchBlockRecommendations()` in `src/store/index.js` | Sends the recommendation request and stores the result |
 | Store apply | `applySuggestion()` in `src/store/index.js` | Applies bounded attribute updates and records activity |

@@ -1,69 +1,76 @@
-jest.mock( '../../utils/template-actions', () => ( {
+jest.mock('../../utils/template-actions', () => ({
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn(
-		( activity ) => activity?.undo || {}
-	),
+	getTemplateActivityUndoState: jest.fn((activity) => activity?.undo || {}),
 	undoTemplateSuggestionOperations: jest.fn(),
-} ) );
+}));
 
 import { actions, reducer, selectors } from '../index';
 
-describe( 'block request state', () => {
-	beforeEach( () => {
+describe('block request state', () => {
+	beforeEach(() => {
 		actions._blockRecommendationAbort = null;
-	} );
+	});
 
-	test( 'loading state is isolated per clientId', () => {
+	test('loading state is isolated per clientId', () => {
 		const state = reducer(
 			undefined,
-			actions.setBlockRequestState( 'block-a', 'loading', null, 1 )
+			actions.setBlockRequestState('block-a', 'loading', null, 1)
 		);
 
-		expect( selectors.isBlockLoading( state, 'block-a' ) ).toBe( true );
-		expect( selectors.isBlockLoading( state, 'block-b' ) ).toBe( false );
-		expect( selectors.getBlockStatus( state, 'block-b' ) ).toBe( 'idle' );
-	} );
+		expect(selectors.isBlockLoading(state, 'block-a')).toBe(true);
+		expect(selectors.isBlockLoading(state, 'block-b')).toBe(false);
+		expect(selectors.getBlockStatus(state, 'block-b')).toBe('idle');
+	});
 
-	test( 'error state is isolated per clientId', () => {
+	test('error state is isolated per clientId', () => {
 		const state = reducer(
 			undefined,
-			actions.setBlockRequestState(
+			actions.setBlockRequestState('block-a', 'error', 'Block A failed.', 1)
+		);
+
+		expect(selectors.getBlockError(state, 'block-a')).toBe('Block A failed.');
+		expect(selectors.getBlockError(state, 'block-b')).toBeNull();
+	});
+
+	test('block apply state is isolated per clientId', () => {
+		const state = reducer(
+			undefined,
+			actions.setBlockApplyState(
 				'block-a',
 				'error',
-				'Block A failed.',
-				1
+				'This result is stale. Refresh recommendations before applying it.'
 			)
 		);
 
-		expect( selectors.getBlockError( state, 'block-a' ) ).toBe(
-			'Block A failed.'
+		expect(selectors.getBlockApplyError(state, 'block-a')).toBe(
+			'This result is stale. Refresh recommendations before applying it.'
 		);
-		expect( selectors.getBlockError( state, 'block-b' ) ).toBeNull();
-	} );
+		expect(selectors.getBlockApplyError(state, 'block-b')).toBeNull();
+	});
 
-	test( 'stale completions are ignored for the same block', () => {
+	test('stale completions are ignored for the same block', () => {
 		let state = reducer(
 			undefined,
-			actions.setBlockRequestState( 'block-a', 'loading', null, 1 )
+			actions.setBlockRequestState('block-a', 'loading', null, 1)
 		);
 
 		state = reducer(
 			state,
-			actions.setBlockRequestState( 'block-a', 'loading', null, 2 )
+			actions.setBlockRequestState('block-a', 'loading', null, 2)
 		);
 		state = reducer(
 			state,
 			actions.setBlockRecommendations(
 				'block-a',
 				{
-					block: [ { label: 'Fresh result' } ],
+					block: [{ label: 'Fresh result' }],
 				},
 				2
 			)
 		);
 		state = reducer(
 			state,
-			actions.setBlockRequestState( 'block-a', 'ready', null, 2 )
+			actions.setBlockRequestState('block-a', 'ready', null, 2)
 		);
 
 		const staleState = reducer(
@@ -71,30 +78,26 @@ describe( 'block request state', () => {
 			actions.setBlockRecommendations(
 				'block-a',
 				{
-					block: [ { label: 'Stale result' } ],
+					block: [{ label: 'Stale result' }],
 				},
 				1
 			)
 		);
 		const finalState = reducer(
 			staleState,
-			actions.setBlockRequestState( 'block-a', 'ready', null, 1 )
+			actions.setBlockRequestState('block-a', 'ready', null, 1)
 		);
 
-		expect(
-			selectors.getBlockRecommendations( finalState, 'block-a' )
-		).toEqual( {
-			block: [ { label: 'Fresh result' } ],
-		} );
-		expect( selectors.getBlockRequestToken( finalState, 'block-a' ) ).toBe(
-			2
-		);
-	} );
+		expect(selectors.getBlockRecommendations(finalState, 'block-a')).toEqual({
+			block: [{ label: 'Fresh result' }],
+		});
+		expect(selectors.getBlockRequestToken(finalState, 'block-a')).toBe(2);
+	});
 
-	test( 'clearing block recommendations also clears request metadata', () => {
+	test('clearing block recommendations also clears request metadata', () => {
 		let state = reducer(
 			undefined,
-			actions.setBlockRequestState( 'block-a', 'error', 'Nope', 3 )
+			actions.setBlockRequestState('block-a', 'error', 'Nope', 3)
 		);
 
 		state = reducer(
@@ -102,7 +105,7 @@ describe( 'block request state', () => {
 			actions.setBlockRecommendations(
 				'block-a',
 				{
-					block: [ { label: 'Suggestion' } ],
+					block: [{ label: 'Suggestion' }],
 				},
 				3
 			)
@@ -115,19 +118,17 @@ describe( 'block request state', () => {
 				abort,
 			},
 		};
-		actions.clearBlockRecommendations( 'block-a' )( { dispatch } );
-		state = reducer( state, dispatch.mock.calls[ 0 ][ 0 ] );
+		actions.clearBlockRecommendations('block-a')({ dispatch });
+		state = reducer(state, dispatch.mock.calls[0][0]);
 
-		expect(
-			selectors.getBlockRecommendations( state, 'block-a' )
-		).toBeNull();
-		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'idle' );
-		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
-		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 0 );
-		expect( abort ).toHaveBeenCalledTimes( 1 );
-	} );
+		expect(selectors.getBlockRecommendations(state, 'block-a')).toBeNull();
+		expect(selectors.getBlockStatus(state, 'block-a')).toBe('idle');
+		expect(selectors.getBlockError(state, 'block-a')).toBeNull();
+		expect(selectors.getBlockRequestToken(state, 'block-a')).toBe(0);
+		expect(abort).toHaveBeenCalledTimes(1);
+	});
 
-	test( 'stores block request diagnostics with the latest successful result and clears them on reload', () => {
+	test('stores block request diagnostics with the latest successful result and clears them on reload', () => {
 		const diagnostics = {
 			hasEmptyBlockResult: true,
 			title: 'No block-lane suggestions returned',
@@ -147,19 +148,54 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getBlockRequestDiagnostics( state, 'block-a' ) ).toEqual(
+		expect(selectors.getBlockRequestDiagnostics(state, 'block-a')).toEqual(
 			diagnostics
 		);
 
 		state = reducer(
 			state,
-			actions.setBlockRequestState( 'block-a', 'loading', null, 3 )
+			actions.setBlockRequestState('block-a', 'loading', null, 3)
 		);
 
-		expect( selectors.getBlockRequestDiagnostics( state, 'block-a' ) ).toBeNull();
-	} );
+		expect(selectors.getBlockRequestDiagnostics(state, 'block-a')).toBeNull();
+	});
 
-	test( 'global styles and style book reducers accept scope.key as well as scope.scopeKey', () => {
+	test('loading a new block request clears prior block apply errors', () => {
+		let state = reducer(
+			undefined,
+			actions.setBlockApplyState(
+				'block-a',
+				'error',
+				'This result is stale. Refresh recommendations before applying it.'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockRequestState('block-a', 'loading', null, 3)
+		);
+
+		expect(selectors.getBlockApplyError(state, 'block-a')).toBeNull();
+		expect(selectors.getBlockApplyStatus(state, 'block-a')).toBe('idle');
+	});
+
+	test('clearBlockError clears block apply errors as well as request errors', () => {
+		let state = reducer(
+			undefined,
+			actions.setBlockApplyState(
+				'block-a',
+				'error',
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.'
+			)
+		);
+
+		state = reducer(state, actions.clearBlockError('block-a'));
+
+		expect(selectors.getBlockApplyError(state, 'block-a')).toBeNull();
+		expect(selectors.getBlockApplyStatus(state, 'block-a')).toBe('idle');
+	});
+
+	test('global styles and style book reducers accept scope.key as well as scope.scopeKey', () => {
 		let state = reducer(
 			undefined,
 			actions.setGlobalStylesRecommendations(
@@ -168,7 +204,7 @@ describe( 'block request state', () => {
 					entityId: '17',
 				},
 				{
-					suggestions: [ { label: 'Use accent canvas' } ],
+					suggestions: [{ label: 'Use accent canvas' }],
 					explanation: 'Editorial palette.',
 				},
 				'Make this feel more editorial.',
@@ -176,10 +212,8 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getGlobalStylesScopeKey( state ) ).toBe(
-			'global_styles:17'
-		);
-		expect( selectors.getGlobalStylesInteractionState( state ) ).toBe(
+		expect(selectors.getGlobalStylesScopeKey(state)).toBe('global_styles:17');
+		expect(selectors.getGlobalStylesInteractionState(state)).toBe(
 			'advisory-ready'
 		);
 
@@ -193,7 +227,7 @@ describe( 'block request state', () => {
 					blockTitle: 'Paragraph',
 				},
 				{
-					suggestions: [ { label: 'Tighten paragraph rhythm' } ],
+					suggestions: [{ label: 'Tighten paragraph rhythm' }],
 					explanation: 'Use a denser type rhythm.',
 				},
 				'Make this paragraph feel more editorial.',
@@ -201,15 +235,15 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getStyleBookScopeKey( state ) ).toBe(
+		expect(selectors.getStyleBookScopeKey(state)).toBe(
 			'style_book:17:core/paragraph'
 		);
-		expect( selectors.getStyleBookInteractionState( state ) ).toBe(
+		expect(selectors.getStyleBookInteractionState(state)).toBe(
 			'advisory-ready'
 		);
-	} );
+	});
 
-	test( 'empty successful results still count as ready across block and editor-wide surfaces', () => {
+	test('empty successful results still count as ready across block and editor-wide surfaces', () => {
 		let state = reducer(
 			undefined,
 			actions.setBlockRecommendations(
@@ -226,10 +260,10 @@ describe( 'block request state', () => {
 		);
 		state = reducer(
 			state,
-			actions.setBlockRequestState( 'block-a', 'ready', null, 1 )
+			actions.setBlockRequestState('block-a', 'ready', null, 1)
 		);
 
-		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+		expect(selectors.getBlockInteractionState(state, 'block-a')).toBe(
 			'advisory-ready'
 		);
 
@@ -247,9 +281,7 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getTemplateInteractionState( state ) ).toBe(
-			'advisory-ready'
-		);
+		expect(selectors.getTemplateInteractionState(state)).toBe('advisory-ready');
 
 		state = reducer(
 			state,
@@ -265,7 +297,7 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getTemplatePartInteractionState( state ) ).toBe(
+		expect(selectors.getTemplatePartInteractionState(state)).toBe(
 			'advisory-ready'
 		);
 
@@ -286,7 +318,7 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getGlobalStylesInteractionState( state ) ).toBe(
+		expect(selectors.getGlobalStylesInteractionState(state)).toBe(
 			'advisory-ready'
 		);
 
@@ -309,12 +341,12 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getStyleBookInteractionState( state ) ).toBe(
+		expect(selectors.getStyleBookInteractionState(state)).toBe(
 			'advisory-ready'
 		);
-	} );
+	});
 
-	test( 'global styles and style book interaction state stays error when the latest request failed', () => {
+	test('global styles and style book interaction state stays error when the latest request failed', () => {
 		let state = reducer(
 			undefined,
 			actions.setGlobalStylesRecommendations(
@@ -333,12 +365,10 @@ describe( 'block request state', () => {
 		);
 		state = reducer(
 			state,
-			actions.setGlobalStylesStatus( 'error', 'Global styles failed.', 1 )
+			actions.setGlobalStylesStatus('error', 'Global styles failed.', 1)
 		);
 
-		expect( selectors.getGlobalStylesInteractionState( state ) ).toBe(
-			'error'
-		);
+		expect(selectors.getGlobalStylesInteractionState(state)).toBe('error');
 
 		state = reducer(
 			state,
@@ -360,21 +390,19 @@ describe( 'block request state', () => {
 		);
 		state = reducer(
 			state,
-			actions.setStyleBookStatus( 'error', 'Style Book failed.', 2 )
+			actions.setStyleBookStatus('error', 'Style Book failed.', 2)
 		);
 
-		expect( selectors.getStyleBookInteractionState( state ) ).toBe(
-			'error'
-		);
-	} );
+		expect(selectors.getStyleBookInteractionState(state)).toBe('error');
+	});
 
-	test( 'normalized block interaction state exposes advisory-ready and inline-apply semantics', () => {
+	test('normalized block interaction state exposes advisory-ready and inline-apply semantics', () => {
 		let state = reducer(
 			undefined,
-			actions.setBlockRequestState( 'block-a', 'loading', null, 1 )
+			actions.setBlockRequestState('block-a', 'loading', null, 1)
 		);
 
-		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+		expect(selectors.getBlockInteractionState(state, 'block-a')).toBe(
 			'loading'
 		);
 
@@ -383,51 +411,49 @@ describe( 'block request state', () => {
 			actions.setBlockRecommendations(
 				'block-a',
 				{
-					block: [ { label: 'Refresh hierarchy' } ],
+					block: [{ label: 'Refresh hierarchy' }],
 				},
 				1
 			)
 		);
 		state = reducer(
 			state,
-			actions.setBlockRequestState( 'block-a', 'ready', null, 1 )
+			actions.setBlockRequestState('block-a', 'ready', null, 1)
 		);
 
-		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+		expect(selectors.getBlockInteractionState(state, 'block-a')).toBe(
 			'advisory-ready'
 		);
-		expect(
-			selectors.getSurfaceInteractionContract( state, 'block' )
-		).toEqual(
-			expect.objectContaining( {
+		expect(selectors.getSurfaceInteractionContract(state, 'block')).toEqual(
+			expect.objectContaining({
 				allowsInlineApply: true,
 				previewRequired: false,
-			} )
+			})
 		);
 		expect(
-			selectors.isSurfaceApplyAllowed( state, 'block', {
+			selectors.isSurfaceApplyAllowed(state, 'block', {
 				hasResult: true,
-			} )
-		).toBe( true );
+			})
+		).toBe(true);
 		expect(
-			selectors.getBlockInteractionState( state, 'block-a', {
+			selectors.getBlockInteractionState(state, 'block-a', {
 				hasSuccess: true,
-			} )
-		).toBe( 'success' );
+			})
+		).toBe('success');
 		expect(
-			selectors.getBlockInteractionState( state, 'block-a', {
+			selectors.getBlockInteractionState(state, 'block-a', {
 				undoStatus: 'success',
-			} )
-		).toBe( 'advisory-ready' );
-	} );
+			})
+		).toBe('advisory-ready');
+	});
 
-	test( 'dismissing an inline block apply failure preserves the last ready recommendation set', () => {
+	test('dismissing an inline block apply failure preserves the last ready recommendation set', () => {
 		let state = reducer(
 			undefined,
 			actions.setBlockRecommendations(
 				'block-a',
 				{
-					block: [ { label: 'Refresh hierarchy' } ],
+					block: [{ label: 'Refresh hierarchy' }],
 				},
 				3,
 				'block-context'
@@ -436,7 +462,7 @@ describe( 'block request state', () => {
 
 		state = reducer(
 			state,
-			actions.setBlockRequestState( 'block-a', 'ready', null, 3 )
+			actions.setBlockRequestState('block-a', 'ready', null, 3)
 		);
 		state = reducer(
 			state,
@@ -448,25 +474,21 @@ describe( 'block request state', () => {
 			)
 		);
 
-		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'ready' );
-		expect( selectors.getBlockError( state, 'block-a' ) ).toBe(
+		expect(selectors.getBlockStatus(state, 'block-a')).toBe('ready');
+		expect(selectors.getBlockError(state, 'block-a')).toBe(
 			'This suggestion could not be applied safely.'
 		);
-		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
-			'error'
-		);
+		expect(selectors.getBlockInteractionState(state, 'block-a')).toBe('error');
 
-		state = reducer( state, actions.clearBlockError( 'block-a' ) );
+		state = reducer(state, actions.clearBlockError('block-a'));
 
-		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'ready' );
-		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
-		expect( selectors.getBlockRecommendations( state, 'block-a' ) ).toEqual(
-			{
-				block: [ { label: 'Refresh hierarchy' } ],
-			}
-		);
-		expect( selectors.getBlockInteractionState( state, 'block-a' ) ).toBe(
+		expect(selectors.getBlockStatus(state, 'block-a')).toBe('ready');
+		expect(selectors.getBlockError(state, 'block-a')).toBeNull();
+		expect(selectors.getBlockRecommendations(state, 'block-a')).toEqual({
+			block: [{ label: 'Refresh hierarchy' }],
+		});
+		expect(selectors.getBlockInteractionState(state, 'block-a')).toBe(
 			'advisory-ready'
 		);
-	} );
-} );
+	});
+});

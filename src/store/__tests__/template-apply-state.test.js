@@ -52,7 +52,7 @@ describe( 'template apply state', () => {
 		] );
 	} );
 
-	test( 'loading a fresh template recommendation set resets preview and apply feedback', () => {
+	test( 'loading a fresh template recommendation set keeps the active review target but resets apply feedback', () => {
 		let state = reducer(
 			undefined,
 			actions.setTemplateRecommendations( 'theme//home', {
@@ -81,9 +81,9 @@ describe( 'template apply state', () => {
 		);
 		state = reducer( state, actions.setTemplateStatus( 'loading' ) );
 
-		expect(
-			selectors.getTemplateSelectedSuggestionKey( state )
-		).toBeNull();
+		expect( selectors.getTemplateSelectedSuggestionKey( state ) ).toBe(
+			'Refresh header-0'
+		);
 		expect( selectors.getTemplateApplyStatus( state ) ).toBe( 'idle' );
 		expect( selectors.getTemplateApplyError( state ) ).toBeNull();
 		expect(
@@ -242,6 +242,121 @@ describe( 'template apply state', () => {
 		);
 	} );
 
+	test( 'loading a fresh template-part recommendation set keeps the active review target but resets apply feedback', () => {
+		let state = reducer(
+			undefined,
+			actions.setTemplatePartRecommendations(
+				'theme//header',
+				{
+					suggestions: [ { label: 'Add utility row' } ],
+					explanation: 'Review before applying.',
+				},
+				'Prompt',
+				1,
+				'header-signature'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setTemplatePartSelectedSuggestion( 'Add utility row-0' )
+		);
+		state = reducer(
+			state,
+			actions.setTemplatePartApplyState(
+				'error',
+				'Pattern is missing in the template part.'
+			)
+		);
+		state = reducer( state, actions.setTemplatePartStatus( 'loading' ) );
+
+		expect( selectors.getTemplatePartSelectedSuggestionKey( state ) ).toBe(
+			'Add utility row-0'
+		);
+		expect( selectors.getTemplatePartApplyStatus( state ) ).toBe( 'idle' );
+		expect( selectors.getTemplatePartApplyError( state ) ).toBeNull();
+	} );
+
+	test( 'loading a fresh Global Styles recommendation set keeps the active review target but resets apply feedback', () => {
+		let state = reducer(
+			undefined,
+			actions.setGlobalStylesRecommendations(
+				{
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
+				},
+				{
+					suggestions: [ { label: 'Use accent canvas' } ],
+					explanation: 'Review before applying.',
+				},
+				'Prompt',
+				1,
+				'global-styles-signature'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setGlobalStylesSelectedSuggestion( 'Use accent canvas-0' )
+		);
+		state = reducer(
+			state,
+			actions.setGlobalStylesApplyState(
+				'error',
+				'The styles branch no longer matches.'
+			)
+		);
+		state = reducer( state, actions.setGlobalStylesStatus( 'loading' ) );
+
+		expect( selectors.getGlobalStylesSelectedSuggestionKey( state ) ).toBe(
+			'Use accent canvas-0'
+		);
+		expect( selectors.getGlobalStylesApplyStatus( state ) ).toBe( 'idle' );
+		expect( selectors.getGlobalStylesApplyError( state ) ).toBeNull();
+	} );
+
+	test( 'loading a fresh Style Book recommendation set keeps the active review target but resets apply feedback', () => {
+		let state = reducer(
+			undefined,
+			actions.setStyleBookRecommendations(
+				{
+					scopeKey: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+					blockTitle: 'Paragraph',
+				},
+				{
+					suggestions: [ { label: 'Refine paragraph rhythm' } ],
+					explanation: 'Review before applying.',
+				},
+				'Prompt',
+				1,
+				'style-book-signature'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setStyleBookSelectedSuggestion(
+				'Refine paragraph rhythm-0'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setStyleBookApplyState(
+				'error',
+				'The example block no longer matches.'
+			)
+		);
+		state = reducer( state, actions.setStyleBookStatus( 'loading' ) );
+
+		expect( selectors.getStyleBookSelectedSuggestionKey( state ) ).toBe(
+			'Refine paragraph rhythm-0'
+		);
+		expect( selectors.getStyleBookApplyStatus( state ) ).toBe( 'idle' );
+		expect( selectors.getStyleBookApplyError( state ) ).toBeNull();
+	} );
+
 	test( 'template normalized interaction state distinguishes preview-ready, applying, and error', () => {
 		let state = reducer(
 			undefined,
@@ -356,6 +471,20 @@ describe( 'template apply state', () => {
 					'No safe Global Styles changes were returned for this prompt.',
 			} )
 		);
+	} );
+
+	test( 'stale surfaces suppress empty and advisory notices until the result is refreshed', () => {
+		expect(
+			selectors.getSurfaceStatusNotice( undefined, 'template', {
+				hasResult: true,
+				hasSuggestions: false,
+				isStale: true,
+				emptyMessage:
+					'No safe template changes were returned for this prompt.',
+				advisoryMessage:
+					'Review a template-backed change before applying it.',
+			} )
+		).toBeNull();
 	} );
 
 	test( 'template interaction state stays error after a failed request with no successful result', () => {

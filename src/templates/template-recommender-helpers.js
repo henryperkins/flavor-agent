@@ -464,7 +464,11 @@ export function buildTemplateSuggestionViewModel(
 		validateTemplateOperationSequence( rawOperations );
 	const partReasonLookup = templateParts.reduce( ( acc, part ) => {
 		const key = getTemplatePartKey( part?.slug || '', part?.area || '' );
-		acc[ key ] = part?.reason || '';
+
+		if ( ! ( key in acc ) ) {
+			acc[ key ] = part?.reason || '';
+		}
+
 		return acc;
 	}, {} );
 	const operations = executableOperations.ok
@@ -519,6 +523,29 @@ export function buildTemplateSuggestionViewModel(
 		} );
 	}
 
+	const advisoryTemplateParts = [];
+	const seenTemplateParts = new Set();
+
+	for ( const part of templateParts ) {
+		const slug = part?.slug || '';
+		const area = part?.area || '';
+		const key = getTemplatePartKey( slug, area );
+
+		if ( ! slug || ! area || seenTemplateParts.has( key ) ) {
+			continue;
+		}
+
+		seenTemplateParts.add( key );
+		advisoryTemplateParts.push( {
+			key,
+			slug,
+			area,
+			reason: partReasonLookup[ key ] || '',
+			actionType: TEMPLATE_PART_REVIEW_ACTION,
+			ctaLabel: 'Review in editor',
+		} );
+	}
+
 	return {
 		suggestionKey: suggestion?.suggestionKey || '',
 		label: suggestion?.label || '',
@@ -528,17 +555,26 @@ export function buildTemplateSuggestionViewModel(
 				? ''
 				: executableOperations.error || '',
 		operations,
-		templateParts: templateOperations.map( ( operation ) => ( {
-			key: getTemplatePartKey( operation.slug, operation.area ),
-			slug: operation.slug,
-			area: operation.area,
-			reason:
-				partReasonLookup[
-					getTemplatePartKey( operation.slug, operation.area )
-				] || '',
-			actionType: TEMPLATE_PART_REVIEW_ACTION,
-			ctaLabel: 'Review in editor',
-		} ) ),
+		templateParts:
+			operations.length > 0
+				? templateOperations.map( ( operation ) => ( {
+						key: getTemplatePartKey(
+							operation.slug,
+							operation.area
+						),
+						slug: operation.slug,
+						area: operation.area,
+						reason:
+							partReasonLookup[
+								getTemplatePartKey(
+									operation.slug,
+									operation.area
+								)
+							] || '',
+						actionType: TEMPLATE_PART_REVIEW_ACTION,
+						ctaLabel: 'Review in editor',
+				  } ) )
+				: advisoryTemplateParts,
 		patternSuggestions,
 		canApply:
 			rawOperations.length > 0 &&

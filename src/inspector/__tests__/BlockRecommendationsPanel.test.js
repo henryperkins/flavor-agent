@@ -11,75 +11,90 @@ const mockGetLatestUndoableActivity = jest.fn();
 const mockGetResolvedActivityEntries = jest.fn();
 const mockGetBlockActivityUndoState = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
+const mockRenderNavigationRecommendations = jest.fn();
+let mockShouldRenderNavigationRecommendations = false;
 
-jest.mock( '@wordpress/block-editor', () => ( {
+jest.mock('@wordpress/block-editor', () => ({
 	store: 'core/block-editor',
-} ) );
+}));
 
-jest.mock( '@wordpress/components', () =>
-	require( '../../test-utils/wp-components' ).mockWpComponents()
+jest.mock('@wordpress/components', () =>
+	require('../../test-utils/wp-components').mockWpComponents()
 );
 
-jest.mock( '@wordpress/data', () => ( {
-	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
-	useSelect: ( ...args ) => mockUseSelect( ...args ),
-} ) );
+jest.mock('@wordpress/data', () => ({
+	useDispatch: (...args) => mockUseDispatch(...args),
+	useSelect: (...args) => mockUseSelect(...args),
+}));
 
-jest.mock( '@wordpress/editor', () => {
-	const { createElement } = require( '@wordpress/element' );
+jest.mock('@wordpress/editor', () => {
+	const { createElement } = require('@wordpress/element');
 
 	return {
-		PluginDocumentSettingPanel: ( { children, title } ) =>
-			createElement( 'aside', { 'data-panel-title': title }, children ),
+		PluginDocumentSettingPanel: ({ children, title }) =>
+			createElement('aside', { 'data-panel-title': title }, children),
 	};
-} );
+});
 
-jest.mock( '@wordpress/icons', () => ( {
+jest.mock('@wordpress/icons', () => ({
 	starFilled: 'star-filled',
-} ) );
+}));
 
-jest.mock( '../../store', () => ( {
+jest.mock('../../store', () => ({
 	STORE_NAME: 'flavor-agent',
-} ) );
+}));
 
-jest.mock( '../../context/collector', () => ( {
-	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
-	getLiveBlockContextSignature: ( _select, clientId ) => {
-		const context = mockCollectBlockContext( clientId );
+jest.mock('../../context/collector', () => ({
+	collectBlockContext: (...args) => mockCollectBlockContext(...args),
+	getLiveBlockContextSignature: (_select, clientId) => {
+		const context = mockCollectBlockContext(clientId);
 
-		return context ? JSON.stringify( context ) : '';
+		return context ? JSON.stringify(context) : '';
 	},
-} ) );
+}));
 
-jest.mock( '../../utils/block-recommendation-context', () => ( {
-	buildBlockRecommendationContextSignature: ( context = {} ) =>
-		JSON.stringify( context || {} ),
-} ) );
+jest.mock('../../utils/block-recommendation-context', () => ({
+	buildBlockRecommendationContextSignature: (context = {}) =>
+		JSON.stringify(context || {}),
+}));
 
-jest.mock( '../../store/activity-history', () => ( {
-	getBlockActivityUndoState: ( ...args ) =>
-		mockGetBlockActivityUndoState( ...args ),
-	getLatestAppliedActivity: ( ...args ) =>
-		mockGetLatestAppliedActivity( ...args ),
-	getLatestUndoableActivity: ( ...args ) =>
-		mockGetLatestUndoableActivity( ...args ),
-	getResolvedActivityEntries: ( ...args ) =>
-		mockGetResolvedActivityEntries( ...args ),
-} ) );
+jest.mock('../../store/activity-history', () => ({
+	getBlockActivityUndoState: (...args) =>
+		mockGetBlockActivityUndoState(...args),
+	getLatestAppliedActivity: (...args) => mockGetLatestAppliedActivity(...args),
+	getLatestUndoableActivity: (...args) =>
+		mockGetLatestUndoableActivity(...args),
+	getResolvedActivityEntries: (...args) =>
+		mockGetResolvedActivityEntries(...args),
+}));
 
-jest.mock( '../../components/AIActivitySection', () => ( props ) => {
-	mockRenderAIActivitySection( props );
+jest.mock('../../components/AIActivitySection', () => (props) => {
+	mockRenderAIActivitySection(props);
 	return null;
-} );
-jest.mock( '../NavigationRecommendations', () => () => null );
-jest.mock( '../SuggestionChips', () => ( props ) => {
-	mockSuggestionChips( props );
+});
+jest.mock('../NavigationRecommendations', () => (props) => {
+	mockRenderNavigationRecommendations(props);
+
+	if (!mockShouldRenderNavigationRecommendations) {
+		return null;
+	}
+
+	return (
+		<div data-navigation-recommendations={props.embedded ? 'embedded' : 'full'}>
+			{props.embedded
+				? 'Embedded Navigation Recommendations'
+				: 'Navigation Recommendations'}
+		</div>
+	);
+});
+jest.mock('../SuggestionChips', () => (props) => {
+	mockSuggestionChips(props);
 	return null;
-} );
+});
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { act } = require( 'react' );
-const { setupReactTest } = require( '../../test-utils/setup-react-test' );
+const { act } = require('react');
+const { setupReactTest } = require('../../test-utils/setup-react-test');
 
 import {
 	BlockRecommendationsContent,
@@ -93,7 +108,7 @@ function getState() {
 	return currentState;
 }
 
-function createState( overrides = {} ) {
+function createState(overrides = {}) {
 	return {
 		blockEditor: {
 			selectedBlockClientId: 'block-1',
@@ -119,6 +134,7 @@ function createState( overrides = {} ) {
 		},
 		store: {
 			activityLog: [],
+			blockApplyErrors: {},
 			blockErrors: {},
 			blockRecommendations: {},
 			blockContextSignatures: {},
@@ -131,59 +147,55 @@ function createState( overrides = {} ) {
 	};
 }
 
-function selectStore( storeName ) {
-	if ( storeName === 'core/block-editor' ) {
+function selectStore(storeName) {
+	if (storeName === 'core/block-editor') {
 		return {
 			getBlock: jest.fn(
-				( clientId ) =>
-					getState().blockEditor.blockLookup[ clientId ] || null
+				(clientId) => getState().blockEditor.blockLookup[clientId] || null
 			),
 			getBlockEditingMode: jest.fn(
-				( clientId ) =>
-					getState().blockEditor.editingModes[ clientId ] || 'default'
+				(clientId) => getState().blockEditor.editingModes[clientId] || 'default'
 			),
 			getBlockParents: jest.fn(
-				( clientId ) =>
-					getState().blockEditor.blockParents[ clientId ] || []
+				(clientId) => getState().blockEditor.blockParents[clientId] || []
 			),
-			getBlocks: jest.fn( () => getState().blockEditor.blocks ),
+			getBlocks: jest.fn(() => getState().blockEditor.blocks),
 			getSelectedBlockClientId: jest.fn(
 				() => getState().blockEditor.selectedBlockClientId
 			),
 		};
 	}
 
-	if ( storeName === 'flavor-agent' ) {
+	if (storeName === 'flavor-agent') {
 		return {
-			getActivityLog: jest.fn( () => getState().store.activityLog ),
+			getActivityLog: jest.fn(() => getState().store.activityLog),
 			getBlockError: jest.fn(
-				( clientId ) => getState().store.blockErrors[ clientId ] || null
+				(clientId) => getState().store.blockErrors[clientId] || null
 			),
-			getBlockInteractionState: jest.fn( () => 'idle' ),
+			getBlockApplyError: jest.fn(
+				(clientId) => getState().store.blockApplyErrors[clientId] || null
+			),
+			getBlockInteractionState: jest.fn(() => 'idle'),
 			getBlockStatus: jest.fn(
-				( clientId ) =>
-					getState().store.blockStatuses[ clientId ] || 'idle'
+				(clientId) => getState().store.blockStatuses[clientId] || 'idle'
 			),
 			getBlockRecommendationContextSignature: jest.fn(
-				( clientId ) =>
-					getState().store.blockContextSignatures[ clientId ] || null
+				(clientId) => getState().store.blockContextSignatures[clientId] || null
 			),
 			getBlockRequestDiagnostics: jest.fn(
-				( clientId ) =>
-					getState().store.blockRequestDiagnostics?.[ clientId ] ||
-					null
+				(clientId) =>
+					getState().store.blockRequestDiagnostics?.[clientId] || null
 			),
 			getBlockRecommendations: jest.fn(
-				( clientId ) =>
-					getState().store.blockRecommendations[ clientId ] || null
+				(clientId) => getState().store.blockRecommendations[clientId] || null
 			),
 			getLastUndoneActivityId: jest.fn(
 				() => getState().store.lastUndoneActivityId
 			),
-			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
+			getSurfaceStatusNotice: jest.fn((surface, options = {}) => {
 				void surface;
 
-				if ( options.requestError ) {
+				if (options.requestError) {
 					return {
 						source: 'request',
 						tone: 'error',
@@ -192,7 +204,7 @@ function selectStore( storeName ) {
 					};
 				}
 
-				if ( options.undoError ) {
+				if (options.undoError) {
 					return {
 						source: 'undo',
 						tone: 'error',
@@ -201,7 +213,7 @@ function selectStore( storeName ) {
 					};
 				}
 
-				if ( options.applySuccessMessage ) {
+				if (options.applySuccessMessage) {
 					return {
 						source: 'apply',
 						tone: 'success',
@@ -211,7 +223,16 @@ function selectStore( storeName ) {
 					};
 				}
 
-				if ( options.undoSuccessMessage ) {
+				if (options.applyError) {
+					return {
+						source: 'apply',
+						tone: 'error',
+						message: options.applyError,
+						isDismissible: true,
+					};
+				}
+
+				if (options.undoSuccessMessage) {
 					return {
 						source: 'undo',
 						tone: 'success',
@@ -220,12 +241,11 @@ function selectStore( storeName ) {
 				}
 
 				return null;
-			} ),
-			getUndoError: jest.fn( () => getState().store.undoError ),
-			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
+			}),
+			getUndoError: jest.fn(() => getState().store.undoError),
+			getUndoStatus: jest.fn(() => getState().store.undoStatus),
 			isBlockLoading: jest.fn(
-				( clientId ) =>
-					getState().store.blockStatuses[ clientId ] === 'loading'
+				(clientId) => getState().store.blockStatuses[clientId] === 'loading'
 			),
 		};
 	}
@@ -234,96 +254,94 @@ function selectStore( storeName ) {
 }
 
 function renderPanel() {
-	act( () => {
-		getRoot().render( <BlockRecommendationsDocumentPanel /> );
-	} );
+	act(() => {
+		getRoot().render(<BlockRecommendationsDocumentPanel />);
+	});
 }
 
-function renderContent( clientId = 'block-1' ) {
-	act( () => {
-		getRoot().render(
-			<BlockRecommendationsContent clientId={ clientId } />
-		);
-	} );
+function renderContent(clientId = 'block-1') {
+	act(() => {
+		getRoot().render(<BlockRecommendationsContent clientId={clientId} />);
+	});
 }
 
 function getTextarea() {
-	return getContainer().querySelector( 'textarea' );
+	return getContainer().querySelector('textarea');
 }
 
-beforeEach( () => {
+beforeEach(() => {
 	jest.clearAllMocks();
 	mockSuggestionChips.mockReset();
+	mockShouldRenderNavigationRecommendations = false;
 	currentState = createState();
 	window.flavorAgentData = {
 		canRecommendBlocks: true,
 	};
-	mockCollectBlockContext.mockReturnValue( {
+	mockCollectBlockContext.mockReturnValue({
 		block: {
 			name: 'core/paragraph',
 		},
-	} );
-	mockGetResolvedActivityEntries.mockImplementation(
-		( entries ) => entries || []
-	);
+	});
+	mockGetResolvedActivityEntries.mockImplementation((entries) => entries || []);
 	mockGetBlockActivityUndoState.mockImplementation(
-		( entry ) => entry?.undo || {}
+		(entry) => entry?.undo || {}
 	);
 	mockGetLatestAppliedActivity.mockImplementation(
-		( entries ) => entries?.[ entries.length - 1 ] || null
+		(entries) => entries?.[entries.length - 1] || null
 	);
 	mockGetLatestUndoableActivity.mockImplementation(
-		( entries ) =>
-			[ ...( entries || [] ) ]
-				.reverse()
-				.find( ( entry ) => entry?.undo?.canUndo ) || null
+		(entries) =>
+			[...(entries || [])].reverse().find((entry) => entry?.undo?.canUndo) ||
+			null
 	);
-	mockUseDispatch.mockImplementation( () => ( {
+	mockUseDispatch.mockImplementation(() => ({
 		clearBlockError: mockClearBlockError,
 		clearUndoError: mockClearUndoError,
 		fetchBlockRecommendations: mockFetchBlockRecommendations,
 		undoActivity: mockUndoActivity,
-	} ) );
-	mockUseSelect.mockImplementation( ( mapSelect ) =>
-		mapSelect( selectStore )
-	);
-} );
+	}));
+	mockUseSelect.mockImplementation((mapSelect) => mapSelect(selectStore));
+});
 
-afterEach( () => {
+afterEach(() => {
 	delete window.flavorAgentData;
 	currentState = null;
-} );
+});
 
-describe( 'BlockRecommendationsDocumentPanel', () => {
-	test( 'renders the last selected block panel after selection clears', () => {
+describe('BlockRecommendationsDocumentPanel', () => {
+	test('renders the last selected block panel after selection clears', () => {
 		renderPanel();
-		expect( getContainer().textContent ).toBe( '' );
+		expect(getContainer().textContent).toBe('');
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Last Selected Block' );
-		expect( getContainer().textContent ).toContain( 'Get Suggestions' );
+		expect(getContainer().textContent).toContain('Last Selected Block');
+		expect(getContainer().textContent).toContain(
+			'Saving cleared block selection. Flavor Agent stays scoped to the last block you selected until you choose another block.'
+		);
+		expect(getContainer().textContent).toContain(
+			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.'
+		);
+		expect(getContainer().textContent).toContain('Get Suggestions');
 		expect(
-			getContainer().querySelector(
-				'[data-panel-title="AI Recommendations"]'
-			)
+			getContainer().querySelector('[data-panel-title="AI Recommendations"]')
 		).not.toBeNull();
-	} );
+	});
 
-	test( 'fetches block recommendations for the remembered block after save clears selection', () => {
+	test('fetches block recommendations for the remembered block after save clears selection', () => {
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
-		} );
+		});
 
 		renderPanel();
 
@@ -333,23 +351,21 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			'value'
 		);
 
-		act( () => {
-			descriptor.set.call( textarea, 'Tighten the hero copy.' );
-			textarea.dispatchEvent(
-				new window.Event( 'input', { bubbles: true } )
-			);
-		} );
+		act(() => {
+			descriptor.set.call(textarea, 'Tighten the hero copy.');
+			textarea.dispatchEvent(new window.Event('input', { bubbles: true }));
+		});
 
-		const button = Array.from(
-			getContainer().querySelectorAll( 'button' )
-		).find( ( element ) => element.textContent === 'Get Suggestions' );
+		const button = Array.from(getContainer().querySelectorAll('button')).find(
+			(element) => element.textContent === 'Get Suggestions'
+		);
 
-		act( () => {
+		act(() => {
 			button.click();
-		} );
+		});
 
-		expect( mockCollectBlockContext ).toHaveBeenCalledWith( 'block-1' );
-		expect( mockFetchBlockRecommendations ).toHaveBeenCalledWith(
+		expect(mockCollectBlockContext).toHaveBeenCalledWith('block-1');
+		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
 			'block-1',
 			{
 				block: {
@@ -358,56 +374,51 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			},
 			'Tighten the hero copy.'
 		);
-	} );
+	});
 
-	test( 'does not render when the remembered block is no longer present', () => {
+	test('does not render when the remembered block is no longer present', () => {
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 				blockLookup: {},
 				blocks: [],
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toBe( '' );
-	} );
+		expect(getContainer().textContent).toBe('');
+	});
 
-	test( 'shows the shared capability notice when block recommendations are unavailable', () => {
+	test('shows the shared capability notice when block recommendations are unavailable', () => {
 		window.flavorAgentData = {
 			canRecommendBlocks: false,
 			settingsUrl:
 				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-			connectorsUrl:
-				'https://example.test/wp-admin/options-connectors.php',
+			connectorsUrl: 'https://example.test/wp-admin/options-connectors.php',
 		};
 
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain(
-			'Settings > Flavor Agent'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Settings > Connectors'
-		);
-		expect( getContainer().textContent ).toContain(
+		expect(getContainer().textContent).toContain('Settings > Flavor Agent');
+		expect(getContainer().textContent).toContain('Settings > Connectors');
+		expect(getContainer().textContent).toContain(
 			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
 		);
-	} );
+	});
 
-	test( 'shows an undo action on apply success notices and dispatches undo for the latest block activity', () => {
-		currentState = createState( {
+	test('shows an undo action on apply success notices and dispatches undo for the latest block activity', () => {
+		currentState = createState({
 			store: {
 				activityLog: [
 					{
@@ -425,10 +436,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				],
 			},
-		} );
+		});
 
 		renderPanel();
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
@@ -449,42 +460,40 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				],
 			},
-		} );
+		});
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain(
-			'Applied Refresh hero copy.'
-		);
+		expect(getContainer().textContent).toContain('Applied Refresh hero copy.');
 		expect(
 			mockRenderAIActivitySection.mock.calls[
 				mockRenderAIActivitySection.mock.calls.length - 1
-			][ 0 ]
+			][0]
 		).toEqual(
-			expect.objectContaining( {
+			expect.objectContaining({
 				description:
 					'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.',
-				entries: expect.any( Array ),
+				entries: expect.any(Array),
 				resetKey: 'block-1',
-			} )
+			})
 		);
 
 		const undoButton = Array.from(
-			getContainer().querySelectorAll( 'button' )
-		).find( ( element ) => element.textContent === 'Undo' );
+			getContainer().querySelectorAll('button')
+		).find((element) => element.textContent === 'Undo');
 
-		expect( undoButton ).toBeDefined();
+		expect(undoButton).toBeDefined();
 
-		act( () => {
+		act(() => {
 			undoButton.click();
-		} );
+		});
 
-		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
-	} );
+		expect(mockUndoActivity).toHaveBeenCalledWith('activity-1');
+	});
 
-	test( 'separates executable block suggestions from advisory structural ideas', () => {
+	test('separates executable block suggestions from advisory structural ideas', () => {
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
@@ -494,8 +503,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 						block: [
 							{
 								label: 'Hide on mobile',
-								description:
-									'Use viewport visibility for mobile.',
+								description: 'Use viewport visibility for mobile.',
 								attributeUpdates: {
 									metadata: {
 										blockVisibility: {
@@ -525,55 +533,51 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				},
 				blockContextSignatures: {
-					'block-1': JSON.stringify( {
+					'block-1': JSON.stringify({
 						block: {
 							name: 'core/paragraph',
 						},
-					} ),
+					}),
 				},
 				blockStatuses: {
 					'block-1': 'ready',
 				},
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Apply Now' );
-		expect( getContainer().textContent ).toContain( 'Manual Ideas' );
-		expect( getContainer().textContent ).toContain(
-			'Recommended Next Step'
-		);
-		expect( getContainer().textContent ).toContain(
-			'Wrap this block in a Group'
-		);
-		expect( getContainer().textContent ).toContain(
+		expect(getContainer().textContent).toContain('Apply now');
+		expect(getContainer().textContent).toContain('Manual ideas');
+		expect(getContainer().textContent).toContain('Recommended Next Step');
+		expect(getContainer().textContent).toContain('Wrap this block in a Group');
+		expect(getContainer().textContent).toContain(
 			'Replace with a callout pattern'
 		);
-		expect( getContainer().textContent ).not.toContain(
+		expect(getContainer().textContent).not.toContain(
 			'One-click apply stays available when Flavor Agent can safely change this block'
 		);
-		expect( getContainer().textContent ).not.toContain(
+		expect(getContainer().textContent).not.toContain(
 			'These ideas need manual follow-through or a broader preview/apply flow'
 		);
-		expect( mockSuggestionChips ).toHaveBeenCalledTimes( 1 );
-		expect( mockSuggestionChips.mock.calls[ 0 ][ 0 ] ).toEqual(
-			expect.objectContaining( {
+		expect(mockSuggestionChips).toHaveBeenCalledTimes(1);
+		expect(mockSuggestionChips.mock.calls[0][0]).toEqual(
+			expect.objectContaining({
 				clientId: 'block-1',
 				label: 'AI block suggestions',
 				suggestions: [
-					expect.objectContaining( {
+					expect.objectContaining({
 						label: 'Hide on mobile',
-					} ),
+					}),
 				],
-			} )
+			})
 		);
-	} );
+	});
 
-	test( 'keeps purely advisory block suggestions out of one-click chips', () => {
+	test('keeps purely advisory block suggestions out of one-click chips', () => {
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
@@ -594,31 +598,29 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				},
 				blockContextSignatures: {
-					'block-1': JSON.stringify( {
+					'block-1': JSON.stringify({
 						block: {
 							name: 'core/paragraph',
 						},
-					} ),
+					}),
 				},
 				blockStatuses: {
 					'block-1': 'ready',
 				},
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Manual Ideas' );
-		expect( getContainer().textContent ).toContain(
-			'Wrap this block in a Group'
-		);
-		expect( mockSuggestionChips ).not.toHaveBeenCalled();
-	} );
+		expect(getContainer().textContent).toContain('Manual ideas');
+		expect(getContainer().textContent).toContain('Wrap this block in a Group');
+		expect(mockSuggestionChips).not.toHaveBeenCalled();
+	});
 
-	test( 'keeps structural and pattern suggestions advisory even when they include safe local updates', () => {
+	test('keeps structural and pattern suggestions advisory even when they include safe local updates', () => {
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 			},
@@ -657,34 +659,32 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				},
 				blockContextSignatures: {
-					'block-1': JSON.stringify( {
+					'block-1': JSON.stringify({
 						block: {
 							name: 'core/paragraph',
 						},
-					} ),
+					}),
 				},
 				blockStatuses: {
 					'block-1': 'ready',
 				},
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'Manual Ideas' );
-		expect( getContainer().textContent ).toContain(
-			'Wrap this block in a Group'
-		);
-		expect( getContainer().textContent ).toContain(
+		expect(getContainer().textContent).toContain('Manual ideas');
+		expect(getContainer().textContent).toContain('Wrap this block in a Group');
+		expect(getContainer().textContent).toContain(
 			'Replace with a callout pattern'
 		);
-		expect( mockSuggestionChips ).not.toHaveBeenCalled();
-	} );
+		expect(mockSuggestionChips).not.toHaveBeenCalled();
+	});
 
-	test( 'does not keep an undo success notice once the resolved entry is no longer undone', () => {
-		mockGetLatestAppliedActivity.mockReturnValue( null );
-		mockGetLatestUndoableActivity.mockReturnValue( null );
-		currentState = createState( {
+	test('does not keep an undo success notice once the resolved entry is no longer undone', () => {
+		mockGetLatestAppliedActivity.mockReturnValue(null);
+		mockGetLatestUndoableActivity.mockReturnValue(null);
+		currentState = createState({
 			store: {
 				activityLog: [
 					{
@@ -704,22 +704,22 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				lastUndoneActivityId: 'activity-1',
 				undoStatus: 'success',
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).not.toContain(
+		expect(getContainer().textContent).not.toContain(
 			'Undid Refresh hero copy.'
 		);
 		expect(
-			getContainer().querySelector( '[data-status-notice="true"]' )
+			getContainer().querySelector('[data-status-notice="true"]')
 		).toBeNull();
-	} );
+	});
 
-	test( 'shows the current block scope even before recommendations exist', () => {
+	test('shows the current block scope even before recommendations exist', () => {
 		renderPanel();
 
-		currentState = createState( {
+		currentState = createState({
 			blockEditor: {
 				selectedBlockClientId: null,
 				blockLookup: {
@@ -739,33 +739,124 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				],
 			},
-		} );
+		});
 
 		renderPanel();
 
-		expect( getContainer().textContent ).toContain( 'core/heading' );
-		expect( getContainer().textContent ).not.toContain( 'Current' );
-		expect( getContainer().textContent ).not.toContain( 'Stale' );
-	} );
+		expect(getContainer().textContent).toContain('core/heading');
+		expect(getContainer().textContent).toContain('Last Selected Block');
+		expect(getContainer().textContent).not.toContain('Current');
+		expect(getContainer().textContent).not.toContain('Stale');
+	});
 
-	test( 'adds an activity diagnostic row when a fresh request returns no block-lane suggestions', () => {
-		currentState = createState( {
+	test('renders the shared intro shell and a shorter composer helper in the main block panel', () => {
+		renderContent();
+
+		expect(getContainer().textContent).toContain('Selected Block');
+		expect(getContainer().textContent).toContain(
+			'Ask for a specific outcome or fetch recommendations based on the current block context.'
+		);
+		expect(getContainer().textContent).toContain(
+			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.'
+		);
+	});
+
+	test('renders embedded navigation after the block lanes when navigation guidance is present', () => {
+		mockShouldRenderNavigationRecommendations = true;
+		currentState = createState({
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/navigation',
+						attributes: {
+							ref: 12,
+						},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/navigation',
+						attributes: {
+							ref: 12,
+						},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Tighten spacing',
+								description: 'Use safer spacing for the menu block.',
+								attributeUpdates: {
+									style: {
+										spacing: {
+											blockGap: '1rem',
+										},
+									},
+								},
+							},
+							{
+								label: 'Improve menu hierarchy',
+								description: 'Group related destinations more clearly.',
+								type: 'structural_recommendation',
+							},
+						],
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify({
+						block: {
+							name: 'core/navigation',
+						},
+					}),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		});
+
+		renderContent();
+
+		const panelText = getContainer().textContent;
+		expect(panelText.indexOf('Apply now')).toBeGreaterThan(-1);
+		expect(panelText.indexOf('Manual ideas')).toBeGreaterThan(-1);
+		expect(
+			panelText.indexOf('Embedded Navigation Recommendations')
+		).toBeGreaterThan(panelText.indexOf('Manual ideas'));
+		expect(mockRenderNavigationRecommendations).toHaveBeenCalledWith(
+			expect.objectContaining({
+				clientId: 'block-1',
+				embedded: true,
+			})
+		);
+	});
+
+	test('adds an activity diagnostic row when a fresh request returns no block-lane suggestions', () => {
+		currentState = createState({
 			store: {
 				blockRecommendations: {
 					'block-1': {
 						block: [],
 						settings: [],
-						styles: [ { label: 'Use accent text' } ],
+						styles: [{ label: 'Use accent text' }],
 						explanation: 'Use stronger editorial contrast.',
 						prompt: 'Make this feel more editorial.',
 					},
 				},
 				blockContextSignatures: {
-					'block-1': JSON.stringify( {
+					'block-1': JSON.stringify({
 						block: {
 							name: 'core/paragraph',
 						},
-					} ),
+					}),
 				},
 				blockRequestDiagnostics: {
 					'block-1': {
@@ -784,34 +875,34 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					'block-1': 'ready',
 				},
 			},
-		} );
+		});
 
 		renderContent();
 
 		const latestActivityProps =
 			mockRenderAIActivitySection.mock.calls[
 				mockRenderAIActivitySection.mock.calls.length - 1
-			][ 0 ];
+			][0];
 
-		expect( latestActivityProps.description ).toContain(
+		expect(latestActivityProps.description).toContain(
 			'Recent request diagnostics and applied actions'
 		);
-		expect( latestActivityProps.entries[ 0 ] ).toEqual(
-			expect.objectContaining( {
+		expect(latestActivityProps.entries[0]).toEqual(
+			expect.objectContaining({
 				type: 'request_diagnostic',
 				suggestion: 'No block-lane suggestions returned',
-				diagnostic: expect.objectContaining( {
+				diagnostic: expect.objectContaining({
 					detailLines: [
 						'Flavor Agent returned 1 style, but none in the block lane.',
 					],
-				} ),
+				}),
 				executionResult: 'review',
-			} )
+			})
 		);
-	} );
+	});
 
-	test( 'marks stored block results stale and keeps them visible until the user refreshes', () => {
-		currentState = createState( {
+	test('marks stored block results stale and keeps them visible until the user refreshes', () => {
+		currentState = createState({
 			store: {
 				blockRecommendations: {
 					'block-1': {
@@ -833,45 +924,45 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				},
 				blockContextSignatures: {
-					'block-1': JSON.stringify( {
+					'block-1': JSON.stringify({
 						block: {
 							name: 'core/paragraph',
 						},
-					} ),
+					}),
 				},
 				blockStatuses: {
 					'block-1': 'ready',
 				},
 			},
-		} );
-		mockCollectBlockContext.mockReturnValue( {
+		});
+		mockCollectBlockContext.mockReturnValue({
 			block: {
 				name: 'core/quote',
 			},
-		} );
+		});
 
 		renderContent();
 
-		expect( getContainer().textContent ).toContain( 'Stale' );
-		expect( getContainer().textContent ).toContain(
+		expect(getContainer().textContent).toContain('Stale');
+		expect(getContainer().textContent).toContain(
 			'This block changed after the last request.'
 		);
-		expect( getContainer().textContent ).toContain(
+		expect(getContainer().textContent).toContain(
 			'Refresh recommendations for the current block'
 		);
-		expect( mockSuggestionChips ).toHaveBeenCalledWith(
-			expect.objectContaining( {
+		expect(mockSuggestionChips).toHaveBeenCalledWith(
+			expect.objectContaining({
 				suggestions: [
-					expect.objectContaining( {
+					expect.objectContaining({
 						label: 'Hide on mobile',
-					} ),
+					}),
 				],
 				disabled: true,
-			} )
+			})
 		);
-	} );
+	});
 
-	test( 'marks same-clientId block edits stale and refreshes against the updated live context', () => {
+	test('marks same-clientId block edits stale and refreshes against the updated live context', () => {
 		const initialContext = {
 			block: {
 				name: 'core/paragraph',
@@ -889,7 +980,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			},
 		};
 
-		currentState = createState( {
+		currentState = createState({
 			store: {
 				blockRecommendations: {
 					'block-1': {
@@ -911,44 +1002,44 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 					},
 				},
 				blockContextSignatures: {
-					'block-1': JSON.stringify( initialContext ),
+					'block-1': JSON.stringify(initialContext),
 				},
 				blockStatuses: {
 					'block-1': 'ready',
 				},
 			},
-		} );
-		mockCollectBlockContext.mockReturnValue( initialContext );
+		});
+		mockCollectBlockContext.mockReturnValue(initialContext);
 
 		renderContent();
 
-		expect( getContainer().textContent ).not.toContain( 'Stale' );
+		expect(getContainer().textContent).not.toContain('Stale');
 
-		mockCollectBlockContext.mockReturnValue( updatedContext );
+		mockCollectBlockContext.mockReturnValue(updatedContext);
 
 		renderContent();
 
-		expect( getContainer().textContent ).toContain( 'Stale' );
-		expect( getContainer().textContent ).toContain(
+		expect(getContainer().textContent).toContain('Stale');
+		expect(getContainer().textContent).toContain(
 			'This block changed after the last request.'
 		);
 
 		mockFetchBlockRecommendations.mockClear();
 
 		const refreshButton = Array.from(
-			getContainer().querySelectorAll( 'button' )
-		).find( ( element ) => element.textContent === 'Refresh' );
+			getContainer().querySelectorAll('button')
+		).find((element) => element.textContent === 'Refresh');
 
-		expect( refreshButton ).toBeDefined();
+		expect(refreshButton).toBeDefined();
 
-		act( () => {
+		act(() => {
 			refreshButton.click();
-		} );
+		});
 
-		expect( mockFetchBlockRecommendations ).toHaveBeenCalledWith(
+		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
 			'block-1',
 			updatedContext,
 			''
 		);
-	} );
-} );
+	});
+});

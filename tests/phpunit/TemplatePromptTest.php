@@ -95,13 +95,13 @@ final class TemplatePromptTest extends TestCase {
 
 	public function test_parse_response_keeps_only_valid_structured_template_operations(): void {
 		$context = [
-			'assignedParts'  => [
+			'assignedParts'            => [
 				[
 					'slug' => 'header',
 					'area' => 'header',
 				],
 			],
-			'availableParts' => [
+			'availableParts'           => [
 				[
 					'slug'  => 'header-minimal',
 					'area'  => 'header',
@@ -113,9 +113,9 @@ final class TemplatePromptTest extends TestCase {
 					'title' => 'Footer Main',
 				],
 			],
-			'allowedAreas'   => [ 'header', 'footer' ],
-			'emptyAreas'     => [ 'footer' ],
-			'patterns'       => [
+			'allowedAreas'             => [ 'header', 'footer' ],
+			'emptyAreas'               => [ 'footer' ],
+			'patterns'                 => [
 				[
 					'name' => 'theme/hero',
 				],
@@ -301,6 +301,64 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertSame(
 			[],
 			$result['suggestions'][0]['patternSuggestions']
+		);
+	}
+
+	public function test_parse_response_keeps_advisory_pattern_summaries_without_operations(): void {
+		$context = [
+			'assignedParts'  => [
+				[
+					'slug' => 'header',
+					'area' => 'header',
+				],
+			],
+			'availableParts' => [
+				[
+					'slug'  => 'footer-main',
+					'area'  => 'footer',
+					'title' => 'Footer Main',
+				],
+			],
+			'allowedAreas'   => [ 'header', 'footer' ],
+			'emptyAreas'     => [ 'footer' ],
+			'patterns'       => [
+				[
+					'name' => 'theme/hero',
+				],
+				[
+					'name' => 'theme/cta',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Consider a stronger hero pattern',
+						'description'        => 'A hero pattern could make the opening feel more intentional without forcing a structural mutation yet.',
+						'operations'         => [],
+						'patternSuggestions' => [ 'theme/hero', 'theme/cta', 'missing/pattern' ],
+					],
+				],
+				'explanation' => 'Pattern ideas stay advisory when there is no safe deterministic insertion anchor.',
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Consider a stronger hero pattern',
+					'description'        => 'A hero pattern could make the opening feel more intentional without forcing a structural mutation yet.',
+					'operations'         => [],
+					'templateParts'      => [],
+					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+				],
+			],
+			$result['suggestions']
 		);
 	}
 
@@ -535,7 +593,7 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
 
-	public function test_parse_response_rejects_legacy_pattern_summaries_without_executable_operations(): void {
+	public function test_parse_response_keeps_legacy_pattern_summaries_as_advisory_without_executable_operations(): void {
 		$context = [
 			'assignedParts'  => [],
 			'availableParts' => [],
@@ -566,8 +624,19 @@ final class TemplatePromptTest extends TestCase {
 
 		$result = TemplatePrompt::parse_response( $raw, $context );
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Too many pattern inserts',
+					'description'        => 'Legacy summaries should not imply multiple inserts.',
+					'operations'         => [],
+					'templateParts'      => [],
+					'patternSuggestions' => [ 'theme/hero', 'theme/cta' ],
+				],
+			],
+			$result['suggestions']
+		);
 	}
 
 	public function test_parse_response_rejects_multiple_insert_pattern_operations(): void {

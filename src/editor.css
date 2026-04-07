@@ -1357,6 +1357,24 @@
     var(--wpds-color-bg-surface-neutral-strong, #ffffff);
 }
 
+.flavor-agent-card--template.is-review-selected {
+  border-color: color-mix(
+    in srgb,
+    var(--flavor-agent-color-accent) 24%,
+    var(--wpds-color-stroke-surface-neutral, #d8d8d8)
+  );
+  background: linear-gradient(
+      135deg,
+      color-mix(
+        in srgb,
+        var(--flavor-agent-color-accent) 8%,
+        transparent
+      ),
+      transparent 55%
+    ),
+    var(--wpds-color-bg-surface-neutral-strong, #ffffff);
+}
+
 .flavor-agent-template-preview {
   margin-top: 10px;
 }

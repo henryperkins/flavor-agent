@@ -12,6 +12,7 @@ const mockGetTemplateActivityUndoState = jest.fn(
 const mockOpenInserterForPattern = jest.fn();
 const mockSelectBlockByArea = jest.fn();
 const mockSelectBlockBySlugOrArea = jest.fn();
+const DOCUMENT_POSITION_FOLLOWING = 4;
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -375,6 +376,18 @@ function getTextarea() {
 	return getContainer().querySelector( 'textarea' );
 }
 
+function getButton( label ) {
+	return Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+		( element ) => element.textContent === label
+	);
+}
+
+function getReviewSections() {
+	return Array.from(
+		getContainer().querySelectorAll( '.flavor-agent-review-section' )
+	);
+}
+
 async function setPromptValue( value ) {
 	const textarea = getTextarea();
 
@@ -470,7 +483,24 @@ afterEach( async () => {
 } );
 
 describe( 'TemplateRecommender', () => {
-	test( 'clears stale recommendations when template-global visible patterns change without resetting the prompt', async () => {
+	test( 'renders one shared review panel below the lanes instead of nesting it in the selected card', async () => {
+		const selectedCard = getContainer().querySelector(
+			'.flavor-agent-card--template.is-review-selected'
+		);
+		const reviewSections = getReviewSections();
+		const reviewSection = reviewSections[ 0 ] || null;
+
+		expect( selectedCard ).not.toBeNull();
+		expect( reviewSections.length ).toBe( 1 );
+		expect( selectedCard?.textContent ).toContain( 'Review open' );
+		expect( selectedCard?.textContent ).toContain( 'Reviewing' );
+		expect( selectedCard?.contains( reviewSection ) ).toBe( false );
+		expect( selectedCard?.compareDocumentPosition( reviewSection ) ).toBe(
+			DOCUMENT_POSITION_FOLLOWING
+		);
+	} );
+
+	test( 'preserves stale recommendations when template-global visible patterns change without resetting the prompt', async () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 		expect( hasText( 'Confirm Apply' ) ).toBe( true );
 		expect( hasText( 'The previous apply state should be cleared.' ) ).toBe(
@@ -494,12 +524,10 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 		await renderPanel();
 
-		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( hasText( 'Add hero intro' ) ).toBe( false );
-		expect( hasText( 'Confirm Apply' ) ).toBe( false );
-		expect( hasText( 'The previous apply state should be cleared.' ) ).toBe(
-			false
-		);
+		expect( mockClearTemplateRecommendations ).not.toHaveBeenCalled();
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
+		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
 		expect( getTextarea().value ).toBe( 'Keep this prompt.' );
 	} );
 
@@ -525,7 +553,7 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 	} );
 
-	test( 'does not render stale template results when the stored context signature mismatches', async () => {
+	test( 'keeps stale template results visible but disables confirm apply when the stored context signature mismatches', async () => {
 		currentState = createState( {
 			store: {
 				templateContextSignature: 'stale-signature',
@@ -534,8 +562,8 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Add hero intro' ) ).toBe( false );
-		expect( hasText( 'Confirm Apply' ) ).toBe( false );
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
 	} );
 
 	test( 'shows a stale scope badge when the stored template result context mismatches', async () => {
@@ -550,9 +578,11 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Home Template' ) ).toBe( true );
 		expect( hasText( TEMPLATE_REF ) ).toBe( true );
 		expect( hasText( 'Stale' ) ).toBe( true );
-		expect( hasText( 'Context has changed since the last request.' ) ).toBe(
-			true
-		);
+		expect(
+			hasText(
+				'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+			)
+		).toBe( true );
 	} );
 
 	test( 'does not show the current scope badge when the latest template request failed', async () => {
@@ -610,7 +640,7 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Manual Ideas' ) ).toBe( true );
+		expect( hasText( 'Manual ideas' ) ).toBe( true );
 		expect( hasText( 'Explore an editorial collage' ) ).toBe( true );
 		expect( hasText( 'Suggested Patterns' ) ).toBe( true );
 		expect( hasText( 'Footer' ) ).toBe( true );
@@ -655,6 +685,14 @@ describe( 'TemplateRecommender', () => {
 				],
 			},
 		} );
+		currentState = {
+			...currentState,
+			store: {
+				...currentState.store,
+				templateContextSignature:
+					buildTemplateContextSignature( currentState ),
+			},
+		};
 
 		await renderPanel();
 
@@ -702,7 +740,7 @@ describe( 'TemplateRecommender', () => {
 		);
 	} );
 
-	test( 'clears stale recommendations when live override metadata changes', async () => {
+	test( 'preserves stale recommendations when live override metadata changes', async () => {
 		currentState = createState( {
 			blockEditor: {
 				...getState().blockEditor,
@@ -731,6 +769,14 @@ describe( 'TemplateRecommender', () => {
 				],
 			},
 		} );
+		currentState = {
+			...currentState,
+			store: {
+				...currentState.store,
+				templateContextSignature:
+					buildTemplateContextSignature( currentState ),
+			},
+		};
 
 		await renderPanel();
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
@@ -760,11 +806,12 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 		await renderPanel();
 
-		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( hasText( 'Add hero intro' ) ).toBe( false );
+		expect( mockClearTemplateRecommendations ).not.toHaveBeenCalled();
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
 	} );
 
-	test( 'clears stale recommendations when the top-level template structure changes without changing slots', async () => {
+	test( 'preserves stale recommendations when the top-level template structure changes without changing slots', async () => {
 		expect( hasText( 'Add hero intro' ) ).toBe( true );
 
 		currentState = {
@@ -788,9 +835,9 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 		await renderPanel();
 
-		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( hasText( 'Add hero intro' ) ).toBe( false );
-		expect( hasText( 'Confirm Apply' ) ).toBe( false );
+		expect( mockClearTemplateRecommendations ).not.toHaveBeenCalled();
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
 	} );
 
 	test( 'clears recommendations and resets the prompt when the template changes', async () => {
@@ -819,7 +866,7 @@ describe( 'TemplateRecommender', () => {
 		expect( getTextarea().value ).toBe( '' );
 	} );
 
-	test( 'clears an in-flight request when the context changes while loading', async () => {
+	test( 'keeps an in-flight template request active when the context changes while loading', async () => {
 		currentState = createState( {
 			store: {
 				templateApplyError: null,
@@ -849,8 +896,8 @@ describe( 'TemplateRecommender', () => {
 		await renderPanel();
 		await renderPanel();
 
-		expect( mockClearTemplateRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( hasText( 'Analyzing template structure…' ) ).toBe( false );
+		expect( mockClearTemplateRecommendations ).not.toHaveBeenCalled();
+		expect( hasText( 'Analyzing template structure…' ) ).toBe( true );
 	} );
 
 	test( 'shows the undo success notice even when the last template activity is now undone', async () => {

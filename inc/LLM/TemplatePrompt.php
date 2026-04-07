@@ -68,7 +68,7 @@ Return ONLY a JSON object with this exact shape. Do not use markdown fences or a
 }
 
 Rules:
-- operations[] MUST be the executable source of truth for the suggestion.
+- operations[] MUST be the executable source of truth when the suggestion is fully deterministic.
 - Supported operation types are ONLY: assign_template_part, replace_template_part, insert_pattern.
 - Each suggestion may contain at most one insert_pattern operation.
 - assign_template_part MUST include slug and area.
@@ -82,7 +82,8 @@ Rules:
 - templateParts[].slug MUST be a slug that appears in the Available Template Parts list.
 - templateParts[].area MUST be an area already present in the assigned template parts or Explicitly Empty Areas list.
 - patternSuggestions[] MUST be pattern name values from the Available Patterns list.
-- Keep templateParts and patternSuggestions aligned with the operations you return.
+- If a suggestion cannot be safely expressed with the supported operations, leave operations as an empty array and keep it advisory through templateParts and/or patternSuggestions.
+- Keep templateParts and patternSuggestions aligned with the operations you return. When operations is empty, use them as advisory summaries instead.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Prioritize explicitly empty template-part placeholders before replacing existing assignments.
 - Respect the theme's design tokens when suggesting patterns.
@@ -484,12 +485,12 @@ SYSTEM;
 			);
 		}
 
-		$unused_part_lookup    = self::build_unused_template_part_lookup( $context );
-		$assigned_part_lookup  = self::build_assigned_template_part_lookup( $context );
-		$allowed_area_lookup   = self::build_allowed_area_lookup( $context );
-		$empty_area_lookup     = self::build_empty_area_lookup( $context );
-		$pattern_lookup        = self::build_pattern_lookup( $context );
-		$template_block_lookup = self::build_template_block_lookup( $context );
+		$unused_part_lookup      = self::build_unused_template_part_lookup( $context );
+		$assigned_part_lookup    = self::build_assigned_template_part_lookup( $context );
+		$allowed_area_lookup     = self::build_allowed_area_lookup( $context );
+		$empty_area_lookup       = self::build_empty_area_lookup( $context );
+		$pattern_lookup          = self::build_pattern_lookup( $context );
+		$template_block_lookup   = self::build_template_block_lookup( $context );
 		$insertion_anchor_lookup = self::build_insertion_anchor_lookup( $context );
 
 		$suggestions = self::validate_template_suggestions(
@@ -586,7 +587,6 @@ SYSTEM;
 			if ( count( $validated_operations ) === 0 ) {
 				$derived_operations = self::derive_template_operations(
 					$validated_template_parts,
-					$validated_pattern_suggestions,
 					$assigned_part_lookup,
 					$empty_area_lookup
 				);
@@ -598,18 +598,19 @@ SYSTEM;
 				$validated_operations = $derived_operations['operations'];
 			}
 
-			if ( count( $validated_operations ) === 0 ) {
-				continue;
+			if ( count( $validated_operations ) > 0 ) {
+				$entry['operations']         = $validated_operations;
+				$entry['templateParts']      = self::summarize_template_parts_from_operations(
+					$validated_operations,
+					$validated_template_parts
+				);
+				$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
+					$validated_operations
+				);
+			} else {
+				$entry['templateParts']      = $validated_template_parts;
+				$entry['patternSuggestions'] = $validated_pattern_suggestions;
 			}
-
-			$entry['operations']         = $validated_operations;
-			$entry['templateParts']      = self::summarize_template_parts_from_operations(
-				$validated_operations,
-				$validated_template_parts
-			);
-			$entry['patternSuggestions'] = self::summarize_pattern_suggestions_from_operations(
-				$validated_operations
-			);
 
 			if (
 				count( $entry['operations'] ) === 0
@@ -1157,19 +1158,15 @@ SYSTEM;
 
 	/**
 	 * @param array<int, array{slug: string, area: string, reason: string}> $template_parts
-	 * @param string[] $pattern_suggestions
 	 * @param array $assigned_part_lookup Assigned template-part lookup.
 	 * @param array<string, true> $empty_area_lookup Explicitly empty area lookup.
 	 * @return array{operations: array<int, array<string, string>>, invalid: bool}
 	 */
 	private static function derive_template_operations(
 		array $template_parts,
-		array $pattern_suggestions,
 		array $assigned_part_lookup,
 		array $empty_area_lookup
 	): array {
-		unset( $pattern_suggestions );
-
 		$operations = [];
 		$seen_areas = [];
 

@@ -501,6 +501,37 @@ describe( 'template recommender helpers', () => {
 		expect( model.canApply ).toBe( false );
 	} );
 
+	test( 'buildTemplateSuggestionViewModel keeps advisory template-part summaries when no operations are present', () => {
+		const model = buildTemplateSuggestionViewModel( {
+			templateParts: [
+				{
+					slug: 'footer-main',
+					area: 'footer',
+					reason: 'Populate the empty footer slot manually.',
+				},
+				{
+					slug: 'footer-main',
+					area: 'footer',
+					reason: 'Duplicate should collapse.',
+				},
+			],
+		} );
+
+		expect( model.operations ).toEqual( [] );
+		expect( model.templateParts ).toEqual( [
+			{
+				key: 'footer-main|footer',
+				slug: 'footer-main',
+				area: 'footer',
+				reason: 'Populate the empty footer slot manually.',
+				actionType: TEMPLATE_PART_REVIEW_ACTION,
+				ctaLabel: 'Review in editor',
+			},
+		] );
+		expect( model.executionError ).toBe( '' );
+		expect( model.canApply ).toBe( false );
+	} );
+
 	test( 'buildTemplateSuggestionViewModel resolves pattern titles from insert operations', () => {
 		const model = buildTemplateSuggestionViewModel(
 			{

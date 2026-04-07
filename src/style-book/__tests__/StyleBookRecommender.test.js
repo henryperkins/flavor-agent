@@ -11,6 +11,7 @@ const mockGetStyleBookUiState = jest.fn();
 const mockSubscribeToStyleBookUi = jest.fn();
 const mockRenderAIStatusNotice = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
+const mockRenderAIReviewSection = jest.fn();
 let mockSurfaceCapability = null;
 const DEFAULT_EXECUTION_CONTRACT = {
 	supportedStylePaths: [
@@ -78,12 +79,36 @@ jest.mock( '../../components/AIActivitySection', () => ( props ) => {
 	mockRenderAIActivitySection( props );
 	return null;
 } );
-jest.mock(
-	'../../components/AIReviewSection',
-	() =>
-		( { children } ) =>
-			children
-);
+jest.mock( '../../components/AIReviewSection', () => {
+	const { createElement } = require( '@wordpress/element' );
+
+	return ( props ) => {
+		mockRenderAIReviewSection( props );
+
+		return createElement(
+			'section',
+			{ 'data-review-section': 'true' },
+			createElement(
+				'div',
+				{ 'data-review-title': 'true' },
+				props.title || ''
+			),
+			createElement(
+				'div',
+				{ 'data-review-status': 'true' },
+				props.statusLabel || ''
+			),
+			props.summary
+				? createElement(
+						'div',
+						{ 'data-review-summary': 'true' },
+						props.summary
+				  )
+				: null,
+			props.children
+		);
+	};
+} );
 
 jest.mock( '../../utils/capability-flags', () => ( {
 	getSurfaceCapability: () =>
@@ -746,12 +771,26 @@ describe( 'StyleBookRecommender', () => {
 			getRoot().render( <StyleBookRecommender /> );
 		} );
 
+		const reviewSection = sidebar.querySelector(
+			'[data-review-section="true"]'
+		);
+
+		expect( reviewSection ).not.toBeNull();
 		expect( sidebar.textContent ).toContain( 'Style Book' );
 		expect( sidebar.textContent ).toContain( 'Paragraph' );
 		expect( sidebar.textContent ).toContain( 'Review first' );
 		expect( sidebar.textContent ).toContain( 'Spacing' );
 		expect( sidebar.textContent ).toContain( 'Review open' );
 		expect( sidebar.textContent ).toContain( 'spacing.blockGap → 40' );
+		expect( mockRenderAIReviewSection ).toHaveBeenLastCalledWith(
+			expect.objectContaining( {
+				title: 'Review Before Apply',
+				statusLabel: 'Review first',
+				confirmLabel: 'Apply Style Change',
+				onCancel: expect.any( Function ),
+				onConfirm: expect.any( Function ),
+			} )
+		);
 		expect( sidebar.textContent ).not.toContain(
 			'Raw CSS and custom CSS are out of scope.'
 		);
@@ -786,11 +825,14 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.textContent ).toContain( 'Paragraph' );
 		expect( sidebar.textContent ).toContain( 'Stale' );
 		expect( sidebar.textContent ).toContain(
-			'Context has changed since the last request.'
+			'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
 		);
-		expect( sidebar.textContent ).not.toContain(
-			'Tighten paragraph rhythm'
-		);
+		expect( sidebar.textContent ).toContain( 'Tighten paragraph rhythm' );
+		expect(
+			Array.from( sidebar.querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Review'
+			)?.disabled
+		).toBe( true );
 	} );
 
 	test( 'does not show the current scope badge when the latest Style Book request failed', () => {
@@ -872,7 +914,7 @@ describe( 'StyleBookRecommender', () => {
 		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	test( 'clears stale recommendations after template viewport visibility changes', () => {
+	test( 'preserves stale recommendations after template viewport visibility changes', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -932,13 +974,12 @@ describe( 'StyleBookRecommender', () => {
 			getRoot().render( <StyleBookRecommender /> );
 		} );
 
-		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( sidebar.textContent ).not.toContain(
-			'Tighten paragraph rhythm'
-		);
+		expect( mockClearStyleBookRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Tighten paragraph rhythm' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 
-	test( 'clears stale recommendations after surrounding semantic context changes without structure drift', () => {
+	test( 'preserves stale recommendations after surrounding semantic context changes without structure drift', () => {
 		currentStoreState = {
 			...currentStoreState,
 			recommendations: [
@@ -1000,9 +1041,8 @@ describe( 'StyleBookRecommender', () => {
 			getRoot().render( <StyleBookRecommender /> );
 		} );
 
-		expect( mockClearStyleBookRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( sidebar.textContent ).not.toContain(
-			'Tighten paragraph rhythm'
-		);
+		expect( mockClearStyleBookRecommendations ).not.toHaveBeenCalled();
+		expect( sidebar.textContent ).toContain( 'Tighten paragraph rhythm' );
+		expect( sidebar.textContent ).toContain( 'Stale' );
 	} );
 } );

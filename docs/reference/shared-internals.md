@@ -1,6 +1,6 @@
 # Shared Internals
 
-Cross-cutting store utilities, shared UI components, and context helpers used by multiple recommendation surfaces. Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/reference/abilities-and-routes.md` for the exact contract.
+Cross-cutting store utilities, shared UI components, and context helpers used by multiple recommendation surfaces. Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/reference/abilities-and-routes.md` for the exact contract, and `docs/reference/recommendation-ui-consistency.md` for the cross-surface UI comparison.
 
 ## Store Utilities
 
@@ -10,19 +10,19 @@ Session-scoped AI activity schema, scope resolution, `sessionStorage` cache/fall
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `resolveActivityScope(postType, entityId)` | Builds a normalized scope object `{ key, hint, postType, entityId }` to partition activity logs per edited entity |
-| `resolveGlobalStylesScope(globalStylesId, opts)` | Scope object keyed to a Global Styles entity |
-| `resolveStyleBookScope(globalStylesId, blockName, opts)` | Scope object keyed to a specific block within the Style Book UI |
-| `getCurrentActivityScope(registry)` | Inspects the data registry to determine the active editing scope (post, global styles, or Style Book block) |
-| `readPersistedActivityLog(scopeKey)` | Reads the `sessionStorage` cache for a given scope key; handles schema version migration and legacy detection |
-| `writePersistedActivityLog(scopeKey, entries)` | Writes the trimmed activity log to `sessionStorage` as a versioned JSON blob |
-| `createActivityEntry({...})` | Factory for new activity entries with monotonic IDs, timestamps, initial undo state, and persistence tracking |
-| `getBlockActivityUndoState(entry, blockEditorSelect)` | Resolves live undo state for a block-surface entry by checking whether the target block still exists and its attributes match the expected snapshot |
-| `getResolvedActivityEntries(entries, runtimeUndoResolver)` | Batch-resolves undo states for all entries, applying ordered-undo rules across the full log |
-| `getLatestUndoableActivity(entries, runtimeUndoResolver)` | Returns the most recent tail entry that is both `canUndo: true` and `status: 'available'` after full resolution |
-| `ORDERED_UNDO_BLOCKED_ERROR` | Error message constant displayed when undo is blocked because newer AI actions exist |
+| Export                                                     | Role                                                                                                                                                |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolveActivityScope(postType, entityId)`                 | Builds a normalized scope object `{ key, hint, postType, entityId }` to partition activity logs per edited entity                                   |
+| `resolveGlobalStylesScope(globalStylesId, opts)`           | Scope object keyed to a Global Styles entity                                                                                                        |
+| `resolveStyleBookScope(globalStylesId, blockName, opts)`   | Scope object keyed to a specific block within the Style Book UI                                                                                     |
+| `getCurrentActivityScope(registry)`                        | Inspects the data registry to determine the active editing scope (post, global styles, or Style Book block)                                         |
+| `readPersistedActivityLog(scopeKey)`                       | Reads the `sessionStorage` cache for a given scope key; handles schema version migration and legacy detection                                       |
+| `writePersistedActivityLog(scopeKey, entries)`             | Writes the trimmed activity log to `sessionStorage` as a versioned JSON blob                                                                        |
+| `createActivityEntry({...})`                               | Factory for new activity entries with monotonic IDs, timestamps, initial undo state, and persistence tracking                                       |
+| `getBlockActivityUndoState(entry, blockEditorSelect)`      | Resolves live undo state for a block-surface entry by checking whether the target block still exists and its attributes match the expected snapshot |
+| `getResolvedActivityEntries(entries, runtimeUndoResolver)` | Batch-resolves undo states for all entries, applying ordered-undo rules across the full log                                                         |
+| `getLatestUndoableActivity(entries, runtimeUndoResolver)`  | Returns the most recent tail entry that is both `canUndo: true` and `status: 'available'` after full resolution                                     |
+| `ORDERED_UNDO_BLOCKED_ERROR`                               | Error message constant displayed when undo is blocked because newer AI actions exist                                                                |
 
 **Session cache contract:** The server-backed activity repository is the source of truth. `sessionStorage` acts only as a cache/fallback so the current editor session can display activity entries before server hydration completes and handle transient offline periods. On entity change, `loadActivitySession()` merges server entries with pending local entries and writes the merged set back to `sessionStorage`. Entries that have been persisted to the server carry `persistence.status === 'server'`; local-only entries carry `'local'` or `'create'` status and are synced on the next opportunity.
 
@@ -34,13 +34,13 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `buildSafeAttributeUpdates(currentAttributes, suggestedUpdates)` | Produces a safe attribute patch by filtering out raw CSS injection, stripping unsafe theme payloads, and deep-merging nested keys so existing sub-properties are preserved |
-| `buildUndoAttributeUpdates(previousAttributes, nextAttributes)` | Builds a restoration patch that reverts an applied attribute change; keys present only in `next` are set to `undefined` |
-| `attributeSnapshotsMatch(previousSnapshot, currentSnapshot)` | Deep structural equality check between two attribute snapshots, used by undo logic to determine whether a block's attributes still match the expected state |
-| `sanitizeRecommendationsForContext(recommendations, blockContext)` | Main sanitization pipeline: normalizes suggestion groups, strips theme-unsafe CSS, filters binding-unsafe attributes, enforces editing-mode restrictions |
-| `getBlockSuggestionExecutionInfo(suggestion, blockContext)` | Returns `{ allowedUpdates, isAdvisory, isAdvisoryOnly, isExecutable }` describing whether a suggestion is purely informational or carries executable attribute changes |
+| Export                                                             | Role                                                                                                                                                                       |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `buildSafeAttributeUpdates(currentAttributes, suggestedUpdates)`   | Produces a safe attribute patch by filtering out raw CSS injection, stripping unsafe theme payloads, and deep-merging nested keys so existing sub-properties are preserved |
+| `buildUndoAttributeUpdates(previousAttributes, nextAttributes)`    | Builds a restoration patch that reverts an applied attribute change; keys present only in `next` are set to `undefined`                                                    |
+| `attributeSnapshotsMatch(previousSnapshot, currentSnapshot)`       | Deep structural equality check between two attribute snapshots, used by undo logic to determine whether a block's attributes still match the expected state                |
+| `sanitizeRecommendationsForContext(recommendations, blockContext)` | Main sanitization pipeline: normalizes suggestion groups, strips theme-unsafe CSS, filters binding-unsafe attributes, enforces editing-mode restrictions                   |
+| `getBlockSuggestionExecutionInfo(suggestion, blockContext)`        | Returns `{ allowedUpdates, isAdvisory, isAdvisoryOnly, isExecutable }` describing whether a suggestion is purely informational or carries executable attribute changes     |
 
 **Consumers:** `src/store/index.js` (uses all apply/undo helpers), `src/store/activity-history.js` (uses `attributeSnapshotsMatch`), `src/inspector/BlockRecommendationsPanel.js` (uses `getBlockSuggestionExecutionInfo`)
 
@@ -50,9 +50,9 @@ Minimal module (2 exports) that resolves activity entry targets to live editor b
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `getBlockByPath(blocks, path)` | Traverses a block tree using an array of numeric indices and returns the block at that location |
+| Export                                            | Role                                                                                                                 |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `getBlockByPath(blocks, path)`                    | Traverses a block tree using an array of numeric indices and returns the block at that location                      |
 | `resolveActivityBlock(blockEditorSelect, target)` | Resolves an activity target: tries `target.clientId` first, then falls back to `target.blockPath` via tree traversal |
 
 **Consumers:** `src/store/activity-history.js`, `src/store/index.js`
@@ -79,7 +79,7 @@ Renders a contextual `<Notice>` with a configurable tone (`info`, `warning`, `er
 
 ### `src/components/AIAdvisorySection.js`
 
-Renders a styled section container for non-executable, advisory-only AI suggestions (e.g. structural recommendations, pattern replacement ideas). Displays a title, an "Advisory only" pill badge, a formatted count pill, optional description, optional meta slot, and a body slot for child content.
+Renders a styled section container for non-executable, advisory-only AI suggestions (e.g. structural recommendations, pattern replacement ideas). Displays a title, an optional advisory-status pill, a formatted count pill, optional description, optional meta slot, and a body slot for child content.
 
 **Props:** `title`, `advisoryLabel`, `count`, `countLabel`, `countNoun`, `description`, `meta`, `children`, `className`
 
@@ -87,7 +87,7 @@ Renders a styled section container for non-executable, advisory-only AI suggesti
 
 ### `src/components/AIReviewSection.js`
 
-Renders a review-before-apply confirmation panel for executable AI operations. Displays a title, "Executable" status pill, operation count pill, optional summary, a child content slot (typically an operation list), an optional hint, and Confirm/Cancel action buttons.
+Renders a review-before-apply confirmation panel for executable AI operations. Displays a title, configurable status pill, operation count pill, optional summary, a child content slot (typically an operation list), an optional hint, and Confirm/Cancel action buttons.
 
 **Props:** `title`, `statusLabel`, `count`, `countLabel`, `countNoun`, `summary`, `children`, `hint`, `confirmLabel`, `cancelLabel`, `onConfirm`, `onCancel`, `confirmDisabled`, `className`
 
@@ -101,12 +101,12 @@ Client-side block introspection. Queries the `@wordpress/blocks` and `@wordpress
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `introspectBlockInstance(clientId)` | Full manifest for a live block: type metadata + current attributes, editing mode, parent chain, child count, content-only status, block visibility |
-| `introspectBlockTree(rootClientId, maxDepth)` | Recursively introspects child blocks from a root, returning a nested tree of instance manifests |
-| `summarizeTree(tree, options, depth)` | Compresses an introspected tree into a token-budget-friendly summary for LLM prompts |
-| `buildCapabilityIndex(tree)` | Deduplicated map of unique block types to their capability summaries |
+| Export                                        | Role                                                                                                                                               |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `introspectBlockInstance(clientId)`           | Full manifest for a live block: type metadata + current attributes, editing mode, parent chain, child count, content-only status, block visibility |
+| `introspectBlockTree(rootClientId, maxDepth)` | Recursively introspects child blocks from a root, returning a nested tree of instance manifests                                                    |
+| `summarizeTree(tree, options, depth)`         | Compresses an introspected tree into a token-budget-friendly summary for LLM prompts                                                               |
+| `buildCapabilityIndex(tree)`                  | Deduplicated map of unique block types to their capability summaries                                                                               |
 
 **Consumers:** `src/context/collector.js`
 
@@ -116,12 +116,12 @@ Design token extraction from `theme.json` and global styles. Produces a full tok
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `collectThemeTokens()` | Entry point: reads current editor settings and returns the full design-token manifest |
-| `summarizeTokens(tokens)` | Compresses the manifest into a compact, prompt-friendly summary |
-| `buildGlobalStylesExecutionContract(tokens)` | Combines supported style paths with sorted preset slug maps for the LLM to validate style writes |
-| `buildBlockStyleExecutionContract(tokens, blockType)` | Same as above but scoped to a specific block type's supports |
+| Export                                                | Role                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `collectThemeTokens()`                                | Entry point: reads current editor settings and returns the full design-token manifest            |
+| `summarizeTokens(tokens)`                             | Compresses the manifest into a compact, prompt-friendly summary                                  |
+| `buildGlobalStylesExecutionContract(tokens)`          | Combines supported style paths with sorted preset slug maps for the LLM to validate style writes |
+| `buildBlockStyleExecutionContract(tokens, blockType)` | Same as above but scoped to a specific block type's supports                                     |
 
 **Consumers:** `src/context/collector.js`, `src/utils/style-operations.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
 
@@ -131,11 +131,11 @@ Walks block trees to collect pattern override summaries and viewport visibility 
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
+| Export                                                        | Role                                                                         |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `describeEditorBlockLabel(blockName, attributes, areaLookup)` | Human-readable label for a block (includes slug and area for template parts) |
-| `collectPatternOverrideSummary(blocks, areaLookup)` | Summary of all blocks with `core/pattern-overrides` bindings |
-| `collectViewportVisibilitySummary(blocks, areaLookup)` | Summary of all blocks with viewport-based block visibility rules |
+| `collectPatternOverrideSummary(blocks, areaLookup)`           | Summary of all blocks with `core/pattern-overrides` bindings                 |
+| `collectViewportVisibilitySummary(blocks, areaLookup)`        | Summary of all blocks with viewport-based block visibility rules             |
 
 **Consumers:** `src/global-styles/GlobalStylesRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/templates/template-recommender-helpers.js`
 
@@ -145,11 +145,11 @@ Block structural role inference. Recursively annotates a block tree with semanti
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `annotateStructuralIdentity(tree, options)` | Recursive tree walker that attaches `structuralIdentity` objects to every node |
+| Export                                                    | Role                                                                                                 |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `annotateStructuralIdentity(tree, options)`               | Recursive tree walker that attaches `structuralIdentity` objects to every node                       |
 | `buildStructuralContext(tree, selectedClientId, options)` | Orchestrates annotation + path finding to produce a complete structural context for a selected block |
-| `toStructuralSummary(node)` | Extracts a compact summary for LLM prompt use |
+| `toStructuralSummary(node)`                               | Extracts a compact summary for LLM prompt use                                                        |
 
 **Consumers:** `src/context/collector.js`
 
@@ -161,11 +161,11 @@ Canonical abstraction layer between WordPress's dual editor stores (`core/editor
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `getEditedPostTypeEntity(select, expectedPostType?)` | Resolves the currently edited entity from `core/editor` or `core/edit-site` |
-| `getPostTypeFieldDefinitions(postType)` | Returns frozen `{ id, label }` field descriptors appropriate for each post type |
-| `usePostTypeEntityContract(postType)` | React hook: composes entity fields, view/layout defaults, area options, and recommended category into a single contract |
+| Export                                               | Role                                                                                                                    |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `getEditedPostTypeEntity(select, expectedPostType?)` | Resolves the currently edited entity from `core/editor` or `core/edit-site`                                             |
+| `getPostTypeFieldDefinitions(postType)`              | Returns frozen `{ id, label }` field descriptors appropriate for each post type                                         |
+| `usePostTypeEntityContract(postType)`                | React hook: composes entity fields, view/layout defaults, area options, and recommended category into a single contract |
 
 **Consumers:** `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/patterns/PatternRecommender.js`
 
@@ -215,11 +215,11 @@ Template-part area resolution from attributes, slug, or the server-localized are
 
 **Key exports:**
 
-| Export | Role |
-|---|---|
-| `getTemplatePartAreaLookup()` | Returns the canonical slug-to-area mapping from `flavorAgentData` |
-| `inferTemplatePartArea(attributes, areaLookup)` | Convenience: returns the resolved area string |
-| `matchesTemplatePartArea(block, area, areaLookup)` | Predicate: does the block's inferred area match the given area? |
+| Export                                             | Role                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| `getTemplatePartAreaLookup()`                      | Returns the canonical slug-to-area mapping from `flavorAgentData` |
+| `inferTemplatePartArea(attributes, areaLookup)`    | Convenience: returns the resolved area string                     |
+| `matchesTemplatePartArea(block, area, areaLookup)` | Predicate: does the block's inferred area match the given area?   |
 
 **Consumers:** `src/utils/structural-identity.js`, `src/utils/editor-context-metadata.js`, `src/utils/template-actions.js`, `src/templates/template-recommender-helpers.js`, `src/template-parts/TemplatePartRecommender.js`
 

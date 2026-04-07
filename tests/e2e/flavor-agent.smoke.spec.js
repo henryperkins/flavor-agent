@@ -22,6 +22,7 @@ const TEMPLATE_PROMPT =
 const TEMPLATE_INSERTED_CONTENT = 'Inserted by Flavor Agent';
 const TEMPLATE_PATTERN_NAME = 'flavor-agent/editorial-banner';
 const TEMPLATE_PATTERN_TITLE = 'Editorial Banner';
+const TEMPLATE_STALE_INSERTED_CONTENT = 'Template freshness check';
 const TEMPLATE_MAIN_CONTENT_TARGET_PATH = [ 1, 0 ];
 const TEMPLATE_MAIN_CONTENT_TARGET = {
 	name: 'core/heading',
@@ -32,10 +33,12 @@ const TEMPLATE_PART_INSERTED_CONTENT =
 	'Inserted into the template part by Flavor Agent';
 const TEMPLATE_PART_PATTERN_NAME = 'flavor-agent/header-utility-row';
 const TEMPLATE_PART_PATTERN_TITLE = 'Header Utility Row';
+const TEMPLATE_PART_STALE_INSERTED_CONTENT = 'Template part freshness check';
 const GLOBAL_STYLES_PROMPT =
 	'Warm the canvas slightly and tighten the site-wide vertical rhythm.';
 const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|signal';
 const GLOBAL_STYLES_LINE_HEIGHT_VALUE = 1.73;
+const GLOBAL_STYLES_STALE_TEXT_COLOR = '#101010';
 const GLOBAL_STYLES_SIDEBAR_SELECTOR =
 	'.editor-global-styles-sidebar__panel, .editor-global-styles-sidebar, [role="region"][aria-label="Styles"]';
 const GLOBAL_STYLES_RESPONSE = {
@@ -63,6 +66,35 @@ const GLOBAL_STYLES_RESPONSE = {
 					path: [ 'typography', 'lineHeight' ],
 					value: GLOBAL_STYLES_LINE_HEIGHT_VALUE,
 					valueType: 'freeform',
+				},
+			],
+		},
+	],
+};
+const STYLE_BOOK_BLOCK_NAME = 'core/paragraph';
+const STYLE_BOOK_BLOCK_TITLE = 'Paragraph';
+const STYLE_BOOK_PROMPT =
+	'Make this paragraph style feel more like a print pull quote.';
+const STYLE_BOOK_STALE_TEXT_COLOR = '#123456';
+const STYLE_BOOK_RESPONSE = {
+	explanation:
+		'Increase emphasis in the paragraph example with a stronger text treatment.',
+	suggestions: [
+		{
+			label: 'Strengthen paragraph emphasis',
+			description:
+				'Use the signal preset for paragraph text so the example reads more like a featured pull quote.',
+			category: 'typography',
+			tone: 'executable',
+			operations: [
+				{
+					type: 'set_block_styles',
+					path: [ 'color', 'text' ],
+					value: 'var:preset|color|signal',
+					valueType: 'preset',
+					presetType: 'color',
+					presetSlug: 'signal',
+					cssVar: 'var(--wp--preset--color--signal)',
 				},
 			],
 		},
@@ -141,6 +173,163 @@ async function mockGlobalStylesRecommendations( page, styleRequests ) {
 			body: JSON.stringify( GLOBAL_STYLES_RESPONSE ),
 		} );
 	} );
+}
+
+function getPanelBody( locator ) {
+	return locator.locator(
+		'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " components-panel__body ")][1]'
+	);
+}
+
+async function getSurfaceActivityCount( page, surface ) {
+	return page.evaluate(
+		( targetSurface ) =>
+			(
+				window.wp?.data?.select( 'flavor-agent' )?.getActivityLog?.() ||
+				[]
+			).filter( ( entry ) => entry?.surface === targetSurface ).length,
+		surface
+	);
+}
+
+async function setCurrentGlobalStylesTextColor( page, textColor ) {
+	await page.evaluate( ( nextTextColor ) => {
+		const core = window.wp?.data?.select( 'core' );
+		const coreDispatch = window.wp?.data?.dispatch( 'core' );
+		const globalStylesId =
+			core?.__experimentalGetCurrentGlobalStylesId?.() || null;
+		const record = globalStylesId
+			? core?.getEditedEntityRecord?.(
+					'root',
+					'globalStyles',
+					globalStylesId
+			  ) ||
+			  core?.getEntityRecord?.(
+					'root',
+					'globalStyles',
+					globalStylesId
+			  ) ||
+			  null
+			: null;
+
+		if ( ! globalStylesId || ! record ) {
+			return;
+		}
+
+		coreDispatch?.editEntityRecord?.(
+			'root',
+			'globalStyles',
+			globalStylesId,
+			{
+				styles: {
+					...( record.styles || {} ),
+					color: {
+						...( record.styles?.color || {} ),
+						text: nextTextColor,
+					},
+				},
+			}
+		);
+	}, textColor );
+}
+
+async function setStyleBookBlockTextColor( page, { blockName, textColor } ) {
+	await page.evaluate(
+		( { nextBlockName, nextTextColor } ) => {
+			const core = window.wp?.data?.select( 'core' );
+			const coreDispatch = window.wp?.data?.dispatch( 'core' );
+			const globalStylesId =
+				core?.__experimentalGetCurrentGlobalStylesId?.() || null;
+			const record = globalStylesId
+				? core?.getEditedEntityRecord?.(
+						'root',
+						'globalStyles',
+						globalStylesId
+				  ) ||
+				  core?.getEntityRecord?.(
+						'root',
+						'globalStyles',
+						globalStylesId
+				  ) ||
+				  null
+				: null;
+
+			if ( ! globalStylesId || ! record ) {
+				return;
+			}
+
+			coreDispatch?.editEntityRecord?.(
+				'root',
+				'globalStyles',
+				globalStylesId,
+				{
+					styles: {
+						...( record.styles || {} ),
+						blocks: {
+							...( record.styles?.blocks || {} ),
+							[ nextBlockName ]: {
+								...( record.styles?.blocks?.[ nextBlockName ] ||
+									{} ),
+								color: {
+									...( record.styles?.blocks?.[
+										nextBlockName
+									]?.color || {} ),
+									text: nextTextColor,
+								},
+							},
+						},
+					},
+				}
+			);
+		},
+		{
+			nextBlockName: blockName,
+			nextTextColor: textColor,
+		}
+	);
+}
+
+async function injectStyleBookExample( page, { blockName, blockTitle } ) {
+	await page.evaluate(
+		( { nextBlockName, nextBlockTitle } ) => {
+			window.flavorAgentData.canRecommendStyleBook = true;
+
+			const existingIframe = document.querySelector(
+				'.editor-style-book__iframe'
+			);
+			const iframe = existingIframe || document.createElement( 'iframe' );
+
+			iframe.className = 'editor-style-book__iframe';
+			iframe.setAttribute( 'title', 'Style Book' );
+
+			if ( ! existingIframe ) {
+				document.body.appendChild( iframe );
+			}
+
+			const iframeDocument = iframe.contentDocument;
+
+			if ( ! iframeDocument ) {
+				return;
+			}
+
+			iframeDocument.open();
+			iframeDocument.write( `<!doctype html>
+<html>
+  <body>
+    <div class="editor-style-book__example is-selected" id="example-${ encodeURIComponent(
+		nextBlockName
+	) }">
+      <div class="editor-style-book__example-title">${ nextBlockTitle }</div>
+    </div>
+  </body>
+</html>` );
+			iframeDocument.close();
+		},
+		{
+			nextBlockName: blockName,
+			nextBlockTitle: blockTitle,
+		}
+	);
 }
 
 async function waitForWordPressReady( page ) {
@@ -734,12 +923,62 @@ async function registerTemplatePattern(
 	);
 }
 
+async function insertRootParagraphBlock( page, content ) {
+	await page.evaluate( ( nextContent ) => {
+		const { createBlock } = window.wp.blocks;
+
+		window.wp?.data
+			?.dispatch( 'core/block-editor' )
+			?.insertBlocks?.( [
+				createBlock( 'core/paragraph', { content: nextContent } ),
+			] );
+	}, content );
+}
+
+async function setFirstRootBlockPatternOverride(
+	page,
+	attributeName = 'layout'
+) {
+	await page.evaluate( ( nextAttributeName ) => {
+		const blockEditor = window.wp?.data?.select( 'core/block-editor' );
+		const blockEditorDispatch =
+			window.wp?.data?.dispatch( 'core/block-editor' );
+		const firstBlock = blockEditor?.getBlocks?.()?.[ 0 ] || null;
+
+		if ( ! firstBlock?.clientId ) {
+			return;
+		}
+
+		blockEditorDispatch?.updateBlockAttributes?.( firstBlock.clientId, {
+			metadata: {
+				...( firstBlock.attributes?.metadata || {} ),
+				bindings: {
+					...( firstBlock.attributes?.metadata?.bindings || {} ),
+					[ nextAttributeName ]: {
+						source: 'core/pattern-overrides',
+					},
+				},
+			},
+		} );
+	}, attributeName );
+}
+
 async function openTemplateRecommendationsPanel( page ) {
 	const promptInput = page.getByPlaceholder(
 		'Describe the structure or layout you want.'
 	);
 
 	await ensurePanelOpen( page, 'AI Template Recommendations', promptInput );
+
+	return promptInput;
+}
+
+async function openStyleBookRecommendationsPanel( page ) {
+	const promptInput = page.getByPlaceholder(
+		'Describe the block style direction you want.'
+	);
+
+	await ensurePanelOpen( page, 'AI Style Book Suggestions', promptInput );
 
 	return promptInput;
 }
@@ -1579,6 +1818,259 @@ test( '@wp70-site-editor global styles surface requests defaults when the prompt
 	).toBeVisible();
 } );
 
+test( '@wp70-site-editor global styles surface keeps stale results visible but disables review and apply until refresh', async ( {
+	page,
+} ) => {
+	const styleRequests = [];
+
+	await mockGlobalStylesRecommendations( page, styleRequests );
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
+	);
+	await page.waitForFunction( () =>
+		Boolean(
+			window.wp?.data
+				?.select( 'core' )
+				?.__experimentalGetCurrentGlobalStylesId?.()
+		)
+	);
+	await enableSiteEditorGlobalStylesSidebar( page );
+
+	const promptInput = page.getByLabel( 'Describe the style direction' );
+	const recommendationsPanel = page
+		.locator( '.flavor-agent-global-styles-panel' )
+		.first();
+
+	await expect( promptInput ).toBeVisible();
+	await promptInput.fill( GLOBAL_STYLES_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Style Suggestions' } )
+		.click();
+
+	await expect.poll( () => styleRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel
+			.getByText( 'Adjust canvas tone and rhythm' )
+			.first()
+	).toBeVisible();
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Review' } )
+		.click();
+	await expect(
+		recommendationsPanel.getByText( 'Review Before Apply', { exact: true } )
+	).toBeVisible();
+
+	await setCurrentGlobalStylesTextColor(
+		page,
+		GLOBAL_STYLES_STALE_TEXT_COLOR
+	);
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const core = window.wp?.data?.select( 'core' );
+				const globalStylesId =
+					core?.__experimentalGetCurrentGlobalStylesId?.() || null;
+				const record = globalStylesId
+					? core?.getEditedEntityRecord?.(
+							'root',
+							'globalStyles',
+							globalStylesId
+					  ) ||
+					  core?.getEntityRecord?.(
+							'root',
+							'globalStyles',
+							globalStylesId
+					  ) ||
+					  null
+					: null;
+
+				return record?.styles?.color?.text || '';
+			} )
+		)
+		.toBe( GLOBAL_STYLES_STALE_TEXT_COLOR );
+
+	await expect(
+		recommendationsPanel.getByText(
+			'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Reviewing',
+			exact: true,
+		} )
+	).toBeDisabled();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Apply Style Change',
+			exact: true,
+		} )
+	).toBeDisabled();
+
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Refresh', exact: true } )
+		.click();
+
+	await expect.poll( () => styleRequests.length ).toBe( 2 );
+	expect( styleRequests[ 1 ].scope.surface ).toBe( 'global-styles' );
+	expect(
+		styleRequests[ 1 ].styleContext.currentConfig.styles.color.text
+	).toBe( GLOBAL_STYLES_STALE_TEXT_COLOR );
+	await expect(
+		recommendationsPanel.getByText(
+			'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toHaveCount( 0 );
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Review',
+			exact: true,
+		} )
+	).toBeEnabled();
+} );
+
+test( '@wp70-site-editor style book surface keeps stale results visible but disables review and apply until refresh', async ( {
+	page,
+} ) => {
+	const styleRequests = [];
+
+	await page.route( '**/*recommend-style*', async ( route ) => {
+		styleRequests.push( route.request().postDataJSON() );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( STYLE_BOOK_RESPONSE ),
+		} );
+	} );
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
+	);
+	await page.waitForFunction( () =>
+		Boolean(
+			window.wp?.data
+				?.select( 'core' )
+				?.__experimentalGetCurrentGlobalStylesId?.()
+		)
+	);
+	await enableSiteEditorGlobalStylesSidebar( page );
+	await injectStyleBookExample( page, {
+		blockName: STYLE_BOOK_BLOCK_NAME,
+		blockTitle: STYLE_BOOK_BLOCK_TITLE,
+	} );
+
+	const promptInput = await openStyleBookRecommendationsPanel( page );
+	const recommendationsPanel = page
+		.locator( '.flavor-agent-style-book-panel' )
+		.first();
+
+	await promptInput.fill( STYLE_BOOK_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Style Suggestions' } )
+		.click();
+
+	await expect.poll( () => styleRequests.length ).toBe( 1 );
+	expect( styleRequests[ 0 ].scope.surface ).toBe( 'style-book' );
+	expect( styleRequests[ 0 ].scope.blockName ).toBe( STYLE_BOOK_BLOCK_NAME );
+	expect( styleRequests[ 0 ].scope.blockTitle ).toBe(
+		STYLE_BOOK_BLOCK_TITLE
+	);
+	await expect(
+		recommendationsPanel
+			.getByText( 'Strengthen paragraph emphasis' )
+			.first()
+	).toBeVisible();
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Review' } )
+		.click();
+	await expect(
+		recommendationsPanel.getByText( 'Review Before Apply', { exact: true } )
+	).toBeVisible();
+
+	await setStyleBookBlockTextColor( page, {
+		blockName: STYLE_BOOK_BLOCK_NAME,
+		textColor: STYLE_BOOK_STALE_TEXT_COLOR,
+	} );
+	await expect
+		.poll( () =>
+			page.evaluate( ( blockName ) => {
+				const core = window.wp?.data?.select( 'core' );
+				const globalStylesId =
+					core?.__experimentalGetCurrentGlobalStylesId?.() || null;
+				const record = globalStylesId
+					? core?.getEditedEntityRecord?.(
+							'root',
+							'globalStyles',
+							globalStylesId
+					  ) ||
+					  core?.getEntityRecord?.(
+							'root',
+							'globalStyles',
+							globalStylesId
+					  ) ||
+					  null
+					: null;
+
+				return record?.styles?.blocks?.[ blockName ]?.color?.text || '';
+			}, STYLE_BOOK_BLOCK_NAME )
+		)
+		.toBe( STYLE_BOOK_STALE_TEXT_COLOR );
+
+	await expect(
+		recommendationsPanel.getByText(
+			'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Reviewing',
+			exact: true,
+		} )
+	).toBeDisabled();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Apply Style Change',
+			exact: true,
+		} )
+	).toBeDisabled();
+
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Refresh', exact: true } )
+		.click();
+
+	await expect.poll( () => styleRequests.length ).toBe( 2 );
+	expect( styleRequests[ 1 ].scope.surface ).toBe( 'style-book' );
+	expect(
+		styleRequests[ 1 ].styleContext.styleBookTarget.currentStyles.color.text
+	).toBe( STYLE_BOOK_STALE_TEXT_COLOR );
+	await expect(
+		recommendationsPanel.getByText(
+			'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toHaveCount( 0 );
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Review',
+			exact: true,
+		} )
+	).toBeEnabled();
+} );
+
 test( 'template surface smoke previews and applies executable template recommendations', async ( {
 	page,
 } ) => {
@@ -1660,7 +2152,7 @@ test( 'template surface smoke previews and applies executable template recommend
 	);
 
 	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
-	await page.getByRole( 'button', { name: 'Preview Apply' } ).click();
+	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await expect(
 		page
 			.locator( '.flavor-agent-review-section' )
@@ -1710,6 +2202,265 @@ test( 'template surface smoke previews and applies executable template recommend
 	await expect( page.locator( '.flavor-agent-activity-row' ) ).toContainText(
 		'Clarify template hierarchy'
 	);
+} );
+
+test( 'template surface keeps stale results visible but disables review and apply until refresh', async ( {
+	page,
+} ) => {
+	const templateRequests = [];
+
+	await page.route( '**/*recommend-template*', async ( route ) => {
+		templateRequests.push( route.request().postDataJSON() );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+				suggestions: [
+					{
+						label: 'Clarify template hierarchy',
+						description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+						operations: [
+							{
+								type: 'insert_pattern',
+								patternName: TEMPLATE_PATTERN_NAME,
+								placement: 'end',
+							},
+						],
+						templateParts: [],
+						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+					},
+				],
+			} ),
+		} );
+	} );
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await openFirstTemplateEditor( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await page.waitForFunction(
+		() =>
+			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
+			window.wp?.data
+				?.select( 'core/edit-site' )
+				?.getEditedPostType?.() === 'wp_template'
+	);
+	await page.waitForFunction(
+		() =>
+			(
+				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.() ||
+				[]
+			).length > 0
+	);
+
+	await enableTemplateDocumentSidebar( page );
+	await registerTemplatePattern( page, {
+		insertedContent: TEMPLATE_INSERTED_CONTENT,
+		patternName: TEMPLATE_PATTERN_NAME,
+		patternTitle: TEMPLATE_PATTERN_TITLE,
+	} );
+
+	let promptInput = await openTemplateRecommendationsPanel( page );
+	let recommendationsPanel = getPanelBody( promptInput );
+
+	await promptInput.fill( TEMPLATE_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Suggestions' } )
+		.click();
+
+	await expect.poll( () => templateRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel.getByText( 'Clarify template hierarchy' ).first()
+	).toBeVisible();
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Review' } )
+		.click();
+	await expect(
+		recommendationsPanel.getByText( 'Review Before Apply', { exact: true } )
+	).toBeVisible();
+
+	await insertRootParagraphBlock( page, TEMPLATE_STALE_INSERTED_CONTENT );
+	await expect
+		.poll( () =>
+			page.evaluate( ( nextContent ) => {
+				const blocks =
+					window.wp?.data
+						?.select( 'core/block-editor' )
+						?.getBlocks?.() || [];
+
+				return blocks.some(
+					( block ) =>
+						block?.name === 'core/paragraph' &&
+						String( block?.attributes?.content || '' ).includes(
+							nextContent
+						)
+				);
+			}, TEMPLATE_STALE_INSERTED_CONTENT )
+		)
+		.toBe( true );
+	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
+	promptInput = await openTemplateRecommendationsPanel( page );
+	recommendationsPanel = getPanelBody( promptInput );
+
+	await expect(
+		recommendationsPanel.getByText(
+			'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Reviewing',
+			exact: true,
+		} )
+	).toBeDisabled();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Confirm Apply',
+			exact: true,
+		} )
+	).toBeDisabled();
+
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Refresh', exact: true } )
+		.click();
+
+	await expect.poll( () => templateRequests.length ).toBe( 2 );
+	expect(
+		templateRequests[ 1 ].editorStructure.topLevelBlockTree.length
+	).toBe(
+		templateRequests[ 0 ].editorStructure.topLevelBlockTree.length + 1
+	);
+	expect( templateRequests[ 1 ].editorStructure.topLevelBlockTree ).toEqual(
+		expect.arrayContaining( [
+			expect.objectContaining( {
+				name: 'core/paragraph',
+			} ),
+		] )
+	);
+	await expect(
+		recommendationsPanel.getByText(
+			'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toHaveCount( 0 );
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Review',
+			exact: true,
+		} )
+	).toBeEnabled();
+} );
+
+test( 'template surface keeps advisory-only suggestions visible without executable controls', async ( {
+	page,
+} ) => {
+	const templateRequests = [];
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await openFirstTemplateEditor( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await page.waitForFunction(
+		() =>
+			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
+			window.wp?.data
+				?.select( 'core/edit-site' )
+				?.getEditedPostType?.() === 'wp_template'
+	);
+	await page.waitForFunction(
+		() =>
+			(
+				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.() ||
+				[]
+			).length > 0
+	);
+	await page.route( '**/*recommend-template*', async ( route ) => {
+		templateRequests.push( route.request().postDataJSON() );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				explanation: 'One advisory idea is available.',
+				suggestions: [
+					{
+						label: 'Explore an editorial collage',
+						description:
+							'Consider a more magazine-like grouping before the footer.',
+						operations: [],
+						templateParts: [
+							{
+								slug: 'footer',
+								area: 'footer',
+								reason: 'Tighten the entry sequence before the primary content.',
+							},
+						],
+						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+					},
+				],
+			} ),
+		} );
+	} );
+
+	await enableTemplateDocumentSidebar( page );
+	await registerTemplatePattern( page, {
+		insertedContent: TEMPLATE_INSERTED_CONTENT,
+		patternName: TEMPLATE_PATTERN_NAME,
+		patternTitle: TEMPLATE_PATTERN_TITLE,
+	} );
+
+	const promptInput = await openTemplateRecommendationsPanel( page );
+	const recommendationsPanel = getPanelBody( promptInput );
+
+	await promptInput.fill( TEMPLATE_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Suggestions' } )
+		.click();
+
+	await expect.poll( () => templateRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel.getByText( 'Manual ideas' ).first()
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByText( 'Explore an editorial collage' ).first()
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByText( 'Template Parts' )
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByText( 'Suggested Patterns' )
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByText( 'Review in editor' )
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Browse pattern',
+			exact: true,
+		} )
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Review',
+			exact: true,
+		} )
+	).toHaveCount( 0 );
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Confirm Apply',
+			exact: true,
+		} )
+	).toHaveCount( 0 );
+	await expect
+		.poll( () => getSurfaceActivityCount( page, 'template' ) )
+		.toBe( 0 );
 } );
 
 test( 'template surface explains unavailable plugin backends', async ( {
@@ -1855,7 +2606,7 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 	);
 
 	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
-	await page.getByRole( 'button', { name: 'Preview Apply' } ).click();
+	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await expect(
 		page
 			.locator( '.flavor-agent-review-section' )
@@ -1890,6 +2641,293 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 			hasInsertedContent: false,
 			undoStatus: 'undone',
 		} );
+} );
+
+test( '@wp70-site-editor template-part surface keeps stale results visible but disables review and apply until refresh', async ( {
+	page,
+} ) => {
+	const templatePartRequests = [];
+
+	await page.route( '**/*recommend-template-part*', async ( route ) => {
+		templatePartRequests.push( route.request().postDataJSON() );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				explanation:
+					'Add a compact utility row at the end of the header part.',
+				suggestions: [
+					{
+						label: 'Add utility row',
+						description:
+							'Insert a compact row at the end of this header part.',
+						blockHints: [
+							{
+								path: [ 0 ],
+								label: 'Header wrapper',
+								reason: 'Keep the insertion inside the existing container.',
+							},
+						],
+						patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
+						operations: [
+							{
+								type: 'insert_pattern',
+								patternName: TEMPLATE_PART_PATTERN_NAME,
+								placement: 'after_block_path',
+								targetPath: [ 0, 1 ],
+							},
+						],
+					},
+				],
+			} ),
+		} );
+	} );
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await openFirstTemplateEditor( page );
+	await dismissSiteEditorWelcomeGuide( page );
+
+	const templateTarget = await getTemplateTarget( page );
+	const templatePartRef =
+		buildTemplatePartRefFromTemplateTarget( templateTarget );
+
+	expect( templatePartRef ).toBeTruthy();
+
+	await openTemplatePartEditor( page, templatePartRef );
+	await page.waitForFunction(
+		() =>
+			Boolean( window.flavorAgentData?.canRecommendTemplateParts ) &&
+			window.wp?.data
+				?.select( 'core/edit-site' )
+				?.getEditedPostType?.() === 'wp_template_part'
+	);
+	await page.waitForFunction(
+		() =>
+			(
+				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.() ||
+				[]
+			).length > 0
+	);
+
+	await enableSiteEditorDocumentSidebar( page );
+	await registerTemplatePattern( page, {
+		insertedContent: TEMPLATE_PART_INSERTED_CONTENT,
+		patternName: TEMPLATE_PART_PATTERN_NAME,
+		patternTitle: TEMPLATE_PART_PATTERN_TITLE,
+	} );
+
+	let promptInput = await openTemplatePartRecommendationsPanel( page );
+	let recommendationsPanel = getPanelBody( promptInput );
+
+	await promptInput.fill( TEMPLATE_PART_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Suggestions' } )
+		.click();
+
+	await expect.poll( () => templatePartRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel.getByText( 'Add utility row' ).first()
+	).toBeVisible();
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Review' } )
+		.click();
+	await expect(
+		recommendationsPanel.getByText( 'Review Before Apply', { exact: true } )
+	).toBeVisible();
+
+	await setFirstRootBlockPatternOverride( page, 'layout' );
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const firstBlock =
+					window.wp?.data
+						?.select( 'core/block-editor' )
+						?.getBlocks?.()?.[ 0 ] || null;
+
+				return (
+					firstBlock?.attributes?.metadata?.bindings?.layout
+						?.source || ''
+				);
+			} )
+		)
+		.toBe( 'core/pattern-overrides' );
+	await page
+		.getByRole( 'tab', { name: 'Template Part', exact: true } )
+		.click();
+	promptInput = await openTemplatePartRecommendationsPanel( page );
+	recommendationsPanel = getPanelBody( promptInput );
+
+	await expect(
+		recommendationsPanel.getByText(
+			'This template part changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Reviewing',
+			exact: true,
+		} )
+	).toBeDisabled();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Confirm Apply',
+			exact: true,
+		} )
+	).toBeDisabled();
+
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Refresh', exact: true } )
+		.click();
+
+	await expect.poll( () => templatePartRequests.length ).toBe( 2 );
+	expect(
+		templatePartRequests[ 1 ].editorStructure.currentPatternOverrides
+			.hasOverrides
+	).toBe( true );
+	expect(
+		templatePartRequests[ 1 ].editorStructure.currentPatternOverrides
+			.blockCount
+	).toBeGreaterThan(
+		templatePartRequests[ 0 ].editorStructure.currentPatternOverrides
+			.blockCount
+	);
+	expect(
+		templatePartRequests[ 1 ].editorStructure.currentPatternOverrides.blocks
+	).toEqual(
+		expect.arrayContaining( [
+			expect.objectContaining( {
+				overrideAttributes: [ 'layout' ],
+			} ),
+		] )
+	);
+	await expect(
+		recommendationsPanel.getByText(
+			'This template part changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+		)
+	).toHaveCount( 0 );
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Review',
+			exact: true,
+		} )
+	).toBeEnabled();
+} );
+
+test( '@wp70-site-editor template-part surface keeps advisory-only suggestions visible without executable controls', async ( {
+	page,
+} ) => {
+	const templatePartRequests = [];
+
+	await page.route( '**/*recommend-template-part*', async ( route ) => {
+		templatePartRequests.push( route.request().postDataJSON() );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				explanation: 'One advisory idea is available.',
+				suggestions: [
+					{
+						label: 'Introduce utility links',
+						description:
+							'Add a compact utility-links pattern near the navigation block.',
+						blockHints: [
+							{
+								path: [ 0 ],
+								label: 'Header wrapper',
+								blockName: 'core/group',
+								reason: 'Keep the change inside the existing header container.',
+							},
+						],
+						patternSuggestions: [ TEMPLATE_PART_PATTERN_NAME ],
+						operations: [],
+					},
+				],
+			} ),
+		} );
+	} );
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await openFirstTemplateEditor( page );
+	await dismissSiteEditorWelcomeGuide( page );
+
+	const templateTarget = await getTemplateTarget( page );
+	const templatePartRef =
+		buildTemplatePartRefFromTemplateTarget( templateTarget );
+
+	expect( templatePartRef ).toBeTruthy();
+
+	await openTemplatePartEditor( page, templatePartRef );
+	await page.waitForFunction(
+		() =>
+			Boolean( window.flavorAgentData?.canRecommendTemplateParts ) &&
+			window.wp?.data
+				?.select( 'core/edit-site' )
+				?.getEditedPostType?.() === 'wp_template_part'
+	);
+	await page.waitForFunction(
+		() =>
+			(
+				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.() ||
+				[]
+			).length > 0
+	);
+
+	await enableSiteEditorDocumentSidebar( page );
+	await registerTemplatePattern( page, {
+		insertedContent: TEMPLATE_PART_INSERTED_CONTENT,
+		patternName: TEMPLATE_PART_PATTERN_NAME,
+		patternTitle: TEMPLATE_PART_PATTERN_TITLE,
+	} );
+
+	const promptInput = await openTemplatePartRecommendationsPanel( page );
+	const recommendationsPanel = getPanelBody( promptInput );
+
+	await promptInput.fill( TEMPLATE_PART_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Suggestions' } )
+		.click();
+
+	await expect.poll( () => templatePartRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel.getByText( 'Manual ideas' ).first()
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByText( 'Introduce utility links' ).first()
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByText( 'Focus Blocks', { exact: true } )
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Browse pattern',
+			exact: true,
+		} )
+	).toBeVisible();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Review',
+			exact: true,
+		} )
+	).toHaveCount( 0 );
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Confirm Apply',
+			exact: true,
+		} )
+	).toHaveCount( 0 );
+	await expect
+		.poll( () => getSurfaceActivityCount( page, 'template-part' ) )
+		.toBe( 0 );
 } );
 
 test( '@wp70-site-editor template undo survives a Site Editor refresh when the template has not drifted', async ( {
@@ -1956,7 +2994,7 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 	await promptInput.fill( TEMPLATE_PROMPT );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
-	await page.getByRole( 'button', { name: 'Preview Apply' } ).click();
+	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await page.evaluate( () => {
 		window.wp.data.dispatch( 'core/block-editor' ).clearSelectedBlock();
 	} );
@@ -2085,7 +3123,7 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 	await promptInput.fill( TEMPLATE_PROMPT );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
-	await page.getByRole( 'button', { name: 'Preview Apply' } ).click();
+	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await page.evaluate( () => {
 		window.wp.data.dispatch( 'core/block-editor' ).clearSelectedBlock();
 	} );

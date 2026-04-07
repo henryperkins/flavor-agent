@@ -6,14 +6,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Recommendations`
 - Scope: only while editing a `wp_template` entity
-- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, preview-before-apply, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, explanation text with linked entities, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, a shared lower review-before-apply panel, recent activity, and inline undo
 
 ## Surfacing Conditions
 
 - `TemplateRecommender()` must resolve a current template reference through `core/editor` or `core/edit-site`
 - The shared `wp_template` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align with the current Site Editor template shape while still falling back to built-in field metadata when no live view config is exposed
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplates` is false; the localized flag is driven by the shared surface-capability contract and flips on when any compatible chat provider is configured in `Settings > Flavor Agent` or `Settings > Connectors`
-- The panel clears stale recommendations when the template changes or when the recommendation context changes, including editor slot state or the template-global visible pattern set
+- The panel clears recommendations on hard template changes, but keeps same-template drifted results visible as stale until the user refreshes or a fresh result arrives
 
 ## Shared Interaction Model
 
@@ -21,8 +21,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only after the user explicitly opens preview on a validated suggestion
 - The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
-- Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the shared status notice pattern
-- Only suggestions with validated executable operations survive server-side parsing; advisory summaries stay aligned with those operations instead of acting as a fallback path
+- Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the shared status notice pattern
+- Executable suggestions still require validated operations, while advisory-only suggestions survive server-side parsing when their template-part or pattern summaries validate without a safe deterministic apply path
 
 ## End-To-End Flow
 
@@ -31,9 +31,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` posts it to `POST /flavor-agent/v1/recommend-template`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
 5. `TemplateAbilities::recommend_template()` gathers template context through `ServerCollector::for_template()`, folds in editor slot overrides, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
-6. The parsed response returns up to three suggestion cards with validated structured operations
+6. The parsed response returns up to three suggestion cards, preserving validated structured operations for executable ideas and validated summaries for advisory ideas
 7. The UI builds an entity map so template-part slugs, areas, and pattern names inside descriptions and explanations become clickable actions
-8. Preview mode shows the exact validated operations that would run if the user confirms apply
+8. Selecting an executable suggestion opens the shared lower review panel, which shows the exact validated operations that would run if the user confirms apply
 9. `applyTemplateSuggestion()` in the store calls the deterministic executor, records activity, and exposes inline undo for the newest valid tail entry
 
 ## Flow Diagram
@@ -148,29 +148,29 @@ Review Before Apply
 
 Anchored template insertion is limited to validated top-level anchors gathered by `ServerCollector::for_template()` and the editor structure payload. Every template `insert_pattern` operation must include an explicit placement. `start` and `end` require matching live insertion anchors, while `before_block_path` and `after_block_path` also require a validated `targetPath`. Legacy implicit insertions are rejected by `TemplatePrompt::parse_response()` and `validateTemplateOperationSequence()`.
 
-Each suggestion may include at most one `insert_pattern` operation. The server derives `patternSuggestions` from validated insert operations only and rejects responses that keep only advisory pattern names after validation.
+Each suggestion may include at most one `insert_pattern` operation. Executable suggestions derive `patternSuggestions` from validated insert operations, while advisory-only suggestions may preserve validated pattern names when no safe deterministic insertion anchor is available.
 
 ## Guardrails And Failure Modes
 
 - The surface is hidden outside `wp_template` editing
 - Any invalid operation causes the entire apply to fail before mutation; there is no partial apply path
-- Suggestions without a final validated `operations[]` list are dropped before they reach the UI
+- Suggestions with neither validated operations nor validated advisory summaries are dropped before they reach the UI
 - Free-form template rewrites are intentionally out of scope
 - Only the newest valid tail entry is undoable; older entries are blocked until newer still-applied actions are undone
 
 ## Primary Functions And Handlers
 
-| Layer | Function / class | Role |
-|---|---|---|
-| UI shell | `TemplateRecommender()` in `src/templates/TemplateRecommender.js` | Renders the panel, entity links, preview flow, activity, and undo |
-| Input builder | `buildTemplateFetchInput()` in `src/templates/template-recommender-helpers.js` | Normalizes the request payload |
-| Context helpers | `buildEditorTemplateSlotSnapshot()` and `getVisiblePatternNames()` | Capture slot state and invalidation boundaries |
-| Store request | `fetchTemplateRecommendations()` in `src/store/index.js` | Sends the recommendation request |
-| Store apply | `applyTemplateSuggestion()` in `src/store/index.js` | Runs deterministic apply and records activity |
-| Deterministic executor | `applyTemplateSuggestionOperations()` in `src/utils/template-actions.js` | Validates and executes the structured operation set |
-| REST handler | `Agent_Controller::handle_recommend_template()` | Adapts the REST request to the backend ability |
-| Backend ability | `TemplateAbilities::recommend_template()` | Builds context and returns validated template suggestions |
-| Prompt contract | `TemplatePrompt::build_user()` / `TemplatePrompt::parse_response()` | Defines and validates the structured template suggestion format |
+| Layer                  | Function / class                                                               | Role                                                              |
+| ---------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| UI shell               | `TemplateRecommender()` in `src/templates/TemplateRecommender.js`              | Renders the panel, entity links, preview flow, activity, and undo |
+| Input builder          | `buildTemplateFetchInput()` in `src/templates/template-recommender-helpers.js` | Normalizes the request payload                                    |
+| Context helpers        | `buildEditorTemplateSlotSnapshot()` and `getVisiblePatternNames()`             | Capture slot state and invalidation boundaries                    |
+| Store request          | `fetchTemplateRecommendations()` in `src/store/index.js`                       | Sends the recommendation request                                  |
+| Store apply            | `applyTemplateSuggestion()` in `src/store/index.js`                            | Runs deterministic apply and records activity                     |
+| Deterministic executor | `applyTemplateSuggestionOperations()` in `src/utils/template-actions.js`       | Validates and executes the structured operation set               |
+| REST handler           | `Agent_Controller::handle_recommend_template()`                                | Adapts the REST request to the backend ability                    |
+| Backend ability        | `TemplateAbilities::recommend_template()`                                      | Builds context and returns validated template suggestions         |
+| Prompt contract        | `TemplatePrompt::build_user()` / `TemplatePrompt::parse_response()`            | Defines and validates the structured template suggestion format   |
 
 ## Related Routes And Abilities
 

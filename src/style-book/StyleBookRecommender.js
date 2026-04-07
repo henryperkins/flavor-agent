@@ -166,7 +166,7 @@ function formatBadgeLabel( value = '' ) {
 }
 
 function getToneLabel( suggestion ) {
-	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual';
+	return suggestion?.tone === 'executable' ? 'Review first' : 'Manual ideas';
 }
 
 function OperationList( {
@@ -200,6 +200,7 @@ function StyleBookPanel( {
 	isLoading,
 	isApplying,
 	isUndoing,
+	isStale,
 	selectedSuggestion,
 	suggestions,
 	explanation,
@@ -225,14 +226,24 @@ function StyleBookPanel( {
 	const manualSuggestions = suggestions.filter(
 		( suggestion ) => suggestion?.tone !== 'executable'
 	);
-	const featuredSuggestion =
-		executableSuggestions[ 0 ] || manualSuggestions[ 0 ] || null;
+	const featuredSuggestion = isStale
+		? null
+		: executableSuggestions[ 0 ] || manualSuggestions[ 0 ] || null;
 	let promptHelp = '';
+	let reviewHint = '';
 
 	if ( showSecondaryGuidance ) {
 		promptHelp = blockTitle
 			? `Flavor Agent will keep changes inside the theme-backed Style Book controls for ${ blockTitle }. Raw CSS and custom CSS are out of scope.`
 			: 'Select a Style Book example to request safe, theme-backed block style changes. Raw CSS and custom CSS are out of scope.';
+	}
+
+	if ( isStale ) {
+		reviewHint =
+			'This review is stale. Refresh recommendations before applying these operations.';
+	} else if ( showSecondaryGuidance ) {
+		reviewHint =
+			'Only the operations shown here will run against the active Style Book example.';
 	}
 
 	const renderSuggestionCard = ( suggestion ) => (
@@ -299,6 +310,7 @@ function StyleBookPanel( {
 								onReview( suggestion.suggestionKey )
 							}
 							className="flavor-agent-card__apply"
+							disabled={ isStale }
 						>
 							{ selectedSuggestion?.suggestionKey ===
 							suggestion.suggestionKey
@@ -341,6 +353,13 @@ function StyleBookPanel( {
 				scopeDetails={ blockTitle ? [ blockTitle ] : [] }
 				isFresh={ hasMatchingResult }
 				hasResult={ hasResult }
+				staleReason={
+					isStale
+						? 'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+						: ''
+				}
+				onRefresh={ isStale ? onRequest : undefined }
+				isRefreshing={ isLoading }
 			/>
 			<AIStatusNotice
 				notice={ panelNotice }
@@ -368,12 +387,12 @@ function StyleBookPanel( {
 			/>
 
 			{ inlineNotice && ! selectedSuggestion && (
-					<AIStatusNotice
-						notice={ inlineNotice }
-						onAction={ onNoticeAction }
-						className="flavor-agent-style-feedback-notice"
-					/>
-				) }
+				<AIStatusNotice
+					notice={ inlineNotice }
+					onAction={ onNoticeAction }
+					className="flavor-agent-style-feedback-notice"
+				/>
+			) }
 
 			{ explanation && suggestions.length > 0 && (
 				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
@@ -399,7 +418,7 @@ function StyleBookPanel( {
 
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Review First"
+					title="Review first"
 					tone="Review first"
 					count={ executableSuggestions.length }
 					countNoun="suggestion"
@@ -415,8 +434,8 @@ function StyleBookPanel( {
 
 			{ manualSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Manual Ideas"
-					tone="Manual"
+					title="Manual ideas"
+					tone="Manual ideas"
 					count={ manualSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -432,21 +451,17 @@ function StyleBookPanel( {
 			{ selectedSuggestion && (
 				<AIReviewSection
 					title="Review Before Apply"
-					statusLabel="Executable"
+					statusLabel="Review first"
 					count={ selectedSuggestion.operations?.length || 0 }
 					summary={ selectedSuggestion.description }
 					onConfirm={ onApply }
 					onCancel={ onCancelReview }
-					confirmDisabled={ isApplying }
+					confirmDisabled={ isApplying || isStale }
 					confirmLabel={
 						isApplying ? 'Applying…' : 'Apply Style Change'
 					}
 					className="flavor-agent-style-review"
-					hint={
-						showSecondaryGuidance
-							? 'Only the operations shown here will run against the active Style Book example.'
-							: ''
-					}
+					hint={ reviewHint }
 				>
 					{ inlineNotice && (
 						<AIStatusNotice
@@ -674,24 +689,27 @@ export default function StyleBookRecommender() {
 			themeTokenDiagnostics,
 			executionContract,
 		} );
-	const hasMatchingResult = Boolean(
+	const hasStoredResultForScope = Boolean(
 		scope?.scopeKey &&
 			currentResultRef === scope.scopeKey &&
-			status === 'ready' &&
-			currentResultContextSignature &&
-			currentResultContextSignature === recommendationContextSignature
-	);
-	const suggestions = useMemo(
-		() => ( hasMatchingResult ? rawSuggestions : [] ),
-		[ hasMatchingResult, rawSuggestions ]
-	);
-	const explanation = hasMatchingResult ? currentExplanation : '';
-	const hasResult = Boolean(
-		scope?.scopeKey &&
-			currentResultRef === scope.scopeKey &&
-			status === 'ready' &&
 			currentResultContextSignature
 	);
+	const hasMatchingResult = Boolean(
+		hasStoredResultForScope &&
+			status === 'ready' &&
+			currentResultContextSignature === recommendationContextSignature
+	);
+	const isStaleResult = Boolean(
+		hasStoredResultForScope &&
+			currentResultContextSignature !== recommendationContextSignature
+	);
+	const suggestions = useMemo(
+		() => ( hasMatchingResult || isStaleResult ? rawSuggestions : [] ),
+		[ hasMatchingResult, isStaleResult, rawSuggestions ]
+	);
+	const explanation =
+		hasMatchingResult || isStaleResult ? currentExplanation : '';
+	const hasResult = hasMatchingResult || isStaleResult;
 	const selectedSuggestion = useMemo(
 		() =>
 			suggestions.find(
@@ -708,8 +726,7 @@ export default function StyleBookRecommender() {
 		() => getLatestUndoableActivity( activityEntries )?.id || null,
 		[ activityEntries ]
 	);
-	const showSecondaryGuidance =
-		! hasMatchingResult && activityEntries.length === 0;
+	const showSecondaryGuidance = ! hasResult && activityEntries.length === 0;
 	const hasApplySuccess =
 		applyStatus === 'success' &&
 		Boolean( latestStyleBookActivity ) &&
@@ -734,6 +751,8 @@ export default function StyleBookRecommender() {
 				applySuccessMessage: hasApplySuccess
 					? 'Flavor Agent applied the selected Style Book change.'
 					: '',
+				requestStatus: status,
+				isStale: isStaleResult,
 				hasResult,
 				hasSuggestions: suggestions.length > 0,
 				hasPreview: Boolean( selectedSuggestion ),
@@ -867,21 +886,11 @@ export default function StyleBookRecommender() {
 			return;
 		}
 
-		const hasStoredResultForScope = Boolean(
-			currentScopeKey &&
-				currentResultRef === currentScopeKey &&
-				currentResultContextSignature
-		);
-		const shouldClearRecommendations =
-			entityChanged ||
-			( recommendationContextChanged &&
-				( hasStoredResultForScope || isLoading ) );
-
 		previousScopeKey.current = currentScopeKey;
 		previousRecommendationContextSignature.current =
 			recommendationContextSignature;
 
-		if ( ! shouldClearRecommendations ) {
+		if ( ! entityChanged ) {
 			return;
 		}
 
@@ -892,9 +901,6 @@ export default function StyleBookRecommender() {
 		}
 	}, [
 		clearStyleBookRecommendations,
-		currentResultContextSignature,
-		currentResultRef,
-		isLoading,
 		recommendationContextSignature,
 		scope?.scopeKey,
 	] );
@@ -938,9 +944,16 @@ export default function StyleBookRecommender() {
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
-			applyStyleBookSuggestion( selectedSuggestion );
+			applyStyleBookSuggestion(
+				selectedSuggestion,
+				recommendationContextSignature
+			);
 		}
-	}, [ applyStyleBookSuggestion, selectedSuggestion ] );
+	}, [
+		applyStyleBookSuggestion,
+		recommendationContextSignature,
+		selectedSuggestion,
+	] );
 
 	const handleUndo = useCallback(
 		( activityId ) => {
@@ -964,6 +977,7 @@ export default function StyleBookRecommender() {
 			isLoading={ isLoading }
 			isApplying={ isApplying }
 			isUndoing={ undoStatus === 'undoing' }
+			isStale={ isStaleResult }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }

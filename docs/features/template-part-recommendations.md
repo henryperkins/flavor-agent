@@ -6,14 +6,14 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: Site Editor document settings panel titled `AI Template Part Recommendations`
 - Scope: only while editing a `wp_template_part` entity
-- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, slug and area badges, explanation text, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, focus-block links, suggested-pattern links, preview-before-apply, recent activity, and inline undo
+- UI shape: shared setup/capability notice when unavailable, otherwise a prompt field, slug and area badges, explanation text, a featured recommendation, grouped `Review first` / `Manual ideas` lanes, focus-block links, suggested-pattern links, a shared lower review-before-apply panel, recent activity, and inline undo
 
 ## Surfacing Conditions
 
 - `TemplatePartRecommender()` must resolve a current template-part reference through the shared edited-entity resolver, preferring `core/editor` and falling back to `core/edit-site`
 - The shared `wp_template_part` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align its title and area labels with the current WordPress template-part contract while still falling back to built-in field and area metadata when no live view config is exposed
 - The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by the shared surface-capability contract and flips on when any compatible chat provider is configured in `Settings > Flavor Agent` or `Settings > Connectors`
-- The panel clears stale recommendations when the template part changes or when the visible pattern context changes
+- The panel clears recommendations on hard template-part changes, but keeps same-template-part drifted results visible as stale until the user refreshes or a fresh result arrives
 
 ## Shared Interaction Model
 
@@ -21,7 +21,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Template-part recommendations move `idle -> loading -> advisory-ready` after results arrive, then `preview-ready` only when the user explicitly opens preview on a validated suggestion
 - The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
-- Preview uses the shared `AIReviewSection` shell and post-apply / post-undo feedback uses the same shared status notice pattern as block and template
+- Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the same shared status notice pattern as block and template
 - Suggestions that fail deterministic validation stay visible in the shared advisory shell so the user can still review focus blocks and pattern ideas without getting an apply affordance
 
 ## End-To-End Flow
@@ -33,7 +33,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 5. `TemplateAbilities::recommend_template_part()` gathers template-part context through `ServerCollector::for_template_part()`, including executable targets, insertion anchors, and structural constraints, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
 6. The parsed response returns explanation text, advisory `blockHints`, advisory `patternSuggestions`, and optional structured `operations`
 7. `buildTemplatePartSuggestionViewModel()` validates the operation sequence before the UI offers preview or apply controls
-8. The user can jump to focus blocks through path-based selection links, browse suggested patterns in the inserter, preview the validated operations, and confirm apply
+8. The user can jump to focus blocks through path-based selection links, browse suggested patterns in the inserter, open the shared lower review panel for validated operations, and confirm apply
 9. `applyTemplatePartSuggestion()` runs the deterministic executor, records activity, and exposes inline undo for the newest valid tail entry
 
 ## Flow Diagram
