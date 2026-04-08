@@ -38,6 +38,7 @@ register_deactivation_hook(
 	function () {
 		FlavorAgent\Patterns\PatternIndex::deactivate();
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::PRUNE_CRON_HOOK );
+		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK );
 	}
@@ -46,10 +47,15 @@ register_deactivation_hook(
 add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
+add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
 add_action( 'admin_init', [ FlavorAgent\Settings::class, 'register_settings' ] );
+add_action(
+	FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
+	[ FlavorAgent\Activity\Repository::class, 'run_admin_projection_backfill' ]
+);
 add_action( 'wp_abilities_api_categories_init', [ FlavorAgent\Abilities\Registration::class, 'register_category' ] );
 add_action( 'wp_abilities_api_init', [ FlavorAgent\Abilities\Registration::class, 'register_abilities' ] );
 

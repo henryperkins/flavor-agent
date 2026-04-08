@@ -36,14 +36,112 @@ function getExecutionPathLabel( entry ) {
 	return getRequestMeta( entry )?.pathLabel || '';
 }
 
-function getFallbackLabel( entry ) {
-	const requestMeta = getRequestMeta( entry );
+function getNumericMetric( value ) {
+	if ( typeof value === 'number' && Number.isFinite( value ) ) {
+		return value;
+	}
 
-	if ( ! requestMeta?.usedFallback || ! requestMeta?.selectedProviderLabel ) {
+	if ( typeof value === 'string' && value.trim() ) {
+		const parsed = Number( value );
+
+		if ( Number.isFinite( parsed ) ) {
+			return parsed;
+		}
+	}
+
+	return null;
+}
+
+function getTokenUsageLabel( requestMeta ) {
+	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
 		return '';
 	}
 
-	return `Fallback from selected ${ requestMeta.selectedProviderLabel }.`;
+	const totalTokens = getNumericMetric( requestMeta?.tokenUsage?.total );
+	const inputTokens = getNumericMetric( requestMeta?.tokenUsage?.input );
+	const outputTokens = getNumericMetric( requestMeta?.tokenUsage?.output );
+
+	if ( totalTokens !== null ) {
+		return `${ totalTokens } total tokens`;
+	}
+
+	if ( inputTokens === null && outputTokens === null ) {
+		return '';
+	}
+
+	return [
+		inputTokens !== null ? `${ inputTokens } input` : null,
+		outputTokens !== null ? `${ outputTokens } output` : null,
+	]
+		.filter( Boolean )
+		.join( ' / ' );
+}
+
+function getLatencyLabel( requestMeta ) {
+	const latencyMs = getNumericMetric( requestMeta?.latencyMs );
+
+	return latencyMs !== null ? `${ latencyMs } ms` : '';
+}
+
+function getExecutionDetailLines( entry ) {
+	const requestMeta = getRequestMeta( entry );
+	const selectedProvider =
+		requestMeta?.selectedProviderLabel || requestMeta?.selectedProvider || '';
+	const credentialSource =
+		requestMeta?.credentialSourceLabel || requestMeta?.credentialSource || '';
+	const lines = [];
+
+	if ( getExecutionPathLabel( entry ) ) {
+		lines.push( `Provider path: ${ getExecutionPathLabel( entry ) }` );
+	}
+
+	if ( requestMeta?.ownerLabel ) {
+		lines.push( `Configured in: ${ requestMeta.ownerLabel }` );
+	}
+
+	if ( credentialSource ) {
+		lines.push( `Credential source: ${ credentialSource }` );
+	}
+
+	if ( selectedProvider ) {
+		lines.push( `Selected provider: ${ selectedProvider }` );
+	}
+
+	if ( requestMeta?.usedFallback && selectedProvider ) {
+		lines.push( `Fallback from selected ${ selectedProvider }.` );
+	}
+
+	if ( requestMeta?.ability ) {
+		lines.push( `Ability: ${ requestMeta.ability }` );
+	}
+
+	if ( requestMeta?.route ) {
+		lines.push( `Route: ${ requestMeta.route }` );
+	}
+
+	if (
+		typeof entry?.request?.reference === 'string' &&
+		entry.request.reference.trim()
+	) {
+		lines.push( `Reference: ${ entry.request.reference.trim() }` );
+	}
+
+	if (
+		typeof entry?.request?.prompt === 'string' &&
+		entry.request.prompt.trim()
+	) {
+		lines.push( `Prompt: ${ entry.request.prompt.trim() }` );
+	}
+
+	if ( getTokenUsageLabel( requestMeta ) ) {
+		lines.push( `Token usage: ${ getTokenUsageLabel( requestMeta ) }` );
+	}
+
+	if ( getLatencyLabel( requestMeta ) ) {
+		lines.push( `Latency: ${ getLatencyLabel( requestMeta ) }` );
+	}
+
+	return lines;
 }
 
 function getStatusLabel( entry ) {
@@ -222,15 +320,17 @@ export default function AIActivitySection( {
 			{ isOpen && visibleEntries.length > 0 && (
 				<div className="flavor-agent-panel__group-body">
 					{ visibleEntries.map( ( entry ) => {
-						const canUndo =
-							entry?.undo?.status === 'available' &&
-							entry?.undo?.canUndo === true &&
-							typeof onUndo === 'function';
-						const hasPendingUndoSync =
-							entry?.persistence?.status !== 'server' &&
-							entry?.persistence?.syncType === 'undo';
+							const canUndo =
+								entry?.undo?.status === 'available' &&
+								entry?.undo?.canUndo === true &&
+								typeof onUndo === 'function';
+							const hasPendingUndoSync =
+								entry?.persistence?.status !== 'server' &&
+								entry?.persistence?.syncType === 'undo';
+							const executionDetailLines =
+								getExecutionDetailLines( entry );
 
-						return (
+							return (
 							<div
 								key={ entry.id }
 								className="flavor-agent-activity-row"
@@ -242,22 +342,29 @@ export default function AIActivitySection( {
 									<div className="flavor-agent-activity-row__meta">
 										{ describeActivity( entry ) }
 									</div>
-									{ getExecutionSummary( entry ) && (
-										<div className="flavor-agent-activity-row__meta">
-											{ getExecutionSummary( entry ) }
-										</div>
-									) }
-									{ getExecutionPathLabel( entry ) && (
-										<div className="flavor-agent-activity-row__meta">
-											{ getExecutionPathLabel( entry ) }
-										</div>
-									) }
-									{ getFallbackLabel( entry ) && (
-										<div className="flavor-agent-activity-row__meta">
-											{ getFallbackLabel( entry ) }
-										</div>
-									) }
-									{ getDiagnosticDetailLines( entry ).map(
+										{ getExecutionSummary( entry ) && (
+											<div className="flavor-agent-activity-row__meta">
+												{ getExecutionSummary( entry ) }
+											</div>
+										) }
+										{ executionDetailLines.length > 0 && (
+											<details className="flavor-agent-activity-row__details">
+												<summary className="flavor-agent-activity-row__meta">
+													Execution details
+												</summary>
+												{ executionDetailLines.map(
+													( line, index ) => (
+														<div
+															key={ `${ entry.id }:execution:${ index }` }
+															className="flavor-agent-activity-row__meta"
+														>
+															{ line }
+														</div>
+													)
+												) }
+											</details>
+										) }
+										{ getDiagnosticDetailLines( entry ).map(
 										( line, index ) => (
 											<div
 												key={ `${ entry.id }:diagnostic:${ index }` }

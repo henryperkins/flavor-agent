@@ -523,12 +523,15 @@ namespace {
 			}
 
 			public function get_results( string $query, string $output = OBJECT ): array {
+				WordPressTestState::$db_queries[] = $query;
+
 				if ( ! preg_match( '/FROM\s+([^\s]+)/i', $query, $matches ) ) {
 					return [];
 				}
 
 				$table = (string) ( $matches[1] ?? '' );
 				$rows  = array_values( WordPressTestState::$db_tables[ $table ] ?? [] );
+				$has_entity_pairs = false;
 
 				if ( preg_match( "/document_scope_key\s*=\s*'([^']*)'/i", $query, $matches ) ) {
 					$scope_key = stripslashes( (string) ( $matches[1] ?? '' ) );
@@ -550,24 +553,66 @@ namespace {
 					);
 				}
 
-				if ( preg_match( "/entity_type\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-					$entity_type = stripslashes( (string) ( $matches[1] ?? '' ) );
-					$rows        = array_values(
+				if (
+					preg_match_all(
+						"/entity_type\s*=\s*'([^']*)'\s+AND\s+entity_ref\s*=\s*'([^']*)'/i",
+						$query,
+						$matches,
+						PREG_SET_ORDER
+					)
+				) {
+					$entity_pairs = array_values(
+						array_filter(
+							array_map(
+								static fn ( array $match ): array => [
+									'entity_type' => stripslashes( (string) ( $match[1] ?? '' ) ),
+									'entity_ref'  => stripslashes( (string) ( $match[2] ?? '' ) ),
+								],
+								$matches
+							),
+							static fn ( array $pair ): bool => '' !== $pair['entity_type'] || '' !== $pair['entity_ref']
+						)
+					);
+					$has_entity_pairs = [] !== $entity_pairs;
+					$rows             = array_values(
 						array_filter(
 							$rows,
-							static fn ( array $row ): bool => (string) ( $row['entity_type'] ?? '' ) === $entity_type
+							static function ( array $row ) use ( $entity_pairs ): bool {
+								foreach ( $entity_pairs as $pair ) {
+									if (
+										(string) ( $row['entity_type'] ?? '' ) === $pair['entity_type']
+										&& (string) ( $row['entity_ref'] ?? '' ) === $pair['entity_ref']
+									) {
+										return true;
+									}
+								}
+
+								return false;
+							}
 						)
 					);
 				}
 
-				if ( preg_match( "/entity_ref\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-					$entity_ref = stripslashes( (string) ( $matches[1] ?? '' ) );
-					$rows       = array_values(
-						array_filter(
-							$rows,
-							static fn ( array $row ): bool => (string) ( $row['entity_ref'] ?? '' ) === $entity_ref
-						)
-					);
+				if ( ! $has_entity_pairs ) {
+					if ( preg_match( "/entity_type\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+						$entity_type = stripslashes( (string) ( $matches[1] ?? '' ) );
+						$rows        = array_values(
+							array_filter(
+								$rows,
+								static fn ( array $row ): bool => (string) ( $row['entity_type'] ?? '' ) === $entity_type
+							)
+						);
+					}
+
+					if ( preg_match( "/entity_ref\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+						$entity_ref = stripslashes( (string) ( $matches[1] ?? '' ) );
+						$rows       = array_values(
+							array_filter(
+								$rows,
+								static fn ( array $row ): bool => (string) ( $row['entity_ref'] ?? '' ) === $entity_ref
+							)
+						);
+					}
 				}
 
 				if ( preg_match( "/activity_id\s*=\s*'([^']*)'/i", $query, $matches ) ) {
@@ -576,6 +621,48 @@ namespace {
 						array_filter(
 							$rows,
 							static fn ( array $row ): bool => (string) ( $row['activity_id'] ?? '' ) === $activity_id
+						)
+					);
+				}
+
+				if ( preg_match( "/activity_id\s+IN\s*\\(([^\\)]+)\\)/i", $query, $matches ) ) {
+					$activity_ids = array_values(
+						array_filter(
+							array_map(
+								static fn ( string $value ): string => trim( stripslashes( $value ), " \t\n\r\0\x0B'" ),
+								explode( ',', (string) ( $matches[1] ?? '' ) )
+							)
+						)
+					);
+					$rows         = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => in_array(
+								(string) ( $row['activity_id'] ?? '' ),
+								$activity_ids,
+								true
+							)
+						)
+					);
+				}
+
+				if ( preg_match( "/FIND_IN_SET\\s*\\(\\s*activity_id\\s*,\\s*'([^']*)'\\s*\\)\\s*>\\s*0/i", $query, $matches ) ) {
+					$activity_ids = array_values(
+						array_filter(
+							array_map(
+								static fn ( string $value ): string => trim( stripslashes( $value ) ),
+								explode( ',', (string) ( $matches[1] ?? '' ) )
+							)
+						)
+					);
+					$rows         = array_values(
+						array_filter(
+							$rows,
+							static fn ( array $row ): bool => in_array(
+								(string) ( $row['activity_id'] ?? '' ),
+								$activity_ids,
+								true
+							)
 						)
 					);
 				}
@@ -600,6 +687,31 @@ namespace {
 
 				if ( preg_match( '/LIMIT\s+(\d+)/i', $query, $matches ) ) {
 					$rows = array_slice( $rows, 0, (int) ( $matches[1] ?? 0 ) );
+				}
+
+				if ( preg_match( '/SELECT\s+(.+?)\s+FROM\s+/is', $query, $matches ) ) {
+					$select_clause = trim( (string) ( $matches[1] ?? '*' ) );
+
+					if ( '*' !== $select_clause ) {
+						$columns = array_values(
+							array_filter(
+								array_map(
+									static fn ( string $column ): string => trim(
+										str_replace( '`', '', $column )
+									),
+									explode( ',', $select_clause )
+								),
+								static fn ( string $column ): bool => '' !== $column
+							)
+						);
+						$rows    = array_map(
+							static fn ( array $row ): array => array_intersect_key(
+								$row,
+								array_flip( $columns )
+							),
+							$rows
+						);
+					}
 				}
 
 				if ( ARRAY_A === $output ) {
@@ -1361,6 +1473,17 @@ namespace {
 		function update_option( string $name, $value, $autoload = null ): bool {
 			WordPressTestState::$options[ $name ] = $value;
 			WordPressTestState::$updated_options[ $name ] = $value;
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'delete_option' ) ) {
+		function delete_option( string $name ): bool {
+			unset(
+				WordPressTestState::$options[ $name ],
+				WordPressTestState::$updated_options[ $name ]
+			);
 
 			return true;
 		}

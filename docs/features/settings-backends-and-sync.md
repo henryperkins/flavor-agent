@@ -19,7 +19,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Azure OpenAI endpoint, API key, embedding deployment, and chat deployment
 - OpenAI Native API key override plus embedding and chat model IDs
 - Qdrant URL and API key
-- Cloudflare AI Search account ID, instance ID, API token, and max result count
+- Cloudflare AI Search max result count
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
 ## Backend Gating Rules
@@ -31,13 +31,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Template recommendations | Active provider chat configured (direct or connector-backed) |
 | Template-part recommendations | Active provider chat configured (direct or connector-backed) |
 | Navigation recommendations | Active provider chat configured (direct or connector-backed) and current user can edit theme options |
-| WordPress docs grounding | Optional Cloudflare AI Search configuration; recommendation-time use is cache-only and non-blocking |
+| WordPress docs grounding | Built-in public Cloudflare AI Search endpoint; recommendation-time use is cache-only and non-blocking |
 
 ## Save And Validation Flow
 
 1. The user changes settings on `Settings > Flavor Agent`
 2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
-3. Flavor Agent validates Azure, OpenAI Native, Qdrant, and Cloudflare settings only when those credential sets changed and enough data is present to run the validation
+3. Flavor Agent validates Azure, OpenAI Native, and Qdrant settings when those credential sets changed and enough data is present to run the validation. Legacy Cloudflare credentials are only revalidated when those deprecated fields are still being used.
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
 5. If OpenAI Native is selected, the page also reports the current effective API key source and whether the core OpenAI connector is registered/configured
 6. Connector-backed providers appear in the dropdown only when the WordPress AI Client reports that they currently support text generation

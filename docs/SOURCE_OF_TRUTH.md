@@ -306,7 +306,7 @@ flavor-agent/
 | OpenAI Native Embeddings         | Pattern embedding                                         | Pattern index + pattern recommendations when OpenAI Native is the active embedding backend                      | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
 | OpenAI Native Chat               | Chat + ranking                                            | Direct-provider block/content/template/template-part/navigation/style requests and pattern ranking              | Optional `flavor_agent_openai_native_api_key` override, `_chat_model`; otherwise inherits core OpenAI connector credentials      |
 | Qdrant                           | Vector similarity search                                  | Pattern recommendations                                                                                         | `flavor_agent_qdrant_url`, `_key`                                                                                                |
-| Cloudflare AI Search             | WordPress dev-doc grounding                               | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | `flavor_agent_cloudflare_ai_search_account_id`, `_instance_id`, `_api_token`, `_max_results`                                     |
+| Cloudflare AI Search             | WordPress dev-doc grounding                               | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | Managed public search endpoint plus `flavor_agent_cloudflare_ai_search_max_results`                                              |
 
 The plugin works in degraded mode without any services configured. Each surface gracefully disables when its required backends are absent.
 
@@ -393,9 +393,9 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### AI Activity And Undo
 
-- **Schema:** Block, template, template-part, Global Styles, and Style Book apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status.
-- **Persistence:** Activity records are persisted through the server-backed activity repository when available and are hydrated back into the editor-side storage adapter keyed by the current post, template, template-part, or Global Styles scope reference. The same repository now also supports recent unscoped/admin reads for privileged users. Template, template-part, and Global Styles activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
-- **UI:** The Block Inspector, Template Recommendations panel, Template Part panel, Global Styles panel, and Style Book panel share the same status vocabulary, recent-activity shell, and inline undo treatment. Navigation shares the advisory/status framing but remains activity-free because it is advisory-only, and pattern recommendations remain outside the activity contract. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported executable surfaces through a `DataViews` activity feed and a read-only `DataForm` details panel.
+- **Schema:** Block, template, template-part, Global Styles, and Style Book apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status. The admin audit lane also stores scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes/failures when a document scope exists.
+- **Persistence:** Activity records are persisted through the server-backed activity repository when available and are hydrated back into the editor-side storage adapter keyed by the current post, template, template-part, or Global Styles scope reference. The same repository now also supports recent unscoped/admin reads for privileged users and projects filterable admin columns for provider/model/path/ability metadata so global audit queries do not need to decode every historical `request_json` payload to filter by provenance. Template, template-part, and Global Styles activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
+- **UI:** The Block Inspector, Template Recommendations panel, Template Part panel, Global Styles panel, and Style Book panel share the same status vocabulary, recent-activity shell, and inline undo treatment. Navigation still shares only the advisory/status framing and remains non-executable, while pattern recommendations remain browse-only. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported executable surfaces plus scoped review-only diagnostics through a `DataViews` activity feed and a read-only `DataForm` details panel.
 - **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template assignment/replacement undo resolves the current block from a stable area/slug locator, template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot, Global Styles and Style Book undo only stays available while the active `root/globalStyles` entity still matches the recorded post-apply user config. The admin audit view applies the same ordered-tail rule when it marks older entries as blocked by newer still-applied actions.
 
 #### Admin Activity Page
@@ -403,8 +403,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Location:** `Settings > AI Activity`
 - **Permission:** `manage_options`
 - **Bundle:** `inc/Admin/ActivityPage.php` + `src/admin/activity-log.js`
-- **Behavior:** Uses `@wordpress/dataviews/wp` with the `activity` layout as the default feed, persisted/resettable view preferences, grouped summary cards, and a read-only `DataForm` details sidebar for diagnostics and links back to affected entities, plugin settings, and core Connectors.
-- **Scope:** Covers recent server-backed block, template, template-part, Global Styles, and Style Book actions; it is the first audit surface, not the final observability product.
+- **Behavior:** Uses `@wordpress/dataviews/wp` with the `activity` layout as the default feed, persisted/resettable view preferences, grouped summary cards, a read-only `DataForm` details sidebar for diagnostics and links back to affected entities, plugin settings, and core Connectors, and separate summary buckets for review-only rows, blocked undo, and failed/unavailable entries.
+- **Scope:** Covers recent server-backed block, template, template-part, Global Styles, and Style Book actions plus scoped read-only `request_diagnostic` rows from content, pattern, and navigation requests; it is the first audit surface, not the final observability product.
 
 #### Pattern Index Lifecycle
 
@@ -438,7 +438,7 @@ All abilities registered with full JSON Schema input/output definitions:
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
 - Recommendation-time grounding for block, pattern, template, template-part, navigation, Global Styles, and Style Book suggestions is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
 - Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks). Source keys with an `ai-search/<instanceId>/` prefix are now recognized alongside the plain `developer.wordpress.org/` prefix.
-- Docs grounding prewarm: on plugin activation and successful Cloudflare credential changes, an async WP-Cron job seeds the entity cache for 16 high-frequency entities (8 core blocks, 7 template types, core/navigation). Exact entity misses now also fall back to prewarmed generic editor/template/template-part guidance families before returning empty. Throttled by credential fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
+- Docs grounding prewarm: on plugin activation, normal bootstrap, and successful legacy Cloudflare credential changes, an async WP-Cron job seeds the entity cache for high-frequency entities. Exact entity misses now also fall back to prewarmed generic editor/template/template-part guidance families before returning empty. Throttled by backend fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
 
 #### REST API
 
@@ -463,7 +463,7 @@ Settings page at Settings > Flavor Agent with five sections:
 - Azure OpenAI (endpoint, key, embedding deployment, chat deployment)
 - OpenAI Native (optional API key override, chat model, embedding model, effective key source, connector status)
 - Qdrant (URL, key)
-- Cloudflare AI Search (account ID, instance ID, API token, max results)
+- Cloudflare AI Search (managed public endpoint, max results)
 
 Block recommendations can use the direct plugin-managed chat backend configured here or the core `Settings > Connectors` path when the direct backend is not configured.
 When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
@@ -472,7 +472,7 @@ Plus pattern sync status panel with manual trigger.
 
 When the Azure OpenAI endpoint, key, embedding deployment, or chat deployment changes and all four fields are present, the settings save flow validates both the embeddings and responses deployments and preserves the previous values if validation fails.
 When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
-When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the settings save flow validates the configured account, instance, and token with a lightweight probe search and preserves the previous values if validation fails. This keeps the settings flow compatible with documented AI Search Run tokens.
+Flavor Agent uses a managed public Cloudflare AI Search `/search` endpoint for docs grounding, so site owners do not need to configure Cloudflare credentials. When legacy Cloudflare account/instance/token values are still present and change, the settings save flow validates them with a lightweight probe search and preserves the previous values if validation fails. This keeps backwards compatibility with documented AI Search Run tokens.
 Unchanged or partial credential submissions skip remote validation.
 Successful saves still use the standard Settings API notice flow, and failed Azure OpenAI, Qdrant, or Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
 
@@ -733,7 +733,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
 - [x] Admin settings page with backend configuration
-- [x] Cloudflare AI Search credential validation on changed settings saves
+- [x] Legacy Cloudflare AI Search credential validation on changed settings saves
 - [x] Settings page success/error feedback for credential validation
 - [x] Clean uninstall
 - [x] Live credential validation on Azure OpenAI/Qdrant settings save

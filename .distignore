@@ -4,6 +4,7 @@
 .devcontainer
 .github
 .git
+.vscode
 .gitignore
 .distignore
 .mcp.json
@@ -12,7 +13,10 @@
 .remember
 activity.jpeg
 broker
+AI_RECOMMENDATION_UI_REVIEW.md
 CLAUDE.md
+blueprint.json
+composer.lock
 dist
 docker
 docker-compose.yml
@@ -20,6 +24,7 @@ docker-compose.yml
 docs
 .env.example
 flavor-agent-*-php-*.md
+jsconfig.json
 node_modules
 output
 package-lock.json

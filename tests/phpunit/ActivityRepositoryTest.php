@@ -304,10 +304,12 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertCount( 2, $result['entries'] ?? [] );
 		$this->assertSame(
 			[
-				'total'   => 6,
+				'total'   => 5,
 				'applied' => 1,
 				'undone'  => 1,
-				'review'  => 4,
+				'review'  => 0,
+				'blocked' => 2,
+				'failed'  => 1,
 			],
 			$result['summary'] ?? []
 		);
@@ -546,6 +548,48 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_query_admin_search_matches_projected_style_book_block_labels(): void {
+		Repository::install();
+
+		Repository::create(
+			[
+				'id'         => 'activity-style-book',
+				'type'       => 'apply_style_suggestion',
+				'surface'    => 'style-book',
+				'target'     => [
+					'globalStylesId' => '17',
+					'blockName'      => 'core/paragraph',
+					'blockTitle'     => 'Paragraph',
+				],
+				'suggestion' => 'Refine paragraph styles.',
+				'before'     => [
+					'attributes' => [],
+				],
+				'after'      => [
+					'attributes' => [],
+				],
+				'request'    => [],
+				'document'   => [
+					'scopeKey' => 'style_book:17:core/paragraph',
+					'postType' => 'global_styles',
+					'entityId' => '17',
+				],
+				'timestamp'  => '2026-03-24T10:00:00Z',
+			]
+		);
+
+		$result = Repository::query_admin(
+			[
+				'search' => 'Paragraph',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-style-book' ],
+			array_column( $result['entries'] ?? [], 'id' )
+		);
+	}
+
 	public function test_query_admin_supports_relative_day_filters(): void {
 		Repository::install();
 
@@ -684,7 +728,7 @@ final class ActivityRepositoryTest extends TestCase {
 				'providerOperator' => 'is',
 			]
 		);
-		$sorted_result = Repository::query_admin(
+		$sorted_result   = Repository::query_admin(
 			[
 				'sortField'     => 'configurationOwner',
 				'sortDirection' => 'asc',
@@ -696,9 +740,196 @@ final class ActivityRepositoryTest extends TestCase {
 			array_column( $filtered_result['entries'] ?? [], 'id' )
 		);
 		$this->assertSame(
+			[
+				[
+					'value' => 'Azure OpenAI responses',
+					'label' => 'Azure OpenAI responses',
+				],
+				[
+					'value' => 'WordPress AI Client',
+					'label' => 'WordPress AI Client',
+				],
+			],
+			$filtered_result['filterOptions']['provider'] ?? []
+		);
+		$this->assertSame(
 			[ 'activity-connector', 'activity-azure' ],
 			array_column( $sorted_result['entries'] ?? [], 'id' )
 		);
+	}
+
+	public function test_query_admin_preserves_blocked_status_when_filtered_results_hide_newer_activity(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry_with_request_meta(
+				'activity-older',
+				'2026-03-24T10:00:00Z',
+				[
+					'backendLabel'  => 'WordPress AI Client',
+					'providerLabel' => 'WordPress AI Client',
+				]
+			)
+		);
+		Repository::create(
+			$this->build_block_entry_with_request_meta(
+				'activity-newer',
+				'2026-03-24T10:00:01Z',
+				[
+					'backendLabel'  => 'Azure OpenAI responses',
+					'providerLabel' => 'Azure OpenAI',
+				]
+			)
+		);
+
+		$result = Repository::query_admin(
+			[
+				'provider' => 'WordPress AI Client',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-older' ],
+			array_column( $result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame( 'blocked', $result['entries'][0]['status'] ?? null );
+	}
+
+	public function test_maybe_install_schedules_and_runs_admin_projection_backfill_for_legacy_rows(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry_with_request_meta(
+				'activity-legacy',
+				'2026-03-24T10:00:00Z',
+				[
+					'backendLabel'          => 'Azure OpenAI responses',
+					'providerLabel'         => 'Azure OpenAI',
+					'pathLabel'             => 'Azure OpenAI via Settings > Flavor Agent',
+					'ownerLabel'            => 'Settings > Flavor Agent',
+					'credentialSourceLabel' => 'Settings > Flavor Agent',
+					'selectedProviderLabel' => 'Azure OpenAI',
+				]
+			)
+		);
+
+		$table_name = Repository::table_name();
+
+		WordPressTestState::$db_tables[ $table_name ][0]['schema_version']            = 1;
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_operation_type']      = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_operation_label']     = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_provider']            = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_provider_path']       = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_configuration_owner'] = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_credential_source']   = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_selected_provider']   = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_request_ability']     = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_request_route']       = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_request_reference']   = '';
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_request_prompt']      = null;
+		WordPressTestState::$db_tables[ $table_name ][0]['admin_search_text']         = '';
+		WordPressTestState::$options[ Repository::SCHEMA_OPTION ]                     = Repository::SCHEMA_VERSION - 1;
+
+		Repository::maybe_install();
+
+		$this->assertSame(
+			Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
+			WordPressTestState::$scheduled_events[ Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK ]['hook'] ?? null
+		);
+		$this->assertSame(
+			'',
+			WordPressTestState::$db_tables[ $table_name ][0]['admin_operation_type'] ?? null
+		);
+
+		$pending_result = Repository::query_admin(
+			[
+				'provider' => 'Azure OpenAI responses',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-legacy' ],
+			array_column( $pending_result['entries'] ?? [], 'id' )
+		);
+
+		Repository::run_admin_projection_backfill();
+
+		$this->assertSame(
+			'modify-attributes',
+			WordPressTestState::$db_tables[ $table_name ][0]['admin_operation_type'] ?? null
+		);
+		$this->assertSame(
+			'Azure OpenAI responses',
+			WordPressTestState::$db_tables[ $table_name ][0]['admin_provider'] ?? null
+		);
+		$this->assertSame(
+			'Azure OpenAI via Settings > Flavor Agent',
+			WordPressTestState::$db_tables[ $table_name ][0]['admin_provider_path'] ?? null
+		);
+		$this->assertFalse(
+			wp_next_scheduled( Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK )
+		);
+
+		$result = Repository::query_admin(
+			[
+				'provider' => 'Azure OpenAI responses',
+			]
+		);
+
+		$this->assertSame(
+			[ 'activity-legacy' ],
+			array_column( $result['entries'] ?? [], 'id' )
+		);
+	}
+
+	public function test_query_admin_provider_filter_batches_history_queries(): void {
+		$original_wpdb = $GLOBALS['wpdb'] ?? null;
+		$counting_wpdb = new class() extends \wpdb {
+			public int $get_results_calls = 0;
+
+			public function get_results( string $query, string $output = OBJECT ): array {
+				++$this->get_results_calls;
+
+				return parent::get_results( $query, $output );
+			}
+		};
+
+		if ( $original_wpdb instanceof \wpdb ) {
+			$counting_wpdb->prefix = $original_wpdb->prefix;
+		}
+
+		$GLOBALS['wpdb'] = $counting_wpdb;
+
+		try {
+			Repository::install();
+
+			for ( $index = 1; $index <= 3; ++$index ) {
+				Repository::create(
+					$this->build_block_entry_with_request_meta(
+						'activity-' . $index,
+						sprintf( '2026-03-24T10:00:%02dZ', $index ),
+						[
+							'backendLabel'  => 'Azure OpenAI responses',
+							'providerLabel' => 'Azure OpenAI',
+						],
+						(string) ( 40 + $index )
+					)
+				);
+			}
+
+			$counting_wpdb->get_results_calls = 0;
+
+			$result = Repository::query_admin(
+				[
+					'provider' => 'Azure OpenAI responses',
+				]
+			);
+
+			$this->assertCount( 3, $result['entries'] ?? [] );
+			$this->assertSame( 3, $counting_wpdb->get_results_calls );
+		} finally {
+			$GLOBALS['wpdb'] = $original_wpdb;
+		}
 	}
 
 	public function test_create_generates_a_uuid_v4_activity_id_when_none_is_provided(): void {
@@ -854,7 +1085,7 @@ final class ActivityRepositoryTest extends TestCase {
 		}
 
 		WordPressTestState::$options['timezone_string'] = $selected['name'];
-		$get_timestamp_data = new \ReflectionMethod( Repository::class, 'get_timestamp_data' );
+		$get_timestamp_data                             = new \ReflectionMethod( Repository::class, 'get_timestamp_data' );
 		$get_timestamp_data->setAccessible( true );
 		$matches_day_filter = new \ReflectionMethod( Repository::class, 'matches_day_filter' );
 		$matches_day_filter->setAccessible( true );
@@ -1041,9 +1272,10 @@ final class ActivityRepositoryTest extends TestCase {
 	private function build_block_entry_with_request_meta(
 		string $id,
 		string $timestamp,
-		array $request_meta
+		array $request_meta,
+		string $entity_id = '42'
 	): array {
-		$entry = $this->build_block_entry( $id, $timestamp );
+		$entry                  = $this->build_block_entry( $id, $timestamp, $entity_id );
 		$entry['request']['ai'] = $request_meta;
 
 		return $entry;

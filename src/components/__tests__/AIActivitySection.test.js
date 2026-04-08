@@ -49,7 +49,20 @@ describe( 'AIActivitySection', () => {
 									model: 'gpt-5.3-chat',
 									pathLabel:
 										'Azure OpenAI via Settings > Flavor Agent',
+									ownerLabel: 'Settings > Flavor Agent',
+									credentialSourceLabel:
+										'Settings > Flavor Agent',
+									selectedProviderLabel: 'Azure OpenAI',
+									ability: 'flavor-agent/recommend-block',
+									route:
+										'POST /flavor-agent/v1/recommend-block',
+									tokenUsage: {
+										total: 96,
+									},
+									latencyMs: 420,
 								},
+								prompt: 'Tighten the intro copy.',
+								reference: 'block:42:1',
 							},
 							undo: {
 								canUndo: true,
@@ -158,8 +171,36 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Azure OpenAI responses · gpt-5.3-chat'
 		);
+		expect( getContainer().textContent ).toContain( 'Execution details' );
 		expect( getContainer().textContent ).toContain(
 			'Azure OpenAI via Settings > Flavor Agent'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Configured in: Settings > Flavor Agent'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Credential source: Settings > Flavor Agent'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Selected provider: Azure OpenAI'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Ability: flavor-agent/recommend-block'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Route: POST /flavor-agent/v1/recommend-block'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Reference: block:42:1'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Prompt: Tighten the intro copy.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Token usage: 96 total tokens'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Latency: 420 ms'
 		);
 		expect( getContainer().textContent ).toContain(
 			'WordPress AI Client via Settings > Connectors'

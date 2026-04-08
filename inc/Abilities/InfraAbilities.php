@@ -29,7 +29,7 @@ final class InfraAbilities {
 		$azure_chat                       = get_option( 'flavor_agent_azure_chat_deployment', '' );
 		$qdrant_url                       = get_option( 'flavor_agent_qdrant_url', '' );
 		$qdrant_key                       = get_option( 'flavor_agent_qdrant_key', '' );
-		$cloudflare_ai_search_id          = get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' );
+		$cloudflare_ai_search_id          = AISearchClient::configured_instance_id();
 
 		$azure_chat_configured         = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_chat );
 		$openai_native_chat_configured = $native_chat_config['configured'];
@@ -54,7 +54,7 @@ final class InfraAbilities {
 		);
 
 		return [
-			'configured'         => $block_recommendations_configured || $active_chat_configured || $cloudflare_configured || ( $active_pattern_provider && $qdrant_configured ),
+			'configured'         => $block_recommendations_configured || $active_chat_configured || ( $active_pattern_provider && $qdrant_configured ),
 			'model'              => self::resolve_primary_model( $block_recommendations_configured, $active_chat_configured ),
 			'availableAbilities' => $abilities,
 			'surfaces'           => SurfaceCapabilities::build(

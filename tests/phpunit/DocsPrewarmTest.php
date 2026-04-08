@@ -89,18 +89,22 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertSame( 'ok', $state['status'] );
 	}
 
-	public function test_prewarm_not_configured_returns_early_with_not_configured_status(): void {
-		// No Cloudflare credentials configured.
+	public function test_prewarm_uses_built_in_public_search_endpoint_when_legacy_credentials_are_missing(): void {
+		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) );
+
 		$summary = AISearchClient::prewarm();
 
-		$this->assertSame( 0, $summary['warmed'] );
+		$this->assertSame( count( AISearchClient::get_warm_set() ), $summary['warmed'] );
 		$this->assertSame( 0, $summary['failed'] );
 		$this->assertSame( 0, $summary['skipped'] );
-
-		$state = AISearchClient::get_prewarm_state();
-
-		$this->assertSame( 'not_configured', $state['fingerprint'] );
-		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame(
+			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			WordPressTestState::$last_remote_post['url']
+		);
+		$this->assertArrayNotHasKey(
+			'Authorization',
+			WordPressTestState::$last_remote_post['args']['headers']
+		);
 	}
 
 	// ------------------------------------------------------------------
@@ -252,11 +256,13 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertGreaterThan( time() - 10, $event['timestamp'] );
 	}
 
-	public function test_schedule_prewarm_does_not_create_event_when_not_configured(): void {
-		// No Cloudflare credentials.
+	public function test_schedule_prewarm_creates_event_when_using_built_in_public_search_endpoint(): void {
 		AISearchClient::schedule_prewarm();
 
-		$this->assertEmpty( WordPressTestState::$scheduled_events );
+		$this->assertArrayHasKey(
+			AISearchClient::PREWARM_CRON_HOOK,
+			WordPressTestState::$scheduled_events
+		);
 	}
 
 	public function test_schedule_prewarm_does_not_double_schedule(): void {
@@ -274,6 +280,36 @@ final class DocsPrewarmTest extends TestCase {
 		);
 	}
 
+	public function test_schedule_prewarm_does_not_rearm_within_throttle_window_after_prewarm_runs(): void {
+		$this->configure_cloudflare();
+		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) );
+
+		AISearchClient::prewarm();
+		AISearchClient::schedule_prewarm();
+
+		$this->assertArrayNotHasKey(
+			AISearchClient::PREWARM_CRON_HOOK,
+			WordPressTestState::$scheduled_events
+		);
+	}
+
+	public function test_schedule_prewarm_accepts_explicit_credential_changes_even_when_current_config_is_throttled(): void {
+		$this->configure_cloudflare();
+		$this->prime_successful_search_responses( count( AISearchClient::get_warm_set() ) );
+
+		AISearchClient::prewarm();
+		AISearchClient::schedule_prewarm(
+			'account-123',
+			'wp-dev-docs',
+			'changed-token'
+		);
+
+		$this->assertArrayHasKey(
+			AISearchClient::PREWARM_CRON_HOOK,
+			WordPressTestState::$scheduled_events
+		);
+	}
+
 	// ------------------------------------------------------------------
 	// should_prewarm()
 	// ------------------------------------------------------------------
@@ -284,8 +320,8 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertTrue( AISearchClient::should_prewarm() );
 	}
 
-	public function test_should_prewarm_returns_false_when_not_configured(): void {
-		$this->assertFalse( AISearchClient::should_prewarm() );
+	public function test_should_prewarm_returns_true_when_using_built_in_public_search_endpoint(): void {
+		$this->assertTrue( AISearchClient::should_prewarm() );
 	}
 
 	public function test_should_prewarm_returns_false_within_throttle_window(): void {

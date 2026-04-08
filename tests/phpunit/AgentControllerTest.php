@@ -1399,6 +1399,8 @@ final class AgentControllerTest extends TestCase {
 				'applied' => 2,
 				'undone'  => 0,
 				'review'  => 0,
+				'blocked' => 0,
+				'failed'  => 0,
 			],
 			$data['summary'] ?? null
 		);

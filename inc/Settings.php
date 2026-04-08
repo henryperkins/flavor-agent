@@ -369,14 +369,14 @@ final class Settings {
 				'option'      => 'flavor_agent_azure_reasoning_effort',
 				'label_for'   => 'flavor_agent_azure_reasoning_effort',
 				'default'     => 'medium',
-					'choices'     => [
-						'low'    => 'Low',
-						'medium' => 'Medium',
-						'high'   => 'High',
-						'xhigh'  => 'XHigh',
-					],
-					'description' => 'Optional. Sets the default reasoning effort for Azure ranking calls.',
-				]
+				'choices'     => [
+					'low'    => 'Low',
+					'medium' => 'Medium',
+					'high'   => 'High',
+					'xhigh'  => 'XHigh',
+				],
+				'description' => 'Optional. Sets the default reasoning effort for Azure ranking calls.',
+			]
 		);
 
 		// --- OpenAI Native fields ---
@@ -790,14 +790,14 @@ final class Settings {
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; the value is unslashed and sanitized immediately below.
-		$feedback_key = $_POST[ self::PAGE_FEEDBACK_FIELD_NAME ] ?? '';
+		$feedback_key = wp_unslash( $_POST[ self::PAGE_FEEDBACK_FIELD_NAME ] ?? '' );
 
 		return self::sanitize_settings_page_feedback_request_key( $feedback_key );
 	}
 
 	private static function get_settings_page_feedback_request_key_from_query(): string {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only query param used to match request-scoped feedback after the save redirect.
-		$feedback_key = $_GET[ self::PAGE_FEEDBACK_QUERY_KEY ] ?? '';
+		$feedback_key = wp_unslash( $_GET[ self::PAGE_FEEDBACK_QUERY_KEY ] ?? '' );
 
 		return self::sanitize_settings_page_feedback_request_key( $feedback_key );
 	}
@@ -806,8 +806,6 @@ final class Settings {
 		if ( ! is_string( $feedback_key ) ) {
 			return '';
 		}
-
-		$feedback_key = wp_unslash( $feedback_key );
 
 		return substr( sanitize_key( $feedback_key ), 0, 32 );
 	}
@@ -829,7 +827,7 @@ final class Settings {
 	 * @param array<string, mixed> $feedback
 	 */
 	private static function render_settings_save_summary( array $feedback ): void {
-		if ( empty( $_GET['settings-updated'] ) ) {
+		if ( ! self::has_settings_updated_query_flag() ) {
 			return;
 		}
 
@@ -1103,17 +1101,15 @@ final class Settings {
 		string $url,
 		array $attributes = []
 	): void {
-		$attribute_string = '';
-
-		foreach ( $attributes as $attribute_name => $attribute_value ) {
-			$attribute_string .= sprintf(
-				' %s="%s"',
-				esc_attr( $attribute_name ),
-				esc_attr( $attribute_value )
-			);
-		}
+		$card_attributes = array_merge(
+			[
+				'class' => 'flavor-agent-settings__glance-item flavor-agent-settings__glance-item--' . $tone,
+				'href'  => self::sanitize_url_value( $url ),
+			],
+			$attributes
+		);
 		?>
-		<a class="flavor-agent-settings__glance-item flavor-agent-settings__glance-item--<?php echo esc_attr( $tone ); ?>" href="<?php echo esc_attr( self::sanitize_url_value( $url ) ); ?>"<?php echo $attribute_string; ?>>
+		<a<?php self::render_html_attributes( $card_attributes ); ?>>
 			<p class="flavor-agent-settings__glance-label">
 				<?php echo esc_html( $title ); ?>
 			</p>
@@ -1174,17 +1170,14 @@ final class Settings {
 			return;
 		}
 
-		$attribute_string = '';
-
-		foreach ( $attributes as $attribute_name => $attribute_value ) {
-			$attribute_string .= sprintf(
-				' %s="%s"',
-				esc_attr( $attribute_name ),
-				esc_attr( $attribute_value )
-			);
-		}
+		$badge_attributes = array_merge(
+			[
+				'class' => 'flavor-agent-settings-section__badge flavor-agent-settings-section__badge--' . $badge['tone'],
+			],
+			$attributes
+		);
 		?>
-		<span class="flavor-agent-settings-section__badge flavor-agent-settings-section__badge--<?php echo esc_attr( $badge['tone'] ); ?>"<?php echo $attribute_string; ?>>
+		<span<?php self::render_html_attributes( $badge_attributes ); ?>>
 			<?php echo esc_html( $badge['label'] ); ?>
 		</span>
 		<?php
@@ -1371,13 +1364,42 @@ final class Settings {
 		self::render_registered_fields_table(
 			'flavor_agent_cloudflare',
 			[
-				'flavor_agent_cloudflare_ai_search_account_id',
-				'flavor_agent_cloudflare_ai_search_instance_id',
-				'flavor_agent_cloudflare_ai_search_api_token',
 				'flavor_agent_cloudflare_ai_search_max_results',
 			]
 		);
+		self::render_cloudflare_legacy_override_panel();
 		self::render_prewarm_diagnostics_panel( $state );
+	}
+
+	private static function render_cloudflare_legacy_override_panel(): void {
+		$has_saved_legacy_values = self::has_saved_cloudflare_legacy_values();
+		?>
+		<details class="flavor-agent-settings-subpanel"<?php echo $has_saved_legacy_values ? ' open' : ''; ?>>
+			<summary class="flavor-agent-settings-subpanel__summary">
+				<?php echo esc_html__( 'Legacy Cloudflare Override', 'flavor-agent' ); ?>
+			</summary>
+			<div class="flavor-agent-settings-subpanel__body">
+				<p class="description">
+					<?php echo esc_html__( 'Optional. Update or clear older Cloudflare AI Search credentials here. Leave all three fields blank to use the managed public endpoint.', 'flavor-agent' ); ?>
+				</p>
+				<?php if ( $has_saved_legacy_values ) : ?>
+					<p class="description">
+						<?php echo esc_html__( 'Saved legacy values are present on this site. Clearing them removes the legacy override without requiring a manual database edit.', 'flavor-agent' ); ?>
+					</p>
+				<?php endif; ?>
+				<?php
+				self::render_registered_fields_table(
+					'flavor_agent_cloudflare',
+					[
+						'flavor_agent_cloudflare_ai_search_account_id',
+						'flavor_agent_cloudflare_ai_search_instance_id',
+						'flavor_agent_cloudflare_ai_search_api_token',
+					]
+				);
+				?>
+			</div>
+		</details>
+		<?php
 	}
 
 	private static function render_prewarm_diagnostics_panel( array $state ): void {
@@ -1981,8 +2003,8 @@ final class Settings {
 		self::render_context_panel(
 			__( 'What Docs Grounding Does', 'flavor-agent' ),
 			[
-				__( 'Docs grounding is optional. It lets Flavor Agent pull supporting context from developer.wordpress.org.', 'flavor-agent' ),
-				__( 'New Cloudflare AI Search credentials are validated before they are saved.', 'flavor-agent' ),
+				__( 'Flavor Agent uses a managed public Cloudflare AI Search endpoint to pull supporting context from developer.wordpress.org.', 'flavor-agent' ),
+				__( 'No Cloudflare credentials are required on this site. If an older install still has saved Cloudflare credentials, you can update or clear that legacy override below.', 'flavor-agent' ),
 			]
 		);
 	}
@@ -1991,7 +2013,7 @@ final class Settings {
 	 * Generic text/password/url field renderer driven by $args.
 	 */
 	public static function render_text_field( array $args ): void {
-		$option         = $args['option'] ?? '';
+		$option         = (string) ( $args['option'] ?? '' );
 		$type           = $args['type'] ?? 'text';
 		$placeholder    = $args['placeholder'] ?? '';
 		$description    = $args['description'] ?? '';
@@ -1999,7 +2021,14 @@ final class Settings {
 		$value          = (string) get_option( $option, $default );
 		$field_id       = (string) ( $args['label_for'] ?? $option );
 		$description_id = '' !== $description ? $field_id . '-description' : '';
-		$constraints    = '';
+		$attributes     = [
+			'type'        => (string) $type,
+			'id'          => $field_id,
+			'name'        => $option,
+			'value'       => $value,
+			'class'       => 'regular-text flavor-agent-settings-field',
+			'placeholder' => (string) $placeholder,
+		];
 
 		foreach ( [ 'step', 'min', 'max' ] as $attribute ) {
 			if ( ! array_key_exists( $attribute, $args ) ) {
@@ -2012,44 +2041,28 @@ final class Settings {
 				continue;
 			}
 
-			$constraints .= sprintf(
-				' %s="%s"',
-				$attribute,
-				esc_attr( $attribute_value )
-			);
+			$attributes[ $attribute ] = $attribute_value;
 		}
 
 		if ( isset( $args['inputmode'] ) && '' !== (string) $args['inputmode'] ) {
-			$constraints .= sprintf(
-				' inputmode="%s"',
-				esc_attr( (string) $args['inputmode'] )
-			);
+			$attributes['inputmode'] = (string) $args['inputmode'];
 		}
 
 		if ( '' !== $description_id ) {
-			$constraints .= sprintf(
-				' aria-describedby="%s"',
-				esc_attr( $description_id )
-			);
+			$attributes['aria-describedby'] = $description_id;
 		}
 
 		$autocomplete = array_key_exists( 'autocomplete', $args )
 			? (string) $args['autocomplete']
 			: '';
-		$autocomplete_attribute = '' !== $autocomplete
-			? sprintf( ' autocomplete="%s"', esc_attr( $autocomplete ) )
-			: '';
 
-		printf(
-			'<input type="%s" id="%s" name="%s" value="%s" class="regular-text flavor-agent-settings-field" placeholder="%s"%s%s />',
-			esc_attr( $type ),
-			esc_attr( $field_id ),
-			esc_attr( $option ),
-			esc_attr( $value ),
-			esc_attr( $placeholder ),
-			$autocomplete_attribute,
-			$constraints
-		);
+		if ( '' !== $autocomplete ) {
+			$attributes['autocomplete'] = $autocomplete;
+		}
+
+		?>
+		<input<?php self::render_html_attributes( $attributes ); ?> />
+		<?php
 
 		if ( $description ) {
 			printf(
@@ -2067,6 +2080,11 @@ final class Settings {
 		$default        = (string) ( $args['default'] ?? '' );
 		$field_id       = (string) ( $args['label_for'] ?? $option );
 		$description_id = '' !== $description ? $field_id . '-description' : '';
+		$attributes     = [
+			'id'    => $field_id,
+			'name'  => $option,
+			'class' => 'flavor-agent-settings-field',
+		];
 		$value          = (string) get_option(
 			$option,
 			$option === Provider::OPTION_NAME ? Provider::AZURE : $default
@@ -2074,20 +2092,18 @@ final class Settings {
 		$autocomplete   = array_key_exists( 'autocomplete', $args )
 			? (string) $args['autocomplete']
 			: '';
-		$description_attribute = '' !== $description_id
-			? sprintf( ' aria-describedby="%s"', esc_attr( $description_id ) )
-			: '';
-		$autocomplete_attribute = '' !== $autocomplete
-			? sprintf( ' autocomplete="%s"', esc_attr( $autocomplete ) )
-			: '';
 
-		printf(
-			'<select id="%s" name="%s" class="flavor-agent-settings-field"%s%s>',
-			esc_attr( $field_id ),
-			esc_attr( $option ),
-			$autocomplete_attribute,
-			$description_attribute
-		);
+		if ( '' !== $autocomplete ) {
+			$attributes['autocomplete'] = $autocomplete;
+		}
+
+		if ( '' !== $description_id ) {
+			$attributes['aria-describedby'] = $description_id;
+		}
+
+		?>
+		<select<?php self::render_html_attributes( $attributes ); ?>>
+		<?php
 
 		foreach ( $choices as $choice_value => $choice_label ) {
 			printf(
@@ -2709,6 +2725,16 @@ final class Settings {
 		];
 	}
 
+	private static function has_saved_cloudflare_legacy_values(): bool {
+		foreach ( self::get_current_cloudflare_values() as $value ) {
+			if ( '' !== trim( $value ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/**
 	 * @param array<string, string> $values
 	 * @param array<string, string> $current_values
@@ -2823,8 +2849,32 @@ final class Settings {
 		return md5( $fingerprint_payload );
 	}
 
+	private static function has_settings_updated_query_flag(): bool {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only query arg used only to render post-save notices.
+		$settings_updated = wp_unslash( $_GET['settings-updated'] ?? '' );
+
+		if ( ! is_string( $settings_updated ) ) {
+			return false;
+		}
+
+		return '' !== sanitize_text_field( $settings_updated );
+	}
+
 	private static function sanitize_url_value( mixed $value ): string {
 		return (string) sanitize_url( (string) $value );
+	}
+
+	/**
+	 * @param array<string, string> $attributes
+	 */
+	private static function render_html_attributes( array $attributes ): void {
+		foreach ( $attributes as $attribute_name => $attribute_value ) {
+			printf(
+				' %s="%s"',
+				esc_attr( $attribute_name ),
+				esc_attr( $attribute_value )
+			);
+		}
 	}
 
 	/**
@@ -3009,7 +3059,7 @@ final class Settings {
 		self::record_section_feedback_message(
 			self::GROUP_DOCS,
 			'error',
-			__( 'Credentials were not saved. Check the account ID, AI Search Instance ID, and token permissions.', 'flavor-agent' ),
+			__( 'We kept your previous docs grounding settings because validation failed.', 'flavor-agent' ),
 			true
 		);
 		self::$cloudflare_validation_error_reported = true;
@@ -3254,21 +3304,28 @@ final class Settings {
 		string $metric = '',
 		bool $is_visible = true
 	): void {
-		$attribute_string = '';
+		$metric_attributes = [
+			'class' => 'flavor-agent-sync-panel__metric' . ( ! $is_visible ? ' is-hidden' : '' ),
+		];
+		$value_attributes  = [
+			'class' => 'flavor-agent-sync-panel__metric-value' . ( $is_error ? ' flavor-agent-sync-panel__metric-value--error' : '' ),
+		];
 
 		if ( '' !== $metric ) {
-			$attribute_string .= sprintf(
-				' data-pattern-metric="%s"',
-				esc_attr( $metric )
-			);
+			$metric_attributes['data-pattern-metric']      = $metric;
+			$value_attributes['data-pattern-metric-value'] = $metric;
+		}
+
+		if ( ! $is_visible ) {
+			$metric_attributes['hidden'] = 'hidden';
 		}
 
 		?>
-		<div class="flavor-agent-sync-panel__metric<?php echo ! $is_visible ? ' is-hidden' : ''; ?>"<?php echo $attribute_string; ?><?php echo ! $is_visible ? ' hidden' : ''; ?>>
+		<div<?php self::render_html_attributes( $metric_attributes ); ?>>
 			<p class="flavor-agent-sync-panel__metric-label">
 				<?php echo esc_html( $label ); ?>
 			</p>
-			<p class="flavor-agent-sync-panel__metric-value<?php echo $is_error ? ' flavor-agent-sync-panel__metric-value--error' : ''; ?>"<?php echo '' !== $metric ? ' data-pattern-metric-value="' . esc_attr( $metric ) . '"' : ''; ?>>
+			<p<?php self::render_html_attributes( $value_attributes ); ?>>
 				<?php echo esc_html( $value ); ?>
 			</p>
 		</div>

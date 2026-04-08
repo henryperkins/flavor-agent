@@ -41,3 +41,5 @@ if [[ -f "${output_dir}/composer.json" ]] && command -v composer >/dev/null 2>&1
 	COMPOSER_ROOT_VERSION="${COMPOSER_ROOT_VERSION:-dev-main}" \
 		composer --working-dir="${output_dir}" dump-autoload --no-dev --classmap-authoritative --no-interaction >/dev/null
 fi
+
+rm -f -- "${output_dir}/composer.lock"

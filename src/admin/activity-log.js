@@ -77,8 +77,20 @@ function getSummaryCards( entries ) {
 		},
 		{
 			id: 'review',
-			label: 'Needs review',
+			label: 'Review-only',
 			value: summary?.review || 0,
+			description: '',
+		},
+		{
+			id: 'blocked',
+			label: 'Undo blocked',
+			value: summary?.blocked || 0,
+			description: '',
+		},
+		{
+			id: 'failed',
+			label: 'Failed or unavailable',
+			value: summary?.failed || 0,
 			description: '',
 		},
 	];
@@ -749,7 +761,7 @@ export function ActivityLogApp( { bootData } ) {
 	const [ view, setView ] = useState( () =>
 		readPersistedActivityView( undefined, viewOptions )
 	);
-	const [ responseData, setResponseData ] = useState( () => ( {
+		const [ responseData, setResponseData ] = useState( () => ( {
 		entries: [],
 		filterOptions: null,
 		paginationInfo: {
@@ -758,13 +770,15 @@ export function ActivityLogApp( { bootData } ) {
 			totalItems: 0,
 			totalPages: 0,
 		},
-		summary: {
-			total: 0,
-			applied: 0,
-			undone: 0,
-			review: 0,
-		},
-	} ) );
+			summary: {
+				total: 0,
+				applied: 0,
+				undone: 0,
+				review: 0,
+				blocked: 0,
+				failed: 0,
+			},
+		} ) );
 	const [ error, setError ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
@@ -839,6 +853,8 @@ export function ActivityLogApp( { bootData } ) {
 						applied: response?.summary?.applied || 0,
 						undone: response?.summary?.undone || 0,
 						review: response?.summary?.review || 0,
+						blocked: response?.summary?.blocked || 0,
+						failed: response?.summary?.failed || 0,
 					},
 				} );
 			} catch ( fetchError ) {
@@ -855,13 +871,15 @@ export function ActivityLogApp( { bootData } ) {
 						totalItems: 0,
 						totalPages: 0,
 					},
-					summary: {
-						total: 0,
-						applied: 0,
-						undone: 0,
-						review: 0,
-					},
-				} );
+						summary: {
+							total: 0,
+							applied: 0,
+							undone: 0,
+							review: 0,
+							blocked: 0,
+							failed: 0,
+						},
+					} );
 				setError(
 					fetchError?.message ||
 						'Flavor Agent could not load the recent AI activity log.'

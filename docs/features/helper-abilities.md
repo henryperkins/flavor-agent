@@ -19,7 +19,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `flavor-agent/introspect-block`, `flavor-agent/list-patterns`, `flavor-agent/get-theme-tokens`, and `flavor-agent/check-status` require `edit_posts`
 - `flavor-agent/list-template-parts` requires `edit_theme_options`
-- `flavor-agent/search-wordpress-docs` requires `manage_options` and a configured Cloudflare AI Search backend
+- `flavor-agent/search-wordpress-docs` requires `manage_options` and a valid docs backend; by default that is the managed public Cloudflare AI Search endpoint, with legacy Cloudflare credentials still supported for backwards compatibility
 - `flavor-agent/check-status` only reports what is currently available; it does not change configuration or retry backends
 - `flavor-agent/search-wordpress-docs` accepts a query plus optional `maxResults` and `entityKey` fields
 
@@ -50,7 +50,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Guardrails And Failure Modes
 
-- Docs search fails closed unless Cloudflare AI Search is configured
+- Docs search fails closed only if no valid docs backend resolves, for example when the managed public endpoint is disabled or invalid and no working legacy Cloudflare credentials are available
 - Only `developer.wordpress.org` guidance is accepted by the docs-search pipeline
 - Empty docs queries return a `missing_query` error
 - `search-wordpress-docs` may warm exact-query or entity cache entries, but that background behavior never blocks the caller

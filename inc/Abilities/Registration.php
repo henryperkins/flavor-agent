@@ -493,18 +493,18 @@ final class Registration {
 										'items' => [
 											'type'       => 'object',
 											'properties' => [
-												'type' => [ 'type' => 'string' ],
-												'patternName' => [ 'type' => 'string' ],
-												'placement' => [ 'type' => 'string' ],
-													'targetPath' => [
-														'type' => 'array',
-														'items' => [ 'type' => 'integer' ],
-													],
-													'expectedBlockName' => [ 'type' => 'string' ],
-													'expectedTarget' => [ 'type' => 'object' ],
+												'type'              => [ 'type' => 'string' ],
+												'patternName'       => [ 'type' => 'string' ],
+												'placement'         => [ 'type' => 'string' ],
+												'targetPath'        => [
+													'type'  => 'array',
+													'items' => [ 'type' => 'integer' ],
 												],
+												'expectedBlockName' => [ 'type' => 'string' ],
+												'expectedTarget'    => [ 'type' => 'object' ],
 											],
 										],
+									],
 								],
 							],
 						],
@@ -687,7 +687,7 @@ final class Registration {
 			'flavor-agent/search-wordpress-docs',
 			[
 				'label'               => __( 'Search WordPress developer docs', 'flavor-agent' ),
-				'description'         => __( 'Query the configured Cloudflare AI Search index for official WordPress developer documentation.', 'flavor-agent' ),
+				'description'         => __( 'Query Flavor Agent\'s trusted WordPress developer docs search backend.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ WordPressDocsAbilities::class, 'search_wordpress_docs' ],
 				'permission_callback' => [ WordPressDocsAbilities::class, 'can_search_wordpress_docs' ],

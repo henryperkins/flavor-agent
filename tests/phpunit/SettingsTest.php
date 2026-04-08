@@ -892,6 +892,39 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_page_keeps_legacy_cloudflare_override_controls_available(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id'  => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'   => 'token-xyz',
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'Legacy Cloudflare Override',
+			$output
+		);
+		$this->assertStringContainsString(
+			'name="flavor_agent_cloudflare_ai_search_account_id"',
+			$output
+		);
+		$this->assertStringContainsString(
+			'name="flavor_agent_cloudflare_ai_search_instance_id"',
+			$output
+		);
+		$this->assertStringContainsString(
+			'name="flavor_agent_cloudflare_ai_search_api_token"',
+			$output
+		);
+		$this->assertStringContainsString(
+			'manual database edit',
+			$output
+		);
+	}
+
 	public function test_render_page_consumes_request_scoped_feedback_only_for_the_matching_user(): void {
 		WordPressTestState::$current_user_id = 1;
 		$_POST                              = [

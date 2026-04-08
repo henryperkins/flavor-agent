@@ -16,24 +16,22 @@ final class InfraAbilitiesTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
-	public function test_check_status_marks_cloudflare_docs_backend_as_configured(): void {
+	public function test_check_status_marks_cloudflare_docs_backend_as_configured_without_marking_plugin_ready(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts'     => true,
 			'manage_options' => true,
 		];
-		WordPressTestState::$options      = [
-			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
-			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
-		];
 
 		$status = InfraAbilities::check_status( [] );
 
-		$this->assertTrue( $status['configured'] );
+		$this->assertFalse( $status['configured'] );
 		$this->assertNull( $status['model'] );
 		$this->assertContains( 'flavor-agent/search-wordpress-docs', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['cloudflare_ai_search']['configured'] );
-		$this->assertSame( 'wp-dev-docs', $status['backends']['cloudflare_ai_search']['instanceId'] );
+		$this->assertSame(
+			'c5d54c4a-27df-4034-80da-ca6054684fcd',
+			$status['backends']['cloudflare_ai_search']['instanceId']
+		);
 	}
 
 	public function test_check_status_marks_wordpress_ai_client_backend_as_configured(): void {
@@ -56,16 +54,12 @@ final class InfraAbilitiesTest extends TestCase {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
 		];
-		WordPressTestState::$options      = [
-			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
-			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
-		];
 
 		$status = InfraAbilities::check_status( [] );
 
-		$this->assertTrue( $status['configured'] );
+		$this->assertFalse( $status['configured'] );
 		$this->assertNotContains( 'flavor-agent/search-wordpress-docs', $status['availableAbilities'] );
+		$this->assertTrue( $status['backends']['cloudflare_ai_search']['configured'] );
 	}
 
 	public function test_check_status_uses_azure_chat_deployment_as_primary_model_when_anthropic_is_missing(): void {

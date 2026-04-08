@@ -18,6 +18,8 @@ final class AISearchClient {
 	private const ENTITY_CACHE_TTL           = 43200;
 	private const VALIDATION_PROBE_QUERY     = 'block editor';
 	private const VALIDATION_PROBE_RESULTS   = 3;
+	private const DEFAULT_PUBLIC_SEARCH_URL  = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
+	private const PUBLIC_HOST_SUFFIX         = '.search.ai.cloudflare.com';
 	private const PREWARM_STATE_OPTION       = 'flavor_agent_docs_prewarm_state';
 	private const WARM_QUEUE_OPTION          = 'flavor_agent_docs_warm_queue';
 	private const PREWARM_THROTTLE_SECONDS   = 3600;
@@ -66,15 +68,25 @@ final class AISearchClient {
 		?string $instance_id = null,
 		?string $api_token = null
 	): bool {
-		$account_id  = self::resolve_config_value( $account_id, 'flavor_agent_cloudflare_ai_search_account_id' );
-		$instance_id = self::resolve_config_value( $instance_id, 'flavor_agent_cloudflare_ai_search_instance_id' );
-		$api_token   = self::resolve_config_value( $api_token, 'flavor_agent_cloudflare_ai_search_api_token' );
+		if ( self::has_explicit_legacy_config_request( $account_id, $instance_id, $api_token ) ) {
+			return self::has_legacy_credentials( $account_id, $instance_id, $api_token );
+		}
 
-		return $account_id !== '' && $instance_id !== '' && $api_token !== '';
+		return ! is_wp_error( self::get_config() );
+	}
+
+	public static function configured_instance_id(): ?string {
+		$config = self::get_config();
+
+		if ( is_wp_error( $config ) ) {
+			return null;
+		}
+
+		return '' !== $config['instanceId'] ? $config['instanceId'] : null;
 	}
 
 	/**
-	 * Validate that the configured Cloudflare AI Search instance is queryable.
+	 * Validate that the resolved Cloudflare AI Search backend is queryable.
 	 *
 	 * Uses a lightweight probe search so documented AI Search Run tokens can pass
 	 * validation without requiring instance metadata read access.
@@ -107,7 +119,7 @@ final class AISearchClient {
 	}
 
 	/**
-	 * Query the configured Cloudflare AI Search instance for WordPress docs guidance.
+	 * Query the resolved Cloudflare AI Search backend for WordPress docs guidance.
 	 *
 	 * @return array{query: string, guidance: array<int, array<string, mixed>>}|\WP_Error
 	 */
@@ -466,7 +478,7 @@ final class AISearchClient {
 		?string $instance_id = null,
 		?string $api_token = null
 	): void {
-		if ( ! self::is_configured( $account_id, $instance_id, $api_token ) ) {
+		if ( ! self::should_prewarm( $account_id, $instance_id, $api_token ) ) {
 			return;
 		}
 
@@ -480,12 +492,20 @@ final class AISearchClient {
 	/**
 	 * Check whether a prewarm should run based on credential changes and throttle window.
 	 */
-	public static function should_prewarm(): bool {
-		if ( ! self::is_configured() ) {
+	public static function should_prewarm(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): bool {
+		if ( ! self::is_configured( $account_id, $instance_id, $api_token ) ) {
 			return false;
 		}
 
-		$fingerprint = self::build_credentials_fingerprint();
+		$fingerprint = self::build_credentials_fingerprint(
+			$account_id,
+			$instance_id,
+			$api_token
+		);
 		$state       = self::read_prewarm_state();
 
 		return ! self::is_prewarm_throttled( $state, $fingerprint );
@@ -597,13 +617,36 @@ final class AISearchClient {
 		return trim( (string) get_option( $option_name, '' ) );
 	}
 
-	private static function build_credentials_fingerprint(): string {
+	private static function has_explicit_legacy_config_request(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): bool {
+		return null !== $account_id || null !== $instance_id || null !== $api_token;
+	}
+
+	private static function has_legacy_credentials(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): bool {
+		return trim( (string) $account_id ) !== ''
+			&& trim( (string) $instance_id ) !== ''
+			&& trim( (string) $api_token ) !== '';
+	}
+
+	private static function build_credentials_fingerprint(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): string {
 		$payload = wp_json_encode(
-			[
-				'account_id'  => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_account_id' ),
-				'instance_id' => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_instance_id' ),
-				'api_token'   => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_api_token' ),
-			]
+			self::build_config_identity_payload(
+				true,
+				$account_id,
+				$instance_id,
+				$api_token
+			)
 		);
 
 		if ( ! is_string( $payload ) || $payload === '' ) {
@@ -611,6 +654,34 @@ final class AISearchClient {
 		}
 
 		return md5( $payload );
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function build_config_identity_payload(
+		bool $include_secret = false,
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): array {
+		$config = self::get_config( $account_id, $instance_id, $api_token );
+
+		if ( is_wp_error( $config ) ) {
+			return [];
+		}
+
+		$payload = [
+			'mode'       => $config['mode'],
+			'instanceId' => $config['instanceId'],
+			'searchUrl'  => $config['searchUrl'],
+		];
+
+		if ( $include_secret && $config['apiToken'] !== '' ) {
+			$payload['apiToken'] = $config['apiToken'];
+		}
+
+		return $payload;
 	}
 
 	/**
@@ -748,18 +819,47 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @return array{instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
+	 * @return array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
 	 */
 	private static function get_config(
 		?string $account_id = null,
 		?string $instance_id = null,
 		?string $api_token = null
 	): array|\WP_Error {
-		$account_id  = trim( (string) ( null !== $account_id ? $account_id : get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) ) );
-		$instance_id = trim( (string) ( null !== $instance_id ? $instance_id : get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' ) ) );
-		$api_token   = trim( (string) ( null !== $api_token ? $api_token : get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) ) );
+		if ( self::has_explicit_legacy_config_request( $account_id, $instance_id, $api_token ) ) {
+			return self::build_legacy_config(
+				trim( (string) $account_id ),
+				trim( (string) $instance_id ),
+				trim( (string) $api_token )
+			);
+		}
 
-		if ( $account_id === '' || $instance_id === '' || $api_token === '' ) {
+		$account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
+		$instance_id = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' ) );
+		$api_token   = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) );
+
+		if ( self::has_legacy_credentials( $account_id, $instance_id, $api_token ) ) {
+			return self::build_legacy_config( $account_id, $instance_id, $api_token );
+		}
+
+		$public_search_url = self::get_public_search_url();
+
+		if ( '' !== $public_search_url ) {
+			return self::build_public_config( $public_search_url );
+		}
+
+		return new \WP_Error(
+			'missing_cloudflare_ai_search_credentials',
+			'Cloudflare AI Search is not configured.',
+			[ 'status' => 400 ]
+		);
+	}
+
+	/**
+	 * @return array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
+	 */
+	private static function build_legacy_config( string $account_id, string $instance_id, string $api_token ): array|\WP_Error {
+		if ( ! self::has_legacy_credentials( $account_id, $instance_id, $api_token ) ) {
 			return new \WP_Error(
 				'missing_cloudflare_ai_search_credentials',
 				'Cloudflare AI Search credentials are not configured. Go to Settings > Flavor Agent.',
@@ -768,6 +868,7 @@ final class AISearchClient {
 		}
 
 		return [
+			'mode'        => 'legacy',
 			'instanceId'  => $instance_id,
 			'instanceUrl' => sprintf(
 				'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances/%s',
@@ -783,6 +884,117 @@ final class AISearchClient {
 		];
 	}
 
+	/**
+	 * @return array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
+	 */
+	private static function build_public_config( string $search_url ): array|\WP_Error {
+		$normalized_search_url = self::normalize_public_search_url( $search_url );
+
+		if ( '' === $normalized_search_url ) {
+			return new \WP_Error(
+				'missing_cloudflare_ai_search_credentials',
+				'Cloudflare AI Search public search URL is invalid.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		return [
+			'mode'        => 'public',
+			'instanceId'  => self::extract_public_instance_id( $normalized_search_url ),
+			'instanceUrl' => '',
+			'searchUrl'   => $normalized_search_url,
+			'apiToken'    => '',
+		];
+	}
+
+	private static function get_public_search_url(): string {
+		$search_url = self::DEFAULT_PUBLIC_SEARCH_URL;
+
+		if ( function_exists( 'apply_filters' ) ) {
+			/**
+			 * Filters the public Cloudflare AI Search endpoint used for trusted WordPress docs grounding.
+			 *
+			 * Return an empty string to disable the built-in public endpoint and require legacy credentials.
+			 *
+			 * @param string $public_search_url Public AI Search `/search` endpoint.
+			 */
+			$search_url = apply_filters(
+				'flavor_agent_cloudflare_ai_search_public_search_url',
+				$search_url
+			);
+		}
+
+		return self::normalize_public_search_url( is_string( $search_url ) ? $search_url : '' );
+	}
+
+	private static function normalize_public_search_url( string $search_url ): string {
+		$search_url = trim( $search_url );
+
+		if ( '' === $search_url ) {
+			return '';
+		}
+
+		$parts = wp_parse_url( $search_url );
+
+		if ( ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		$host   = strtolower( (string) ( $parts['host'] ?? '' ) );
+		$path   = (string) ( $parts['path'] ?? '' );
+
+		if (
+			'https' !== $scheme ||
+			'' === $host ||
+			! str_ends_with( $host, self::PUBLIC_HOST_SUFFIX ) ||
+			( isset( $parts['user'] ) && '' !== (string) $parts['user'] ) ||
+			( isset( $parts['pass'] ) && '' !== (string) $parts['pass'] ) ||
+			( isset( $parts['port'] ) && 443 !== (int) $parts['port'] ) ||
+			isset( $parts['query'] ) ||
+			isset( $parts['fragment'] )
+		) {
+			return '';
+		}
+
+		$path = preg_replace( '#/+#', '/', $path );
+		$path = is_string( $path ) ? rtrim( $path, '/' ) : '';
+
+		if ( '' === $path ) {
+			$path = '/search';
+		} elseif ( '/mcp' === $path ) {
+			$path = '/search';
+		}
+
+		if ( '/search' !== $path ) {
+			return '';
+		}
+
+		return 'https://' . $host . $path;
+	}
+
+	private static function extract_public_instance_id( string $search_url ): string {
+		$parts = wp_parse_url( $search_url );
+
+		if ( ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$host = strtolower( (string) ( $parts['host'] ?? '' ) );
+
+		if ( ! str_ends_with( $host, self::PUBLIC_HOST_SUFFIX ) ) {
+			return '';
+		}
+
+		$instance_id = substr( $host, 0, -strlen( self::PUBLIC_HOST_SUFFIX ) );
+
+		if ( ! is_string( $instance_id ) || '' === $instance_id || str_contains( $instance_id, '.' ) ) {
+			return '';
+		}
+
+		return strtolower( sanitize_text_field( $instance_id ) );
+	}
+
 	private static function normalize_max_results( ?int $max_results ): int {
 		if ( null === $max_results ) {
 			$max_results = (int) get_option(
@@ -795,7 +1007,7 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @param array{instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
+	 * @param array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	private static function request_search(
@@ -806,14 +1018,19 @@ final class AISearchClient {
 		string $parse_error_code,
 		int $error_status
 	): array|\WP_Error {
+		$headers = [
+			'Content-Type' => 'application/json',
+		];
+
+		if ( $config['apiToken'] !== '' ) {
+			$headers['Authorization'] = 'Bearer ' . $config['apiToken'];
+		}
+
 		$response = wp_remote_post(
 			$config['searchUrl'],
 			[
 				'timeout' => 20,
-				'headers' => [
-					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $config['apiToken'],
-				],
+				'headers' => $headers,
 				'body'    => self::build_search_request_body( $query, $result_limit ),
 			]
 		);
@@ -873,12 +1090,7 @@ final class AISearchClient {
 	}
 
 	private static function build_cache_namespace(): string {
-		$payload = wp_json_encode(
-			[
-				'account_id'  => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_account_id' ),
-				'instance_id' => self::resolve_config_value( null, 'flavor_agent_cloudflare_ai_search_instance_id' ),
-			]
-		);
+		$payload = wp_json_encode( self::build_config_identity_payload() );
 
 		if ( ! is_string( $payload ) || $payload === '' ) {
 			return '';
@@ -1071,7 +1283,7 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @param array{instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
+	 * @param array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
 	 * @return array<int, array<string, mixed>>|\WP_Error
 	 */
 	private static function validate_trusted_wordpress_docs_source( array $config ): array|\WP_Error {
@@ -1216,7 +1428,7 @@ final class AISearchClient {
 
 	/**
 	 * @param array<int, mixed> $chunks Raw chunk list from Cloudflare AI Search.
-	 * @param string|null       $instance_id Configured Cloudflare AI Search instance ID.
+	 * @param string|null       $instance_id Resolved Cloudflare AI Search instance ID.
 	 * @return array<int, array<string, mixed>>
 	 */
 	private static function normalize_chunks( array $chunks, ?string $instance_id = null ): array {
@@ -1481,6 +1693,10 @@ final class AISearchClient {
 					: get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' )
 			)
 		);
+
+		if ( '' === $resolved ) {
+			$resolved = self::extract_public_instance_id( self::get_public_search_url() );
+		}
 
 		if ( $resolved === '' || str_contains( $resolved, '/' ) || str_contains( $resolved, '\\' ) ) {
 			return '';

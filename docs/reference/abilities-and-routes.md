@@ -30,7 +30,7 @@ Use it when you need to answer:
 | `flavor-agent/recommend-style` | `edit_theme_options` | Active provider chat configured | Shared style suggestions for Global Styles and Style Book, constrained to validated `theme.json` paths, theme-backed values, and Global Styles-only theme variations | Site Editor Global Styles and Style Book panels |
 | `flavor-agent/list-template-parts` | `edit_theme_options` | None beyond capability | Registered template parts, optionally filtered by area | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Active provider chat configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
-| `flavor-agent/search-wordpress-docs` | `manage_options` | Cloudflare AI Search configured | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
+| `flavor-agent/search-wordpress-docs` | `manage_options` | Managed public docs backend available (legacy Cloudflare credentials optional) | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
 | `flavor-agent/get-theme-tokens` | `edit_posts` | None beyond capability | Theme token snapshot: colors, typography, spacing, layout, and related feature flags | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/check-status` | `edit_posts` | None beyond capability | Backend inventory, active model hint, and currently available ability list | Settings diagnostics and external-agent surface |
 
@@ -54,9 +54,16 @@ Use it when you need to answer:
 | `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | `fetchTemplatePartRecommendations()` | `TemplateAbilities::recommend_template_part()` | Thin REST adapter over the ability |
 | `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` and `fetchStyleBookRecommendations()` | `StyleAbilities::recommend_style()` | Thin REST adapter over the shared style ability |
 | `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` for scoped reads; `ActivityRepository::query_admin()` for global admin reads | Scoped queries power editor/theme history; global admin reads return pagination, summary, and filter-option metadata for the audit page |
-| `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries |
+| `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries, including executable apply rows and scoped read-only `request_diagnostic` audit rows |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
 | `POST /flavor-agent/v1/sync-patterns` | `manage_options` | `src/admin/settings-page-controller.js` | `PatternIndex::sync()` | Manual admin-only pattern catalog rebuild with live settings-panel state refresh |
+
+## Activity Route Notes
+
+- Activity persistence is REST-only today. There is no matching registered ability for create/read/undo.
+- `POST /flavor-agent/v1/activity` persists the request provenance that the UI shows later: backend/provider label, model, provider path, configuration owner, credential source, selected provider, fallback usage, route, ability, prompt, reference, token usage, and latency when the originating client includes them.
+- The repository projects the admin-audit fields it needs for filtering into schema-versioned table columns (`admin_post_type`, `admin_operation_type`, `admin_provider`, `admin_provider_path`, `admin_configuration_owner`, `admin_credential_source`, `admin_selected_provider`, `admin_request_ability`, `admin_request_route`, `admin_request_reference`, `admin_request_prompt`, and related identifiers) so `Settings > AI Activity` does not need to decode every historical `request_json` payload to filter by provenance.
+- `GET /flavor-agent/v1/activity?global=1` is the only route that exposes the wp-admin audit feed. It is still intentionally a first audit slice rather than a full observability console: the response includes timeline entries, summary counts, pagination, and filter options, but not diff-oriented inspection or broader operator workflows.
 
 ## Example Contracts
 

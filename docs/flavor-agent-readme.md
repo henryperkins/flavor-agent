@@ -180,7 +180,7 @@ The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 When chat credentials are configured on that screen, Flavor Agent uses the selected provider for pattern, template, template-part, Global Styles, Style Book, and navigation recommendations. If not, block recommendations still fall back to the core `Settings > Connectors` screen through the WordPress AI Client path.
 When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for block/pattern/template/template-part/Global Styles/Style Book/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
 
-When the Cloudflare AI Search account ID, instance ID, or token changes and all three fields are present, the plugin validates the configured account, instance, and token by running a lightweight probe search that must return trusted `developer.wordpress.org` guidance, and keeps the previous values if validation fails. This allows documented AI Search Run tokens to pass validation without requiring instance metadata read access. Successful saves still use the standard Settings API notice flow, and failed validation surfaces the Cloudflare error on the same screen.
+Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
 
 Configured options:
 
@@ -194,9 +194,6 @@ Configured options:
 - `flavor_agent_openai_native_embedding_model`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
-- `flavor_agent_cloudflare_ai_search_account_id`
-- `flavor_agent_cloudflare_ai_search_instance_id`
-- `flavor_agent_cloudflare_ai_search_api_token`
 - `flavor_agent_cloudflare_ai_search_max_results`
 
 `flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native chat and embedding model IDs in its own settings either way.

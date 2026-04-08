@@ -85,6 +85,44 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
+	public function test_search_uses_built_in_public_search_endpoint_without_authorization_when_legacy_credentials_are_missing(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'search_query' => 'rewritten query',
+						'chunks'       => [
+							[
+								'id'    => 'chunk-1',
+								'score' => 0.91,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/rest-api/reference/wp_template_parts',
+									'metadata' => [],
+								],
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/rest-api/reference/wp_template_parts/\"\n---\nWhere the template part is intended for use (header, footer, etc).",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'template part area guidance' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			WordPressTestState::$last_remote_post['url']
+		);
+		$this->assertArrayNotHasKey(
+			'Authorization',
+			WordPressTestState::$last_remote_post['args']['headers']
+		);
+	}
+
 	public function test_search_normalizes_crlf_frontmatter_before_extracting_url_and_excerpt(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -138,34 +176,34 @@ final class AISearchClientTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 			'flavor_agent_cloudflare_ai_search_max_results' => 4,
 		];
-		WordPressTestState::$remote_post_response = [
-			'response' => [
-				'code' => 200,
-			],
+			WordPressTestState::$remote_post_response = [
+				'response' => [
+					'code' => 200,
+				],
 				'body'     => wp_json_encode(
-				[
-					'result' => [
-						'search_query' => 'block editor',
-						'chunks'       => [
-							[
-								'id'    => 'chunk-1',
-								'score' => 0.76,
-								'item'  => [
-									'key'      => 'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
-									'metadata' => [],
+					[
+						'result' => [
+							'search_query' => 'block editor',
+							'chunks'       => [
+								[
+									'id'    => 'chunk-1',
+									'score' => 0.76,
+									'item'  => [
+										'key'      => 'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
+										'metadata' => [],
+									],
+									'text'  => 'Malicious non-doc content that only borrows a trusted-looking source key.',
 								],
-								'text'  => 'Malicious non-doc content that only borrows a trusted-looking source key.',
 							],
 						],
-					],
-				]
-			),
-		];
+					]
+				),
+			];
 
-		$result = AISearchClient::search( 'block editor' );
+			$result = AISearchClient::search( 'block editor' );
 
-		$this->assertIsArray( $result );
-		$this->assertSame( [], $result['guidance'] );
+			$this->assertIsArray( $result );
+			$this->assertSame( [], $result['guidance'] );
 	}
 
 	public function test_search_rejects_forged_or_traversing_source_keys_when_urls_are_missing(): void {
@@ -425,11 +463,28 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'cloudflare_ai_search_validation_untrusted_source', $result->get_error_code() );
 	}
 
-	public function test_search_requires_configuration(): void {
+	public function test_search_uses_public_search_endpoint_by_default_when_no_legacy_credentials_are_saved(): void {
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'search_query' => 'template parts',
+						'chunks'       => [],
+					],
+				]
+			),
+		];
+
 		$result = AISearchClient::search( 'template parts' );
 
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'missing_cloudflare_ai_search_credentials', $result->get_error_code() );
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			WordPressTestState::$last_remote_post['url']
+		);
 		$this->assertSame( [], AISearchClient::maybe_search( 'template parts' ) );
 	}
 
@@ -1064,6 +1119,21 @@ final class AISearchClientTest extends TestCase {
 			AISearchClient::infer_entity_key_from_query(
 				'WordPress block theme guidance. template type 404. template parts and theme.json.'
 			)
+		);
+	}
+
+	public function test_normalize_public_search_url_rewrites_mcp_endpoints_to_search(): void {
+		$method = new \ReflectionMethod( AISearchClient::class, 'normalize_public_search_url' );
+		$method->setAccessible( true );
+
+		$result = $method->invoke(
+			null,
+			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/mcp'
+		);
+
+		$this->assertSame(
+			'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search',
+			$result
 		);
 	}
 

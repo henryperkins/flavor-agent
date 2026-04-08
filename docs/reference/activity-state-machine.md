@@ -27,6 +27,8 @@ Activity history is also maintained as a scoped client session. `loadActivitySes
 | `undone` | The action was successfully rolled back |
 | `failed` | The undo attempt failed (error message stored in `undo.error`) |
 
+`review` is not an executable undo state for apply actions. It is only used by scoped read-only `request_diagnostic` audit rows, which the admin page renders as review-only or failed request records instead of as undoable activity.
+
 ## Valid Transitions
 
 ```text
@@ -81,6 +83,12 @@ The client also enforces this rule before sending the request:
 | `undo.updatedAt` | ISO 8601 `string` | Set on any transition |
 | `undo.undoneAt` | ISO 8601 `string` or `null` | Set on `undone` transitions |
 
+## Review-Only Audit Rows
+
+- Content, pattern, and navigation requests can persist scoped `request_diagnostic` rows when a document scope exists, even though those surfaces do not run Flavor Agent-owned apply/undo executors.
+- Those rows are stored in the same activity table and travel through the same `GET /flavor-agent/v1/activity?global=1` admin feed, but they do not participate in the executable ordered-undo lifecycle.
+- The admin page resolves them into `review` or `failed` buckets based on the recorded execution result and persisted undo payload, while inline executable surfaces continue to care only about `available`, runtime `blocked`, `undone`, and `failed`.
+
 ## Retry and Merge Behavior
 
 When a `POST /activity` create request arrives for an entry that already exists (duplicate `activity_id`), the server merges rather than rejecting:
@@ -119,6 +127,8 @@ Activity entries are automatically pruned by a daily cron event (`flavor_agent_p
 | Table suffix | `flavor_agent_activity` |
 | Default query limit | 20 |
 | Maximum query limit | 100 |
+
+Schema version 2 also projects filterable admin-audit metadata into dedicated columns so privileged global reads can filter by provenance without decoding every `request_json` blob. The projected fields cover post type/entity identifiers, block path, operation metadata, provider/backend/model labels, provider path, configuration owner, credential source, selected provider, ability, route, prompt, and reference. The admin page still hydrates the current page from the full stored rows so the details view can show the complete request and before/after payloads.
 
 ## Primary Source Files
 

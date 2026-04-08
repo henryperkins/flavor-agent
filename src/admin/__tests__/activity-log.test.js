@@ -242,6 +242,8 @@ function buildResponse( entries, overrides = {} ) {
 			applied: entries.length,
 			undone: 0,
 			review: 0,
+			blocked: 0,
+			failed: 0,
 			...( overrides.summary || {} ),
 		},
 	};
@@ -336,6 +338,8 @@ describe( 'ActivityLogApp', () => {
 						applied: 3,
 						undone: 4,
 						review: 2,
+						blocked: 1,
+						failed: 2,
 					},
 				}
 			)
@@ -344,7 +348,9 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Recorded actions' ) ).toBe( '9' );
 		expect( getSummaryCardValue( 'Still applied' ) ).toBe( '3' );
 		expect( getSummaryCardValue( 'Undone' ) ).toBe( '4' );
-		expect( getSummaryCardValue( 'Needs review' ) ).toBe( '2' );
+		expect( getSummaryCardValue( 'Review-only' ) ).toBe( '2' );
+		expect( getSummaryCardValue( 'Undo blocked' ) ).toBe( '1' );
+		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
 	} );
 
 	test( 'clamps stale saved pages back into range before rendering the feed', async () => {
