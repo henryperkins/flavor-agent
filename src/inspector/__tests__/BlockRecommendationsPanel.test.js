@@ -561,13 +561,22 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(getContainer().textContent).not.toContain(
 			'These ideas need manual follow-through or a broader preview/apply flow'
 		);
-		expect(mockSuggestionChips).toHaveBeenCalledTimes(1);
-		expect(mockSuggestionChips.mock.calls[0][0]).toEqual(
-			expect.objectContaining({
-				clientId: 'block-1',
-				label: 'AI block suggestions',
-				suggestions: [
-					expect.objectContaining({
+			expect(mockSuggestionChips).toHaveBeenCalledTimes(1);
+			expect(mockSuggestionChips.mock.calls[0][0]).toEqual(
+				expect.objectContaining({
+					clientId: 'block-1',
+					currentRequestInput: expect.objectContaining({
+						clientId: 'block-1',
+						editorContext: expect.objectContaining({
+							block: expect.objectContaining({
+								name: 'core/paragraph',
+							}),
+						}),
+					}),
+					currentRequestSignature: expect.any(String),
+					label: 'AI block suggestions',
+					suggestions: [
+						expect.objectContaining({
 						label: 'Hide on mobile',
 					}),
 				],

@@ -258,15 +258,96 @@ final class BlockAbilitiesTest extends TestCase {
 			]
 		);
 
-		$this->assertSame(
-			[
-				'settings'    => [],
-				'styles'      => [],
-				'block'       => [],
-				'explanation' => '',
-			],
-			$result
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['settings'] ?? null );
+		$this->assertSame( [], $result['styles'] ?? null );
+		$this->assertSame( [], $result['block'] ?? null );
+		$this->assertSame( '', $result['explanation'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['resolvedContextSignature'] ?? '' )
 		);
+	}
+
+	public function test_recommend_block_resolve_signature_only_returns_minimal_payload_and_ignores_docs_guidance_cache_changes(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		$input    = [
+			'prompt'        => 'Keep the paragraph tighter and clearer.',
+			'selectedBlock' => [
+				'blockName'  => 'core/paragraph',
+				'attributes' => [
+					'content' => 'Hello world',
+				],
+			],
+		];
+		$baseline = BlockAbilities::recommend_block(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null ],
+			$baseline
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+
+		$prepared = $this->invoke_prepare_recommend_block_input( $input );
+		$query    = $this->invoke_private_string_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_query',
+			[
+				$prepared['context'],
+				$prepared['prompt'],
+			]
+		);
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
+			[
+				'id'        => 'chunk-1',
+				'title'     => 'Paragraph block guidance',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+				'excerpt'   => 'Paragraph guidance should keep typography and spacing inside supported editor controls.',
+				'score'     => 0.91,
+			],
+		];
+		WordPressTestState::$last_remote_post = [];
+
+		$with_docs = BlockAbilities::recommend_block(
+			array_merge(
+				$input,
+				[
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $with_docs );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $with_docs['resolvedContextSignature'] ?? null ],
+			$with_docs
+		);
+		$this->assertSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$with_docs['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	/**
@@ -279,6 +360,31 @@ final class BlockAbilitiesTest extends TestCase {
 		$result = $method->invoke( null, $input );
 
 		$this->assertIsArray( $result );
+
+		return $result;
+	}
+
+	private function build_cache_key( string $query, int $max_results ): string {
+		$method = new ReflectionMethod( \FlavorAgent\Cloudflare\AISearchClient::class, 'build_cache_key' );
+		$method->setAccessible( true );
+
+		$result = $method->invoke( null, $query, $max_results );
+
+		$this->assertIsString( $result );
+
+		return $result;
+	}
+
+	/**
+	 * @param array<int, mixed> $arguments
+	 */
+	private function invoke_private_string_method( string $class_name, string $method_name, array $arguments ): string {
+		$method = new ReflectionMethod( $class_name, $method_name );
+		$method->setAccessible( true );
+
+		$result = $method->invokeArgs( null, $arguments );
+
+		$this->assertIsString( $result );
 
 		return $result;
 	}

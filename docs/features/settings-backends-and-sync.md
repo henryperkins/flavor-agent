@@ -5,6 +5,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Exact Surface
 
 - Settings page: `Settings > Flavor Agent`
+- Durable setup guidance: native WordPress `Help` tabs/sidebar on the Flavor Agent settings screen
 - Admin audit page: `Settings > AI Activity` is documented separately in `docs/features/activity-and-audit.md`
 - Sync surface: `Sync Pattern Catalog` panel on the main Flavor Agent settings page
 
@@ -20,6 +21,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - OpenAI Native API key override plus embedding and chat model IDs
 - Qdrant URL and API key
 - Cloudflare AI Search max result count
+- Cloudflare AI Search override credentials for older installs or explicit custom-endpoint use
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
 ## Backend Gating Rules
@@ -31,16 +33,17 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Template recommendations | Active provider chat configured (direct or connector-backed) |
 | Template-part recommendations | Active provider chat configured (direct or connector-backed) |
 | Navigation recommendations | Active provider chat configured (direct or connector-backed) and current user can edit theme options |
-| WordPress docs grounding | Built-in public Cloudflare AI Search endpoint; recommendation-time use is cache-only and non-blocking |
+| WordPress docs grounding | Built-in public Cloudflare AI Search endpoint; recommendation-time use stays cache-first, non-blocking for model execution, and can fall back through query, family, entity, and warm generic guidance caches |
 
 ## Save And Validation Flow
 
 1. The user changes settings on `Settings > Flavor Agent`
 2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
-3. Flavor Agent validates Azure, OpenAI Native, and Qdrant settings when those credential sets changed and enough data is present to run the validation. Legacy Cloudflare credentials are only revalidated when those deprecated fields are still being used.
+3. Flavor Agent validates Azure, OpenAI Native, and Qdrant settings when those credential sets changed and enough data is present to run the validation. Cloudflare override credentials are only revalidated when those override fields are still being used.
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
 5. If OpenAI Native is selected, the page also reports the current effective API key source and whether the core OpenAI connector is registered/configured
 6. Connector-backed providers appear in the dropdown only when the WordPress AI Client reports that they currently support text generation
+7. Durable setup guidance, troubleshooting, and format notes live in the native WordPress `Help` dropdown so inline page copy can stay focused on active controls and runtime state
 
 ## Pattern Sync Flow
 

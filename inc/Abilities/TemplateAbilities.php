@@ -11,6 +11,7 @@ use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
+use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\StringArray;
 
 final class TemplateAbilities {
@@ -35,6 +36,10 @@ final class TemplateAbilities {
 	 */
 	public static function recommend_template( mixed $input ): array|\WP_Error {
 		$input = self::normalize_input( $input );
+		$resolve_signature_only = filter_var(
+			$input['resolveSignatureOnly'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
 
 		$template_ref          = isset( $input['templateRef'] )
 			? trim( (string) $input['templateRef'] )
@@ -42,7 +47,7 @@ final class TemplateAbilities {
 		$template_type         = isset( $input['templateType'] ) && is_string( $input['templateType'] ) && $input['templateType'] !== ''
 			? $input['templateType']
 			: null;
-		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
+		$prompt                = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
@@ -60,24 +65,52 @@ final class TemplateAbilities {
 			return $context;
 		}
 
+		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
+			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
+		}
+
 		$editor_slots     = self::normalize_template_editor_slots( $input['editorSlots'] ?? null );
 		$editor_structure = self::normalize_template_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_live_slot_context( $context, $editor_slots );
 		$context          = self::apply_template_live_structure_context( $context, $editor_structure );
 
-		$system = TemplatePrompt::build_system();
-		$user   = TemplatePrompt::build_user(
+		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
+			'template',
+			[
+				'context' => $context,
+				'prompt'  => $prompt,
+			]
+		);
+
+		if ( $resolve_signature_only ) {
+			return [
+				'resolvedContextSignature' => $resolved_context_signature,
+			];
+		}
+
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		$system        = TemplatePrompt::build_system();
+		$user          = TemplatePrompt::build_user(
 			$context,
 			$prompt,
-			self::collect_wordpress_docs_guidance( $context, $prompt )
+			$docs_guidance
 		);
+
 		$result = ResponsesClient::rank( $system, $user );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		return TemplatePrompt::parse_response( $result, $context );
+		$payload = TemplatePrompt::parse_response( $result, $context );
+
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+
+		$payload['resolvedContextSignature'] = $resolved_context_signature;
+
+		return $payload;
 	}
 
 	/**
@@ -88,11 +121,15 @@ final class TemplateAbilities {
 	 */
 	public static function recommend_template_part( mixed $input ): array|\WP_Error {
 		$input = self::normalize_input( $input );
+		$resolve_signature_only = filter_var(
+			$input['resolveSignatureOnly'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
 
 		$template_part_ref     = isset( $input['templatePartRef'] )
 			? trim( (string) $input['templatePartRef'] )
 			: '';
-		$prompt                = isset( $input['prompt'] ) ? (string) $input['prompt'] : '';
+		$prompt                = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $input )
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
@@ -110,22 +147,50 @@ final class TemplateAbilities {
 			return $context;
 		}
 
+		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
+			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
+		}
+
 		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
 		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
 
-		$system = TemplatePartPrompt::build_system();
-		$user   = TemplatePartPrompt::build_user(
+		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
+			'template-part',
+			[
+				'context' => $context,
+				'prompt'  => $prompt,
+			]
+		);
+
+		if ( $resolve_signature_only ) {
+			return [
+				'resolvedContextSignature' => $resolved_context_signature,
+			];
+		}
+
+		$docs_guidance = self::collect_template_part_wordpress_docs_guidance( $context, $prompt );
+		$system        = TemplatePartPrompt::build_system();
+		$user          = TemplatePartPrompt::build_user(
 			$context,
 			$prompt,
-			self::collect_template_part_wordpress_docs_guidance( $context, $prompt )
+			$docs_guidance
 		);
+
 		$result = ResponsesClient::rank( $system, $user );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		return TemplatePartPrompt::parse_response( $result, $context );
+		$payload = TemplatePartPrompt::parse_response( $result, $context );
+
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+
+		$payload['resolvedContextSignature'] = $resolved_context_signature;
+
+		return $payload;
 	}
 
 	/**
@@ -1356,6 +1421,9 @@ final class TemplateAbilities {
 			: '';
 		$allowed_areas = StringArray::sanitize( $context['allowedAreas'] ?? [] );
 		$empty_areas   = StringArray::sanitize( $context['emptyAreas'] ?? [] );
+		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $context )
+			? StringArray::sanitize( $context['visiblePatternNames'] ?? [] )
+			: null;
 		$top_level_block_tree = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
 		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
 		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
@@ -1407,6 +1475,17 @@ final class TemplateAbilities {
 
 		if ( ! empty( $top_level_block_names ) ) {
 			$parts[] = 'top-level blocks ' . implode( ', ', $top_level_block_names );
+		}
+
+		if ( is_array( $visible_pattern_names ) ) {
+			$visible_pattern_summary = [ 'visible pattern count ' . count( $visible_pattern_names ) ];
+			$visible_pattern_sample  = array_slice( $visible_pattern_names, 0, 3 );
+
+			if ( ! empty( $visible_pattern_sample ) ) {
+				$visible_pattern_summary[] = 'visible patterns ' . implode( ', ', $visible_pattern_sample );
+			}
+
+			$parts[] = implode( ', ', $visible_pattern_summary );
 		}
 
 		if ( isset( $structure_stats['blockCount'] ) || isset( $structure_stats['maxDepth'] ) ) {
@@ -1463,6 +1542,7 @@ final class TemplateAbilities {
 			: '';
 		$top_level    = StringArray::sanitize( $context['topLevelBlocks'] ?? [] );
 		$block_counts = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
+		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
 		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
 		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
 		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
@@ -1489,6 +1569,41 @@ final class TemplateAbilities {
 					array_slice( array_values( $block_counts ), 0, 6 )
 				)
 			);
+		}
+
+		$override_block_names = array_slice(
+			StringArray::sanitize( $current_pattern_overrides['blockNames'] ?? [] ),
+			0,
+			3
+		);
+
+		if ( [] === $override_block_names && ! empty( $current_pattern_overrides['blocks'] ) ) {
+			$override_block_names = array_values(
+				array_unique(
+					array_filter(
+						array_map(
+							static fn( mixed $block ): string => is_array( $block ) && is_string( $block['name'] ?? null )
+								? sanitize_text_field( $block['name'] )
+								: '',
+							array_slice(
+								is_array( $current_pattern_overrides['blocks'] ) ? $current_pattern_overrides['blocks'] : [],
+								0,
+								3
+							)
+						)
+					)
+				)
+			);
+		}
+
+		if ( array_key_exists( 'currentPatternOverrides', $context ) ) {
+			$override_summary = [ 'pattern override blocks ' . (int) ( $current_pattern_overrides['blockCount'] ?? 0 ) ];
+
+			if ( ! empty( $override_block_names ) ) {
+				$override_summary[] = 'override block names ' . implode( ', ', $override_block_names );
+			}
+
+			$parts[] = implode( ', ', $override_summary );
 		}
 
 		if ( ! empty( $operation_targets ) ) {
@@ -1599,6 +1714,9 @@ final class TemplateAbilities {
 
 		$allowed_areas  = StringArray::sanitize( $context['allowedAreas'] ?? [] );
 		$empty_areas    = StringArray::sanitize( $context['emptyAreas'] ?? [] );
+		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $context )
+			? StringArray::sanitize( $context['visiblePatternNames'] ?? [] )
+			: null;
 		$assigned_areas = [];
 
 		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
@@ -1634,6 +1752,11 @@ final class TemplateAbilities {
 
 		if ( ! empty( $assigned_areas ) ) {
 			$family_context['assignedAreas'] = $assigned_areas;
+		}
+
+		if ( is_array( $visible_pattern_names ) ) {
+			$family_context['hasVisiblePatternScope'] = true;
+			$family_context['visiblePatternCount']    = count( $visible_pattern_names );
 		}
 
 		$top_level_block_names = array_values(
@@ -1704,6 +1827,7 @@ final class TemplateAbilities {
 		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
 		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
 		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
+		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
 		$target_names = array_values(
 			array_filter(
 				array_map(
@@ -1731,6 +1855,12 @@ final class TemplateAbilities {
 
 		if ( ! empty( $anchor_placements ) ) {
 			$family_context['anchorPlacements'] = $anchor_placements;
+		}
+
+		if ( array_key_exists( 'currentPatternOverrides', $context ) ) {
+			$family_context['hasPatternOverrides'] = ! empty( $current_pattern_overrides['hasOverrides'] )
+				|| ! empty( $current_pattern_overrides['blockCount'] );
+			$family_context['patternOverrideCount'] = (int) ( $current_pattern_overrides['blockCount'] ?? 0 );
 		}
 
 		if ( ! empty( $structural_constraints['hasContentOnly'] ) ) {

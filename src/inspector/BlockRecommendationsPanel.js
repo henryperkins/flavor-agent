@@ -24,6 +24,7 @@ import {
 	getLiveBlockContextSignature,
 } from '../context/collector';
 import { buildBlockRecommendationRequestSignature } from '../utils/recommendation-request-signature';
+import { buildBlockRecommendationRequestData } from './block-recommendation-request';
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -111,6 +112,7 @@ function useBlockRecommendationState(clientId) {
 		error,
 		status,
 		storedContextSignature,
+		storedStaleReason,
 		storedRequestToken,
 		requestDiagnostics,
 		blockActivityLog,
@@ -144,6 +146,7 @@ function useBlockRecommendationState(clientId) {
 				status: store.getBlockStatus(clientId),
 				storedContextSignature:
 					store.getBlockRecommendationContextSignature(clientId),
+				storedStaleReason: store.getBlockStaleReason?.(clientId) || null,
 				storedRequestToken: store.getBlockRequestToken?.(clientId) || 0,
 				requestDiagnostics:
 					store.getBlockRequestDiagnostics?.(clientId) || null,
@@ -196,6 +199,7 @@ function useBlockRecommendationState(clientId) {
 		error,
 		status,
 		storedContextSignature,
+		storedStaleReason,
 		storedRequestToken,
 		requestDiagnostics,
 		blockActivityEntries,
@@ -246,6 +250,7 @@ export function BlockRecommendationsContent({
 		error,
 		status,
 		storedContextSignature,
+		storedStaleReason,
 		storedRequestToken,
 		requestDiagnostics,
 		blockActivityEntries,
@@ -282,14 +287,18 @@ export function BlockRecommendationsContent({
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
-	const currentRequestSignature = useMemo(
+	const {
+		requestSignature: currentRequestSignature,
+		requestInput: currentRequestInput,
+	} = useMemo(
 		() =>
-			buildBlockRecommendationRequestSignature({
+			buildBlockRecommendationRequestData({
 				clientId,
+				liveContext,
+				liveContextSignature,
 				prompt,
-				contextSignature: liveContextSignature,
 			}),
-		[clientId, liveContextSignature, prompt]
+		[clientId, liveContext, liveContextSignature, prompt]
 	);
 	const storedRequestSignature = useMemo(
 		() =>
@@ -300,12 +309,22 @@ export function BlockRecommendationsContent({
 			}),
 		[clientId, liveContextSignature, recommendations?.prompt, storedContextSignature]
 	);
+	const clientStaleReason =
+		status === 'ready' &&
+		Boolean(recommendations) &&
+		storedRequestSignature !== currentRequestSignature
+			? 'client'
+			: null;
+	const effectiveStaleReason =
+		clientStaleReason ||
+		(storedStaleReason === 'server' ? 'server' : null);
 	const hasFreshResult =
 		status === 'ready' &&
 		Boolean(recommendations) &&
+		effectiveStaleReason === null &&
 		storedRequestSignature === currentRequestSignature;
 	const hasResult = status === 'ready' && Boolean(recommendations);
-	const isStaleResult = hasResult && !hasFreshResult;
+	const isStaleResult = hasResult && effectiveStaleReason !== null;
 	const blockSuggestions = hasResult
 		? recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS
 		: EMPTY_BLOCK_SUGGESTIONS;
@@ -547,7 +566,9 @@ export function BlockRecommendationsContent({
 				hasResult={hasResult}
 				staleReason={
 					isStaleResult
-						? 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.'
+						? effectiveStaleReason === 'server'
+							? 'This result no longer matches the current server-resolved recommendation context. Refresh before applying anything from the previous result.'
+							: 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.'
 						: ''
 				}
 				refreshLabel={REFRESH_ACTION_LABEL}
@@ -639,6 +660,7 @@ export function BlockRecommendationsContent({
 						suggestions={executableBlockSuggestions}
 						label="AI block suggestions"
 						currentRequestSignature={currentRequestSignature}
+						currentRequestInput={currentRequestInput}
 						disabled={isStaleResult}
 					/>
 				</RecommendationLane>

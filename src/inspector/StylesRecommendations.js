@@ -5,7 +5,7 @@
  */
 import { PanelBody, Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useCallback } from '@wordpress/element';
+import { useCallback, useMemo } from '@wordpress/element';
 import { arrowRight, check, styles as stylesIcon } from '@wordpress/icons';
 
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -29,6 +29,7 @@ import {
 	DELEGATED_STYLE_PANELS,
 	STYLE_PANEL_DELEGATIONS,
 } from './panel-delegation';
+import { buildBlockRecommendationRequestData } from './block-recommendation-request';
 import { getSuggestionKey, getSuggestionPanel } from './suggestion-keys';
 import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
@@ -52,6 +53,11 @@ export default function StylesRecommendations({
 		(select) => getLiveBlockContextSignature(select, clientId),
 		[clientId]
 	);
+	const liveContext = useMemo(() => {
+		void liveContextSignature;
+
+		return clientId ? collectBlockContext(clientId) : null;
+	}, [clientId, liveContextSignature]);
 	const { applyNotice, requestPrompt, isRefreshing } = useSelect(
 		(select) => {
 			const store = select(STORE_NAME);
@@ -67,7 +73,20 @@ export default function StylesRecommendations({
 				isRefreshing: store.isBlockLoading?.(clientId) || false,
 			};
 		},
-		[clientId]
+			[clientId]
+		);
+	const {
+		requestSignature: currentRequestSignature,
+		requestInput: currentRequestInput,
+	} = useMemo(
+		() =>
+			buildBlockRecommendationRequestData({
+				clientId,
+				liveContext,
+				liveContextSignature,
+				prompt: requestPrompt,
+			}),
+		[clientId, liveContext, liveContextSignature, requestPrompt]
 	);
 	const handleRefresh = useCallback(() => {
 		const liveContext = collectBlockContext(clientId);
@@ -80,7 +99,12 @@ export default function StylesRecommendations({
 	}, [clientId, fetchBlockRecommendations, requestPrompt]);
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback({
 		applySuggestion: (targetClientId, suggestion) =>
-			applySuggestion(targetClientId, suggestion, liveContextSignature),
+			applySuggestion(
+				targetClientId,
+				suggestion,
+				currentRequestSignature,
+				currentRequestInput
+			),
 		buildFeedback: buildStyleFeedback,
 		clientId,
 		getKey: getSuggestionKey,

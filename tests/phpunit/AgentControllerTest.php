@@ -119,42 +119,43 @@ final class AgentControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
+		$response_data = $response->get_data();
+		$this->assertSame( 'client-123', $response_data['clientId'] ?? null );
+		$this->assertSame( [], $response_data['payload']['settings'] ?? null );
+		$this->assertSame( [], $response_data['payload']['styles'] ?? null );
+		$this->assertSame( [], $response_data['payload']['block'] ?? null );
+		$this->assertSame( 'Use the accent color.', $response_data['payload']['explanation'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response_data['payload']['resolvedContextSignature'] ?? '' )
+		);
 		$this->assertSame(
 			[
-				'payload'  => [
-					'settings'    => [],
-					'styles'      => [],
-					'block'       => [],
-					'explanation' => 'Use the accent color.',
-					'requestMeta' => [
-						'selectedProvider'      => 'azure_openai',
-						'selectedProviderLabel' => 'Azure OpenAI',
-						'connectorId'           => 'wordpress_ai_client',
-						'connectorLabel'        => 'WordPress AI Client',
-						'connectorPluginSlug'   => '',
-						'provider'              => 'wordpress_ai_client',
-						'providerLabel'         => 'WordPress AI Client',
-						'backendLabel'          => 'WordPress AI Client',
-						'model'                 => 'provider-managed',
-						'owner'                 => 'connectors',
-						'ownerLabel'            => 'Settings > Connectors',
-						'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
-						'credentialSource'      => 'provider_managed',
-						'credentialSourceLabel' => 'Provider-managed',
-						'tokenUsage'            => [
-							'total'  => 52,
-							'input'  => 21,
-							'output' => 31,
-						],
-						'latencyMs'             => 187,
-						'usedFallback'          => true,
-						'ability'               => 'flavor-agent/recommend-block',
-						'route'                 => 'POST /flavor-agent/v1/recommend-block',
-					],
+				'selectedProvider'      => 'azure_openai',
+				'selectedProviderLabel' => 'Azure OpenAI',
+				'connectorId'           => 'wordpress_ai_client',
+				'connectorLabel'        => 'WordPress AI Client',
+				'connectorPluginSlug'   => '',
+				'provider'              => 'wordpress_ai_client',
+				'providerLabel'         => 'WordPress AI Client',
+				'backendLabel'          => 'WordPress AI Client',
+				'model'                 => 'provider-managed',
+				'owner'                 => 'connectors',
+				'ownerLabel'            => 'Settings > Connectors',
+				'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+				'credentialSource'      => 'provider_managed',
+				'credentialSourceLabel' => 'Provider-managed',
+				'tokenUsage'            => [
+					'total'  => 52,
+					'input'  => 21,
+					'output' => 31,
 				],
-				'clientId' => 'client-123',
+				'latencyMs'             => 187,
+				'usedFallback'          => true,
+				'ability'               => 'flavor-agent/recommend-block',
+				'route'                 => 'POST /flavor-agent/v1/recommend-block',
 			],
-			$response->get_data()
+			$response_data['payload']['requestMeta'] ?? null
 		);
 		$this->assertStringContainsString(
 			'core/paragraph',
@@ -164,6 +165,44 @@ final class AgentControllerTest extends TestCase {
 			'WordPress Gutenberg block styling and configuration assistant.',
 			WordPressTestState::$last_ai_client_prompt['system'] ?? ''
 		);
+	}
+
+	public function test_handle_recommend_block_signature_only_wraps_minimal_payload_and_skips_model_call(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
+		$request->set_param( 'clientId', 'client-123' );
+		$request->set_param( 'prompt', 'Make it sharper' );
+		$request->set_param( 'resolveSignatureOnly', true );
+		$request->set_param(
+			'editorContext',
+			[
+				'block' => [
+					'name'              => 'core/paragraph',
+					'currentAttributes' => [
+						'content' => 'Hello world',
+					],
+				],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_block( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'client-123', $response->get_data()['clientId'] ?? null );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $response->get_data()['payload']['resolvedContextSignature'] ?? null ],
+			$response->get_data()['payload'] ?? null
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['payload']['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_handle_recommend_template_limits_patterns_to_live_template_editor_visibility(): void {
@@ -232,6 +271,33 @@ final class AgentControllerTest extends TestCase {
 			'theme/footer-callout',
 			(string) ( $request_body['input'] ?? '' )
 		);
+	}
+
+	public function test_handle_recommend_template_signature_only_returns_minimal_payload_and_skips_model_call(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//home' );
+		$request->set_param( 'templateType', 'home' );
+		$request->set_param( 'prompt', 'Make the home template feel more editorial.' );
+		$request->set_param( 'resolveSignatureOnly', true );
+		$request->set_param( 'visiblePatternNames', [ 'theme/hero' ] );
+
+		$response = Agent_Controller::handle_recommend_template( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null ],
+			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_handle_recommend_content_forwards_post_context(): void {
@@ -687,6 +753,56 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-style',
 			'POST /flavor-agent/v1/recommend-style'
 		);
+	}
+
+	public function test_handle_recommend_style_signature_only_returns_minimal_payload_and_skips_model_call(): void {
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-style' );
+		$request->set_param(
+			'scope',
+			[
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+				'postType'       => 'global_styles',
+				'entityId'       => '17',
+				'entityKind'     => 'root',
+				'entityName'     => 'globalStyles',
+			]
+		);
+		$request->set_param(
+			'styleContext',
+			[
+				'currentConfig'         => [ 'styles' => [] ],
+				'mergedConfig'          => [ 'styles' => [] ],
+				'availableVariations'   => [],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			]
+		);
+		$request->set_param( 'prompt', 'Make the site feel more editorial.' );
+		$request->set_param( 'resolveSignatureOnly', true );
+
+		$response = Agent_Controller::handle_recommend_style( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null ],
+			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_handle_recommend_template_preserves_explicit_empty_visible_pattern_filter(): void {
@@ -1268,6 +1384,32 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-template-part',
 			'POST /flavor-agent/v1/recommend-template-part'
 		);
+	}
+
+	public function test_handle_recommend_template_part_signature_only_returns_minimal_payload_and_skips_model_call(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
+		$request->set_param( 'templatePartRef', 'theme//header' );
+		$request->set_param( 'prompt', 'Make the header feel lighter.' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/header-utility' ] );
+		$request->set_param( 'resolveSignatureOnly', true );
+
+		$response = Agent_Controller::handle_recommend_template_part( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null ],
+			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_handle_recommend_template_part_preserves_explicit_empty_visible_pattern_filter(): void {

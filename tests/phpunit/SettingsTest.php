@@ -867,11 +867,14 @@ final class SettingsTest extends TestCase {
 		$this->assertCount( 3, $screen->help_tabs );
 		$this->assertSame( 'flavor-agent-overview', $screen->help_tabs[0]['id'] );
 		$this->assertSame( 'Overview', $screen->help_tabs[0]['title'] );
-		$this->assertStringContainsString( 'Chat Provider', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'This screen keeps inline copy short', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'Configure Chat Provider first', $screen->help_tabs[0]['content'] );
 		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
 		$this->assertStringContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
+		$this->assertStringContainsString( 'built-in public developer.wordpress.org endpoint by default', $screen->help_tabs[1]['content'] );
+		$this->assertStringContainsString( 'Cloudflare override fields are only for older installs or explicit custom-endpoint use.', $screen->help_tabs[1]['content'] );
 		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
-		$this->assertStringContainsString( 'Pattern Sync', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Guidelines import fills the form first', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
 		$this->assertStringContainsString( 'options-connectors.php', $screen->help_sidebar );
 		$this->assertStringContainsString( 'flavor-agent-activity', $screen->help_sidebar );
@@ -887,9 +890,18 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'Use Help for setup guidance and troubleshooting.',
+			'Use Help for setup reference and troubleshooting.',
 			$output
 		);
+		$this->assertStringContainsString( 'Required', $output );
+		$this->assertStringContainsString( 'Choose the chat path Flavor Agent should prefer.', $output );
+		$this->assertStringContainsString( 'Optional', $output );
+		$this->assertStringContainsString( 'Add vector search for pattern recommendations.', $output );
+		$this->assertStringContainsString( 'Ground responses with developer.wordpress.org docs.', $output );
+		$this->assertStringContainsString( 'Store plugin-owned site, writing, image, and block guidance.', $output );
+		$this->assertStringNotContainsString( 'Set up chat first.', $output );
+		$this->assertStringNotContainsString( 'Optional second step for vector-based pattern recommendations.', $output );
+		$this->assertStringNotContainsString( 'Recent Activity', $output );
 		$this->assertStringNotContainsString( 'Where To Configure What', $output );
 		$this->assertStringNotContainsString( 'Use Connectors for shared provider credentials.', $output );
 		$this->assertStringContainsString(
@@ -906,7 +918,7 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_render_page_keeps_legacy_cloudflare_override_controls_available(): void {
+	public function test_render_page_keeps_cloudflare_override_controls_available(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id'  => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -918,7 +930,7 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Legacy Cloudflare Override',
+			'Cloudflare Override',
 			$output
 		);
 		$this->assertStringContainsString(
@@ -934,9 +946,19 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'manual database edit',
+			'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint.',
 			$output
 		);
+		$this->assertStringContainsString(
+			'Saved override values are present. Clear all three fields to stop using the override.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Optional override. Cloudflare account ID for older installs or custom endpoints.',
+			$output
+		);
+		$this->assertStringNotContainsString( 'Legacy override only.', $output );
+		$this->assertStringNotContainsString( 'Required for docs grounding.', $output );
 	}
 
 	public function test_render_page_consumes_request_scoped_feedback_only_for_the_matching_user(): void {
@@ -988,6 +1010,11 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Block Guidelines', $output );
 		$this->assertStringContainsString( 'Import JSON', $output );
 		$this->assertStringContainsString( 'Export JSON', $output );
+		$this->assertStringContainsString( 'Import fills the form. Save Changes to persist.', $output );
+		$this->assertStringNotContainsString(
+			'Store plugin-owned guidance that Flavor Agent can rely on without coupling to Gutenberg experiments or another plugin’s data model.',
+			$output
+		);
 	}
 
 	public function test_sanitize_guideline_copy_marks_guidelines_feedback_and_sanitizes_text(): void {

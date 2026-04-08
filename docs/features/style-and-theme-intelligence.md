@@ -35,7 +35,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `getGlobalStylesUserConfig()` resolves the current `root/globalStyles` entity id, the current user config, and any available theme style variations
 3. `collectThemeTokens()`, `buildTemplateStructureSnapshot()`, and `collectViewportVisibilitySummary()` contribute theme-token diagnostics plus the live template structure/visibility snapshot that the active styles surface posts through `fetchGlobalStylesRecommendations()` or `fetchStyleBookRecommendations()` to `POST /flavor-agent/v1/recommend-style`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_style()` adapts the request to `FlavorAgent\Abilities\StyleAbilities::recommend_style()`
-5. `StyleAbilities::recommend_style()` folds the Site Editor scope, current configs, available variations or Style Book target details, live template structure/visibility, design semantics, `ServerCollector::for_tokens()`, and supported style paths into the style prompt context and docs-grounding query
+5. `StyleAbilities::recommend_style()` folds the Site Editor scope, current configs, available variations or Style Book target details, live template structure/visibility, design semantics, `ServerCollector::for_tokens()`, and supported style paths into the style apply context, computes `resolvedContextSignature` from that server-normalized context plus the sanitized prompt, returns early for signature-only revalidation, and only then resolves docs guidance before calling `ResponsesClient::rank()`
 6. `FlavorAgent\LLM\StylePrompt` constrains the response to validated `set_styles`, `set_block_styles`, and Global Styles-only `set_theme_variation` operations
 7. The UI renders advisory or executable suggestion cards; executable cards enter preview before apply
 8. `applyGlobalStylesSuggestion()` or `applyStyleBookSuggestion()` runs the deterministic executor, records before/after user config, and persists activity
@@ -130,7 +130,8 @@ User opens the Site Editor Styles sidebar
       ]
     }
   ],
-  "explanation": "The current theme already exposes a registered variation that moves the site toward the requested tone."
+  "explanation": "The current theme already exposes a registered variation that moves the site toward the requested tone.",
+  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
 }
 ```
 
@@ -185,9 +186,12 @@ User opens the Site Editor Styles sidebar
 
 ## Request Freshness And Live Context
 
-- Global Styles and Style Book build a local request signature from `surface + scope + prompt + contextSignature` so freshness and review/apply eligibility track the exact model input the user last requested, not just route status.
+- Global Styles and Style Book still build a local request signature from `surface + scope + prompt + contextSignature` so stale cards and disabled review/apply state react immediately when the prompt or live style context changes.
+- Normal responses also store a server `resolvedContextSignature` hashed from the server-normalized style apply context plus the sanitized prompt after full theme tokens and Style Book block-manifest context have been resolved.
+- `applyGlobalStylesSuggestion()` and `applyStyleBookSuggestion()` keep the local stale guard first, then re-post the same request with `resolveSignatureOnly: true` and only allow the deterministic executor to run when the current `resolvedContextSignature` still matches the stored result.
 - The current ready-result prompt is hydrated back into the composer once per result token, which keeps preloaded or restored results fresh on mount and only marks them stale after the user edits the prompt or the live style context changes.
 - `styleContext.templateStructure` and `styleContext.templateVisibility` always come from the live editor canvas. They are sent alongside `currentConfig`, `mergedConfig`, design semantics, and supported-path metadata so style prompts and docs grounding stay aligned with the unsaved template the user is actually previewing.
+- Style Book docs grounding remains cache-first. If the block-scoped entity cache is cold but the generic `guidance:style-book` cache is warm, the style surface reuses that generic guidance immediately instead of forcing a foreground remote warm on the apply-critical path.
 - When a result becomes stale, the surfaces keep the previous cards visible for comparison but disable review/apply until the user refreshes against the live context.
 
 ## What This Surface Can Do
@@ -211,6 +215,7 @@ User opens the Site Editor Styles sidebar
 - The style surfaces are hidden outside the Site Editor Styles sidebar
 - Executable changes are limited to validated `theme.json` channels; raw CSS, `customCSS`, nested `style.css`, unsupported controls, width/height transforms, and pseudo-element-only operations are out of scope
 - Unsupported or ambiguous ideas stay advisory-only instead of entering the apply path
+- Apply is also blocked when the stored `resolvedContextSignature` no longer matches the current server-resolved apply context
 - Undo is unavailable once the active scope changes or the live user config drifts away from the recorded post-apply state
 
 ## Primary Functions And Handlers

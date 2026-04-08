@@ -909,6 +909,123 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 'fresh', $runtime_state['lastFallbackType'] );
 	}
 
+	public function test_maybe_search_with_cache_fallbacks_prefers_foreground_warm_for_style_book_when_live_search_succeeds(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'chunks' => [
+							[
+								'id'    => 'fresh-style-book-chunk',
+								'score' => 0.94,
+								'item'  => [
+									'key'      => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+									'metadata' => [],
+								],
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/\"\n---\nParagraph blocks should use supported typography and color controls in Style Book.",
+							],
+						],
+					],
+				]
+			),
+		];
+
+		$family_context   = [
+			'surface'   => 'style-book',
+			'entityKey' => 'core/paragraph',
+			'blockName' => 'core/paragraph',
+		];
+		$generic_guidance = [
+			[
+				'id'        => 'generic-style-book-chunk',
+				'title'     => 'Style Book guidance',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/style-book',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/style-book/',
+				'excerpt'   => 'Generic Style Book guidance.',
+				'score'     => 0.81,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:style-book' ) ] = $generic_guidance;
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'paragraph style book guidance',
+			'core/paragraph',
+			$family_context,
+			4
+		);
+
+		$this->assertSame( 'fresh-style-book-chunk', $result[0]['id'] );
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
+		$this->assertArrayNotHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame(
+			'fresh-style-book-chunk',
+			WordPressTestState::$transients[ $this->build_cache_key( 'paragraph style book guidance', 4 ) ][0]['id']
+		);
+		$this->assertSame(
+			'fresh-style-book-chunk',
+			WordPressTestState::$transients[ $this->build_family_cache_key( $family_context, 4 ) ][0]['id']
+		);
+		$this->assertSame(
+			'fresh-style-book-chunk',
+			WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/paragraph' ) ][0]['id']
+		);
+	}
+
+	public function test_maybe_search_with_cache_fallbacks_returns_generic_style_book_guidance_and_queues_async_warm_when_live_search_fails(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
+
+		$family_context   = [
+			'surface'   => 'style-book',
+			'entityKey' => 'core/paragraph',
+			'blockName' => 'core/paragraph',
+		];
+		$generic_guidance = [
+			[
+				'id'        => 'generic-style-book-chunk',
+				'title'     => 'Style Book guidance',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/style-book',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/style-book/',
+				'excerpt'   => 'Generic Style Book guidance.',
+				'score'     => 0.81,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:style-book' ) ] = $generic_guidance;
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'paragraph style book guidance',
+			'core/paragraph',
+			$family_context,
+			4
+		);
+
+		$this->assertSame( $generic_guidance, $result );
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
+		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$queue = WordPressTestState::$options['flavor_agent_docs_warm_queue'] ?? [];
+
+		$this->assertCount( 1, $queue );
+		$this->assertSame( 'paragraph style book guidance', array_values( $queue )[0]['query'] ?? '' );
+	}
+
 	public function test_process_context_warm_queue_retries_failed_entries_with_backoff(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',

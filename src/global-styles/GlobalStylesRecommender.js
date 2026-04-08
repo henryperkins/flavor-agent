@@ -199,6 +199,7 @@ function GlobalStylesPanel( {
 	isApplying,
 	isUndoing,
 	isStale,
+	staleReasonType = null,
 	selectedSuggestion,
 	suggestions,
 	explanation,
@@ -346,7 +347,9 @@ function GlobalStylesPanel( {
 				hasResult={ hasResult }
 				staleReason={
 					isStale
-						? 'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.'
+						? staleReasonType === 'server'
+							? 'This Global Styles result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
+							: 'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.'
 						: ''
 				}
 				onRefresh={ isStale ? onRequest : undefined }
@@ -544,6 +547,7 @@ export default function GlobalStylesRecommender() {
 		currentResultToken,
 		currentResultContextSignature,
 		currentResultRef,
+		storedStaleReason,
 		status,
 		selectedSuggestionKey,
 		applyStatus,
@@ -646,6 +650,8 @@ export default function GlobalStylesRecommender() {
 			currentResultContextSignature:
 				store?.getGlobalStylesContextSignature?.() || null,
 			currentResultRef: store?.getGlobalStylesResultRef?.() || null,
+			storedStaleReason:
+				store?.getGlobalStylesStaleReason?.() || null,
 			status: store?.getGlobalStylesStatus?.() || 'idle',
 			selectedSuggestionKey:
 				store?.getGlobalStylesSelectedSuggestionKey?.() || null,
@@ -681,6 +687,35 @@ export default function GlobalStylesRecommender() {
 			prompt,
 			contextSignature: recommendationContextSignature,
 		} );
+	const currentRequestInput = useMemo(
+		() =>
+			scope
+				? buildRequestInput( {
+						scope,
+						prompt,
+						currentConfig,
+						mergedConfig,
+						availableVariations,
+						templateStructure,
+						templateVisibility,
+						designSemantics,
+						contextSignature: recommendationContextSignature,
+						themeTokenDiagnostics,
+				  } )
+				: null,
+		[
+			availableVariations,
+			currentConfig,
+			designSemantics,
+			mergedConfig,
+			prompt,
+			recommendationContextSignature,
+			scope,
+			templateStructure,
+			templateVisibility,
+			themeTokenDiagnostics,
+		]
+	);
 	const resultRequestSignature =
 		buildGlobalStylesRecommendationRequestSignature( {
 			scope: {
@@ -694,14 +729,22 @@ export default function GlobalStylesRecommender() {
 	const hasStoredResultForScope = Boolean(
 		scope?.globalStylesId && currentResultRef === scope.globalStylesId
 	);
+	const clientStaleReason =
+		hasStoredResultForScope &&
+		resultRequestSignature !== recommendationRequestSignature
+			? 'client'
+			: null;
+	const effectiveStaleReason =
+		clientStaleReason ||
+		(storedStaleReason === 'server' ? 'server' : null);
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
+			effectiveStaleReason === null &&
 			resultRequestSignature === recommendationRequestSignature
 	);
 	const isStaleResult = Boolean(
-		hasStoredResultForScope &&
-			resultRequestSignature !== recommendationRequestSignature
+		hasStoredResultForScope && effectiveStaleReason !== null
 	);
 	const suggestions = useMemo(
 		() => ( hasMatchingResult || isStaleResult ? rawSuggestions : [] ),
@@ -952,47 +995,27 @@ export default function GlobalStylesRecommender() {
 	] );
 
 	const handleRequest = useCallback( () => {
-		if ( ! scope ) {
+		if ( ! currentRequestInput ) {
 			return;
 		}
 
-		fetchGlobalStylesRecommendations(
-			buildRequestInput( {
-				scope,
-				prompt,
-				currentConfig,
-				mergedConfig,
-				availableVariations,
-				templateStructure,
-				templateVisibility,
-				designSemantics,
-				contextSignature: recommendationContextSignature,
-				themeTokenDiagnostics,
-			} )
-		);
+		fetchGlobalStylesRecommendations( currentRequestInput );
 	}, [
-		availableVariations,
-		currentConfig,
-		designSemantics,
 		fetchGlobalStylesRecommendations,
-		mergedConfig,
-		prompt,
-		recommendationContextSignature,
-		scope,
-		templateStructure,
-		templateVisibility,
-		themeTokenDiagnostics,
+		currentRequestInput,
 	] );
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
 			applyGlobalStylesSuggestion(
 				selectedSuggestion,
-				recommendationRequestSignature
+				recommendationRequestSignature,
+				currentRequestInput
 			);
 		}
 	}, [
 		applyGlobalStylesSuggestion,
+		currentRequestInput,
 		recommendationRequestSignature,
 		selectedSuggestion,
 	] );
@@ -1019,6 +1042,7 @@ export default function GlobalStylesRecommender() {
 			isApplying={ isApplying }
 			isUndoing={ isUndoing }
 			isStale={ isStaleResult }
+			staleReasonType={ effectiveStaleReason }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }

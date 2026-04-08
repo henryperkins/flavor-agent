@@ -89,6 +89,11 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
+					'resolveSignatureOnly' => [
+						'required'          => false,
+						'type'              => 'boolean',
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					],
 				],
 			]
 		);
@@ -255,6 +260,11 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'resolveSignatureOnly' => [
+						'required'          => false,
+						'type'              => 'boolean',
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					],
 				],
 			]
 		);
@@ -301,6 +311,11 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
+					'resolveSignatureOnly' => [
+						'required'          => false,
+						'type'              => 'boolean',
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					],
 				],
 			]
 		);
@@ -335,6 +350,11 @@ final class Agent_Controller {
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
+					'resolveSignatureOnly' => [
+						'required'          => false,
+						'type'              => 'boolean',
+						'sanitize_callback' => 'rest_sanitize_boolean',
 					],
 				],
 			]
@@ -622,11 +642,13 @@ final class Agent_Controller {
 	}
 
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$client_id = $request->get_param( 'clientId' );
-		$result    = BlockAbilities::recommend_block(
+		$client_id              = $request->get_param( 'clientId' );
+		$resolve_signature_only = self::is_signature_only_request( $request );
+		$result                 = BlockAbilities::recommend_block(
 			[
-				'editorContext' => $request->get_param( 'editorContext' ),
-				'prompt'        => $request->get_param( 'prompt' ),
+				'editorContext'       => $request->get_param( 'editorContext' ),
+				'prompt'              => $request->get_param( 'prompt' ),
+				'resolveSignatureOnly' => $resolve_signature_only,
 			]
 		);
 
@@ -634,9 +656,13 @@ final class Agent_Controller {
 			return self::append_request_meta_to_error_for_route( $result, 'recommend-block' );
 		}
 
+		$payload = $resolve_signature_only
+			? $result
+			: self::append_request_meta_for_route( $result, 'recommend-block' );
+
 		return new \WP_REST_Response(
 			[
-				'payload'  => self::append_request_meta_for_route( $result, 'recommend-block' ),
+				'payload'  => $payload,
 				'clientId' => $client_id,
 			],
 			200
@@ -848,6 +874,16 @@ final class Agent_Controller {
 		);
 
 		return new \WP_REST_Response( $payload, 200 );
+	}
+
+	/**
+	 * Signature-only requests resolve the current server apply-freshness signature.
+	 */
+	private static function is_signature_only_request( \WP_REST_Request $request ): bool {
+		return filter_var(
+			$request->get_param( 'resolveSignatureOnly' ),
+			FILTER_VALIDATE_BOOLEAN
+		);
 	}
 
 	/**
@@ -1125,7 +1161,8 @@ final class Agent_Controller {
 	 * Handle POST /recommend-template with a thin ability adapter.
 	 */
 	public static function handle_recommend_template( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$input = [
+		$resolve_signature_only = self::is_signature_only_request( $request );
+		$input                  = [
 			'templateRef' => $request->get_param( 'templateRef' ),
 		];
 
@@ -1155,29 +1192,34 @@ final class Agent_Controller {
 			$input['editorStructure'] = self::sanitize_structured_value( $editor_structure );
 		}
 
+		$input['resolveSignatureOnly'] = $resolve_signature_only;
+
 		$result = TemplateAbilities::recommend_template( $input );
 
 		if ( \is_wp_error( $result ) ) {
 			return self::append_request_meta_to_error_for_route( $result, 'recommend-template' );
 		}
 
-		return new \WP_REST_Response(
-			self::append_request_meta_for_route( $result, 'recommend-template' ),
-			200
-		);
+		$payload = $resolve_signature_only
+			? $result
+			: self::append_request_meta_for_route( $result, 'recommend-template' );
+
+		return new \WP_REST_Response( $payload, 200 );
 	}
 
 	/**
 	 * Handle POST /recommend-style with a thin ability adapter.
 	 */
 	public static function handle_recommend_style( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$input = [
-			'scope'        => self::sanitize_structured_value(
+		$resolve_signature_only = self::is_signature_only_request( $request );
+		$input                  = [
+			'scope'                => self::sanitize_structured_value(
 				$request->get_param( 'scope' )
 			),
-			'styleContext' => self::sanitize_structured_value(
+			'styleContext'         => self::sanitize_structured_value(
 				$request->get_param( 'styleContext' )
 			),
+			'resolveSignatureOnly' => $resolve_signature_only,
 		];
 
 		$prompt = $request->get_param( 'prompt' );
@@ -1191,17 +1233,19 @@ final class Agent_Controller {
 			return self::append_request_meta_to_error_for_route( $result, 'recommend-style' );
 		}
 
-		return new \WP_REST_Response(
-			self::append_request_meta_for_route( $result, 'recommend-style' ),
-			200
-		);
+		$payload = $resolve_signature_only
+			? $result
+			: self::append_request_meta_for_route( $result, 'recommend-style' );
+
+		return new \WP_REST_Response( $payload, 200 );
 	}
 
 	/**
 	 * Handle POST /recommend-template-part with a thin ability adapter.
 	 */
 	public static function handle_recommend_template_part( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$input = [
+		$resolve_signature_only = self::is_signature_only_request( $request );
+		$input                  = [
 			'templatePartRef' => $request->get_param( 'templatePartRef' ),
 		];
 
@@ -1221,16 +1265,19 @@ final class Agent_Controller {
 			$input['editorStructure'] = self::sanitize_structured_value( $editor_structure );
 		}
 
+		$input['resolveSignatureOnly'] = $resolve_signature_only;
+
 		$result = TemplateAbilities::recommend_template_part( $input );
 
 		if ( \is_wp_error( $result ) ) {
 			return self::append_request_meta_to_error_for_route( $result, 'recommend-template-part' );
 		}
 
-		return new \WP_REST_Response(
-			self::append_request_meta_for_route( $result, 'recommend-template-part' ),
-			200
-		);
+		$payload = $resolve_signature_only
+			? $result
+			: self::append_request_meta_for_route( $result, 'recommend-template-part' );
+
+		return new \WP_REST_Response( $payload, 200 );
 	}
 
 	public static function handle_get_activity( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {

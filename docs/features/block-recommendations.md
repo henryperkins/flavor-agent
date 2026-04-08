@@ -27,6 +27,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Fresh results now surface one featured next step before the grouped `Apply now` and `Manual ideas` lanes
 - Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract
 - Block recommendations are the only recommendation surface that now retains stale client-side results; stale results stay visible for reference, executable chips are demoted/disabled, and `SurfaceScopeBar` exposes an explicit `Refresh` action
+- Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
 - The panel now states that inline apply is the exception for safe local block updates, while structural surfaces keep the same status/history framing but require preview first
 - The embedded navigation section remains a subordinate exception: it keeps its own request state and `Recommended Next Changes` wrapper because it is nested inside block recommendations rather than acting as a peer surface
 - Style suggestions preserve one-click apply in both the Styles tab and delegated native style sub-panels, but the Styles tab remains projection-only and the actual request composer stays in the main block panel
@@ -38,11 +39,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `collectBlockContext()` in `src/context/collector.js` builds the client-side block snapshot, including bindable attributes and native inspector panel availability
 3. `fetchBlockRecommendations()` in `src/store/index.js` posts that context to `POST /flavor-agent/v1/recommend-block`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_block()` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
-5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, and calls `FlavorAgent\LLM\ChatClient::chat()`
+5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
 6. `ChatClient::chat()` prefers the selected plugin provider when chat is configured and otherwise falls back to the WordPress AI Client / Connectors path
 7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails
 8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders the matching cards and chips
-9. When the user applies a suggestion, `applySuggestion()` safely merges allowed attribute updates into the current block and records an activity entry
+9. When the user applies a suggestion, `applySuggestion()` first compares the stored client request signature, then re-posts the same request with `resolveSignatureOnly: true` to verify the current `resolvedContextSignature`, and only then safely merges allowed attribute updates into the current block and records an activity entry
 10. Inline undo calls `undoActivity()`, which validates the live block state before restoring the previous attribute snapshot
 
 ## Flow Diagram
@@ -146,7 +147,8 @@ User selects block + prompt
       }
     ],
     "block": [],
-    "explanation": "The block already works as a section wrapper, so spacing and layout changes are the lowest-risk improvements."
+    "explanation": "The block already works as a section wrapper, so spacing and layout changes are the lowest-risk improvements.",
+    "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
   },
   "clientId": "2b1c4f3f-1234-5678-9abc-def012345678"
 }
@@ -190,6 +192,7 @@ User selects block + prompt
 - Disabled blocks do not render the surface at all
 - Content-only editing mode limits executable suggestions to content-safe attributes, though broader manual guidance can still remain visible
 - Visibility state in `attributes.metadata.blockVisibility` is respected during prompt building and post-parse enforcement
+- Apply is also blocked when the live server-resolved apply context drifts, even if the local block snapshot still hashes to the same client request signature
 - If no allowed attribute updates remain after validation, the suggestion is not applied
 - Undo is blocked if the block moved, disappeared, or changed after the AI apply
 

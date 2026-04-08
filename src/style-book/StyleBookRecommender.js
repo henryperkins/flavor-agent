@@ -212,6 +212,7 @@ function StyleBookPanel( {
 	isApplying,
 	isUndoing,
 	isStale,
+	staleReasonType = null,
 	selectedSuggestion,
 	suggestions,
 	explanation,
@@ -367,7 +368,9 @@ function StyleBookPanel( {
 				hasResult={ hasResult }
 				staleReason={
 					isStale
-						? 'This Style Book result no longer matches the current live block styles or prompt. Refresh before reviewing or applying anything from the previous result.'
+						? staleReasonType === 'server'
+							? 'This Style Book result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
+							: 'This Style Book result no longer matches the current live block styles or prompt. Refresh before reviewing or applying anything from the previous result.'
 						: ''
 				}
 				onRefresh={ isStale ? onRequest : undefined }
@@ -559,6 +562,7 @@ export default function StyleBookRecommender() {
 		currentResultToken,
 		currentResultContextSignature,
 		currentResultRef,
+		storedStaleReason,
 		status,
 		selectedSuggestionKey,
 		applyStatus,
@@ -681,6 +685,8 @@ export default function StyleBookRecommender() {
 				currentResultContextSignature:
 					store?.getStyleBookContextSignature?.() || null,
 				currentResultRef: store?.getStyleBookResultRef?.() || null,
+				storedStaleReason:
+					store?.getStyleBookStaleReason?.() || null,
 				status: store?.getStyleBookStatus?.() || 'idle',
 				selectedSuggestionKey:
 					store?.getStyleBookSelectedSuggestionKey?.() || null,
@@ -727,6 +733,39 @@ export default function StyleBookRecommender() {
 			prompt,
 			contextSignature: recommendationContextSignature,
 		} );
+	const currentRequestInput = useMemo(
+		() =>
+			scope && blockType
+				? buildRequestInput( {
+						scope,
+						prompt,
+						currentConfig,
+						mergedConfig,
+						themeTokenDiagnostics,
+						blockDescription: blockType?.description || '',
+						currentStyles,
+						mergedStyles,
+						templateStructure,
+						templateVisibility,
+						designSemantics,
+						contextSignature: recommendationContextSignature,
+				  } )
+				: null,
+		[
+			blockType,
+			currentConfig,
+			currentStyles,
+			designSemantics,
+			mergedConfig,
+			mergedStyles,
+			prompt,
+			recommendationContextSignature,
+			scope,
+			templateStructure,
+			templateVisibility,
+			themeTokenDiagnostics,
+		]
+	);
 	const resultRequestSignature =
 		buildStyleBookRecommendationRequestSignature( {
 			scope: {
@@ -741,14 +780,22 @@ export default function StyleBookRecommender() {
 	const hasStoredResultForScope = Boolean(
 		scope?.scopeKey && currentResultRef === scope.scopeKey
 	);
+	const clientStaleReason =
+		hasStoredResultForScope &&
+		resultRequestSignature !== recommendationRequestSignature
+			? 'client'
+			: null;
+	const effectiveStaleReason =
+		clientStaleReason ||
+		(storedStaleReason === 'server' ? 'server' : null);
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
+			effectiveStaleReason === null &&
 			resultRequestSignature === recommendationRequestSignature
 	);
 	const isStaleResult = Boolean(
-		hasStoredResultForScope &&
-			resultRequestSignature !== recommendationRequestSignature
+		hasStoredResultForScope && effectiveStaleReason !== null
 	);
 	const suggestions = useMemo(
 		() => ( hasMatchingResult || isStaleResult ? rawSuggestions : [] ),
@@ -1005,51 +1052,27 @@ export default function StyleBookRecommender() {
 	] );
 
 	const handleRequest = useCallback( () => {
-		if ( ! scope || ! blockType ) {
+		if ( ! currentRequestInput ) {
 			return;
 		}
 
-		fetchStyleBookRecommendations(
-			buildRequestInput( {
-				scope,
-				prompt,
-				currentConfig,
-				mergedConfig,
-				themeTokenDiagnostics,
-				blockDescription: blockType?.description || '',
-				currentStyles,
-				mergedStyles,
-				templateStructure,
-				templateVisibility,
-				designSemantics,
-				contextSignature: recommendationContextSignature,
-			} )
-		);
+		fetchStyleBookRecommendations( currentRequestInput );
 	}, [
-		blockType,
-		currentConfig,
-		currentStyles,
-		designSemantics,
 		fetchStyleBookRecommendations,
-		mergedConfig,
-		mergedStyles,
-		prompt,
-		recommendationContextSignature,
-		scope,
-		templateStructure,
-		templateVisibility,
-		themeTokenDiagnostics,
+		currentRequestInput,
 	] );
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {
 			applyStyleBookSuggestion(
 				selectedSuggestion,
-				recommendationRequestSignature
+				recommendationRequestSignature,
+				currentRequestInput
 			);
 		}
 	}, [
 		applyStyleBookSuggestion,
+		currentRequestInput,
 		recommendationRequestSignature,
 		selectedSuggestion,
 	] );
@@ -1077,6 +1100,7 @@ export default function StyleBookRecommender() {
 			isApplying={ isApplying }
 			isUndoing={ isUndoing }
 			isStale={ isStaleResult }
+			staleReasonType={ effectiveStaleReason }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
 			explanation={ explanation }

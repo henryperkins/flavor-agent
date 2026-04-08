@@ -359,7 +359,7 @@ final class Settings {
 				'option'      => Provider::OPTION_NAME,
 				'label_for'   => Provider::OPTION_NAME,
 				'choices'     => Provider::choices( Provider::get() ),
-				'description' => 'Required for chat. Choose the path Flavor Agent should prefer first.',
+				'description' => 'Choose the provider Flavor Agent should try first.',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
 		);
@@ -377,7 +377,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_azure_openai_endpoint',
 				'type'        => 'url',
 				'placeholder' => 'https://my-resource.openai.azure.com/',
-				'description' => 'Required for Azure chat and embeddings. Use the Azure OpenAI resource endpoint.',
+				'description' => 'Azure OpenAI resource URL.',
 				'autocomplete' => 'url',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -393,7 +393,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_azure_openai_key',
 				'type'        => 'password',
 				'placeholder' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-				'description' => 'Required for Azure chat and embeddings. Use Key 1 or Key 2 from the same Azure resource.',
+				'description' => 'Key 1 or Key 2 for that resource.',
 				'autocomplete' => 'new-password',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -408,7 +408,7 @@ final class Settings {
 				'option'      => 'flavor_agent_azure_embedding_deployment',
 				'label_for'   => 'flavor_agent_azure_embedding_deployment',
 				'placeholder' => 'text-embedding-3-large',
-				'description' => 'Required for pattern recommendations when Azure provides embeddings.',
+				'description' => 'Embedding deployment name.',
 				'autocomplete' => 'off',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -423,7 +423,7 @@ final class Settings {
 				'option'      => 'flavor_agent_azure_chat_deployment',
 				'label_for'   => 'flavor_agent_azure_chat_deployment',
 				'placeholder' => 'gpt-5.4',
-				'description' => 'Required for chat when Azure is the selected direct provider.',
+				'description' => 'Responses deployment name.',
 				'autocomplete' => 'off',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -444,7 +444,7 @@ final class Settings {
 					'high'   => 'High',
 					'xhigh'  => 'XHigh',
 				],
-				'description' => 'Optional. Sets the default reasoning effort for Azure ranking calls.',
+				'description' => 'Default reasoning effort for Azure ranking calls.',
 			]
 		);
 
@@ -461,7 +461,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_openai_native_api_key',
 				'type'        => 'password',
 				'placeholder' => 'sk-...',
-				'description' => 'Required only when you do not want to reuse Settings > Connectors or OPENAI_API_KEY.',
+				'description' => 'Leave blank to use Connectors or OPENAI_API_KEY.',
 				'autocomplete' => 'new-password',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -476,7 +476,7 @@ final class Settings {
 				'option'      => 'flavor_agent_openai_native_embedding_model',
 				'label_for'   => 'flavor_agent_openai_native_embedding_model',
 				'placeholder' => 'text-embedding-3-large',
-				'description' => 'Required for pattern recommendations when OpenAI Native provides embeddings.',
+				'description' => 'Embedding model ID.',
 				'autocomplete' => 'off',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -491,7 +491,7 @@ final class Settings {
 				'option'      => 'flavor_agent_openai_native_chat_model',
 				'label_for'   => 'flavor_agent_openai_native_chat_model',
 				'placeholder' => 'gpt-5.4',
-				'description' => 'Required for chat when OpenAI Native is the selected direct provider.',
+				'description' => 'Responses model ID.',
 				'autocomplete' => 'off',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -510,7 +510,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_qdrant_url',
 				'type'        => 'url',
 				'placeholder' => 'https://my-cluster.cloud.qdrant.io:6333',
-				'description' => 'Required for pattern recommendations. Use the Qdrant cluster URL, including the port.',
+				'description' => 'Qdrant cluster URL, including the port.',
 				'autocomplete' => 'url',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -526,7 +526,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_qdrant_key',
 				'type'        => 'password',
 				'placeholder' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-				'description' => 'Required for pattern recommendations. The key needs read and write access.',
+				'description' => 'API key with read and write access.',
 				'autocomplete' => 'new-password',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -546,7 +546,7 @@ final class Settings {
 				'min'         => '0',
 				'max'         => '1',
 				'placeholder' => '0.30',
-				'description' => 'Optional tuning. Higher values drop weaker matches after reranking.',
+				'description' => 'Higher values drop weaker matches.',
 				'inputmode'   => 'decimal',
 			]
 		);
@@ -565,7 +565,7 @@ final class Settings {
 				'min'         => '1',
 				'max'         => '12',
 				'placeholder' => '8',
-				'description' => 'Optional tuning. Controls how many pattern recommendations are returned.',
+				'description' => 'Maximum recommendations returned.',
 				'inputmode'   => 'numeric',
 			]
 		);
@@ -581,7 +581,7 @@ final class Settings {
 				'option'      => 'flavor_agent_cloudflare_ai_search_account_id',
 				'label_for'   => 'flavor_agent_cloudflare_ai_search_account_id',
 				'placeholder' => 'e.g. 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
-				'description' => 'Required for docs grounding. Use the Cloudflare account ID that owns the AI Search instance.',
+				'description' => 'Optional override. Cloudflare account ID for older installs or custom endpoints.',
 				'autocomplete' => 'off',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -596,7 +596,7 @@ final class Settings {
 				'option'      => 'flavor_agent_cloudflare_ai_search_instance_id',
 				'label_for'   => 'flavor_agent_cloudflare_ai_search_instance_id',
 				'placeholder' => 'wordpress-developer-docs',
-				'description' => 'Required for docs grounding. Use the AI Search instance ID that serves developer.wordpress.org content.',
+				'description' => 'Optional override. AI Search instance ID for older installs or custom endpoints.',
 				'autocomplete' => 'off',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -612,7 +612,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_cloudflare_ai_search_api_token',
 				'type'        => 'password',
 				'placeholder' => 'Cloudflare API token',
-				'description' => 'Required for docs grounding. Needs AI Search Run or AI Search Edit.',
+				'description' => 'Optional override. Needs AI Search Run or Edit for older installs or custom endpoints.',
 				'autocomplete' => 'new-password',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
@@ -628,7 +628,7 @@ final class Settings {
 				'label_for'   => 'flavor_agent_cloudflare_ai_search_max_results',
 				'type'        => 'number',
 				'placeholder' => '4',
-				'description' => 'Optional. Controls how many developer docs can be added per grounded request.',
+				'description' => 'Maximum docs sources per grounded request.',
 					'inputmode'   => 'numeric',
 				]
 			);
@@ -643,7 +643,6 @@ final class Settings {
 					'label_for'   => Guidelines::OPTION_SITE,
 					'rows'        => '5',
 					'placeholder' => 'Describe your site purpose, goals, audience, products, services, or editorial context.',
-					'description' => 'Optional. Explain what the site is for, who it serves, and what Flavor Agent should keep in mind across recommendations.',
 				]
 			);
 			add_settings_field(
@@ -657,7 +656,6 @@ final class Settings {
 					'label_for'   => Guidelines::OPTION_COPY,
 					'rows'        => '6',
 					'placeholder' => 'Tone, voice, formatting, banned phrases, preferred reading level, CTA style, spelling conventions...',
-					'description' => 'Optional. Set writing standards for tone, voice, style, formatting, and wording constraints.',
 				]
 			);
 			add_settings_field(
@@ -671,7 +669,6 @@ final class Settings {
 					'label_for'   => Guidelines::OPTION_IMAGES,
 					'rows'        => '5',
 					'placeholder' => 'Preferred imagery, dimensions, mood, composition, accessibility requirements, illustration vs photography...',
-					'description' => 'Optional. Capture image direction, aesthetic rules, sizing expectations, and accessibility notes.',
 				]
 			);
 			add_settings_field(
@@ -685,7 +682,6 @@ final class Settings {
 					'label_for'   => Guidelines::OPTION_ADDITIONAL,
 					'rows'        => '5',
 					'placeholder' => 'Anything else Flavor Agent should consistently honor.',
-					'description' => 'Optional. Store extra guardrails, workflow notes, or team-specific rules that do not fit the other categories.',
 				]
 			);
 		}
@@ -722,9 +718,9 @@ final class Settings {
 						<h1 class="flavor-agent-admin-hero__title">
 							<?php echo esc_html__( 'Flavor Agent Settings', 'flavor-agent' ); ?>
 						</h1>
-							<p class="flavor-agent-admin-hero__copy">
-								<?php echo esc_html__( 'Set up chat first. Pattern recommendations, docs grounding, and guidelines are optional. Use Help for setup guidance and troubleshooting.', 'flavor-agent' ); ?>
-							</p>
+						<p class="flavor-agent-admin-hero__copy">
+							<?php echo esc_html__( 'Configure site-specific settings here. Use Help for setup reference and troubleshooting.', 'flavor-agent' ); ?>
+						</p>
 						<div class="flavor-agent-admin-hero__actions">
 							<a class="button button-primary" href="<?php echo esc_attr( self::sanitize_url_value( $primary_url ) ); ?>">
 								<?php echo esc_html( $primary_label ); ?>
@@ -736,7 +732,7 @@ final class Settings {
 					</div>
 				</header>
 
-				<?php self::render_setup_status_cards( $state, $activity_url ); ?>
+				<?php self::render_setup_status_cards( $state ); ?>
 				<?php self::render_settings_notices(); ?>
 				<?php self::render_settings_save_summary( $feedback ); ?>
 
@@ -1075,10 +1071,10 @@ final class Settings {
 	/**
 	 * @return array{summary: string, badges: array<int, array{label: string, tone: string}>, status: array{label: string, tone: string}, open: bool}
 	 */
-		private static function get_group_card_meta( string $group, array $state ): array {
-			$pattern_status = self::get_pattern_overview_status( $state );
-			$docs_status    = self::get_docs_overview_status( $state );
-			$guidelines_status = self::get_guidelines_overview_status( $state );
+	private static function get_group_card_meta( string $group, array $state ): array {
+		$pattern_status = self::get_pattern_overview_status( $state );
+		$docs_status    = self::get_docs_overview_status( $state );
+		$guidelines_status = self::get_guidelines_overview_status( $state );
 
 		return match ( $group ) {
 			self::GROUP_CHAT => [
@@ -1105,23 +1101,23 @@ final class Settings {
 				'status'  => $pattern_status,
 				'open'    => false,
 			],
-				self::GROUP_DOCS => [
-					'summary' => __( 'Optional. Ground responses with developer.wordpress.org docs.', 'flavor-agent' ),
-					'badges'  => [
-						self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
-					],
-					'status'  => $docs_status,
-					'open'    => false,
+			self::GROUP_DOCS => [
+				'summary' => __( 'Optional. Ground responses with developer.wordpress.org docs.', 'flavor-agent' ),
+				'badges'  => [
+					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
 				],
-				self::GROUP_GUIDELINES => [
-					'summary' => __( 'Optional. Store plugin-owned site, writing, image, and block guidance.', 'flavor-agent' ),
-					'badges'  => [
-						self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
-					],
-					'status'  => $guidelines_status,
-					'open'    => false,
+				'status'  => $docs_status,
+				'open'    => false,
+			],
+			self::GROUP_GUIDELINES => [
+				'summary' => __( 'Optional. Store plugin-owned site, writing, image, and block guidance.', 'flavor-agent' ),
+				'badges'  => [
+					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
 				],
-				default => [
+				'status'  => $guidelines_status,
+				'open'    => false,
+			],
+			default => [
 				'summary' => '',
 				'badges'  => [],
 				'status'  => self::make_badge( '', 'neutral' ),
@@ -1192,7 +1188,7 @@ final class Settings {
 			return self::make_badge( __( 'On', 'flavor-agent' ), 'success' );
 		}
 
-	private static function render_setup_status_cards( array $state, string $activity_url ): void {
+	private static function render_setup_status_cards( array $state ): void {
 			$chat_status    = ! empty( $state['runtime_chat']['configured'] )
 				? self::make_badge( __( 'Ready', 'flavor-agent' ), 'success' )
 				: self::make_badge( __( 'Needs setup', 'flavor-agent' ), 'warning' );
@@ -1206,14 +1202,12 @@ final class Settings {
 				__( 'Chat Provider', 'flavor-agent' ),
 				$chat_status['label'],
 				$chat_status['tone'],
-				__( 'Start here. Chat must be ready before the rest of the page matters.', 'flavor-agent' ),
 				'#' . self::get_section_dom_id( self::GROUP_CHAT )
 			);
 			self::render_setup_status_card(
 				__( 'Pattern Recommendations', 'flavor-agent' ),
 				$pattern_status['label'],
 				$pattern_status['tone'],
-				__( 'Optional second step for vector-based pattern recommendations.', 'flavor-agent' ),
 				'#' . self::get_section_dom_id( self::GROUP_PATTERNS ),
 				[
 					'data-pattern-overview-status' => 'true',
@@ -1223,23 +1217,14 @@ final class Settings {
 					__( 'Docs Grounding', 'flavor-agent' ),
 					$docs_status['label'],
 					$docs_status['tone'],
-					__( 'Optional third step for developer.wordpress.org grounding.', 'flavor-agent' ),
 					'#' . self::get_section_dom_id( self::GROUP_DOCS )
 				);
 				self::render_setup_status_card(
 					__( 'Guidelines', 'flavor-agent' ),
 					$guidelines_status['label'],
 					$guidelines_status['tone'],
-					__( 'Optional fourth step for plugin-owned voice and guardrail guidance.', 'flavor-agent' ),
 					'#' . self::get_section_dom_id( self::GROUP_GUIDELINES )
 				);
-				self::render_setup_status_card(
-					__( 'Recent Activity', 'flavor-agent' ),
-					__( 'View log', 'flavor-agent' ),
-				'neutral',
-				__( 'Review requests, sync runs, and diagnostics in the activity log.', 'flavor-agent' ),
-				$activity_url
-			);
 			?>
 		</div>
 		<?php
@@ -1252,7 +1237,6 @@ final class Settings {
 		string $title,
 		string $status,
 		string $tone,
-		string $description,
 		string $url,
 		array $attributes = []
 	): void {
@@ -1270,9 +1254,6 @@ final class Settings {
 			</p>
 			<p class="flavor-agent-settings__glance-value">
 				<?php echo esc_html( $status ); ?>
-			</p>
-			<p class="flavor-agent-settings__glance-copy">
-				<?php echo esc_html( $description ); ?>
 			</p>
 		</a>
 		<?php
@@ -1292,18 +1273,20 @@ final class Settings {
 		$is_open = $open_group === $group;
 		?>
 		<section class="flavor-agent-settings-section" id="<?php echo esc_attr( $dom_id ); ?>">
-			<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="<?php echo esc_attr( $group ); ?>"<?php echo $is_open ? ' open' : ''; ?>>
-				<summary class="flavor-agent-settings-section__summary">
-					<span class="flavor-agent-settings-section__summary-main">
-						<span class="flavor-agent-settings-section__title" role="heading" aria-level="2">
-							<?php echo esc_html( $title ); ?>
+				<details class="flavor-agent-settings-section__panel" data-flavor-agent-section="<?php echo esc_attr( $group ); ?>"<?php echo $is_open ? ' open' : ''; ?>>
+					<summary class="flavor-agent-settings-section__summary">
+						<span class="flavor-agent-settings-section__summary-main">
+							<span class="flavor-agent-settings-section__title" role="heading" aria-level="2">
+								<?php echo esc_html( $title ); ?>
+							</span>
+							<?php if ( '' !== (string) $meta['summary'] ) : ?>
+								<span class="flavor-agent-settings-section__summary-text">
+									<?php echo esc_html( $meta['summary'] ); ?>
+								</span>
+							<?php endif; ?>
 						</span>
-						<span class="flavor-agent-settings-section__summary-text">
-							<?php echo esc_html( $meta['summary'] ); ?>
-						</span>
-					</span>
-					<span class="flavor-agent-settings-section__summary-side">
-						<?php self::render_section_badges( $meta['badges'] ); ?>
+						<span class="flavor-agent-settings-section__summary-side">
+							<?php self::render_section_badges( $meta['badges'] ); ?>
 						<?php self::render_badge( $meta['status'], [ 'data-flavor-agent-status-badge' => $group ] ); ?>
 						<span class="flavor-agent-settings-section__toggle" aria-hidden="true"></span>
 					</span>
@@ -1551,10 +1534,10 @@ final class Settings {
 				<summary class="flavor-agent-settings-subpanel__summary">
 					<?php echo esc_html__( 'Block Guidelines', 'flavor-agent' ); ?>
 				</summary>
-				<div class="flavor-agent-settings-subpanel__body">
-					<p class="description">
-						<?php echo esc_html__( 'Add block-specific guidance for blocks that expose content-role attributes. Use this when a particular block should follow extra content or usage rules.', 'flavor-agent' ); ?>
-					</p>
+			<div class="flavor-agent-settings-subpanel__body">
+				<p class="description">
+					<?php echo esc_html__( 'Add extra rules for a specific block when needed.', 'flavor-agent' ); ?>
+				</p>
 					<textarea
 						id="<?php echo esc_attr( Guidelines::OPTION_BLOCKS ); ?>"
 						name="<?php echo esc_attr( Guidelines::OPTION_BLOCKS ); ?>"
@@ -1616,7 +1599,7 @@ final class Settings {
 					<input type="file" accept=".json,application/json" data-guidelines-file-input hidden />
 				</div>
 				<p class="description">
-					<?php echo esc_html__( 'Import and export use the Gutenberg-compatible guideline_categories JSON shape. Import fills the form first; click Save Changes to persist the result.', 'flavor-agent' ); ?>
+					<?php echo esc_html__( 'Import fills the form. Save Changes to persist.', 'flavor-agent' ); ?>
 				</p>
 			</div>
 			<?php
@@ -1627,15 +1610,15 @@ final class Settings {
 		?>
 		<details class="flavor-agent-settings-subpanel"<?php echo $has_saved_legacy_values ? ' open' : ''; ?>>
 			<summary class="flavor-agent-settings-subpanel__summary">
-				<?php echo esc_html__( 'Legacy Cloudflare Override', 'flavor-agent' ); ?>
+				<?php echo esc_html__( 'Cloudflare Override', 'flavor-agent' ); ?>
 			</summary>
 			<div class="flavor-agent-settings-subpanel__body">
 				<p class="description">
-					<?php echo esc_html__( 'Optional. Update or clear older Cloudflare AI Search credentials here. Leave all three fields blank to use the managed public endpoint.', 'flavor-agent' ); ?>
+					<?php echo esc_html__( 'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint.', 'flavor-agent' ); ?>
 				</p>
 				<?php if ( $has_saved_legacy_values ) : ?>
 					<p class="description">
-						<?php echo esc_html__( 'Saved legacy values are present on this site. Clearing them removes the legacy override without requiring a manual database edit.', 'flavor-agent' ); ?>
+						<?php echo esc_html__( 'Saved override values are present. Clear all three fields to stop using the override.', 'flavor-agent' ); ?>
 					</p>
 				<?php endif; ?>
 				<?php
@@ -2137,9 +2120,7 @@ final class Settings {
 		}
 
 		public static function render_guidelines_section(): void {
-			echo '<p class="flavor-agent-settings-inline-meta">'
-				. esc_html__( 'Store plugin-owned guidance that Flavor Agent can rely on without coupling to Gutenberg experiments or another plugin’s data model.', 'flavor-agent' )
-				. '</p>';
+			// Guidance now lives in the screen Help panel to keep the page focused on controls.
 		}
 
 	/**
@@ -2152,29 +2133,36 @@ final class Settings {
 				'title'    => __( 'Overview', 'flavor-agent' ),
 				'content'  => implode(
 					'',
-						[
-							'<p>' . esc_html__( 'Flavor Agent has one required setup step and three optional ones.', 'flavor-agent' ) . '</p>',
-							'<ol>',
-							'<li>' . esc_html__( 'Choose and configure Chat Provider first.', 'flavor-agent' ) . '</li>',
-							'<li>' . esc_html__( 'Add Pattern Recommendations only if you want vector-based pattern search.', 'flavor-agent' ) . '</li>',
-							'<li>' . esc_html__( 'Add Docs Grounding only if you want developer.wordpress.org context in responses.', 'flavor-agent' ) . '</li>',
-							'<li>' . esc_html__( 'Add Guidelines if you want plugin-owned voice and guardrail notes Flavor Agent can use later.', 'flavor-agent' ) . '</li>',
-							'</ol>',
-						]
-					),
-					'priority' => 10,
+					[
+						'<p>' . esc_html__( 'This screen keeps inline copy short so the form stays focused on live settings and status.', 'flavor-agent' ) . '</p>',
+						'<ol>',
+						'<li>' . esc_html__( 'Configure Chat Provider first. It is the only required section.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Add Pattern Recommendations if you want vector-backed pattern search and sync.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Use Docs Grounding for grounding limits, diagnostics, and any Cloudflare override values.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Use Guidelines for plugin-owned site, writing, image, and block notes.', 'flavor-agent' ) . '</li>',
+						'</ol>',
+						'<p>' . esc_html__( 'Use Activity Log to review requests, sync runs, and diagnostics after saving changes.', 'flavor-agent' ) . '</p>',
+					]
+				),
+				'priority' => 10,
 			],
 			[
 				'id'       => 'flavor-agent-configuration',
 				'title'    => __( 'Connectors & Overrides', 'flavor-agent' ),
 				'content'  => implode(
 					'',
-						[
-							'<p>' . esc_html__( 'Use Settings > Connectors for shared credentials used by connector-backed providers.', 'flavor-agent' ) . '</p>',
-							'<p>' . esc_html__( 'Use this screen for direct Azure or OpenAI Native settings, Qdrant, pattern ranking, pattern sync, docs grounding controls, and plugin-owned guidelines.', 'flavor-agent' ) . '</p>',
-							'<p>' . esc_html__( 'Older installs may also have a legacy Cloudflare override here. Leave those fields blank unless you explicitly need that override.', 'flavor-agent' ) . '</p>',
-						]
-					),
+					[
+						'<p>' . esc_html__( 'Use Settings > Connectors for shared credentials used by connector-backed providers.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Use this screen for direct Azure or OpenAI Native settings, Qdrant, sync tuning, docs grounding limits, and plugin-owned guidelines.', 'flavor-agent' ) . '</p>',
+						'<ul>',
+						'<li>' . esc_html__( 'Azure and OpenAI Native fields on this page are only for direct provider configuration.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'OpenAI Native can use the plugin override, Settings > Connectors, or OPENAI_API_KEY. The active source is shown inline.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Pattern Sync needs both an embeddings backend and Qdrant before it can run.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Docs Grounding uses the built-in public developer.wordpress.org endpoint by default.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Cloudflare override fields are only for older installs or explicit custom-endpoint use.', 'flavor-agent' ) . '</li>',
+						'</ul>',
+					]
+				),
 				'priority' => 20,
 			],
 			[
@@ -2184,8 +2172,9 @@ final class Settings {
 					'',
 					[
 						'<p>' . esc_html__( 'If the selected chat provider is incomplete, Flavor Agent can fall back to another configured chat path until you finish setup.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Pattern Sync stays unavailable until both an embeddings backend and Qdrant are configured.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Use Activity Log to review requests, sync runs, and diagnostics after saving changes.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Pattern Sync stays unavailable until both an embeddings backend and Qdrant are configured. The sync panel explains stale reasons, technical details, and the current index state.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Docs Grounding diagnostics summarize runtime grounding health, warm-queue activity, and the last docs prewarm run.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Guidelines import fills the form first. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape.', 'flavor-agent' ) . '</p>',
 					]
 				),
 				'priority' => 30,

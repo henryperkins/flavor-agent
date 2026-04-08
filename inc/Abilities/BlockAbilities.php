@@ -9,12 +9,17 @@ use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
 
 	public static function recommend_block( mixed $input ): array|\WP_Error {
 		$input = self::normalize_map( $input );
+		$resolve_signature_only = filter_var(
+			$input['resolveSignatureOnly'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
 
 		$prepared = self::prepare_recommend_block_input( $input );
 
@@ -25,15 +30,33 @@ final class BlockAbilities {
 		$context = $prepared['context'];
 		$prompt  = $prepared['prompt'];
 
-		if ( self::normalize_editing_mode( $context['block']['editingMode'] ?? 'default' ) === 'disabled' ) {
-			return self::get_empty_recommendation_payload();
+		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
+			'block',
+			[
+				'context' => $context,
+				'prompt'  => $prompt,
+			]
+		);
+
+		if ( $resolve_signature_only ) {
+			return [
+				'resolvedContextSignature' => $resolved_context_signature,
+			];
 		}
 
+		if ( self::normalize_editing_mode( $context['block']['editingMode'] ?? 'default' ) === 'disabled' ) {
+			$payload                             = self::get_empty_recommendation_payload();
+			$payload['resolvedContextSignature'] = $resolved_context_signature;
+
+			return $payload;
+		}
+
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
 		$system_prompt = Prompt::build_system();
 		$user_prompt   = Prompt::build_user(
 			$context,
 			$prompt,
-			self::collect_wordpress_docs_guidance( $context, $prompt )
+			$docs_guidance
 		);
 
 		$result = ChatClient::chat( $system_prompt, $user_prompt );
@@ -48,7 +71,15 @@ final class BlockAbilities {
 			return $payload;
 		}
 
-		return Prompt::enforce_block_context_rules( $payload, $context['block'] ?? [] );
+		$payload = Prompt::enforce_block_context_rules( $payload, $context['block'] ?? [] );
+
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+
+		$payload['resolvedContextSignature'] = $resolved_context_signature;
+
+		return $payload;
 	}
 
 	public static function introspect_block( mixed $input ): array|\WP_Error {

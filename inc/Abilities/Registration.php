@@ -44,6 +44,10 @@ final class Registration {
 							'type'        => 'string',
 							'description' => 'Optional user instruction',
 						],
+						'resolveSignatureOnly' => [
+							'type'        => 'boolean',
+							'description' => 'When true, only resolve the server-resolved apply-context signature without calling the model.',
+						],
 					],
 					'required'   => [ 'selectedBlock' ],
 				],
@@ -299,6 +303,10 @@ final class Registration {
 							'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.',
 						],
 						'prompt'              => [ 'type' => 'string' ],
+						'resolveSignatureOnly' => [
+							'type'        => 'boolean',
+							'description' => 'When true, only resolve the server-resolved apply-context signature without calling the model.',
+						],
 						'visiblePatternNames' => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
@@ -437,6 +445,7 @@ final class Registration {
 							],
 						],
 						'explanation' => [ 'type' => 'string' ],
+						'resolvedContextSignature' => [ 'type' => 'string' ],
 					],
 				],
 				'meta'                => self::public_recommendation_meta(),
@@ -459,6 +468,10 @@ final class Registration {
 							'description' => 'Template-part identifier from the Site Editor.',
 						],
 						'prompt'              => [ 'type' => 'string' ],
+						'resolveSignatureOnly' => [
+							'type'        => 'boolean',
+							'description' => 'When true, only resolve the server-resolved apply-context signature without calling the model.',
+						],
 						'visiblePatternNames' => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
@@ -644,6 +657,7 @@ final class Registration {
 							],
 						],
 						'explanation' => [ 'type' => 'string' ],
+						'resolvedContextSignature' => [ 'type' => 'string' ],
 					],
 				],
 				'meta'                => self::public_recommendation_meta(),
@@ -813,6 +827,10 @@ final class Registration {
 						'prompt'       => [
 							'type'        => 'string',
 							'description' => 'Optional user instruction',
+						],
+						'resolveSignatureOnly' => [
+							'type'        => 'boolean',
+							'description' => 'When true, only resolve the server-resolved apply-context signature without calling the model.',
 						],
 					],
 					'required'   => [ 'scope', 'styleContext' ],
@@ -1201,6 +1219,7 @@ final class Registration {
 					'items' => $suggestion_schema,
 				],
 				'explanation' => [ 'type' => 'string' ],
+				'resolvedContextSignature' => [ 'type' => 'string' ],
 			],
 		];
 	}

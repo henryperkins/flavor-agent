@@ -29,6 +29,7 @@ const { act } = require('react');
 const { setupReactTest } = require('../../test-utils/setup-react-test');
 
 import SuggestionChips from '../SuggestionChips';
+import { buildBlockRecommendationRequestSignature } from '../../utils/recommendation-request-signature';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -106,14 +107,26 @@ describe('SuggestionChips', () => {
 			await Promise.resolve();
 		});
 
-		expect(mockApplySuggestion).toHaveBeenCalledWith(
-			'block-1',
-			{
-				label: 'Use accent color',
-				panel: 'color',
-			},
-			'live-context:block-1'
-		);
+			expect(mockApplySuggestion).toHaveBeenCalledWith(
+				'block-1',
+				{
+					label: 'Use accent color',
+					panel: 'color',
+				},
+				buildBlockRecommendationRequestSignature({
+					clientId: 'block-1',
+					prompt: 'Keep the current direction.',
+					contextSignature: 'live-context:block-1',
+				}),
+				{
+					clientId: 'block-1',
+					editorContext: {
+						block: { name: 'core/paragraph' },
+					},
+					contextSignature: 'live-context:block-1',
+					prompt: 'Keep the current direction.',
+				}
+			);
 		expect(
 			getContainer().querySelector('.flavor-agent-inline-feedback')?.textContent
 		).toBe('AppliedUse accent color');

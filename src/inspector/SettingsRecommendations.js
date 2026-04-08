@@ -5,7 +5,7 @@
  */
 import { PanelBody, Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useCallback } from '@wordpress/element';
+import { useCallback, useMemo } from '@wordpress/element';
 import { Icon, check, arrowRight } from '@wordpress/icons';
 
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -24,6 +24,7 @@ import {
 } from '../context/collector';
 import { STORE_NAME } from '../store';
 import { formatCount } from '../utils/format-count';
+import { buildBlockRecommendationRequestData } from './block-recommendation-request';
 import groupByPanel from './group-by-panel';
 import { DELEGATED_SETTINGS_PANELS } from './panel-delegation';
 import { getSuggestionKey } from './suggestion-keys';
@@ -47,6 +48,11 @@ export default function SettingsRecommendations( {
 		( select ) => getLiveBlockContextSignature( select, clientId ),
 		[ clientId ]
 	);
+	const liveContext = useMemo( () => {
+		void liveContextSignature;
+
+		return clientId ? collectBlockContext( clientId ) : null;
+	}, [ clientId, liveContextSignature ] );
 	const { applyNotice, isRefreshing, requestPrompt } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -62,7 +68,20 @@ export default function SettingsRecommendations( {
 					store.getBlockRecommendations?.( clientId )?.prompt || '',
 			};
 		},
-		[ clientId ]
+			[ clientId ]
+		);
+	const {
+		requestSignature: currentRequestSignature,
+		requestInput: currentRequestInput,
+	} = useMemo(
+		() =>
+			buildBlockRecommendationRequestData( {
+				clientId,
+				liveContext,
+				liveContextSignature,
+				prompt: requestPrompt,
+			} ),
+		[ clientId, liveContext, liveContextSignature, requestPrompt ]
 	);
 	const handleRefresh = useCallback( () => {
 		const liveContext = collectBlockContext( clientId );
@@ -75,7 +94,12 @@ export default function SettingsRecommendations( {
 	}, [ clientId, fetchBlockRecommendations, requestPrompt ] );
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion: ( targetClientId, suggestion ) =>
-			applySuggestion( targetClientId, suggestion, liveContextSignature ),
+			applySuggestion(
+				targetClientId,
+				suggestion,
+				currentRequestSignature,
+				currentRequestInput
+			),
 		buildFeedback: buildSettingsFeedback,
 		clientId,
 		getKey: getSuggestionKey,

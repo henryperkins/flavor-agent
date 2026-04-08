@@ -342,6 +342,7 @@ export default function TemplatePartRecommender() {
 		applyError,
 		lastAppliedSuggestionKey,
 		lastAppliedOperations,
+		storedStaleReason,
 		activityLog,
 		undoError,
 		undoStatus,
@@ -364,6 +365,7 @@ export default function TemplatePartRecommender() {
 			applyError: store.getTemplatePartApplyError(),
 			lastAppliedSuggestionKey: store.getTemplatePartLastAppliedSuggestionKey(),
 			lastAppliedOperations: store.getTemplatePartLastAppliedOperations(),
+			storedStaleReason: store.getTemplatePartStaleReason?.() || null,
 			activityLog: store.getActivityLog() || [],
 			undoError: store.getUndoError(),
 			undoStatus: store.getUndoStatus(),
@@ -496,6 +498,23 @@ export default function TemplatePartRecommender() {
 			}),
 		[templatePartRef, prompt, recommendationContextSignature]
 	);
+	const currentRequestInput = useMemo(
+		() =>
+			buildTemplatePartFetchInput({
+				templatePartRef,
+				prompt,
+				visiblePatternNames,
+				editorStructure,
+				contextSignature: recommendationContextSignature,
+			}),
+		[
+			editorStructure,
+			prompt,
+			recommendationContextSignature,
+			templatePartRef,
+			visiblePatternNames,
+		]
+	);
 	const resultRequestSignature = useMemo(
 		() =>
 			buildTemplatePartRecommendationRequestSignature({
@@ -505,13 +524,21 @@ export default function TemplatePartRecommender() {
 			}),
 		[resultContextSignature, resultPrompt, resultRef]
 	);
+	const clientStaleReason =
+		hasStoredResultForTemplatePart &&
+		resultRequestSignature !== recommendationRequestSignature
+			? 'client'
+			: null;
+	const effectiveStaleReason =
+		clientStaleReason ||
+		(storedStaleReason === 'server' ? 'server' : null);
 	const hasMatchingResult =
 		hasStoredResultForTemplatePart &&
 		status === 'ready' &&
+		effectiveStaleReason === null &&
 		resultRequestSignature === recommendationRequestSignature;
 	const isStaleResult =
-		hasStoredResultForTemplatePart &&
-		resultRequestSignature !== recommendationRequestSignature;
+		hasStoredResultForTemplatePart && effectiveStaleReason !== null;
 	const visibleRecommendations = useMemo(
 		() => (hasMatchingResult || isStaleResult ? recommendations : []),
 		[hasMatchingResult, isStaleResult, recommendations]
@@ -699,23 +726,11 @@ export default function TemplatePartRecommender() {
 			return;
 		}
 
-		fetchTemplatePartRecommendations(
-			buildTemplatePartFetchInput({
-				templatePartRef,
-				prompt,
-				visiblePatternNames,
-				editorStructure,
-				contextSignature: recommendationContextSignature,
-			})
-		);
+		fetchTemplatePartRecommendations(currentRequestInput);
 	}, [
 		canRecommend,
-		editorStructure,
 		fetchTemplatePartRecommendations,
-		prompt,
-		recommendationContextSignature,
-		templatePartRef,
-		visiblePatternNames,
+		currentRequestInput,
 	]);
 	const handlePreviewSuggestion = useCallback(
 		(suggestionKey) => {
@@ -728,9 +743,13 @@ export default function TemplatePartRecommender() {
 	}, [setTemplatePartSelectedSuggestion]);
 	const handleApplySuggestion = useCallback(
 		(suggestion, currentRequestSignature) => {
-			applyTemplatePartSuggestion(suggestion, currentRequestSignature);
+			applyTemplatePartSuggestion(
+				suggestion,
+				currentRequestSignature,
+				currentRequestInput
+			);
 		},
-		[applyTemplatePartSuggestion]
+		[applyTemplatePartSuggestion, currentRequestInput]
 	);
 	const handleUndo = useCallback(
 		(activityId) => {
@@ -802,7 +821,9 @@ export default function TemplatePartRecommender() {
 					hasResult={hasResult}
 					staleReason={
 						isStaleResult
-							? 'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.'
+							? effectiveStaleReason === 'server'
+								? 'This template-part result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
+								: 'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.'
 							: ''
 					}
 					onRefresh={isStaleResult ? handleFetch : undefined}

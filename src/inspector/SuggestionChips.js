@@ -17,7 +17,7 @@ import {
 	collectBlockContext,
 	getLiveBlockContextSignature,
 } from '../context/collector';
-import { buildBlockRecommendationRequestSignature } from '../utils/recommendation-request-signature';
+import { buildBlockRecommendationRequestData } from './block-recommendation-request';
 import { getSuggestionKey } from './suggestion-keys';
 import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
@@ -33,6 +33,7 @@ export default function SuggestionChips( {
 	suggestions,
 	label,
 	currentRequestSignature = null,
+	currentRequestInput = null,
 	disabled = false,
 	isStale = false,
 	title = '',
@@ -44,6 +45,11 @@ export default function SuggestionChips( {
 		( select ) => getLiveBlockContextSignature( select, clientId ),
 		[ clientId ]
 	);
+	const liveContext = useMemo( () => {
+		void liveContextSignature;
+
+		return clientId ? collectBlockContext( clientId ) : null;
+	}, [ clientId, liveContextSignature ] );
 	const { isRefreshing, requestPrompt } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -56,14 +62,18 @@ export default function SuggestionChips( {
 		},
 		[ clientId ]
 	);
-	const fallbackRequestSignature = useMemo(
+	const {
+		requestSignature: fallbackRequestSignature,
+		requestInput: fallbackRequestInput,
+	} = useMemo(
 		() =>
-			buildBlockRecommendationRequestSignature( {
+			buildBlockRecommendationRequestData( {
 				clientId,
+				liveContext,
+				liveContextSignature,
 				prompt: requestPrompt,
-				contextSignature: liveContextSignature,
 			} ),
-		[ clientId, liveContextSignature, requestPrompt ]
+		[ clientId, liveContext, liveContextSignature, requestPrompt ]
 	);
 	const handleRefresh = useCallback( () => {
 		const liveContext = collectBlockContext( clientId );
@@ -79,7 +89,8 @@ export default function SuggestionChips( {
 			applySuggestion(
 				targetClientId,
 				suggestion,
-				currentRequestSignature || fallbackRequestSignature
+				currentRequestSignature || fallbackRequestSignature,
+				currentRequestInput || fallbackRequestInput
 			),
 		buildFeedback: buildChipFeedback,
 		clientId,

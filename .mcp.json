@@ -4,6 +4,14 @@
       "command": "npx",
       "args": ["-y", "@playwright/mcp"],
       "type": "stdio"
+    },
+    "wpds": {
+      "command": "node",
+      "args": [
+        "/home/azureuser/.local/share/codex-mcp/wpds-mcp/server.ts",
+        "--stdio"
+      ],
+      "type": "stdio"
     }
   }
 }

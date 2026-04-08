@@ -61,10 +61,12 @@ const DEFAULT_BLOCK_REQUEST_STATE = {
 	error: null,
 	requestToken: 0,
 	contextSignature: null,
+	resolvedContextSignature: null,
 	diagnostics: null,
 	applyStatus: 'idle',
 	applyError: null,
 	lastAppliedSuggestionKey: null,
+	staleReason: null,
 };
 
 const DEFAULT_STATE = {
@@ -102,6 +104,7 @@ const DEFAULT_STATE = {
 	templateRequestPrompt: '',
 	templateRef: null,
 	templateContextSignature: null,
+	templateResolvedContextSignature: null,
 	templateRequestToken: 0,
 	templateResultToken: 0,
 	templateSelectedSuggestionKey: null,
@@ -109,6 +112,7 @@ const DEFAULT_STATE = {
 	templateApplyError: null,
 	templateLastAppliedSuggestionKey: null,
 	templateLastAppliedOperations: [],
+	templateStaleReason: null,
 	templatePartRecommendations: [],
 	templatePartExplanation: '',
 	templatePartStatus: 'idle',
@@ -116,6 +120,7 @@ const DEFAULT_STATE = {
 	templatePartRequestPrompt: '',
 	templatePartRef: null,
 	templatePartContextSignature: null,
+	templatePartResolvedContextSignature: null,
 	templatePartRequestToken: 0,
 	templatePartResultToken: 0,
 	templatePartSelectedSuggestionKey: null,
@@ -123,6 +128,7 @@ const DEFAULT_STATE = {
 	templatePartApplyError: null,
 	templatePartLastAppliedSuggestionKey: null,
 	templatePartLastAppliedOperations: [],
+	templatePartStaleReason: null,
 	globalStylesSuggestions: [],
 	globalStylesExplanation: '',
 	globalStylesStatus: 'idle',
@@ -131,6 +137,7 @@ const DEFAULT_STATE = {
 	globalStylesScopeKey: null,
 	globalStylesEntityId: null,
 	globalStylesContextSignature: null,
+	globalStylesResolvedContextSignature: null,
 	globalStylesRequestToken: 0,
 	globalStylesResultToken: 0,
 	globalStylesSelectedSuggestionKey: null,
@@ -138,6 +145,7 @@ const DEFAULT_STATE = {
 	globalStylesApplyError: null,
 	globalStylesLastAppliedSuggestionKey: null,
 	globalStylesLastAppliedOperations: [],
+	globalStylesStaleReason: null,
 	styleBookSuggestions: [],
 	styleBookExplanation: '',
 	styleBookStatus: 'idle',
@@ -148,6 +156,7 @@ const DEFAULT_STATE = {
 	styleBookBlockName: null,
 	styleBookBlockTitle: '',
 	styleBookContextSignature: null,
+	styleBookResolvedContextSignature: null,
 	styleBookRequestToken: 0,
 	styleBookResultToken: 0,
 	styleBookSelectedSuggestionKey: null,
@@ -155,6 +164,7 @@ const DEFAULT_STATE = {
 	styleBookApplyError: null,
 	styleBookLastAppliedSuggestionKey: null,
 	styleBookLastAppliedOperations: [],
+	styleBookStaleReason: null,
 };
 
 const SHARED_PANEL_SEQUENCE = Object.freeze([
@@ -432,7 +442,7 @@ function getScopeKey(scope = null) {
 	return normalizeStringMessage(scope?.scopeKey || scope?.key) || null;
 }
 
-function buildStaleApplyErrorMessage(surface) {
+function buildClientStaleApplyErrorMessage(surface) {
 	switch (surface) {
 		case 'template':
 			return 'This template result is stale. Refresh recommendations before applying it.';
@@ -444,6 +454,36 @@ function buildStaleApplyErrorMessage(surface) {
 			return 'This Style Book result is stale. Refresh recommendations before applying it.';
 		default:
 			return 'This result is stale. Refresh recommendations before applying it.';
+	}
+}
+
+function buildServerStaleApplyErrorMessage(surface) {
+	switch (surface) {
+		case 'template':
+			return 'This template result no longer matches the current server-resolved context. Refresh recommendations before applying it.';
+		case 'template-part':
+			return 'This template-part result no longer matches the current server-resolved context. Refresh recommendations before applying it.';
+		case 'global-styles':
+			return 'This Global Styles result no longer matches the current server-resolved context. Refresh recommendations before applying it.';
+		case 'style-book':
+			return 'This Style Book result no longer matches the current server-resolved context. Refresh recommendations before applying it.';
+		default:
+			return 'This result no longer matches the current server-resolved context. Refresh recommendations before applying it.';
+	}
+}
+
+function buildServerRevalidationErrorMessage(surface) {
+	switch (surface) {
+		case 'template':
+			return 'Flavor Agent could not revalidate this template result against the current server context. Try again or refresh recommendations.';
+		case 'template-part':
+			return 'Flavor Agent could not revalidate this template-part result against the current server context. Try again or refresh recommendations.';
+		case 'global-styles':
+			return 'Flavor Agent could not revalidate this Global Styles result against the current server context. Try again or refresh recommendations.';
+		case 'style-book':
+			return 'Flavor Agent could not revalidate this Style Book result against the current server context. Try again or refresh recommendations.';
+		default:
+			return 'Flavor Agent could not revalidate this result against the current server context. Try again or refresh recommendations.';
 	}
 }
 
@@ -464,14 +504,114 @@ function guardSurfaceApplyFreshness({
 		return null;
 	}
 
-	const error = buildStaleApplyErrorMessage(surface);
+	const error = buildClientStaleApplyErrorMessage(surface);
 
-	localDispatch(setApplyState('error', error));
+	localDispatch(setApplyState('error', error, 'client'));
 
 	return {
 		ok: false,
 		error,
+		staleReason: 'client',
 	};
+}
+
+function getResolvedContextSignatureFromResponse(result = null) {
+	const resolvedContextSignature = normalizeStringMessage(
+		result?.payload?.resolvedContextSignature ||
+			result?.resolvedContextSignature
+	);
+
+	return resolvedContextSignature || null;
+}
+
+function stripContextSignatureFromRequestInput(requestInput = null) {
+	if (!isPlainObject(requestInput)) {
+		return {};
+	}
+
+	const { contextSignature, ...requestData } = requestInput;
+
+	return requestData;
+}
+
+async function guardSurfaceApplyResolvedFreshness({
+	surface,
+	endpoint,
+	liveRequestInput,
+	storedResolvedContextSignature = null,
+	localDispatch,
+	setApplyState,
+}) {
+	const storedSignature = normalizeStringMessage(
+		storedResolvedContextSignature
+	);
+
+	if (!storedSignature) {
+		const error = buildServerStaleApplyErrorMessage(surface);
+
+		localDispatch(setApplyState('error', error, 'server'));
+
+		return {
+			ok: false,
+			error,
+			staleReason: 'server',
+		};
+	}
+
+	const requestData = stripContextSignatureFromRequestInput(liveRequestInput);
+
+	if (Object.keys(requestData).length === 0) {
+		const error = buildServerRevalidationErrorMessage(surface);
+
+		localDispatch(setApplyState('error', error));
+
+		return {
+			ok: false,
+			error,
+		};
+	}
+
+	try {
+		const result = await apiFetch({
+			path: endpoint,
+			method: 'POST',
+			data: {
+				...requestData,
+				resolveSignatureOnly: true,
+			},
+		});
+		const resolvedContextSignature =
+			getResolvedContextSignatureFromResponse(result);
+
+		if (
+			!resolvedContextSignature ||
+			resolvedContextSignature !== storedSignature
+		) {
+			const error = buildServerStaleApplyErrorMessage(surface);
+
+			localDispatch(setApplyState('error', error, 'server'));
+
+			return {
+				ok: false,
+				error,
+				staleReason: 'server',
+			};
+		}
+
+		return {
+			ok: true,
+			resolvedContextSignature,
+		};
+	} catch {
+		const error = buildServerRevalidationErrorMessage(surface);
+
+		localDispatch(setApplyState('error', error));
+
+		return {
+			ok: false,
+			error,
+		};
+	}
 }
 
 function getSurfaceStatusNotice(surface, options = {}) {
@@ -1608,13 +1748,20 @@ const actions = {
 		};
 	},
 
-	setBlockApplyState(clientId, status, error = null, suggestionKey = null) {
+	setBlockApplyState(
+		clientId,
+		status,
+		error = null,
+		suggestionKey = null,
+		staleReason = null
+	) {
 		return {
 			type: 'SET_BLOCK_APPLY_STATE',
 			clientId,
 			status,
 			error,
 			suggestionKey,
+			staleReason,
 		};
 	},
 
@@ -1623,7 +1770,8 @@ const actions = {
 		recommendations,
 		requestToken = null,
 		contextSignature = null,
-		diagnostics = null
+		diagnostics = null,
+		resolvedContextSignature = null
 	) {
 		return {
 			type: 'SET_BLOCK_RECS',
@@ -1632,6 +1780,7 @@ const actions = {
 			requestToken,
 			contextSignature,
 			diagnostics,
+			resolvedContextSignature,
 		};
 	},
 
@@ -1890,6 +2039,8 @@ const actions = {
 					requestToken,
 					result,
 				}) => {
+					const resolvedContextSignature =
+						getResolvedContextSignatureFromResponse(result);
 					const payload = attachRequestMetaToRecommendationPayload(
 						result.payload || {}
 					);
@@ -1929,7 +2080,8 @@ const actions = {
 							},
 							requestToken,
 							contextSignature,
-							diagnostics
+							diagnostics,
+							resolvedContextSignature
 						)
 					);
 					localDispatch(
@@ -1945,7 +2097,12 @@ const actions = {
 			});
 	},
 
-	applySuggestion(clientId, suggestion, currentRequestSignature = null) {
+	applySuggestion(
+		clientId,
+		suggestion,
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 			const applyErrorMessage =
@@ -1968,11 +2125,38 @@ const actions = {
 							null,
 					}),
 				localDispatch,
-				setApplyState: (status, error) =>
-					actions.setBlockApplyState(clientId, status, error),
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						null,
+						staleReason
+					),
 			});
 
 			if (staleApplyResult) {
+				return false;
+			}
+
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
+				surface: 'block',
+				endpoint: '/flavor-agent/v1/recommend-block',
+				liveRequestInput,
+				storedResolvedContextSignature:
+					select.getBlockResolvedContextSignature?.(clientId) || null,
+				localDispatch,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						null,
+						staleReason
+					),
+			});
+
+			if (!resolvedFreshness.ok) {
 				return false;
 			}
 
@@ -2325,7 +2509,8 @@ const actions = {
 		payload,
 		prompt = '',
 		requestToken = null,
-		contextSignature = null
+		contextSignature = null,
+		resolvedContextSignature = null
 	) {
 		return {
 			type: 'SET_TEMPLATE_RECS',
@@ -2334,6 +2519,7 @@ const actions = {
 			prompt,
 			requestToken,
 			contextSignature,
+			resolvedContextSignature,
 		};
 	},
 
@@ -2348,7 +2534,8 @@ const actions = {
 		status,
 		error = null,
 		suggestionKey = null,
-		operations = []
+		operations = [],
+		staleReason = null
 	) {
 		return {
 			type: 'SET_TEMPLATE_APPLY_STATE',
@@ -2356,6 +2543,7 @@ const actions = {
 			error,
 			suggestionKey,
 			operations,
+			staleReason,
 		};
 	},
 
@@ -2373,7 +2561,8 @@ const actions = {
 		payload,
 		prompt = '',
 		requestToken = null,
-		contextSignature = null
+		contextSignature = null,
+		resolvedContextSignature = null
 	) {
 		return {
 			type: 'SET_TEMPLATE_PART_RECS',
@@ -2382,6 +2571,7 @@ const actions = {
 			prompt,
 			requestToken,
 			contextSignature,
+			resolvedContextSignature,
 		};
 	},
 
@@ -2396,7 +2586,8 @@ const actions = {
 		status,
 		error = null,
 		suggestionKey = null,
-		operations = []
+		operations = [],
+		staleReason = null
 	) {
 		return {
 			type: 'SET_TEMPLATE_PART_APPLY_STATE',
@@ -2404,6 +2595,7 @@ const actions = {
 			error,
 			suggestionKey,
 			operations,
+			staleReason,
 		};
 	},
 
@@ -2421,7 +2613,8 @@ const actions = {
 		payload,
 		prompt = '',
 		requestToken = null,
-		contextSignature = null
+		contextSignature = null,
+		resolvedContextSignature = null
 	) {
 		return {
 			type: 'SET_GLOBAL_STYLES_RECS',
@@ -2430,6 +2623,7 @@ const actions = {
 			prompt,
 			requestToken,
 			contextSignature,
+			resolvedContextSignature,
 		};
 	},
 
@@ -2444,7 +2638,8 @@ const actions = {
 		status,
 		error = null,
 		suggestionKey = null,
-		operations = []
+		operations = [],
+		staleReason = null
 	) {
 		return {
 			type: 'SET_GLOBAL_STYLES_APPLY_STATE',
@@ -2452,6 +2647,7 @@ const actions = {
 			error,
 			suggestionKey,
 			operations,
+			staleReason,
 		};
 	},
 
@@ -2469,7 +2665,8 @@ const actions = {
 		payload,
 		prompt = '',
 		requestToken = null,
-		contextSignature = null
+		contextSignature = null,
+		resolvedContextSignature = null
 	) {
 		return {
 			type: 'SET_STYLE_BOOK_RECS',
@@ -2478,6 +2675,7 @@ const actions = {
 			prompt,
 			requestToken,
 			contextSignature,
+			resolvedContextSignature,
 		};
 	},
 
@@ -2492,7 +2690,8 @@ const actions = {
 		status,
 		error = null,
 		suggestionKey = null,
-		operations = []
+		operations = [],
+		staleReason = null
 	) {
 		return {
 			type: 'SET_STYLE_BOOK_APPLY_STATE',
@@ -2500,6 +2699,7 @@ const actions = {
 			error,
 			suggestionKey,
 			operations,
+			staleReason,
 		};
 	},
 
@@ -2875,7 +3075,11 @@ const actions = {
 		};
 	},
 
-	applyTemplateSuggestion(suggestion, currentRequestSignature = null) {
+	applyTemplateSuggestion(
+		suggestion,
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -2891,11 +3095,39 @@ const actions = {
 						contextSignature: select.getTemplateContextSignature?.() || null,
 					}),
 				localDispatch,
-				setApplyState: actions.setTemplateApplyState,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setTemplateApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
 			});
 
 			if (staleApplyResult) {
 				return staleApplyResult;
+			}
+
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
+				surface: 'template',
+				endpoint: '/flavor-agent/v1/recommend-template',
+				liveRequestInput,
+				storedResolvedContextSignature:
+					select.getTemplateResolvedContextSignature?.() || null,
+				localDispatch,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setTemplateApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
+			});
+
+			if (!resolvedFreshness.ok) {
+				return resolvedFreshness;
 			}
 
 			localDispatch(actions.setTemplateApplyState('applying'));
@@ -2953,7 +3185,11 @@ const actions = {
 		};
 	},
 
-	applyTemplatePartSuggestion(suggestion, currentRequestSignature = null) {
+	applyTemplatePartSuggestion(
+		suggestion,
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -2970,11 +3206,39 @@ const actions = {
 							select.getTemplatePartContextSignature?.() || null,
 					}),
 				localDispatch,
-				setApplyState: actions.setTemplatePartApplyState,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setTemplatePartApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
 			});
 
 			if (staleApplyResult) {
 				return staleApplyResult;
+			}
+
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
+				surface: 'template-part',
+				endpoint: '/flavor-agent/v1/recommend-template-part',
+				liveRequestInput,
+				storedResolvedContextSignature:
+					select.getTemplatePartResolvedContextSignature?.() || null,
+				localDispatch,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setTemplatePartApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
+			});
+
+			if (!resolvedFreshness.ok) {
+				return resolvedFreshness;
 			}
 
 			localDispatch(actions.setTemplatePartApplyState('applying'));
@@ -3033,7 +3297,11 @@ const actions = {
 		};
 	},
 
-	applyGlobalStylesSuggestion(suggestion, currentRequestSignature = null) {
+	applyGlobalStylesSuggestion(
+		suggestion,
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -3054,11 +3322,39 @@ const actions = {
 							select.getGlobalStylesContextSignature?.() || null,
 					}),
 				localDispatch,
-				setApplyState: actions.setGlobalStylesApplyState,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setGlobalStylesApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
 			});
 
 			if (staleApplyResult) {
 				return staleApplyResult;
+			}
+
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
+				surface: 'global-styles',
+				endpoint: '/flavor-agent/v1/recommend-style',
+				liveRequestInput,
+				storedResolvedContextSignature:
+					select.getGlobalStylesResolvedContextSignature?.() || null,
+				localDispatch,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setGlobalStylesApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
+			});
+
+			if (!resolvedFreshness.ok) {
+				return resolvedFreshness;
 			}
 
 			localDispatch(actions.setGlobalStylesApplyState('applying'));
@@ -3120,7 +3416,11 @@ const actions = {
 		};
 	},
 
-	applyStyleBookSuggestion(suggestion, currentRequestSignature = null) {
+	applyStyleBookSuggestion(
+		suggestion,
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -3141,11 +3441,39 @@ const actions = {
 						contextSignature: select.getStyleBookContextSignature?.() || null,
 					}),
 				localDispatch,
-				setApplyState: actions.setStyleBookApplyState,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setStyleBookApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
 			});
 
 			if (staleApplyResult) {
 				return staleApplyResult;
+			}
+
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
+				surface: 'style-book',
+				endpoint: '/flavor-agent/v1/recommend-style',
+				liveRequestInput,
+				storedResolvedContextSignature:
+					select.getStyleBookResolvedContextSignature?.() || null,
+				localDispatch,
+				setApplyState: (status, error, staleReason = null) =>
+					actions.setStyleBookApplyState(
+						status,
+						error,
+						null,
+						[],
+						staleReason
+					),
+			});
+
+			if (!resolvedFreshness.ok) {
+				return resolvedFreshness;
 			}
 
 			localDispatch(actions.setStyleBookApplyState('applying'));
@@ -3246,6 +3574,8 @@ const actions = {
 					requestToken,
 					result,
 				}) => {
+					const resolvedContextSignature =
+						getResolvedContextSignatureFromResponse(result);
 					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
@@ -3254,7 +3584,8 @@ const actions = {
 							payload,
 							requestInput.prompt || '',
 							requestToken,
-							contextSignature
+							contextSignature,
+							resolvedContextSignature
 						)
 					);
 				},
@@ -3301,6 +3632,8 @@ const actions = {
 					requestToken,
 					result,
 				}) => {
+					const resolvedContextSignature =
+						getResolvedContextSignatureFromResponse(result);
 					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
@@ -3309,7 +3642,8 @@ const actions = {
 							payload,
 							requestInput.prompt || '',
 							requestToken,
-							contextSignature
+							contextSignature,
+							resolvedContextSignature
 						)
 					);
 				},
@@ -3355,6 +3689,8 @@ const actions = {
 					requestToken,
 					result,
 				}) => {
+					const resolvedContextSignature =
+						getResolvedContextSignatureFromResponse(result);
 					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
@@ -3363,7 +3699,8 @@ const actions = {
 							payload,
 							requestInput.prompt || '',
 							requestToken,
-							contextSignature
+							contextSignature,
+							resolvedContextSignature
 						)
 					);
 				},
@@ -3409,6 +3746,8 @@ const actions = {
 					requestToken,
 					result,
 				}) => {
+					const resolvedContextSignature =
+						getResolvedContextSignatureFromResponse(result);
 					const payload = attachRequestMetaToRecommendationPayload(result);
 
 					localDispatch(
@@ -3417,7 +3756,8 @@ const actions = {
 							payload,
 							requestInput.prompt || '',
 							requestToken,
-							contextSignature
+							contextSignature,
+							resolvedContextSignature
 						)
 					);
 				},
@@ -3457,6 +3797,12 @@ function reducer(state = DEFAULT_STATE, action) {
 							action.status === 'loading'
 								? null
 								: currentEntry.lastAppliedSuggestionKey,
+						resolvedContextSignature:
+							action.status === 'loading'
+								? null
+								: currentEntry.resolvedContextSignature,
+						staleReason:
+							action.status === 'loading' ? null : currentEntry.staleReason,
 						requestToken: action.requestToken ?? currentEntry.requestToken,
 					},
 				},
@@ -3478,10 +3824,13 @@ function reducer(state = DEFAULT_STATE, action) {
 					[action.clientId]: {
 						...getStoredBlockRequestState(state, action.clientId),
 						contextSignature: action.contextSignature ?? null,
+						resolvedContextSignature:
+							action.resolvedContextSignature ?? null,
 						diagnostics: normalizeBlockRequestDiagnostics(action.diagnostics),
 						applyStatus: 'idle',
 						applyError: null,
 						lastAppliedSuggestionKey: null,
+						staleReason: null,
 					},
 				},
 			};
@@ -3500,6 +3849,10 @@ function reducer(state = DEFAULT_STATE, action) {
 							action.status === 'success'
 								? action.suggestionKey ?? null
 								: currentEntry.lastAppliedSuggestionKey,
+						staleReason:
+							action.status === 'error'
+								? action.staleReason ?? null
+								: null,
 					},
 				},
 			};
@@ -3812,6 +4165,8 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'loading'
 						? []
 						: state.templateLastAppliedOperations,
+				templateStaleReason:
+					action.status === 'loading' ? null : state.templateStaleReason,
 			};
 		case 'SET_TEMPLATE_RECS':
 			if (isStaleTemplateRequest(state, action.requestToken)) {
@@ -3825,6 +4180,8 @@ function reducer(state = DEFAULT_STATE, action) {
 				templateRequestPrompt: action.prompt ?? '',
 				templateRef: action.templateRef,
 				templateContextSignature: action.contextSignature ?? null,
+				templateResolvedContextSignature:
+					action.resolvedContextSignature ?? null,
 				templateRequestToken: action.requestToken ?? state.templateRequestToken,
 				templateResultToken: state.templateResultToken + 1,
 				templateStatus: 'ready',
@@ -3834,6 +4191,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				templateApplyError: null,
 				templateLastAppliedSuggestionKey: null,
 				templateLastAppliedOperations: [],
+				templateStaleReason: null,
 			};
 		case 'SET_TEMPLATE_SELECTED_SUGGESTION':
 			return {
@@ -3861,6 +4219,8 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'success'
 						? action.operations ?? []
 						: state.templateLastAppliedOperations,
+				templateStaleReason:
+					action.status === 'error' ? action.staleReason ?? null : null,
 			};
 		case 'CLEAR_TEMPLATE_RECS':
 			return {
@@ -3872,6 +4232,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				templateRequestPrompt: '',
 				templateRef: null,
 				templateContextSignature: null,
+				templateResolvedContextSignature: null,
 				templateRequestToken: state.templateRequestToken + 1,
 				templateResultToken: state.templateResultToken + 1,
 				templateSelectedSuggestionKey: null,
@@ -3879,6 +4240,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				templateApplyError: null,
 				templateLastAppliedSuggestionKey: null,
 				templateLastAppliedOperations: [],
+				templateStaleReason: null,
 			};
 		case 'SET_GLOBAL_STYLES_STATUS':
 			if (isStaleGlobalStylesRequest(state, action.requestToken)) {
@@ -3905,6 +4267,8 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'loading'
 						? []
 						: state.globalStylesLastAppliedOperations,
+				globalStylesStaleReason:
+					action.status === 'loading' ? null : state.globalStylesStaleReason,
 			};
 		case 'SET_GLOBAL_STYLES_RECS':
 			if (isStaleGlobalStylesRequest(state, action.requestToken)) {
@@ -3920,6 +4284,8 @@ function reducer(state = DEFAULT_STATE, action) {
 				globalStylesEntityId:
 					action.scope?.globalStylesId || action.scope?.entityId || null,
 				globalStylesContextSignature: action.contextSignature ?? null,
+				globalStylesResolvedContextSignature:
+					action.resolvedContextSignature ?? null,
 				globalStylesRequestToken:
 					action.requestToken ?? state.globalStylesRequestToken,
 				globalStylesResultToken: state.globalStylesResultToken + 1,
@@ -3930,6 +4296,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				globalStylesApplyError: null,
 				globalStylesLastAppliedSuggestionKey: null,
 				globalStylesLastAppliedOperations: [],
+				globalStylesStaleReason: null,
 			};
 		case 'SET_GLOBAL_STYLES_SELECTED_SUGGESTION':
 			return {
@@ -3957,6 +4324,10 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'success'
 						? action.operations ?? []
 						: state.globalStylesLastAppliedOperations,
+				globalStylesStaleReason:
+					action.status === 'error'
+						? action.staleReason ?? null
+						: null,
 			};
 		case 'SET_STYLE_BOOK_STATUS':
 			if (isStaleStyleBookRequest(state, action.requestToken)) {
@@ -3982,6 +4353,8 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'loading'
 						? []
 						: state.styleBookLastAppliedOperations,
+				styleBookStaleReason:
+					action.status === 'loading' ? null : state.styleBookStaleReason,
 			};
 		case 'SET_STYLE_BOOK_RECS':
 			if (isStaleStyleBookRequest(state, action.requestToken)) {
@@ -3998,6 +4371,8 @@ function reducer(state = DEFAULT_STATE, action) {
 				styleBookBlockName: action.scope?.blockName || null,
 				styleBookBlockTitle: action.scope?.blockTitle || '',
 				styleBookContextSignature: action.contextSignature ?? null,
+				styleBookResolvedContextSignature:
+					action.resolvedContextSignature ?? null,
 				styleBookRequestToken:
 					action.requestToken ?? state.styleBookRequestToken,
 				styleBookResultToken: state.styleBookResultToken + 1,
@@ -4008,6 +4383,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				styleBookApplyError: null,
 				styleBookLastAppliedSuggestionKey: null,
 				styleBookLastAppliedOperations: [],
+				styleBookStaleReason: null,
 			};
 		case 'SET_STYLE_BOOK_SELECTED_SUGGESTION':
 			return {
@@ -4035,6 +4411,8 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'success'
 						? action.operations ?? []
 						: state.styleBookLastAppliedOperations,
+				styleBookStaleReason:
+					action.status === 'error' ? action.staleReason ?? null : null,
 			};
 		case 'SET_TEMPLATE_PART_STATUS':
 			if (isStaleTemplatePartRequest(state, action.requestToken)) {
@@ -4061,6 +4439,8 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'loading'
 						? []
 						: state.templatePartLastAppliedOperations,
+				templatePartStaleReason:
+					action.status === 'loading' ? null : state.templatePartStaleReason,
 			};
 		case 'SET_TEMPLATE_PART_RECS':
 			if (isStaleTemplatePartRequest(state, action.requestToken)) {
@@ -4074,6 +4454,8 @@ function reducer(state = DEFAULT_STATE, action) {
 				templatePartRequestPrompt: action.prompt ?? '',
 				templatePartRef: action.templatePartRef,
 				templatePartContextSignature: action.contextSignature ?? null,
+				templatePartResolvedContextSignature:
+					action.resolvedContextSignature ?? null,
 				templatePartRequestToken:
 					action.requestToken ?? state.templatePartRequestToken,
 				templatePartResultToken: state.templatePartResultToken + 1,
@@ -4084,6 +4466,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				templatePartApplyError: null,
 				templatePartLastAppliedSuggestionKey: null,
 				templatePartLastAppliedOperations: [],
+				templatePartStaleReason: null,
 			};
 		case 'SET_TEMPLATE_PART_SELECTED_SUGGESTION':
 			return {
@@ -4111,6 +4494,10 @@ function reducer(state = DEFAULT_STATE, action) {
 					action.status === 'success'
 						? action.operations ?? []
 						: state.templatePartLastAppliedOperations,
+				templatePartStaleReason:
+					action.status === 'error'
+						? action.staleReason ?? null
+						: null,
 			};
 		case 'CLEAR_TEMPLATE_PART_RECS':
 			return {
@@ -4122,6 +4509,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				templatePartRequestPrompt: '',
 				templatePartRef: null,
 				templatePartContextSignature: null,
+				templatePartResolvedContextSignature: null,
 				templatePartRequestToken: state.templatePartRequestToken + 1,
 				templatePartResultToken: state.templatePartResultToken + 1,
 				templatePartSelectedSuggestionKey: null,
@@ -4129,6 +4517,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				templatePartApplyError: null,
 				templatePartLastAppliedSuggestionKey: null,
 				templatePartLastAppliedOperations: [],
+				templatePartStaleReason: null,
 			};
 		case 'CLEAR_GLOBAL_STYLES_RECS':
 			return {
@@ -4141,6 +4530,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				globalStylesScopeKey: null,
 				globalStylesEntityId: null,
 				globalStylesContextSignature: null,
+				globalStylesResolvedContextSignature: null,
 				globalStylesRequestToken: state.globalStylesRequestToken + 1,
 				globalStylesResultToken: state.globalStylesResultToken + 1,
 				globalStylesSelectedSuggestionKey: null,
@@ -4148,6 +4538,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				globalStylesApplyError: null,
 				globalStylesLastAppliedSuggestionKey: null,
 				globalStylesLastAppliedOperations: [],
+				globalStylesStaleReason: null,
 			};
 		case 'CLEAR_STYLE_BOOK_RECS':
 			return {
@@ -4162,6 +4553,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				styleBookBlockName: null,
 				styleBookBlockTitle: '',
 				styleBookContextSignature: null,
+				styleBookResolvedContextSignature: null,
 				styleBookRequestToken: state.styleBookRequestToken + 1,
 				styleBookResultToken: state.styleBookResultToken + 1,
 				styleBookSelectedSuggestionKey: null,
@@ -4169,6 +4561,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				styleBookApplyError: null,
 				styleBookLastAppliedSuggestionKey: null,
 				styleBookLastAppliedOperations: [],
+				styleBookStaleReason: null,
 			};
 		default:
 			return state;
@@ -4186,6 +4579,8 @@ const selectors = {
 		getStoredBlockRequestState(state, clientId).requestToken,
 	getBlockRecommendationContextSignature: (state, clientId) =>
 		getStoredBlockRequestState(state, clientId).contextSignature,
+	getBlockResolvedContextSignature: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).resolvedContextSignature,
 	getBlockRequestDiagnostics: (state, clientId) =>
 		getStoredBlockRequestState(state, clientId).diagnostics,
 	getBlockApplyStatus: (state, clientId) =>
@@ -4194,6 +4589,8 @@ const selectors = {
 		getStoredBlockRequestState(state, clientId).applyError,
 	getBlockLastAppliedSuggestionKey: (state, clientId) =>
 		getStoredBlockRequestState(state, clientId).lastAppliedSuggestionKey,
+	getBlockStaleReason: (state, clientId) =>
+		getStoredBlockRequestState(state, clientId).staleReason,
 	isBlockLoading: (state, clientId) =>
 		getStoredBlockRequestState(state, clientId).status === 'loading',
 	isBlockApplying: (state, clientId) =>
@@ -4274,6 +4671,8 @@ const selectors = {
 	getTemplateRequestPrompt: (state) => state.templateRequestPrompt,
 	getTemplateResultRef: (state) => state.templateRef,
 	getTemplateContextSignature: (state) => state.templateContextSignature,
+	getTemplateResolvedContextSignature: (state) =>
+		state.templateResolvedContextSignature,
 	getTemplateRequestToken: (state) => state.templateRequestToken,
 	getTemplateResultToken: (state) => state.templateResultToken,
 	isTemplateLoading: (state) => state.templateStatus === 'loading',
@@ -4287,6 +4686,7 @@ const selectors = {
 		state.templateLastAppliedSuggestionKey,
 	getTemplateLastAppliedOperations: (state) =>
 		state.templateLastAppliedOperations,
+	getTemplateStaleReason: (state) => state.templateStaleReason,
 	getTemplatePartRecommendations: (state) => state.templatePartRecommendations,
 	getTemplatePartExplanation: (state) => state.templatePartExplanation,
 	getTemplatePartError: (state) => state.templatePartError,
@@ -4294,6 +4694,8 @@ const selectors = {
 	getTemplatePartResultRef: (state) => state.templatePartRef,
 	getTemplatePartContextSignature: (state) =>
 		state.templatePartContextSignature,
+	getTemplatePartResolvedContextSignature: (state) =>
+		state.templatePartResolvedContextSignature,
 	getTemplatePartRequestToken: (state) => state.templatePartRequestToken,
 	getTemplatePartResultToken: (state) => state.templatePartResultToken,
 	isTemplatePartLoading: (state) => state.templatePartStatus === 'loading',
@@ -4308,6 +4710,7 @@ const selectors = {
 		state.templatePartLastAppliedSuggestionKey,
 	getTemplatePartLastAppliedOperations: (state) =>
 		state.templatePartLastAppliedOperations,
+	getTemplatePartStaleReason: (state) => state.templatePartStaleReason,
 	getGlobalStylesRecommendations: (state) => state.globalStylesSuggestions,
 	getGlobalStylesExplanation: (state) => state.globalStylesExplanation,
 	getGlobalStylesError: (state) => state.globalStylesError,
@@ -4316,6 +4719,8 @@ const selectors = {
 	getGlobalStylesScopeKey: (state) => state.globalStylesScopeKey,
 	getGlobalStylesContextSignature: (state) =>
 		state.globalStylesContextSignature,
+	getGlobalStylesResolvedContextSignature: (state) =>
+		state.globalStylesResolvedContextSignature,
 	getGlobalStylesRequestToken: (state) => state.globalStylesRequestToken,
 	getGlobalStylesResultToken: (state) => state.globalStylesResultToken,
 	isGlobalStylesLoading: (state) => state.globalStylesStatus === 'loading',
@@ -4330,6 +4735,7 @@ const selectors = {
 		state.globalStylesLastAppliedSuggestionKey,
 	getGlobalStylesLastAppliedOperations: (state) =>
 		state.globalStylesLastAppliedOperations,
+	getGlobalStylesStaleReason: (state) => state.globalStylesStaleReason,
 	getStyleBookRecommendations: (state) => state.styleBookSuggestions,
 	getStyleBookExplanation: (state) => state.styleBookExplanation,
 	getStyleBookError: (state) => state.styleBookError,
@@ -4340,6 +4746,8 @@ const selectors = {
 	getStyleBookBlockName: (state) => state.styleBookBlockName,
 	getStyleBookBlockTitle: (state) => state.styleBookBlockTitle,
 	getStyleBookContextSignature: (state) => state.styleBookContextSignature,
+	getStyleBookResolvedContextSignature: (state) =>
+		state.styleBookResolvedContextSignature,
 	getStyleBookRequestToken: (state) => state.styleBookRequestToken,
 	getStyleBookResultToken: (state) => state.styleBookResultToken,
 	isStyleBookLoading: (state) => state.styleBookStatus === 'loading',
@@ -4353,6 +4761,7 @@ const selectors = {
 		state.styleBookLastAppliedSuggestionKey,
 	getStyleBookLastAppliedOperations: (state) =>
 		state.styleBookLastAppliedOperations,
+	getStyleBookStaleReason: (state) => state.styleBookStaleReason,
 	getSurfaceInteractionContract: (state, surface) => {
 		void state;
 

@@ -9,6 +9,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
 - Unavailable state: when pattern backends are missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains ranking/browse-only instead of participating in the lane/review/apply model
+- Pattern recommendations do not use `resolvedContextSignature` and do not accept `resolveSignatureOnly`; freshness for this surface stays request-time and backend-runtime scoped rather than review/apply scoped
 
 ## Surfacing Conditions
 

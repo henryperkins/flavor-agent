@@ -36,6 +36,7 @@ const { act } = require('react');
 const { setupReactTest } = require('../../test-utils/setup-react-test');
 
 import StylesRecommendations from '../StylesRecommendations';
+import { buildBlockRecommendationRequestSignature } from '../../utils/recommendation-request-signature';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -188,7 +189,19 @@ describe('StylesRecommendations', () => {
 		expect(mockApplySuggestion).toHaveBeenCalledWith(
 			'block-1',
 			suggestion,
-			'live-context:block-1'
+			buildBlockRecommendationRequestSignature({
+				clientId: 'block-1',
+				prompt: 'Warm up the palette',
+				contextSignature: 'live-context:block-1',
+			}),
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: { name: 'core/paragraph' },
+				},
+				contextSignature: 'live-context:block-1',
+				prompt: 'Warm up the palette',
+			}
 		);
 		expect(
 			getContainer().querySelector('.flavor-agent-inline-feedback')?.textContent

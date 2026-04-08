@@ -134,6 +134,167 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertSame( 'set_styles', $result['suggestions'][0]['operations'][0]['type'] ?? null );
 	}
 
+	public function test_recommend_style_resolve_signature_only_returns_minimal_payload_and_changes_when_prompt_changes(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+
+		$disable_public_docs = static fn(): string => '';
+		\add_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			$disable_public_docs
+		);
+
+		$input = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+			],
+			'styleContext' => [
+				'currentConfig'         => [ 'styles' => [] ],
+				'mergedConfig'          => [ 'styles' => [] ],
+				'availableVariations'   => [],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			],
+		];
+
+		try {
+			$baseline = StyleAbilities::recommend_style(
+				array_merge(
+					$input,
+					[
+						'prompt'               => 'Keep the palette restrained.',
+						'resolveSignatureOnly' => true,
+					]
+				)
+			);
+			$changed  = StyleAbilities::recommend_style(
+				array_merge(
+					$input,
+					[
+						'prompt'               => 'Make the palette warmer and more editorial.',
+						'resolveSignatureOnly' => true,
+					]
+				)
+			);
+
+			$this->assertIsArray( $baseline );
+			$this->assertSame(
+				[ 'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null ],
+				$baseline
+			);
+			$this->assertMatchesRegularExpression(
+				'/^[a-f0-9]{64}$/',
+				(string) ( $baseline['resolvedContextSignature'] ?? '' )
+			);
+			$this->assertIsArray( $changed );
+			$this->assertSame(
+				[ 'resolvedContextSignature' => $changed['resolvedContextSignature'] ?? null ],
+				$changed
+			);
+			$this->assertMatchesRegularExpression(
+				'/^[a-f0-9]{64}$/',
+				(string) ( $changed['resolvedContextSignature'] ?? '' )
+			);
+			$this->assertNotSame(
+				$baseline['resolvedContextSignature'] ?? null,
+				$changed['resolvedContextSignature'] ?? null
+			);
+			$this->assertSame( [], WordPressTestState::$last_remote_post );
+		} finally {
+			\remove_filter(
+				'flavor_agent_cloudflare_ai_search_public_search_url',
+				$disable_public_docs
+			);
+		}
+	}
+
+	public function test_recommend_style_resolve_signature_only_ignores_docs_guidance_cache_changes(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+
+		$input = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+			],
+			'styleContext' => [
+				'currentConfig'         => [ 'styles' => [] ],
+				'mergedConfig'          => [ 'styles' => [] ],
+				'availableVariations'   => [],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			],
+			'prompt'       => 'Keep the palette restrained.',
+			'resolveSignatureOnly' => true,
+		];
+
+		$built_context = $this->invoke_private_array_method(
+			StyleAbilities::class,
+			'build_global_styles_context',
+			[
+				$input['scope'],
+				$input['styleContext'],
+			]
+		);
+		$query         = $this->invoke_private_string_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_query',
+			[
+				$built_context,
+				$input['prompt'],
+			]
+		);
+
+		$baseline = StyleAbilities::recommend_style( $input );
+
+		$this->assertIsArray( $baseline );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null ],
+			$baseline
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
+			[
+				'id'        => 'chunk-1',
+				'title'     => 'Global styles reference',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
+				'excerpt'   => 'Use theme.json preset families for color and typography changes.',
+				'score'     => 0.91,
+			],
+		];
+		WordPressTestState::$last_remote_post = [];
+
+		$with_docs = StyleAbilities::recommend_style( $input );
+
+		$this->assertIsArray( $with_docs );
+		$this->assertSame(
+			[ 'resolvedContextSignature' => $with_docs['resolvedContextSignature'] ?? null ],
+			$with_docs
+		);
+		$this->assertSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$with_docs['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_recommend_style_downgrades_invalid_freeform_operations_to_advisory(): void {
 		WordPressTestState::$global_settings      = [
 			'color'  => [

@@ -37,6 +37,11 @@ final class RegistrationTest extends TestCase {
 			$this->assertArrayHasKey( $field, $selected_block['properties'] );
 		}
 
+		$this->assertSame(
+			'boolean',
+			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
+		);
+
 		$this->assertTrue( (bool) ( $selected_block['properties']['attributes']['additionalProperties'] ?? false ) );
 		$this->assertTrue( (bool) ( $selected_block['properties']['blockVisibility']['additionalProperties'] ?? false ) );
 		$this->assertTrue( (bool) ( $selected_block['properties']['structuralIdentity']['additionalProperties'] ?? false ) );
@@ -179,6 +184,10 @@ final class RegistrationTest extends TestCase {
 			$list_ability['output_schema']['properties']['patterns']['items']['properties']['patternOverrides']['type'] ?? null
 		);
 		$this->assertArrayNotHasKey(
+			'resolveSignatureOnly',
+			$recommend_ability['input_schema']['properties'] ?? []
+		);
+		$this->assertArrayNotHasKey(
 			'editorStructure',
 			$recommend_ability['input_schema']['properties'] ?? []
 		);
@@ -255,6 +264,10 @@ final class RegistrationTest extends TestCase {
 			$ability['input_schema']['properties']['visiblePatternNames']['items']['type'] ?? null
 		);
 		$this->assertSame(
+			'boolean',
+			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
+		);
+		$this->assertSame(
 			'object',
 			$ability['input_schema']['properties']['editorSlots']['type'] ?? null
 		);
@@ -304,6 +317,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$ability['input_schema']['properties']['visiblePatternNames']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
 		);
 		$this->assertSame(
 			'object',
@@ -433,6 +450,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'object',
 			$style_ability['input_schema']['properties']['styleContext']['properties']['templateVisibility']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$style_ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
 		);
 		$this->assertSame(
 			'array',

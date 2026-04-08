@@ -36,6 +36,7 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import SettingsRecommendations from '../SettingsRecommendations';
+import { buildBlockRecommendationRequestSignature } from '../../utils/recommendation-request-signature';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -171,7 +172,19 @@ describe( 'SettingsRecommendations', () => {
 		expect( mockApplySuggestion ).toHaveBeenCalledWith(
 			'block-1',
 			suggestion,
-			'live-context:block-1'
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Keep the current direction.',
+				contextSignature: 'live-context:block-1',
+			} ),
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: { name: 'core/paragraph' },
+				},
+				contextSignature: 'live-context:block-1',
+				prompt: 'Keep the current direction.',
+			}
 		);
 		expect( applyButton.disabled ).toBe( true );
 	} );

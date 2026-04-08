@@ -9,6 +9,7 @@ use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
+use FlavorAgent\Support\RecommendationResolvedSignature;
 
 final class StyleAbilities {
 
@@ -73,10 +74,14 @@ final class StyleAbilities {
 	];
 
 	public static function recommend_style( mixed $input ): array|\WP_Error {
-		$input         = self::normalize_map( $input );
-		$scope         = self::normalize_map( $input['scope'] ?? [] );
-		$style_context = self::normalize_map( $input['styleContext'] ?? [] );
-		$prompt        = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
+		$input                  = self::normalize_map( $input );
+		$resolve_signature_only = filter_var(
+			$input['resolveSignatureOnly'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
+		$scope                  = self::normalize_map( $input['scope'] ?? [] );
+		$style_context          = self::normalize_map( $input['styleContext'] ?? [] );
+		$prompt                 = isset( $input['prompt'] ) ? sanitize_textarea_field( (string) $input['prompt'] ) : '';
 
 		$scope_surface = self::normalize_style_surface( (string) ( $scope['surface'] ?? '' ) );
 
@@ -94,20 +99,46 @@ final class StyleAbilities {
 			return $context;
 		}
 
+		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
+			$scope_surface,
+			[
+				'context' => $context,
+				'prompt'  => $prompt,
+			]
+		);
+
+		if ( $resolve_signature_only ) {
+			return [
+				'resolvedContextSignature' => $resolved_context_signature,
+			];
+		}
+
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		$system_prompt = StylePrompt::build_system();
+		$user_prompt   = StylePrompt::build_user(
+			$context,
+			$prompt,
+			$docs_guidance
+		);
+
 		$result = ResponsesClient::rank(
-			StylePrompt::build_system(),
-			StylePrompt::build_user(
-				$context,
-				$prompt,
-				self::collect_wordpress_docs_guidance( $context, $prompt )
-			)
+			$system_prompt,
+			$user_prompt
 		);
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		return StylePrompt::parse_response( $result, $context );
+		$payload = StylePrompt::parse_response( $result, $context );
+
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+
+		$payload['resolvedContextSignature'] = $resolved_context_signature;
+
+		return $payload;
 	}
 
 	/**

@@ -41,19 +41,22 @@ Use it when you need to answer:
 - The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
 - `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
-- The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) also compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. That signature is UI-only freshness/apply state; it is not POSTed back to PHP.
+- The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) still compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. That signature remains client-local and is not POSTed back to PHP.
+- The same five executable surfaces now also store a server `resolvedContextSignature` on normal responses. PHP computes that hash from the server-normalized apply context plus the sanitized prompt, so it still captures server-only context such as theme tokens, pattern candidates, and Style Book block-manifest details without making docs-cache churn part of freshness.
+- `flavor-agent/recommend-block`, `flavor-agent/recommend-template`, `flavor-agent/recommend-template-part`, and `flavor-agent/recommend-style` accept an optional boolean `resolveSignatureOnly`. When true, they resolve only the current server apply-context signature and return `resolvedContextSignature` without running docs grounding or model calls.
+- `flavor-agent/recommend-patterns` remains a request-time ranking surface. It does not accept `resolveSignatureOnly` and does not participate in review/apply freshness revalidation.
 
 ## REST Routes
 
 | Route | Permission | First-party caller | Backend owner | Notes |
 |---|---|---|---|---|
-| `POST /flavor-agent/v1/recommend-block` | `edit_posts` | `fetchBlockRecommendations()` | `BlockAbilities::recommend_block()` | Wraps the response as `{ payload, clientId }` |
+| `POST /flavor-agent/v1/recommend-block` | `edit_posts` | `fetchBlockRecommendations()` | `BlockAbilities::recommend_block()` | Wraps both normal and signature-only responses as `{ payload, clientId }` |
 | `POST /flavor-agent/v1/recommend-content` | `edit_posts` | No first-party caller yet | `ContentAbilities::recommend_content()` | Thin REST adapter over the content-lane scaffold |
-| `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | `fetchPatternRecommendations()` | `PatternAbilities::recommend_patterns()` | Thin REST adapter over the ability |
+| `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | `fetchPatternRecommendations()` | `PatternAbilities::recommend_patterns()` | Thin REST adapter over the ability; no `resolveSignatureOnly` contract |
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | `fetchNavigationRecommendations()` | `NavigationAbilities::recommend_navigation()` | Thin REST adapter over the ability |
-| `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Thin REST adapter over the ability |
-| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | `fetchTemplatePartRecommendations()` | `TemplateAbilities::recommend_template_part()` | Thin REST adapter over the ability |
-| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` and `fetchStyleBookRecommendations()` | `StyleAbilities::recommend_style()` | Thin REST adapter over the shared style ability |
+| `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Accepts `resolveSignatureOnly`; normal responses include `resolvedContextSignature` |
+| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options` | `fetchTemplatePartRecommendations()` | `TemplateAbilities::recommend_template_part()` | Accepts `resolveSignatureOnly`; normal responses include `resolvedContextSignature` |
+| `POST /flavor-agent/v1/recommend-style` | `edit_theme_options` | `fetchGlobalStylesRecommendations()` and `fetchStyleBookRecommendations()` | `StyleAbilities::recommend_style()` | Accepts `resolveSignatureOnly`; normal responses include `resolvedContextSignature` |
 | `GET /flavor-agent/v1/activity` | Contextual editor/theme capability; `manage_options` for global reads | `loadActivitySession()` and admin activity log | `ActivityRepository::query()` for scoped reads; `ActivityRepository::query_admin()` for global admin reads | Scoped queries power editor/theme history; global admin reads return pagination, summary, and filter-option metadata for the audit page |
 | `POST /flavor-agent/v1/activity` | Contextual editor/theme capability | Store-side activity persistence | `ActivityRepository::create()` | Persists server-backed activity entries, including executable apply rows and scoped read-only `request_diagnostic` audit rows |
 | `POST /flavor-agent/v1/activity/{id}/undo` | Contextual editor/theme capability | `undoActivity()` | `ActivityRepository::update_undo_status()` | Persists undo-status transitions |
@@ -500,6 +503,8 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 ## Route Notes
 
 - The recommendation routes sanitize and normalize structured inputs before handing them to the ability layer
+- Normal `recommend-block`, `recommend-template`, `recommend-template-part`, and `recommend-style` responses include `resolvedContextSignature`. Signature-only requests return only that field after normalizing the current apply context and prompt; they skip docs grounding and model calls. The block REST route keeps its `{ payload, clientId }` wrapper even in signature-only mode.
+- `POST /flavor-agent/v1/recommend-patterns` remains outside that freshness contract and does not accept `resolveSignatureOnly`.
 - `POST /flavor-agent/v1/recommend-patterns` does not accept `editorStructure`; the current pattern route contract ignores it
 - Template recommendation requests carry an editor-collected `editorStructure` with the live top-level block tree, zeroed empty-state stats when needed, current pattern-override summaries, and current viewport-visibility summaries; the server replaces that mutable slice atomically and derives insertion anchors from the live tree
 - Template recommendation requests also carry live `editorSlots.assignedParts` and `editorSlots.emptyAreas`; the server keeps canonical saved capability metadata and computes effective `allowedAreas` by merging those live areas with the saved template contract

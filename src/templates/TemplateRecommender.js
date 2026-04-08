@@ -235,6 +235,7 @@ export default function TemplateRecommender() {
 		applyError,
 		lastAppliedSuggestionKey,
 		lastAppliedOperations,
+		storedStaleReason,
 		activityLog,
 		undoError,
 		undoStatus,
@@ -257,6 +258,7 @@ export default function TemplateRecommender() {
 			applyError: store.getTemplateApplyError(),
 			lastAppliedSuggestionKey: store.getTemplateLastAppliedSuggestionKey(),
 			lastAppliedOperations: store.getTemplateLastAppliedOperations(),
+			storedStaleReason: store.getTemplateStaleReason?.() || null,
 			activityLog: store.getActivityLog() || [],
 			undoError: store.getUndoError(),
 			undoStatus: store.getUndoStatus(),
@@ -393,6 +395,27 @@ export default function TemplateRecommender() {
 			}),
 		[templateRef, prompt, recommendationContextSignature]
 	);
+	const currentRequestInput = useMemo(
+		() =>
+			buildTemplateFetchInput({
+				templateRef,
+				templateType,
+				prompt,
+				editorSlots,
+				editorStructure,
+				visiblePatternNames,
+				contextSignature: recommendationContextSignature,
+			}),
+		[
+			editorSlots,
+			editorStructure,
+			prompt,
+			recommendationContextSignature,
+			templateRef,
+			templateType,
+			visiblePatternNames,
+		]
+	);
 	const resultRequestSignature = useMemo(
 		() =>
 			buildTemplateRecommendationRequestSignature({
@@ -402,13 +425,21 @@ export default function TemplateRecommender() {
 			}),
 		[resultContextSignature, resultPrompt, resultRef]
 	);
+	const clientStaleReason =
+		hasStoredResultForTemplate &&
+		resultRequestSignature !== recommendationRequestSignature
+			? 'client'
+			: null;
+	const effectiveStaleReason =
+		clientStaleReason ||
+		(storedStaleReason === 'server' ? 'server' : null);
 	const hasMatchingResult =
 		hasStoredResultForTemplate &&
 		status === 'ready' &&
+		effectiveStaleReason === null &&
 		resultRequestSignature === recommendationRequestSignature;
 	const isStaleResult =
-		hasStoredResultForTemplate &&
-		resultRequestSignature !== recommendationRequestSignature;
+		hasStoredResultForTemplate && effectiveStaleReason !== null;
 	const visibleRecommendations = useMemo(
 		() => (hasMatchingResult || isStaleResult ? recommendations : []),
 		[hasMatchingResult, isStaleResult, recommendations]
@@ -591,27 +622,11 @@ export default function TemplateRecommender() {
 			return;
 		}
 
-		fetchTemplateRecommendations(
-			buildTemplateFetchInput({
-				templateRef,
-				templateType,
-				prompt,
-				editorSlots,
-				editorStructure,
-				visiblePatternNames,
-				contextSignature: recommendationContextSignature,
-			})
-		);
+		fetchTemplateRecommendations(currentRequestInput);
 	}, [
 		canRecommend,
-		editorSlots,
-		editorStructure,
 		fetchTemplateRecommendations,
-		prompt,
-		recommendationContextSignature,
-		templateRef,
-		templateType,
-		visiblePatternNames,
+		currentRequestInput,
 	]);
 
 	const handleEntityAction = useCallback((entity) => {
@@ -638,9 +653,13 @@ export default function TemplateRecommender() {
 	}, [setTemplateSelectedSuggestion]);
 	const handleApplySuggestion = useCallback(
 		(suggestion, currentRequestSignature) => {
-			applyTemplateSuggestion(suggestion, currentRequestSignature);
+			applyTemplateSuggestion(
+				suggestion,
+				currentRequestSignature,
+				currentRequestInput
+			);
 		},
-		[applyTemplateSuggestion]
+		[applyTemplateSuggestion, currentRequestInput]
 	);
 	const handleUndo = useCallback(
 		(activityId) => {
@@ -695,7 +714,9 @@ export default function TemplateRecommender() {
 					hasResult={hasResult}
 					staleReason={
 						isStaleResult
-							? 'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.'
+							? effectiveStaleReason === 'server'
+								? 'This template result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
+								: 'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.'
 							: ''
 					}
 					onRefresh={isStaleResult ? handleFetch : undefined}
