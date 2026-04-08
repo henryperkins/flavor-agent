@@ -273,6 +273,24 @@ describe( 'AIActivitySection', () => {
 								ai: {
 									backendLabel: 'Azure OpenAI responses',
 									model: 'gpt-5.4-mini',
+									transport: {
+										host: 'judas2.openai.azure.com',
+										path: '/openai/v1/responses',
+										timeoutSeconds: 180,
+									},
+									requestSummary: {
+										bodyBytes: 18420,
+										instructionsChars: 17200,
+										inputChars: 512,
+										reasoningEffort: 'high',
+									},
+									responseSummary: {
+										httpStatus: 504,
+									},
+									errorSummary: {
+										wrappedMessage:
+											'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+									},
 								},
 							},
 							diagnostic: {
@@ -304,6 +322,17 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain( 'Request failed' );
 		expect( getContainer().textContent ).toContain(
 			'Flavor Agent returned 1 style, but none in the block lane.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Endpoint: judas2.openai.azure.com/openai/v1/responses'
+		);
+		expect( getContainer().textContent ).toContain( 'Timeout: 180 s' );
+		expect( getContainer().textContent ).toContain(
+			'Payload: 18420 bytes · 17200 instruction chars · 512 input chars · reasoning high'
+		);
+		expect( getContainer().textContent ).toContain( 'Response: HTTP 504' );
+		expect( getContainer().textContent ).toContain(
+			'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received'
 		);
 		expect( getContainer().textContent ).not.toContain(
 			'Undo unavailable'

@@ -93,8 +93,8 @@ final class ServerCollector {
 		);
 	}
 
-	public static function for_navigation( int $menu_id = 0, string $markup = '' ): array|\WP_Error {
-		return self::navigation_context_collector()->for_navigation( $menu_id, $markup );
+	public static function for_navigation( int $menu_id = 0, string $markup = '', array $editor_context = [] ): array|\WP_Error {
+		return self::navigation_context_collector()->for_navigation( $menu_id, $markup, $editor_context );
 	}
 
 	private static function block_type_introspector(): BlockTypeIntrospector {

@@ -23,8 +23,10 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
+	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
+	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import { getBlockPatterns as getCompatBlockPatterns } from '../patterns/compat';
 import { STORE_NAME } from '../store';
@@ -39,7 +41,6 @@ import {
 	selectBlockByPath,
 } from '../utils/template-actions';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
-import { collectPatternOverrideSummary } from '../utils/editor-context-metadata';
 import {
 	TEMPLATE_OPERATION_INSERT_PATTERN,
 	TEMPLATE_OPERATION_REMOVE_BLOCK,
@@ -55,6 +56,11 @@ import {
 	getEditedPostTypeEntity,
 	usePostTypeEntityContract,
 } from '../utils/editor-entity-contracts';
+import {
+	buildEditorTemplatePartStructureSnapshot,
+	buildTemplatePartFetchInput,
+	buildTemplatePartRecommendationContextSignature,
+} from './template-part-recommender-helpers';
 
 const ENTITY_ACTION_BROWSE_PATTERN = 'browse-pattern';
 const ENTITY_ACTION_SELECT_BLOCK_HINT = 'select-block-hint';
@@ -107,60 +113,6 @@ function deriveTemplatePartArea(
 	}
 
 	return '';
-}
-
-function normalizeVisiblePatternNames(visiblePatternNames) {
-	if (!Array.isArray(visiblePatternNames)) {
-		return null;
-	}
-
-	return Array.from(new Set(visiblePatternNames.filter(Boolean)));
-}
-
-function buildTemplatePartRecommendationContextSignature({
-	visiblePatternNames,
-	currentPatternOverrides,
-} = {}) {
-	const normalizedVisiblePatternNames =
-		normalizeVisiblePatternNames(visiblePatternNames);
-
-	return JSON.stringify({
-		currentPatternOverrides: currentPatternOverrides || null,
-		visiblePatternNames: Array.isArray(normalizedVisiblePatternNames)
-			? [...normalizedVisiblePatternNames].sort()
-			: null,
-	});
-}
-
-function buildTemplatePartFetchInput({
-	templatePartRef,
-	prompt,
-	visiblePatternNames,
-	editorStructure,
-	contextSignature = '',
-}) {
-	const input = { templatePartRef };
-	const trimmedPrompt = prompt.trim();
-	const normalizedVisiblePatternNames =
-		normalizeVisiblePatternNames(visiblePatternNames);
-
-	if (trimmedPrompt) {
-		input.prompt = trimmedPrompt;
-	}
-
-	if (Array.isArray(normalizedVisiblePatternNames)) {
-		input.visiblePatternNames = normalizedVisiblePatternNames;
-	}
-
-	if (editorStructure) {
-		input.editorStructure = editorStructure;
-	}
-
-	if (contextSignature) {
-		input.contextSignature = contextSignature;
-	}
-
-	return input;
 }
 
 function getSuggestionCardKey(suggestion = {}, index) {
@@ -477,23 +429,31 @@ export default function TemplatePartRecommender() {
 		clearTemplatePartRecommendations,
 		clearUndoError,
 		fetchTemplatePartRecommendations,
+		setTemplatePartApplyState,
 		setTemplatePartSelectedSuggestion,
+		setTemplatePartStatus,
 		undoActivity,
 	} = useDispatch(STORE_NAME);
 	const [prompt, setPrompt] = useState('');
 	const previousTemplatePartRef = useRef(templatePartRef);
 	const templatePartAreaLookup = useMemo(() => getTemplatePartAreaLookup(), []);
-	const currentPatternOverrides = useMemo(
-		() => collectPatternOverrideSummary(editorBlocks, templatePartAreaLookup),
+	const editorStructure = useMemo(
+		() =>
+			buildEditorTemplatePartStructureSnapshot(
+				editorBlocks,
+				templatePartAreaLookup
+			),
 		[editorBlocks, templatePartAreaLookup]
 	);
+	const currentPatternOverrides =
+		editorStructure?.currentPatternOverrides || null;
 	const recommendationContextSignature = useMemo(
 		() =>
 			buildTemplatePartRecommendationContextSignature({
 				visiblePatternNames,
-				currentPatternOverrides,
+				editorStructure,
 			}),
-		[currentPatternOverrides, visiblePatternNames]
+		[editorStructure, visiblePatternNames]
 	);
 	const previousRecommendationContextSignature = useRef(
 		recommendationContextSignature
@@ -635,10 +595,12 @@ export default function TemplatePartRecommender() {
 							lastUndoneTemplatePartActivity?.suggestion || 'suggestion'
 					  }.`
 					: '',
+				onDismissAction: Boolean(error),
+				onApplyDismissAction: Boolean(applyError),
+				onUndoDismissAction: Boolean(undoError),
 				emptyMessage: hasResult
 					? 'No template-part suggestions were returned for this request.'
 					: '',
-				onUndoDismissAction: Boolean(undoError),
 			});
 		},
 		[
@@ -665,6 +627,27 @@ export default function TemplatePartRecommender() {
 	const featuredSuggestionCard = isStaleResult
 		? null
 		: executableSuggestionCards[0] || advisorySuggestionCards[0] || null;
+	const dismissStatusNotice = useCallback(() => {
+		switch (statusNotice?.source) {
+			case 'request':
+				setTemplatePartStatus(
+					hasStoredResultForTemplatePart ? 'ready' : 'idle'
+				);
+				break;
+			case 'apply':
+				setTemplatePartApplyState('idle');
+				break;
+			case 'undo':
+				clearUndoError();
+				break;
+		}
+	}, [
+		clearUndoError,
+		hasStoredResultForTemplatePart,
+		setTemplatePartApplyState,
+		setTemplatePartStatus,
+		statusNotice?.source,
+	]);
 
 	const handleFetch = useCallback(() => {
 		if (!canRecommend) {
@@ -676,15 +659,13 @@ export default function TemplatePartRecommender() {
 				templatePartRef,
 				prompt,
 				visiblePatternNames,
-				editorStructure: {
-					currentPatternOverrides,
-				},
+				editorStructure,
 				contextSignature: recommendationContextSignature,
 			})
 		);
 	}, [
 		canRecommend,
-		currentPatternOverrides,
+		editorStructure,
 		fetchTemplatePartRecommendations,
 		prompt,
 		recommendationContextSignature,
@@ -820,9 +801,7 @@ export default function TemplatePartRecommender() {
 							? () => handleUndo(latestTemplatePartActivity.id)
 							: undefined
 					}
-					onDismiss={
-						statusNotice?.source === 'undo' ? clearUndoError : undefined
-					}
+					onDismiss={dismissStatusNotice}
 				/>
 
 				{canRecommend && hasResult && explanation && (
@@ -833,6 +812,18 @@ export default function TemplatePartRecommender() {
 							onEntityClick={handleEntityAction}
 						/>
 					</p>
+				)}
+
+				{canRecommend && isStaleResult && (
+					<RecommendationHero
+						title="Refresh recommendations for this template part"
+						description="Flavor Agent kept the previous result visible so you can compare it against the current template part."
+						tone={STALE_STATUS_LABEL}
+						why="Review and apply actions stay disabled until you refresh against the live template-part context."
+						primaryActionLabel={REFRESH_ACTION_LABEL}
+						onPrimaryAction={handleFetch}
+						primaryActionDisabled={isLoading}
+					/>
 				)}
 
 				{canRecommend && featuredSuggestionCard && (

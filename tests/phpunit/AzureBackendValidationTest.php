@@ -192,6 +192,11 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 25, $meta['tokenUsage']['input'] ?? null );
 		$this->assertSame( 65, $meta['tokenUsage']['output'] ?? null );
 		$this->assertIsInt( $meta['latencyMs'] ?? null );
+		$this->assertSame( 'example.openai.azure.com', $meta['transport']['host'] ?? null );
+		$this->assertSame( '/openai/v1/responses', $meta['transport']['path'] ?? null );
+		$this->assertSame( 180, $meta['transport']['timeoutSeconds'] ?? null );
+		$this->assertSame( 'medium', $meta['requestSummary']['reasoningEffort'] ?? null );
+		$this->assertSame( 200, $meta['responseSummary']['httpStatus'] ?? null );
 	}
 
 	public function test_rank_returns_a_retryable_rate_limit_error_without_sleeping(): void {
@@ -645,6 +650,15 @@ final class AzureBackendValidationTest extends TestCase {
 			'Azure OpenAI responses request timed out after 180 seconds while contacting example.openai.azure.com.',
 			$result->get_error_message()
 		);
+		$data = $result->get_error_data();
+		$this->assertIsArray( $data );
+		$this->assertSame( 'example.openai.azure.com', $data['requestMeta']['transport']['host'] ?? null );
+		$this->assertSame( 180, $data['requestMeta']['transport']['timeoutSeconds'] ?? null );
+		$this->assertSame( 'medium', $data['requestMeta']['requestSummary']['reasoningEffort'] ?? null );
+		$this->assertSame(
+			'cURL error 28: Operation timed out after 30002 milliseconds with 0 bytes received',
+			$data['requestMeta']['errorSummary']['wrappedMessage'] ?? null
+		);
 	}
 
 	public function test_embedding_validation_wraps_transport_timeout_with_backend_context(): void {
@@ -791,8 +805,141 @@ final class AzureBackendValidationTest extends TestCase {
 		);
 	}
 
-	public function test_qdrant_ensure_collection_rejects_vector_size_mismatch(): void {
+	public function test_qdrant_probe_health_hits_requested_probe(): void {
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => 'ready',
+		];
+
+		$result = QdrantClient::probe_health(
+			'readyz',
+			'https://example.cloud.qdrant.io:6333',
+			'qdrant-key'
+		);
+
+		$this->assertSame(
+			[
+				'probe'   => 'readyz',
+				'status'  => 200,
+				'message' => 'ready',
+			],
+			$result
+		);
+		$this->assertSame(
+			'https://example.cloud.qdrant.io:6333/readyz',
+			WordPressTestState::$last_remote_get['url']
+		);
+		$this->assertSame(
+			'qdrant-key',
+			WordPressTestState::$last_remote_get['args']['headers']['api-key'] ?? null
+		);
+	}
+
+	public function test_qdrant_probe_health_rejects_unknown_probe(): void {
+		$result = QdrantClient::probe_health(
+			'broken',
+			'https://example.cloud.qdrant.io:6333',
+			'qdrant-key'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'qdrant_health_probe_invalid', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_qdrant_get_telemetry_returns_result_payload(): void {
+		WordPressTestState::$options             = [
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'status' => 'ok',
+					'result' => [
+						'collections' => [
+							'total' => 3,
+						],
+					],
+				]
+			),
+		];
+
+		$result = QdrantClient::get_telemetry();
+
+		$this->assertSame(
+			[
+				'collections' => [
+					'total' => 3,
+				],
+			],
+			$result
+		);
+		$this->assertSame(
+			'https://example.cloud.qdrant.io:6333/telemetry',
+			WordPressTestState::$last_remote_get['url']
+		);
+	}
+
+	public function test_qdrant_get_collection_optimizations_supports_detail_flags(): void {
+		WordPressTestState::$options             = [
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+		WordPressTestState::$remote_get_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'status' => 'ok',
+					'result' => [
+						'queued' => 2,
+					],
+				]
+			),
+		];
+
+		$result = QdrantClient::get_collection_optimizations(
+			'flavor-agent-patterns-test',
+			[ 'queued', 'completed' ]
+		);
+
+		$this->assertSame(
+			[
+				'queued' => 2,
+			],
+			$result
+		);
+		$this->assertSame(
+			'https://example.cloud.qdrant.io:6333/collections/flavor-agent-patterns-test/optimizations?with=queued%2Ccompleted',
+			WordPressTestState::$last_remote_get['url']
+		);
+	}
+
+	public function test_qdrant_get_collection_optimizations_rejects_unknown_detail_flags(): void {
 		WordPressTestState::$options = [
+			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key' => 'qdrant-key',
+		];
+
+		$result = QdrantClient::get_collection_optimizations(
+			'flavor-agent-patterns-test',
+			[ 'queued', 'bogus' ]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'qdrant_optimizations_invalid_detail_flag', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_qdrant_ensure_collection_rejects_vector_size_mismatch(): void {
+		WordPressTestState::$options             = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];
@@ -824,11 +971,11 @@ final class AzureBackendValidationTest extends TestCase {
 	}
 
 	public function test_qdrant_ensure_collection_indexes_traits_payloads(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options               = [
 			'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];
-		WordPressTestState::$remote_get_response = [
+		WordPressTestState::$remote_get_response   = [
 			'response' => [
 				'code' => 200,
 			],

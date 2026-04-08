@@ -786,11 +786,15 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_maybe_search_with_cache_fallbacks_uses_generic_guidance_when_entity_cache_is_cold(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
 
 		$family_context   = [
 			'surface'   => 'template-part',
@@ -819,14 +823,14 @@ final class AISearchClientTest extends TestCase {
 		);
 
 		$this->assertSame( $generic_guidance, $result );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
 		$this->assertArrayHasKey(
 			AISearchClient::CONTEXT_WARM_CRON_HOOK,
 			WordPressTestState::$scheduled_events
 		);
 	}
 
-	public function test_process_context_warm_queue_seeds_exact_family_and_entity_caches(): void {
+	public function test_maybe_search_with_cache_fallbacks_prefers_foreground_warm_over_generic_guidance_when_live_search_succeeds(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -841,18 +845,150 @@ final class AISearchClientTest extends TestCase {
 					'result' => [
 						'chunks' => [
 							[
-								'id'    => 'chunk-1',
-								'score' => 0.91,
+								'id'    => 'fresh-chunk',
+								'score' => 0.92,
 								'item'  => [
-									'key'      => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+									'key'      => 'developer.wordpress.org/themes/templates/template-parts',
 									'metadata' => [],
 								],
-								'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/\"\n---\nUse clear labels and keep footer navigation compact.",
+								'text'  => "---\nsource_url: \"https://developer.wordpress.org/themes/templates/template-parts/\"\n---\nHeader template parts should stay focused and reusable.",
 							],
 						],
 					],
 				]
 			),
+		];
+
+		$family_context   = [
+			'surface'   => 'template-part',
+			'entityKey' => 'core/template-part',
+			'area'      => 'header',
+			'slug'      => 'marketing-header',
+		];
+		$generic_guidance = [
+			[
+				'id'        => 'generic-chunk',
+				'title'     => 'Template parts overview',
+				'sourceKey' => 'developer.wordpress.org/themes/templates/template-parts',
+				'url'       => 'https://developer.wordpress.org/themes/templates/template-parts/',
+				'excerpt'   => 'Template parts should stay focused and reusable.',
+				'score'     => 0.83,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:template-part' ) ] = $generic_guidance;
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'header template part guidance',
+			'core/template-part',
+			$family_context,
+			4
+		);
+
+		$this->assertSame( 'fresh-chunk', $result[0]['id'] );
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
+		$this->assertArrayNotHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame(
+			'fresh-chunk',
+			WordPressTestState::$transients[ $this->build_cache_key( 'header template part guidance', 4 ) ][0]['id']
+		);
+		$this->assertSame(
+			'fresh-chunk',
+			WordPressTestState::$transients[ $this->build_family_cache_key( $family_context, 4 ) ][0]['id']
+		);
+		$this->assertSame(
+			'fresh-chunk',
+			WordPressTestState::$transients[ $this->build_entity_cache_key( 'core/template-part' ) ][0]['id']
+		);
+
+		$runtime_state = AISearchClient::get_runtime_state();
+
+		$this->assertSame( 'healthy', $runtime_state['status'] );
+		$this->assertSame( 'foreground', $runtime_state['lastTrustedSuccessMode'] );
+		$this->assertSame( 'foreground', $runtime_state['lastServedMode'] );
+		$this->assertSame( 'fresh', $runtime_state['lastFallbackType'] );
+	}
+
+	public function test_process_context_warm_queue_retries_failed_entries_with_backoff(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
+
+		$family_context = [
+			'surface'        => 'block',
+			'entityKey'      => 'core/navigation',
+			'location'       => 'footer',
+			'structuralRole' => 'footer-navigation',
+		];
+
+		AISearchClient::schedule_context_warm(
+			'navigation footer guidance',
+			'core/navigation',
+			$family_context,
+			4
+		);
+		AISearchClient::process_context_warm_queue();
+
+		$queue = WordPressTestState::$options['flavor_agent_docs_warm_queue'] ?? [];
+
+		$this->assertCount( 1, $queue );
+
+		$entry = array_values( $queue )[0];
+
+		$this->assertSame( 1, $entry['attempts'] ?? null );
+		$this->assertSame( 'http_request_failed', $entry['lastErrorCode'] ?? null );
+		$this->assertSame( 'Cloudflare timed out.', $entry['lastErrorMessage'] ?? null );
+		$this->assertIsInt( $entry['nextAttemptAt'] ?? null );
+		$this->assertGreaterThanOrEqual( time() + 50, $entry['nextAttemptAt'] ?? 0 );
+		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame(
+			$entry['nextAttemptAt'],
+			WordPressTestState::$scheduled_events[ AISearchClient::CONTEXT_WARM_CRON_HOOK ]['timestamp']
+		);
+
+		$runtime_state = AISearchClient::get_runtime_state();
+
+		$this->assertSame( 'retrying', $runtime_state['status'] );
+		$this->assertSame( 'Cloudflare timed out.', $runtime_state['lastErrorMessage'] );
+		$this->assertSame( 'async', $runtime_state['lastErrorMode'] );
+	}
+
+	public function test_process_context_warm_queue_seeds_exact_family_and_entity_caches(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_responses = [
+			new \WP_Error( 'http_request_failed', 'Foreground warm failed.' ),
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'result' => [
+							'chunks' => [
+								[
+									'id'    => 'chunk-1',
+									'score' => 0.91,
+									'item'  => [
+										'key'      => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+										'metadata' => [],
+									],
+									'text'  => "---\nsource_url: \"https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/\"\n---\nUse clear labels and keep footer navigation compact.",
+								],
+							],
+						],
+					]
+				),
+			],
 		];
 
 		$family_context = [
@@ -872,7 +1008,7 @@ final class AISearchClientTest extends TestCase {
 				4
 			)
 		);
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
 
 		AISearchClient::process_context_warm_queue();
 

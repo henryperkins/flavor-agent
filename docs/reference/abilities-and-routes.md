@@ -109,8 +109,7 @@ Use it when you need to answer:
         "area": "header"
       }
     ],
-    "emptyAreas": ["sidebar"],
-    "allowedAreas": ["header", "sidebar"]
+    "emptyAreas": ["sidebar"]
   },
   "editorStructure": {
     "topLevelBlockTree": [
@@ -129,10 +128,144 @@ Use it when you need to answer:
         "attributes": {},
         "childCount": 2
       }
-    ]
+    ],
+    "structureStats": {
+      "blockCount": 4,
+      "maxDepth": 2,
+      "topLevelBlockCount": 2,
+      "hasNavigation": false,
+      "hasQuery": true,
+      "hasTemplateParts": true,
+      "firstTopLevelBlock": "core/template-part",
+      "lastTopLevelBlock": "core/group"
+    },
+    "currentPatternOverrides": {
+      "hasOverrides": false,
+      "blockCount": 0,
+      "blockNames": [],
+      "blocks": []
+    },
+    "currentViewportVisibility": {
+      "hasVisibilityRules": false,
+      "blockCount": 0,
+      "blocks": []
+    }
   }
 }
 ```
+
+The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The server keeps canonical saved capability metadata and computes the effective `allowedAreas` set by merging those live areas with the saved template contract. Empty templates still send `editorSlots` and `editorStructure` with empty arrays and zeroed stats.
+
+### Template-Part Ability Request
+
+```json
+{
+  "templatePartRef": "theme//header",
+  "prompt": "Create a stronger utility row above the main navigation.",
+  "visiblePatternNames": ["core/header-with-utility-row"],
+  "editorStructure": {
+    "blockTree": [
+      {
+        "path": [0],
+        "name": "core/group",
+        "label": "Group",
+        "attributes": { "tagName": "header" },
+        "childCount": 2,
+        "children": [
+          {
+            "path": [0, 0],
+            "name": "core/site-logo",
+            "label": "Site Logo",
+            "attributes": {},
+            "childCount": 0,
+            "children": []
+          },
+          {
+            "path": [0, 1],
+            "name": "core/navigation",
+            "label": "Navigation",
+            "attributes": { "overlayMenu": "mobile" },
+            "childCount": 0,
+            "children": []
+          }
+        ]
+      }
+    ],
+    "allBlockPaths": [
+      {
+        "path": [0],
+        "name": "core/group",
+        "label": "Group",
+        "attributes": { "tagName": "header" },
+        "childCount": 2
+      },
+      {
+        "path": [0, 1],
+        "name": "core/navigation",
+        "label": "Navigation",
+        "attributes": { "overlayMenu": "mobile" },
+        "childCount": 0
+      }
+    ],
+    "topLevelBlocks": ["core/group"],
+    "blockCounts": {
+      "core/group": 1,
+      "core/navigation": 1
+    },
+    "structureStats": {
+      "blockCount": 2,
+      "maxDepth": 2,
+      "hasNavigation": true,
+      "containsLogo": false,
+      "containsSiteTitle": false,
+      "containsSearch": false,
+      "containsSocialLinks": false,
+      "containsQuery": false,
+      "containsColumns": false,
+      "containsButtons": false,
+      "containsSpacer": false,
+      "containsSeparator": false,
+      "firstTopLevelBlock": "core/group",
+      "lastTopLevelBlock": "core/group",
+      "hasSingleWrapperGroup": true,
+      "isNearlyEmpty": false
+    },
+    "currentPatternOverrides": {
+      "hasOverrides": false,
+      "blockCount": 0,
+      "blockNames": [],
+      "blocks": []
+    },
+    "operationTargets": [
+      {
+        "path": [0, 1],
+        "name": "core/navigation",
+        "label": "Navigation",
+        "allowedOperations": ["replace_block_with_pattern", "remove_block"],
+        "allowedInsertions": ["before_block_path", "after_block_path"]
+      }
+    ],
+    "insertionAnchors": [
+      { "placement": "start", "label": "Start of template part" },
+      { "placement": "end", "label": "End of template part" },
+      {
+        "placement": "before_block_path",
+        "targetPath": [0, 1],
+        "blockName": "core/navigation",
+        "label": "Before Navigation"
+      }
+    ],
+    "structuralConstraints": {
+      "contentOnlyPaths": [],
+      "lockedPaths": [],
+      "hasContentOnly": false,
+      "hasLockedBlocks": false
+    }
+  }
+}
+```
+
+`editorStructure.blockTree` is the prompt-facing summary. `editorStructure.allBlockPaths` is the full live path index the server uses to validate deep executable paths and stale signatures. Empty template parts still send the same keys with empty trees, zeroed stats, no operation targets, and start/end anchors.
 
 ### Template Ability Response Shape
 
@@ -337,8 +470,10 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 
 - The recommendation routes sanitize and normalize structured inputs before handing them to the ability layer
 - `POST /flavor-agent/v1/recommend-patterns` does not accept `editorStructure`; the current pattern route contract ignores it
-- Template recommendation requests carry an editor-collected `editorStructure` with the top-level block tree; the server normalizes it and derives insertion anchors for validated operations
-- Template-part requests also accept `editorStructure` for editor-collected override context, then combine it with server-collected executable targets, insertion anchors, and structural constraints before any apply affordance is shown
+- Template recommendation requests carry an editor-collected `editorStructure` with the live top-level block tree, zeroed empty-state stats when needed, current pattern-override summaries, and current viewport-visibility summaries; the server replaces that mutable slice atomically and derives insertion anchors from the live tree
+- Template recommendation requests also carry live `editorSlots.assignedParts` and `editorSlots.emptyAreas`; the server keeps canonical saved capability metadata and computes effective `allowedAreas` by merging those live areas with the saved template contract
+- Template-part requests accept a full live `editorStructure` slice: `blockTree`, `allBlockPaths`, `topLevelBlocks`, `blockCounts`, `structureStats`, `currentPatternOverrides`, `operationTargets`, `insertionAnchors`, and `structuralConstraints`
+- Template-part executable paths are validated against `editorStructure.allBlockPaths`, so deep unsaved paths remain valid even when the prompt-facing `blockTree` is depth-limited
 - Navigation response groups now validate structural `changes[].targetPath` values against the current menu target inventory instead of trusting free-form target text alone
 - Activity permissions are contextual: post-like scopes use `edit_posts` or `edit_post`, while template and template-part scopes use `edit_theme_options`
 - Manual sync is intentionally admin-only because it mutates shared vector-index state

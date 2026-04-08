@@ -54,6 +54,7 @@ Read these documents in this order:
    - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
+   - `pattern-recommendation-debugging.md` — operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage.
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `template-operations.md` — operation types, placements, and validation rules per surface.
    - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
@@ -88,6 +89,7 @@ Each top-level doc has one job:
    - `abilities-and-routes.md` — Which ability or route owns a contract? Which permissions and backend gates apply?
    - `shared-internals.md` — Which cross-cutting store utilities, shared UI components, and context helpers do the surfaces share?
    - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
+   - `pattern-recommendation-debugging.md` — How do you debug sync, Qdrant collection health, raw retrieval, and reranking failures?
    - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
    - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?

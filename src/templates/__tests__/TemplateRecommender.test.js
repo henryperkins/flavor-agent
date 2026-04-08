@@ -723,6 +723,16 @@ describe( 'TemplateRecommender', () => {
 			expect.objectContaining( {
 				templateRef: TEMPLATE_REF,
 				editorStructure: expect.objectContaining( {
+					structureStats: {
+						blockCount: 2,
+						maxDepth: 2,
+						topLevelBlockCount: 1,
+						hasNavigation: false,
+						hasQuery: false,
+						hasTemplateParts: false,
+						firstTopLevelBlock: 'core/group',
+						lastTopLevelBlock: 'core/group',
+					},
 					currentPatternOverrides: {
 						hasOverrides: true,
 						blockCount: 1,
@@ -751,6 +761,60 @@ describe( 'TemplateRecommender', () => {
 						],
 					},
 				} ),
+			} )
+		);
+	} );
+
+	test( 'serializes empty templates with explicit live structure and slot snapshots', async () => {
+		currentState = createState( {
+			blockEditor: {
+				...getState().blockEditor,
+				blocks: [],
+			},
+		} );
+
+		await renderPanel();
+
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
+				.click();
+		} );
+
+		expect( mockFetchTemplateRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				templateRef: TEMPLATE_REF,
+				editorSlots: {
+					assignedParts: [],
+					emptyAreas: [],
+					allowedAreas: [],
+				},
+				editorStructure: {
+					topLevelBlockTree: [],
+					structureStats: {
+						blockCount: 0,
+						maxDepth: 0,
+						topLevelBlockCount: 0,
+						hasNavigation: false,
+						hasQuery: false,
+						hasTemplateParts: false,
+						firstTopLevelBlock: '',
+						lastTopLevelBlock: '',
+					},
+					currentPatternOverrides: {
+						hasOverrides: false,
+						blockCount: 0,
+						blockNames: [],
+						blocks: [],
+					},
+					currentViewportVisibility: {
+						hasVisibilityRules: false,
+						blockCount: 0,
+						blocks: [],
+					},
+				},
 			} )
 		);
 	} );

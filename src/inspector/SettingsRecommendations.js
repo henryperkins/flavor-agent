@@ -4,12 +4,24 @@
  * Renders AI-suggested configuration changes in the Settings tab.
  */
 import { PanelBody, Button } from '@wordpress/components';
-import { useDispatch } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { useCallback } from '@wordpress/element';
 import { Icon, check, arrowRight } from '@wordpress/icons';
 
+import AIStatusNotice from '../components/AIStatusNotice';
 import InlineActionFeedback from '../components/InlineActionFeedback';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
+import SurfaceScopeBar from '../components/SurfaceScopeBar';
+import {
+	APPLY_NOW_LABEL,
+	REFRESH_ACTION_LABEL,
+	STALE_STATUS_LABEL,
+} from '../components/surface-labels';
+import {
+	collectBlockContext,
+	getLiveBlockContextSignature,
+} from '../context/collector';
 import { STORE_NAME } from '../store';
 import { formatCount } from '../utils/format-count';
 import groupByPanel from './group-by-panel';
@@ -24,10 +36,46 @@ function buildSettingsFeedback( suggestion, key ) {
 	};
 }
 
-export default function SettingsRecommendations( { clientId, suggestions } ) {
-	const { applySuggestion } = useDispatch( STORE_NAME );
+export default function SettingsRecommendations( {
+	clientId,
+	suggestions,
+	isStale = false,
+} ) {
+	const { applySuggestion, clearBlockError, fetchBlockRecommendations } =
+		useDispatch( STORE_NAME );
+	const liveContextSignature = useSelect(
+		( select ) => getLiveBlockContextSignature( select, clientId ),
+		[ clientId ]
+	);
+	const { applyNotice, isRefreshing, requestPrompt } = useSelect(
+		( select ) => {
+			const store = select( STORE_NAME );
+			const applyError = store.getBlockApplyError?.( clientId ) || null;
+
+			return {
+				applyNotice: store.getSurfaceStatusNotice( 'block', {
+					applyError,
+					onApplyDismissAction: true,
+				} ),
+				isRefreshing: store.isBlockLoading?.( clientId ) || false,
+				requestPrompt:
+					store.getBlockRecommendations?.( clientId )?.prompt || '',
+			};
+		},
+		[ clientId ]
+	);
+	const handleRefresh = useCallback( () => {
+		const liveContext = collectBlockContext( clientId );
+
+		if ( ! liveContext ) {
+			return;
+		}
+
+		fetchBlockRecommendations( clientId, liveContext, requestPrompt );
+	}, [ clientId, fetchBlockRecommendations, requestPrompt ] );
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
-		applySuggestion,
+		applySuggestion: ( targetClientId, suggestion ) =>
+			applySuggestion( targetClientId, suggestion, liveContextSignature ),
 		buildFeedback: buildSettingsFeedback,
 		clientId,
 		getKey: getSuggestionKey,
@@ -59,25 +107,52 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 					meta={
 						<>
 							<span className="flavor-agent-pill">
-								{ formatCount( visibleSuggestionCount, 'suggestion' ) }
+								{ formatCount(
+									visibleSuggestionCount,
+									'suggestion'
+								) }
 							</span>
 							{ groupedEntries.length > 1 && (
 								<span className="flavor-agent-pill">
-									{ formatCount( groupedEntries.length, 'panel' ) }
+									{ formatCount(
+										groupedEntries.length,
+										'panel'
+									) }
 								</span>
 							) }
 						</>
 					}
 				/>
 
+				<AIStatusNotice
+					notice={ applyNotice }
+					onDismiss={ () => clearBlockError( clientId ) }
+				/>
+
+				{ isStale && (
+					<SurfaceScopeBar
+						scopeLabel="Block Settings"
+						isFresh={ false }
+						hasResult
+						staleReason="These settings suggestions were generated for an earlier block state. Refresh before applying anything from the Settings tab."
+						onRefresh={ handleRefresh }
+						refreshLabel={ REFRESH_ACTION_LABEL }
+						isRefreshing={ isRefreshing }
+					/>
+				) }
+
 				{ groupedEntries.map( ( [ panel, items ] ) => (
 					<RecommendationLane
 						key={ panel }
 						title={ panelLabel( panel ) }
-						tone="Apply now"
+						tone={ isStale ? STALE_STATUS_LABEL : APPLY_NOW_LABEL }
 						count={ items.length }
 						countNoun="suggestion"
-						description="These suggestions map directly to the native settings in this panel."
+						description={
+							isStale
+								? 'These suggestions are shown for reference from the last request. Refresh before applying them.'
+								: 'These suggestions map directly to the native settings in this panel.'
+						}
 					>
 						{ items.map( ( suggestion ) => {
 							const key = getSuggestionKey( suggestion );
@@ -92,6 +167,7 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 									feedback={
 										feedback?.key === key ? feedback : null
 									}
+									isStale={ isStale }
 								/>
 							);
 						} ) }
@@ -102,7 +178,13 @@ export default function SettingsRecommendations( { clientId, suggestions } ) {
 	);
 }
 
-function SuggestionCard( { suggestion, onApply, applied, feedback } ) {
+function SuggestionCard( {
+	suggestion,
+	onApply,
+	applied,
+	feedback,
+	isStale = false,
+} ) {
 	const { label, description, confidence, currentValue, suggestedValue } =
 		suggestion;
 	const confidenceLabel =
@@ -122,7 +204,9 @@ function SuggestionCard( { suggestion, onApply, applied, feedback } ) {
 				<div className="flavor-agent-card__lead">
 					<span className="flavor-agent-card__label">{ label }</span>
 					<div className="flavor-agent-card__meta">
-						<span className="flavor-agent-pill">Apply now</span>
+						<span className="flavor-agent-pill">
+							{ isStale ? STALE_STATUS_LABEL : APPLY_NOW_LABEL }
+						</span>
 						{ confidenceLabel && (
 							<span className="flavor-agent-pill">
 								{ confidenceLabel }
@@ -139,7 +223,7 @@ function SuggestionCard( { suggestion, onApply, applied, feedback } ) {
 					className={ `flavor-agent-card__apply${
 						applied ? ' flavor-agent-card__apply--applied' : ''
 					}` }
-					disabled={ applied }
+					disabled={ applied || isStale }
 				/>
 			</div>
 

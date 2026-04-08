@@ -27,10 +27,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## End-To-End Flow
 
 1. `TemplatePartRecommender()` resolves the current template-part reference through the shared edited-entity resolver, then derives slug and area using both the template-part area lookup and the normalized `wp_template_part` entity contract returned by `usePostTypeEntityContract()`
-2. The component builds the request through `buildTemplatePartFetchInput()`, including `visiblePatternNames`
+2. The component builds the request through `buildTemplatePartFetchInput()`, including `visiblePatternNames` plus a full live template-part structure snapshot from `buildEditorTemplatePartStructureSnapshot()`
 3. `fetchTemplatePartRecommendations()` in the store posts the request to `POST /flavor-agent/v1/recommend-template-part`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template_part()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template_part()`
-5. `TemplateAbilities::recommend_template_part()` gathers template-part context through `ServerCollector::for_template_part()`, including executable targets, insertion anchors, and structural constraints, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
+5. `TemplateAbilities::recommend_template_part()` gathers canonical template-part metadata through `ServerCollector::for_template_part()`, atomically overlays the live unsaved structural slice from the editor, validates path-based targets and anchors against the full live path index, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
 6. The parsed response returns explanation text, advisory `blockHints`, advisory `patternSuggestions`, and optional structured `operations`
 7. `buildTemplatePartSuggestionViewModel()` validates the operation sequence before the UI offers preview or apply controls
 8. The user can jump to focus blocks through path-based selection links, browse suggested patterns in the inserter, open the shared lower review panel for validated operations, and confirm apply
@@ -63,9 +63,125 @@ User prompt in wp_template_part editor
   "visiblePatternNames": [
     "core/header-with-utility-row",
     "core/site-branding-minimal"
-  ]
+  ],
+  "editorStructure": {
+    "blockTree": [
+      {
+        "path": [0],
+        "name": "core/group",
+        "label": "Group",
+        "attributes": { "tagName": "header" },
+        "childCount": 2,
+        "children": [
+          {
+            "path": [0, 0],
+            "name": "core/site-logo",
+            "label": "Site Logo",
+            "attributes": {},
+            "childCount": 0,
+            "children": []
+          },
+          {
+            "path": [0, 1],
+            "name": "core/navigation",
+            "label": "Navigation",
+            "attributes": { "overlayMenu": "mobile" },
+            "childCount": 0,
+            "children": []
+          }
+        ]
+      }
+    ],
+    "allBlockPaths": [
+      {
+        "path": [0],
+        "name": "core/group",
+        "label": "Group",
+        "attributes": { "tagName": "header" },
+        "childCount": 2
+      },
+      {
+        "path": [0, 0],
+        "name": "core/site-logo",
+        "label": "Site Logo",
+        "attributes": {},
+        "childCount": 0
+      },
+      {
+        "path": [0, 1],
+        "name": "core/navigation",
+        "label": "Navigation",
+        "attributes": { "overlayMenu": "mobile" },
+        "childCount": 0
+      }
+    ],
+    "topLevelBlocks": ["core/group"],
+    "blockCounts": {
+      "core/group": 1,
+      "core/site-logo": 1,
+      "core/navigation": 1
+    },
+    "structureStats": {
+      "blockCount": 3,
+      "maxDepth": 2,
+      "hasNavigation": true,
+      "containsLogo": true,
+      "containsSiteTitle": false,
+      "containsSearch": false,
+      "containsSocialLinks": false,
+      "containsQuery": false,
+      "containsColumns": false,
+      "containsButtons": false,
+      "containsSpacer": false,
+      "containsSeparator": false,
+      "firstTopLevelBlock": "core/group",
+      "lastTopLevelBlock": "core/group",
+      "hasSingleWrapperGroup": true,
+      "isNearlyEmpty": false
+    },
+    "currentPatternOverrides": {
+      "hasOverrides": false,
+      "blockCount": 0,
+      "blockNames": [],
+      "blocks": []
+    },
+    "operationTargets": [
+      {
+        "path": [0],
+        "name": "core/group",
+        "label": "Group",
+        "allowedOperations": ["replace_block_with_pattern", "remove_block"],
+        "allowedInsertions": ["before_block_path", "after_block_path"]
+      },
+      {
+        "path": [0, 1],
+        "name": "core/navigation",
+        "label": "Navigation",
+        "allowedOperations": ["replace_block_with_pattern", "remove_block"],
+        "allowedInsertions": ["before_block_path", "after_block_path"]
+      }
+    ],
+    "insertionAnchors": [
+      { "placement": "start", "label": "Start of template part" },
+      { "placement": "end", "label": "End of template part" },
+      {
+        "placement": "before_block_path",
+        "targetPath": [0, 1],
+        "blockName": "core/navigation",
+        "label": "Before Navigation"
+      }
+    ],
+    "structuralConstraints": {
+      "contentOnlyPaths": [],
+      "lockedPaths": [],
+      "hasContentOnly": false,
+      "hasLockedBlocks": false
+    }
+  }
 }
 ```
+
+The prompt-facing `blockTree` may stay summarized, but `editorStructure.allBlockPaths` carries the full live path coverage the server uses to validate deep executable targets. Empty template parts still send an explicit structure snapshot with empty trees, zeroed stats, no targets, and start/end anchors.
 
 ## Example Response
 
@@ -126,7 +242,7 @@ Supported placement modes today:
 - `before_block_path`
 - `after_block_path`
 
-Replace and remove operations only stay executable when their `targetPath` is listed in the prompt's executable operation targets. Insert operations only stay executable when their placement and `targetPath` match the prompt's executable insertion anchors.
+Replace and remove operations only stay executable when their `targetPath` is listed in the prompt's executable operation targets. Insert operations only stay executable when their placement and `targetPath` match the prompt's executable insertion anchors. Deep paths are validated against the full live path index, not only the depth-limited prompt tree.
 
 ## Guardrails And Failure Modes
 
@@ -159,6 +275,7 @@ Replace and remove operations only stay executable when their `targetPath` is li
 ## Key Implementation Files
 
 - `src/template-parts/TemplatePartRecommender.js`
+- `src/template-parts/template-part-recommender-helpers.js`
 - `src/utils/template-actions.js`
 - `src/utils/template-operation-sequence.js`
 - `src/utils/template-part-areas.js` — four-tier template-part area resolution; see `docs/reference/shared-internals.md`

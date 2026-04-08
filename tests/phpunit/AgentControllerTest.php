@@ -20,6 +20,7 @@ final class AgentControllerTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->disable_public_docs_grounding();
 		$this->register_paragraph_block();
 		$this->register_pattern(
 			'theme/hero',
@@ -342,12 +343,30 @@ final class AgentControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $response );
 		$this->assertSame( 'missing_existing_content', $response->get_error_code() );
+		$response_data = $response->get_error_data();
+		$this->assertIsArray( $response_data );
+		$this->assertSame(
+			'flavor-agent/recommend-content',
+			$response_data['requestMeta']['ability'] ?? null
+		);
+		$this->assertSame(
+			'POST /flavor-agent/v1/recommend-content',
+			$response_data['requestMeta']['route'] ?? null
+		);
 
 		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
 		$this->assertCount( 1, $entries );
 		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
 		$this->assertSame( 'content', $entries[0]['surface'] ?? null );
 		$this->assertSame( 'failed', $entries[0]['undo']['status'] ?? null );
+		$this->assertSame(
+			'flavor-agent/recommend-content',
+			$entries[0]['request']['ai']['ability'] ?? null
+		);
+		$this->assertSame(
+			'POST /flavor-agent/v1/recommend-content',
+			$entries[0]['request']['ai']['route'] ?? null
+		);
 		$this->assertSame(
 			'Edit and critique modes require existing postContext.content.',
 			$entries[0]['undo']['error'] ?? null
@@ -933,6 +952,16 @@ final class AgentControllerTest extends TestCase {
 						],
 					],
 				],
+				'structureStats'   => [
+					'blockCount'         => 2,
+					'maxDepth'           => 1,
+					'topLevelBlockCount' => 2,
+					'hasNavigation'      => false,
+					'hasQuery'           => false,
+					'hasTemplateParts'   => true,
+					'firstTopLevelBlock' => 'core/cover',
+					'lastTopLevelBlock'  => 'core/template-part',
+				],
 			]
 		);
 
@@ -956,8 +985,185 @@ final class AgentControllerTest extends TestCase {
 			'- [1] core/template-part {slug=site-header, area=header} - site-header template part (header)',
 			(string) ( $request_body['input'] ?? '' )
 		);
+		$this->assertStringContainsString(
+			'Block count: 2',
+			(string) ( $request_body['input'] ?? '' )
+		);
 		$this->assertStringNotContainsString(
 			'- [0] core/paragraph',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_recommend_template_treats_empty_live_structure_as_authoritative(): void {
+		WordPressTestState::$block_templates['wp_template'][0]->content =
+			'<!-- wp:paragraph --><p>Saved intro</p><!-- /wp:paragraph -->'
+			. '<!-- wp:template-part {"slug":"site-header","area":"header"} /-->';
+		WordPressTestState::$remote_post_response                       = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [
+								[
+									'label'              => 'Start with a hero pattern',
+									'description'        => 'Use the empty live template as a clean canvas.',
+									'operations'         => [
+										[
+											'type'        => 'insert_pattern',
+											'patternName' => 'theme/hero',
+											'placement'   => 'start',
+										],
+									],
+									'templateParts'      => [],
+									'patternSuggestions' => [ 'theme/hero' ],
+								],
+							],
+							'explanation' => 'Use the live empty template.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//home' );
+		$request->set_param(
+			'editorSlots',
+			[
+				'assignedParts' => [],
+				'emptyAreas'    => [],
+			]
+		);
+		$request->set_param(
+			'editorStructure',
+			[
+				'topLevelBlockTree'         => [],
+				'structureStats'            => [
+					'blockCount'         => 0,
+					'maxDepth'           => 0,
+					'topLevelBlockCount' => 0,
+					'hasNavigation'      => false,
+					'hasQuery'           => false,
+					'hasTemplateParts'   => false,
+					'firstTopLevelBlock' => '',
+					'lastTopLevelBlock'  => '',
+				],
+				'currentPatternOverrides'   => [
+					'hasOverrides' => false,
+					'blockCount'   => 0,
+					'blockNames'   => [],
+					'blocks'       => [],
+				],
+				'currentViewportVisibility' => [
+					'hasVisibilityRules' => false,
+					'blockCount'         => 0,
+					'blocks'             => [],
+				],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_template( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'None - this template has no template parts assigned.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Block count: 0',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Top-level block count: 0',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'- `site-header` -> area: `header`',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'- [0] core/paragraph',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_recommend_template_keeps_unsaved_live_areas_executable(): void {
+		WordPressTestState::$block_templates['wp_template_part'][] = (object) [
+			'id'      => 'theme//footer-main',
+			'slug'    => 'footer-main',
+			'title'   => 'Footer Main',
+			'area'    => 'footer',
+			'content' => '<!-- wp:paragraph --><p>Footer</p><!-- /wp:paragraph -->',
+		];
+		WordPressTestState::$remote_post_response               = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [
+								[
+									'label'        => 'Add footer template part',
+									'description'  => 'Use the new live footer area.',
+									'operations'   => [
+										[
+											'type' => 'assign_template_part',
+											'slug' => 'footer-main',
+											'area' => 'footer',
+										],
+									],
+									'templateParts' => [
+										[
+											'slug'   => 'footer-main',
+											'area'   => 'footer',
+											'reason' => 'Footer content belongs in the unsaved footer slot.',
+										],
+									],
+									'patternSuggestions' => [],
+								],
+							],
+							'explanation' => 'Use the live footer area.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//home' );
+		$request->set_param(
+			'editorSlots',
+			[
+				'assignedParts' => [],
+				'emptyAreas'    => [ 'footer' ],
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_template( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame(
+			'assign_template_part',
+			$response->get_data()['suggestions'][0]['operations'][0]['type'] ?? null
+		);
+		$this->assertSame(
+			'footer',
+			$response->get_data()['suggestions'][0]['operations'][0]['area'] ?? null
+		);
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'## Explicitly Empty Areas' . "\n" . 'footer',
 			(string) ( $request_body['input'] ?? '' )
 		);
 	}
@@ -1100,7 +1306,9 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
-	public function test_handle_recommend_template_part_forwards_editor_structure_overrides(): void {
+	public function test_handle_recommend_template_part_prefers_full_live_editor_structure_over_saved_structure(): void {
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:paragraph --><p>Saved Header</p><!-- /wp:paragraph -->';
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
@@ -1120,6 +1328,88 @@ final class AgentControllerTest extends TestCase {
 		$request->set_param(
 			'editorStructure',
 			[
+				'blockTree'               => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/group',
+						'label'      => 'Group',
+						'attributes' => [
+							'tagName' => 'header',
+						],
+						'childCount' => 2,
+						'children'   => [
+							[
+								'path'       => [ 0, 0 ],
+								'name'       => 'core/site-logo',
+								'label'      => 'Site Logo',
+								'attributes' => [],
+								'childCount' => 0,
+								'children'   => [],
+							],
+							[
+								'path'       => [ 0, 1 ],
+								'name'       => 'core/navigation',
+								'label'      => 'Navigation',
+								'attributes' => [
+									'overlayMenu' => 'mobile',
+								],
+								'childCount' => 0,
+								'children'   => [],
+							],
+						],
+					],
+				],
+				'allBlockPaths'           => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/group',
+						'label'      => 'Group',
+						'attributes' => [
+							'tagName' => 'header',
+						],
+						'childCount' => 2,
+					],
+					[
+						'path'       => [ 0, 0 ],
+						'name'       => 'core/site-logo',
+						'label'      => 'Site Logo',
+						'attributes' => [],
+						'childCount' => 0,
+					],
+					[
+						'path'       => [ 0, 1 ],
+						'name'       => 'core/navigation',
+						'label'      => 'Navigation',
+						'attributes' => [
+							'overlayMenu' => 'mobile',
+						],
+						'childCount' => 0,
+					],
+				],
+				'topLevelBlocks'          => [ 'core/group' ],
+				'blockCounts'             => [
+					'core/group'      => 1,
+					'core/site-logo'  => 1,
+					'core/navigation' => 1,
+				],
+				'structureStats'          => [
+					'blockCount'            => 3,
+					'maxDepth'              => 2,
+					'hasNavigation'         => true,
+					'containsLogo'          => true,
+					'containsSiteTitle'     => false,
+					'containsSearch'        => false,
+					'containsSocialLinks'   => false,
+					'containsQuery'         => false,
+					'containsColumns'       => false,
+					'containsButtons'       => false,
+					'containsSpacer'        => false,
+					'containsSeparator'     => false,
+					'firstTopLevelBlock'    => 'core/group',
+					'lastTopLevelBlock'     => 'core/group',
+					'hasSingleWrapperGroup' => true,
+					'isNearlyEmpty'         => false,
+				],
 				'currentPatternOverrides' => [
 					'hasOverrides' => true,
 					'blockCount'   => 1,
@@ -1131,6 +1421,50 @@ final class AgentControllerTest extends TestCase {
 							'overrideAttributes' => [ 'overlayMenu' ],
 						],
 					],
+				],
+				'operationTargets'        => [
+					[
+						'path'              => [ 0 ],
+						'name'              => 'core/group',
+						'label'             => 'Group',
+						'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+						'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+					],
+					[
+						'path'              => [ 0, 1 ],
+						'name'              => 'core/navigation',
+						'label'             => 'Navigation',
+						'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+						'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+					],
+				],
+				'insertionAnchors'        => [
+					[
+						'placement' => 'start',
+						'label'     => 'Start of template part',
+					],
+					[
+						'placement' => 'end',
+						'label'     => 'End of template part',
+					],
+					[
+						'placement'  => 'before_block_path',
+						'targetPath' => [ 0, 1 ],
+						'blockName'  => 'core/navigation',
+						'label'      => 'Before Navigation',
+					],
+					[
+						'placement'  => 'after_block_path',
+						'targetPath' => [ 0, 1 ],
+						'blockName'  => 'core/navigation',
+						'label'      => 'After Navigation',
+					],
+				],
+				'structuralConstraints'   => [
+					'contentOnlyPaths' => [],
+					'lockedPaths'      => [],
+					'hasContentOnly'   => false,
+					'hasLockedBlocks'  => false,
 				],
 			]
 		);
@@ -1144,11 +1478,127 @@ final class AgentControllerTest extends TestCase {
 
 		$this->assertIsArray( $request_body );
 		$this->assertStringContainsString(
+			'Block count: 3',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'- [0] core/group {tagName=header}',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'- [0, 1] core/navigation {overlayMenu=mobile}',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
 			'## Current Pattern Override Blocks',
 			(string) ( $request_body['input'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'Path 1 > 2 - `Navigation`',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Executable Operation Targets',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Executable Insertion Anchors',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'- [0] core/paragraph',
+			(string) ( $request_body['input'] ?? '' )
+		);
+	}
+
+	public function test_handle_recommend_template_part_treats_empty_live_structure_as_authoritative(): void {
+		WordPressTestState::$block_templates['wp_template_part'][0]->content =
+			'<!-- wp:group --><!-- wp:navigation /--><!-- /wp:group -->';
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode(
+				[
+					'output_text' => wp_json_encode(
+						[
+							'suggestions' => [],
+							'explanation' => 'Use the live empty template part.',
+						]
+					),
+				]
+			),
+		];
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
+		$request->set_param( 'templatePartRef', 'theme//header' );
+		$request->set_param(
+			'editorStructure',
+			[
+				'blockTree'               => [],
+				'allBlockPaths'           => [],
+				'topLevelBlocks'          => [],
+				'blockCounts'             => [],
+				'structureStats'          => [
+					'blockCount'            => 0,
+					'maxDepth'              => 0,
+					'hasNavigation'         => false,
+					'containsLogo'          => false,
+					'containsSiteTitle'     => false,
+					'containsSearch'        => false,
+					'containsSocialLinks'   => false,
+					'containsQuery'         => false,
+					'containsColumns'       => false,
+					'containsButtons'       => false,
+					'containsSpacer'        => false,
+					'containsSeparator'     => false,
+					'firstTopLevelBlock'    => '',
+					'lastTopLevelBlock'     => '',
+					'hasSingleWrapperGroup' => false,
+					'isNearlyEmpty'         => true,
+				],
+				'currentPatternOverrides' => [
+					'hasOverrides' => false,
+					'blockCount'   => 0,
+					'blockNames'   => [],
+					'blocks'       => [],
+				],
+				'operationTargets'        => [],
+				'insertionAnchors'        => [
+					[
+						'placement' => 'start',
+						'label'     => 'Start of template part',
+					],
+					[
+						'placement' => 'end',
+						'label'     => 'End of template part',
+					],
+				],
+				'structuralConstraints'   => [
+					'contentOnlyPaths' => [],
+					'lockedPaths'      => [],
+					'hasContentOnly'   => false,
+					'hasLockedBlocks'  => false,
+				],
+			]
+		);
+
+		Agent_Controller::handle_recommend_template_part( $request );
+
+		$request_body = json_decode(
+			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
+			true
+		);
+
+		$this->assertIsArray( $request_body );
+		$this->assertStringContainsString(
+			'This template part is empty.',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'Block count: 0',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'[0, 0] core/navigation',
 			(string) ( $request_body['input'] ?? '' )
 		);
 	}
@@ -1163,6 +1613,18 @@ final class AgentControllerTest extends TestCase {
 		];
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:navigation {"ref":42} /-->';
+		WordPressTestState::$block_templates['wp_template_part'][]           = (object) [
+			'slug'    => 'header-overlay',
+			'title'   => 'Header Overlay',
+			'area'    => 'navigation-overlay',
+			'content' => '<!-- wp:navigation {"ref":42} /-->',
+		];
+		WordPressTestState::$block_templates['wp_template_part'][]           = (object) [
+			'slug'    => 'footer-overlay',
+			'title'   => 'Footer Overlay',
+			'area'    => 'navigation-overlay',
+			'content' => '<!-- wp:navigation {"ref":99} /-->',
+		];
 		WordPressTestState::$remote_post_response                            = [
 			'response' => [
 				'code' => 200,
@@ -1199,6 +1661,32 @@ final class AgentControllerTest extends TestCase {
 		$request->set_param(
 			'navigationMarkup',
 			'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- wp:navigation-link {"label":"Contact","url":"/contact"} /--><!-- /wp:navigation -->'
+		);
+		$request->set_param(
+			'editorContext',
+			[
+				'block'               => [
+					'name'               => 'core/navigation',
+					'title'              => 'Navigation',
+					'structuralIdentity' => [
+						'role'             => 'header-navigation',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+					],
+				],
+				'siblingsBefore'      => [ 'core/site-logo' ],
+				'siblingsAfter'       => [ 'core/buttons' ],
+				'structuralAncestors' => [
+					[
+						'block'            => 'core/template-part',
+						'role'             => 'header-slot',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+					],
+				],
+			]
 		);
 		$request->set_param( 'prompt', 'Simplify the header navigation.' );
 		$request->set_param(
@@ -1251,6 +1739,32 @@ final class AgentControllerTest extends TestCase {
 		$this->assertStringContainsString(
 			'## Overlay Context',
 			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'## Live Editor Context',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'`templatePartSlug`: site-header',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'header-overlay',
+			(string) ( $request_body['input'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'footer-overlay',
+			$this->extract_prompt_section(
+				(string) ( $request_body['input'] ?? '' ),
+				'Navigation Overlay Template Parts (WP 7.0+)'
+			)
+		);
+		$this->assertStringContainsString(
+			'`siteOverlayTemplatePartSlugs`: header-overlay, footer-overlay',
+			$this->extract_prompt_section(
+				(string) ( $request_body['input'] ?? '' ),
+				'Overlay Context'
+			)
 		);
 		$this->assertStringContainsString(
 			'Simplify the header navigation.',
@@ -1503,6 +2017,23 @@ final class AgentControllerTest extends TestCase {
 			$name,
 			$properties
 		);
+	}
+
+	private function disable_public_docs_grounding(): void {
+		\add_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			static fn(): string => ''
+		);
+	}
+
+	private function extract_prompt_section( string $prompt, string $heading ): string {
+		$pattern = '/## ' . preg_quote( $heading, '/' ) . "\n(.*?)(?:\n\n## |\z)/s";
+
+		if ( 1 !== preg_match( $pattern, $prompt, $matches ) ) {
+			return '';
+		}
+
+		return $matches[1] ?? '';
 	}
 
 	/**

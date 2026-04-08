@@ -23,8 +23,10 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
+	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
+	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {
 	buildBlockStyleExecutionContractFromSettings,
@@ -219,6 +221,7 @@ function StyleBookPanel( {
 	hasResult,
 	hasMatchingResult,
 	onNoticeAction,
+	onNoticeDismiss,
 	onRequest,
 	onReview,
 	onCancelReview,
@@ -372,6 +375,7 @@ function StyleBookPanel( {
 			<AIStatusNotice
 				notice={ panelNotice }
 				onAction={ onNoticeAction }
+				onDismiss={ onNoticeDismiss }
 			/>
 
 			<SurfaceComposer
@@ -399,6 +403,7 @@ function StyleBookPanel( {
 				<AIStatusNotice
 					notice={ inlineNotice }
 					onAction={ onNoticeAction }
+					onDismiss={ onNoticeDismiss }
 					className="flavor-agent-style-feedback-notice"
 				/>
 			) }
@@ -407,6 +412,18 @@ function StyleBookPanel( {
 				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
 					{ explanation }
 				</p>
+			) }
+
+			{ isStale && (
+				<RecommendationHero
+					title="Refresh recommendations for this Style Book example"
+					description="Flavor Agent kept the previous result visible so you can compare it against the active Style Book example."
+					tone={ STALE_STATUS_LABEL }
+					why="Review and apply actions stay disabled until you refresh against the live Style Book context."
+					primaryActionLabel={ REFRESH_ACTION_LABEL }
+					onPrimaryAction={ onRequest }
+					primaryActionDisabled={ isLoading }
+				/>
 			) }
 
 			{ featuredSuggestion && (
@@ -465,10 +482,8 @@ function StyleBookPanel( {
 					summary={ selectedSuggestion.description }
 					onConfirm={ onApply }
 					onCancel={ onCancelReview }
-					confirmDisabled={ isApplying || isStale }
-					confirmLabel={
-						isApplying ? 'Applying…' : 'Confirm Apply'
-					}
+					confirmDisabled={ isApplying || isUndoing || isStale }
+					confirmLabel={ isApplying ? 'Applying…' : 'Confirm Apply' }
 					className="flavor-agent-style-review"
 					hint={ reviewHint }
 				>
@@ -476,6 +491,7 @@ function StyleBookPanel( {
 						<AIStatusNotice
 							notice={ inlineNotice }
 							onAction={ onNoticeAction }
+							onDismiss={ onNoticeDismiss }
 							className="flavor-agent-style-feedback-notice"
 						/>
 					) }
@@ -742,13 +758,17 @@ export default function StyleBookRecommender() {
 		latestStyleBookActivity?.id === latestUndoableActivityId;
 	const {
 		applyStyleBookSuggestion,
+		clearUndoError,
 		clearStyleBookRecommendations,
 		fetchStyleBookRecommendations,
+		setStyleBookApplyState,
 		setStyleBookSelectedSuggestion,
+		setStyleBookStatus,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 	const isLoading = status === 'loading';
-	const isApplying = applyStatus === 'applying' || undoStatus === 'undoing';
+	const isApplying = applyStatus === 'applying';
+	const isUndoing = undoStatus === 'undoing';
 	const baseNotice = buildNotice
 		? buildNotice( {
 				requestError: currentError,
@@ -769,6 +789,9 @@ export default function StyleBookRecommender() {
 					( selectedSuggestion?.operations || [] ).length > 0,
 				applyStatus,
 				undoStatus,
+				onDismissAction: Boolean( currentError ),
+				onApplyDismissAction: Boolean( currentApplyError ),
+				onUndoDismissAction: Boolean( currentUndoError ),
 				emptyMessage:
 					'No safe Style Book changes were returned for this prompt.',
 				advisoryMessage:
@@ -802,6 +825,27 @@ export default function StyleBookRecommender() {
 	}
 
 	const notice = baseNotice || fallbackNotice;
+	const dismissStatusNotice = useCallback( () => {
+		switch ( notice?.source ) {
+			case 'request':
+				setStyleBookStatus(
+					hasStoredResultForScope ? 'ready' : 'idle'
+				);
+				break;
+			case 'apply':
+				setStyleBookApplyState( 'idle' );
+				break;
+			case 'undo':
+				clearUndoError();
+				break;
+		}
+	}, [
+		clearUndoError,
+		hasStoredResultForScope,
+		notice?.source,
+		setStyleBookApplyState,
+		setStyleBookStatus,
+	] );
 
 	useEffect( () => {
 		if ( typeof document === 'undefined' ) {
@@ -985,7 +1029,7 @@ export default function StyleBookRecommender() {
 			}
 			isLoading={ isLoading }
 			isApplying={ isApplying }
-			isUndoing={ undoStatus === 'undoing' }
+			isUndoing={ isUndoing }
 			isStale={ isStaleResult }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
@@ -1001,6 +1045,7 @@ export default function StyleBookRecommender() {
 					? () => handleUndo( latestStyleBookActivity.id )
 					: undefined
 			}
+			onNoticeDismiss={ dismissStatusNotice }
 			onRequest={ handleRequest }
 			onReview={ setStyleBookSelectedSuggestion }
 			onCancelReview={ () => setStyleBookSelectedSuggestion( null ) }

@@ -375,9 +375,7 @@ SYSTEM;
 			);
 		}
 
-		$block_lookup            = self::build_block_lookup(
-			is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : []
-		);
+		$block_lookup            = self::build_block_lookup( $context );
 		$operation_target_lookup = self::build_operation_target_lookup( $context );
 		$insertion_anchor_lookup = self::build_insertion_anchor_lookup( $context );
 		$pattern_lookup          = self::build_pattern_lookup( $context );
@@ -407,10 +405,23 @@ SYSTEM;
 	}
 
 	/**
+	 * @param array<string, mixed> $context
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_block_lookup( array $context ): array {
+		if ( array_key_exists( 'allBlockPaths', $context ) && is_array( $context['allBlockPaths'] ) ) {
+			return self::build_flat_block_lookup( $context['allBlockPaths'] );
+		}
+
+		$tree = is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : [];
+		return self::build_tree_block_lookup( $tree );
+	}
+
+	/**
 	 * @param array<int, array<string, mixed>> $tree
 	 * @return array<string, array<string, mixed>>
 	 */
-	private static function build_block_lookup( array $tree ): array {
+	private static function build_tree_block_lookup( array $tree ): array {
 		$lookup = [];
 
 		foreach ( $tree as $node ) {
@@ -424,11 +435,46 @@ SYSTEM;
 				$lookup[ self::block_path_key( $path ) ] = [
 					'name' => (string) ( $node['name'] ?? '' ),
 					'path' => $path,
+					'label' => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
+					'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
+					'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
+					'slot' => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
 				];
 			}
 
 			$children = is_array( $node['children'] ?? null ) ? $node['children'] : [];
-			$lookup   = array_merge( $lookup, self::build_block_lookup( $children ) );
+			$lookup   = array_merge( $lookup, self::build_tree_block_lookup( $children ) );
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $nodes
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_flat_block_lookup( array $nodes ): array {
+		$lookup = [];
+
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $node['path'] ?? null );
+
+			if ( null === $path ) {
+				continue;
+			}
+
+			$lookup[ self::block_path_key( $path ) ] = [
+				'name'       => (string) ( $node['name'] ?? '' ),
+				'path'       => $path,
+				'label'      => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
+				'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
+				'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
+				'slot'       => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
+			];
 		}
 
 		return $lookup;

@@ -782,15 +782,11 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Current effective key source:',
+			'Current effective OpenAI key source:',
 			$output
 		);
 		$this->assertStringContainsString(
 			'Settings &gt; Connectors',
-			$output
-		);
-		$this->assertStringContainsString(
-			'Connector status: OpenAI connector: registered (key source: Settings &gt; Connectors).',
 			$output
 		);
 	}
@@ -861,7 +857,26 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'max="1"', $output );
 	}
 
-	public function test_render_page_renders_compact_settings_page_guidance(): void {
+	public function test_register_contextual_help_uses_native_wp_screen_help_tabs(): void {
+		$screen = new \WP_Screen();
+		WordPressTestState::$current_screen = $screen;
+
+		Settings::register_contextual_help();
+
+		$this->assertCount( 3, $screen->help_tabs );
+		$this->assertSame( 'flavor-agent-overview', $screen->help_tabs[0]['id'] );
+		$this->assertSame( 'Overview', $screen->help_tabs[0]['title'] );
+		$this->assertStringContainsString( 'Chat Provider', $screen->help_tabs[0]['content'] );
+		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
+		$this->assertStringContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
+		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
+		$this->assertStringContainsString( 'Pattern Sync', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
+		$this->assertStringContainsString( 'options-connectors.php', $screen->help_sidebar );
+		$this->assertStringContainsString( 'flavor-agent-activity', $screen->help_sidebar );
+	}
+
+	public function test_render_page_moves_setup_guidance_into_wp_help(): void {
 		ob_start();
 		Settings::render_page();
 		$output = (string) ob_get_clean();
@@ -871,13 +886,11 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'Where To Configure What',
+			'Use Help for setup guidance and troubleshooting.',
 			$output
 		);
-		$this->assertStringContainsString(
-			'Use Connectors for shared provider credentials.',
-			$output
-		);
+		$this->assertStringNotContainsString( 'Where To Configure What', $output );
+		$this->assertStringNotContainsString( 'Use Connectors for shared provider credentials.', $output );
 		$this->assertStringContainsString(
 			'Sync Pattern Catalog',
 			$output
@@ -980,6 +993,79 @@ final class SettingsTest extends TestCase {
 			'Pattern index collection vector size no longer matches the active embedding configuration.',
 			$method->invoke( null, 'collection_size_mismatch' )
 		);
+	}
+
+	public function test_get_docs_overview_status_reports_retrying_from_runtime_grounding_state(): void {
+		$method = new ReflectionMethod( Settings::class, 'get_docs_overview_status' );
+		$method->setAccessible( true );
+
+		$result = $method->invoke(
+			null,
+			[
+				'docs_configured'         => true,
+				'prewarm_state'           => [
+					'status' => 'ok',
+				],
+				'runtime_docs_grounding' => [
+					'status' => 'retrying',
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'label' => 'Retrying',
+				'tone'  => 'warning',
+			],
+			$result
+		);
+	}
+
+	public function test_render_page_shows_runtime_grounding_diagnostics(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+			'flavor_agent_docs_runtime_state'              => [
+				'lastSearchAt'           => '2026-04-08 10:00:00',
+				'lastSearchMode'         => 'async',
+				'lastResultCount'        => 0,
+				'lastTrustedSuccessAt'   => '2026-04-08 09:45:00',
+				'lastTrustedSuccessMode' => 'foreground',
+				'lastServedAt'           => '2026-04-08 09:50:00',
+				'lastServedMode'         => 'cache',
+				'lastFallbackType'       => 'generic',
+				'lastErrorAt'            => '2026-04-08 10:00:00',
+				'lastErrorMode'          => 'async',
+				'lastErrorCode'          => 'http_request_failed',
+				'lastErrorMessage'       => 'Cloudflare timed out.',
+			],
+			'flavor_agent_docs_warm_queue'                => [
+				[
+					'query'            => 'navigation footer guidance',
+					'entityKey'        => 'core/navigation',
+					'familyContext'    => [
+						'surface' => 'block',
+					],
+					'maxResults'       => 4,
+					'attempts'         => 1,
+					'nextAttemptAt'    => time() + 60,
+					'lastErrorAt'      => '2026-04-08 10:00:00',
+					'lastErrorCode'    => 'http_request_failed',
+					'lastErrorMessage' => 'Cloudflare timed out.',
+				],
+			],
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Runtime Grounding', $output );
+		$this->assertStringContainsString( 'Retrying', $output );
+		$this->assertStringContainsString( 'Warm queue: 1 pending.', $output );
+		$this->assertStringContainsString( 'Last trusted success: 2026-04-08 09:45:00 UTC via foreground warm', $output );
+		$this->assertStringContainsString( 'Last error (async warm): Cloudflare timed out.', $output );
 	}
 
 	private function reset_validation_state(): void {

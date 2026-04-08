@@ -16,6 +16,7 @@ Use these docs when you need exact answers for:
 3. `docs/reference/abilities-and-routes.md` - exact ability and REST contracts
 4. `docs/reference/shared-internals.md` - cross-cutting store utilities, shared UI components, and context helpers referenced by multiple surfaces
 5. `docs/reference/recommendation-ui-consistency.md` - shared surface taxonomy, interaction-model split, and intentional UI exceptions
+6. `docs/reference/pattern-recommendation-debugging.md` - operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage
 
 ## Surface Docs
 

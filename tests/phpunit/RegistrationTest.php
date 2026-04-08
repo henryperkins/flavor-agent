@@ -271,6 +271,10 @@ final class RegistrationTest extends TestCase {
 			$ability['input_schema']['properties']['editorStructure']['properties']['topLevelBlockTree']['items']['properties']['path']['items']['type'] ?? null
 		);
 		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['structureStats']['properties']['blockCount']['type'] ?? null
+		);
+		$this->assertSame(
 			'string',
 			$suggestion['properties']['operations']['items']['properties']['expectedTarget']['properties']['name']['type'] ?? null
 		);
@@ -304,6 +308,34 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'object',
 			$ability['input_schema']['properties']['editorStructure']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['blockTree']['items']['properties']['path']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['allBlockPaths']['items']['properties']['childCount']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$ability['input_schema']['properties']['editorStructure']['properties']['structureStats']['properties']['hasNavigation']['type'] ?? null
+		);
+		$this->assertSame(
+			'array',
+			$ability['input_schema']['properties']['editorStructure']['properties']['operationTargets']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['operationTargets']['items']['properties']['path']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['insertionAnchors']['items']['properties']['targetPath']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['editorStructure']['properties']['structuralConstraints']['properties']['contentOnlyPaths']['items']['items']['type'] ?? null
 		);
 
 		$suggestion = $ability['output_schema']['properties']['suggestions']['items'] ?? null;
@@ -354,6 +386,10 @@ final class RegistrationTest extends TestCase {
 		$ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-navigation'] ?? null;
 
 		$this->assertIsArray( $ability );
+		$this->assertSame(
+			'object',
+			$ability['input_schema']['properties']['editorContext']['type'] ?? null
+		);
 		$this->assertSame(
 			'array',
 			$ability['output_schema']['properties']['suggestions']['items']['properties']['changes']['type'] ?? null

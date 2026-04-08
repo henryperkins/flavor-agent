@@ -19,6 +19,7 @@ final class PatternAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->disable_public_docs_grounding();
 	}
 
 	public function test_list_patterns_normalizes_object_input_and_applies_filters(): void {
@@ -1343,6 +1344,13 @@ final class PatternAbilitiesTest extends TestCase {
 				'flavor_agent_qdrant_url'               => 'https://example.cloud.qdrant.io:6333',
 				'flavor_agent_qdrant_key'               => 'qdrant-key',
 			]
+		);
+	}
+
+	private function disable_public_docs_grounding(): void {
+		\add_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			static fn(): string => ''
 		);
 	}
 

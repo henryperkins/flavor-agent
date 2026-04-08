@@ -235,6 +235,95 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_global_styles_docs_guidance_falls_back_to_global_styles_guidance_on_query_miss(): void {
+		$entity_guidance = [
+			[
+				'id'        => 'entity-chunk',
+				'title'     => 'Global Styles guidance',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
+				'excerpt'   => 'Use theme.json preset families and site-wide controls before custom CSS.',
+				'score'     => 0.88,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:global-styles' ) ] = $entity_guidance;
+
+		$context = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+			],
+			'styleContext' => [
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'text' ],
+						'valueSource' => 'color',
+					],
+				],
+			],
+		];
+
+		$this->assertSame(
+			$entity_guidance,
+			$this->invoke_private_array_method(
+				StyleAbilities::class,
+				'collect_wordpress_docs_guidance',
+				[ $context, 'Keep the palette restrained.' ]
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_style_book_docs_guidance_falls_back_to_style_book_guidance_when_block_entity_cache_is_cold(): void {
+		$generic_guidance = [
+			[
+				'id'        => 'generic-chunk',
+				'title'     => 'Style Book guidance',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/styles',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/styles/',
+				'excerpt'   => 'Style Book recommendations should stay inside supported block style paths and theme.json controls.',
+				'score'     => 0.87,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:style-book' ) ] = $generic_guidance;
+
+		$context = [
+			'scope'        => [
+				'surface'        => 'style-book',
+				'scopeKey'       => 'style_book:17:core/paragraph',
+				'globalStylesId' => '17',
+				'blockName'      => 'core/paragraph',
+				'blockTitle'     => 'Paragraph',
+			],
+			'styleContext' => [
+				'styleBookTarget'     => [
+					'blockName'   => 'core/paragraph',
+					'blockTitle'  => 'Paragraph',
+					'description' => 'Primary intro copy block.',
+				],
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'typography', 'fontSize' ],
+						'valueSource' => 'font-size',
+					],
+				],
+			],
+		];
+
+		$this->assertSame(
+			$generic_guidance,
+			$this->invoke_private_array_method(
+				StyleAbilities::class,
+				'collect_wordpress_docs_guidance',
+				[ $context, 'Tune the intro typography.' ]
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
 	public function test_template_part_docs_guidance_uses_query_cache_before_entity_cache(): void {
 		$query_guidance  = [
 			[

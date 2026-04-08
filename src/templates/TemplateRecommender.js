@@ -39,8 +39,10 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
+	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
+	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import { STORE_NAME } from '../store';
 import {
@@ -340,21 +342,23 @@ export default function TemplateRecommender() {
 		clearUndoError,
 		clearTemplateRecommendations,
 		fetchTemplateRecommendations,
+		setTemplateApplyState,
 		setTemplateSelectedSuggestion,
+		setTemplateStatus,
 		undoActivity,
 	} = useDispatch(STORE_NAME);
 	const [prompt, setPrompt] = useState('');
 	const previousTemplateRef = useRef(templateRef);
 	const editorSlots = useMemo(
 		() =>
-			Array.isArray(templateBlocks) && templateBlocks.length > 0
+			Array.isArray(templateBlocks)
 				? buildEditorTemplateSlotSnapshot(templateBlocks)
 				: null,
 		[templateBlocks]
 	);
 	const editorStructure = useMemo(
 		() =>
-			Array.isArray(templateBlocks) && templateBlocks.length > 0
+			Array.isArray(templateBlocks)
 				? buildEditorTemplateTopLevelStructureSnapshot(templateBlocks)
 				: null,
 		[templateBlocks]
@@ -485,10 +489,12 @@ export default function TemplateRecommender() {
 				undoSuccessMessage: hasUndoSuccess
 					? `Undid ${lastUndoneTemplateActivity?.suggestion || 'suggestion'}.`
 					: '',
+				onDismissAction: Boolean(error),
+				onApplyDismissAction: Boolean(applyError),
+				onUndoDismissAction: Boolean(undoError),
 				emptyMessage: hasResult
 					? 'No template suggestions were returned for this request.'
 					: '',
-				onUndoDismissAction: Boolean(undoError),
 			});
 		},
 		[
@@ -515,6 +521,25 @@ export default function TemplateRecommender() {
 	const featuredSuggestionCard = isStaleResult
 		? null
 		: executableSuggestionCards[0] || advisorySuggestionCards[0] || null;
+	const dismissStatusNotice = useCallback(() => {
+		switch (statusNotice?.source) {
+			case 'request':
+				setTemplateStatus(hasStoredResultForTemplate ? 'ready' : 'idle');
+				break;
+			case 'apply':
+				setTemplateApplyState('idle');
+				break;
+			case 'undo':
+				clearUndoError();
+				break;
+		}
+	}, [
+		clearUndoError,
+		hasStoredResultForTemplate,
+		setTemplateApplyState,
+		setTemplateStatus,
+		statusNotice?.source,
+	]);
 
 	const handleFetch = useCallback(() => {
 		if (!canRecommend) {
@@ -669,9 +694,7 @@ export default function TemplateRecommender() {
 							? () => handleUndo(latestTemplateActivity.id)
 							: undefined
 					}
-					onDismiss={
-						statusNotice?.source === 'undo' ? clearUndoError : undefined
-					}
+					onDismiss={dismissStatusNotice}
 				/>
 
 				{canRecommend && hasResult && explanation && (
@@ -682,6 +705,18 @@ export default function TemplateRecommender() {
 							onEntityClick={handleEntityAction}
 						/>
 					</p>
+				)}
+
+				{canRecommend && isStaleResult && (
+					<RecommendationHero
+						title="Refresh recommendations for this template"
+						description="Flavor Agent kept the previous result visible so you can compare it against the current template."
+						tone={STALE_STATUS_LABEL}
+						why="Review and apply actions stay disabled until you refresh against the live template context."
+						primaryActionLabel={REFRESH_ACTION_LABEL}
+						onPrimaryAction={handleFetch}
+						primaryActionDisabled={isLoading}
+					/>
 				)}
 
 				{canRecommend && featuredSuggestionCard && (

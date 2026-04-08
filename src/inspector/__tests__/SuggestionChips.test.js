@@ -1,6 +1,8 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockApplySuggestion = jest.fn();
+const mockCollectBlockContext = jest.fn();
+const mockFetchBlockRecommendations = jest.fn();
 
 jest.mock('@wordpress/components', () =>
 	require('../../test-utils/wp-components').mockWpComponents()
@@ -16,6 +18,7 @@ jest.mock('../../store', () => ({
 }));
 
 jest.mock('../../context/collector', () => ({
+	collectBlockContext: (...args) => mockCollectBlockContext(...args),
 	getLiveBlockContextSignature: jest.fn(
 		(_select, clientId) => `live-context:${clientId}`
 	),
@@ -32,11 +35,30 @@ const { getContainer, getRoot } = setupReactTest();
 beforeEach(() => {
 	mockApplySuggestion.mockReset();
 	mockApplySuggestion.mockResolvedValue(true);
+	mockCollectBlockContext.mockReset();
+	mockCollectBlockContext.mockReturnValue({
+		block: { name: 'core/paragraph' },
+	});
+	mockFetchBlockRecommendations.mockReset();
 	mockUseSelect.mockReset();
 	mockUseDispatch.mockImplementation(() => ({
 		applySuggestion: mockApplySuggestion,
+		fetchBlockRecommendations: mockFetchBlockRecommendations,
 	}));
-	mockUseSelect.mockImplementation((callback) => callback(jest.fn()));
+	mockUseSelect.mockImplementation((callback) =>
+		callback((storeName) => {
+			if (storeName === 'flavor-agent') {
+				return {
+					getBlockRecommendations: () => ({
+						prompt: 'Keep the current direction.',
+					}),
+					isBlockLoading: () => false,
+				};
+			}
+
+			return {};
+		})
+	);
 });
 
 describe('SuggestionChips', () => {
@@ -95,6 +117,45 @@ describe('SuggestionChips', () => {
 		expect(
 			getContainer().querySelector('.flavor-agent-inline-feedback')?.textContent
 		).toBe('AppliedUse accent color');
+	});
+
+	test('shows stale guidance and refreshes against the latest block context', () => {
+		act(() => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					isStale
+					suggestions={[
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					]}
+				/>
+			);
+		});
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll('button')
+		).find((element) => element.textContent === 'Refresh');
+
+		expect(getContainer().textContent).toContain(
+			'These suggestions are shown for reference from the last request.'
+		);
+		expect(refreshButton).not.toBeNull();
+
+		act(() => {
+			refreshButton.click();
+		});
+
+		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
+			'block-1',
+			{
+				block: { name: 'core/paragraph' },
+			},
+			'Keep the current direction.'
+		);
 	});
 
 	test('disables an applied chip while inline feedback is visible', async () => {

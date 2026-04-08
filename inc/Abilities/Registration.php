@@ -353,6 +353,19 @@ final class Registration {
 										],
 									],
 								],
+								'structureStats' => [
+									'type'       => 'object',
+									'properties' => [
+										'blockCount'         => [ 'type' => 'integer' ],
+										'maxDepth'           => [ 'type' => 'integer' ],
+										'topLevelBlockCount' => [ 'type' => 'integer' ],
+										'hasNavigation'      => [ 'type' => 'boolean' ],
+										'hasQuery'           => [ 'type' => 'boolean' ],
+										'hasTemplateParts'   => [ 'type' => 'boolean' ],
+										'firstTopLevelBlock' => [ 'type' => 'string' ],
+										'lastTopLevelBlock'  => [ 'type' => 'string' ],
+									],
+								],
 								'currentPatternOverrides' => [ 'type' => 'object' ],
 								'currentViewportVisibility' => [ 'type' => 'object' ],
 							],
@@ -453,7 +466,129 @@ final class Registration {
 						'editorStructure'     => [
 							'type'       => 'object',
 							'properties' => [
+								'blockTree' => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'path'       => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'name'       => [ 'type' => 'string' ],
+											'label'      => [ 'type' => 'string' ],
+											'attributes' => [ 'type' => 'object' ],
+											'childCount' => [ 'type' => 'integer' ],
+											'children'   => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'object' ],
+											],
+										],
+									],
+								],
+								'allBlockPaths' => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'path'       => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'name'       => [ 'type' => 'string' ],
+											'label'      => [ 'type' => 'string' ],
+											'attributes' => [ 'type' => 'object' ],
+											'childCount' => [ 'type' => 'integer' ],
+										],
+									],
+								],
+								'topLevelBlocks' => [
+									'type'  => 'array',
+									'items' => [ 'type' => 'string' ],
+								],
+								'blockCounts' => [
+									'type' => 'object',
+								],
+								'structureStats' => [
+									'type'       => 'object',
+									'properties' => [
+										'blockCount'            => [ 'type' => 'integer' ],
+										'maxDepth'              => [ 'type' => 'integer' ],
+										'hasNavigation'         => [ 'type' => 'boolean' ],
+										'containsLogo'          => [ 'type' => 'boolean' ],
+										'containsSiteTitle'     => [ 'type' => 'boolean' ],
+										'containsSearch'        => [ 'type' => 'boolean' ],
+										'containsSocialLinks'   => [ 'type' => 'boolean' ],
+										'containsQuery'         => [ 'type' => 'boolean' ],
+										'containsColumns'       => [ 'type' => 'boolean' ],
+										'containsButtons'       => [ 'type' => 'boolean' ],
+										'containsSpacer'        => [ 'type' => 'boolean' ],
+										'containsSeparator'     => [ 'type' => 'boolean' ],
+										'firstTopLevelBlock'    => [ 'type' => 'string' ],
+										'lastTopLevelBlock'     => [ 'type' => 'string' ],
+										'hasSingleWrapperGroup' => [ 'type' => 'boolean' ],
+										'isNearlyEmpty'         => [ 'type' => 'boolean' ],
+									],
+								],
 								'currentPatternOverrides' => [ 'type' => 'object' ],
+								'operationTargets' => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'path'              => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+											'name'              => [ 'type' => 'string' ],
+											'label'             => [ 'type' => 'string' ],
+											'allowedOperations' => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'string' ],
+											],
+											'allowedInsertions' => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'string' ],
+											],
+										],
+									],
+								],
+								'insertionAnchors' => [
+									'type'  => 'array',
+									'items' => [
+										'type'       => 'object',
+										'properties' => [
+											'placement'  => [ 'type' => 'string' ],
+											'label'      => [ 'type' => 'string' ],
+											'blockName'  => [ 'type' => 'string' ],
+											'targetPath' => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+										],
+									],
+								],
+								'structuralConstraints' => [
+									'type'       => 'object',
+									'properties' => [
+										'contentOnlyPaths' => [
+											'type'  => 'array',
+											'items' => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+										],
+										'lockedPaths'      => [
+											'type'  => 'array',
+											'items' => [
+												'type'  => 'array',
+												'items' => [ 'type' => 'integer' ],
+											],
+										],
+										'hasContentOnly'   => [ 'type' => 'boolean' ],
+										'hasLockedBlocks'  => [ 'type' => 'boolean' ],
+									],
+								],
 							],
 						],
 					],
@@ -573,6 +708,10 @@ final class Registration {
 						'navigationMarkup' => [
 							'type'        => 'string',
 							'description' => 'Serialized navigation block markup',
+						],
+						'editorContext'    => [
+							'type'        => 'object',
+							'description' => 'Selected navigation block context snapshot from the editor.',
 						],
 						'prompt'           => [ 'type' => 'string' ],
 					],

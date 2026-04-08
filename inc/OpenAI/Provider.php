@@ -33,6 +33,13 @@ final class Provider {
 	private static bool $has_fresh_runtime_chat_metrics = false;
 
 	/**
+	 * @var array<string, mixed>|null
+	 */
+	private static ?array $last_runtime_chat_diagnostics = null;
+
+	private static bool $has_fresh_runtime_chat_diagnostics = false;
+
+	/**
 	 * @return array<string, string>
 	 */
 	public static function direct_choices(): array {
@@ -347,6 +354,10 @@ final class Provider {
 	 *   pathLabel: string,
 	 *   credentialSource: string,
 	 *   credentialSourceLabel: string,
+	 *   transport?: array<string, mixed>,
+	 *   requestSummary?: array<string, mixed>,
+	 *   responseSummary?: array<string, mixed>,
+	 *   errorSummary?: array<string, mixed>,
 	 *   usedFallback: bool
 	 * }
 	 */
@@ -365,6 +376,7 @@ final class Provider {
 		$provider_label    = self::provider_label_for_request_meta( $provider );
 		$connector_meta    = self::connector_meta_for_request_meta( $provider );
 		$metrics           = self::active_chat_metrics();
+		$diagnostics       = self::active_chat_diagnostics();
 		$backend_label     = trim( (string) ( $config['label'] ?? $provider_label ) );
 		$model             = trim( (string) ( $config['model'] ?? '' ) );
 		$used_fallback     = $provider !== $selected_provider;
@@ -422,7 +434,7 @@ final class Provider {
 			$credential_label  = 'Settings > Flavor Agent';
 		}
 
-		return [
+		$meta = [
 			'selectedProvider'      => $selected_provider,
 			'selectedProviderLabel' => self::provider_label_for_request_meta( $selected_provider ),
 			'connectorId'           => $connector_meta['id'],
@@ -441,6 +453,14 @@ final class Provider {
 			'latencyMs'             => $metrics['latencyMs'],
 			'usedFallback'          => $used_fallback,
 		];
+
+		foreach ( [ 'transport', 'requestSummary', 'responseSummary', 'errorSummary' ] as $key ) {
+			if ( is_array( $diagnostics[ $key ] ?? null ) && [] !== $diagnostics[ $key ] ) {
+				$meta[ $key ] = $diagnostics[ $key ];
+			}
+		}
+
+		return $meta;
 	}
 
 	/**
@@ -453,6 +473,18 @@ final class Provider {
 			? $normalized
 			: null;
 		self::$has_fresh_runtime_chat_metrics = true;
+	}
+
+	/**
+	 * @param array<string, mixed>|null $diagnostics
+	 */
+	public static function record_runtime_chat_diagnostics( ?array $diagnostics ): void {
+		$normalized = self::normalize_runtime_chat_diagnostics( $diagnostics );
+
+		self::$last_runtime_chat_diagnostics = null !== $normalized
+			? $normalized
+			: null;
+		self::$has_fresh_runtime_chat_diagnostics = true;
 	}
 
 	public static function active_embedding_model(): ?string {
@@ -557,6 +589,24 @@ final class Provider {
 	}
 
 	/**
+	 * @return array{
+	 *   transport?: array<string, mixed>,
+	 *   requestSummary?: array<string, mixed>,
+	 *   responseSummary?: array<string, mixed>,
+	 *   errorSummary?: array<string, mixed>
+	 * }
+	 */
+	private static function active_chat_diagnostics(): array {
+		if ( self::$has_fresh_runtime_chat_diagnostics ) {
+			self::$has_fresh_runtime_chat_diagnostics = false;
+
+			return self::$last_runtime_chat_diagnostics ?? [];
+		}
+
+		return [];
+	}
+
+	/**
 	 * @param array<string, mixed>|null $metrics
 	 * @return array{tokenUsage: array<string, int>, latencyMs: int}|null
 	 */
@@ -595,6 +645,26 @@ final class Provider {
 			'tokenUsage' => $token_usage,
 			'latencyMs'  => null !== $latency_ms ? $latency_ms : null,
 		];
+	}
+
+	/**
+	 * @param array<string, mixed>|null $diagnostics
+	 * @return array<string, array<string, mixed>>|null
+	 */
+	private static function normalize_runtime_chat_diagnostics( ?array $diagnostics ): ?array {
+		if ( ! is_array( $diagnostics ) ) {
+			return null;
+		}
+
+		$normalized = [];
+
+		foreach ( [ 'transport', 'requestSummary', 'responseSummary', 'errorSummary' ] as $key ) {
+			if ( is_array( $diagnostics[ $key ] ?? null ) && [] !== $diagnostics[ $key ] ) {
+				$normalized[ $key ] = $diagnostics[ $key ];
+			}
+		}
+
+		return [] !== $normalized ? $normalized : null;
 	}
 
 	private static function normalize_runtime_metric_int( $value ): ?int {

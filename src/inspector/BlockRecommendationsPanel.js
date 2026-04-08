@@ -345,7 +345,11 @@ export function BlockRecommendationsContent({
 		[advisoryBlockSuggestions, executableBlockSuggestions, isStaleResult]
 	);
 	const diagnosticActivityEntry = useMemo(() => {
-		if (!hasFreshResult || !requestDiagnostics?.hasEmptyBlockResult) {
+		const isFailureDiagnostic = requestDiagnostics?.type === 'failure';
+		const isEmptyResultDiagnostic =
+			hasFreshResult && requestDiagnostics?.hasEmptyBlockResult;
+
+		if (!isFailureDiagnostic && !isEmptyResultDiagnostic) {
 			return null;
 		}
 
@@ -372,6 +376,14 @@ export function BlockRecommendationsContent({
 							ai: requestDiagnostics.requestMeta,
 					  }
 					: {}),
+				...(requestDiagnostics.errorMessage
+					? {
+							error: {
+								code: requestDiagnostics.errorCode || '',
+								message: requestDiagnostics.errorMessage,
+							},
+					  }
+					: {}),
 			},
 			diagnostic: {
 				detailLines: Array.isArray(requestDiagnostics.detailLines)
@@ -385,8 +397,8 @@ export function BlockRecommendationsContent({
 			},
 			undo: {
 				canUndo: false,
-				status: 'failed',
-				error: null,
+				status: isFailureDiagnostic ? 'failed' : 'review',
+				error: isFailureDiagnostic ? requestDiagnostics.errorMessage || null : null,
 			},
 			timestamp: requestDiagnostics.timestamp || new Date().toISOString(),
 			executionResult: 'review',

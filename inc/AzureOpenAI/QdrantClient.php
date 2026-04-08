@@ -8,6 +8,9 @@ final class QdrantClient {
 
 	private const COLLECTION_PREFIX      = 'flavor-agent-patterns';
 	private const COLLECTION_HASH_LENGTH = 16;
+	private const REQUEST_TIMEOUT        = 10;
+	private const HEALTH_PROBES          = [ 'healthz', 'livez', 'readyz' ];
+	private const OPTIMIZATION_FLAGS     = [ 'queued', 'completed', 'idle_segments' ];
 
 	/**
 	 * @param array{signature_hash?: string}|null $embedding_signature
@@ -35,23 +38,18 @@ final class QdrantClient {
 		?string $base_url = null,
 		?string $api_key = null
 	): true|\WP_Error {
-		$base_url = trim( (string) ( $base_url ?? get_option( 'flavor_agent_qdrant_url', '' ) ) );
-		$api_key  = trim( (string) ( $api_key ?? get_option( 'flavor_agent_qdrant_key', '' ) ) );
+		$connection = self::connection( $base_url, $api_key );
 
-		if ( '' === $base_url || '' === $api_key ) {
-			return new \WP_Error(
-				'missing_credentials',
-				'Qdrant credentials are not configured. Go to Settings > Flavor Agent.',
-				[ 'status' => 400 ]
-			);
+		if ( is_wp_error( $connection ) ) {
+			return $connection;
 		}
 
 		$response = wp_remote_get(
-			rtrim( $base_url, '/' ) . '/collections',
+			$connection['base_url'] . '/collections',
 			[
-				'timeout' => 10,
+				'timeout' => self::REQUEST_TIMEOUT,
 				'headers' => [
-					'api-key' => $api_key,
+					'api-key' => $connection['api_key'],
 				],
 			]
 		);
@@ -65,13 +63,9 @@ final class QdrantClient {
 		$data   = json_decode( $raw, true );
 
 		if ( $status < 200 || $status >= 300 ) {
-			$message = is_array( $data )
-				? ( $data['status']['error'] ?? $data['error'] ?? $data['message'] ?? "Qdrant validation returned HTTP {$status}" )
-				: "Qdrant validation returned HTTP {$status}";
-
 			return new \WP_Error(
 				'qdrant_validation_error',
-				is_string( $message ) ? $message : "Qdrant validation returned HTTP {$status}",
+				self::extract_error_message( $data, "Qdrant validation returned HTTP {$status}" ),
 				[ 'status' => 400 ]
 			);
 		}
@@ -168,6 +162,139 @@ final class QdrantClient {
 		}
 
 		return true;
+	}
+
+	/**
+	 * @return array{probe:string,status:int,message:string}|\WP_Error
+	 */
+	public static function probe_health(
+		string $probe = 'readyz',
+		?string $base_url = null,
+		?string $api_key = null
+	): array|\WP_Error {
+		$probe = sanitize_key( $probe );
+
+		if ( ! in_array( $probe, self::HEALTH_PROBES, true ) ) {
+			return new \WP_Error(
+				'qdrant_health_probe_invalid',
+				sprintf(
+					'Unsupported Qdrant health probe "%s". Expected one of: %s.',
+					$probe,
+					implode( ', ', self::HEALTH_PROBES )
+				),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$connection = self::connection( $base_url, $api_key );
+
+		if ( is_wp_error( $connection ) ) {
+			return $connection;
+		}
+
+		$response = self::request_text(
+			'GET',
+			$connection['base_url'] . '/' . $probe,
+			"probe {$probe}",
+			'qdrant_health_error',
+			[],
+			$connection['api_key']
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$message = trim( $response['body'] );
+
+		return [
+			'probe'   => $probe,
+			'status'  => $response['status'],
+			'message' => '' !== $message
+				? $message
+				: sprintf( 'Qdrant %s returned HTTP %d.', $probe, $response['status'] ),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function get_telemetry(): array|\WP_Error {
+		$base_url = self::base_url();
+
+		if ( is_wp_error( $base_url ) ) {
+			return $base_url;
+		}
+
+		$response = self::request(
+			'GET',
+			$base_url . '/telemetry',
+			'get telemetry',
+			'qdrant_telemetry_error'
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$result = $response['body']['result'] ?? [];
+
+		if ( is_array( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_Error(
+			'qdrant_telemetry_parse_error',
+			'Failed to parse Qdrant telemetry response.',
+			[ 'status' => 502 ]
+		);
+	}
+
+	/**
+	 * @param string[] $detail_flags
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public static function get_collection_optimizations( string $collection_name, array $detail_flags = [] ): array|\WP_Error {
+		$collection_url = self::collection_url( $collection_name );
+
+		if ( is_wp_error( $collection_url ) ) {
+			return $collection_url;
+		}
+
+		$detail_flags = self::normalize_optimization_flags( $detail_flags );
+
+		if ( is_wp_error( $detail_flags ) ) {
+			return $detail_flags;
+		}
+
+		$url = $collection_url . '/optimizations';
+
+		if ( [] !== $detail_flags ) {
+			$url .= '?with=' . rawurlencode( implode( ',', $detail_flags ) );
+		}
+
+		$response = self::request(
+			'GET',
+			$url,
+			'get optimizations',
+			'qdrant_optimizations_error'
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$result = $response['body']['result'] ?? [];
+
+		if ( is_array( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_Error(
+			'qdrant_optimizations_parse_error',
+			'Failed to parse Qdrant optimizations response.',
+			[ 'status' => 502 ]
+		);
 	}
 
 	/**
@@ -367,19 +494,24 @@ final class QdrantClient {
 		return true;
 	}
 
-	private static function collection_url( string $collection_name ): string|\WP_Error {
-		$base = get_option( 'flavor_agent_qdrant_url', '' );
-		$key  = get_option( 'flavor_agent_qdrant_key', '' );
+	private static function base_url(): string|\WP_Error {
+		$connection = self::connection();
 
-		if ( empty( $base ) || empty( $key ) ) {
-			return new \WP_Error(
-				'missing_credentials',
-				'Qdrant credentials are not configured. Go to Settings > Flavor Agent.',
-				[ 'status' => 400 ]
-			);
+		if ( is_wp_error( $connection ) ) {
+			return $connection;
 		}
 
-		return rtrim( $base, '/' ) . '/collections/' . $collection_name;
+		return $connection['base_url'];
+	}
+
+	private static function collection_url( string $collection_name ): string|\WP_Error {
+		$base_url = self::base_url();
+
+		if ( is_wp_error( $base_url ) ) {
+			return $base_url;
+		}
+
+		return $base_url . '/collections/' . $collection_name;
 	}
 
 	/**
@@ -464,8 +596,96 @@ final class QdrantClient {
 		);
 	}
 
-	private static function api_key(): string {
-		return get_option( 'flavor_agent_qdrant_key', '' );
+	private static function api_key( ?string $api_key = null ): string {
+		return trim( (string) ( $api_key ?? get_option( 'flavor_agent_qdrant_key', '' ) ) );
+	}
+
+	/**
+	 * @return array{base_url:string,api_key:string}|\WP_Error
+	 */
+	private static function connection( ?string $base_url = null, ?string $api_key = null ): array|\WP_Error {
+		$resolved_base_url = trim( (string) ( $base_url ?? get_option( 'flavor_agent_qdrant_url', '' ) ) );
+		$resolved_api_key  = self::api_key( $api_key );
+
+		if ( '' === $resolved_base_url || '' === $resolved_api_key ) {
+			return new \WP_Error(
+				'missing_credentials',
+				'Qdrant credentials are not configured. Go to Settings > Flavor Agent.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		return [
+			'base_url' => rtrim( $resolved_base_url, '/' ),
+			'api_key'  => $resolved_api_key,
+		];
+	}
+
+	/**
+	 * @param string[] $detail_flags
+	 * @return string[]|\WP_Error
+	 */
+	private static function normalize_optimization_flags( array $detail_flags ): array|\WP_Error {
+		$normalized_flags = [];
+
+		foreach ( $detail_flags as $detail_flag ) {
+			$candidate = sanitize_key( (string) $detail_flag );
+
+			if ( ! in_array( $candidate, self::OPTIMIZATION_FLAGS, true ) ) {
+				return new \WP_Error(
+					'qdrant_optimizations_invalid_detail_flag',
+					sprintf(
+						'Unsupported Qdrant optimization detail flag "%s". Expected one of: %s.',
+						$candidate,
+						implode( ', ', self::OPTIMIZATION_FLAGS )
+					),
+					[ 'status' => 400 ]
+				);
+			}
+
+			if ( ! in_array( $candidate, $normalized_flags, true ) ) {
+				$normalized_flags[] = $candidate;
+			}
+		}
+
+		return $normalized_flags;
+	}
+
+	private static function extract_error_message( mixed $payload, string $fallback ): string {
+		if ( is_array( $payload ) ) {
+			$message = $payload['status']['error'] ?? $payload['error'] ?? $payload['message'] ?? null;
+
+			return is_string( $message ) && '' !== trim( $message )
+				? $message
+				: $fallback;
+		}
+
+		if ( '' === trim( $payload ) ) {
+			return $fallback;
+		}
+
+		$data = json_decode( $payload, true );
+
+		if ( JSON_ERROR_NONE === json_last_error() && is_array( $data ) ) {
+			return self::extract_error_message( $data, $fallback );
+		}
+
+		$message = trim( wp_strip_all_tags( $payload ) );
+
+		return '' !== $message ? $message : $fallback;
+	}
+
+	/**
+	 * @return array{method:string,timeout:int,headers:array<string,string>}
+	 */
+	private static function request_args( string $method, ?string $api_key = null ): array {
+		return [
+			'method'  => $method,
+			'timeout' => self::REQUEST_TIMEOUT,
+			'headers' => [
+				'api-key' => self::api_key( $api_key ),
+			],
+		];
 	}
 
 	/**
@@ -477,15 +697,10 @@ final class QdrantClient {
 		string $operation,
 		string $error_code,
 		?array $body = null,
-		array $accepted_statuses = []
+		array $accepted_statuses = [],
+		?string $api_key = null
 	): array|\WP_Error {
-		$args = [
-			'method'  => $method,
-			'timeout' => 10,
-			'headers' => [
-				'api-key' => self::api_key(),
-			],
-		];
+		$args = self::request_args( $method, $api_key );
 
 		if ( $body !== null ) {
 			$args['headers']['Content-Type'] = 'application/json';
@@ -501,14 +716,10 @@ final class QdrantClient {
 
 		if ( 429 === $status ) {
 			$raw_body = wp_remote_retrieve_body( $response );
-			$data     = json_decode( $raw_body, true );
-			$message  = is_array( $data )
-				? ( $data['status']['error'] ?? $data['error'] ?? $data['message'] ?? "Qdrant {$operation} is temporarily rate limited." )
-				: "Qdrant {$operation} is temporarily rate limited.";
 
 			return BaseHttpClient::build_retryable_rate_limit_error(
 				'qdrant_rate_limited',
-				(string) $message,
+				self::extract_error_message( $raw_body, "Qdrant {$operation} is temporarily rate limited." ),
 				wp_remote_retrieve_header( $response, 'retry-after' )
 			);
 		}
@@ -532,9 +743,9 @@ final class QdrantClient {
 			: in_array( $status, $accepted_statuses, true );
 
 		if ( ! $is_success ) {
-			$message = $data['status']['error'] ?? $data['error'] ?? $data['message'] ?? "Qdrant {$operation} returned HTTP {$status}";
+			$message = self::extract_error_message( $data, "Qdrant {$operation} returned HTTP {$status}" );
 
-			if ( $status === 400 && is_string( $message ) && str_contains( strtolower( $message ), 'already exists' ) ) {
+			if ( $status === 400 && str_contains( strtolower( $message ), 'already exists' ) ) {
 				return [
 					'status' => $status,
 					'body'   => $data,
@@ -547,6 +758,52 @@ final class QdrantClient {
 		return [
 			'status' => $status,
 			'body'   => is_array( $data ) ? $data : [],
+		];
+	}
+
+	/**
+	 * @return array{status:int,body:string}|\WP_Error
+	 */
+	private static function request_text(
+		string $method,
+		string $url,
+		string $operation,
+		string $error_code,
+		array $accepted_statuses = [],
+		?string $api_key = null
+	): array|\WP_Error {
+		$response = wp_remote_request( $url, self::request_args( $method, $api_key ) );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$status   = wp_remote_retrieve_response_code( $response );
+		$raw_body = wp_remote_retrieve_body( $response );
+
+		if ( 429 === $status ) {
+			return BaseHttpClient::build_retryable_rate_limit_error(
+				'qdrant_rate_limited',
+				self::extract_error_message( $raw_body, "Qdrant {$operation} is temporarily rate limited." ),
+				wp_remote_retrieve_header( $response, 'retry-after' )
+			);
+		}
+
+		$is_success = empty( $accepted_statuses )
+			? $status >= 200 && $status < 300
+			: in_array( $status, $accepted_statuses, true );
+
+		if ( ! $is_success ) {
+			return new \WP_Error(
+				$error_code,
+				self::extract_error_message( $raw_body, "Qdrant {$operation} returned HTTP {$status}" ),
+				[ 'status' => 502 ]
+			);
+		}
+
+		return [
+			'status' => $status,
+			'body'   => $raw_body,
 		];
 	}
 }

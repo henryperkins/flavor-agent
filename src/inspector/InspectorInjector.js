@@ -73,15 +73,19 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			storedContextSignature !== liveContextSignature;
 		const isContentRestricted =
 			editingMode === 'contentOnly' || isInsideContentOnly;
-		const visibleRecommendations = hasMatchingResult
+		const hasVisibleResult = hasMatchingResult || isStaleResult;
+		const visibleRecommendations = hasVisibleResult
 			? recommendations
 			: null;
+		const visibleSettingsRecommendations = hasVisibleResult
+			? recommendations?.settings || []
+			: [];
 		const visibleStyleRecommendations =
-			! isContentRestricted && ( hasMatchingResult || isStaleResult )
+			! isContentRestricted && hasVisibleResult
 				? recommendations?.styles || []
 				: [];
 		const visibleDelegatedStyleRecommendations =
-			! isContentRestricted && hasMatchingResult
+			! isContentRestricted && hasVisibleResult
 				? recommendations?.styles || []
 				: [];
 
@@ -91,7 +95,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 
 		const hasInlineRecs =
 			visibleRecommendations &&
-			( visibleRecommendations.settings?.length > 0 ||
+			( visibleSettingsRecommendations.length > 0 ||
 				visibleDelegatedStyleRecommendations.length > 0 ||
 				visibleRecommendations.block?.length > 0 );
 		const hasStyleRecs = visibleStyleRecommendations.length > 0;
@@ -104,10 +108,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 					<BlockRecommendationsPanel clientId={ clientId } />
 
 					{ hasInlineRecs &&
-						visibleRecommendations.settings?.length > 0 && (
+						visibleSettingsRecommendations.length > 0 && (
 							<SettingsRecommendations
 								clientId={ clientId }
-								suggestions={ visibleRecommendations.settings }
+								suggestions={ visibleSettingsRecommendations }
+								isStale={ isStaleResult }
 							/>
 						) }
 				</InspectorControls>
@@ -131,7 +136,8 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								key={ `settings-${ config.group }` }
 								{ ...config }
 								clientId={ clientId }
-								suggestions={ visibleRecommendations.settings }
+								suggestions={ visibleSettingsRecommendations }
+								isStale={ isStaleResult }
 							/>
 						) ) }
 						{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
@@ -142,6 +148,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								suggestions={
 									visibleDelegatedStyleRecommendations
 								}
+								isStale={ isStaleResult }
 							/>
 						) ) }
 					</>
@@ -155,6 +162,7 @@ function SubPanelSuggestions( {
 	group,
 	panel,
 	clientId,
+	isStale = false,
 	suggestions,
 	label,
 	title,
@@ -171,6 +179,7 @@ function SubPanelSuggestions( {
 			<SuggestionChips
 				clientId={ clientId }
 				suggestions={ filtered }
+				isStale={ isStale }
 				label={ label }
 				title={ title }
 				tone="Apply now"

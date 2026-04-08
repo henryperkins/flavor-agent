@@ -158,6 +158,25 @@ describe( 'activity log utils', () => {
 						ability: 'flavor-agent/recommend-block',
 						route: 'POST /flavor-agent/v1/recommend-block',
 						usedFallback: false,
+						transport: {
+							host: 'judas2.openai.azure.com',
+							path: '/openai/v1/responses',
+							timeoutSeconds: 180,
+						},
+						requestSummary: {
+							bodyBytes: 18420,
+							instructionsChars: 17200,
+							inputChars: 512,
+							reasoningEffort: 'high',
+						},
+						responseSummary: {
+							httpStatus: 504,
+							providerRequestId: 'apim-1234',
+						},
+						errorSummary: {
+							wrappedMessage:
+								'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+						},
 					},
 					reference: 'block:block-1:4',
 				},
@@ -190,6 +209,15 @@ describe( 'activity log utils', () => {
 			connectorPlugin: 'Not recorded',
 			requestAbility: 'flavor-agent/recommend-block',
 			requestRoute: 'POST /flavor-agent/v1/recommend-block',
+			transportEndpoint:
+				'judas2.openai.azure.com/openai/v1/responses',
+			timeout: '180 s',
+			requestPayload:
+				'18420 bytes · 17200 instruction chars · 512 input chars · reasoning high',
+			responseSummary: 'HTTP 504',
+			providerRequestId: 'apim-1234',
+			transportError:
+				'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
 			undoReason:
 				'This is the newest still-applied AI action for this entity.',
 		} );

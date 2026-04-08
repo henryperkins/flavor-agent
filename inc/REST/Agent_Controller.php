@@ -214,6 +214,12 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'editorContext'    => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 					'document'         => [
 						'required'          => false,
 						'type'              => 'object',
@@ -625,7 +631,7 @@ final class Agent_Controller {
 		);
 
 		if ( \is_wp_error( $result ) ) {
-			return $result;
+			return self::append_request_meta_to_error_for_route( $result, 'recommend-block' );
 		}
 
 		return new \WP_REST_Response(
@@ -666,6 +672,7 @@ final class Agent_Controller {
 		$result = ContentAbilities::recommend_content( $input );
 
 		if ( \is_wp_error( $result ) ) {
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-content' );
 			self::persist_request_diagnostic_failure_activity(
 				'content',
 				$result,
@@ -707,7 +714,7 @@ final class Agent_Controller {
 		$result = PatternIndex::sync();
 
 		if ( \is_wp_error( $result ) ) {
-			return $result;
+			return self::append_request_meta_to_error_for_route( $result, 'sync-patterns' );
 		}
 
 		$result['runtimeState'] = PatternIndex::get_runtime_state();
@@ -752,6 +759,7 @@ final class Agent_Controller {
 		$result = PatternAbilities::recommend_patterns( $input );
 
 		if ( \is_wp_error( $result ) ) {
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-patterns' );
 			self::persist_request_diagnostic_failure_activity(
 				'pattern',
 				$result,
@@ -802,9 +810,15 @@ final class Agent_Controller {
 			$input['prompt'] = $prompt;
 		}
 
+		$editor_context = $request->get_param( 'editorContext' );
+		if ( \is_array( $editor_context ) || \is_object( $editor_context ) ) {
+			$input['editorContext'] = self::sanitize_structured_value( $editor_context );
+		}
+
 		$result = NavigationAbilities::recommend_navigation( $input );
 
 		if ( \is_wp_error( $result ) ) {
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-navigation' );
 			self::persist_request_diagnostic_failure_activity(
 				'navigation',
 				$result,
@@ -859,6 +873,40 @@ final class Agent_Controller {
 		$payload['requestMeta'] = $request_meta;
 
 		return $payload;
+	}
+
+	private static function append_request_meta_to_error_for_route( \WP_Error $error, string $route_key ): \WP_Error {
+		$route_definition = self::REQUEST_META_ROUTES[ $route_key ] ?? null;
+
+		if ( ! \is_array( $route_definition ) ) {
+			return $error;
+		}
+
+		$code = $error->get_error_code();
+		$data = $error->get_error_data( $code );
+		$data = \is_array( $data )
+			? $data
+			: ( null !== $data ? [ 'originalData' => $data ] : [] );
+		$request_meta = \is_array( $data['requestMeta'] ?? null )
+			? $data['requestMeta']
+			: [];
+
+		if ( [] === $request_meta && ! empty( $route_definition['includeProviderMeta'] ) ) {
+			$request_meta = Provider::active_chat_request_meta();
+		}
+
+		if ( ! empty( $route_definition['ability'] ) && \is_string( $route_definition['ability'] ) ) {
+			$request_meta['ability'] = $route_definition['ability'];
+		}
+
+		$request_meta['route'] = $route_definition['route'];
+		$data['requestMeta']   = $request_meta;
+
+		return new \WP_Error(
+			$code,
+			$error->get_error_message( $code ),
+			$data
+		);
 	}
 
 	/**
@@ -957,6 +1005,8 @@ final class Agent_Controller {
 
 		$reference = self::build_request_diagnostic_reference( $surface, $target, $document );
 		$message   = trim( (string) $error->get_error_message() );
+		$error_data = $error->get_error_data();
+		$error_data = \is_array( $error_data ) ? $error_data : [];
 
 		ActivityRepository::create(
 			[
@@ -976,10 +1026,11 @@ final class Agent_Controller {
 				'request'         => [
 					'prompt'    => trim( (string) ( $request_context['prompt'] ?? '' ) ),
 					'reference' => $reference,
+					'ai'        => \is_array( $error_data['requestMeta'] ?? null ) ? $error_data['requestMeta'] : [],
 					'error'     => [
 						'code'    => trim( (string) $error->get_error_code() ),
 						'message' => $message,
-						'data'    => $error->get_error_data(),
+						'data'    => $error_data,
 					],
 				],
 				'document'        => $document,
@@ -1107,7 +1158,7 @@ final class Agent_Controller {
 		$result = TemplateAbilities::recommend_template( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return $result;
+			return self::append_request_meta_to_error_for_route( $result, 'recommend-template' );
 		}
 
 		return new \WP_REST_Response(
@@ -1137,7 +1188,7 @@ final class Agent_Controller {
 		$result = StyleAbilities::recommend_style( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return $result;
+			return self::append_request_meta_to_error_for_route( $result, 'recommend-style' );
 		}
 
 		return new \WP_REST_Response(
@@ -1173,7 +1224,7 @@ final class Agent_Controller {
 		$result = TemplateAbilities::recommend_template_part( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return $result;
+			return self::append_request_meta_to_error_for_route( $result, 'recommend-template-part' );
 		}
 
 		return new \WP_REST_Response(

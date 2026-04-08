@@ -23,8 +23,10 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	MANUAL_IDEAS_LABEL,
+	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
+	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {
 	buildGlobalStylesExecutionContractFromSettings,
@@ -205,6 +207,7 @@ function GlobalStylesPanel( {
 	hasResult,
 	hasMatchingResult,
 	onNoticeAction,
+	onNoticeDismiss,
 	onRequest,
 	onReview,
 	onCancelReview,
@@ -351,6 +354,7 @@ function GlobalStylesPanel( {
 			<AIStatusNotice
 				notice={ panelNotice }
 				onAction={ onNoticeAction }
+				onDismiss={ onNoticeDismiss }
 			/>
 
 			<SurfaceComposer
@@ -382,6 +386,7 @@ function GlobalStylesPanel( {
 				<AIStatusNotice
 					notice={ inlineNotice }
 					onAction={ onNoticeAction }
+					onDismiss={ onNoticeDismiss }
 					className="flavor-agent-style-feedback-notice"
 				/>
 			) }
@@ -390,6 +395,18 @@ function GlobalStylesPanel( {
 				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
 					{ explanation }
 				</p>
+			) }
+
+			{ isStale && (
+				<RecommendationHero
+					title="Refresh recommendations for Global Styles"
+					description="Flavor Agent kept the previous result visible so you can compare it against the current Global Styles config."
+					tone={ STALE_STATUS_LABEL }
+					why="Review and apply actions stay disabled until you refresh against the live Global Styles context."
+					primaryActionLabel={ REFRESH_ACTION_LABEL }
+					onPrimaryAction={ onRequest }
+					primaryActionDisabled={ isLoading }
+				/>
 			) }
 
 			{ featuredSuggestion && (
@@ -448,7 +465,7 @@ function GlobalStylesPanel( {
 					summary={ selectedSuggestion.description }
 					onConfirm={ onApply }
 					onCancel={ onCancelReview }
-					confirmDisabled={ isApplying || isStale }
+					confirmDisabled={ isApplying || isUndoing || isStale }
 					confirmLabel={ isApplying ? 'Applying…' : 'Confirm Apply' }
 					className="flavor-agent-style-review"
 					hint={ reviewHint }
@@ -457,6 +474,7 @@ function GlobalStylesPanel( {
 						<AIStatusNotice
 							notice={ inlineNotice }
 							onAction={ onNoticeAction }
+							onDismiss={ onNoticeDismiss }
 							className="flavor-agent-style-feedback-notice"
 						/>
 					) }
@@ -695,14 +713,18 @@ export default function GlobalStylesRecommender() {
 
 	const {
 		applyGlobalStylesSuggestion,
+		clearUndoError,
 		clearGlobalStylesRecommendations,
 		fetchGlobalStylesRecommendations,
+		setGlobalStylesApplyState,
 		setGlobalStylesSelectedSuggestion,
+		setGlobalStylesStatus,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 
 	const isLoading = status === 'loading';
-	const isApplying = applyStatus === 'applying' || undoStatus === 'undoing';
+	const isApplying = applyStatus === 'applying';
+	const isUndoing = undoStatus === 'undoing';
 	const baseNotice = buildNotice
 		? buildNotice( {
 				requestError: currentError,
@@ -723,6 +745,9 @@ export default function GlobalStylesRecommender() {
 					( selectedSuggestion?.operations || [] ).length > 0,
 				applyStatus,
 				undoStatus,
+				onDismissAction: Boolean( currentError ),
+				onApplyDismissAction: Boolean( currentApplyError ),
+				onUndoDismissAction: Boolean( currentUndoError ),
 				emptyMessage:
 					'No safe Global Styles changes were returned for this prompt.',
 				advisoryMessage:
@@ -746,6 +771,27 @@ export default function GlobalStylesRecommender() {
 
 	const notice = baseNotice || fallbackNotice;
 	const isStyleBookActive = Boolean( styleBookUiState?.isActive );
+	const dismissStatusNotice = useCallback( () => {
+		switch ( notice?.source ) {
+			case 'request':
+				setGlobalStylesStatus(
+					hasStoredResultForScope ? 'ready' : 'idle'
+				);
+				break;
+			case 'apply':
+				setGlobalStylesApplyState( 'idle' );
+				break;
+			case 'undo':
+				clearUndoError();
+				break;
+		}
+	}, [
+		clearUndoError,
+		hasStoredResultForScope,
+		notice?.source,
+		setGlobalStylesApplyState,
+		setGlobalStylesStatus,
+	] );
 
 	useEffect( () => {
 		if ( typeof document === 'undefined' ) {
@@ -926,7 +972,7 @@ export default function GlobalStylesRecommender() {
 			visibilityConstraintCount={ templateVisibility?.blockCount || 0 }
 			isLoading={ isLoading }
 			isApplying={ isApplying }
-			isUndoing={ undoStatus === 'undoing' }
+			isUndoing={ isUndoing }
 			isStale={ isStaleResult }
 			selectedSuggestion={ selectedSuggestion }
 			suggestions={ suggestions }
@@ -941,6 +987,7 @@ export default function GlobalStylesRecommender() {
 					? () => handleUndo( latestGlobalStylesActivity.id )
 					: undefined
 			}
+			onNoticeDismiss={ dismissStatusNotice }
 			onRequest={ handleRequest }
 			onReview={ setGlobalStylesSelectedSuggestion }
 			onCancelReview={ () => setGlobalStylesSelectedSuggestion( null ) }

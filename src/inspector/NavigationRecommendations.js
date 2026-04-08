@@ -22,6 +22,10 @@ import {
 	MANUAL_IDEAS_LABEL,
 	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
+import {
+	collectBlockContext,
+	getLiveBlockContextSignature,
+} from '../context/collector';
 import { getSurfaceCapability } from '../utils/capability-flags';
 
 function formatChangeType( type ) {
@@ -45,6 +49,7 @@ export function buildNavigationFetchInput( {
 	block,
 	blockClientId,
 	prompt = '',
+	editorContext = null,
 } ) {
 	if ( block?.name !== 'core/navigation' ) {
 		return null;
@@ -55,6 +60,8 @@ export function buildNavigationFetchInput( {
 		blockClientId,
 	};
 	const trimmedPrompt = prompt.trim();
+	const navigationEditorContext =
+		buildNavigationEditorContext( editorContext );
 
 	if ( Number.isInteger( menuId ) && menuId > 0 ) {
 		input.menuId = menuId;
@@ -70,6 +77,10 @@ export function buildNavigationFetchInput( {
 		input.prompt = trimmedPrompt;
 	}
 
+	if ( navigationEditorContext ) {
+		input.editorContext = navigationEditorContext;
+	}
+
 	if ( ! input.menuId && ! input.navigationMarkup ) {
 		return null;
 	}
@@ -77,10 +88,70 @@ export function buildNavigationFetchInput( {
 	return input;
 }
 
-function buildNavigationContextSignature( { block, blockClientId } ) {
+function buildNavigationEditorContext( editorContext ) {
+	if ( editorContext?.block?.name !== 'core/navigation' ) {
+		return null;
+	}
+
+	const context = {
+		block: {
+			name: editorContext.block.name,
+		},
+	};
+	const structuralIdentity =
+		editorContext?.block?.structuralIdentity &&
+		typeof editorContext.block.structuralIdentity === 'object'
+			? editorContext.block.structuralIdentity
+			: {};
+
+	if ( editorContext?.block?.title ) {
+		context.block.title = editorContext.block.title;
+	}
+
+	if ( Object.keys( structuralIdentity ).length > 0 ) {
+		context.block.structuralIdentity = structuralIdentity;
+	}
+
+	if (
+		Array.isArray( editorContext?.siblingsBefore ) &&
+		editorContext.siblingsBefore.length > 0
+	) {
+		context.siblingsBefore = editorContext.siblingsBefore.filter( Boolean );
+	}
+
+	if (
+		Array.isArray( editorContext?.siblingsAfter ) &&
+		editorContext.siblingsAfter.length > 0
+	) {
+		context.siblingsAfter = editorContext.siblingsAfter.filter( Boolean );
+	}
+
+	if (
+		Array.isArray( editorContext?.structuralAncestors ) &&
+		editorContext.structuralAncestors.length > 0
+	) {
+		context.structuralAncestors = editorContext.structuralAncestors;
+	}
+
+	if (
+		Array.isArray( editorContext?.structuralBranch ) &&
+		editorContext.structuralBranch.length > 0
+	) {
+		context.structuralBranch = editorContext.structuralBranch;
+	}
+
+	return context;
+}
+
+function buildNavigationContextSignature( {
+	block,
+	blockClientId,
+	editorContext,
+} ) {
 	const input = buildNavigationFetchInput( {
 		block,
 		blockClientId,
+		editorContext,
 		prompt: '',
 	} );
 
@@ -213,22 +284,33 @@ export default function NavigationRecommendations( {
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const previousClientId = useRef( clientId );
+	const liveContextSignature = useSelect(
+		( select ) => getLiveBlockContextSignature( select, clientId ),
+		[ clientId ]
+	);
+	const liveNavigationContext = useMemo( () => {
+		void liveContextSignature;
+
+		return clientId ? collectBlockContext( clientId ) : null;
+	}, [ clientId, liveContextSignature ] );
 	const requestInput = useMemo(
 		() =>
 			buildNavigationFetchInput( {
 				block: navigationBlock,
 				blockClientId: clientId,
+				editorContext: liveNavigationContext,
 				prompt,
 			} ),
-		[ clientId, navigationBlock, prompt ]
+		[ clientId, liveNavigationContext, navigationBlock, prompt ]
 	);
 	const recommendationContextSignature = useMemo(
 		() =>
 			buildNavigationContextSignature( {
 				block: navigationBlock,
 				blockClientId: clientId,
+				editorContext: liveNavigationContext,
 			} ),
-		[ clientId, navigationBlock ]
+		[ clientId, liveNavigationContext, navigationBlock ]
 	);
 	const hasStoredResult =
 		resultBlockClientId === clientId && status === 'ready';
@@ -317,6 +399,7 @@ export default function NavigationRecommendations( {
 		const refreshInput = buildNavigationFetchInput( {
 			block: navigationBlock,
 			blockClientId: clientId,
+			editorContext: liveNavigationContext,
 			prompt: prompt.trim() || requestPrompt,
 		} );
 
@@ -330,6 +413,7 @@ export default function NavigationRecommendations( {
 		canRecommend,
 		clientId,
 		fetchNavigationRecommendations,
+		liveNavigationContext,
 		navigationBlock,
 		prompt,
 		recommendationContextSignature,

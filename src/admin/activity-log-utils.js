@@ -525,15 +525,15 @@ function getPrimaryOperation( entry ) {
 }
 
 function deriveOperationType( entry ) {
-	const primaryOperation = getPrimaryOperation( entry );
-	const operationType = String( primaryOperation?.type || '' );
-
 	if ( entry?.type === 'request_diagnostic' ) {
 		return {
 			value: 'request-diagnostic',
 			label: 'Request diagnostic',
 		};
 	}
+
+	const primaryOperation = getPrimaryOperation( entry );
+	const operationType = String( primaryOperation?.type || '' );
 
 	if (
 		operationType === 'insert_pattern' ||
@@ -730,8 +730,72 @@ function getRequestDiagnostics( request = {} ) {
 		[ 'timing', 'latencyMs' ],
 		[ 'metadata', 'latencyMs' ],
 	] );
+	const endpointHost = getFirstString( request, [
+		[ 'ai', 'transport', 'host' ],
+		[ 'transport', 'host' ],
+	] );
+	const endpointPath = getFirstString( request, [
+		[ 'ai', 'transport', 'path' ],
+		[ 'transport', 'path' ],
+	] );
+	const timeoutSeconds = getFirstNumber( request, [
+		[ 'ai', 'transport', 'timeoutSeconds' ],
+		[ 'transport', 'timeoutSeconds' ],
+	] );
+	const requestBodyBytes = getFirstNumber( request, [
+		[ 'ai', 'requestSummary', 'bodyBytes' ],
+		[ 'requestSummary', 'bodyBytes' ],
+	] );
+	const instructionsChars = getFirstNumber( request, [
+		[ 'ai', 'requestSummary', 'instructionsChars' ],
+		[ 'requestSummary', 'instructionsChars' ],
+	] );
+	const requestInputChars = getFirstNumber( request, [
+		[ 'ai', 'requestSummary', 'inputChars' ],
+		[ 'requestSummary', 'inputChars' ],
+	] );
+	const maxOutputTokens = getFirstNumber( request, [
+		[ 'ai', 'requestSummary', 'maxOutputTokens' ],
+		[ 'requestSummary', 'maxOutputTokens' ],
+	] );
+	const reasoningEffort = getFirstString( request, [
+		[ 'ai', 'requestSummary', 'reasoningEffort' ],
+		[ 'requestSummary', 'reasoningEffort' ],
+	] );
+	const httpStatus = getFirstNumber( request, [
+		[ 'ai', 'responseSummary', 'httpStatus' ],
+		[ 'responseSummary', 'httpStatus' ],
+	] );
+	const responseBodyBytes = getFirstNumber( request, [
+		[ 'ai', 'responseSummary', 'bodyBytes' ],
+		[ 'responseSummary', 'bodyBytes' ],
+	] );
+	const processingMs = getFirstNumber( request, [
+		[ 'ai', 'responseSummary', 'processingMs' ],
+		[ 'responseSummary', 'processingMs' ],
+	] );
+	const retryAfter = getFirstNumber( request, [
+		[ 'ai', 'responseSummary', 'retryAfter' ],
+		[ 'responseSummary', 'retryAfter' ],
+	] );
+	const responseRegion = getFirstString( request, [
+		[ 'ai', 'responseSummary', 'region' ],
+		[ 'responseSummary', 'region' ],
+	] );
+	const providerRequestId = getFirstString( request, [
+		[ 'ai', 'responseSummary', 'providerRequestId' ],
+		[ 'responseSummary', 'providerRequestId' ],
+	] );
+	const transportError = getFirstString( request, [
+		[ 'ai', 'errorSummary', 'wrappedMessage' ],
+		[ 'errorSummary', 'wrappedMessage' ],
+	] );
 
 	let tokenUsageLabel = EMPTY_VALUE;
+	let transportEndpoint = EMPTY_VALUE;
+	let timeoutLabel = EMPTY_VALUE;
+	let requestPayloadLabel = EMPTY_VALUE;
+	let responseLabel = EMPTY_VALUE;
 
 	if ( totalTokens !== null ) {
 		tokenUsageLabel = `${ totalTokens } total tokens`;
@@ -743,6 +807,36 @@ function getRequestDiagnostics( request = {} ) {
 			.filter( Boolean )
 			.join( ' / ' );
 	}
+
+	if ( endpointHost ) {
+		transportEndpoint = `${ endpointHost }${ endpointPath || '' }`;
+	}
+
+	if ( timeoutSeconds !== null ) {
+		timeoutLabel = `${ timeoutSeconds } s`;
+	}
+
+	requestPayloadLabel = [
+		requestBodyBytes !== null ? `${ requestBodyBytes } bytes` : null,
+		instructionsChars !== null
+			? `${ instructionsChars } instruction chars`
+			: null,
+		requestInputChars !== null ? `${ requestInputChars } input chars` : null,
+		maxOutputTokens !== null ? `${ maxOutputTokens } max output tokens` : null,
+		reasoningEffort ? `reasoning ${ reasoningEffort }` : null,
+	]
+		.filter( Boolean )
+		.join( ' · ' ) || EMPTY_VALUE;
+
+	responseLabel = [
+		httpStatus !== null ? `HTTP ${ httpStatus }` : null,
+		responseBodyBytes !== null ? `${ responseBodyBytes } bytes` : null,
+		processingMs !== null ? `${ processingMs } ms processing` : null,
+		retryAfter !== null ? `${ retryAfter } s retry-after` : null,
+		responseRegion ? `region ${ responseRegion }` : null,
+	]
+		.filter( Boolean )
+		.join( ' · ' ) || EMPTY_VALUE;
 
 	return {
 		provider: provider || EMPTY_VALUE,
@@ -758,6 +852,12 @@ function getRequestDiagnostics( request = {} ) {
 		usedFallback,
 		tokenUsageLabel,
 		latencyLabel: latencyMs !== null ? `${ latencyMs } ms` : EMPTY_VALUE,
+		transportEndpoint,
+		timeoutLabel,
+		requestPayloadLabel,
+		responseLabel,
+		providerRequestId: providerRequestId || EMPTY_VALUE,
+		transportError: transportError || EMPTY_VALUE,
 	};
 }
 
@@ -1233,12 +1333,22 @@ export function normalizeActivityEntry(
 	const documentLabel = formatDocumentLabel( postType, entityId );
 	const operationType = deriveOperationType( entry );
 	const targetLink = buildActivityTargetLink( entry, adminBaseUrl );
+	let undoError = EMPTY_VALUE;
 	let userLabel = EMPTY_VALUE;
 
 	if ( typeof entry?.userLabel === 'string' && entry.userLabel.trim() ) {
 		userLabel = entry.userLabel.trim();
 	} else if ( entry?.userId ) {
 		userLabel = `User #${ entry.userId }`;
+	}
+
+	if ( typeof entry?.undo?.error === 'string' && entry.undo.error.trim() ) {
+		undoError = entry.undo.error.trim();
+	} else if (
+		status === 'blocked' &&
+		typeof resolvedUndo?.error !== 'string'
+	) {
+		undoError = ORDERED_UNDO_BLOCKED_ERROR;
 	}
 
 	return {
@@ -1293,6 +1403,12 @@ export function normalizeActivityEntry(
 		connectorPlugin: diagnostics.connectorPlugin,
 		requestAbility: diagnostics.requestAbility,
 		requestRoute: diagnostics.requestRoute,
+		transportEndpoint: diagnostics.transportEndpoint,
+		timeout: diagnostics.timeoutLabel,
+		requestPayload: diagnostics.requestPayloadLabel,
+		responseSummary: diagnostics.responseLabel,
+		providerRequestId: diagnostics.providerRequestId,
+		transportError: diagnostics.transportError,
 		beforeSummary: summarizeActivityState( entry?.before ),
 		afterSummary: summarizeActivityState( entry?.after ),
 		stateDiff: buildStructuredStateDiff( entry?.before, entry?.after ),
@@ -1300,13 +1416,7 @@ export function normalizeActivityEntry(
 			status === 'applied' && resolvedUndo?.status === 'available'
 				? 'Undo available'
 				: getActivityStatusLabel( status ),
-		undoError:
-			typeof entry?.undo?.error === 'string' && entry.undo.error.trim()
-				? entry.undo.error.trim()
-				: status === 'blocked' &&
-				  typeof resolvedUndo?.error !== 'string'
-				? ORDERED_UNDO_BLOCKED_ERROR
-				: EMPTY_VALUE,
+		undoError,
 		undoReason: getUndoReason( status, resolvedUndo, entry ),
 		provider: diagnostics.provider,
 		model: diagnostics.model,

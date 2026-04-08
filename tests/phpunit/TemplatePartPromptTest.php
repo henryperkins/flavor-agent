@@ -431,6 +431,144 @@ final class TemplatePartPromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_accepts_deep_live_paths_from_the_full_path_index(): void {
+		$context = [
+			'blockTree'             => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'attributes' => [],
+					'childCount' => 1,
+					'children'   => [
+						[
+							'path'       => [ 0, 0 ],
+							'name'       => 'core/group',
+							'attributes' => [],
+							'childCount' => 1,
+							'children'   => [
+								[
+									'path'       => [ 0, 0, 0 ],
+									'name'       => 'core/group',
+									'attributes' => [],
+									'childCount' => 1,
+									'children'   => [],
+								],
+							],
+						],
+					],
+				],
+			],
+			'allBlockPaths'         => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Outer Group',
+					'attributes' => [],
+					'childCount' => 1,
+				],
+				[
+					'path'       => [ 0, 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Middle Group',
+					'attributes' => [],
+					'childCount' => 1,
+				],
+				[
+					'path'       => [ 0, 0, 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Inner Group',
+					'attributes' => [],
+					'childCount' => 1,
+				],
+				[
+					'path'       => [ 0, 0, 0, 0 ],
+					'name'       => 'core/navigation',
+					'label'      => 'Navigation',
+					'attributes' => [
+						'overlayMenu' => 'mobile',
+					],
+					'childCount' => 0,
+				],
+			],
+			'patterns'              => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'operationTargets'      => [
+				[
+					'path'              => [ 0, 0, 0, 0 ],
+					'name'              => 'core/navigation',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+			],
+			'insertionAnchors'      => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template part',
+				],
+				[
+					'placement' => 'end',
+					'label'     => 'End of template part',
+				],
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0, 0, 0, 0 ],
+					'label'      => 'Before Navigation',
+				],
+			],
+			'structuralConstraints' => [
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => false,
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Reshape the deep navigation cluster',
+						'description'        => 'Replace the deeply nested navigation block with a utility pattern.',
+						'blockHints'         => [
+							[
+								'path'   => [ 0, 0, 0, 0 ],
+								'label'  => 'Navigation block',
+								'reason' => 'This is the deepest executable target in the live editor tree.',
+							],
+						],
+						'patternSuggestions' => [],
+						'operations'         => [
+							[
+								'type'              => 'replace_block_with_pattern',
+								'patternName'       => 'theme/header-utility',
+								'expectedBlockName' => 'core/navigation',
+								'targetPath'        => [ 0, 0, 0, 0 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[ 0, 0, 0, 0 ],
+			$result['suggestions'][0]['blockHints'][0]['path'] ?? []
+		);
+		$this->assertSame(
+			[ 0, 0, 0, 0 ],
+			$result['suggestions'][0]['operations'][0]['targetPath'] ?? []
+		);
+		$this->assertSame(
+			'Navigation',
+			$result['suggestions'][0]['operations'][0]['expectedTarget']['label'] ?? ''
+		);
+	}
+
 	public function test_parse_response_rejects_start_insertions_without_a_start_anchor(): void {
 		$context = [
 			'blockTree'        => [],

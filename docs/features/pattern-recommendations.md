@@ -1,6 +1,7 @@
 # Pattern Recommendations
 
 Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/reference/abilities-and-routes.md` for the exact contract.
+For production debugging and live Qdrant inspection, also use `docs/reference/pattern-recommendation-debugging.md`.
 
 ## Exact Surface
 

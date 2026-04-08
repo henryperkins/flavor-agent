@@ -530,6 +530,47 @@ function getDetailFields() {
 			readOnly: true,
 		},
 		{
+			id: 'transportEndpoint',
+			label: 'Endpoint',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'timeout',
+			label: 'Timeout',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'requestPayload',
+			label: 'Payload',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'responseSummary',
+			label: 'Response',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'providerRequestId',
+			label: 'Provider request ID',
+			type: 'text',
+			readOnly: true,
+		},
+		{
+			id: 'transportError',
+			label: 'Transport detail',
+			type: 'text',
+			readOnly: true,
+			render: ( { item } ) => (
+				<pre className="flavor-agent-activity-log__code">
+					{ item.transportError }
+				</pre>
+			),
+		},
+		{
 			id: 'requestReference',
 			label: 'Reference',
 			type: 'text',
@@ -652,6 +693,12 @@ function getDetailForm() {
 					'requestFallback',
 					'tokenUsage',
 					'latency',
+					'transportEndpoint',
+					'timeout',
+					'requestPayload',
+					'responseSummary',
+					'providerRequestId',
+					'transportError',
 				],
 				layout: {
 					type: 'details',

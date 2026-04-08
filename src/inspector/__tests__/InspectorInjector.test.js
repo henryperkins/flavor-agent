@@ -41,7 +41,9 @@ jest.mock( '../BlockRecommendationsPanel', () => ( {
 } ) );
 
 jest.mock( '../SettingsRecommendations', () => ( props ) => (
-	<div>{ `Settings ${ props.suggestions.length }` }</div>
+	<div>{ `Settings ${ props.suggestions.length }${
+		props.isStale ? ' stale' : ''
+	}` }</div>
 ) );
 
 jest.mock( '../StylesRecommendations', () => ( props ) => (
@@ -51,7 +53,7 @@ jest.mock( '../StylesRecommendations', () => ( props ) => (
 ) );
 
 jest.mock( '../SuggestionChips', () => ( props ) => (
-	<div>{ props.label }</div>
+	<div>{ `${ props.label }${ props.isStale ? ' stale' : '' }` }</div>
 ) );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -139,11 +141,19 @@ describe( 'InspectorInjector', () => {
 		expect( getContainer().textContent ).toContain( 'Styles 1' );
 	} );
 
-	test( 'keeps stale style suggestions visible while hiding stale settings suggestions when context changes', () => {
+	test( 'keeps stale projected settings and style suggestions visible when context changes', () => {
 		currentState = {
 			...getState(),
 			store: {
 				...getState().store,
+				blockRecommendations: {
+					settings: [
+						{ label: 'Use larger heading' },
+						{ label: 'Pin block', panel: 'position' },
+					],
+					styles: [ { label: 'Use accent color', panel: 'color' } ],
+					block: [ { label: 'Hide on mobile' } ],
+				},
 				blockContextSignature: JSON.stringify( {
 					block: { name: 'core/heading' },
 				} ),
@@ -158,11 +168,17 @@ describe( 'InspectorInjector', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
-		expect( getContainer().textContent ).not.toContain( 'Settings 1' );
+		expect( getContainer().textContent ).toContain( 'Settings 2 stale' );
 		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
+		expect( getContainer().textContent ).toContain(
+			'AI position suggestions stale'
+		);
+		expect( getContainer().textContent ).toContain(
+			'AI color suggestions stale'
+		);
 	} );
 
-	test( 'keeps the stale styles surface mounted after a same-clientId block edit changes context', () => {
+	test( 'keeps stale projected settings visible after a same-clientId block edit changes context', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Settings 1' );
@@ -177,7 +193,7 @@ describe( 'InspectorInjector', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
-		expect( getContainer().textContent ).not.toContain( 'Settings 1' );
+		expect( getContainer().textContent ).toContain( 'Settings 1 stale' );
 		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
 	} );
 

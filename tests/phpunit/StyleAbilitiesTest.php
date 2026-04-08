@@ -803,6 +803,42 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_build_wordpress_docs_entity_key_uses_global_styles_guidance_for_global_styles_surface(): void {
+		$entity_key = $this->invoke_private_string_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_entity_key',
+			[
+				[
+					'scope' => [
+						'surface'        => 'global-styles',
+						'scopeKey'       => 'global_styles:17',
+						'globalStylesId' => '17',
+					],
+				],
+			]
+		);
+
+		$this->assertSame( 'guidance:global-styles', $entity_key );
+	}
+
+	public function test_build_wordpress_docs_entity_key_falls_back_to_style_book_guidance_without_block_name(): void {
+		$entity_key = $this->invoke_private_string_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_entity_key',
+			[
+				[
+					'scope' => [
+						'surface'        => 'style-book',
+						'scopeKey'       => 'style_book:17',
+						'globalStylesId' => '17',
+					],
+				],
+			]
+		);
+
+		$this->assertSame( 'guidance:style-book', $entity_key );
+	}
+
 	private function build_cache_key( string $query, int $max_results ): string {
 		$method = new ReflectionMethod( AISearchClient::class, 'build_cache_key' );
 		$method->setAccessible( true );

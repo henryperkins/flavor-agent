@@ -370,7 +370,11 @@ final class StyleAbilities {
 			return AISearchClient::resolve_entity_key( $style_book_name );
 		}
 
-		return AISearchClient::resolve_entity_key( 'guidance:block-editor' );
+		if ( self::SURFACE_STYLE_BOOK === $surface ) {
+			return AISearchClient::resolve_entity_key( 'guidance:style-book' );
+		}
+
+		return AISearchClient::resolve_entity_key( 'guidance:global-styles' );
 	}
 
 	/**

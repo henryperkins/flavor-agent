@@ -145,6 +145,7 @@ final class NavigationAbilitiesTest extends TestCase {
 				[
 					'slug'  => 'mobile-overlay',
 					'title' => 'Mobile Overlay',
+					'area'  => 'navigation-overlay',
 				],
 			],
 			'structureSummary'     => [
@@ -155,9 +156,51 @@ final class NavigationAbilitiesTest extends TestCase {
 			'menuItemCount'        => 3,
 			'maxDepth'             => 2,
 			'overlayContext'       => [
-				'usesOverlay'              => true,
-				'overlayMode'              => 'mobile',
-				'hasDedicatedOverlayParts' => true,
+				'usesOverlay'                  => true,
+				'overlayMode'                  => 'mobile',
+				'hasDedicatedOverlayParts'     => true,
+				'siteHasDedicatedOverlayParts' => true,
+				'siteOverlayTemplatePartCount' => 2,
+				'siteOverlayTemplatePartSlugs' => [ 'mobile-overlay', 'footer-overlay' ],
+			],
+			'editorContext'        => [
+				'block'               => [
+					'name'               => 'core/navigation',
+					'title'              => 'Navigation',
+					'structuralIdentity' => [
+						'role'             => 'header-navigation',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+					],
+				],
+				'siblingsBefore'      => [ 'core/site-logo' ],
+				'siblingsAfter'       => [ 'core/buttons' ],
+				'structuralAncestors' => [
+					[
+						'block'            => 'core/template-part',
+						'role'             => 'header-slot',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+					],
+				],
+				'structuralBranch'    => [
+					[
+						'block'            => 'core/template-part',
+						'role'             => 'header-slot',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+						'children'         => [
+							[
+								'block'    => 'core/navigation',
+								'role'     => 'header-navigation',
+								'location' => 'header',
+							],
+						],
+					],
+				],
 			],
 			'themeTokens'          => [
 				'colors' => [ 'primary: #0073aa' ],
@@ -173,6 +216,9 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'Max depth: 2', $prompt );
 		$this->assertStringContainsString( '## Location Context', $prompt );
 		$this->assertStringContainsString( '`source`: template-part-scan', $prompt );
+		$this->assertStringContainsString( '## Live Editor Context', $prompt );
+		$this->assertStringContainsString( '`templatePartSlug`: site-header', $prompt );
+		$this->assertStringContainsString( '`siblingsBefore`: core/site-logo', $prompt );
 		$this->assertStringContainsString( '## Current Attributes', $prompt );
 		$this->assertStringContainsString( '`overlayMenu`: mobile', $prompt );
 		$this->assertStringContainsString( '## Menu Structure', $prompt );
@@ -187,6 +233,7 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'mobile-overlay', $prompt );
 		$this->assertStringContainsString( '## Overlay Context', $prompt );
 		$this->assertStringContainsString( '`hasDedicatedOverlayParts`: true', $prompt );
+		$this->assertStringContainsString( '`siteOverlayTemplatePartCount`: 2', $prompt );
 		$this->assertStringContainsString( '## User Instruction', $prompt );
 		$this->assertStringContainsString( 'Simplify the header nav.', $prompt );
 	}

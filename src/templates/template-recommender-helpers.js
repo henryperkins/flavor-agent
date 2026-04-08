@@ -102,6 +102,57 @@ function summarizeTemplateBlockAttributes( attributes = {} ) {
 	return summary;
 }
 
+function collectTemplateBlockStats( blocks = [] ) {
+	const stats = {
+		blockCount: 0,
+		maxDepth: 0,
+		blockCounts: {},
+	};
+
+	const visit = ( branch = [], depth = 1 ) => {
+		if ( ! Array.isArray( branch ) ) {
+			return;
+		}
+
+		branch.forEach( ( block ) => {
+			if ( ! block || typeof block !== 'object' || ! block.name ) {
+				return;
+			}
+
+			stats.blockCount += 1;
+			stats.maxDepth = Math.max( stats.maxDepth, depth );
+			stats.blockCounts[ block.name ] =
+				( stats.blockCounts[ block.name ] || 0 ) + 1;
+
+			visit( block.innerBlocks, depth + 1 );
+		} );
+	};
+
+	visit( blocks );
+
+	return stats;
+}
+
+function buildTemplateStructureStats( blocks = [], topLevelBlockTree = [] ) {
+	const { blockCount, maxDepth, blockCounts } = collectTemplateBlockStats(
+		blocks
+	);
+
+	return {
+		blockCount,
+		maxDepth,
+		topLevelBlockCount: topLevelBlockTree.length,
+		hasNavigation: Boolean( blockCounts[ 'core/navigation' ] ),
+		hasQuery: Boolean( blockCounts[ 'core/query' ] ),
+		hasTemplateParts: Boolean( blockCounts[ 'core/template-part' ] ),
+		firstTopLevelBlock: topLevelBlockTree[ 0 ]?.name || '',
+		lastTopLevelBlock:
+			topLevelBlockTree.length > 0
+				? topLevelBlockTree[ topLevelBlockTree.length - 1 ]?.name || ''
+				: '',
+	};
+}
+
 export function buildEditorTemplateTopLevelStructureSnapshot(
 	blocks = [],
 	areaLookup
@@ -109,6 +160,7 @@ export function buildEditorTemplateTopLevelStructureSnapshot(
 	if ( ! Array.isArray( blocks ) ) {
 		return {
 			topLevelBlockTree: [],
+			structureStats: buildTemplateStructureStats(),
 			currentPatternOverrides: {
 				hasOverrides: false,
 				blockCount: 0,
@@ -123,50 +175,56 @@ export function buildEditorTemplateTopLevelStructureSnapshot(
 		};
 	}
 
-	return {
-		topLevelBlockTree: blocks
-			.map( ( block, index ) => {
-				if ( ! block?.name ) {
-					return null;
-				}
+	const topLevelBlockTree = blocks
+		.map( ( block, index ) => {
+			if ( ! block?.name ) {
+				return null;
+			}
 
-				const attributes =
-					block && typeof block.attributes === 'object'
-						? block.attributes
-						: {};
-				const slug =
-					typeof attributes?.slug === 'string'
-						? attributes.slug.trim()
-						: '';
-				const area =
-					block.name === 'core/template-part'
-						? inferTemplatePartArea( attributes, areaLookup )
-						: '';
-				const entry = {
-					path: [ index ],
-					name: block.name,
-					label: describeEditorBlockLabel(
-						block.name,
-						attributes,
-						areaLookup
-					),
-					attributes: summarizeTemplateBlockAttributes( attributes ),
-					childCount: Array.isArray( block.innerBlocks )
-						? block.innerBlocks.length
-						: 0,
+			const attributes =
+				block && typeof block.attributes === 'object'
+					? block.attributes
+					: {};
+			const slug =
+				typeof attributes?.slug === 'string'
+					? attributes.slug.trim()
+					: '';
+			const area =
+				block.name === 'core/template-part'
+					? inferTemplatePartArea( attributes, areaLookup )
+					: '';
+			const entry = {
+				path: [ index ],
+				name: block.name,
+				label: describeEditorBlockLabel(
+					block.name,
+					attributes,
+					areaLookup
+				),
+				attributes: summarizeTemplateBlockAttributes( attributes ),
+				childCount: Array.isArray( block.innerBlocks )
+					? block.innerBlocks.length
+					: 0,
+			};
+
+			if ( block.name === 'core/template-part' ) {
+				entry.slot = {
+					slug,
+					area,
+					isEmpty: ! slug,
 				};
+			}
 
-				if ( block.name === 'core/template-part' ) {
-					entry.slot = {
-						slug,
-						area,
-						isEmpty: ! slug,
-					};
-				}
+			return entry;
+		} )
+		.filter( Boolean );
 
-				return entry;
-			} )
-			.filter( Boolean ),
+	return {
+		topLevelBlockTree,
+		structureStats: buildTemplateStructureStats(
+			blocks,
+			topLevelBlockTree
+		),
 		currentPatternOverrides: collectPatternOverrideSummary(
 			blocks,
 			areaLookup
@@ -187,10 +245,16 @@ export function buildTemplateRecommendationContextSignature( {
 		normalizeVisiblePatternNames( visiblePatternNames );
 
 	return JSON.stringify( {
-		editorSlots: editorSlots || null,
+		assignedParts: Array.isArray( editorSlots?.assignedParts )
+			? editorSlots.assignedParts
+			: null,
+		emptyAreas: Array.isArray( editorSlots?.emptyAreas )
+			? editorSlots.emptyAreas
+			: null,
 		topLevelBlockTree: Array.isArray( editorStructure?.topLevelBlockTree )
 			? editorStructure.topLevelBlockTree
 			: null,
+		structureStats: editorStructure?.structureStats || null,
 		currentPatternOverrides:
 			editorStructure?.currentPatternOverrides || null,
 		currentViewportVisibility:

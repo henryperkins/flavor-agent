@@ -52,7 +52,8 @@ Rules:
 - Structural changes (reorder, group, ungroup, add-submenu, flatten) MUST include targetPath.
 - Structural changes MUST use a real targetPath from the Current Menu Target Inventory list.
 - set-attribute changes should reference real core/navigation block attributes (overlayMenu, openSubmenusOnClick, hasIcon, icon, maxNestingLevel, showSubmenuIcon).
-- In WordPress 7.0+, navigation overlays are a first-class template-part area (navigation-overlay). When overlay template parts exist, prefer referencing them over suggesting inline overlay configuration.
+- In WordPress 7.0+, navigation overlays are a first-class template-part area (navigation-overlay). When relevant overlay template parts are listed for this navigation, prefer referencing them over suggesting inline overlay configuration.
+- Treat site-wide overlay counts and slugs in Overlay Context as background capability signals only. Do not assume a specific overlay part applies unless it appears in the Navigation Overlay Template Parts list.
 - Do not suggest adding menu items that do not exist in the current structure. Suggest reorganization of what is already there.
 - Use the provided location, overlay, and structure summaries to explain why a suggestion fits this navigation's current role.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented navigation block practices.
@@ -103,6 +104,13 @@ SYSTEM;
 			if ( count( $lines ) > 0 ) {
 				$sections[] = "## Location Context\n" . implode( "\n", $lines );
 			}
+		}
+
+		$editor_context_lines = self::format_editor_context(
+			is_array( $context['editorContext'] ?? null ) ? $context['editorContext'] : []
+		);
+		if ( $editor_context_lines !== '' ) {
+			$sections[] = "## Live Editor Context\n{$editor_context_lines}";
 		}
 
 		// Current attributes.
@@ -454,6 +462,119 @@ SYSTEM;
 		}
 
 		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<string, mixed> $editor_context
+	 */
+	private static function format_editor_context( array $editor_context ): string {
+		if ( [] === $editor_context ) {
+			return '';
+		}
+
+		$lines = [];
+		$block = is_array( $editor_context['block'] ?? null ) ? $editor_context['block'] : [];
+
+		$block_name = sanitize_text_field( (string) ( $block['name'] ?? '' ) );
+		if ( '' !== $block_name ) {
+			$lines[] = "- `block`: {$block_name}";
+		}
+
+		$block_title = sanitize_text_field( (string) ( $block['title'] ?? '' ) );
+		if ( '' !== $block_title ) {
+			$lines[] = "- `title`: {$block_title}";
+		}
+
+		$identity = is_array( $block['structuralIdentity'] ?? null ) ? $block['structuralIdentity'] : [];
+		foreach ( [ 'role', 'location', 'templateArea', 'templatePartSlug' ] as $key ) {
+			$value = sanitize_text_field( (string) ( $identity[ $key ] ?? '' ) );
+
+			if ( '' !== $value ) {
+				$lines[] = "- `{$key}`: {$value}";
+			}
+		}
+
+		$siblings_before = is_array( $editor_context['siblingsBefore'] ?? null ) ? $editor_context['siblingsBefore'] : [];
+		if ( [] !== $siblings_before ) {
+			$lines[] = '- `siblingsBefore`: ' . implode( ', ', array_map( 'strval', $siblings_before ) );
+		}
+
+		$siblings_after = is_array( $editor_context['siblingsAfter'] ?? null ) ? $editor_context['siblingsAfter'] : [];
+		if ( [] !== $siblings_after ) {
+			$lines[] = '- `siblingsAfter`: ' . implode( ', ', array_map( 'strval', $siblings_after ) );
+		}
+
+		$ancestors = is_array( $editor_context['structuralAncestors'] ?? null ) ? $editor_context['structuralAncestors'] : [];
+		$ancestor_summary = self::format_structural_summaries( $ancestors );
+		if ( '' !== $ancestor_summary ) {
+			$lines[] = "- `structuralAncestors`: {$ancestor_summary}";
+		}
+
+		$branch = is_array( $editor_context['structuralBranch'] ?? null ) ? $editor_context['structuralBranch'] : [];
+		$branch_summary = self::format_structural_branch( $branch );
+		if ( '' !== $branch_summary ) {
+			$lines[] = "- `structuralBranch`: {$branch_summary}";
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $summaries
+	 */
+	private static function format_structural_summaries( array $summaries ): string {
+		$parts = [];
+
+		foreach ( array_slice( $summaries, 0, 4 ) as $summary ) {
+			if ( ! is_array( $summary ) ) {
+				continue;
+			}
+
+			$piece = [];
+
+			foreach ( [ 'block', 'role', 'location', 'templateArea', 'templatePartSlug' ] as $key ) {
+				$value = sanitize_text_field( (string) ( $summary[ $key ] ?? '' ) );
+
+				if ( '' === $value ) {
+					continue;
+				}
+
+				$piece[] = 'block' === $key ? $value : "{$key}={$value}";
+			}
+
+			if ( [] !== $piece ) {
+				$parts[] = implode( ' ', $piece );
+			}
+		}
+
+		return implode( ' | ', $parts );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $branch
+	 */
+	private static function format_structural_branch( array $branch ): string {
+		$parts = [];
+
+		foreach ( array_slice( $branch, 0, 3 ) as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$summary = self::format_structural_summaries( [ $node ] );
+			if ( '' === $summary ) {
+				continue;
+			}
+
+			$child_count = is_array( $node['children'] ?? null ) ? count( $node['children'] ) : 0;
+			if ( $child_count > 0 ) {
+				$summary .= " children={$child_count}";
+			}
+
+			$parts[] = $summary;
+		}
+
+		return implode( ' | ', $parts );
 	}
 
 	/**

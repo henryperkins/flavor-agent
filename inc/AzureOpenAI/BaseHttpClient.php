@@ -10,7 +10,13 @@ abstract class BaseHttpClient {
 
 	/**
 	 * @param array<string, string> $headers
-	 * @return array{status: int, data: mixed, json_error: int}|\WP_Error
+	 * @return array{
+	 *   status: int,
+	 *   data: mixed,
+	 *   json_error: int,
+	 *   headers: array<string, string>,
+	 *   body_bytes: int
+	 * }|\WP_Error
 	 */
 	protected static function post_json_with_retry(
 		string $url,
@@ -38,7 +44,9 @@ abstract class BaseHttpClient {
 		}
 
 		$status = wp_remote_retrieve_response_code( $response );
-		$data   = json_decode( wp_remote_retrieve_body( $response ), true );
+		$raw_body = wp_remote_retrieve_body( $response );
+		$data     = json_decode( $raw_body, true );
+		$response_headers = self::extract_response_headers( $response );
 
 		if ( 429 === $status ) {
 			$message = is_array( $data ) && isset( $data['error']['message'] ) && is_string( $data['error']['message'] )
@@ -48,7 +56,12 @@ abstract class BaseHttpClient {
 			return self::build_retryable_rate_limit_error(
 				'rate_limited',
 				$message,
-				wp_remote_retrieve_header( $response, 'retry-after' )
+				wp_remote_retrieve_header( $response, 'retry-after' ),
+				[
+					'http_status'         => $status,
+					'response_headers'    => $response_headers,
+					'response_body_bytes' => strlen( $raw_body ),
+				]
 			);
 		}
 
@@ -56,6 +69,8 @@ abstract class BaseHttpClient {
 			'status'     => $status,
 			'data'       => $data,
 			'json_error' => json_last_error(),
+			'headers'    => $response_headers,
+			'body_bytes' => strlen( $raw_body ),
 		];
 	}
 
@@ -88,19 +103,46 @@ abstract class BaseHttpClient {
 	public static function build_retryable_rate_limit_error(
 		string $code,
 		string $message,
-		string|false $header
+		string|false $header,
+		array $extra_data = []
 	): \WP_Error {
 		$retry_after = self::parse_retry_after_header( $header );
 
 		return new \WP_Error(
 			$code,
 			$message,
-			[
+			array_merge(
+				[
 				'status'          => 429,
 				'retryable'       => true,
 				'retry_after'     => $retry_after,
 				'retry_after_raw' => false !== $header ? trim( $header ) : null,
-			]
+				],
+				$extra_data
+			)
 		);
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	protected static function extract_response_headers( $response ): array {
+		if ( ! is_array( $response ) || ! is_array( $response['headers'] ?? null ) ) {
+			return [];
+		}
+
+		$headers = [];
+
+		foreach ( $response['headers'] as $key => $value ) {
+			if ( ! is_string( $key ) ) {
+				continue;
+			}
+
+			if ( is_scalar( $value ) ) {
+				$headers[ strtolower( $key ) ] = trim( (string) $value );
+			}
+		}
+
+		return $headers;
 	}
 }

@@ -776,11 +776,16 @@ final class ServerCollectorTest extends TestCase {
 		);
 		$this->assertSame(
 			[
-				'usesOverlay'              => true,
-				'overlayMode'              => 'always',
-				'hasDedicatedOverlayParts' => false,
-				'overlayTemplatePartCount' => 0,
-				'overlayTemplatePartSlugs' => [],
+				'usesOverlay'                  => true,
+				'overlayMode'                  => 'always',
+				'hasDedicatedOverlayParts'     => false,
+				'overlayTemplatePartCount'     => 0,
+				'overlayTemplatePartSlugs'     => [],
+				'siteHasDedicatedOverlayParts' => false,
+				'siteOverlayTemplatePartCount' => 0,
+				'siteOverlayTemplatePartSlugs' => [],
+				'overlayReferenceScope'        => 'none',
+				'overlayReferenceSource'       => 'none',
 			],
 			$result['overlayContext'] ?? null
 		);
@@ -804,6 +809,102 @@ final class ServerCollectorTest extends TestCase {
 				],
 			],
 			$result['targetInventory'] ?? null
+		);
+	}
+
+	public function test_for_navigation_prefers_editor_context_location_and_scopes_overlay_parts(): void {
+		WordPressTestState::$posts[42]                           = (object) [
+			'ID'           => 42,
+			'post_type'    => 'wp_navigation',
+			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->',
+		];
+		WordPressTestState::$block_templates['wp_template_part'] = [
+			(object) [
+				'slug'    => 'site-footer',
+				'title'   => 'Site Footer',
+				'area'    => 'footer',
+				'content' => '<!-- wp:navigation {"ref":42} /-->',
+			],
+			(object) [
+				'slug'    => 'header-overlay',
+				'title'   => 'Header Overlay',
+				'area'    => 'navigation-overlay',
+				'content' => '<!-- wp:navigation {"ref":42} /-->',
+			],
+			(object) [
+				'slug'    => 'footer-overlay',
+				'title'   => 'Footer Overlay',
+				'area'    => 'navigation-overlay',
+				'content' => '<!-- wp:navigation {"ref":77} /-->',
+			],
+		];
+
+		$result = ServerCollector::for_navigation(
+			42,
+			'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} /-->',
+			[
+				'block'               => [
+					'name'               => 'core/navigation',
+					'structuralIdentity' => [
+						'role'             => 'header-navigation',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+					],
+				],
+				'siblingsBefore'      => [ 'core/site-logo' ],
+				'structuralAncestors' => [
+					[
+						'block'            => 'core/template-part',
+						'role'             => 'header-slot',
+						'location'         => 'header',
+						'templateArea'     => 'header',
+						'templatePartSlug' => 'site-header',
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'header', $result['location'] ?? null );
+		$this->assertSame(
+			[
+				'area'             => 'header',
+				'source'           => 'editor-context',
+				'templateArea'     => 'header',
+				'templatePartSlug' => 'site-header',
+				'role'             => 'header-navigation',
+			],
+			$result['locationDetails'] ?? null
+		);
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'header-overlay',
+					'title' => 'Header Overlay',
+					'area'  => 'navigation-overlay',
+				],
+			],
+			$result['overlayTemplateParts'] ?? null
+		);
+		$this->assertSame(
+			[
+				'usesOverlay'                  => true,
+				'overlayMode'                  => 'mobile',
+				'hasDedicatedOverlayParts'     => true,
+				'overlayTemplatePartCount'     => 1,
+				'overlayTemplatePartSlugs'     => [ 'header-overlay' ],
+				'siteHasDedicatedOverlayParts' => true,
+				'siteOverlayTemplatePartCount' => 2,
+				'siteOverlayTemplatePartSlugs' => [ 'header-overlay', 'footer-overlay' ],
+				'overlayReferenceScope'        => 'scoped',
+				'overlayReferenceSource'       => 'direct-menu-ref',
+			],
+			$result['overlayContext'] ?? null
+		);
+		$this->assertSame(
+			'core/navigation',
+			$result['editorContext']['block']['name'] ?? null
 		);
 	}
 

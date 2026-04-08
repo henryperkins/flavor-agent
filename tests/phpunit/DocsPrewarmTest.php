@@ -42,9 +42,11 @@ final class DocsPrewarmTest extends TestCase {
 		$this->assertArrayHasKey( 'template:index', $warm_set );
 		$this->assertArrayHasKey( 'template:search', $warm_set );
 		$this->assertArrayHasKey( 'guidance:block-editor', $warm_set );
+		$this->assertArrayHasKey( 'guidance:global-styles', $warm_set );
+		$this->assertArrayHasKey( 'guidance:style-book', $warm_set );
 		$this->assertArrayHasKey( 'guidance:template', $warm_set );
 		$this->assertArrayHasKey( 'guidance:template-part', $warm_set );
-		$this->assertCount( 20, $warm_set );
+		$this->assertCount( 22, $warm_set );
 
 		foreach ( $warm_set as $entity_key => $query ) {
 			$this->assertNotEmpty( $query, "Query for {$entity_key} must not be empty." );

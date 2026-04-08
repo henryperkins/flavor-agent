@@ -4,6 +4,8 @@ const mockSerialize = jest.fn();
 const mockFetchNavigationRecommendations = jest.fn();
 const mockClearNavigationError = jest.fn();
 const mockClearNavigationRecommendations = jest.fn();
+const mockCollectBlockContext = jest.fn();
+const mockGetLiveBlockContextSignature = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -26,6 +28,12 @@ jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
 } ) );
 
+jest.mock( '../../context/collector', () => ( {
+	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
+	getLiveBlockContextSignature: ( ...args ) =>
+		mockGetLiveBlockContextSignature( ...args ),
+} ) );
+
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
@@ -39,6 +47,65 @@ const { getContainer, getRoot } = setupReactTest();
 let currentState = null;
 function getState() {
 	return currentState;
+}
+
+function getRequestNavigationEditorContext() {
+	return {
+		block: {
+			name: 'core/navigation',
+			title: 'Navigation',
+			structuralIdentity: {
+				role: 'header-navigation',
+				location: 'header',
+				templateArea: 'header',
+				templatePartSlug: 'site-header',
+			},
+		},
+		siblingsBefore: [ 'core/site-logo' ],
+		siblingsAfter: [ 'core/buttons' ],
+		structuralAncestors: [
+			{
+				block: 'core/template-part',
+				role: 'header-slot',
+				location: 'header',
+				templateArea: 'header',
+				templatePartSlug: 'site-header',
+			},
+		],
+		structuralBranch: [
+			{
+				block: 'core/template-part',
+				role: 'header-slot',
+				location: 'header',
+				templateArea: 'header',
+				templatePartSlug: 'site-header',
+				children: [
+					{
+						block: 'core/navigation',
+						role: 'header-navigation',
+						location: 'header',
+					},
+				],
+			},
+		],
+	};
+}
+
+function getCollectedNavigationContext() {
+	return {
+		...getRequestNavigationEditorContext(),
+		themeTokens: {
+			colors: [ 'accent: #ff5500' ],
+		},
+	};
+}
+
+function buildStoredNavigationSignature( navigationMarkup, menuId = 42 ) {
+	return JSON.stringify( {
+		menuId,
+		navigationMarkup,
+		editorContext: getRequestNavigationEditorContext(),
+	} );
 }
 
 function createSelectors() {
@@ -150,6 +217,12 @@ beforeEach( () => {
 	window.flavorAgentData = {
 		canRecommendNavigation: true,
 	};
+	mockGetLiveBlockContextSignature.mockImplementation(
+		() => 'live-nav-signature'
+	);
+	mockCollectBlockContext.mockImplementation( () =>
+		getCollectedNavigationContext()
+	);
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( ( storeName ) => {
@@ -288,6 +361,7 @@ describe( 'NavigationRecommendations', () => {
 		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				blockClientId: 'nav-1',
+				editorContext: getRequestNavigationEditorContext(),
 				menuId: 42,
 				navigationMarkup:
 					'<!-- wp:navigation {"ref":42,"overlayMenu":"mobile"} --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
@@ -330,6 +404,7 @@ describe( 'NavigationRecommendations', () => {
 		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				blockClientId: 'nav-1',
+				editorContext: getRequestNavigationEditorContext(),
 				menuId: 42,
 				navigationMarkup:
 					'<!-- wp:navigation {"ref":42,"overlayMenu":"always"} /-->',
@@ -378,6 +453,7 @@ describe( 'NavigationRecommendations', () => {
 		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				blockClientId: 'nav-1',
+				editorContext: getRequestNavigationEditorContext(),
 				menuId: 42,
 				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
 				prompt: 'Simplify the footer navigation.',
@@ -547,10 +623,8 @@ describe( 'NavigationRecommendations', () => {
 			navigationExplanation: 'Existing guidance.',
 			navigationError: null,
 			navigationStatus: 'ready',
-			navigationContextSignature: JSON.stringify( {
-				menuId: 42,
-				navigationMarkup: initialMarkup,
-			} ),
+			navigationContextSignature:
+				buildStoredNavigationSignature( initialMarkup ),
 		};
 		mockSerialize.mockImplementation( ( blocks ) =>
 			blocks?.[ 0 ]?.innerBlocks?.length === 1
@@ -627,10 +701,12 @@ describe( 'NavigationRecommendations', () => {
 					],
 				},
 				blockClientId: 'nav-1',
+				editorContext: getCollectedNavigationContext(),
 				prompt: '  Simplify the header navigation.  ',
 			} )
 		).toEqual( {
 			blockClientId: 'nav-1',
+			editorContext: getRequestNavigationEditorContext(),
 			menuId: 42,
 			navigationMarkup:
 				'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
@@ -661,10 +737,8 @@ describe( 'NavigationRecommendations', () => {
 			navigationExplanation: 'Existing guidance.',
 			navigationError: null,
 			navigationStatus: 'ready',
-			navigationContextSignature: JSON.stringify( {
-				menuId: 42,
-				navigationMarkup: mobileMarkup,
-			} ),
+			navigationContextSignature:
+				buildStoredNavigationSignature( mobileMarkup ),
 		};
 		mockSerialize.mockImplementation( ( blocks ) =>
 			blocks?.[ 0 ]?.attributes?.overlayMenu === 'mobile'
@@ -719,10 +793,9 @@ describe( 'NavigationRecommendations', () => {
 			navigationExplanation: 'Existing guidance.',
 			navigationError: null,
 			navigationStatus: 'ready',
-			navigationContextSignature: JSON.stringify( {
-				menuId: 42,
-				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
-			} ),
+			navigationContextSignature: buildStoredNavigationSignature(
+				'<!-- wp:navigation {"ref":42} /-->'
+			),
 		};
 		mockSerialize.mockImplementation( ( blocks ) => {
 			const menuId = Number( blocks?.[ 0 ]?.attributes?.ref || 0 );

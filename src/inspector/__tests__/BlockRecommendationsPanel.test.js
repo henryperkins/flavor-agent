@@ -923,6 +923,71 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		);
 	});
 
+	test('adds an activity diagnostic row when a block request fails with request metadata', () => {
+		currentState = createState({
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [],
+						settings: [],
+						styles: [],
+						explanation: '',
+						prompt: 'Make this feel more editorial.',
+					},
+				},
+				blockRequestDiagnostics: {
+					'block-1': {
+						type: 'failure',
+						title:
+							'Block request failed: Azure OpenAI responses request timed out after 180 seconds.',
+						detailLines: [
+							'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+						],
+						blockName: 'core/paragraph',
+						prompt: 'Make this feel more editorial.',
+						requestToken: 4,
+						timestamp: '2026-04-08T12:00:00Z',
+						requestMeta: {
+							backendLabel: 'Azure OpenAI responses',
+							model: 'gpt-5.4-mini',
+						},
+						errorCode: 'http_request_failed',
+						errorMessage:
+							'Azure OpenAI responses request timed out after 180 seconds.',
+					},
+				},
+				blockStatuses: {
+					'block-1': 'error',
+				},
+			},
+		});
+
+		renderContent();
+
+		const latestActivityProps =
+			mockRenderAIActivitySection.mock.calls[
+				mockRenderAIActivitySection.mock.calls.length - 1
+			][0];
+
+		expect(latestActivityProps.entries[0]).toEqual(
+			expect.objectContaining({
+				type: 'request_diagnostic',
+				suggestion:
+					'Block request failed: Azure OpenAI responses request timed out after 180 seconds.',
+				request: expect.objectContaining({
+					error: expect.objectContaining({
+						code: 'http_request_failed',
+						message:
+							'Azure OpenAI responses request timed out after 180 seconds.',
+					}),
+				}),
+				undo: expect.objectContaining({
+					status: 'failed',
+				}),
+			})
+		);
+	});
+
 	test('marks stored block results stale and keeps them visible until the user refreshes', () => {
 		currentState = createState({
 			store: {

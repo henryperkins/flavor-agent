@@ -1,8 +1,12 @@
 const mockApplySuggestion = jest.fn();
 const mockUseDispatch = jest.fn();
+const mockUseSelect = jest.fn();
+const mockCollectBlockContext = jest.fn();
+const mockFetchBlockRecommendations = jest.fn();
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useSelect: ( ...args ) => mockUseSelect( ...args ),
 } ) );
 
 jest.mock( '@wordpress/components', () =>
@@ -19,6 +23,13 @@ jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
 } ) );
 
+jest.mock( '../../context/collector', () => ( {
+	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
+	getLiveBlockContextSignature: jest.fn(
+		( _select, clientId ) => `live-context:${ clientId }`
+	),
+} ) );
+
 import { createElement } from '@wordpress/element';
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
@@ -31,9 +42,30 @@ const { getContainer, getRoot } = setupReactTest();
 beforeEach( () => {
 	jest.clearAllMocks();
 	mockApplySuggestion.mockResolvedValue( true );
+	mockCollectBlockContext.mockReturnValue( {
+		block: { name: 'core/paragraph' },
+	} );
 	mockUseDispatch.mockReturnValue( {
 		applySuggestion: mockApplySuggestion,
+		clearBlockError: jest.fn(),
+		fetchBlockRecommendations: mockFetchBlockRecommendations,
 	} );
+	mockUseSelect.mockImplementation( ( callback ) =>
+		callback( ( storeName ) => {
+			if ( storeName === 'flavor-agent' ) {
+				return {
+					getBlockApplyError: () => null,
+					getBlockRecommendations: () => ( {
+						prompt: 'Keep the current direction.',
+					} ),
+					getSurfaceStatusNotice: () => null,
+					isBlockLoading: () => false,
+				};
+			}
+
+			return {};
+		} )
+	);
 } );
 
 function renderComponent( suggestions ) {
@@ -138,7 +170,8 @@ describe( 'SettingsRecommendations', () => {
 
 		expect( mockApplySuggestion ).toHaveBeenCalledWith(
 			'block-1',
-			suggestion
+			suggestion,
+			'live-context:block-1'
 		);
 		expect( applyButton.disabled ).toBe( true );
 	} );

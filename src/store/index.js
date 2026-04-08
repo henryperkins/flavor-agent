@@ -765,6 +765,38 @@ function getApiErrorCode(error) {
 	return '';
 }
 
+function buildBlockRecommendationFailureDiagnostics(
+	error,
+	requestData = {},
+	requestToken = null
+) {
+	const message = getApiErrorMessage(error, 'Request failed.');
+	const requestMeta = normalizeRequestMeta(error?.data?.requestMeta);
+	const wrappedMessage =
+		normalizeStringMessage(
+			requestMeta?.errorSummary?.wrappedMessage ||
+				error?.data?.requestMeta?.errorSummary?.wrappedMessage
+		) || '';
+	const detailLines = [];
+
+	if (wrappedMessage && wrappedMessage !== message) {
+		detailLines.push(`Transport detail: ${wrappedMessage}`);
+	}
+
+	return {
+		type: 'failure',
+		title: `Block request failed: ${message}`,
+		detailLines,
+		requestMeta,
+		errorCode: getApiErrorCode(error),
+		errorMessage: message,
+		requestToken,
+		timestamp: new Date().toISOString(),
+		prompt: requestData.prompt || '',
+		blockName: requestData.editorContext?.block?.name || '',
+	};
+}
+
 function buildActivityQueryPath({
 	scopeKey,
 	surface = '',
@@ -1794,6 +1826,20 @@ const actions = {
 					requestData,
 					requestToken,
 				}) => {
+					const diagnostics = buildBlockRecommendationFailureDiagnostics(
+						err,
+						requestData,
+						requestToken
+					);
+
+					localDispatch(
+						actions.setBlockRequestState(
+							requestClientId,
+							'error',
+							err?.message || 'Request failed.',
+							requestToken
+						)
+					);
 					localDispatch(
 						actions.setBlockRecommendations(
 							requestClientId,
@@ -1805,20 +1851,12 @@ const actions = {
 								styles: [],
 								block: [],
 								explanation: '',
-								requestMeta: null,
+								requestMeta: diagnostics.requestMeta || null,
 								timestamp: Date.now(),
 							},
 							requestToken,
 							contextSignature,
-							null
-						)
-					);
-					localDispatch(
-						actions.setBlockRequestState(
-							requestClientId,
-							'error',
-							err?.message || 'Request failed.',
-							requestToken
+							diagnostics
 						)
 					);
 				},

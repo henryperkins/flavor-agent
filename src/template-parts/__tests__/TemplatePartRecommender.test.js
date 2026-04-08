@@ -554,7 +554,65 @@ describe('TemplatePartRecommender', () => {
 		expect(mockFetchTemplatePartRecommendations).toHaveBeenCalledWith(
 			expect.objectContaining({
 				templatePartRef: 'theme//header',
-				editorStructure: {
+				editorStructure: expect.objectContaining({
+					blockTree: [
+						{
+							path: [0],
+							name: 'core/group',
+							label: 'Group',
+							attributes: {},
+							childCount: 1,
+							children: [
+								{
+									path: [0, 0],
+									name: 'core/navigation',
+									label: 'Navigation',
+									attributes: {},
+									childCount: 0,
+									children: [],
+								},
+							],
+						},
+					],
+					allBlockPaths: [
+						{
+							path: [0],
+							name: 'core/group',
+							label: 'Group',
+							attributes: {},
+							childCount: 1,
+						},
+						{
+							path: [0, 0],
+							name: 'core/navigation',
+							label: 'Navigation',
+							attributes: {},
+							childCount: 0,
+						},
+					],
+					topLevelBlocks: ['core/group'],
+					blockCounts: {
+						'core/group': 1,
+						'core/navigation': 1,
+					},
+					structureStats: {
+						blockCount: 2,
+						maxDepth: 2,
+						hasNavigation: true,
+						containsLogo: false,
+						containsSiteTitle: false,
+						containsSearch: false,
+						containsSocialLinks: false,
+						containsQuery: false,
+						containsColumns: false,
+						containsButtons: false,
+						containsSpacer: false,
+						containsSeparator: false,
+						firstTopLevelBlock: 'core/group',
+						lastTopLevelBlock: 'core/group',
+						hasSingleWrapperGroup: true,
+						isNearlyEmpty: false,
+					},
 					currentPatternOverrides: {
 						hasOverrides: true,
 						blockCount: 1,
@@ -569,12 +627,88 @@ describe('TemplatePartRecommender', () => {
 							},
 						],
 					},
-				},
+					operationTargets: [
+						{
+							path: [0],
+							name: 'core/group',
+							label: 'Group',
+							allowedOperations: [
+								'replace_block_with_pattern',
+								'remove_block',
+							],
+							allowedInsertions: [
+								'before_block_path',
+								'after_block_path',
+							],
+						},
+						{
+							path: [0, 0],
+							name: 'core/navigation',
+							label: 'Navigation',
+							allowedOperations: [
+								'replace_block_with_pattern',
+								'remove_block',
+							],
+							allowedInsertions: [
+								'before_block_path',
+								'after_block_path',
+							],
+						},
+					],
+					insertionAnchors: [
+						{
+							placement: 'start',
+							label: 'Start of template part',
+						},
+						{
+							placement: 'end',
+							label: 'End of template part',
+						},
+						{
+							placement: 'before_block_path',
+							targetPath: [0],
+							blockName: 'core/group',
+							label: 'Before Group',
+						},
+						{
+							placement: 'after_block_path',
+							targetPath: [0],
+							blockName: 'core/group',
+							label: 'After Group',
+						},
+						{
+							placement: 'before_block_path',
+							targetPath: [0, 0],
+							blockName: 'core/navigation',
+							label: 'Before Navigation',
+						},
+						{
+							placement: 'after_block_path',
+							targetPath: [0, 0],
+							blockName: 'core/navigation',
+							label: 'After Navigation',
+						},
+					],
+					structuralConstraints: {
+						contentOnlyPaths: [],
+						lockedPaths: [],
+						hasContentOnly: false,
+						hasLockedBlocks: false,
+					},
+				}),
 			})
 		);
 	});
 
-	test('handles template-part requests without live override metadata', async () => {
+	test('handles template-part requests without live override metadata and keeps empty structure explicit', async () => {
+		currentState = createState({
+			blockEditor: {
+				blocks: [],
+			},
+		});
+
+		await renderPanel();
+
 		await act(async () => {
 			Array.from(getContainer().querySelectorAll('button'))
 				.find((element) => element.textContent === 'Get Suggestions')
@@ -585,11 +719,50 @@ describe('TemplatePartRecommender', () => {
 			expect.objectContaining({
 				templatePartRef: 'theme//header',
 				editorStructure: {
+					blockTree: [],
+					allBlockPaths: [],
+					topLevelBlocks: [],
+					blockCounts: {},
+					structureStats: {
+						blockCount: 0,
+						maxDepth: 0,
+						hasNavigation: false,
+						containsLogo: false,
+						containsSiteTitle: false,
+						containsSearch: false,
+						containsSocialLinks: false,
+						containsQuery: false,
+						containsColumns: false,
+						containsButtons: false,
+						containsSpacer: false,
+						containsSeparator: false,
+						firstTopLevelBlock: '',
+						lastTopLevelBlock: '',
+						hasSingleWrapperGroup: false,
+						isNearlyEmpty: true,
+					},
 					currentPatternOverrides: {
 						hasOverrides: false,
 						blockCount: 0,
 						blockNames: [],
 						blocks: [],
+					},
+					operationTargets: [],
+					insertionAnchors: [
+						{
+							placement: 'start',
+							label: 'Start of template part',
+						},
+						{
+							placement: 'end',
+							label: 'End of template part',
+						},
+					],
+					structuralConstraints: {
+						contentOnlyPaths: [],
+						lockedPaths: [],
+						hasContentOnly: false,
+						hasLockedBlocks: false,
 					},
 				},
 			})

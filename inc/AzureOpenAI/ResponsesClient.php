@@ -71,6 +71,7 @@ final class ResponsesClient extends BaseHttpClient {
 	 */
 	public static function rank( string $instructions, string $input, ?string $reasoning_effort = null ): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
+		Provider::record_runtime_chat_diagnostics( null );
 
 		$config                    = Provider::chat_configuration();
 		$provider                  = is_string( $config['provider'] ?? null ) ? $config['provider'] : null;
@@ -161,6 +162,7 @@ final class ResponsesClient extends BaseHttpClient {
 	 */
 	private static function request( string $url, array $headers, string $body, string $label ): string|\WP_Error {
 		$started_at = microtime( true );
+		$base_diagnostics = self::build_base_diagnostics( $url, $body, self::REQUEST_TIMEOUT );
 		$response = self::post_json_with_retry(
 			$url,
 			$headers,
@@ -170,7 +172,12 @@ final class ResponsesClient extends BaseHttpClient {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			Provider::record_runtime_chat_metrics( self::extract_response_metrics( [], $started_at ) );
+			Provider::record_runtime_chat_diagnostics(
+				self::build_error_diagnostics( $base_diagnostics, $response )
+			);
+
+			return self::append_request_meta_to_error( $response );
 		}
 
 		$status = $response['status'];
@@ -179,28 +186,312 @@ final class ResponsesClient extends BaseHttpClient {
 			is_array( $data ) ? $data : [],
 			$started_at
 		);
+		$diagnostics = self::build_response_diagnostics(
+			$base_diagnostics,
+			$status,
+			$response['headers'],
+			(int) $response['body_bytes'],
+			is_array( $data ) ? $data : []
+		);
 
 		if ( $status !== 200 ) {
 			Provider::record_runtime_chat_metrics( $metrics );
+			Provider::record_runtime_chat_diagnostics( $diagnostics );
 			$msg = is_array( $data ) ? ( $data['error']['message'] ?? "{$label} returned HTTP {$status}" ) : "{$label} returned HTTP {$status}";
-			return new \WP_Error( 'responses_error', $msg, [ 'status' => 502 ] );
+			return self::append_request_meta_to_error(
+				new \WP_Error(
+					'responses_error',
+					$msg,
+					[
+						'status'      => 502,
+						'http_status' => $status,
+					]
+				)
+			);
 		}
 
 		if ( JSON_ERROR_NONE !== $response['json_error'] ) {
 			Provider::record_runtime_chat_metrics( $metrics );
-			return new \WP_Error( 'responses_parse_error', 'Failed to parse Responses API response.', [ 'status' => 502 ] );
+			Provider::record_runtime_chat_diagnostics( $diagnostics );
+			return self::append_request_meta_to_error(
+				new \WP_Error(
+					'responses_parse_error',
+					'Failed to parse Responses API response.',
+					[
+						'status'      => 502,
+						'http_status' => $status,
+					]
+				)
+			);
 		}
 
 		$text = ConfigurationValidator::extract_response_text( is_array( $data ) ? $data : [] );
 
 		if ( empty( $text ) ) {
 			Provider::record_runtime_chat_metrics( $metrics );
-			return new \WP_Error( 'empty_response', "{$label} returned no text.", [ 'status' => 502 ] );
+			Provider::record_runtime_chat_diagnostics( $diagnostics );
+			return self::append_request_meta_to_error(
+				new \WP_Error(
+					'empty_response',
+					"{$label} returned no text.",
+					[
+						'status'      => 502,
+						'http_status' => $status,
+					]
+				)
+			);
 		}
 
 		Provider::record_runtime_chat_metrics( $metrics );
+		Provider::record_runtime_chat_diagnostics( $diagnostics );
 
 		return $text;
+	}
+
+	/**
+	 * @return array{
+	 *   transport: array<string, mixed>,
+	 *   requestSummary: array<string, mixed>
+	 * }
+	 */
+	private static function build_base_diagnostics( string $url, string $body, int $timeout ): array {
+		$decoded_body = json_decode( $body, true );
+		$payload      = is_array( $decoded_body ) ? $decoded_body : [];
+		$host         = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$path         = (string) wp_parse_url( $url, PHP_URL_PATH );
+		$request_summary = [
+			'bodyBytes' => strlen( $body ),
+		];
+
+		if ( [] !== $payload ) {
+			$request_summary['topLevelKeys'] = array_values(
+				array_filter(
+					array_keys( $payload ),
+					static fn ( $key ): bool => is_string( $key ) && '' !== $key
+				)
+			);
+		}
+
+		$instructions_chars = self::measure_payload_value( $payload['instructions'] ?? null );
+		$input_chars        = self::measure_payload_value( $payload['input'] ?? null );
+		$max_output_tokens  = self::normalize_metric_int( $payload['max_output_tokens'] ?? null );
+		$reasoning_effort   = trim(
+			(string) (
+				is_array( $payload['reasoning'] ?? null )
+					? ( $payload['reasoning']['effort'] ?? '' )
+					: ''
+			)
+		);
+
+		if ( null !== $instructions_chars ) {
+			$request_summary['instructionsChars'] = $instructions_chars;
+		}
+
+		if ( null !== $input_chars ) {
+			$request_summary['inputChars'] = $input_chars;
+		}
+
+		if ( null !== $max_output_tokens ) {
+			$request_summary['maxOutputTokens'] = $max_output_tokens;
+		}
+
+		if ( '' !== $reasoning_effort ) {
+			$request_summary['reasoningEffort'] = $reasoning_effort;
+		}
+
+		return [
+			'transport'      => [
+				'method'         => 'POST',
+				'host'           => '' !== $host ? $host : $url,
+				'path'           => $path,
+				'timeoutSeconds' => $timeout,
+			],
+			'requestSummary' => $request_summary,
+		];
+	}
+
+	/**
+	 * @param array{
+	 *   transport: array<string, mixed>,
+	 *   requestSummary: array<string, mixed>
+	 * } $base_diagnostics
+	 * @param array<string, string> $headers
+	 * @param array<string, mixed> $data
+	 * @return array{
+	 *   transport: array<string, mixed>,
+	 *   requestSummary: array<string, mixed>,
+	 *   responseSummary: array<string, mixed>
+	 * }
+	 */
+	private static function build_response_diagnostics(
+		array $base_diagnostics,
+		int $status,
+		array $headers,
+		int $body_bytes,
+		array $data
+	): array {
+		$response_summary = [
+			'httpStatus' => $status,
+			'bodyBytes'  => max( 0, $body_bytes ),
+		];
+
+		$provider_request_id = self::first_header_value(
+			$headers,
+			[ 'apim-request-id', 'x-request-id', 'request-id', 'x-ms-request-id' ]
+		);
+		$processing_ms       = self::normalize_metric_int(
+			self::first_header_value( $headers, [ 'openai-processing-ms', 'x-openai-processing-ms' ] )
+		);
+		$retry_after         = self::normalize_metric_int(
+			self::first_header_value( $headers, [ 'retry-after' ] )
+		);
+		$region              = self::first_header_value( $headers, [ 'x-ms-region' ] );
+
+		if ( null !== $provider_request_id ) {
+			$response_summary['providerRequestId'] = $provider_request_id;
+		}
+
+		if ( null !== $processing_ms ) {
+			$response_summary['processingMs'] = $processing_ms;
+		}
+
+		if ( null !== $retry_after ) {
+			$response_summary['retryAfter'] = $retry_after;
+		}
+
+		if ( null !== $region ) {
+			$response_summary['region'] = $region;
+		}
+
+		if ( is_array( $data['error'] ?? null ) && is_string( $data['error']['message'] ?? null ) ) {
+			$response_summary['errorMessage'] = trim( (string) $data['error']['message'] );
+		}
+
+		return $base_diagnostics + [
+			'responseSummary' => $response_summary,
+		];
+	}
+
+	/**
+	 * @param array{
+	 *   transport: array<string, mixed>,
+	 *   requestSummary: array<string, mixed>
+	 * } $base_diagnostics
+	 * @return array{
+	 *   transport: array<string, mixed>,
+	 *   requestSummary: array<string, mixed>,
+	 *   responseSummary?: array<string, mixed>,
+	 *   errorSummary: array<string, mixed>
+	 * }
+	 */
+	private static function build_error_diagnostics( array $base_diagnostics, \WP_Error $error ): array {
+		$error_code = $error->get_error_code();
+		$error_data = $error->get_error_data( $error_code );
+		$error_data = is_array( $error_data ) ? $error_data : [];
+		$response_summary = [];
+		$error_summary    = [
+			'code'    => $error_code,
+			'message' => trim( $error->get_error_message( $error_code ) ),
+		];
+
+		$http_status = self::normalize_metric_int( $error_data['http_status'] ?? $error_data['status'] ?? null );
+
+		if ( null !== $http_status ) {
+			$response_summary['httpStatus'] = $http_status;
+		}
+
+		$response_body_bytes = self::normalize_metric_int( $error_data['response_body_bytes'] ?? null );
+
+		if ( null !== $response_body_bytes ) {
+			$response_summary['bodyBytes'] = $response_body_bytes;
+		}
+
+		if ( is_string( $error_data['wrapped'] ?? null ) && '' !== trim( (string) $error_data['wrapped'] ) ) {
+			$error_summary['wrappedMessage'] = trim( (string) $error_data['wrapped'] );
+		}
+
+		$response_headers = is_array( $error_data['response_headers'] ?? null )
+			? $error_data['response_headers']
+			: [];
+
+		$provider_request_id = self::first_header_value(
+			$response_headers,
+			[ 'apim-request-id', 'x-request-id', 'request-id', 'x-ms-request-id' ]
+		);
+		$retry_after         = self::normalize_metric_int( $error_data['retry_after'] ?? null );
+
+		if ( null !== $provider_request_id ) {
+			$response_summary['providerRequestId'] = $provider_request_id;
+		}
+
+		if ( null !== $retry_after ) {
+			$response_summary['retryAfter'] = $retry_after;
+		}
+
+		if ( [] !== $response_headers ) {
+			$region = self::first_header_value( $response_headers, [ 'x-ms-region' ] );
+
+			if ( null !== $region ) {
+				$response_summary['region'] = $region;
+			}
+		}
+
+		return $base_diagnostics + array_filter(
+			[
+				'responseSummary' => [] !== $response_summary ? $response_summary : null,
+				'errorSummary'    => $error_summary,
+			]
+		);
+	}
+
+	private static function append_request_meta_to_error( \WP_Error $error ): \WP_Error {
+		$code = $error->get_error_code();
+		$data = $error->get_error_data( $code );
+		$data = is_array( $data )
+			? $data
+			: ( null !== $data ? [ 'originalData' => $data ] : [] );
+
+		$data['requestMeta'] = Provider::active_chat_request_meta();
+
+		return new \WP_Error(
+			$code,
+			$error->get_error_message( $code ),
+			$data
+		);
+	}
+
+	private static function first_header_value( array $headers, array $candidates ): ?string {
+		foreach ( $candidates as $candidate ) {
+			$value = trim( (string) ( $headers[ strtolower( $candidate ) ] ?? '' ) );
+
+			if ( '' !== $value ) {
+				return $value;
+			}
+		}
+
+		return null;
+	}
+
+	private static function measure_payload_value( $value ): ?int {
+		if ( is_string( $value ) ) {
+			return self::string_length( $value );
+		}
+
+		if ( is_array( $value ) || is_object( $value ) ) {
+			$encoded = wp_json_encode( $value );
+
+			if ( false !== $encoded ) {
+				return self::string_length( $encoded );
+			}
+		}
+
+		return null;
+	}
+
+	private static function string_length( string $value ): int {
+		return function_exists( 'mb_strlen' )
+			? (int) mb_strlen( $value, 'UTF-8' )
+			: strlen( $value );
 	}
 
 	/**

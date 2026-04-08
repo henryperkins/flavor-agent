@@ -60,36 +60,10 @@ final class TemplateAbilities {
 			return $context;
 		}
 
-		$editor_slots = self::normalize_editor_slots( $input['editorSlots'] ?? null );
-
-		if ( array_key_exists( 'assignedParts', $editor_slots ) ) {
-			$context['assignedParts'] = $editor_slots['assignedParts'];
-		}
-
-		if ( array_key_exists( 'emptyAreas', $editor_slots ) ) {
-			$context['emptyAreas'] = $editor_slots['emptyAreas'];
-		}
-
-		if ( array_key_exists( 'allowedAreas', $editor_slots ) ) {
-			$context['allowedAreas'] = $editor_slots['allowedAreas'];
-		}
-
-		$editor_structure = self::normalize_editor_structure( $input['editorStructure'] ?? null );
-
-		if ( array_key_exists( 'topLevelBlockTree', $editor_structure ) ) {
-			$context['topLevelBlockTree']        = $editor_structure['topLevelBlockTree'];
-			$context['topLevelInsertionAnchors'] = self::build_top_level_insertion_anchors(
-				$editor_structure['topLevelBlockTree']
-			);
-		}
-
-		if ( array_key_exists( 'currentPatternOverrides', $editor_structure ) ) {
-			$context['currentPatternOverrides'] = $editor_structure['currentPatternOverrides'];
-		}
-
-		if ( array_key_exists( 'currentViewportVisibility', $editor_structure ) ) {
-			$context['currentViewportVisibility'] = $editor_structure['currentViewportVisibility'];
-		}
+		$editor_slots     = self::normalize_template_editor_slots( $input['editorSlots'] ?? null );
+		$editor_structure = self::normalize_template_editor_structure( $input['editorStructure'] ?? null );
+		$context          = self::apply_template_live_slot_context( $context, $editor_slots );
+		$context          = self::apply_template_live_structure_context( $context, $editor_structure );
 
 		$system = TemplatePrompt::build_system();
 		$user   = TemplatePrompt::build_user(
@@ -136,11 +110,8 @@ final class TemplateAbilities {
 			return $context;
 		}
 
-		$editor_structure = self::normalize_editor_structure( $input['editorStructure'] ?? null );
-
-		if ( array_key_exists( 'currentPatternOverrides', $editor_structure ) ) {
-			$context['currentPatternOverrides'] = $editor_structure['currentPatternOverrides'];
-		}
+		$editor_structure = self::normalize_template_part_editor_structure( $input['editorStructure'] ?? null );
+		$context          = self::apply_template_part_live_structure_context( $context, $editor_structure );
 
 		$system = TemplatePartPrompt::build_system();
 		$user   = TemplatePartPrompt::build_user(
@@ -160,7 +131,7 @@ final class TemplateAbilities {
 	/**
 	 * @return array<string, mixed>
 	 */
-	private static function normalize_editor_slots( mixed $input ): array {
+	private static function normalize_template_editor_slots( mixed $input ): array {
 		if ( is_object( $input ) ) {
 			$input = get_object_vars( $input );
 		}
@@ -227,7 +198,7 @@ final class TemplateAbilities {
 	/**
 	 * @return array<string, mixed>
 	 */
-	private static function normalize_editor_structure( mixed $input ): array {
+	private static function normalize_template_editor_structure( mixed $input ): array {
 		if ( is_object( $input ) ) {
 			$input = get_object_vars( $input );
 		}
@@ -283,6 +254,12 @@ final class TemplateAbilities {
 			$result['topLevelBlockTree'] = $top_level_block_tree;
 		}
 
+		if ( array_key_exists( 'structureStats', $input ) ) {
+			$result['structureStats'] = self::normalize_template_structure_stats(
+				$input['structureStats']
+			);
+		}
+
 		if ( array_key_exists( 'currentPatternOverrides', $input ) ) {
 			$result['currentPatternOverrides'] = self::normalize_pattern_override_summary(
 				$input['currentPatternOverrides']
@@ -296,6 +273,185 @@ final class TemplateAbilities {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_template_part_editor_structure( mixed $input ): array {
+		$input = self::normalize_input( $input );
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$result = [];
+
+		if ( array_key_exists( 'blockTree', $input ) ) {
+			$result['blockTree'] = self::normalize_template_part_block_tree(
+				$input['blockTree']
+			);
+		}
+
+		if ( array_key_exists( 'allBlockPaths', $input ) ) {
+			$result['allBlockPaths'] = self::normalize_template_part_path_index(
+				$input['allBlockPaths']
+			);
+		}
+
+		$has_live_path_coverage = array_key_exists( 'allBlockPaths', $result ) || array_key_exists( 'blockTree', $result );
+		$path_lookup            = self::build_template_part_path_lookup_from_live_structure( $result );
+
+		if ( array_key_exists( 'topLevelBlocks', $input ) ) {
+			$result['topLevelBlocks'] = array_values(
+				array_filter(
+					array_map(
+						'sanitize_text_field',
+						StringArray::sanitize( $input['topLevelBlocks'] )
+					),
+					static fn( string $name ): bool => '' !== $name
+				)
+			);
+		}
+
+		if ( array_key_exists( 'blockCounts', $input ) ) {
+			$result['blockCounts'] = self::normalize_block_counts(
+				$input['blockCounts']
+			);
+		}
+
+		if ( array_key_exists( 'structureStats', $input ) ) {
+			$result['structureStats'] = self::normalize_template_part_structure_stats(
+				$input['structureStats']
+			);
+		}
+
+		if ( array_key_exists( 'currentPatternOverrides', $input ) ) {
+			$overrides = self::normalize_pattern_override_summary(
+				$input['currentPatternOverrides']
+			);
+			$result['currentPatternOverrides'] = $has_live_path_coverage
+				? self::filter_pattern_override_summary_by_path_lookup( $overrides, $path_lookup )
+				: $overrides;
+		}
+
+		if ( array_key_exists( 'operationTargets', $input ) ) {
+			$result['operationTargets'] = self::normalize_template_part_operation_targets(
+				$input['operationTargets'],
+				$path_lookup
+			);
+		}
+
+		if ( array_key_exists( 'insertionAnchors', $input ) ) {
+			$result['insertionAnchors'] = self::normalize_template_part_insertion_anchors(
+				$input['insertionAnchors'],
+				$path_lookup
+			);
+		}
+
+		if ( array_key_exists( 'structuralConstraints', $input ) ) {
+			$result['structuralConstraints'] = self::normalize_template_part_structural_constraints(
+				$input['structuralConstraints'],
+				$path_lookup
+			);
+		}
+
+		if ( $has_live_path_coverage ) {
+			$result['topLevelBlocks'] = self::derive_template_part_top_level_blocks_from_path_lookup(
+				$path_lookup
+			);
+			$result['blockCounts']    = self::derive_template_part_block_counts_from_path_lookup(
+				$path_lookup
+			);
+			$result['structureStats'] = self::derive_template_part_structure_stats_from_path_lookup(
+				$path_lookup
+			);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @param array<string, mixed> $editor_slots
+	 * @return array<string, mixed>
+	 */
+	private static function apply_template_live_slot_context( array $context, array $editor_slots ): array {
+		if ( array_key_exists( 'assignedParts', $editor_slots ) ) {
+			$context['assignedParts'] = $editor_slots['assignedParts'];
+		}
+
+		if ( array_key_exists( 'emptyAreas', $editor_slots ) ) {
+			$context['emptyAreas'] = $editor_slots['emptyAreas'];
+		}
+
+		if (
+			array_key_exists( 'assignedParts', $editor_slots )
+			|| array_key_exists( 'emptyAreas', $editor_slots )
+			|| array_key_exists( 'allowedAreas', $editor_slots )
+		) {
+			$context['allowedAreas'] = self::build_effective_template_allowed_areas(
+				$context,
+				$editor_slots
+			);
+		}
+
+		return $context;
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @param array<string, mixed> $editor_structure
+	 * @return array<string, mixed>
+	 */
+	private static function apply_template_live_structure_context( array $context, array $editor_structure ): array {
+		if ( array_key_exists( 'topLevelBlockTree', $editor_structure ) ) {
+			$context['topLevelBlockTree']        = $editor_structure['topLevelBlockTree'];
+			$context['topLevelInsertionAnchors'] = self::build_top_level_insertion_anchors(
+				$editor_structure['topLevelBlockTree']
+			);
+		}
+
+		if ( array_key_exists( 'structureStats', $editor_structure ) ) {
+			$context['structureStats'] = $editor_structure['structureStats'];
+		}
+
+		if ( array_key_exists( 'currentPatternOverrides', $editor_structure ) ) {
+			$context['currentPatternOverrides'] = $editor_structure['currentPatternOverrides'];
+		}
+
+		if ( array_key_exists( 'currentViewportVisibility', $editor_structure ) ) {
+			$context['currentViewportVisibility'] = $editor_structure['currentViewportVisibility'];
+		}
+
+		return $context;
+	}
+
+	/**
+	 * @param array<string, mixed> $context
+	 * @param array<string, mixed> $editor_structure
+	 * @return array<string, mixed>
+	 */
+	private static function apply_template_part_live_structure_context( array $context, array $editor_structure ): array {
+		foreach (
+			[
+				'blockTree',
+				'allBlockPaths',
+				'topLevelBlocks',
+				'blockCounts',
+				'structureStats',
+				'currentPatternOverrides',
+				'operationTargets',
+				'insertionAnchors',
+				'structuralConstraints',
+			] as $key
+		) {
+			if ( array_key_exists( $key, $editor_structure ) ) {
+				$context[ $key ] = $editor_structure[ $key ];
+			}
+		}
+
+		return $context;
 	}
 
 	/**
@@ -422,6 +578,578 @@ final class TemplateAbilities {
 	}
 
 	/**
+	 * @param array<string, mixed> $context
+	 * @param array<string, mixed> $editor_slots
+	 * @return string[]
+	 */
+	private static function build_effective_template_allowed_areas( array $context, array $editor_slots ): array {
+		$allowed_areas = StringArray::sanitize( $context['allowedAreas'] ?? [] );
+
+		foreach ( is_array( $editor_slots['assignedParts'] ?? null ) ? $editor_slots['assignedParts'] : [] as $part ) {
+			if ( ! is_array( $part ) ) {
+				continue;
+			}
+
+			$area = sanitize_key( (string) ( $part['area'] ?? '' ) );
+
+			if ( '' !== $area ) {
+				$allowed_areas[] = $area;
+			}
+		}
+
+		$allowed_areas = array_merge(
+			$allowed_areas,
+			StringArray::sanitize( $editor_slots['emptyAreas'] ?? [] ),
+			StringArray::sanitize( $editor_slots['allowedAreas'] ?? [] )
+		);
+
+		$allowed_areas = array_values(
+			array_unique(
+				array_filter(
+					array_map( 'sanitize_key', $allowed_areas ),
+					static fn( string $area ): bool => '' !== $area
+				)
+			)
+		);
+		sort( $allowed_areas );
+
+		return $allowed_areas;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_template_structure_stats( mixed $input ): array {
+		$input = self::normalize_input( $input );
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		return [
+			'blockCount'         => max( 0, (int) ( $input['blockCount'] ?? 0 ) ),
+			'maxDepth'           => max( 0, (int) ( $input['maxDepth'] ?? 0 ) ),
+			'topLevelBlockCount' => max( 0, (int) ( $input['topLevelBlockCount'] ?? 0 ) ),
+			'hasNavigation'      => ! empty( $input['hasNavigation'] ),
+			'hasQuery'           => ! empty( $input['hasQuery'] ),
+			'hasTemplateParts'   => ! empty( $input['hasTemplateParts'] ),
+			'firstTopLevelBlock' => sanitize_text_field( (string) ( $input['firstTopLevelBlock'] ?? '' ) ),
+			'lastTopLevelBlock'  => sanitize_text_field( (string) ( $input['lastTopLevelBlock'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_template_part_structure_stats( mixed $input ): array {
+		$input = self::normalize_input( $input );
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		return [
+			'blockCount'          => max( 0, (int) ( $input['blockCount'] ?? 0 ) ),
+			'maxDepth'            => max( 0, (int) ( $input['maxDepth'] ?? 0 ) ),
+			'hasNavigation'       => ! empty( $input['hasNavigation'] ),
+			'containsLogo'        => ! empty( $input['containsLogo'] ),
+			'containsSiteTitle'   => ! empty( $input['containsSiteTitle'] ),
+			'containsSearch'      => ! empty( $input['containsSearch'] ),
+			'containsSocialLinks' => ! empty( $input['containsSocialLinks'] ),
+			'containsQuery'       => ! empty( $input['containsQuery'] ),
+			'containsColumns'     => ! empty( $input['containsColumns'] ),
+			'containsButtons'     => ! empty( $input['containsButtons'] ),
+			'containsSpacer'      => ! empty( $input['containsSpacer'] ),
+			'containsSeparator'   => ! empty( $input['containsSeparator'] ),
+			'firstTopLevelBlock'  => sanitize_text_field( (string) ( $input['firstTopLevelBlock'] ?? '' ) ),
+			'lastTopLevelBlock'   => sanitize_text_field( (string) ( $input['lastTopLevelBlock'] ?? '' ) ),
+			'hasSingleWrapperGroup' => ! empty( $input['hasSingleWrapperGroup'] ),
+			'isNearlyEmpty'       => ! empty( $input['isNearlyEmpty'] ),
+		];
+	}
+
+	/**
+	 * @return array<string, int>
+	 */
+	private static function normalize_block_counts( mixed $input ): array {
+		if ( is_object( $input ) ) {
+			$input = get_object_vars( $input );
+		}
+
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$result = [];
+
+		foreach ( $input as $name => $count ) {
+			$block_name = sanitize_text_field( (string) $name );
+
+			if ( '' === $block_name || ! is_numeric( $count ) ) {
+				continue;
+			}
+
+			$result[ $block_name ] = max( 0, (int) $count );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_template_part_block_tree( mixed $input ): array {
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$tree = [];
+
+		foreach ( $input as $node ) {
+			$normalized = self::normalize_template_part_block_tree_node( $node );
+
+			if ( null !== $normalized ) {
+				$tree[] = $normalized;
+			}
+		}
+
+		return $tree;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private static function normalize_template_part_block_tree_node( mixed $node ): ?array {
+		$entry = self::normalize_template_part_path_node( $node );
+
+		if ( null === $entry ) {
+			return null;
+		}
+
+		if ( is_object( $node ) ) {
+			$node = get_object_vars( $node );
+		}
+
+		$children = [];
+		foreach ( is_array( $node['children'] ?? null ) ? $node['children'] : [] as $child ) {
+			$normalized_child = self::normalize_template_part_block_tree_node( $child );
+
+			if ( null !== $normalized_child ) {
+				$children[] = $normalized_child;
+			}
+		}
+
+		$entry['children'] = $children;
+
+		return $entry;
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_template_part_path_index( mixed $input ): array {
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$paths = [];
+
+		foreach ( $input as $node ) {
+			$normalized = self::normalize_template_part_path_node( $node );
+
+			if ( null !== $normalized ) {
+				$paths[] = $normalized;
+			}
+		}
+
+		return $paths;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private static function normalize_template_part_path_node( mixed $node ): ?array {
+		if ( is_object( $node ) ) {
+			$node = get_object_vars( $node );
+		}
+
+		if ( ! is_array( $node ) ) {
+			return null;
+		}
+
+		$path = self::sanitize_block_path( $node['path'] ?? null );
+		$name = sanitize_text_field( (string) ( $node['name'] ?? '' ) );
+
+		if ( null === $path || '' === $name ) {
+			return null;
+		}
+
+		$entry = [
+			'path'       => $path,
+			'name'       => $name,
+			'label'      => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
+			'attributes' => self::normalize_template_block_attributes( $node['attributes'] ?? null ),
+			'childCount' => isset( $node['childCount'] ) && is_numeric( $node['childCount'] )
+				? max( 0, (int) $node['childCount'] )
+				: 0,
+		];
+
+		$slot = self::normalize_template_slot_summary( $node['slot'] ?? null );
+		if ( [] !== $slot ) {
+			$entry['slot'] = $slot;
+		}
+
+		return $entry;
+	}
+
+	/**
+	 * @param array<string, mixed> $structure
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_template_part_path_lookup_from_live_structure( array $structure ): array {
+		if ( array_key_exists( 'allBlockPaths', $structure ) ) {
+			$lookup = [];
+
+			foreach ( is_array( $structure['allBlockPaths'] ) ? $structure['allBlockPaths'] : [] as $node ) {
+				if ( ! is_array( $node ) ) {
+					continue;
+				}
+
+				$path = self::sanitize_block_path( $node['path'] ?? null );
+
+				if ( null === $path ) {
+					continue;
+				}
+
+				$lookup[ self::block_path_key( $path ) ] = $node;
+			}
+
+			return $lookup;
+		}
+
+		if ( array_key_exists( 'blockTree', $structure ) ) {
+			return self::build_template_part_path_lookup_from_block_tree(
+				is_array( $structure['blockTree'] ) ? $structure['blockTree'] : []
+			);
+		}
+
+		return [];
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $tree
+	 * @return array<string, array<string, mixed>>
+	 */
+	private static function build_template_part_path_lookup_from_block_tree( array $tree ): array {
+		$lookup = [];
+
+		foreach ( $tree as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $node['path'] ?? null );
+
+			if ( null !== $path ) {
+				$lookup[ self::block_path_key( $path ) ] = $node;
+			}
+
+			$children = is_array( $node['children'] ?? null ) ? $node['children'] : [];
+			$lookup   = array_merge(
+				$lookup,
+				self::build_template_part_path_lookup_from_block_tree( $children )
+			);
+		}
+
+		return $lookup;
+	}
+
+	/**
+	 * @param array<string, mixed>               $summary
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<string, mixed>
+	 */
+	private static function filter_pattern_override_summary_by_path_lookup( array $summary, array $path_lookup ): array {
+		$blocks = [];
+
+		foreach ( is_array( $summary['blocks'] ?? null ) ? $summary['blocks'] : [] as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $block['path'] ?? null );
+
+			if ( null === $path || ! isset( $path_lookup[ self::block_path_key( $path ) ] ) ) {
+				continue;
+			}
+
+			$blocks[] = $block;
+		}
+
+		return [
+			'hasOverrides' => [] !== $blocks,
+			'blockCount'   => count( $blocks ),
+			'blockNames'   => array_values(
+				array_unique(
+					array_map(
+						static fn( array $block ): string => sanitize_text_field( (string) ( $block['name'] ?? '' ) ),
+						$blocks
+					)
+				)
+			),
+			'blocks'       => $blocks,
+		];
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_template_part_operation_targets( mixed $input, array $path_lookup ): array {
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$targets = [];
+
+		foreach ( $input as $target ) {
+			$target = self::normalize_input( $target );
+			$path   = self::sanitize_block_path( $target['path'] ?? null );
+
+			if ( null === $path ) {
+				continue;
+			}
+
+			$path_key     = self::block_path_key( $path );
+			$path_details = $path_lookup[ $path_key ] ?? null;
+
+			if ( ! is_array( $path_details ) ) {
+				continue;
+			}
+
+			$targets[] = [
+				'path'              => $path,
+				'name'              => sanitize_text_field( (string) ( $path_details['name'] ?? '' ) ),
+				'label'             => sanitize_text_field(
+					(string) ( $target['label'] ?? ( $path_details['label'] ?? '' ) )
+				),
+				'allowedOperations' => array_values(
+					array_unique(
+						array_filter(
+							array_map(
+								'sanitize_key',
+								StringArray::sanitize( $target['allowedOperations'] ?? [] )
+							),
+							static fn( string $operation ): bool => '' !== $operation
+						)
+					)
+				),
+				'allowedInsertions' => array_values(
+					array_unique(
+						array_filter(
+							array_map(
+								'sanitize_key',
+								StringArray::sanitize( $target['allowedInsertions'] ?? [] )
+							),
+							static fn( string $placement ): bool => '' !== $placement
+						)
+					)
+				),
+			];
+		}
+
+		return $targets;
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_template_part_insertion_anchors( mixed $input, array $path_lookup ): array {
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$anchors = [];
+
+		foreach ( $input as $anchor ) {
+			$anchor    = self::normalize_input( $anchor );
+			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+			$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+
+			if ( '' === $placement ) {
+				continue;
+			}
+
+			$entry = [
+				'placement' => $placement,
+				'label'     => sanitize_text_field( (string) ( $anchor['label'] ?? '' ) ),
+			];
+
+			if ( null !== $path ) {
+				$path_key     = self::block_path_key( $path );
+				$path_details = $path_lookup[ $path_key ] ?? null;
+
+				if ( ! is_array( $path_details ) ) {
+					continue;
+				}
+
+				$entry['targetPath'] = $path;
+				$entry['blockName']  = sanitize_text_field(
+					(string) ( $path_details['name'] ?? '' )
+				);
+			}
+
+			$anchors[] = $entry;
+		}
+
+		return $anchors;
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_template_part_structural_constraints( mixed $input, array $path_lookup ): array {
+		$input = self::normalize_input( $input );
+
+		$content_only_paths = self::normalize_path_list_against_lookup(
+			$input['contentOnlyPaths'] ?? [],
+			$path_lookup
+		);
+		$locked_paths       = self::normalize_path_list_against_lookup(
+			$input['lockedPaths'] ?? [],
+			$path_lookup
+		);
+
+		return [
+			'contentOnlyPaths' => $content_only_paths,
+			'lockedPaths'      => $locked_paths,
+			'hasContentOnly'   => count( $content_only_paths ) > 0,
+			'hasLockedBlocks'  => count( $locked_paths ) > 0,
+		];
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<int, array<int, int>>
+	 */
+	private static function normalize_path_list_against_lookup( mixed $input, array $path_lookup ): array {
+		if ( ! is_array( $input ) ) {
+			return [];
+		}
+
+		$paths = [];
+
+		foreach ( $input as $path ) {
+			$normalized = self::sanitize_block_path( $path );
+
+			if ( null === $normalized || ! isset( $path_lookup[ self::block_path_key( $normalized ) ] ) ) {
+				continue;
+			}
+
+			$paths[ self::block_path_key( $normalized ) ] = $normalized;
+		}
+
+		return array_values( $paths );
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return string[]
+	 */
+	private static function derive_template_part_top_level_blocks_from_path_lookup( array $path_lookup ): array {
+		$top_level_blocks = [];
+
+		foreach ( $path_lookup as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $node['path'] ?? null );
+			$name = sanitize_text_field( (string) ( $node['name'] ?? '' ) );
+
+			if ( null === $path || 1 !== count( $path ) || '' === $name ) {
+				continue;
+			}
+
+			$top_level_blocks[] = $name;
+		}
+
+		return $top_level_blocks;
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<string, int>
+	 */
+	private static function derive_template_part_block_counts_from_path_lookup( array $path_lookup ): array {
+		$block_counts = [];
+
+		foreach ( $path_lookup as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $node['name'] ?? '' ) );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$block_counts[ $name ] = ( $block_counts[ $name ] ?? 0 ) + 1;
+		}
+
+		return $block_counts;
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $path_lookup
+	 * @return array<string, mixed>
+	 */
+	private static function derive_template_part_structure_stats_from_path_lookup( array $path_lookup ): array {
+		$top_level_blocks = self::derive_template_part_top_level_blocks_from_path_lookup(
+			$path_lookup
+		);
+		$block_counts     = self::derive_template_part_block_counts_from_path_lookup(
+			$path_lookup
+		);
+		$block_count      = count( $path_lookup );
+		$max_depth        = 0;
+
+		foreach ( $path_lookup as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$path = self::sanitize_block_path( $node['path'] ?? null );
+
+			if ( null !== $path ) {
+				$max_depth = max( $max_depth, count( $path ) );
+			}
+		}
+
+		return [
+			'blockCount'            => $block_count,
+			'maxDepth'              => $max_depth,
+			'hasNavigation'         => ! empty( $block_counts['core/navigation'] ),
+			'containsLogo'          => ! empty( $block_counts['core/site-logo'] ),
+			'containsSiteTitle'     => ! empty( $block_counts['core/site-title'] ),
+			'containsSearch'        => ! empty( $block_counts['core/search'] ),
+			'containsSocialLinks'   => ! empty( $block_counts['core/social-links'] ),
+			'containsQuery'         => ! empty( $block_counts['core/query'] ),
+			'containsColumns'       => ! empty( $block_counts['core/columns'] ),
+			'containsButtons'       => ! empty( $block_counts['core/buttons'] ),
+			'containsSpacer'        => ! empty( $block_counts['core/spacer'] ),
+			'containsSeparator'     => ! empty( $block_counts['core/separator'] ),
+			'firstTopLevelBlock'    => $top_level_blocks[0] ?? '',
+			'lastTopLevelBlock'     => count( $top_level_blocks ) > 0 ? $top_level_blocks[ count( $top_level_blocks ) - 1 ] : '',
+			'hasSingleWrapperGroup' => 1 === count( $top_level_blocks ) && 'core/group' === $top_level_blocks[0],
+			'isNearlyEmpty'         => $block_count <= 1,
+		];
+	}
+
+	/**
 	 * @return array<string, scalar>
 	 */
 	private static function normalize_template_block_attributes( mixed $input ): array {
@@ -445,6 +1173,9 @@ final class TemplateAbilities {
 			'area'            => 'key',
 			'ref'             => 'int',
 			'templateLock'    => 'text',
+			'layoutType'      => 'text',
+			'layoutJustifyContent' => 'text',
+			'layoutOrientation' => 'text',
 		];
 
 		foreach ( $allowed_fields as $field => $type ) {

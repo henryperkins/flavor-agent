@@ -73,9 +73,14 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, string> */
 		public static array $db_queries = [];
 
+		/** @var array<string, array<int, array<int, array{callback: callable, accepted_args: int}>>> */
+		public static array $filters = [];
+
 		public static int $db_insert_id = 0;
 
 		public static int $current_user_id = 0;
+
+		public static ?object $current_screen = null;
 
 		public static mixed $remote_post_response = [];
 
@@ -124,8 +129,10 @@ namespace FlavorAgent\Tests\Support {
 			self::$posts                       = [];
 			self::$db_tables                   = [];
 			self::$db_queries                  = [];
+			self::$filters                     = [];
 			self::$db_insert_id                = 0;
 			self::$current_user_id             = 0;
+			self::$current_screen              = null;
 			self::$remote_post_response        = [];
 			self::$remote_get_response         = [];
 			self::$ai_client_supported         = false;
@@ -815,6 +822,24 @@ namespace {
 		}
 	}
 
+	if ( ! class_exists( 'WP_Screen' ) ) {
+		class WP_Screen {
+
+			/** @var array<int, array<string, mixed>> */
+			public array $help_tabs = [];
+
+			public string $help_sidebar = '';
+
+			public function add_help_tab( array $args ): void {
+				$this->help_tabs[] = $args;
+			}
+
+			public function set_help_sidebar( string $content ): void {
+				$this->help_sidebar = $content;
+			}
+		}
+	}
+
 	if ( ! function_exists( 'get_option' ) ) {
 		function get_option( string $name, $default = false ) {
 			return WordPressTestState::$options[ $name ] ?? $default;
@@ -1008,6 +1033,100 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'add_filter' ) ) {
+		function add_filter( string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+			if ( ! isset( WordPressTestState::$filters[ $hook_name ] ) ) {
+				WordPressTestState::$filters[ $hook_name ] = [];
+			}
+
+			if ( ! isset( WordPressTestState::$filters[ $hook_name ][ $priority ] ) ) {
+				WordPressTestState::$filters[ $hook_name ][ $priority ] = [];
+			}
+
+			WordPressTestState::$filters[ $hook_name ][ $priority ][] = [
+				'callback'      => $callback,
+				'accepted_args' => max( 0, $accepted_args ),
+			];
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'apply_filters' ) ) {
+		function apply_filters( string $hook_name, $value, ...$args ) {
+			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
+				return $value;
+			}
+
+			$callbacks = WordPressTestState::$filters[ $hook_name ];
+			ksort( $callbacks );
+
+			foreach ( $callbacks as $entries ) {
+				foreach ( $entries as $entry ) {
+					$accepted_args = (int) ( $entry['accepted_args'] ?? 1 );
+					$callback_args = 0 === $accepted_args
+						? []
+						: array_slice( array_merge( [ $value ], $args ), 0, $accepted_args );
+					$value         = call_user_func_array( $entry['callback'], $callback_args );
+				}
+			}
+
+			return $value;
+		}
+	}
+
+	if ( ! function_exists( 'remove_filter' ) ) {
+		function remove_filter( string $hook_name, callable $callback, int $priority = 10 ): bool {
+			$entries = WordPressTestState::$filters[ $hook_name ][ $priority ] ?? null;
+
+			if ( ! is_array( $entries ) ) {
+				return false;
+			}
+
+			foreach ( $entries as $index => $entry ) {
+				if ( ( $entry['callback'] ?? null ) !== $callback ) {
+					continue;
+				}
+
+				unset( WordPressTestState::$filters[ $hook_name ][ $priority ][ $index ] );
+
+				if ( [] === WordPressTestState::$filters[ $hook_name ][ $priority ] ) {
+					unset( WordPressTestState::$filters[ $hook_name ][ $priority ] );
+				}
+
+				if ( [] === WordPressTestState::$filters[ $hook_name ] ) {
+					unset( WordPressTestState::$filters[ $hook_name ] );
+				}
+
+				return true;
+			}
+
+			return false;
+		}
+	}
+
+	if ( ! function_exists( 'remove_all_filters' ) ) {
+		function remove_all_filters( ?string $hook_name = null, $priority = false ): bool {
+			if ( null === $hook_name ) {
+				WordPressTestState::$filters = [];
+				return true;
+			}
+
+			if ( false === $priority ) {
+				unset( WordPressTestState::$filters[ $hook_name ] );
+				return true;
+			}
+
+			unset( WordPressTestState::$filters[ $hook_name ][ (int) $priority ] );
+
+			if ( [] === ( WordPressTestState::$filters[ $hook_name ] ?? [] ) ) {
+				unset( WordPressTestState::$filters[ $hook_name ] );
+			}
+
+			return true;
+		}
+	}
+
 	if ( ! function_exists( 'is_wp_error' ) ) {
 		function is_wp_error( $value ): bool {
 			return $value instanceof WP_Error;
@@ -1073,6 +1192,12 @@ namespace {
 			$normalized = ltrim( $path, '/' );
 
 			return 'https://example.test/wp-admin/' . $normalized;
+		}
+	}
+
+	if ( ! function_exists( 'get_current_screen' ) ) {
+		function get_current_screen() {
+			return WordPressTestState::$current_screen;
 		}
 	}
 

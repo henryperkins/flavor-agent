@@ -27,10 +27,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## End-To-End Flow
 
 1. `TemplateRecommender()` resolves the current `wp_template` reference through the shared edited-entity resolver, reads the normalized `wp_template` entity contract through `usePostTypeEntityContract()`, and derives the template type
-2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()`, captures the template-global `visiblePatternNames`, and sends the current top-level template structure plus executable insertion anchors through the server-side collector
+2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()`, captures the template-global `visiblePatternNames`, and always sends an explicit live template snapshot through `buildEditorTemplateTopLevelStructureSnapshot()`, including zeroed empty-state stats, live pattern-override summaries, and viewport-visibility summaries
 3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` posts it to `POST /flavor-agent/v1/recommend-template`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
-5. `TemplateAbilities::recommend_template()` gathers template context through `ServerCollector::for_template()`, folds in editor slot overrides, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
+5. `TemplateAbilities::recommend_template()` gathers canonical template metadata through `ServerCollector::for_template()`, atomically overlays the mutable live slot and structure slices from the editor, merges effective `allowedAreas` from server-known capabilities plus unsaved live areas, adds docs guidance, and calls `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
 6. The parsed response returns up to three suggestion cards, preserving validated structured operations for executable ideas and validated summaries for advisory ideas
 7. The UI builds an entity map so template-part slugs, areas, and pattern names inside descriptions and explanations become clickable actions
 8. Selecting an executable suggestion opens the shared lower review panel, which shows the exact validated operations that would run if the user confirms apply
@@ -41,7 +41,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ```text
 User prompt in wp_template editor
   -> TemplateRecommender
-  -> buildEditorTemplateSlotSnapshot() + visiblePatternNames
+  -> buildEditorTemplateSlotSnapshot() + buildEditorTemplateTopLevelStructureSnapshot() + visiblePatternNames
   -> buildTemplateFetchInput()
   -> fetchTemplateRecommendations()
   -> POST /flavor-agent/v1/recommend-template
@@ -72,8 +72,47 @@ User prompt in wp_template editor
         "area": "footer"
       }
     ],
-    "emptyAreas": ["sidebar"],
-    "allowedAreas": ["header", "footer", "sidebar"]
+    "emptyAreas": ["sidebar"]
+  },
+  "editorStructure": {
+    "topLevelBlockTree": [
+      {
+        "path": [0],
+        "name": "core/template-part",
+        "label": "header template part (header)",
+        "attributes": { "slug": "header", "area": "header" },
+        "childCount": 0,
+        "slot": { "slug": "header", "area": "header", "isEmpty": false }
+      },
+      {
+        "path": [1],
+        "name": "core/group",
+        "label": "Group",
+        "attributes": {},
+        "childCount": 2
+      }
+    ],
+    "structureStats": {
+      "blockCount": 4,
+      "maxDepth": 2,
+      "topLevelBlockCount": 2,
+      "hasNavigation": false,
+      "hasQuery": true,
+      "hasTemplateParts": true,
+      "firstTopLevelBlock": "core/template-part",
+      "lastTopLevelBlock": "core/group"
+    },
+    "currentPatternOverrides": {
+      "hasOverrides": false,
+      "blockCount": 0,
+      "blockNames": [],
+      "blocks": []
+    },
+    "currentViewportVisibility": {
+      "hasVisibilityRules": false,
+      "blockCount": 0,
+      "blocks": []
+    }
   },
   "visiblePatternNames": [
     "core/query-offset-feature",
@@ -81,6 +120,8 @@ User prompt in wp_template editor
   ]
 }
 ```
+
+`editorSlots.emptyAreas` and `editorSlots.assignedParts` are the live editor occupancy fields. The server keeps canonical capability metadata from the saved template and expands the effective `allowedAreas` set with any unsaved live areas implied by those fields. Empty templates still send `editorSlots` and `editorStructure` with empty arrays and zeroed stats.
 
 ## Example Response
 

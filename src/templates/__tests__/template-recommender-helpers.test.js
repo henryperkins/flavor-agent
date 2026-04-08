@@ -92,6 +92,7 @@ describe( 'template recommender helpers', () => {
 			buildTemplateRecommendationContextSignature( {
 				editorSlots: {
 					assignedParts: [ { slug: 'site-header', area: 'header' } ],
+					emptyAreas: [ 'footer' ],
 				},
 				visiblePatternNames: [
 					'theme/hero',
@@ -102,10 +103,10 @@ describe( 'template recommender helpers', () => {
 			} )
 		).toBe(
 			JSON.stringify( {
-				editorSlots: {
-					assignedParts: [ { slug: 'site-header', area: 'header' } ],
-				},
+				assignedParts: [ { slug: 'site-header', area: 'header' } ],
+				emptyAreas: [ 'footer' ],
 				topLevelBlockTree: null,
+				structureStats: null,
 				currentPatternOverrides: null,
 				currentViewportVisibility: null,
 				visiblePatternNames: [ 'theme/footer', 'theme/hero' ],
@@ -133,6 +134,10 @@ describe( 'template recommender helpers', () => {
 	test( 'buildTemplateRecommendationContextSignature includes top-level template structure', () => {
 		expect(
 			buildTemplateRecommendationContextSignature( {
+				editorSlots: {
+					assignedParts: [],
+					emptyAreas: [],
+				},
 				editorStructure: {
 					topLevelBlockTree: [
 						{
@@ -151,11 +156,22 @@ describe( 'template recommender helpers', () => {
 							},
 						},
 					],
+					structureStats: {
+						blockCount: 2,
+						maxDepth: 1,
+						topLevelBlockCount: 2,
+						hasNavigation: false,
+						hasQuery: false,
+						hasTemplateParts: true,
+						firstTopLevelBlock: 'core/group',
+						lastTopLevelBlock: 'core/template-part',
+					},
 				},
 			} )
 		).toBe(
 			JSON.stringify( {
-				editorSlots: null,
+				assignedParts: [],
+				emptyAreas: [],
 				topLevelBlockTree: [
 					{
 						path: [ 0 ],
@@ -173,6 +189,16 @@ describe( 'template recommender helpers', () => {
 						},
 					},
 				],
+				structureStats: {
+					blockCount: 2,
+					maxDepth: 1,
+					topLevelBlockCount: 2,
+					hasNavigation: false,
+					hasQuery: false,
+					hasTemplateParts: true,
+					firstTopLevelBlock: 'core/group',
+					lastTopLevelBlock: 'core/template-part',
+				},
 				currentPatternOverrides: null,
 				currentViewportVisibility: null,
 				visiblePatternNames: null,
@@ -265,6 +291,16 @@ describe( 'template recommender helpers', () => {
 					},
 				},
 			],
+			structureStats: {
+				blockCount: 3,
+				maxDepth: 2,
+				topLevelBlockCount: 2,
+				hasNavigation: false,
+				hasQuery: false,
+				hasTemplateParts: true,
+				firstTopLevelBlock: 'core/group',
+				lastTopLevelBlock: 'core/template-part',
+			},
 			currentPatternOverrides: {
 				hasOverrides: false,
 				blockCount: 0,
@@ -321,6 +357,16 @@ describe( 'template recommender helpers', () => {
 					childCount: 1,
 				},
 			],
+			structureStats: {
+				blockCount: 2,
+				maxDepth: 2,
+				topLevelBlockCount: 1,
+				hasNavigation: false,
+				hasQuery: false,
+				hasTemplateParts: false,
+				firstTopLevelBlock: 'core/group',
+				lastTopLevelBlock: 'core/group',
+			},
 			currentPatternOverrides: {
 				hasOverrides: true,
 				blockCount: 1,
@@ -347,6 +393,33 @@ describe( 'template recommender helpers', () => {
 						visibleViewports: [ 'desktop' ],
 					},
 				],
+			},
+		} );
+	} );
+
+	test( 'buildEditorTemplateTopLevelStructureSnapshot keeps empty templates explicit', () => {
+		expect( buildEditorTemplateTopLevelStructureSnapshot( [] ) ).toEqual( {
+			topLevelBlockTree: [],
+			structureStats: {
+				blockCount: 0,
+				maxDepth: 0,
+				topLevelBlockCount: 0,
+				hasNavigation: false,
+				hasQuery: false,
+				hasTemplateParts: false,
+				firstTopLevelBlock: '',
+				lastTopLevelBlock: '',
+			},
+			currentPatternOverrides: {
+				hasOverrides: false,
+				blockCount: 0,
+				blockNames: [],
+				blocks: [],
+			},
+			currentViewportVisibility: {
+				hasVisibilityRules: false,
+				blockCount: 0,
+				blocks: [],
 			},
 		} );
 	} );

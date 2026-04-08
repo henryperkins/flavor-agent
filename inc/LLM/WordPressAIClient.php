@@ -32,6 +32,7 @@ final class WordPressAIClient {
 
 	public static function chat( string $system_prompt, string $user_prompt, ?string $provider = null, ?string $reasoning_effort = null ): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
+		Provider::record_runtime_chat_diagnostics( null );
 		$prompt = self::make_prompt( $user_prompt );
 
 		if ( is_wp_error( $prompt ) ) {

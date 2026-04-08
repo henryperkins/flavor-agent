@@ -58,12 +58,13 @@ function getTokenUsageLabel( requestMeta ) {
 	}
 
 	const totalTokens = getNumericMetric( requestMeta?.tokenUsage?.total );
-	const inputTokens = getNumericMetric( requestMeta?.tokenUsage?.input );
-	const outputTokens = getNumericMetric( requestMeta?.tokenUsage?.output );
 
 	if ( totalTokens !== null ) {
 		return `${ totalTokens } total tokens`;
 	}
+
+	const inputTokens = getNumericMetric( requestMeta?.tokenUsage?.input );
+	const outputTokens = getNumericMetric( requestMeta?.tokenUsage?.output );
 
 	if ( inputTokens === null && outputTokens === null ) {
 		return '';
@@ -81,6 +82,113 @@ function getLatencyLabel( requestMeta ) {
 	const latencyMs = getNumericMetric( requestMeta?.latencyMs );
 
 	return latencyMs !== null ? `${ latencyMs } ms` : '';
+}
+
+function getTransportEndpointLabel( requestMeta ) {
+	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
+		return '';
+	}
+
+	const host =
+		typeof requestMeta?.transport?.host === 'string'
+			? requestMeta.transport.host.trim()
+			: '';
+	const path =
+		typeof requestMeta?.transport?.path === 'string'
+			? requestMeta.transport.path.trim()
+			: '';
+
+	if ( ! host ) {
+		return '';
+	}
+
+	return `${ host }${ path || '' }`;
+}
+
+function getTimeoutLabel( requestMeta ) {
+	const timeoutSeconds = getNumericMetric(
+		requestMeta?.transport?.timeoutSeconds
+	);
+
+	return timeoutSeconds !== null ? `${ timeoutSeconds } s` : '';
+}
+
+function getPayloadSummaryLabel( requestMeta ) {
+	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
+		return '';
+	}
+
+	const bodyBytes = getNumericMetric( requestMeta?.requestSummary?.bodyBytes );
+	const instructionsChars = getNumericMetric(
+		requestMeta?.requestSummary?.instructionsChars
+	);
+	const inputChars = getNumericMetric( requestMeta?.requestSummary?.inputChars );
+	const maxOutputTokens = getNumericMetric(
+		requestMeta?.requestSummary?.maxOutputTokens
+	);
+	const reasoningEffort =
+		typeof requestMeta?.requestSummary?.reasoningEffort === 'string'
+			? requestMeta.requestSummary.reasoningEffort.trim()
+			: '';
+
+	const parts = [
+		bodyBytes !== null ? `${ bodyBytes } bytes` : null,
+		instructionsChars !== null
+			? `${ instructionsChars } instruction chars`
+			: null,
+		inputChars !== null ? `${ inputChars } input chars` : null,
+		maxOutputTokens !== null ? `${ maxOutputTokens } max output tokens` : null,
+		reasoningEffort ? `reasoning ${ reasoningEffort }` : null,
+	];
+
+	return parts.filter( Boolean ).join( ' · ' );
+}
+
+function getResponseSummaryLabel( requestMeta ) {
+	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
+		return '';
+	}
+
+	const httpStatus = getNumericMetric( requestMeta?.responseSummary?.httpStatus );
+	const bodyBytes = getNumericMetric( requestMeta?.responseSummary?.bodyBytes );
+	const processingMs = getNumericMetric(
+		requestMeta?.responseSummary?.processingMs
+	);
+	const retryAfter = getNumericMetric( requestMeta?.responseSummary?.retryAfter );
+	const region =
+		typeof requestMeta?.responseSummary?.region === 'string'
+			? requestMeta.responseSummary.region.trim()
+			: '';
+
+	const parts = [
+		httpStatus !== null ? `HTTP ${ httpStatus }` : null,
+		bodyBytes !== null ? `${ bodyBytes } bytes` : null,
+		processingMs !== null ? `${ processingMs } ms processing` : null,
+		retryAfter !== null ? `${ retryAfter } s retry-after` : null,
+		region ? `region ${ region }` : null,
+	];
+
+	return parts.filter( Boolean ).join( ' · ' );
+}
+
+function getProviderRequestIdLabel( requestMeta ) {
+	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
+		return '';
+	}
+
+	return typeof requestMeta?.responseSummary?.providerRequestId === 'string'
+		? requestMeta.responseSummary.providerRequestId.trim()
+		: '';
+}
+
+function getWrappedTransportErrorLabel( requestMeta ) {
+	if ( ! requestMeta || typeof requestMeta !== 'object' ) {
+		return '';
+	}
+
+	return typeof requestMeta?.errorSummary?.wrappedMessage === 'string'
+		? requestMeta.errorSummary.wrappedMessage.trim()
+		: '';
 }
 
 function getExecutionDetailLines( entry ) {
@@ -117,6 +225,34 @@ function getExecutionDetailLines( entry ) {
 
 	if ( requestMeta?.route ) {
 		lines.push( `Route: ${ requestMeta.route }` );
+	}
+
+	if ( getTransportEndpointLabel( requestMeta ) ) {
+		lines.push( `Endpoint: ${ getTransportEndpointLabel( requestMeta ) }` );
+	}
+
+	if ( getTimeoutLabel( requestMeta ) ) {
+		lines.push( `Timeout: ${ getTimeoutLabel( requestMeta ) }` );
+	}
+
+	if ( getPayloadSummaryLabel( requestMeta ) ) {
+		lines.push( `Payload: ${ getPayloadSummaryLabel( requestMeta ) }` );
+	}
+
+	if ( getResponseSummaryLabel( requestMeta ) ) {
+		lines.push( `Response: ${ getResponseSummaryLabel( requestMeta ) }` );
+	}
+
+	if ( getProviderRequestIdLabel( requestMeta ) ) {
+		lines.push(
+			`Provider request ID: ${ getProviderRequestIdLabel( requestMeta ) }`
+		);
+	}
+
+	if ( getWrappedTransportErrorLabel( requestMeta ) ) {
+		lines.push(
+			`Transport detail: ${ getWrappedTransportErrorLabel( requestMeta ) }`
+		);
 	}
 
 	if (
