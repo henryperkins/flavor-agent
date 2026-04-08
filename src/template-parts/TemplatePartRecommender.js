@@ -56,6 +56,7 @@ import {
 	getEditedPostTypeEntity,
 	usePostTypeEntityContract,
 } from '../utils/editor-entity-contracts';
+import { buildTemplatePartRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	buildEditorTemplatePartStructureSnapshot,
 	buildTemplatePartFetchInput,
@@ -330,6 +331,7 @@ export default function TemplatePartRecommender() {
 		recommendations,
 		explanation,
 		error,
+		resultPrompt,
 		resultRef,
 		resultContextSignature,
 		resultToken,
@@ -351,6 +353,7 @@ export default function TemplatePartRecommender() {
 			recommendations: store.getTemplatePartRecommendations(),
 			explanation: store.getTemplatePartExplanation(),
 			error: store.getTemplatePartError(),
+			resultPrompt: store.getTemplatePartRequestPrompt?.() || '',
 			resultRef: store.getTemplatePartResultRef(),
 			resultContextSignature: store.getTemplatePartContextSignature(),
 			resultToken: store.getTemplatePartResultToken(),
@@ -435,6 +438,7 @@ export default function TemplatePartRecommender() {
 		undoActivity,
 	} = useDispatch(STORE_NAME);
 	const [prompt, setPrompt] = useState('');
+	const hydratedResultKeyRef = useRef(null);
 	const previousTemplatePartRef = useRef(templatePartRef);
 	const templatePartAreaLookup = useMemo(() => getTemplatePartAreaLookup(), []);
 	const editorStructure = useMemo(
@@ -483,12 +487,31 @@ export default function TemplatePartRecommender() {
 		[templatePartContract.templatePartAreaLabels, area]
 	);
 	const hasStoredResultForTemplatePart = resultRef === templatePartRef;
-	const hasCurrentContext =
-		!resultContextSignature ||
-		resultContextSignature === recommendationContextSignature;
+	const recommendationRequestSignature = useMemo(
+		() =>
+			buildTemplatePartRecommendationRequestSignature({
+				templatePartRef,
+				prompt,
+				contextSignature: recommendationContextSignature,
+			}),
+		[templatePartRef, prompt, recommendationContextSignature]
+	);
+	const resultRequestSignature = useMemo(
+		() =>
+			buildTemplatePartRecommendationRequestSignature({
+				templatePartRef: resultRef,
+				prompt: resultPrompt,
+				contextSignature: resultContextSignature,
+			}),
+		[resultContextSignature, resultPrompt, resultRef]
+	);
 	const hasMatchingResult =
-		hasStoredResultForTemplatePart && status === 'ready' && hasCurrentContext;
-	const isStaleResult = hasStoredResultForTemplatePart && !hasCurrentContext;
+		hasStoredResultForTemplatePart &&
+		status === 'ready' &&
+		resultRequestSignature === recommendationRequestSignature;
+	const isStaleResult =
+		hasStoredResultForTemplatePart &&
+		resultRequestSignature !== recommendationRequestSignature;
 	const visibleRecommendations = useMemo(
 		() => (hasMatchingResult || isStaleResult ? recommendations : []),
 		[hasMatchingResult, isStaleResult, recommendations]
@@ -515,6 +538,7 @@ export default function TemplatePartRecommender() {
 			return;
 		}
 
+		hydratedResultKeyRef.current = null;
 		clearTemplatePartRecommendations();
 
 		if (templatePartChanged) {
@@ -524,6 +548,27 @@ export default function TemplatePartRecommender() {
 		clearTemplatePartRecommendations,
 		recommendationContextSignature,
 		templatePartRef,
+	]);
+
+	useEffect(() => {
+		const hydrationKey =
+			hasStoredResultForTemplatePart && status === 'ready'
+				? `${resultRef || ''}:${resultToken || resultRequestSignature}`
+				: '';
+
+		if (!hydrationKey || hydratedResultKeyRef.current === hydrationKey) {
+			return;
+		}
+
+		hydratedResultKeyRef.current = hydrationKey;
+		setPrompt(resultPrompt);
+	}, [
+		hasStoredResultForTemplatePart,
+		resultPrompt,
+		resultRef,
+		resultRequestSignature,
+		resultToken,
+		status,
 	]);
 
 	const suggestionCards = useMemo(
@@ -682,8 +727,8 @@ export default function TemplatePartRecommender() {
 		setTemplatePartSelectedSuggestion(null);
 	}, [setTemplatePartSelectedSuggestion]);
 	const handleApplySuggestion = useCallback(
-		(suggestion, currentContextSignature) => {
-			applyTemplatePartSuggestion(suggestion, currentContextSignature);
+		(suggestion, currentRequestSignature) => {
+			applyTemplatePartSuggestion(suggestion, currentRequestSignature);
 		},
 		[applyTemplatePartSuggestion]
 	);
@@ -757,7 +802,7 @@ export default function TemplatePartRecommender() {
 					hasResult={hasResult}
 					staleReason={
 						isStaleResult
-							? 'This template part changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+							? 'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.'
 							: ''
 					}
 					onRefresh={isStaleResult ? handleFetch : undefined}
@@ -819,7 +864,7 @@ export default function TemplatePartRecommender() {
 						title="Refresh recommendations for this template part"
 						description="Flavor Agent kept the previous result visible so you can compare it against the current template part."
 						tone={STALE_STATUS_LABEL}
-						why="Review and apply actions stay disabled until you refresh against the live template-part context."
+						why="Review and apply actions stay disabled until you refresh against the live template-part context and current prompt."
 						primaryActionLabel={REFRESH_ACTION_LABEL}
 						onPrimaryAction={handleFetch}
 						primaryActionDisabled={isLoading}
@@ -929,7 +974,7 @@ export default function TemplatePartRecommender() {
 						onConfirm={() =>
 							handleApplySuggestion(
 								selectedSuggestion,
-								recommendationContextSignature
+								recommendationRequestSignature
 							)
 						}
 						onCancel={handleCancelPreview}

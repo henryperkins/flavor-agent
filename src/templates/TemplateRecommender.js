@@ -77,6 +77,7 @@ import {
 	TEMPLATE_OPERATION_REPLACE,
 } from './template-recommender-helpers';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { buildTemplateRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	getEditedPostTypeEntity,
 	usePostTypeEntityContract,
@@ -223,6 +224,7 @@ export default function TemplateRecommender() {
 		recommendations,
 		explanation,
 		error,
+		resultPrompt,
 		resultRef,
 		resultContextSignature,
 		resultToken,
@@ -244,6 +246,7 @@ export default function TemplateRecommender() {
 			recommendations: store.getTemplateRecommendations(),
 			explanation: store.getTemplateExplanation(),
 			error: store.getTemplateError(),
+			resultPrompt: store.getTemplateRequestPrompt?.() || '',
 			resultRef: store.getTemplateResultRef(),
 			resultContextSignature: store.getTemplateContextSignature(),
 			resultToken: store.getTemplateResultToken(),
@@ -348,6 +351,7 @@ export default function TemplateRecommender() {
 		undoActivity,
 	} = useDispatch(STORE_NAME);
 	const [prompt, setPrompt] = useState('');
+	const hydratedResultKeyRef = useRef(null);
 	const previousTemplateRef = useRef(templateRef);
 	const editorSlots = useMemo(
 		() =>
@@ -380,12 +384,31 @@ export default function TemplateRecommender() {
 		recommendationContextSignature
 	);
 	const hasStoredResultForTemplate = resultRef === templateRef;
-	const hasCurrentContext =
-		!resultContextSignature ||
-		resultContextSignature === recommendationContextSignature;
+	const recommendationRequestSignature = useMemo(
+		() =>
+			buildTemplateRecommendationRequestSignature({
+				templateRef,
+				prompt,
+				contextSignature: recommendationContextSignature,
+			}),
+		[templateRef, prompt, recommendationContextSignature]
+	);
+	const resultRequestSignature = useMemo(
+		() =>
+			buildTemplateRecommendationRequestSignature({
+				templateRef: resultRef,
+				prompt: resultPrompt,
+				contextSignature: resultContextSignature,
+			}),
+		[resultContextSignature, resultPrompt, resultRef]
+	);
 	const hasMatchingResult =
-		hasStoredResultForTemplate && status === 'ready' && hasCurrentContext;
-	const isStaleResult = hasStoredResultForTemplate && !hasCurrentContext;
+		hasStoredResultForTemplate &&
+		status === 'ready' &&
+		resultRequestSignature === recommendationRequestSignature;
+	const isStaleResult =
+		hasStoredResultForTemplate &&
+		resultRequestSignature !== recommendationRequestSignature;
 	const visibleRecommendations = useMemo(
 		() => (hasMatchingResult || isStaleResult ? recommendations : []),
 		[hasMatchingResult, isStaleResult, recommendations]
@@ -411,6 +434,7 @@ export default function TemplateRecommender() {
 			return;
 		}
 
+		hydratedResultKeyRef.current = null;
 		clearTemplateRecommendations();
 
 		if (templateChanged) {
@@ -420,6 +444,27 @@ export default function TemplateRecommender() {
 		clearTemplateRecommendations,
 		recommendationContextSignature,
 		templateRef,
+	]);
+
+	useEffect(() => {
+		const hydrationKey =
+			hasStoredResultForTemplate && status === 'ready'
+				? `${resultRef || ''}:${resultToken || resultRequestSignature}`
+				: '';
+
+		if (!hydrationKey || hydratedResultKeyRef.current === hydrationKey) {
+			return;
+		}
+
+		hydratedResultKeyRef.current = hydrationKey;
+		setPrompt(resultPrompt);
+	}, [
+		hasStoredResultForTemplate,
+		resultPrompt,
+		resultRef,
+		resultRequestSignature,
+		resultToken,
+		status,
 	]);
 
 	const entityMap = useMemo(
@@ -592,8 +637,8 @@ export default function TemplateRecommender() {
 		setTemplateSelectedSuggestion(null);
 	}, [setTemplateSelectedSuggestion]);
 	const handleApplySuggestion = useCallback(
-		(suggestion, currentContextSignature) => {
-			applyTemplateSuggestion(suggestion, currentContextSignature);
+		(suggestion, currentRequestSignature) => {
+			applyTemplateSuggestion(suggestion, currentRequestSignature);
 		},
 		[applyTemplateSuggestion]
 	);
@@ -650,7 +695,7 @@ export default function TemplateRecommender() {
 					hasResult={hasResult}
 					staleReason={
 						isStaleResult
-							? 'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+							? 'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.'
 							: ''
 					}
 					onRefresh={isStaleResult ? handleFetch : undefined}
@@ -712,7 +757,7 @@ export default function TemplateRecommender() {
 						title="Refresh recommendations for this template"
 						description="Flavor Agent kept the previous result visible so you can compare it against the current template."
 						tone={STALE_STATUS_LABEL}
-						why="Review and apply actions stay disabled until you refresh against the live template context."
+						why="Review and apply actions stay disabled until you refresh against the live template context and current prompt."
 						primaryActionLabel={REFRESH_ACTION_LABEL}
 						onPrimaryAction={handleFetch}
 						primaryActionDisabled={isLoading}
@@ -822,7 +867,7 @@ export default function TemplateRecommender() {
 						onConfirm={() =>
 							handleApplySuggestion(
 								selectedSuggestion,
-								recommendationContextSignature
+								recommendationRequestSignature
 							)
 						}
 						onCancel={handleCancelPreview}

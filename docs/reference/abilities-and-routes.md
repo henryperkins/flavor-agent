@@ -41,6 +41,7 @@ Use it when you need to answer:
 - The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
 - `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
+- The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) also compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. That signature is UI-only freshness/apply state; it is not POSTed back to PHP.
 
 ## REST Routes
 
@@ -328,6 +329,21 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
       "source": "server",
       "settingsKey": "wp_get_global_settings",
       "reason": "server-global-settings"
+    },
+    "templateStructure": [
+      {
+        "name": "core/template-part",
+        "innerBlocks": [{ "name": "core/site-title" }]
+      },
+      {
+        "name": "core/group",
+        "innerBlocks": [{ "name": "core/query-title" }]
+      }
+    ],
+    "templateVisibility": {
+      "hasVisibilityRules": false,
+      "blockCount": 0,
+      "blocks": []
     }
   },
   "prompt": "Make the site feel more editorial."
@@ -362,6 +378,21 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
       "blockTitle": "Group",
       "currentStyles": {},
       "mergedStyles": {}
+    },
+    "templateStructure": [
+      {
+        "name": "core/template-part",
+        "innerBlocks": [{ "name": "core/heading" }]
+      },
+      {
+        "name": "core/group",
+        "innerBlocks": [{ "name": "core/paragraph" }]
+      }
+    ],
+    "templateVisibility": {
+      "hasVisibilityRules": false,
+      "blockCount": 0,
+      "blocks": []
     }
   },
   "prompt": "Make this block feel more editorial."
@@ -474,6 +505,8 @@ Apply flow -> activity create -> inline activity UI -> undo -> activity/{id}/und
 - Template recommendation requests also carry live `editorSlots.assignedParts` and `editorSlots.emptyAreas`; the server keeps canonical saved capability metadata and computes effective `allowedAreas` by merging those live areas with the saved template contract
 - Template-part requests accept a full live `editorStructure` slice: `blockTree`, `allBlockPaths`, `topLevelBlocks`, `blockCounts`, `structureStats`, `currentPatternOverrides`, `operationTargets`, `insertionAnchors`, and `structuralConstraints`
 - Template-part executable paths are validated against `editorStructure.allBlockPaths`, so deep unsaved paths remain valid even when the prompt-facing `blockTree` is depth-limited
+- Global Styles and Style Book requests carry live `styleContext.templateStructure` and `styleContext.templateVisibility` snapshots from the current editor canvas so style docs grounding and prompt shaping stay aligned with the template the user is actually looking at
+- Docs grounding stays surface-specific: template requests scope guidance with live slot occupancy, top-level structure, visible patterns, pattern overrides, and viewport visibility; template-part requests scope guidance with operation targets, insertion anchors, structural constraints, and live block paths; style requests scope guidance with supported style paths, available variations or the active Style Book target, design semantics, and the live template structure/visibility snapshot
 - Navigation response groups now validate structural `changes[].targetPath` values against the current menu target inventory instead of trusting free-form target text alone
 - Activity permissions are contextual: post-like scopes use `edit_posts` or `edit_post`, while template and template-part scopes use `edit_theme_options`
 - Manual sync is intentionally admin-only because it mutates shared vector-index state

@@ -74,12 +74,26 @@ const { act } = require('react');
 const { setupReactTest } = require('../../test-utils/setup-react-test');
 
 import TemplatePartRecommender from '../TemplatePartRecommender';
+import {
+	buildEditorTemplatePartStructureSnapshot,
+	buildTemplatePartRecommendationContextSignature,
+} from '../template-part-recommender-helpers';
 
 const { getContainer, getRoot } = setupReactTest();
 
 let currentState = null;
 function getState() {
 	return currentState;
+}
+
+function buildTemplatePartContextSignature( state = getState() ) {
+	return buildTemplatePartRecommendationContextSignature( {
+		visiblePatternNames: [],
+		editorStructure: buildEditorTemplatePartStructureSnapshot(
+			state.blockEditor.blocks,
+			mockGetTemplatePartAreaLookup()
+		),
+	} );
 }
 
 function createState(overrides = {}) {
@@ -444,7 +458,7 @@ describe('TemplatePartRecommender', () => {
 		expect(hasText('Stale')).toBe(true);
 		expect(
 			hasText(
-				'This template part changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+				'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.'
 			)
 		).toBe(true);
 	});
@@ -472,6 +486,9 @@ describe('TemplatePartRecommender', () => {
 				templatePartRecommendations: [],
 				templatePartExplanation: '',
 				templatePartResultRef: 'theme//header',
+				templatePartContextSignature: buildTemplatePartContextSignature(
+					createState()
+				),
 				templatePartStatus: 'ready',
 			},
 		});

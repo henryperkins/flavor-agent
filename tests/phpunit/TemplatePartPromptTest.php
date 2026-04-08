@@ -80,6 +80,32 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( 'uses default binding expansion', $prompt );
 	}
 
+	public function test_build_user_includes_up_to_thirty_available_patterns(): void {
+		$patterns = [];
+
+		for ( $i = 1; $i <= 31; $i++ ) {
+			$patterns[] = [
+				'name' => sprintf( 'theme/pattern-%02d', $i ),
+			];
+		}
+
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef' => 'theme//header',
+				'slug'            => 'header',
+				'title'           => 'Header',
+				'area'            => 'header',
+				'blockTree'       => [],
+				'patterns'        => $patterns,
+				'themeTokens'     => [],
+			]
+		);
+
+		$this->assertStringContainsString( 'Showing 30 of 31 patterns.', $prompt );
+		$this->assertStringContainsString( '- `theme/pattern-30`', $prompt );
+		$this->assertStringNotContainsString( '- `theme/pattern-31`', $prompt );
+	}
+
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {
 		$context = [
 			'blockTree'        => [
@@ -409,7 +435,7 @@ final class TemplatePartPromptTest extends TestCase {
 								'name'       => 'core/group',
 								'label'      => '',
 								'attributes' => [],
-								'childCount' => 0,
+								'childCount' => 2,
 							],
 							'targetPath'        => [ 0 ],
 						],

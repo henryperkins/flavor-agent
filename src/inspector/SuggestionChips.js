@@ -4,7 +4,7 @@
  */
 import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useCallback } from '@wordpress/element';
+import { useCallback, useMemo } from '@wordpress/element';
 import { check } from '@wordpress/icons';
 
 import {
@@ -17,6 +17,7 @@ import {
 	collectBlockContext,
 	getLiveBlockContextSignature,
 } from '../context/collector';
+import { buildBlockRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import { getSuggestionKey } from './suggestion-keys';
 import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
 
@@ -31,6 +32,7 @@ export default function SuggestionChips( {
 	clientId,
 	suggestions,
 	label,
+	currentRequestSignature = null,
 	disabled = false,
 	isStale = false,
 	title = '',
@@ -54,6 +56,15 @@ export default function SuggestionChips( {
 		},
 		[ clientId ]
 	);
+	const fallbackRequestSignature = useMemo(
+		() =>
+			buildBlockRecommendationRequestSignature( {
+				clientId,
+				prompt: requestPrompt,
+				contextSignature: liveContextSignature,
+			} ),
+		[ clientId, liveContextSignature, requestPrompt ]
+	);
 	const handleRefresh = useCallback( () => {
 		const liveContext = collectBlockContext( clientId );
 
@@ -65,9 +76,15 @@ export default function SuggestionChips( {
 	}, [ clientId, fetchBlockRecommendations, requestPrompt ] );
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion: ( targetClientId, suggestion ) =>
-			applySuggestion( targetClientId, suggestion, liveContextSignature ),
+			applySuggestion(
+				targetClientId,
+				suggestion,
+				currentRequestSignature || fallbackRequestSignature
+			),
 		buildFeedback: buildChipFeedback,
 		clientId,
+		currentRequestSignature,
+		fallbackRequestSignature,
 		getKey: getSuggestionKey,
 		suggestions,
 	} );

@@ -427,6 +427,14 @@ final class RegistrationTest extends TestCase {
 			$style_ability['input_schema']['properties']['styleContext']['properties']['styleBookTarget']['type'] ?? null
 		);
 		$this->assertSame(
+			'object',
+			$style_ability['input_schema']['properties']['styleContext']['properties']['templateStructure']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$style_ability['input_schema']['properties']['styleContext']['properties']['templateVisibility']['type'] ?? null
+		);
+		$this->assertSame(
 			'array',
 			$style_ability['output_schema']['properties']['suggestions']['type'] ?? null
 		);

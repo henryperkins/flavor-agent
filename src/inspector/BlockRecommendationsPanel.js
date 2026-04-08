@@ -2,7 +2,13 @@ import { PanelBody, Notice } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import { useState, useCallback, useMemo, useEffect } from '@wordpress/element';
+import {
+	useState,
+	useCallback,
+	useMemo,
+	useEffect,
+	useRef,
+} from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
@@ -17,6 +23,7 @@ import {
 	collectBlockContext,
 	getLiveBlockContextSignature,
 } from '../context/collector';
+import { buildBlockRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -104,6 +111,7 @@ function useBlockRecommendationState(clientId) {
 		error,
 		status,
 		storedContextSignature,
+		storedRequestToken,
 		requestDiagnostics,
 		blockActivityLog,
 		blockApplyError,
@@ -136,6 +144,7 @@ function useBlockRecommendationState(clientId) {
 				status: store.getBlockStatus(clientId),
 				storedContextSignature:
 					store.getBlockRecommendationContextSignature(clientId),
+				storedRequestToken: store.getBlockRequestToken?.(clientId) || 0,
 				requestDiagnostics:
 					store.getBlockRequestDiagnostics?.(clientId) || null,
 				blockActivityLog: blockEntries,
@@ -187,6 +196,7 @@ function useBlockRecommendationState(clientId) {
 		error,
 		status,
 		storedContextSignature,
+		storedRequestToken,
 		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
@@ -236,6 +246,7 @@ export function BlockRecommendationsContent({
 		error,
 		status,
 		storedContextSignature,
+		storedRequestToken,
 		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
@@ -255,6 +266,7 @@ export function BlockRecommendationsContent({
 		undoActivity,
 	} = useDispatch(STORE_NAME);
 	const [prompt, setPrompt] = useState('');
+	const hydratedResultKeyRef = useRef(null);
 	const liveContextSignature = useSelect(
 		(select) => getLiveBlockContextSignature(select, clientId),
 		[clientId]
@@ -270,11 +282,28 @@ export function BlockRecommendationsContent({
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
 		lastUndoneBlockActivity?.undo?.status === 'undone';
+	const currentRequestSignature = useMemo(
+		() =>
+			buildBlockRecommendationRequestSignature({
+				clientId,
+				prompt,
+				contextSignature: liveContextSignature,
+			}),
+		[clientId, liveContextSignature, prompt]
+	);
+	const storedRequestSignature = useMemo(
+		() =>
+			buildBlockRecommendationRequestSignature({
+				clientId,
+				prompt: recommendations?.prompt || '',
+				contextSignature: storedContextSignature || liveContextSignature,
+			}),
+		[clientId, liveContextSignature, recommendations?.prompt, storedContextSignature]
+	);
 	const hasFreshResult =
 		status === 'ready' &&
 		Boolean(recommendations) &&
-		(!storedContextSignature ||
-			storedContextSignature === liveContextSignature);
+		storedRequestSignature === currentRequestSignature;
 	const hasResult = status === 'ready' && Boolean(recommendations);
 	const isStaleResult = hasResult && !hasFreshResult;
 	const blockSuggestions = hasResult
@@ -423,8 +452,29 @@ export function BlockRecommendationsContent({
 		: 'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.';
 
 	useEffect(() => {
+		hydratedResultKeyRef.current = null;
 		setPrompt('');
 	}, [clientId]);
+
+	useEffect(() => {
+		const hydrationKey =
+			status === 'ready' && clientId && recommendations
+				? `${clientId}:${storedRequestToken || storedRequestSignature}`
+				: '';
+
+		if (!hydrationKey || hydratedResultKeyRef.current === hydrationKey) {
+			return;
+		}
+
+		hydratedResultKeyRef.current = hydrationKey;
+		setPrompt(recommendations?.prompt || '');
+	}, [
+		clientId,
+		recommendations,
+		status,
+		storedRequestSignature,
+		storedRequestToken,
+	]);
 
 	const handleFetch = useCallback(() => {
 		if (!canRecommendBlocks) {
@@ -497,7 +547,7 @@ export function BlockRecommendationsContent({
 				hasResult={hasResult}
 				staleReason={
 					isStaleResult
-						? 'This block changed after the last request. Refresh before applying anything from the previous result.'
+						? 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.'
 						: ''
 				}
 				refreshLabel={REFRESH_ACTION_LABEL}
@@ -554,7 +604,7 @@ export function BlockRecommendationsContent({
 					title="Refresh recommendations for the current block"
 					description="Flavor Agent kept the previous result visible so you can compare it against the current block."
 					tone={STALE_STATUS_LABEL}
-					why="Apply actions stay disabled until you refresh against the live block context."
+					why="Apply actions stay disabled until you refresh against the live block context and current prompt."
 					primaryActionLabel={REFRESH_ACTION_LABEL}
 					onPrimaryAction={handleRefresh}
 					primaryActionDisabled={isLoading}
@@ -588,6 +638,7 @@ export function BlockRecommendationsContent({
 						clientId={clientId}
 						suggestions={executableBlockSuggestions}
 						label="AI block suggestions"
+						currentRequestSignature={currentRequestSignature}
 						disabled={isStaleResult}
 					/>
 				</RecommendationLane>

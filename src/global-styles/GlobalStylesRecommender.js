@@ -49,6 +49,7 @@ import {
 	getResolvedActivityEntries,
 } from '../store/activity-history';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { buildGlobalStylesRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	buildGlobalStylesRecommendationContextSignature,
 	getGlobalStylesActivityUndoState,
@@ -345,7 +346,7 @@ function GlobalStylesPanel( {
 				hasResult={ hasResult }
 				staleReason={
 					isStale
-						? 'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+						? 'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.'
 						: ''
 				}
 				onRefresh={ isStale ? onRequest : undefined }
@@ -402,7 +403,7 @@ function GlobalStylesPanel( {
 					title="Refresh recommendations for Global Styles"
 					description="Flavor Agent kept the previous result visible so you can compare it against the current Global Styles config."
 					tone={ STALE_STATUS_LABEL }
-					why="Review and apply actions stay disabled until you refresh against the live Global Styles context."
+					why="Review and apply actions stay disabled until you refresh against the live Global Styles context and current prompt."
 					primaryActionLabel={ REFRESH_ACTION_LABEL }
 					onPrimaryAction={ onRequest }
 					primaryActionDisabled={ isLoading }
@@ -502,6 +503,7 @@ function GlobalStylesPanel( {
 export default function GlobalStylesRecommender() {
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ portalNode, setPortalNode ] = useState( null );
+	const hydratedResultKeyRef = useRef( null );
 	const [ styleBookUiState, setStyleBookUiState ] = useState( () =>
 		typeof document === 'undefined'
 			? {
@@ -538,6 +540,8 @@ export default function GlobalStylesRecommender() {
 		designSemantics,
 		rawSuggestions,
 		currentExplanation,
+		currentRequestPrompt,
+		currentResultToken,
 		currentResultContextSignature,
 		currentResultRef,
 		status,
@@ -636,6 +640,9 @@ export default function GlobalStylesRecommender() {
 			} ),
 			rawSuggestions: mappedSuggestions,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
+			currentRequestPrompt:
+				store?.getGlobalStylesRequestPrompt?.() || '',
+			currentResultToken: store?.getGlobalStylesResultToken?.() || 0,
 			currentResultContextSignature:
 				store?.getGlobalStylesContextSignature?.() || null,
 			currentResultRef: store?.getGlobalStylesResultRef?.() || null,
@@ -668,19 +675,33 @@ export default function GlobalStylesRecommender() {
 			themeTokenDiagnostics,
 			executionContract,
 		} );
+	const recommendationRequestSignature =
+		buildGlobalStylesRecommendationRequestSignature( {
+			scope,
+			prompt,
+			contextSignature: recommendationContextSignature,
+		} );
+	const resultRequestSignature =
+		buildGlobalStylesRecommendationRequestSignature( {
+			scope: {
+				scopeKey: scope?.scopeKey || '',
+				globalStylesId: currentResultRef || '',
+				entityId: currentResultRef || '',
+			},
+			prompt: currentRequestPrompt,
+			contextSignature: currentResultContextSignature,
+		} );
 	const hasStoredResultForScope = Boolean(
-		scope?.globalStylesId &&
-			currentResultRef === scope.globalStylesId &&
-			currentResultContextSignature
+		scope?.globalStylesId && currentResultRef === scope.globalStylesId
 	);
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
-			currentResultContextSignature === recommendationContextSignature
+			resultRequestSignature === recommendationRequestSignature
 	);
 	const isStaleResult = Boolean(
 		hasStoredResultForScope &&
-			currentResultContextSignature !== recommendationContextSignature
+			resultRequestSignature !== recommendationRequestSignature
 	);
 	const suggestions = useMemo(
 		() => ( hasMatchingResult || isStaleResult ? rawSuggestions : [] ),
@@ -895,6 +916,7 @@ export default function GlobalStylesRecommender() {
 			return;
 		}
 
+		hydratedResultKeyRef.current = null;
 		clearGlobalStylesRecommendations();
 
 		if ( entityChanged ) {
@@ -904,6 +926,29 @@ export default function GlobalStylesRecommender() {
 		clearGlobalStylesRecommendations,
 		recommendationContextSignature,
 		scope?.globalStylesId,
+	] );
+
+	useEffect( () => {
+		const hydrationKey =
+			hasStoredResultForScope && status === 'ready'
+				? `${ currentResultRef || '' }:${
+					currentResultToken || resultRequestSignature
+				}`
+				: '';
+
+		if ( ! hydrationKey || hydratedResultKeyRef.current === hydrationKey ) {
+			return;
+		}
+
+		hydratedResultKeyRef.current = hydrationKey;
+		setPrompt( currentRequestPrompt );
+	}, [
+		currentRequestPrompt,
+		currentResultRef,
+		currentResultToken,
+		hasStoredResultForScope,
+		resultRequestSignature,
+		status,
 	] );
 
 	const handleRequest = useCallback( () => {
@@ -943,12 +988,12 @@ export default function GlobalStylesRecommender() {
 		if ( selectedSuggestion ) {
 			applyGlobalStylesSuggestion(
 				selectedSuggestion,
-				recommendationContextSignature
+				recommendationRequestSignature
 			);
 		}
 	}, [
 		applyGlobalStylesSuggestion,
-		recommendationContextSignature,
+		recommendationRequestSignature,
 		selectedSuggestion,
 	] );
 

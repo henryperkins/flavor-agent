@@ -13,6 +13,8 @@ final class TemplatePartPrompt {
 
 	use FormatsDocsGuidance;
 
+	private const MAX_PROMPT_PATTERNS = 30;
+
 	/**
 	 * Build the system prompt for template-part recommendations.
 	 */
@@ -199,7 +201,7 @@ SYSTEM;
 
 		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
 		if ( count( $patterns ) > 0 ) {
-			$max   = 20;
+			$max   = self::MAX_PROMPT_PATTERNS;
 			$shown = array_slice( $patterns, 0, $max );
 			$lines = array_map(
 				static function ( array $pattern ): string {

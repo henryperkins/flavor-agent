@@ -28,6 +28,13 @@ const PATTERN_REASON_LABELS = {
 	pattern_registry_changed: 'Registered patterns changed.',
 };
 
+const GUIDELINE_CATEGORY_FIELDS = {
+	site: 'flavor_agent_guideline_site',
+	copy: 'flavor_agent_guideline_copy',
+	images: 'flavor_agent_guideline_images',
+	additional: 'flavor_agent_guideline_additional',
+};
+
 function getDefaultStorage() {
 	try {
 		return window.localStorage;
@@ -430,6 +437,472 @@ function initializeSectionState( root, storage ) {
 	} );
 }
 
+function parseJsonValue( value, fallback = null ) {
+	if ( ! value ) {
+		return fallback;
+	}
+
+	try {
+		return JSON.parse( value );
+	} catch ( error ) {
+		return fallback;
+	}
+}
+
+function isValidBlockName( blockName ) {
+	return /^[a-z0-9-]+\/[a-z0-9-]+$/.test( normalizeText( blockName ) );
+}
+
+function normalizeBlockGuidelines( value ) {
+	if ( ! value || typeof value !== 'object' ) {
+		return {};
+	}
+
+	return Object.fromEntries(
+		Object.entries( value )
+			.map( ( [ blockName, blockData ] ) => {
+				if ( ! isValidBlockName( blockName ) ) {
+					return null;
+				}
+
+				const rawGuidelines =
+					blockData &&
+					typeof blockData === 'object' &&
+					! Array.isArray( blockData )
+						? blockData.guidelines
+						: blockData;
+				const guidelines = normalizeText( rawGuidelines ).trim();
+
+				if ( ! guidelines ) {
+					return null;
+				}
+
+				return [ blockName, guidelines ];
+			} )
+			.filter( Boolean )
+			.sort( ( [ leftName ], [ rightName ] ) =>
+				leftName.localeCompare( rightName )
+			)
+	);
+}
+
+function buildGuidelinesPayload( root, blockGuidelines ) {
+	const categories = Object.fromEntries(
+		Object.entries( GUIDELINE_CATEGORY_FIELDS ).map( ( [ key, fieldId ] ) => {
+			const field = root.querySelector( `#${ fieldId }` );
+
+			return [
+				key,
+				{
+					guidelines: field ? normalizeText( field.value ).trim() : '',
+				},
+			];
+		} )
+	);
+
+	return {
+		guideline_categories: {
+			...categories,
+			blocks: Object.fromEntries(
+				Object.entries( blockGuidelines ).map(
+					( [ blockName, guidelines ] ) => [
+						blockName,
+						{ guidelines: normalizeText( guidelines ).trim() },
+					]
+				)
+			),
+		},
+	};
+}
+
+function initializeGuidelinesManager( root ) {
+	const guidelinesRoot = root.querySelector(
+		'[data-flavor-agent-guidelines-root]'
+	);
+
+	if ( ! guidelinesRoot ) {
+		return;
+	}
+
+	const hiddenInput = guidelinesRoot.querySelector(
+		'[data-guidelines-block-input]'
+	);
+	const optionsNode = guidelinesRoot.querySelector(
+		'[data-guidelines-block-options]'
+	);
+	const listRoot = guidelinesRoot.querySelector( '[data-guidelines-block-list]' );
+	const blockSelect = guidelinesRoot.querySelector(
+		'[data-guidelines-block-select]'
+	);
+	const blockText = guidelinesRoot.querySelector(
+		'[data-guidelines-block-text]'
+	);
+	const saveButton = guidelinesRoot.querySelector(
+		'[data-guidelines-block-save]'
+	);
+	const cancelButton = guidelinesRoot.querySelector(
+		'[data-guidelines-block-cancel]'
+	);
+	const importButton = guidelinesRoot.querySelector(
+		'[data-guidelines-import-button]'
+	);
+	const exportButton = guidelinesRoot.querySelector(
+		'[data-guidelines-export-button]'
+	);
+	const fileInput = guidelinesRoot.querySelector( '[data-guidelines-file-input]' );
+	const noticeRoot = guidelinesRoot.querySelector( '[data-guidelines-notice]' );
+	const blocksPanel = guidelinesRoot.querySelector(
+		'.flavor-agent-guidelines__blocks-panel'
+	);
+
+	if (
+		! hiddenInput ||
+		! optionsNode ||
+		! listRoot ||
+		! blockSelect ||
+		! blockText ||
+		! saveButton ||
+		! cancelButton ||
+		! importButton ||
+		! exportButton ||
+		! fileInput
+	) {
+		return;
+	}
+
+	const parsedOptions = parseJsonValue( optionsNode.textContent, [] );
+	const blockOptions = Array.isArray( parsedOptions )
+		? parsedOptions
+				.map( ( option ) => ( {
+					value: normalizeText( option?.value ).trim(),
+					label: normalizeText( option?.label || option?.value ).trim(),
+				} ) )
+				.filter( ( option ) => option.value && option.label )
+		: [];
+	const blockLabels = new Map(
+		blockOptions.map( ( option ) => [ option.value, option.label ] )
+	);
+	let blockGuidelines = normalizeBlockGuidelines(
+		parseJsonValue( hiddenInput.value, {} )
+	);
+	let editingBlock = '';
+
+	const writeBlockGuidelines = () => {
+		hiddenInput.value = JSON.stringify( blockGuidelines );
+	};
+
+	const getSortedBlockEntries = () =>
+		Object.entries( blockGuidelines ).sort(
+			( [ leftName ], [ rightName ] ) => {
+				const leftLabel = blockLabels.get( leftName ) || leftName;
+				const rightLabel = blockLabels.get( rightName ) || rightName;
+				const labelComparison = leftLabel.localeCompare( rightLabel );
+
+				if ( labelComparison !== 0 ) {
+					return labelComparison;
+				}
+
+				return leftName.localeCompare( rightName );
+			}
+		);
+
+	const renderBlockSelect = () => {
+		const usedBlocks = new Set( Object.keys( blockGuidelines ) );
+
+		if ( editingBlock ) {
+			usedBlocks.delete( editingBlock );
+		}
+
+		const availableOptions = blockOptions.filter(
+			( option ) => ! usedBlocks.has( option.value )
+		);
+		const selectedValue = editingBlock || normalizeText( blockSelect.value );
+
+		blockSelect.innerHTML = '';
+
+		const placeholderOption = document.createElement( 'option' );
+		placeholderOption.value = '';
+		placeholderOption.textContent = 'Select a block';
+		blockSelect.appendChild( placeholderOption );
+
+		if (
+			editingBlock &&
+			! availableOptions.find( ( option ) => option.value === editingBlock )
+		) {
+			availableOptions.unshift( {
+				value: editingBlock,
+				label: blockLabels.get( editingBlock ) || editingBlock,
+			} );
+		}
+
+		availableOptions.forEach( ( option ) => {
+			const optionNode = document.createElement( 'option' );
+			optionNode.value = option.value;
+			optionNode.textContent = option.label;
+			blockSelect.appendChild( optionNode );
+		} );
+
+		blockSelect.disabled = Boolean( editingBlock );
+
+		if ( selectedValue ) {
+			blockSelect.value = selectedValue;
+		}
+	};
+
+	const resetEditor = () => {
+		editingBlock = '';
+		blockText.value = '';
+		saveButton.textContent = 'Add Block Guideline';
+		cancelButton.hidden = true;
+		renderBlockSelect();
+		blockSelect.value = '';
+	};
+
+	const startEditing = ( blockName ) => {
+		editingBlock = normalizeText( blockName );
+		blockText.value = blockGuidelines[ editingBlock ] || '';
+		saveButton.textContent = 'Update Block Guideline';
+		cancelButton.hidden = false;
+		renderBlockSelect();
+		blockSelect.value = editingBlock;
+		blockText.focus();
+	};
+
+	const renderBlockList = () => {
+		listRoot.innerHTML = '';
+
+		const entries = getSortedBlockEntries();
+
+		if ( entries.length === 0 ) {
+			const emptyState = document.createElement( 'p' );
+			emptyState.className = 'flavor-agent-guidelines__empty-state';
+			emptyState.textContent =
+				'No block guidelines yet. Add one when a specific block needs extra rules.';
+			listRoot.appendChild( emptyState );
+			return;
+		}
+
+		const list = document.createElement( 'div' );
+		list.className = 'flavor-agent-guidelines__items';
+
+		entries.forEach( ( [ blockName, guidelines ] ) => {
+			const item = document.createElement( 'article' );
+			item.className = 'flavor-agent-guidelines__item';
+
+			const header = document.createElement( 'div' );
+			header.className = 'flavor-agent-guidelines__item-header';
+
+			const titleWrap = document.createElement( 'div' );
+			titleWrap.className = 'flavor-agent-guidelines__item-copy';
+
+			const title = document.createElement( 'h4' );
+			title.className = 'flavor-agent-guidelines__item-title';
+			title.textContent = blockLabels.get( blockName ) || blockName;
+
+			const meta = document.createElement( 'p' );
+			meta.className = 'flavor-agent-guidelines__item-meta';
+			meta.textContent = blockName;
+
+			const preview = document.createElement( 'p' );
+			preview.className = 'flavor-agent-guidelines__item-preview';
+			preview.textContent = guidelines;
+
+			titleWrap.appendChild( title );
+			titleWrap.appendChild( meta );
+			titleWrap.appendChild( preview );
+
+			const actions = document.createElement( 'div' );
+			actions.className = 'flavor-agent-guidelines__item-actions';
+
+			const editButton = document.createElement( 'button' );
+			editButton.type = 'button';
+			editButton.className = 'button button-secondary';
+			editButton.textContent = 'Edit';
+			editButton.addEventListener( 'click', () => startEditing( blockName ) );
+
+			const removeButton = document.createElement( 'button' );
+			removeButton.type = 'button';
+			removeButton.className = 'button button-link-delete';
+			removeButton.textContent = 'Remove';
+			removeButton.addEventListener( 'click', () => {
+				const label = blockLabels.get( blockName ) || blockName;
+
+				if (
+					typeof window !== 'undefined' &&
+					typeof window.confirm === 'function' &&
+					! window.confirm(
+						`Remove the block guideline for ${ label }?`
+					)
+				) {
+					return;
+				}
+
+				delete blockGuidelines[ blockName ];
+				writeBlockGuidelines();
+				renderBlockSelect();
+				renderBlockList();
+
+				if ( editingBlock === blockName ) {
+					resetEditor();
+				}
+
+				renderNotice(
+					noticeRoot,
+					'success',
+					'Block guideline removed. Save Changes to persist.'
+				);
+			} );
+
+			actions.appendChild( editButton );
+			actions.appendChild( removeButton );
+
+			header.appendChild( titleWrap );
+			header.appendChild( actions );
+			item.appendChild( header );
+			list.appendChild( item );
+		} );
+
+		listRoot.appendChild( list );
+	};
+
+	const applyImportedPayload = ( payload ) => {
+		if (
+			! payload ||
+			typeof payload !== 'object' ||
+			! payload.guideline_categories ||
+			typeof payload.guideline_categories !== 'object'
+		) {
+			throw new Error(
+				'Check that your file contains a guideline_categories object.'
+			);
+		}
+
+		Object.entries( GUIDELINE_CATEGORY_FIELDS ).forEach(
+			( [ category, fieldId ] ) => {
+				const field = root.querySelector( `#${ fieldId }` );
+
+				if ( ! field ) {
+					return;
+				}
+
+				const nextValue = normalizeText(
+					payload.guideline_categories?.[ category ]?.guidelines
+				);
+				field.value = nextValue;
+			}
+		);
+
+		blockGuidelines = normalizeBlockGuidelines(
+			payload.guideline_categories?.blocks || {}
+		);
+		writeBlockGuidelines();
+		renderBlockSelect();
+		renderBlockList();
+		resetEditor();
+
+		if ( blocksPanel && Object.keys( blockGuidelines ).length > 0 ) {
+			blocksPanel.open = true;
+		}
+	};
+
+	writeBlockGuidelines();
+	renderBlockSelect();
+	renderBlockList();
+	resetEditor();
+
+	saveButton.addEventListener( 'click', () => {
+		const blockName = editingBlock || normalizeText( blockSelect.value ).trim();
+		const guidelines = normalizeText( blockText.value ).trim();
+
+		if ( ! blockName ) {
+			renderNotice(
+				noticeRoot,
+				'error',
+				'Choose a block before saving a block guideline.'
+			);
+			return;
+		}
+
+		if ( ! guidelines ) {
+			renderNotice(
+				noticeRoot,
+				'error',
+				'Enter guideline text before saving a block guideline.'
+			);
+			return;
+		}
+
+		blockGuidelines[ blockName ] = guidelines;
+		writeBlockGuidelines();
+		renderBlockList();
+		resetEditor();
+		renderNotice(
+			noticeRoot,
+			'success',
+			'Block guideline ready. Save Changes to persist.'
+		);
+	} );
+
+	cancelButton.addEventListener( 'click', () => {
+		resetEditor();
+		renderNotice( noticeRoot, '', '' );
+	} );
+
+	importButton.addEventListener( 'click', () => {
+		fileInput.click();
+	} );
+
+	fileInput.addEventListener( 'change', async ( event ) => {
+		const [ file ] = Array.from( event.target.files || [] );
+		event.target.value = '';
+
+		if ( ! file ) {
+			return;
+		}
+
+		try {
+			const parsed = parseJsonValue( await file.text(), null );
+
+			if ( ! parsed ) {
+				throw new Error(
+					'Check that your file contains valid JSON and try again.'
+				);
+			}
+
+			applyImportedPayload( parsed );
+			renderNotice(
+				noticeRoot,
+				'success',
+				'Guidelines imported into the form. Save Changes to persist.'
+			);
+		} catch ( error ) {
+			renderNotice(
+				noticeRoot,
+				'error',
+				error instanceof Error
+					? error.message
+					: 'Could not import guidelines.'
+			);
+		}
+	} );
+
+	exportButton.addEventListener( 'click', () => {
+		const payload = buildGuidelinesPayload( root, blockGuidelines );
+		const blob = new Blob( [ JSON.stringify( payload, null, 2 ) ], {
+			type: 'application/json',
+		} );
+		const objectUrl = URL.createObjectURL( blob );
+		const anchor = document.createElement( 'a' );
+		anchor.href = objectUrl;
+		anchor.download = 'flavor-agent-guidelines.json';
+		document.body.appendChild( anchor );
+		anchor.click();
+		document.body.removeChild( anchor );
+		URL.revokeObjectURL( objectUrl );
+		renderNotice( noticeRoot, 'success', 'Guidelines exported.' );
+	} );
+}
+
 async function readJsonResponse( response ) {
 	const rawBody =
 		response && typeof response.text === 'function'
@@ -569,6 +1042,7 @@ export function initializeSettingsPage( {
 
 	initializeSectionState( root, storage );
 	initializePatternSync( root, fetchImpl );
+	initializeGuidelinesManager( root );
 
 	return {
 		root,

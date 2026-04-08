@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Settings;
 use FlavorAgent\Tests\Support\WordPressTestState;
@@ -974,6 +975,82 @@ final class SettingsTest extends TestCase {
 			$matching_user_output
 		);
 		$this->assertSame( [], WordPressTestState::$transients );
+	}
+
+	public function test_render_page_includes_guidelines_controls(): void {
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '4. Guidelines', $output );
+		$this->assertStringContainsString( 'name="flavor_agent_guideline_site"', $output );
+		$this->assertStringContainsString( 'name="flavor_agent_guideline_copy"', $output );
+		$this->assertStringContainsString( 'Block Guidelines', $output );
+		$this->assertStringContainsString( 'Import JSON', $output );
+		$this->assertStringContainsString( 'Export JSON', $output );
+	}
+
+	public function test_sanitize_guideline_copy_marks_guidelines_feedback_and_sanitizes_text(): void {
+		$_POST = [
+			'option_page'                         => 'flavor_agent_settings',
+			'flavor_agent_settings_feedback_key' => 'guidelines-copy',
+		];
+
+		$this->assertSame(
+			'Use active voice.',
+			Settings::sanitize_guideline_copy( ' <strong>Use active voice.</strong> ' )
+		);
+
+		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
+
+		$this->assertTrue( (bool) ( $feedback['changed_sections']['guidelines'] ?? false ) );
+	}
+
+	public function test_sanitize_guideline_blocks_only_marks_feedback_for_changed_array_values(): void {
+		WordPressTestState::$options = [
+			Guidelines::OPTION_BLOCKS => [
+				'core/paragraph' => 'Use short paragraphs.',
+			],
+		];
+		$_POST                       = [
+			'option_page'                         => 'flavor_agent_settings',
+			'flavor_agent_settings_feedback_key' => 'guidelines-blocks',
+		];
+
+		$this->assertSame(
+			[
+				'core/paragraph' => 'Use short paragraphs.',
+			],
+			Settings::sanitize_guideline_blocks(
+				wp_json_encode(
+					[
+						'core/paragraph' => [
+							'guidelines' => 'Use short paragraphs.',
+						],
+					]
+				)
+			)
+		);
+		$this->assertSame( [], WordPressTestState::$transients );
+
+		$this->assertSame(
+			[
+				'core/paragraph' => 'Use short paragraphs and clear CTAs.',
+			],
+			Settings::sanitize_guideline_blocks(
+				wp_json_encode(
+					[
+						'core/paragraph' => [
+							'guidelines' => 'Use short paragraphs and clear CTAs.',
+						],
+					]
+				)
+			)
+		);
+
+		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
+
+		$this->assertTrue( (bool) ( $feedback['changed_sections']['guidelines'] ?? false ) );
 	}
 
 	public function test_sanitize_azure_reasoning_effort_accepts_xhigh(): void {

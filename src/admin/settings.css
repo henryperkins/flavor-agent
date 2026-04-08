@@ -322,6 +322,12 @@
 	padding-inline: 14px;
 }
 
+.flavor-agent-settings textarea.flavor-agent-settings-field {
+	min-height: 132px;
+	padding: 14px;
+	resize: vertical;
+}
+
 .flavor-agent-settings__actions {
 	display: flex;
 	justify-content: flex-start;
@@ -341,6 +347,184 @@
 .flavor-agent-settings__actions .button.button-primary:focus {
 	border-color: var(--flavor-agent-brand-accent-strong);
 	background: var(--flavor-agent-brand-accent-strong);
+}
+
+.flavor-agent-settings-subpanel {
+	overflow: hidden;
+	margin-top: 18px;
+	border: 1px solid rgba(11, 123, 128, 0.12);
+	border-radius: var(--flavor-agent-radius-xl);
+	background:
+		linear-gradient(
+			180deg,
+			rgba(255, 255, 255, 0.82),
+			rgba(250, 248, 242, 1)
+		),
+		var(--flavor-agent-brand-surface-strong);
+}
+
+.flavor-agent-settings-subpanel__summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 18px;
+	cursor: pointer;
+	list-style: none;
+	color: var(--flavor-agent-brand-accent-strong);
+	font-size: var(--wpds-font-size-xs, 11px);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.flavor-agent-settings-subpanel__summary::-webkit-details-marker {
+	display: none;
+}
+
+.flavor-agent-settings-subpanel__body {
+	padding: 0 18px 18px;
+}
+
+.flavor-agent-guidelines {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+
+.flavor-agent-guidelines__notice .notice {
+	margin: 0;
+}
+
+.flavor-agent-guidelines__blocks-input {
+	display: none;
+}
+
+.flavor-agent-guidelines__block-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 16px;
+}
+
+.flavor-agent-guidelines__items {
+	display: grid;
+	gap: 12px;
+}
+
+.flavor-agent-guidelines__item {
+	padding: 16px 18px;
+	border: 1px solid rgba(11, 123, 128, 0.12);
+	border-radius: var(--flavor-agent-radius-xl);
+	background: rgba(255, 255, 255, 0.72);
+}
+
+.flavor-agent-guidelines__item-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.flavor-agent-guidelines__item-copy {
+	display: grid;
+	gap: 6px;
+	min-width: 0;
+}
+
+.flavor-agent-guidelines__item-title {
+	margin: 0;
+	color: var(--flavor-agent-brand-ink);
+	font-size: var(--wpds-font-size-lg, 15px);
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.flavor-agent-guidelines__item-meta {
+	margin: 0;
+	color: var(--flavor-agent-brand-muted);
+	font-size: var(--wpds-font-size-xs, 11px);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	word-break: break-word;
+}
+
+.flavor-agent-guidelines__item-preview {
+	margin: 0;
+	color: var(--flavor-agent-brand-text);
+	font-size: var(--wpds-font-size-md, 13px);
+	line-height: 1.6;
+	white-space: pre-wrap;
+}
+
+.flavor-agent-guidelines__item-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.flavor-agent-guidelines__empty-state {
+	margin: 12px 0 0;
+	color: var(--flavor-agent-brand-muted);
+	font-size: var(--wpds-font-size-md, 13px);
+	line-height: 1.55;
+}
+
+.flavor-agent-guidelines__block-editor {
+	margin-top: 18px;
+	padding: 18px;
+	border: 1px solid rgba(11, 123, 128, 0.12);
+	border-radius: var(--flavor-agent-radius-xl);
+	background: rgba(237, 247, 247, 0.46);
+}
+
+.flavor-agent-guidelines__block-editor-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+	gap: 14px;
+}
+
+.flavor-agent-guidelines__field {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.flavor-agent-guidelines__field-label {
+	color: var(--flavor-agent-brand-accent-strong);
+	font-size: var(--wpds-font-size-xs, 11px);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.flavor-agent-guidelines__block-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 10px;
+	margin-top: 14px;
+}
+
+.flavor-agent-guidelines__actions-panel {
+	padding: 16px 18px;
+	border: 1px solid rgba(11, 123, 128, 0.12);
+	border-radius: var(--flavor-agent-radius-xl);
+	background: rgba(255, 255, 255, 0.68);
+}
+
+.flavor-agent-guidelines__actions-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.flavor-agent-guidelines__actions-row .button {
+	min-height: 38px;
+	border-radius: var(--flavor-agent-radius-full);
+	padding-inline: 16px;
 }
 
 .flavor-agent-sync-panel {
@@ -499,5 +683,16 @@
 	.flavor-agent-settings-field {
 		width: 100%;
 		max-width: none;
+	}
+
+	.flavor-agent-guidelines__block-editor-grid,
+	.flavor-agent-guidelines__item-header {
+		grid-template-columns: 1fr;
+		flex-direction: column;
+	}
+
+	.flavor-agent-guidelines__item-actions,
+	.flavor-agent-guidelines__block-actions {
+		justify-content: flex-start;
 	}
 }

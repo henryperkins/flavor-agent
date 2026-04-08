@@ -1032,7 +1032,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Stale');
 		expect(getContainer().textContent).toContain(
-			'This block changed after the last request.'
+			'This result no longer matches the current block or prompt.'
 		);
 		expect(getContainer().textContent).toContain(
 			'Refresh recommendations for the current block'
@@ -1108,7 +1108,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Stale');
 		expect(getContainer().textContent).toContain(
-			'This block changed after the last request.'
+			'This result no longer matches the current block or prompt.'
 		);
 
 		mockFetchBlockRecommendations.mockClear();

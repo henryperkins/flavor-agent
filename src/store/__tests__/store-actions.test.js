@@ -29,6 +29,13 @@ import {
 } from '../../utils/template-actions';
 import { buildBlockRecommendationContextSignature } from '../../utils/block-recommendation-context';
 import {
+	buildBlockRecommendationRequestSignature,
+	buildGlobalStylesRecommendationRequestSignature,
+	buildStyleBookRecommendationRequestSignature,
+	buildTemplatePartRecommendationRequestSignature,
+	buildTemplateRecommendationRequestSignature,
+} from '../../utils/recommendation-request-signature';
+import {
 	createActivityEntry,
 	readPersistedActivityLog,
 } from '../activity-history';
@@ -225,7 +232,7 @@ describe('store action thunks', () => {
 		);
 	});
 
-	test('fetchBlockRecommendations clears the current block payload before surfacing request errors', async () => {
+	test('fetchBlockRecommendations stores fallback diagnostics after surfacing request errors', async () => {
 		apiFetch.mockRejectedValue(new Error('Network blew up.'));
 
 		const dispatch = jest.fn();
@@ -257,9 +264,16 @@ describe('store action thunks', () => {
 		);
 		expect(dispatch).toHaveBeenNthCalledWith(
 			2,
-			actions.setBlockRecommendations(
-				'block-1',
-				{
+			actions.setBlockRequestState('block-1', 'error', 'Network blew up.', 5)
+		);
+		expect(dispatch).toHaveBeenNthCalledWith(
+			3,
+			expect.objectContaining({
+				type: 'SET_BLOCK_RECS',
+				clientId: 'block-1',
+				requestToken: 5,
+				contextSignature,
+				recommendations: expect.objectContaining({
 					blockName: 'core/paragraph',
 					blockContext: context.block,
 					prompt: 'Tighten this copy.',
@@ -269,14 +283,14 @@ describe('store action thunks', () => {
 					explanation: '',
 					requestMeta: null,
 					timestamp: expect.any(Number),
-				},
-				5,
-				contextSignature
-			)
-		);
-		expect(dispatch).toHaveBeenNthCalledWith(
-			3,
-			actions.setBlockRequestState('block-1', 'error', 'Network blew up.', 5)
+				}),
+				diagnostics: expect.objectContaining({
+					type: 'failure',
+					errorMessage: 'Network blew up.',
+					prompt: 'Tighten this copy.',
+					requestToken: 5,
+				}),
+			})
 		);
 	});
 
@@ -1656,6 +1670,67 @@ describe('store action thunks', () => {
 		expect(result).toBe(false);
 	});
 
+	test('applySuggestion blocks prompt-stale block results before mutating attributes', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue('shared-context'),
+			getBlockRecommendations: jest.fn().mockReturnValue({
+				blockContext: { name: 'core/paragraph' },
+				prompt: 'Keep the copy concise.',
+			}),
+		};
+		const registry = {
+			select: jest.fn((storeName) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue([]),
+							getBlockAttributes: jest.fn().mockReturnValue({
+								content: 'Old copy',
+							}),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue({
+				updateBlockAttributes,
+			}),
+		};
+		const currentRequestSignature =
+			buildBlockRecommendationRequestSignature({
+				clientId: 'block-1',
+				prompt: 'Make the copy more conversational.',
+				contextSignature: 'shared-context',
+			});
+
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Refresh content',
+				attributeUpdates: {
+					content: 'New copy',
+				},
+			},
+			currentRequestSignature
+		)({
+			dispatch,
+			registry,
+			select,
+		});
+
+		expect(updateBlockAttributes).not.toHaveBeenCalled();
+		expect(dispatch).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This result is stale. Refresh recommendations before applying it.'
+			)
+		);
+		expect(result).toBe(false);
+	});
+
 	test('applyGlobalStylesSuggestion converts thrown executor exceptions into apply errors', async () => {
 		applyGlobalStyleSuggestionOperations.mockImplementation(() => {
 			throw new Error('Global Styles executor crashed.');
@@ -1731,6 +1806,108 @@ describe('store action thunks', () => {
 		});
 	});
 
+	test('applyGlobalStylesSuggestion rejects prompt-stale results before running the executor', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getGlobalStylesScopeKey: jest
+				.fn()
+				.mockReturnValue('global_styles:17'),
+			getGlobalStylesResultRef: jest.fn().mockReturnValue('17'),
+			getGlobalStylesContextSignature: jest
+				.fn()
+				.mockReturnValue('shared-style-context'),
+			getGlobalStylesRequestPrompt: jest
+				.fn()
+				.mockReturnValue('Keep the palette restrained.'),
+		};
+		const currentRequestSignature =
+			buildGlobalStylesRecommendationRequestSignature({
+				scope: {
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
+				},
+				prompt: 'Push the palette further.',
+				contextSignature: 'shared-style-context',
+			});
+
+		const result = await actions.applyGlobalStylesSuggestion(
+			{
+				label: 'Use accent canvas',
+			},
+			currentRequestSignature
+		)({
+			dispatch,
+			registry: null,
+			select,
+		});
+
+		expect(applyGlobalStyleSuggestionOperations).not.toHaveBeenCalled();
+		expect(dispatch).toHaveBeenCalledWith(
+			actions.setGlobalStylesApplyState(
+				'error',
+				'This Global Styles result is stale. Refresh recommendations before applying it.'
+			)
+		);
+		expect(result).toEqual({
+			ok: false,
+			error:
+				'This Global Styles result is stale. Refresh recommendations before applying it.',
+		});
+	});
+
+	test('applyStyleBookSuggestion rejects prompt-stale results before running the executor', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getStyleBookScopeKey: jest
+				.fn()
+				.mockReturnValue('style_book:17:core/paragraph'),
+			getStyleBookGlobalStylesId: jest.fn().mockReturnValue('17'),
+			getStyleBookBlockName: jest.fn().mockReturnValue('core/paragraph'),
+			getStyleBookContextSignature: jest
+				.fn()
+				.mockReturnValue('shared-style-book-context'),
+			getStyleBookRequestPrompt: jest
+				.fn()
+				.mockReturnValue('Keep the paragraph understated.'),
+		};
+		const currentRequestSignature =
+			buildStyleBookRecommendationRequestSignature({
+				scope: {
+					scopeKey: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+				},
+				prompt: 'Make the paragraph feel more editorial.',
+				contextSignature: 'shared-style-book-context',
+			});
+
+		const result = await actions.applyStyleBookSuggestion(
+			{
+				label: 'Refine paragraph rhythm',
+			},
+			currentRequestSignature
+		)({
+			dispatch,
+			registry: null,
+			select,
+		});
+
+		expect(applyGlobalStyleSuggestionOperations).not.toHaveBeenCalled();
+		expect(dispatch).toHaveBeenCalledWith(
+			actions.setStyleBookApplyState(
+				'error',
+				'This Style Book result is stale. Refresh recommendations before applying it.'
+			)
+		);
+		expect(result).toEqual({
+			ok: false,
+			error:
+				'This Style Book result is stale. Refresh recommendations before applying it.',
+		});
+	});
+
 	test('applyTemplateSuggestion rejects stale results before running the executor', async () => {
 		const dispatch = jest.fn();
 		const select = {
@@ -1769,6 +1946,57 @@ describe('store action thunks', () => {
 		expect(
 			dispatch.mock.calls.some(([action]) => action?.type === 'LOG_ACTIVITY')
 		).toBe(false);
+		expect(result).toEqual({
+			ok: false,
+			error:
+				'This template result is stale. Refresh recommendations before applying it.',
+		});
+	});
+
+	test('applyTemplateSuggestion rejects prompt-stale results before running the executor', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue('shared-template-context'),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue('Clarify the structure.'),
+			getTemplateResultRef: jest.fn().mockReturnValue('theme//home'),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature({
+				templateRef: 'theme//home',
+				prompt: 'Make the template feel more editorial.',
+				contextSignature: 'shared-template-context',
+			});
+
+		const result = await actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+					},
+				],
+			},
+			currentRequestSignature
+		)({
+			dispatch,
+			registry: null,
+			select,
+		});
+
+		expect(applyTemplateSuggestionOperations).not.toHaveBeenCalled();
+		expect(dispatch).toHaveBeenCalledWith(
+			actions.setTemplateApplyState(
+				'error',
+				'This template result is stale. Refresh recommendations before applying it.'
+			)
+		);
 		expect(result).toEqual({
 			ok: false,
 			error:
@@ -2046,6 +2274,58 @@ describe('store action thunks', () => {
 					placement: 'start',
 				},
 			],
+		});
+	});
+
+	test('applyTemplatePartSuggestion rejects prompt-stale results before running the executor', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getTemplatePartContextSignature: jest
+				.fn()
+				.mockReturnValue('shared-template-part-context'),
+			getTemplatePartRequestPrompt: jest
+				.fn()
+				.mockReturnValue('Keep the header compact.'),
+			getTemplatePartResultRef: jest.fn().mockReturnValue('theme//header'),
+		};
+		const currentRequestSignature =
+			buildTemplatePartRecommendationRequestSignature({
+				templatePartRef: 'theme//header',
+				prompt: 'Add more breathing room to the header.',
+				contextSignature: 'shared-template-part-context',
+			});
+
+		const result = await actions.applyTemplatePartSuggestion(
+			{
+				label: 'Add utility row',
+				suggestionKey: 'Add utility row-0',
+				operations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						placement: 'start',
+					},
+				],
+			},
+			currentRequestSignature
+		)({
+			dispatch,
+			registry: null,
+			select,
+		});
+
+		expect(applyTemplatePartSuggestionOperations).not.toHaveBeenCalled();
+		expect(dispatch).toHaveBeenCalledWith(
+			actions.setTemplatePartApplyState(
+				'error',
+				'This template-part result is stale. Refresh recommendations before applying it.'
+			)
+		);
+		expect(result).toEqual({
+			ok: false,
+			error:
+				'This template-part result is stale. Refresh recommendations before applying it.',
 		});
 	});
 

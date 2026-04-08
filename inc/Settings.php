@@ -22,6 +22,7 @@ final class Settings {
 	private const GROUP_CHAT   = 'chat';
 	private const GROUP_PATTERNS = 'patterns';
 	private const GROUP_DOCS   = 'docs';
+	private const GROUP_GUIDELINES = 'guidelines';
 	private const OPEN_SECTION_STORAGE_KEY = 'flavor-agent-settings-open-section';
 	private const PAGE_FEEDBACK_QUERY_KEY = 'flavor_agent_settings_feedback_key';
 	private const PAGE_FEEDBACK_FIELD_NAME = 'flavor_agent_settings_feedback_key';
@@ -244,17 +245,62 @@ final class Settings {
 				'default'           => '',
 			]
 		);
-		register_setting(
-			self::OPTION_GROUP,
-			'flavor_agent_cloudflare_ai_search_max_results',
-			[
-				'type'              => 'integer',
-				'sanitize_callback' => [ __CLASS__, 'sanitize_grounding_result_count' ],
-				'default'           => 4,
-			]
-		);
+			register_setting(
+				self::OPTION_GROUP,
+				'flavor_agent_cloudflare_ai_search_max_results',
+				[
+					'type'              => 'integer',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_grounding_result_count' ],
+					'default'           => 4,
+				]
+			);
+			register_setting(
+				self::OPTION_GROUP,
+				Guidelines::OPTION_SITE,
+				[
+					'type'              => 'string',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_guideline_site' ],
+					'default'           => '',
+				]
+			);
+			register_setting(
+				self::OPTION_GROUP,
+				Guidelines::OPTION_COPY,
+				[
+					'type'              => 'string',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_guideline_copy' ],
+					'default'           => '',
+				]
+			);
+			register_setting(
+				self::OPTION_GROUP,
+				Guidelines::OPTION_IMAGES,
+				[
+					'type'              => 'string',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_guideline_images' ],
+					'default'           => '',
+				]
+			);
+			register_setting(
+				self::OPTION_GROUP,
+				Guidelines::OPTION_ADDITIONAL,
+				[
+					'type'              => 'string',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_guideline_additional' ],
+					'default'           => '',
+				]
+			);
+			register_setting(
+				self::OPTION_GROUP,
+				Guidelines::OPTION_BLOCKS,
+				[
+					'type'              => 'array',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_guideline_blocks' ],
+					'default'           => [],
+				]
+			);
 
-		// --- Sections ---
+			// --- Sections ---
 
 		add_settings_section(
 			'flavor_agent_openai_provider',
@@ -290,12 +336,18 @@ final class Settings {
 			self::PAGE_SLUG
 		);
 
-		add_settings_section(
-			'flavor_agent_cloudflare',
-			'Cloudflare AI Search',
-			[ __CLASS__, 'render_cloudflare_section' ],
-			self::PAGE_SLUG
-		);
+			add_settings_section(
+				'flavor_agent_cloudflare',
+				'Cloudflare AI Search',
+				[ __CLASS__, 'render_cloudflare_section' ],
+				self::PAGE_SLUG
+			);
+			add_settings_section(
+				'flavor_agent_guidelines',
+				'Guidelines',
+				[ __CLASS__, 'render_guidelines_section' ],
+				self::PAGE_SLUG
+			);
 
 		add_settings_field(
 			Provider::OPTION_NAME,
@@ -565,11 +617,11 @@ final class Settings {
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
 		);
-		add_settings_field(
-			'flavor_agent_cloudflare_ai_search_max_results',
-			'Max Grounding Sources',
-			[ __CLASS__, 'render_text_field' ],
-			self::PAGE_SLUG,
+			add_settings_field(
+				'flavor_agent_cloudflare_ai_search_max_results',
+				'Max Grounding Sources',
+				[ __CLASS__, 'render_text_field' ],
+				self::PAGE_SLUG,
 			'flavor_agent_cloudflare',
 			[
 				'option'      => 'flavor_agent_cloudflare_ai_search_max_results',
@@ -577,10 +629,66 @@ final class Settings {
 				'type'        => 'number',
 				'placeholder' => '4',
 				'description' => 'Optional. Controls how many developer docs can be added per grounded request.',
-				'inputmode'   => 'numeric',
-			]
-		);
-	}
+					'inputmode'   => 'numeric',
+				]
+			);
+			add_settings_field(
+				Guidelines::OPTION_SITE,
+				'Site Context',
+				[ __CLASS__, 'render_textarea_field' ],
+				self::PAGE_SLUG,
+				'flavor_agent_guidelines',
+				[
+					'option'      => Guidelines::OPTION_SITE,
+					'label_for'   => Guidelines::OPTION_SITE,
+					'rows'        => '5',
+					'placeholder' => 'Describe your site purpose, goals, audience, products, services, or editorial context.',
+					'description' => 'Optional. Explain what the site is for, who it serves, and what Flavor Agent should keep in mind across recommendations.',
+				]
+			);
+			add_settings_field(
+				Guidelines::OPTION_COPY,
+				'Copy Guidelines',
+				[ __CLASS__, 'render_textarea_field' ],
+				self::PAGE_SLUG,
+				'flavor_agent_guidelines',
+				[
+					'option'      => Guidelines::OPTION_COPY,
+					'label_for'   => Guidelines::OPTION_COPY,
+					'rows'        => '6',
+					'placeholder' => 'Tone, voice, formatting, banned phrases, preferred reading level, CTA style, spelling conventions...',
+					'description' => 'Optional. Set writing standards for tone, voice, style, formatting, and wording constraints.',
+				]
+			);
+			add_settings_field(
+				Guidelines::OPTION_IMAGES,
+				'Image Guidelines',
+				[ __CLASS__, 'render_textarea_field' ],
+				self::PAGE_SLUG,
+				'flavor_agent_guidelines',
+				[
+					'option'      => Guidelines::OPTION_IMAGES,
+					'label_for'   => Guidelines::OPTION_IMAGES,
+					'rows'        => '5',
+					'placeholder' => 'Preferred imagery, dimensions, mood, composition, accessibility requirements, illustration vs photography...',
+					'description' => 'Optional. Capture image direction, aesthetic rules, sizing expectations, and accessibility notes.',
+				]
+			);
+			add_settings_field(
+				Guidelines::OPTION_ADDITIONAL,
+				'Additional Guidelines',
+				[ __CLASS__, 'render_textarea_field' ],
+				self::PAGE_SLUG,
+				'flavor_agent_guidelines',
+				[
+					'option'      => Guidelines::OPTION_ADDITIONAL,
+					'label_for'   => Guidelines::OPTION_ADDITIONAL,
+					'rows'        => '5',
+					'placeholder' => 'Anything else Flavor Agent should consistently honor.',
+					'description' => 'Optional. Store extra guardrails, workflow notes, or team-specific rules that do not fit the other categories.',
+				]
+			);
+		}
 
 	public static function render_page(): void {
 		self::ensure_settings_api_registered();
@@ -614,9 +722,9 @@ final class Settings {
 						<h1 class="flavor-agent-admin-hero__title">
 							<?php echo esc_html__( 'Flavor Agent Settings', 'flavor-agent' ); ?>
 						</h1>
-						<p class="flavor-agent-admin-hero__copy">
-							<?php echo esc_html__( 'Set up chat first. Pattern recommendations and docs grounding are optional. Use Help for setup guidance and troubleshooting.', 'flavor-agent' ); ?>
-						</p>
+							<p class="flavor-agent-admin-hero__copy">
+								<?php echo esc_html__( 'Set up chat first. Pattern recommendations, docs grounding, and guidelines are optional. Use Help for setup guidance and troubleshooting.', 'flavor-agent' ); ?>
+							</p>
 						<div class="flavor-agent-admin-hero__actions">
 							<a class="button button-primary" href="<?php echo esc_attr( self::sanitize_url_value( $primary_url ) ); ?>">
 								<?php echo esc_html( $primary_label ); ?>
@@ -654,16 +762,25 @@ final class Settings {
 							self::render_pattern_recommendations_group( $state, $feedback );
 						}
 					);
-					self::render_settings_section_group(
-						self::GROUP_DOCS,
-						__( '3. Docs Grounding', 'flavor-agent' ),
-						self::get_group_card_meta( self::GROUP_DOCS, $state ),
-						$open_group,
-						static function () use ( $state, $feedback ): void {
-							self::render_docs_grounding_group( $state, $feedback );
-						}
-					);
-					?>
+						self::render_settings_section_group(
+							self::GROUP_DOCS,
+							__( '3. Docs Grounding', 'flavor-agent' ),
+							self::get_group_card_meta( self::GROUP_DOCS, $state ),
+							$open_group,
+							static function () use ( $state, $feedback ): void {
+								self::render_docs_grounding_group( $state, $feedback );
+							}
+						);
+						self::render_settings_section_group(
+							self::GROUP_GUIDELINES,
+							__( '4. Guidelines', 'flavor-agent' ),
+							self::get_group_card_meta( self::GROUP_GUIDELINES, $state ),
+							$open_group,
+							static function () use ( $state, $feedback ): void {
+								self::render_guidelines_group( $state, $feedback );
+							}
+						);
+						?>
 					<div class="flavor-agent-settings__actions">
 						<?php
 						submit_button(
@@ -715,10 +832,11 @@ final class Settings {
 		$qdrant_configured         = '' !== (string) get_option( 'flavor_agent_qdrant_url', '' )
 			&& '' !== (string) get_option( 'flavor_agent_qdrant_key', '' );
 		$pattern_state             = PatternIndex::get_runtime_state();
-		$patterns_ready_for_sync   = PatternIndex::recommendation_backends_configured();
-		$docs_configured           = AISearchClient::is_configured();
-		$prewarm_state             = AISearchClient::get_prewarm_state();
-		$runtime_docs_grounding    = AISearchClient::get_runtime_state();
+			$patterns_ready_for_sync   = PatternIndex::recommendation_backends_configured();
+			$docs_configured           = AISearchClient::is_configured();
+			$prewarm_state             = AISearchClient::get_prewarm_state();
+			$runtime_docs_grounding    = AISearchClient::get_runtime_state();
+			$guidelines_enabled        = Guidelines::has_any();
 
 		return [
 			'selected_provider'   => $selected_provider,
@@ -728,12 +846,13 @@ final class Settings {
 			'runtime_embedding'   => $runtime_embedding,
 			'qdrant_configured'   => $qdrant_configured,
 			'pattern_state'       => $pattern_state,
-			'patterns_ready'      => $patterns_ready_for_sync,
-			'docs_configured'     => $docs_configured,
-			'prewarm_state'       => $prewarm_state,
-			'runtime_docs_grounding' => $runtime_docs_grounding,
-		];
-	}
+				'patterns_ready'      => $patterns_ready_for_sync,
+				'docs_configured'     => $docs_configured,
+				'prewarm_state'       => $prewarm_state,
+				'runtime_docs_grounding' => $runtime_docs_grounding,
+				'guidelines_enabled'  => $guidelines_enabled,
+			];
+		}
 
 	/**
 	 * @return array<string, mixed>
@@ -879,15 +998,25 @@ final class Settings {
 				: __( 'Pattern settings saved.', 'flavor-agent' );
 		}
 
-		if (
-			! empty( $changed_sections[ self::GROUP_DOCS ] ) &&
-			(
-				empty( $messages[ self::GROUP_DOCS ]['tone'] ) ||
-				( $messages[ self::GROUP_DOCS ]['tone'] ?? '' ) !== 'error'
-			)
-		) {
-			$summary_lines[] = __( 'Docs grounding settings saved.', 'flavor-agent' );
-		}
+			if (
+				! empty( $changed_sections[ self::GROUP_DOCS ] ) &&
+				(
+					empty( $messages[ self::GROUP_DOCS ]['tone'] ) ||
+					( $messages[ self::GROUP_DOCS ]['tone'] ?? '' ) !== 'error'
+				)
+			) {
+				$summary_lines[] = __( 'Docs grounding settings saved.', 'flavor-agent' );
+			}
+
+			if (
+				! empty( $changed_sections[ self::GROUP_GUIDELINES ] ) &&
+				(
+					empty( $messages[ self::GROUP_GUIDELINES ]['tone'] ) ||
+					( $messages[ self::GROUP_GUIDELINES ]['tone'] ?? '' ) !== 'error'
+				)
+			) {
+				$summary_lines[] = __( 'Guidelines saved.', 'flavor-agent' );
+			}
 
 		$summary_lines = array_values(
 			array_filter(
@@ -946,9 +1075,10 @@ final class Settings {
 	/**
 	 * @return array{summary: string, badges: array<int, array{label: string, tone: string}>, status: array{label: string, tone: string}, open: bool}
 	 */
-	private static function get_group_card_meta( string $group, array $state ): array {
-		$pattern_status = self::get_pattern_overview_status( $state );
-		$docs_status    = self::get_docs_overview_status( $state );
+		private static function get_group_card_meta( string $group, array $state ): array {
+			$pattern_status = self::get_pattern_overview_status( $state );
+			$docs_status    = self::get_docs_overview_status( $state );
+			$guidelines_status = self::get_guidelines_overview_status( $state );
 
 		return match ( $group ) {
 			self::GROUP_CHAT => [
@@ -975,15 +1105,23 @@ final class Settings {
 				'status'  => $pattern_status,
 				'open'    => false,
 			],
-			self::GROUP_DOCS => [
-				'summary' => __( 'Optional. Ground responses with developer.wordpress.org docs.', 'flavor-agent' ),
-				'badges'  => [
-					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
+				self::GROUP_DOCS => [
+					'summary' => __( 'Optional. Ground responses with developer.wordpress.org docs.', 'flavor-agent' ),
+					'badges'  => [
+						self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
+					],
+					'status'  => $docs_status,
+					'open'    => false,
 				],
-				'status'  => $docs_status,
-				'open'    => false,
-			],
-			default => [
+				self::GROUP_GUIDELINES => [
+					'summary' => __( 'Optional. Store plugin-owned site, writing, image, and block guidance.', 'flavor-agent' ),
+					'badges'  => [
+						self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
+					],
+					'status'  => $guidelines_status,
+					'open'    => false,
+				],
+				default => [
 				'summary' => '',
 				'badges'  => [],
 				'status'  => self::make_badge( '', 'neutral' ),
@@ -1017,10 +1155,10 @@ final class Settings {
 	/**
 	 * @return array{label: string, tone: string}
 	 */
-	private static function get_docs_overview_status( array $state ): array {
-		if ( empty( $state['docs_configured'] ) ) {
-			return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
-		}
+		private static function get_docs_overview_status( array $state ): array {
+			if ( empty( $state['docs_configured'] ) ) {
+				return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
+			}
 
 		$prewarm_status = (string) ( $state['prewarm_state']['status'] ?? 'never' );
 		$runtime_status = (string) ( $state['runtime_docs_grounding']['status'] ?? 'idle' );
@@ -1040,15 +1178,27 @@ final class Settings {
 			return self::make_badge( __( 'Needs attention', 'flavor-agent' ), 'warning' );
 		}
 
-		return self::make_badge( __( 'On', 'flavor-agent' ), 'success' );
-	}
+			return self::make_badge( __( 'On', 'flavor-agent' ), 'success' );
+		}
+
+		/**
+		 * @return array{label: string, tone: string}
+		 */
+		private static function get_guidelines_overview_status( array $state ): array {
+			if ( empty( $state['guidelines_enabled'] ) ) {
+				return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
+			}
+
+			return self::make_badge( __( 'On', 'flavor-agent' ), 'success' );
+		}
 
 	private static function render_setup_status_cards( array $state, string $activity_url ): void {
-		$chat_status    = ! empty( $state['runtime_chat']['configured'] )
-			? self::make_badge( __( 'Ready', 'flavor-agent' ), 'success' )
-			: self::make_badge( __( 'Needs setup', 'flavor-agent' ), 'warning' );
-		$pattern_status = self::get_pattern_overview_status( $state );
-		$docs_status    = self::get_docs_overview_status( $state );
+			$chat_status    = ! empty( $state['runtime_chat']['configured'] )
+				? self::make_badge( __( 'Ready', 'flavor-agent' ), 'success' )
+				: self::make_badge( __( 'Needs setup', 'flavor-agent' ), 'warning' );
+			$pattern_status = self::get_pattern_overview_status( $state );
+			$docs_status    = self::get_docs_overview_status( $state );
+			$guidelines_status = self::get_guidelines_overview_status( $state );
 		?>
 		<div class="flavor-agent-settings__glance">
 			<?php
@@ -1069,16 +1219,23 @@ final class Settings {
 					'data-pattern-overview-status' => 'true',
 				]
 			);
-			self::render_setup_status_card(
-				__( 'Docs Grounding', 'flavor-agent' ),
-				$docs_status['label'],
-				$docs_status['tone'],
-				__( 'Optional third step for developer.wordpress.org grounding.', 'flavor-agent' ),
-				'#' . self::get_section_dom_id( self::GROUP_DOCS )
-			);
-			self::render_setup_status_card(
-				__( 'Recent Activity', 'flavor-agent' ),
-				__( 'View log', 'flavor-agent' ),
+				self::render_setup_status_card(
+					__( 'Docs Grounding', 'flavor-agent' ),
+					$docs_status['label'],
+					$docs_status['tone'],
+					__( 'Optional third step for developer.wordpress.org grounding.', 'flavor-agent' ),
+					'#' . self::get_section_dom_id( self::GROUP_DOCS )
+				);
+				self::render_setup_status_card(
+					__( 'Guidelines', 'flavor-agent' ),
+					$guidelines_status['label'],
+					$guidelines_status['tone'],
+					__( 'Optional fourth step for plugin-owned voice and guardrail guidance.', 'flavor-agent' ),
+					'#' . self::get_section_dom_id( self::GROUP_GUIDELINES )
+				);
+				self::render_setup_status_card(
+					__( 'Recent Activity', 'flavor-agent' ),
+					__( 'View log', 'flavor-agent' ),
 				'neutral',
 				__( 'Review requests, sync runs, and diagnostics in the activity log.', 'flavor-agent' ),
 				$activity_url
@@ -1347,18 +1504,123 @@ final class Settings {
 	/**
 	 * @param array<string, mixed> $feedback
 	 */
-	private static function render_docs_grounding_group( array $state, array $feedback ): void {
-		self::render_section_status_blocks( self::GROUP_DOCS, $state, $feedback );
-		self::render_registered_section_callback( 'flavor_agent_cloudflare' );
-		self::render_registered_fields_table(
+		private static function render_docs_grounding_group( array $state, array $feedback ): void {
+			self::render_section_status_blocks( self::GROUP_DOCS, $state, $feedback );
+			self::render_registered_section_callback( 'flavor_agent_cloudflare' );
+			self::render_registered_fields_table(
 			'flavor_agent_cloudflare',
 			[
 				'flavor_agent_cloudflare_ai_search_max_results',
 			]
 		);
-		self::render_cloudflare_legacy_override_panel();
-		self::render_prewarm_diagnostics_panel( $state );
-	}
+			self::render_cloudflare_legacy_override_panel();
+			self::render_prewarm_diagnostics_panel( $state );
+		}
+
+		/**
+		 * @param array<string, mixed> $feedback
+		 */
+		private static function render_guidelines_group( array $state, array $feedback ): void {
+			self::render_section_status_blocks( self::GROUP_GUIDELINES, $state, $feedback );
+			self::render_registered_section_callback( 'flavor_agent_guidelines' );
+			?>
+			<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root>
+				<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
+				<?php
+				self::render_registered_fields_table(
+					'flavor_agent_guidelines',
+					[
+						Guidelines::OPTION_SITE,
+						Guidelines::OPTION_COPY,
+						Guidelines::OPTION_IMAGES,
+						Guidelines::OPTION_ADDITIONAL,
+					]
+				);
+				self::render_guidelines_blocks_panel();
+				self::render_guidelines_actions_panel();
+				?>
+			</div>
+			<?php
+		}
+
+		private static function render_guidelines_blocks_panel(): void {
+			$block_guidelines = Guidelines::get_block_guidelines();
+			$block_options    = Guidelines::get_content_block_options();
+			?>
+			<details class="flavor-agent-settings-subpanel flavor-agent-guidelines__blocks-panel"<?php echo [] !== $block_guidelines ? ' open' : ''; ?>>
+				<summary class="flavor-agent-settings-subpanel__summary">
+					<?php echo esc_html__( 'Block Guidelines', 'flavor-agent' ); ?>
+				</summary>
+				<div class="flavor-agent-settings-subpanel__body">
+					<p class="description">
+						<?php echo esc_html__( 'Add block-specific guidance for blocks that expose content-role attributes. Use this when a particular block should follow extra content or usage rules.', 'flavor-agent' ); ?>
+					</p>
+					<textarea
+						id="<?php echo esc_attr( Guidelines::OPTION_BLOCKS ); ?>"
+						name="<?php echo esc_attr( Guidelines::OPTION_BLOCKS ); ?>"
+						class="flavor-agent-guidelines__blocks-input"
+						data-guidelines-block-input
+						hidden
+					><?php echo esc_textarea( wp_json_encode( $block_guidelines ) ); ?></textarea>
+					<script type="application/json" data-guidelines-block-options><?php echo wp_json_encode( $block_options ); ?></script>
+					<div class="flavor-agent-guidelines__block-list" data-guidelines-block-list></div>
+					<div class="flavor-agent-guidelines__block-editor">
+						<div class="flavor-agent-guidelines__block-editor-grid">
+							<div class="flavor-agent-guidelines__field">
+								<label class="flavor-agent-guidelines__field-label" for="flavor-agent-guidelines-block-select">
+									<?php echo esc_html__( 'Block', 'flavor-agent' ); ?>
+								</label>
+								<select
+									id="flavor-agent-guidelines-block-select"
+									class="flavor-agent-settings-field"
+									data-guidelines-block-select
+								></select>
+							</div>
+							<div class="flavor-agent-guidelines__field flavor-agent-guidelines__field--wide">
+								<label class="flavor-agent-guidelines__field-label" for="flavor-agent-guidelines-block-text">
+									<?php echo esc_html__( 'Guideline text', 'flavor-agent' ); ?>
+								</label>
+								<textarea
+									id="flavor-agent-guidelines-block-text"
+									class="flavor-agent-settings-field flavor-agent-settings-field--textarea"
+									rows="5"
+									placeholder="<?php echo esc_attr__( 'Enter guidelines for how this block should be used...', 'flavor-agent' ); ?>"
+									data-guidelines-block-text
+								></textarea>
+							</div>
+						</div>
+						<div class="flavor-agent-guidelines__block-actions">
+							<button type="button" class="button button-secondary" data-guidelines-block-cancel hidden>
+								<?php echo esc_html__( 'Cancel', 'flavor-agent' ); ?>
+							</button>
+							<button type="button" class="button button-primary" data-guidelines-block-save>
+								<?php echo esc_html__( 'Add Block Guideline', 'flavor-agent' ); ?>
+							</button>
+						</div>
+					</div>
+				</div>
+			</details>
+			<?php
+		}
+
+		private static function render_guidelines_actions_panel(): void {
+			?>
+			<div class="flavor-agent-guidelines__actions-panel">
+				<div class="flavor-agent-guidelines__actions-row">
+					<button type="button" class="button button-secondary" data-guidelines-import-button>
+						<?php echo esc_html__( 'Import JSON', 'flavor-agent' ); ?>
+					</button>
+					<button type="button" class="button button-secondary" data-guidelines-export-button>
+						<?php echo esc_html__( 'Export JSON', 'flavor-agent' ); ?>
+					</button>
+					<input type="file" accept=".json,application/json" data-guidelines-file-input hidden />
+				</div>
+				<p class="description">
+					<?php echo esc_html__( 'Import and export use the Gutenberg-compatible guideline_categories JSON shape. Import fills the form first; click Save Changes to persist the result.', 'flavor-agent' ); ?>
+				</p>
+			</div>
+			<?php
+		}
 
 	private static function render_cloudflare_legacy_override_panel(): void {
 		$has_saved_legacy_values = self::has_saved_cloudflare_legacy_values();
@@ -1870,9 +2132,15 @@ final class Settings {
 		// Guidance now lives in the screen Help panel to keep the page focused on controls.
 	}
 
-	public static function render_cloudflare_section(): void {
-		// Guidance now lives in the screen Help panel to keep the page focused on controls.
-	}
+		public static function render_cloudflare_section(): void {
+			// Guidance now lives in the screen Help panel to keep the page focused on controls.
+		}
+
+		public static function render_guidelines_section(): void {
+			echo '<p class="flavor-agent-settings-inline-meta">'
+				. esc_html__( 'Store plugin-owned guidance that Flavor Agent can rely on without coupling to Gutenberg experiments or another plugin’s data model.', 'flavor-agent' )
+				. '</p>';
+		}
 
 	/**
 	 * @return array<int, array{id: string, title: string, content: string, priority: int}>
@@ -1884,28 +2152,29 @@ final class Settings {
 				'title'    => __( 'Overview', 'flavor-agent' ),
 				'content'  => implode(
 					'',
-					[
-						'<p>' . esc_html__( 'Flavor Agent has one required setup step and two optional ones.', 'flavor-agent' ) . '</p>',
-						'<ol>',
-						'<li>' . esc_html__( 'Choose and configure Chat Provider first.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Add Pattern Recommendations only if you want vector-based pattern search.', 'flavor-agent' ) . '</li>',
-						'<li>' . esc_html__( 'Add Docs Grounding only if you want developer.wordpress.org context in responses.', 'flavor-agent' ) . '</li>',
-						'</ol>',
-					]
-				),
-				'priority' => 10,
+						[
+							'<p>' . esc_html__( 'Flavor Agent has one required setup step and three optional ones.', 'flavor-agent' ) . '</p>',
+							'<ol>',
+							'<li>' . esc_html__( 'Choose and configure Chat Provider first.', 'flavor-agent' ) . '</li>',
+							'<li>' . esc_html__( 'Add Pattern Recommendations only if you want vector-based pattern search.', 'flavor-agent' ) . '</li>',
+							'<li>' . esc_html__( 'Add Docs Grounding only if you want developer.wordpress.org context in responses.', 'flavor-agent' ) . '</li>',
+							'<li>' . esc_html__( 'Add Guidelines if you want plugin-owned voice and guardrail notes Flavor Agent can use later.', 'flavor-agent' ) . '</li>',
+							'</ol>',
+						]
+					),
+					'priority' => 10,
 			],
 			[
 				'id'       => 'flavor-agent-configuration',
 				'title'    => __( 'Connectors & Overrides', 'flavor-agent' ),
 				'content'  => implode(
 					'',
-					[
-						'<p>' . esc_html__( 'Use Settings > Connectors for shared credentials used by connector-backed providers.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Use this screen for direct Azure or OpenAI Native settings, Qdrant, pattern ranking, pattern sync, and docs grounding controls.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Older installs may also have a legacy Cloudflare override here. Leave those fields blank unless you explicitly need that override.', 'flavor-agent' ) . '</p>',
-					]
-				),
+						[
+							'<p>' . esc_html__( 'Use Settings > Connectors for shared credentials used by connector-backed providers.', 'flavor-agent' ) . '</p>',
+							'<p>' . esc_html__( 'Use this screen for direct Azure or OpenAI Native settings, Qdrant, pattern ranking, pattern sync, docs grounding controls, and plugin-owned guidelines.', 'flavor-agent' ) . '</p>',
+							'<p>' . esc_html__( 'Older installs may also have a legacy Cloudflare override here. Leave those fields blank unless you explicitly need that override.', 'flavor-agent' ) . '</p>',
+						]
+					),
 				'priority' => 20,
 			],
 			[
@@ -1949,7 +2218,7 @@ final class Settings {
 	/**
 	 * Generic text/password/url field renderer driven by $args.
 	 */
-	public static function render_text_field( array $args ): void {
+		public static function render_text_field( array $args ): void {
 		$option         = (string) ( $args['option'] ?? '' );
 		$type           = $args['type'] ?? 'text';
 		$placeholder    = $args['placeholder'] ?? '';
@@ -2001,14 +2270,47 @@ final class Settings {
 		<input<?php self::render_html_attributes( $attributes ); ?> />
 		<?php
 
-		if ( $description ) {
-			printf(
-				'<p class="description" id="%s">%s</p>',
-				esc_attr( $description_id ),
-				wp_kses_post( $description )
-			);
+			if ( $description ) {
+				printf(
+					'<p class="description" id="%s">%s</p>',
+					esc_attr( $description_id ),
+					wp_kses_post( $description )
+				);
+			}
 		}
-	}
+
+		public static function render_textarea_field( array $args ): void {
+			$option         = (string) ( $args['option'] ?? '' );
+			$placeholder    = (string) ( $args['placeholder'] ?? '' );
+			$description    = (string) ( $args['description'] ?? '' );
+			$default        = (string) ( $args['default'] ?? '' );
+			$value          = (string) get_option( $option, $default );
+			$field_id       = (string) ( $args['label_for'] ?? $option );
+			$description_id = '' !== $description ? $field_id . '-description' : '';
+			$attributes     = [
+				'id'          => $field_id,
+				'name'        => $option,
+				'class'       => 'flavor-agent-settings-field flavor-agent-settings-field--textarea',
+				'placeholder' => $placeholder,
+				'rows'        => (string) ( $args['rows'] ?? '6' ),
+			];
+
+			if ( '' !== $description_id ) {
+				$attributes['aria-describedby'] = $description_id;
+			}
+
+			?>
+			<textarea<?php self::render_html_attributes( $attributes ); ?>><?php echo esc_textarea( $value ); ?></textarea>
+			<?php
+
+			if ( '' !== $description ) {
+				printf(
+					'<p class="description" id="%s">%s</p>',
+					esc_attr( $description_id ),
+					wp_kses_post( $description )
+				);
+			}
+		}
 
 	public static function render_select_field( array $args ): void {
 		$option         = (string) ( $args['option'] ?? '' );
@@ -2199,16 +2501,42 @@ final class Settings {
 		);
 	}
 
-	public static function sanitize_cloudflare_api_token( mixed $value ): string {
-		return self::sanitize_cloudflare_text_option(
-			$value,
-			'flavor_agent_cloudflare_ai_search_api_token'
-		);
-	}
+		public static function sanitize_cloudflare_api_token( mixed $value ): string {
+			return self::sanitize_cloudflare_text_option(
+				$value,
+				'flavor_agent_cloudflare_ai_search_api_token'
+			);
+		}
 
-	private static function sanitize_azure_url_option( mixed $value, string $option_name ): string {
-		$sanitized_value = self::sanitize_url_value( $value );
-		self::mark_section_changed_by_option( $option_name, $sanitized_value );
+		public static function sanitize_guideline_site( mixed $value ): string {
+			return self::sanitize_guideline_text_option( $value, Guidelines::OPTION_SITE );
+		}
+
+		public static function sanitize_guideline_copy( mixed $value ): string {
+			return self::sanitize_guideline_text_option( $value, Guidelines::OPTION_COPY );
+		}
+
+		public static function sanitize_guideline_images( mixed $value ): string {
+			return self::sanitize_guideline_text_option( $value, Guidelines::OPTION_IMAGES );
+		}
+
+		public static function sanitize_guideline_additional( mixed $value ): string {
+			return self::sanitize_guideline_text_option( $value, Guidelines::OPTION_ADDITIONAL );
+		}
+
+		/**
+		 * @return array<string, string>
+		 */
+		public static function sanitize_guideline_blocks( mixed $value ): array {
+			$sanitized_value = Guidelines::sanitize_block_guidelines( $value );
+			self::mark_section_changed_by_option( Guidelines::OPTION_BLOCKS, $sanitized_value );
+
+			return $sanitized_value;
+		}
+
+		private static function sanitize_azure_url_option( mixed $value, string $option_name ): string {
+			$sanitized_value = self::sanitize_url_value( $value );
+			self::mark_section_changed_by_option( $option_name, $sanitized_value );
 		$resolved_values = self::resolve_azure_submission_values(
 			[
 				$option_name => $sanitized_value,
@@ -2260,10 +2588,10 @@ final class Settings {
 		return $resolved_values[ $option_name ] ?? $sanitized_value;
 	}
 
-	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
-		$sanitized_value = sanitize_text_field( $value );
-		self::mark_section_changed_by_option( $option_name, $sanitized_value );
-		$resolved_values = self::resolve_cloudflare_submission_values(
+		private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
+			$sanitized_value = sanitize_text_field( $value );
+			self::mark_section_changed_by_option( $option_name, $sanitized_value );
+			$resolved_values = self::resolve_cloudflare_submission_values(
 			[
 				$option_name => $sanitized_value,
 			]
@@ -2275,8 +2603,15 @@ final class Settings {
 			return (string) get_option( $option_name, '' );
 		}
 
-		return $resolved_values[ $option_name ] ?? $sanitized_value;
-	}
+			return $resolved_values[ $option_name ] ?? $sanitized_value;
+		}
+
+		private static function sanitize_guideline_text_option( mixed $value, string $option_name ): string {
+			$sanitized_value = Guidelines::sanitize_guideline_text( $value );
+			self::mark_section_changed_by_option( $option_name, $sanitized_value );
+
+			return $sanitized_value;
+		}
 
 	/**
 	 * @param array<string, string> $overrides
@@ -2853,16 +3188,19 @@ final class Settings {
 		set_transient( $storage_key, $feedback, 300 );
 	}
 
-	private static function mark_section_changed_by_option( string $option_name, mixed $next_value ): void {
-		if ( ! self::should_validate_provider_submission() ) {
-			return;
-		}
+		private static function mark_section_changed_by_option( string $option_name, mixed $next_value ): void {
+			if ( ! self::should_validate_provider_submission() ) {
+				return;
+			}
 
-		$current_value = get_option( $option_name, '' );
+			$current_value = get_option( $option_name, '' );
 
-		if ( (string) $current_value === (string) $next_value ) {
-			return;
-		}
+			if (
+				self::normalize_option_value_for_feedback( $current_value )
+				=== self::normalize_option_value_for_feedback( $next_value )
+			) {
+				return;
+			}
 
 		$feedback = self::get_settings_page_feedback();
 
@@ -2888,16 +3226,35 @@ final class Settings {
 			'flavor_agent_qdrant_key',
 			'flavor_agent_azure_embedding_deployment',
 			'flavor_agent_openai_native_embedding_model' => [ self::GROUP_PATTERNS ],
-			'flavor_agent_cloudflare_ai_search_account_id',
-			'flavor_agent_cloudflare_ai_search_instance_id',
-			'flavor_agent_cloudflare_ai_search_api_token',
-			'flavor_agent_cloudflare_ai_search_max_results' => [ self::GROUP_DOCS ],
-			'flavor_agent_azure_openai_endpoint',
-			'flavor_agent_azure_openai_key',
-			'flavor_agent_openai_native_api_key' => [ self::GROUP_CHAT, self::GROUP_PATTERNS ],
-			default => [],
-		};
-	}
+				'flavor_agent_cloudflare_ai_search_account_id',
+				'flavor_agent_cloudflare_ai_search_instance_id',
+				'flavor_agent_cloudflare_ai_search_api_token',
+				'flavor_agent_cloudflare_ai_search_max_results' => [ self::GROUP_DOCS ],
+				Guidelines::OPTION_SITE,
+				Guidelines::OPTION_COPY,
+				Guidelines::OPTION_IMAGES,
+				Guidelines::OPTION_ADDITIONAL,
+				Guidelines::OPTION_BLOCKS => [ self::GROUP_GUIDELINES ],
+				'flavor_agent_azure_openai_endpoint',
+				'flavor_agent_azure_openai_key',
+				'flavor_agent_openai_native_api_key' => [ self::GROUP_CHAT, self::GROUP_PATTERNS ],
+				default => [],
+			};
+		}
+
+		private static function normalize_option_value_for_feedback( mixed $value ): string {
+			if ( is_bool( $value ) ) {
+				return $value ? '1' : '0';
+			}
+
+			if ( is_scalar( $value ) || null === $value ) {
+				return (string) $value;
+			}
+
+			$encoded = wp_json_encode( $value );
+
+			return is_string( $encoded ) ? $encoded : '';
+		}
 
 	private static function record_section_feedback_message(
 		string $section,

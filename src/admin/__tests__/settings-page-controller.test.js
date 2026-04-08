@@ -123,6 +123,56 @@ function renderSettingsPage( {
 	return document.querySelector( '.flavor-agent-settings' );
 }
 
+function renderGuidelinesSettingsPage( {
+	categories = {},
+	blockGuidelines = {},
+	blockOptions = [
+		{
+			value: 'core/image',
+			label: 'Image',
+		},
+		{
+			value: 'core/paragraph',
+			label: 'Paragraph',
+		},
+	],
+} = {} ) {
+	document.body.innerHTML = `
+		<div
+			class="flavor-agent-settings"
+			data-default-section="guidelines"
+			data-force-section=""
+			data-open-section-storage-key="flavor-agent-settings-open-section"
+		>
+			<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root>
+				<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
+				<textarea id="flavor_agent_guideline_site">${ categories.site || '' }</textarea>
+				<textarea id="flavor_agent_guideline_copy">${ categories.copy || '' }</textarea>
+				<textarea id="flavor_agent_guideline_images">${ categories.images || '' }</textarea>
+				<textarea id="flavor_agent_guideline_additional">${ categories.additional || '' }</textarea>
+				<details class="flavor-agent-guidelines__blocks-panel">
+					<div data-guidelines-block-list></div>
+					<textarea data-guidelines-block-input hidden>${ JSON.stringify(
+						blockGuidelines
+					) }</textarea>
+					<script type="application/json" data-guidelines-block-options>${ JSON.stringify(
+						blockOptions
+					) }</script>
+					<select data-guidelines-block-select></select>
+					<textarea data-guidelines-block-text></textarea>
+					<button type="button" data-guidelines-block-cancel hidden>Cancel</button>
+					<button type="button" data-guidelines-block-save>Add Block Guideline</button>
+				</details>
+				<button type="button" data-guidelines-import-button>Import JSON</button>
+				<button type="button" data-guidelines-export-button>Export JSON</button>
+				<input type="file" data-guidelines-file-input hidden />
+			</div>
+		</div>
+	`;
+
+	return document.querySelector( '.flavor-agent-settings' );
+}
+
 describe( 'settings page controller', () => {
 	beforeEach( () => {
 		document.body.innerHTML = '';
@@ -303,5 +353,217 @@ describe( 'settings page controller', () => {
 		expect(
 			root.querySelector( '#flavor-agent-sync-status' ).textContent
 		).toBe( '' );
+	} );
+
+	test( 'guidelines manager adds, edits, and removes block guidelines in the hidden field', () => {
+		const root = renderGuidelinesSettingsPage();
+		const originalConfirm = window.confirm;
+
+		window.confirm = jest.fn( () => true );
+
+		try {
+			initializeSettingsPage( {
+				root,
+				fetchImpl: jest.fn(),
+				storage: createStorage(),
+			} );
+
+			const blockSelect = root.querySelector(
+				'[data-guidelines-block-select]'
+			);
+			const blockText = root.querySelector( '[data-guidelines-block-text]' );
+			const hiddenInput = root.querySelector(
+				'[data-guidelines-block-input]'
+			);
+
+			blockSelect.value = 'core/paragraph';
+			blockText.value = 'Keep paragraphs under three sentences.';
+			root.querySelector( '[data-guidelines-block-save]' ).click();
+
+			expect( JSON.parse( hiddenInput.value ) ).toEqual( {
+				'core/paragraph': 'Keep paragraphs under three sentences.',
+			} );
+			expect(
+				root.querySelector( '.flavor-agent-guidelines__item-title' )
+					.textContent
+			).toBe( 'Paragraph' );
+
+			root.querySelector(
+				'.flavor-agent-guidelines__item-actions .button.button-secondary'
+			).click();
+			expect( blockSelect.disabled ).toBe( true );
+			blockText.value = 'Keep paragraphs under two sentences.';
+			root.querySelector( '[data-guidelines-block-save]' ).click();
+
+			expect( JSON.parse( hiddenInput.value ) ).toEqual( {
+				'core/paragraph': 'Keep paragraphs under two sentences.',
+			} );
+
+			root.querySelector( '.button.button-link-delete' ).click();
+
+			expect( window.confirm ).toHaveBeenCalledWith(
+				'Remove the block guideline for Paragraph?'
+			);
+			expect( JSON.parse( hiddenInput.value ) ).toEqual( {} );
+			expect(
+				root.querySelector( '[data-guidelines-block-list]' ).textContent
+			).toContain(
+				'No block guidelines yet. Add one when a specific block needs extra rules.'
+			);
+		} finally {
+			window.confirm = originalConfirm;
+		}
+	} );
+
+	test( 'guidelines manager imports Gutenberg-compatible JSON into the form', async () => {
+		const root = renderGuidelinesSettingsPage();
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const fileInput = root.querySelector( '[data-guidelines-file-input]' );
+		const file = {
+			text: jest.fn().mockResolvedValue(
+				JSON.stringify( {
+					guideline_categories: {
+						site: {
+							guidelines: 'Studio website for enterprise buyers.',
+						},
+						copy: {
+							guidelines: 'Use direct, plain language.',
+						},
+						images: {
+							guidelines: 'Prefer documentary photography.',
+						},
+						additional: {
+							guidelines: 'Avoid mentioning discounts.',
+						},
+						blocks: {
+							'core/image': {
+								guidelines: 'All images need meaningful alt text.',
+							},
+							'invalid block': {
+								guidelines: 'Ignore this entry.',
+							},
+						},
+					},
+				} )
+			),
+		};
+
+		Object.defineProperty( fileInput, 'files', {
+			value: [ file ],
+			configurable: true,
+		} );
+		fileInput.dispatchEvent( new Event( 'change' ) );
+
+		await flushPromises();
+		await flushPromises();
+
+		expect(
+			root.querySelector( '#flavor_agent_guideline_site' ).value
+		).toBe( 'Studio website for enterprise buyers.' );
+		expect(
+			root.querySelector( '#flavor_agent_guideline_copy' ).value
+		).toBe( 'Use direct, plain language.' );
+		expect(
+			root.querySelector( '#flavor_agent_guideline_images' ).value
+		).toBe( 'Prefer documentary photography.' );
+		expect(
+			root.querySelector( '#flavor_agent_guideline_additional' ).value
+		).toBe( 'Avoid mentioning discounts.' );
+		expect(
+			JSON.parse(
+				root.querySelector( '[data-guidelines-block-input]' ).value
+			)
+		).toEqual( {
+			'core/image': 'All images need meaningful alt text.',
+		} );
+		expect(
+			root.querySelector( '.flavor-agent-guidelines__blocks-panel' ).open
+		).toBe( true );
+		expect(
+			root.querySelector( '[data-guidelines-notice]' ).textContent
+		).toContain( 'Guidelines imported into the form. Save Changes to persist.' );
+	} );
+
+	test( 'guidelines manager exports the current form as Gutenberg-compatible JSON', async () => {
+		const root = renderGuidelinesSettingsPage( {
+			categories: {
+				site: 'Publisher site',
+				copy: 'Use confident editorial language.',
+				images: 'Favor authentic reporting images.',
+				additional: 'Do not mention subscriber counts.',
+			},
+			blockGuidelines: {
+				'core/paragraph': 'Lead paragraphs should stay concise.',
+			},
+		} );
+		const clickSpy = jest
+			.spyOn( HTMLAnchorElement.prototype, 'click' )
+			.mockImplementation( () => {} );
+		const originalBlob = global.Blob;
+		const originalCreateObjectURL = URL.createObjectURL;
+		const originalRevokeObjectURL = URL.revokeObjectURL;
+
+		global.Blob = jest
+			.fn()
+			.mockImplementation( ( parts, options = {} ) => ( {
+				parts,
+				type: options.type,
+			} ) );
+		URL.createObjectURL = jest.fn( () => 'blob:flavor-agent-guidelines' );
+		URL.revokeObjectURL = jest.fn();
+
+		try {
+			initializeSettingsPage( {
+				root,
+				fetchImpl: jest.fn(),
+				storage: createStorage(),
+			} );
+
+			root.querySelector( '[data-guidelines-export-button]' ).click();
+
+			expect( URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
+
+			const [ blob ] = URL.createObjectURL.mock.calls[ 0 ];
+			const payload = JSON.parse( blob.parts.join( '' ) );
+
+			expect( payload ).toEqual( {
+				guideline_categories: {
+					site: {
+						guidelines: 'Publisher site',
+					},
+					copy: {
+						guidelines: 'Use confident editorial language.',
+					},
+					images: {
+						guidelines: 'Favor authentic reporting images.',
+					},
+					additional: {
+						guidelines: 'Do not mention subscriber counts.',
+					},
+					blocks: {
+						'core/paragraph': {
+							guidelines: 'Lead paragraphs should stay concise.',
+						},
+					},
+				},
+			} );
+			expect( URL.revokeObjectURL ).toHaveBeenCalledWith(
+				'blob:flavor-agent-guidelines'
+			);
+			expect(
+				root.querySelector( '[data-guidelines-notice]' ).textContent
+			).toContain( 'Guidelines exported.' );
+		} finally {
+			clickSpy.mockRestore();
+			global.Blob = originalBlob;
+			URL.createObjectURL = originalCreateObjectURL;
+			URL.revokeObjectURL = originalRevokeObjectURL;
+		}
 	} );
 } );

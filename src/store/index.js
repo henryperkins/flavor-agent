@@ -11,6 +11,13 @@ import { createReduxStore, register } from '@wordpress/data';
 import { getPatternBadgeReason } from '../patterns/recommendation-utils';
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import {
+	buildBlockRecommendationRequestSignature,
+	buildGlobalStylesRecommendationRequestSignature,
+	buildStyleBookRecommendationRequestSignature,
+	buildTemplatePartRecommendationRequestSignature,
+	buildTemplateRecommendationRequestSignature,
+} from '../utils/recommendation-request-signature';
+import {
 	applyGlobalStyleSuggestionOperations,
 	getGlobalStylesActivityUndoState,
 	undoGlobalStyleSuggestionOperations,
@@ -442,16 +449,17 @@ function buildStaleApplyErrorMessage(surface) {
 
 function guardSurfaceApplyFreshness({
 	surface,
-	currentContextSignature = null,
-	getStoredContextSignature,
+	currentRequestSignature = null,
+	getStoredRequestSignature,
 	localDispatch,
 	setApplyState,
 }) {
-	const storedContextSignature = getStoredContextSignature?.() || null;
+	const storedRequestSignature = getStoredRequestSignature?.() || null;
 
 	if (
-		!storedContextSignature ||
-		storedContextSignature === currentContextSignature
+		!storedRequestSignature ||
+		!currentRequestSignature ||
+		storedRequestSignature === currentRequestSignature
 	) {
 		return null;
 	}
@@ -1937,7 +1945,7 @@ const actions = {
 			});
 	},
 
-	applySuggestion(clientId, suggestion, currentContextSignature = null) {
+	applySuggestion(clientId, suggestion, currentRequestSignature = null) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 			const applyErrorMessage =
@@ -1949,9 +1957,16 @@ const actions = {
 
 			const staleApplyResult = guardSurfaceApplyFreshness({
 				surface: 'block',
-				currentContextSignature,
-				getStoredContextSignature: () =>
-					select.getBlockRecommendationContextSignature?.(clientId),
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildBlockRecommendationRequestSignature({
+						clientId,
+						prompt:
+							select.getBlockRecommendations?.(clientId)?.prompt || '',
+						contextSignature:
+							select.getBlockRecommendationContextSignature?.(clientId) ||
+							null,
+					}),
 				localDispatch,
 				setApplyState: (status, error) =>
 					actions.setBlockApplyState(clientId, status, error),
@@ -2860,7 +2875,7 @@ const actions = {
 		};
 	},
 
-	applyTemplateSuggestion(suggestion, currentContextSignature = null) {
+	applyTemplateSuggestion(suggestion, currentRequestSignature = null) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -2868,8 +2883,13 @@ const actions = {
 
 			const staleApplyResult = guardSurfaceApplyFreshness({
 				surface: 'template',
-				currentContextSignature,
-				getStoredContextSignature: select.getTemplateContextSignature,
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildTemplateRecommendationRequestSignature({
+						templateRef: select.getTemplateResultRef?.() || '',
+						prompt: select.getTemplateRequestPrompt?.() || '',
+						contextSignature: select.getTemplateContextSignature?.() || null,
+					}),
 				localDispatch,
 				setApplyState: actions.setTemplateApplyState,
 			});
@@ -2933,7 +2953,7 @@ const actions = {
 		};
 	},
 
-	applyTemplatePartSuggestion(suggestion, currentContextSignature = null) {
+	applyTemplatePartSuggestion(suggestion, currentRequestSignature = null) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -2941,8 +2961,14 @@ const actions = {
 
 			const staleApplyResult = guardSurfaceApplyFreshness({
 				surface: 'template-part',
-				currentContextSignature,
-				getStoredContextSignature: select.getTemplatePartContextSignature,
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildTemplatePartRecommendationRequestSignature({
+						templatePartRef: select.getTemplatePartResultRef?.() || '',
+						prompt: select.getTemplatePartRequestPrompt?.() || '',
+						contextSignature:
+							select.getTemplatePartContextSignature?.() || null,
+					}),
 				localDispatch,
 				setApplyState: actions.setTemplatePartApplyState,
 			});
@@ -3007,7 +3033,7 @@ const actions = {
 		};
 	},
 
-	applyGlobalStylesSuggestion(suggestion, currentContextSignature = null) {
+	applyGlobalStylesSuggestion(suggestion, currentRequestSignature = null) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -3015,8 +3041,18 @@ const actions = {
 
 			const staleApplyResult = guardSurfaceApplyFreshness({
 				surface: 'global-styles',
-				currentContextSignature,
-				getStoredContextSignature: select.getGlobalStylesContextSignature,
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildGlobalStylesRecommendationRequestSignature({
+						scope: {
+							scopeKey: select.getGlobalStylesScopeKey?.() || '',
+							globalStylesId: select.getGlobalStylesResultRef?.() || '',
+							entityId: select.getGlobalStylesResultRef?.() || '',
+						},
+						prompt: select.getGlobalStylesRequestPrompt?.() || '',
+						contextSignature:
+							select.getGlobalStylesContextSignature?.() || null,
+					}),
 				localDispatch,
 				setApplyState: actions.setGlobalStylesApplyState,
 			});
@@ -3084,7 +3120,7 @@ const actions = {
 		};
 	},
 
-	applyStyleBookSuggestion(suggestion, currentContextSignature = null) {
+	applyStyleBookSuggestion(suggestion, currentRequestSignature = null) {
 		return async ({ dispatch: localDispatch, registry, select }) => {
 			const scope = getCurrentActivityScope(registry);
 
@@ -3092,8 +3128,18 @@ const actions = {
 
 			const staleApplyResult = guardSurfaceApplyFreshness({
 				surface: 'style-book',
-				currentContextSignature,
-				getStoredContextSignature: select.getStyleBookContextSignature,
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildStyleBookRecommendationRequestSignature({
+						scope: {
+							scopeKey: select.getStyleBookScopeKey?.() || '',
+							globalStylesId: select.getStyleBookGlobalStylesId?.() || '',
+							entityId: select.getStyleBookGlobalStylesId?.() || '',
+							blockName: select.getStyleBookBlockName?.() || '',
+						},
+						prompt: select.getStyleBookRequestPrompt?.() || '',
+						contextSignature: select.getStyleBookContextSignature?.() || null,
+					}),
 				localDispatch,
 				setApplyState: actions.setStyleBookApplyState,
 			});

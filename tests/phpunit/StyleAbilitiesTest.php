@@ -682,6 +682,71 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'Overall density hint: balanced', (string) ( $request_body['input'] ?? '' ) );
 	}
 
+	public function test_style_docs_query_and_family_context_include_live_structure_visibility_and_semantics(): void {
+		$context = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+				'templateSlug'   => 'theme//home',
+				'templateType'   => 'home',
+			],
+			'styleContext' => [
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'background' ],
+						'valueSource' => 'color',
+					],
+				],
+				'templateStructure'   => [
+					[
+						'name'        => 'core/template-part',
+						'innerBlocks' => [
+							[
+								'name' => 'core/site-title',
+							],
+						],
+					],
+					[
+						'name' => 'core/group',
+					],
+				],
+				'templateVisibility'  => [
+					'blockCount' => 1,
+				],
+				'designSemantics'     => [
+					'overallDensityHint' => 'balanced',
+					'locationSummary'    => [
+						[
+							'value' => 'header',
+							'count' => 1,
+						],
+					],
+				],
+			],
+		];
+		$query   = $this->invoke_private_string_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_query',
+			[ $context, 'Keep the palette restrained.' ]
+		);
+		$family  = $this->invoke_private_array_method(
+			StyleAbilities::class,
+			'build_wordpress_docs_family_context',
+			[ $context ]
+		);
+
+		$this->assertStringContainsString( 'template structure core/template-part, core/group', $query );
+		$this->assertStringContainsString( 'live template block count 3', $query );
+		$this->assertStringContainsString( 'viewport-constrained blocks 1', $query );
+		$this->assertStringContainsString( 'overall density balanced', $query );
+		$this->assertStringContainsString( 'template locations header x1', $query );
+		$this->assertSame( 'home', $family['templateType'] ?? null );
+		$this->assertSame( [ 'core/template-part', 'core/group' ], $family['topLevelBlocks'] ?? null );
+		$this->assertSame( 1, $family['visibilityConstraintCount'] ?? null );
+		$this->assertSame( 'balanced', $family['overallDensityHint'] ?? null );
+	}
+
 	public function test_supported_block_style_paths_follow_registered_block_supports(): void {
 		WordPressTestState::$global_settings = [
 			'color'      => [

@@ -829,7 +829,7 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.textContent ).toContain( 'Paragraph' );
 		expect( sidebar.textContent ).toContain( 'Stale' );
 		expect( sidebar.textContent ).toContain(
-			'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+			'This Style Book result no longer matches the current live block styles or prompt. Refresh before reviewing or applying anything from the previous result.'
 		);
 		expect( sidebar.textContent ).toContain( 'Tighten paragraph rhythm' );
 		expect(

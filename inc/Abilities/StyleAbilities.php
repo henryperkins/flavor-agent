@@ -296,7 +296,21 @@ final class StyleAbilities {
 		$style_context         = self::normalize_map( $context['styleContext'] ?? [] );
 		$surface               = self::normalize_style_surface( (string) ( $scope['surface'] ?? self::SURFACE_GLOBAL_STYLES ) );
 		$style_book_target     = self::normalize_map( $style_context['styleBookTarget'] ?? [] );
+		$template_structure    = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$template_visibility   = self::normalize_map( $style_context['templateVisibility'] ?? [] );
+		$design_semantics      = self::normalize_map( $style_context['designSemantics'] ?? [] );
 		$supported_path_labels = [];
+		$top_level_blocks      = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
+						? sanitize_text_field( $node['name'] )
+						: '',
+					array_slice( $template_structure, 0, 6 )
+				)
+			)
+		);
+		$structure_block_count = self::count_template_structure_nodes( $template_structure );
 
 		foreach ( self::normalize_list( $style_context['supportedStylePaths'] ?? [] ) as $path_entry ) {
 			$path = is_array( $path_entry['path'] ?? null ) ? implode( '.', $path_entry['path'] ) : '';
@@ -338,6 +352,35 @@ final class StyleAbilities {
 
 		if ( [] !== $supported_path_labels ) {
 			$parts[] = 'supported style paths ' . implode( ', ', $supported_path_labels );
+		}
+
+		if ( ! empty( $top_level_blocks ) ) {
+			$parts[] = 'template structure ' . implode( ', ', $top_level_blocks );
+		}
+
+		if ( $structure_block_count > 0 ) {
+			$parts[] = 'live template block count ' . $structure_block_count;
+		}
+
+		if ( ! empty( $template_visibility['blockCount'] ) ) {
+			$parts[] = 'viewport-constrained blocks ' . (int) $template_visibility['blockCount'];
+		}
+
+		if ( ! empty( $design_semantics['overallDensityHint'] ) && is_string( $design_semantics['overallDensityHint'] ) ) {
+			$parts[] = 'overall density ' . sanitize_text_field( $design_semantics['overallDensityHint'] );
+		}
+
+		if ( ! empty( $design_semantics['dominantLocation'] ) && is_string( $design_semantics['dominantLocation'] ) ) {
+			$parts[] = 'dominant location ' . sanitize_text_field( $design_semantics['dominantLocation'] );
+		}
+
+		if ( ! empty( $design_semantics['dominantRole'] ) && is_string( $design_semantics['dominantRole'] ) ) {
+			$parts[] = 'dominant role ' . sanitize_text_field( $design_semantics['dominantRole'] );
+		}
+
+		$location_summary = self::summarize_design_location_summary( $design_semantics['locationSummary'] ?? [] );
+		if ( '' !== $location_summary ) {
+			$parts[] = 'template locations ' . $location_summary;
 		}
 
 		if ( $prompt !== '' ) {
@@ -385,6 +428,9 @@ final class StyleAbilities {
 		$style_context      = self::normalize_map( $context['styleContext'] ?? [] );
 		$style_book_target  = self::normalize_map( $style_context['styleBookTarget'] ?? [] );
 		$surface            = self::normalize_style_surface( (string) ( $scope['surface'] ?? self::SURFACE_GLOBAL_STYLES ) );
+		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$template_visibility = self::normalize_map( $style_context['templateVisibility'] ?? [] );
+		$design_semantics   = self::normalize_map( $style_context['designSemantics'] ?? [] );
 		$family_context     = [
 			'surface'   => $surface !== '' ? $surface : self::SURFACE_GLOBAL_STYLES,
 			'entityKey' => self::build_wordpress_docs_entity_key( $context ),
@@ -417,7 +463,89 @@ final class StyleAbilities {
 			}
 		}
 
+		$template_type = sanitize_key( (string) ( $scope['templateType'] ?? '' ) );
+		if ( '' !== $template_type ) {
+			$family_context['templateType'] = $template_type;
+		}
+
+		$top_level_blocks = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
+						? sanitize_text_field( $node['name'] )
+						: '',
+					array_slice( $template_structure, 0, 6 )
+				)
+			)
+		);
+		if ( ! empty( $top_level_blocks ) ) {
+			$family_context['topLevelBlocks'] = $top_level_blocks;
+		}
+
+		if ( ! empty( $template_visibility['blockCount'] ) ) {
+			$family_context['visibilityConstraintCount'] = (int) $template_visibility['blockCount'];
+		}
+
+		if ( ! empty( $design_semantics['overallDensityHint'] ) && is_string( $design_semantics['overallDensityHint'] ) ) {
+			$family_context['overallDensityHint'] = sanitize_text_field( $design_semantics['overallDensityHint'] );
+		}
+
+		if ( ! empty( $design_semantics['dominantLocation'] ) && is_string( $design_semantics['dominantLocation'] ) ) {
+			$family_context['dominantLocation'] = sanitize_text_field( $design_semantics['dominantLocation'] );
+		}
+
+		if ( ! empty( $design_semantics['dominantRole'] ) && is_string( $design_semantics['dominantRole'] ) ) {
+			$family_context['dominantRole'] = sanitize_text_field( $design_semantics['dominantRole'] );
+		}
+
+		if ( isset( $design_semantics['occurrenceCount'] ) && is_numeric( $design_semantics['occurrenceCount'] ) ) {
+			$family_context['occurrenceCount'] = max( 0, (int) $design_semantics['occurrenceCount'] );
+		}
+
 		return $family_context;
+	}
+
+	private static function count_template_structure_nodes( array $nodes ): int {
+		$count = 0;
+
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $node['name'] ?? '' ) );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			++$count;
+			$count += self::count_template_structure_nodes(
+				is_array( $node['innerBlocks'] ?? null ) ? $node['innerBlocks'] : []
+			);
+		}
+
+		return $count;
+	}
+
+	private static function summarize_design_location_summary( mixed $location_summary ): string {
+		$summary = [];
+
+		foreach ( array_slice( self::normalize_list( $location_summary ), 0, 3 ) as $entry ) {
+			$entry = self::normalize_map( $entry );
+			$value = sanitize_text_field( (string) ( $entry['value'] ?? '' ) );
+			$count = isset( $entry['count'] ) && is_numeric( $entry['count'] )
+				? max( 0, (int) $entry['count'] )
+				: null;
+
+			if ( '' === $value ) {
+				continue;
+			}
+
+			$summary[] = null !== $count ? $value . ' x' . $count : $value;
+		}
+
+		return implode( ', ', $summary );
 	}
 
 	private static function normalize_style_surface( string $surface ): string {

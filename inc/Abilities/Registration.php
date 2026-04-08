@@ -788,6 +788,8 @@ final class Registration {
 									'type'  => 'array',
 									'items' => self::open_object_schema(),
 								],
+								'templateStructure'     => self::open_object_schema(),
+								'templateVisibility'    => self::open_object_schema(),
 								'themeTokenDiagnostics' => self::open_object_schema(
 									[
 										'source'      => [ 'type' => 'string' ],

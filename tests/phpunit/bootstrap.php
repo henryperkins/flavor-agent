@@ -765,8 +765,16 @@ namespace {
 				return $this->registered[ $block_name ] ?? null;
 			}
 
+			/**
+			 * @return array<string, object>
+			 */
+			public function get_all_registered(): array {
+				return $this->registered;
+			}
+
 			public function register( string $block_name, array $args ): void {
 				$block_type = (object) $args;
+				$block_type->name = $block_name;
 
 				if ( array_key_exists( 'allowedBlocks', $args ) ) {
 					$block_type->allowed_blocks = $args['allowedBlocks'];
@@ -1009,11 +1017,25 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'esc_textarea' ) ) {
+		function esc_textarea( string $text ): string {
+			return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+		}
+	}
+
 	if ( ! function_exists( 'esc_html__' ) ) {
 		function esc_html__( string $text, string $domain = 'default' ): string {
 			unset( $domain );
 
 			return esc_html( $text );
+		}
+	}
+
+	if ( ! function_exists( 'esc_attr__' ) ) {
+		function esc_attr__( string $text, string $domain = 'default' ): string {
+			unset( $domain );
+
+			return esc_attr( $text );
 		}
 	}
 
@@ -1148,6 +1170,12 @@ namespace {
 					wp_strip_all_tags( (string) $value )
 				) ?? ''
 			);
+		}
+	}
+
+	if ( ! function_exists( 'absint' ) ) {
+		function absint( $maybeint ): int {
+			return abs( (int) $maybeint );
 		}
 	}
 

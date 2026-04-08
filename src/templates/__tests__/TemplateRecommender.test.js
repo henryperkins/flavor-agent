@@ -591,7 +591,7 @@ describe( 'TemplateRecommender', () => {
 		expect( hasText( 'Stale' ) ).toBe( true );
 		expect(
 			hasText(
-				'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+				'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.'
 			)
 		).toBe( true );
 	} );

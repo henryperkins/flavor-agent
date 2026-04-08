@@ -44,6 +44,7 @@ import {
 	getResolvedActivityEntries,
 } from '../store/activity-history';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { buildStyleBookRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 import {
 	buildGlobalStylesRecommendationContextSignature,
 	getGlobalStylesActivityUndoState,
@@ -366,7 +367,7 @@ function StyleBookPanel( {
 				hasResult={ hasResult }
 				staleReason={
 					isStale
-						? 'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+						? 'This Style Book result no longer matches the current live block styles or prompt. Refresh before reviewing or applying anything from the previous result.'
 						: ''
 				}
 				onRefresh={ isStale ? onRequest : undefined }
@@ -419,7 +420,7 @@ function StyleBookPanel( {
 					title="Refresh recommendations for this Style Book example"
 					description="Flavor Agent kept the previous result visible so you can compare it against the active Style Book example."
 					tone={ STALE_STATUS_LABEL }
-					why="Review and apply actions stay disabled until you refresh against the live Style Book context."
+					why="Review and apply actions stay disabled until you refresh against the live Style Book context and current prompt."
 					primaryActionLabel={ REFRESH_ACTION_LABEL }
 					onPrimaryAction={ onRequest }
 					primaryActionDisabled={ isLoading }
@@ -519,6 +520,7 @@ function StyleBookPanel( {
 export default function StyleBookRecommender() {
 	const [ prompt, setPrompt ] = useState( '' );
 	const [ portalNode, setPortalNode ] = useState( null );
+	const hydratedResultKeyRef = useRef( null );
 	const [ styleBookUiState, setStyleBookUiState ] = useState( () =>
 		typeof document === 'undefined'
 			? {
@@ -553,6 +555,8 @@ export default function StyleBookRecommender() {
 		designSemantics,
 		rawSuggestions,
 		currentExplanation,
+		currentRequestPrompt,
+		currentResultToken,
 		currentResultContextSignature,
 		currentResultRef,
 		status,
@@ -671,6 +675,9 @@ export default function StyleBookRecommender() {
 				} ),
 				rawSuggestions: mappedSuggestions,
 				currentExplanation: store?.getStyleBookExplanation?.() || '',
+				currentRequestPrompt:
+					store?.getStyleBookRequestPrompt?.() || '',
+				currentResultToken: store?.getStyleBookResultToken?.() || 0,
 				currentResultContextSignature:
 					store?.getStyleBookContextSignature?.() || null,
 				currentResultRef: store?.getStyleBookResultRef?.() || null,
@@ -714,19 +721,34 @@ export default function StyleBookRecommender() {
 			themeTokenDiagnostics,
 			executionContract,
 		} );
+	const recommendationRequestSignature =
+		buildStyleBookRecommendationRequestSignature( {
+			scope,
+			prompt,
+			contextSignature: recommendationContextSignature,
+		} );
+	const resultRequestSignature =
+		buildStyleBookRecommendationRequestSignature( {
+			scope: {
+				scopeKey: currentResultRef || '',
+				globalStylesId: scope?.globalStylesId || '',
+				entityId: scope?.globalStylesId || '',
+				blockName: scope?.blockName || '',
+			},
+			prompt: currentRequestPrompt,
+			contextSignature: currentResultContextSignature,
+		} );
 	const hasStoredResultForScope = Boolean(
-		scope?.scopeKey &&
-			currentResultRef === scope.scopeKey &&
-			currentResultContextSignature
+		scope?.scopeKey && currentResultRef === scope.scopeKey
 	);
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
-			currentResultContextSignature === recommendationContextSignature
+			resultRequestSignature === recommendationRequestSignature
 	);
 	const isStaleResult = Boolean(
 		hasStoredResultForScope &&
-			currentResultContextSignature !== recommendationContextSignature
+			resultRequestSignature !== recommendationRequestSignature
 	);
 	const suggestions = useMemo(
 		() => ( hasMatchingResult || isStaleResult ? rawSuggestions : [] ),
@@ -947,6 +969,7 @@ export default function StyleBookRecommender() {
 			return;
 		}
 
+		hydratedResultKeyRef.current = null;
 		clearStyleBookRecommendations();
 
 		if ( entityChanged ) {
@@ -956,6 +979,29 @@ export default function StyleBookRecommender() {
 		clearStyleBookRecommendations,
 		recommendationContextSignature,
 		scope?.scopeKey,
+	] );
+
+	useEffect( () => {
+		const hydrationKey =
+			hasStoredResultForScope && status === 'ready'
+				? `${ currentResultRef || '' }:${
+					currentResultToken || resultRequestSignature
+				}`
+				: '';
+
+		if ( ! hydrationKey || hydratedResultKeyRef.current === hydrationKey ) {
+			return;
+		}
+
+		hydratedResultKeyRef.current = hydrationKey;
+		setPrompt( currentRequestPrompt );
+	}, [
+		currentRequestPrompt,
+		currentResultRef,
+		currentResultToken,
+		hasStoredResultForScope,
+		resultRequestSignature,
+		status,
 	] );
 
 	const handleRequest = useCallback( () => {
@@ -999,12 +1045,12 @@ export default function StyleBookRecommender() {
 		if ( selectedSuggestion ) {
 			applyStyleBookSuggestion(
 				selectedSuggestion,
-				recommendationContextSignature
+				recommendationRequestSignature
 			);
 		}
 	}, [
 		applyStyleBookSuggestion,
-		recommendationContextSignature,
+		recommendationRequestSignature,
 		selectedSuggestion,
 	] );
 

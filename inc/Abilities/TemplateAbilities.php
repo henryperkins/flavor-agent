@@ -1356,6 +1356,20 @@ final class TemplateAbilities {
 			: '';
 		$allowed_areas = StringArray::sanitize( $context['allowedAreas'] ?? [] );
 		$empty_areas   = StringArray::sanitize( $context['emptyAreas'] ?? [] );
+		$top_level_block_tree = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
+		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
+		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null ) ? $context['currentViewportVisibility'] : [];
+		$top_level_block_names = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
+						? sanitize_text_field( $node['name'] )
+						: '',
+					array_slice( $top_level_block_tree, 0, 6 )
+				)
+			)
+		);
 		$assigned      = [];
 
 		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
@@ -1391,6 +1405,38 @@ final class TemplateAbilities {
 			$parts[] = 'empty areas ' . implode( ', ', $empty_areas );
 		}
 
+		if ( ! empty( $top_level_block_names ) ) {
+			$parts[] = 'top-level blocks ' . implode( ', ', $top_level_block_names );
+		}
+
+		if ( isset( $structure_stats['blockCount'] ) || isset( $structure_stats['maxDepth'] ) ) {
+			$summary = [];
+
+			if ( isset( $structure_stats['blockCount'] ) ) {
+				$summary[] = (int) $structure_stats['blockCount'] . ' blocks';
+			}
+
+			if ( isset( $structure_stats['topLevelBlockCount'] ) ) {
+				$summary[] = (int) $structure_stats['topLevelBlockCount'] . ' top level';
+			}
+
+			if ( isset( $structure_stats['maxDepth'] ) ) {
+				$summary[] = 'depth ' . (int) $structure_stats['maxDepth'];
+			}
+
+			if ( ! empty( $summary ) ) {
+				$parts[] = 'live structure ' . implode( ', ', $summary );
+			}
+		}
+
+		if ( ! empty( $current_pattern_overrides['blockCount'] ) ) {
+			$parts[] = 'override-ready blocks ' . (int) $current_pattern_overrides['blockCount'];
+		}
+
+		if ( ! empty( $current_viewport_visibility['blockCount'] ) ) {
+			$parts[] = 'viewport-constrained blocks ' . (int) $current_viewport_visibility['blockCount'];
+		}
+
 		if ( $prompt !== '' ) {
 			$parts[] = $prompt;
 		}
@@ -1417,6 +1463,9 @@ final class TemplateAbilities {
 			: '';
 		$top_level    = StringArray::sanitize( $context['topLevelBlocks'] ?? [] );
 		$block_counts = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
+		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
+		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
+		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
 		$parts        = [ 'WordPress block theme template part best practices' ];
 
 		if ( $area !== '' ) {
@@ -1440,6 +1489,82 @@ final class TemplateAbilities {
 					array_slice( array_values( $block_counts ), 0, 6 )
 				)
 			);
+		}
+
+		if ( ! empty( $operation_targets ) ) {
+			$target_summaries = [];
+
+			foreach ( array_slice( $operation_targets, 0, 4 ) as $target ) {
+				if ( ! is_array( $target ) ) {
+					continue;
+				}
+
+				$label = sanitize_text_field(
+					(string) ( $target['label'] ?? $target['name'] ?? '' )
+				);
+				$allowed_operations = array_slice(
+					StringArray::sanitize( $target['allowedOperations'] ?? [] ),
+					0,
+					3
+				);
+
+				if ( '' === $label ) {
+					continue;
+				}
+
+				if ( ! empty( $allowed_operations ) ) {
+					$label .= ' [' . implode( '/', $allowed_operations ) . ']';
+				}
+
+				$target_summaries[] = $label;
+			}
+
+			if ( ! empty( $target_summaries ) ) {
+				$parts[] = 'executable targets ' . implode( ', ', $target_summaries );
+			}
+		}
+
+		if ( ! empty( $insertion_anchors ) ) {
+			$anchor_summaries = [];
+
+			foreach ( array_slice( $insertion_anchors, 0, 4 ) as $anchor ) {
+				if ( ! is_array( $anchor ) ) {
+					continue;
+				}
+
+				$label = sanitize_text_field( (string) ( $anchor['label'] ?? '' ) );
+				$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+				$block_name = sanitize_text_field( (string) ( $anchor['blockName'] ?? '' ) );
+				$summary = '' !== $label ? $label : $placement;
+
+				if ( '' !== $block_name && '' !== $placement && '' === $label ) {
+					$summary .= ' near ' . $block_name;
+				}
+
+				if ( '' !== $summary ) {
+					$anchor_summaries[] = $summary;
+				}
+			}
+
+			if ( ! empty( $anchor_summaries ) ) {
+				$parts[] = 'validated anchors ' . implode( ', ', $anchor_summaries );
+			}
+		}
+
+		if ( ! empty( $structural_constraints['hasContentOnly'] ) || ! empty( $structural_constraints['hasLockedBlocks'] ) ) {
+			$constraint_summaries = [];
+
+			if ( ! empty( $structural_constraints['hasContentOnly'] ) ) {
+				$constraint_summaries[] = 'content-only paths ' . count( $structural_constraints['contentOnlyPaths'] ?? [] );
+			}
+
+			if ( ! empty( $structural_constraints['hasLockedBlocks'] ) ) {
+				$constraint_summaries[] = 'locked paths ' . count( $structural_constraints['lockedPaths'] ?? [] );
+			}
+
+			if ( ! empty( $constraint_summaries ) ) {
+				$parts[] = 'structural constraints ' . implode( ', ', $constraint_summaries );
+			}
 		}
 
 		if ( $prompt !== '' ) {
@@ -1511,6 +1636,44 @@ final class TemplateAbilities {
 			$family_context['assignedAreas'] = $assigned_areas;
 		}
 
+		$top_level_block_names = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
+						? sanitize_text_field( $node['name'] )
+						: '',
+					array_slice(
+						is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [],
+						0,
+						6
+					)
+				)
+			)
+		);
+		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
+		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null ) ? $context['currentViewportVisibility'] : [];
+
+		if ( ! empty( $top_level_block_names ) ) {
+			$family_context['topLevelBlocks'] = $top_level_block_names;
+		}
+
+		if ( isset( $structure_stats['blockCount'] ) ) {
+			$family_context['blockCount'] = (int) $structure_stats['blockCount'];
+		}
+
+		if ( isset( $structure_stats['maxDepth'] ) ) {
+			$family_context['maxDepth'] = (int) $structure_stats['maxDepth'];
+		}
+
+		if ( ! empty( $current_pattern_overrides['blockCount'] ) ) {
+			$family_context['patternOverrideCount'] = (int) $current_pattern_overrides['blockCount'];
+		}
+
+		if ( ! empty( $current_viewport_visibility['blockCount'] ) ) {
+			$family_context['visibilityConstraintCount'] = (int) $current_viewport_visibility['blockCount'];
+		}
+
 		return $family_context;
 	}
 
@@ -1536,6 +1699,46 @@ final class TemplateAbilities {
 
 		if ( $slug !== '' ) {
 			$family_context['slug'] = $slug;
+		}
+
+		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
+		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
+		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
+		$target_names = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $target ): string => is_array( $target ) && is_string( $target['name'] ?? null )
+						? sanitize_text_field( $target['name'] )
+						: '',
+					array_slice( $operation_targets, 0, 4 )
+				)
+			)
+		);
+		$anchor_placements = array_values(
+			array_filter(
+				array_map(
+					static fn( mixed $anchor ): string => is_array( $anchor ) && is_string( $anchor['placement'] ?? null )
+						? sanitize_key( $anchor['placement'] )
+						: '',
+					array_slice( $insertion_anchors, 0, 4 )
+				)
+			)
+		);
+
+		if ( ! empty( $target_names ) ) {
+			$family_context['targetBlocks'] = $target_names;
+		}
+
+		if ( ! empty( $anchor_placements ) ) {
+			$family_context['anchorPlacements'] = $anchor_placements;
+		}
+
+		if ( ! empty( $structural_constraints['hasContentOnly'] ) ) {
+			$family_context['hasContentOnly'] = true;
+		}
+
+		if ( ! empty( $structural_constraints['hasLockedBlocks'] ) ) {
+			$family_context['hasLockedBlocks'] = true;
 		}
 
 		return $family_context;

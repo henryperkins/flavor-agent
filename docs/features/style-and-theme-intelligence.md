@@ -33,9 +33,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 1. `GlobalStylesRecommender()` verifies that the current Site Editor complementary area is `edit-site/global-styles`
 2. `getGlobalStylesUserConfig()` resolves the current `root/globalStyles` entity id, the current user config, and any available theme style variations
-3. `collectThemeTokens()` contributes theme-token source diagnostics and the active surface posts through `fetchGlobalStylesRecommendations()` or `fetchStyleBookRecommendations()` to `POST /flavor-agent/v1/recommend-style`
+3. `collectThemeTokens()`, `buildTemplateStructureSnapshot()`, and `collectViewportVisibilitySummary()` contribute theme-token diagnostics plus the live template structure/visibility snapshot that the active styles surface posts through `fetchGlobalStylesRecommendations()` or `fetchStyleBookRecommendations()` to `POST /flavor-agent/v1/recommend-style`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_style()` adapts the request to `FlavorAgent\Abilities\StyleAbilities::recommend_style()`
-5. `StyleAbilities::recommend_style()` folds the Site Editor scope, current configs, available variations or Style Book target details, `ServerCollector::for_tokens()`, and supported style paths into the style prompt context
+5. `StyleAbilities::recommend_style()` folds the Site Editor scope, current configs, available variations or Style Book target details, live template structure/visibility, design semantics, `ServerCollector::for_tokens()`, and supported style paths into the style prompt context and docs-grounding query
 6. `FlavorAgent\LLM\StylePrompt` constrains the response to validated `set_styles`, `set_block_styles`, and Global Styles-only `set_theme_variation` operations
 7. The UI renders advisory or executable suggestion cards; executable cards enter preview before apply
 8. `applyGlobalStylesSuggestion()` or `applyStyleBookSuggestion()` runs the deterministic executor, records before/after user config, and persists activity
@@ -90,6 +90,21 @@ User opens the Site Editor Styles sidebar
       "source": "server",
       "settingsKey": "wp_get_global_settings",
       "reason": "server-global-settings"
+    },
+    "templateStructure": [
+      {
+        "name": "core/template-part",
+        "innerBlocks": [{ "name": "core/site-title" }]
+      },
+      {
+        "name": "core/group",
+        "innerBlocks": [{ "name": "core/query-title" }]
+      }
+    ],
+    "templateVisibility": {
+      "hasVisibilityRules": false,
+      "blockCount": 0,
+      "blocks": []
     }
   },
   "prompt": "Make the site feel more editorial."
@@ -147,11 +162,33 @@ User opens the Site Editor Styles sidebar
       "blockTitle": "Group",
       "currentStyles": {},
       "mergedStyles": {}
+    },
+    "templateStructure": [
+      {
+        "name": "core/template-part",
+        "innerBlocks": [{ "name": "core/heading" }]
+      },
+      {
+        "name": "core/group",
+        "innerBlocks": [{ "name": "core/paragraph" }]
+      }
+    ],
+    "templateVisibility": {
+      "hasVisibilityRules": false,
+      "blockCount": 0,
+      "blocks": []
     }
   },
   "prompt": "Make this block feel more editorial."
 }
 ```
+
+## Request Freshness And Live Context
+
+- Global Styles and Style Book build a local request signature from `surface + scope + prompt + contextSignature` so freshness and review/apply eligibility track the exact model input the user last requested, not just route status.
+- The current ready-result prompt is hydrated back into the composer once per result token, which keeps preloaded or restored results fresh on mount and only marks them stale after the user edits the prompt or the live style context changes.
+- `styleContext.templateStructure` and `styleContext.templateVisibility` always come from the live editor canvas. They are sent alongside `currentConfig`, `mergedConfig`, design semantics, and supported-path metadata so style prompts and docs grounding stay aligned with the unsaved template the user is actually previewing.
+- When a result becomes stale, the surfaces keep the previous cards visible for comparison but disable review/apply until the user refreshes against the live context.
 
 ## What This Surface Can Do
 

@@ -57,6 +57,23 @@ Minimal module (2 exports) that resolves activity entry targets to live editor b
 
 **Consumers:** `src/store/activity-history.js`, `src/store/index.js`
 
+### `src/utils/recommendation-request-signature.js`
+
+Local request-signature builder shared by the executable recommendation surfaces. It normalizes the surface id, scoped entity ref, composer prompt, and surface-owned context signature into a comparable string that the UI uses for result freshness and apply guards. These signatures intentionally stay client-local; PHP still receives the underlying context payload plus the server-facing `contextSignature` fields.
+
+**Key exports:**
+
+| Export                                                   | Role                                                                                                  |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `buildRecommendationRequestSignature()`                  | Shared normalizer for `{ surface, prompt, contextSignature, scopeKey, entityRef }`                   |
+| `buildBlockRecommendationRequestSignature()`             | Freshness/apply guard for direct block apply results                                                  |
+| `buildTemplateRecommendationRequestSignature()`          | Freshness/apply guard for template review/apply results                                               |
+| `buildTemplatePartRecommendationRequestSignature()`      | Freshness/apply guard for template-part review/apply results                                          |
+| `buildGlobalStylesRecommendationRequestSignature()`      | Freshness/apply guard for Global Styles review/apply results                                          |
+| `buildStyleBookRecommendationRequestSignature()`         | Freshness/apply guard for Style Book review/apply results                                             |
+
+**Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/inspector/SuggestionChips.js`
+
 ## Shared UI Components
 
 Several shared components form the current recommendation-surface shell. `CapabilityNotice`, `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` carry the core capability/status/review contract; `SurfacePanelIntro`, `SurfaceScopeBar`, `SurfaceComposer`, `RecommendationHero`, `RecommendationLane`, and `AIActivitySection` provide the rest of the reusable full-panel framing. Use `docs/reference/recommendation-ui-consistency.md` when you need the exact per-surface composition rules and intentional exceptions.
@@ -98,8 +115,8 @@ Renders a review-before-apply confirmation panel for executable AI operations. D
 These components provide the reusable top-of-panel shell for the full recommendation surfaces.
 
 - `SurfacePanelIntro.js` renders the short surface-specific intro copy block.
-- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
-- `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling.
+- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. On executable surfaces, that freshness state comes from the local request-signature comparison rather than from route status alone, so stale results can stay visible while review/apply stays disabled. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
+- `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling. Executable surfaces hydrate the composer prompt from the stored ready-result prompt once per result token so preloaded results start in a fresh state and only become stale after the user edits the prompt or the live context signature changes.
 
 **Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book (5 surfaces); the block style projection subpanel only reuses `SurfacePanelIntro` and `SurfaceScopeBar`
 

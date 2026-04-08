@@ -768,7 +768,7 @@ describe( 'GlobalStylesRecommender', () => {
 		expect( sidebar.textContent ).toContain( 'Global Styles' );
 		expect( sidebar.textContent ).toContain( 'Stale' );
 		expect( sidebar.textContent ).toContain(
-			'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
+			'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.'
 		);
 		expect( sidebar.textContent ).toContain( 'Use accent canvas' );
 		expect(

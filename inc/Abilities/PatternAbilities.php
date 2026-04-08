@@ -187,9 +187,11 @@ final class PatternAbilities {
 		$structural_limit = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
 		$docs_guidance    = self::collect_wordpress_docs_guidance(
 			[
-				'postType'     => $post_type,
-				'templateType' => $template_type,
-				'blockContext' => $block_context,
+				'postType'            => $post_type,
+				'templateType'        => $template_type,
+				'blockContext'        => $block_context,
+				'insertionContext'    => $insertion_context,
+				'visiblePatternNames' => is_array( $visible_pattern_names ) ? $visible_pattern_names : [],
 			],
 			$prompt
 		);
@@ -1584,9 +1586,25 @@ SYSTEM;
 			? sanitize_key( $context['templateType'] )
 			: '';
 		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
+		$insertion_context = self::normalize_input( $context['insertionContext'] ?? [] );
 		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
 			? sanitize_text_field( $block_context['blockName'] )
 			: '';
+		$root_block    = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
+			? sanitize_text_field( $insertion_context['rootBlock'] )
+			: '';
+		$ancestors     = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
+		$nearby_siblings = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
+		$template_part_area = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
+			? sanitize_key( $insertion_context['templatePartArea'] )
+			: '';
+		$template_part_slug = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
+			? sanitize_text_field( $insertion_context['templatePartSlug'] )
+			: '';
+		$container_layout = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
+			? sanitize_key( $insertion_context['containerLayout'] )
+			: '';
+		$visible_pattern_names = array_slice( StringArray::sanitize( $context['visiblePatternNames'] ?? [] ), 0, 6 );
 		$parts         = [ 'WordPress block patterns, inserter, and editor composition best practices' ];
 
 		if ( $post_type !== '' ) {
@@ -1599,6 +1617,34 @@ SYSTEM;
 
 		if ( $block_name !== '' ) {
 			$parts[] = "near block type {$block_name}";
+		}
+
+		if ( $root_block !== '' ) {
+			$parts[] = "insertion root {$root_block}";
+		}
+
+		if ( ! empty( $ancestors ) ) {
+			$parts[] = 'ancestor chain ' . implode( ' > ', $ancestors );
+		}
+
+		if ( ! empty( $nearby_siblings ) ) {
+			$parts[] = 'nearby sibling blocks ' . implode( ', ', $nearby_siblings );
+		}
+
+		if ( $template_part_area !== '' ) {
+			$parts[] = "template part area {$template_part_area}";
+		}
+
+		if ( $template_part_slug !== '' ) {
+			$parts[] = "template part slug {$template_part_slug}";
+		}
+
+		if ( $container_layout !== '' ) {
+			$parts[] = "container layout {$container_layout}";
+		}
+
+		if ( ! empty( $visible_pattern_names ) ) {
+			$parts[] = 'visible pattern scope ' . implode( ', ', $visible_pattern_names );
 		}
 
 		if ( $prompt !== '' ) {
@@ -1658,9 +1704,22 @@ SYSTEM;
 			? sanitize_key( $context['templateType'] )
 			: '';
 		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
+		$insertion_context = self::normalize_input( $context['insertionContext'] ?? [] );
 		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
 			? sanitize_text_field( $block_context['blockName'] )
 			: '';
+		$root_block    = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
+			? sanitize_text_field( $insertion_context['rootBlock'] )
+			: '';
+		$template_part_area = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
+			? sanitize_key( $insertion_context['templatePartArea'] )
+			: '';
+		$container_layout = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
+			? sanitize_key( $insertion_context['containerLayout'] )
+			: '';
+		$ancestors = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
+		$nearby_siblings = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
+		$visible_pattern_names = array_slice( StringArray::sanitize( $context['visiblePatternNames'] ?? [] ), 0, 6 );
 		$surface       = 'block';
 
 		if ( $entity_key === 'core/template-part' || str_starts_with( $block_name, 'core/template-part/' ) ) {
@@ -1681,6 +1740,30 @@ SYSTEM;
 
 		if ( $block_name !== '' ) {
 			$family_context['nearBlock'] = $block_name;
+		}
+
+		if ( $root_block !== '' ) {
+			$family_context['insertionRoot'] = $root_block;
+		}
+
+		if ( $template_part_area !== '' ) {
+			$family_context['templatePartArea'] = $template_part_area;
+		}
+
+		if ( $container_layout !== '' ) {
+			$family_context['containerLayout'] = $container_layout;
+		}
+
+		if ( ! empty( $ancestors ) ) {
+			$family_context['ancestorBlocks'] = $ancestors;
+		}
+
+		if ( ! empty( $nearby_siblings ) ) {
+			$family_context['nearbyBlocks'] = $nearby_siblings;
+		}
+
+		if ( ! empty( $visible_pattern_names ) ) {
+			$family_context['visiblePatterns'] = $visible_pattern_names;
 		}
 
 		return $family_context;
