@@ -46,8 +46,10 @@ import {
 } from './activity-history';
 import { resolveActivityBlock } from './block-targeting';
 import {
-	createExecutableSurfaceApplyAction,
-	createExecutableSurfaceFetchAction,
+	buildExecutableSurfaceApplyThunk,
+	buildExecutableSurfaceFetchThunk,
+	createExecutableSurfaceApplyConfig,
+	createExecutableSurfaceFetchConfig,
 } from './executable-surface-runtime';
 import {
 	attributeSnapshotsMatch,
@@ -1286,91 +1288,6 @@ async function recordActivityEntry(localDispatch, select, entry) {
 	return nextEntry;
 }
 
-function buildExecutableSurfaceFetchThunk(config, input) {
-	return createExecutableSurfaceFetchAction({
-		...config,
-		attachRequestMetaToRecommendationPayload,
-		getResolvedContextSignatureFromResponse,
-		runAbortableRecommendationRequest,
-	})(input);
-}
-
-function buildExecutableSurfaceApplyThunk(
-	config,
-	suggestion,
-	currentRequestSignature = null,
-	liveRequestInput = null
-) {
-	return createExecutableSurfaceApplyAction({
-		...config,
-		getCurrentActivityScope,
-		guardSurfaceApplyFreshness,
-		guardSurfaceApplyResolvedFreshness,
-		recordActivityEntry,
-		syncActivitySession,
-	})(suggestion, currentRequestSignature, liveRequestInput);
-}
-
-function createExecutableSurfaceFetchConfig({
-	abortKey,
-	dispatchRecommendations,
-	endpoint,
-	getRequestToken,
-	requestErrorMessage,
-	setStatusAction,
-}) {
-	return {
-		abortKey,
-		dispatchRecommendations,
-		endpoint,
-		getRequestToken,
-		requestErrorMessage,
-		setErrorState: (message, requestToken) =>
-			setStatusAction('error', message, requestToken),
-		setLoadingState: (requestToken) =>
-			setStatusAction('loading', null, requestToken),
-	};
-}
-
-function createExecutableSurfaceApplyConfig({
-	applyFailureMessage,
-	buildActivityEntry,
-	endpoint,
-	executeSuggestion,
-	getStoredRequestSignature,
-	getStoredResolvedContextSignature,
-	setApplyStateAction,
-	surface,
-	unexpectedErrorMessage,
-}) {
-	return {
-		applyFailureMessage,
-		buildActivityEntry,
-		endpoint,
-		executeSuggestion,
-		getStoredRequestSignature,
-		getStoredResolvedContextSignature,
-		setApplyState: (
-			status,
-			{
-				error = null,
-				suggestionKey = null,
-				operations = [],
-				staleReason = null,
-			} = {}
-		) =>
-			setApplyStateAction(
-				status,
-				error,
-				suggestionKey,
-				operations,
-				staleReason
-			),
-		surface,
-		unexpectedErrorMessage,
-	};
-}
-
 function dispatchTemplateRecommendations({
 	contextSignature,
 	dispatch,
@@ -1565,6 +1482,20 @@ function buildStyleBookActivityEntryFromStore({
 		blockTitle: scope?.blockTitle || '',
 	});
 }
+
+const EXECUTABLE_SURFACE_FETCH_DEPS = {
+	attachRequestMetaToRecommendationPayload,
+	getResolvedContextSignatureFromResponse,
+	runAbortableRecommendationRequest,
+};
+
+const EXECUTABLE_SURFACE_APPLY_DEPS = {
+	getCurrentActivityScope,
+	guardSurfaceApplyFreshness,
+	guardSurfaceApplyResolvedFreshness,
+	recordActivityEntry,
+	syncActivitySession,
+};
 
 function getTemplateExecutableSurfaceFetchConfig() {
 	return createExecutableSurfaceFetchConfig({
@@ -3483,7 +3414,8 @@ const actions = {
 			getTemplateExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
-			liveRequestInput
+			liveRequestInput,
+			EXECUTABLE_SURFACE_APPLY_DEPS
 		);
 	},
 
@@ -3496,7 +3428,8 @@ const actions = {
 			getTemplatePartExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
-			liveRequestInput
+			liveRequestInput,
+			EXECUTABLE_SURFACE_APPLY_DEPS
 		);
 	},
 
@@ -3509,7 +3442,8 @@ const actions = {
 			getGlobalStylesExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
-			liveRequestInput
+			liveRequestInput,
+			EXECUTABLE_SURFACE_APPLY_DEPS
 		);
 	},
 
@@ -3522,35 +3456,40 @@ const actions = {
 			getStyleBookExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
-			liveRequestInput
+			liveRequestInput,
+			EXECUTABLE_SURFACE_APPLY_DEPS
 		);
 	},
 
 	fetchTemplateRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
 			getTemplateExecutableSurfaceFetchConfig(),
-			input
+			input,
+			EXECUTABLE_SURFACE_FETCH_DEPS
 		);
 	},
 
 	fetchTemplatePartRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
 			getTemplatePartExecutableSurfaceFetchConfig(),
-			input
+			input,
+			EXECUTABLE_SURFACE_FETCH_DEPS
 		);
 	},
 
 	fetchGlobalStylesRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
 			getGlobalStylesExecutableSurfaceFetchConfig(),
-			input
+			input,
+			EXECUTABLE_SURFACE_FETCH_DEPS
 		);
 	},
 
 	fetchStyleBookRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
 			getStyleBookExecutableSurfaceFetchConfig(),
-			input
+			input,
+			EXECUTABLE_SURFACE_FETCH_DEPS
 		);
 	},
 };

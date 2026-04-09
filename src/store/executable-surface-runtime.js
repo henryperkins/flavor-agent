@@ -2,8 +2,66 @@ function normalizeRequestInput( requestInput ) {
 	return requestInput && typeof requestInput === 'object' ? requestInput : {};
 }
 
-// Keep the shared lifecycle generic while leaving selector/action wiring to
-// each surface adapter in the main store module.
+export function createExecutableSurfaceFetchConfig( {
+	abortKey,
+	dispatchRecommendations,
+	endpoint,
+	getRequestToken,
+	requestErrorMessage,
+	setStatusAction,
+} ) {
+	return {
+		abortKey,
+		dispatchRecommendations,
+		endpoint,
+		getRequestToken,
+		requestErrorMessage,
+		setErrorState: ( message, requestToken ) =>
+			setStatusAction( 'error', message, requestToken ),
+		setLoadingState: ( requestToken ) =>
+			setStatusAction( 'loading', null, requestToken ),
+	};
+}
+
+export function createExecutableSurfaceApplyConfig( {
+	applyFailureMessage,
+	buildActivityEntry,
+	endpoint,
+	executeSuggestion,
+	getStoredRequestSignature,
+	getStoredResolvedContextSignature,
+	setApplyStateAction,
+	surface,
+	unexpectedErrorMessage,
+} ) {
+	return {
+		applyFailureMessage,
+		buildActivityEntry,
+		endpoint,
+		executeSuggestion,
+		getStoredRequestSignature,
+		getStoredResolvedContextSignature,
+		setApplyState: (
+			status,
+			{
+				error = null,
+				suggestionKey = null,
+				operations = [],
+				staleReason = null,
+			} = {}
+		) =>
+			setApplyStateAction(
+				status,
+				error,
+				suggestionKey,
+				operations,
+				staleReason
+			),
+		surface,
+		unexpectedErrorMessage,
+	};
+}
+
 export function createExecutableSurfaceFetchAction( {
 	abortKey,
 	attachRequestMetaToRecommendationPayload,
@@ -70,6 +128,23 @@ export function createExecutableSurfaceFetchAction( {
 				select,
 			} );
 	};
+}
+
+export function buildExecutableSurfaceFetchThunk(
+	config,
+	input,
+	{
+		attachRequestMetaToRecommendationPayload,
+		getResolvedContextSignatureFromResponse,
+		runAbortableRecommendationRequest,
+	}
+) {
+	return createExecutableSurfaceFetchAction( {
+		...config,
+		attachRequestMetaToRecommendationPayload,
+		getResolvedContextSignatureFromResponse,
+		runAbortableRecommendationRequest,
+	} )( input );
 }
 
 export function createExecutableSurfaceApplyAction( {
@@ -196,4 +271,27 @@ export function createExecutableSurfaceApplyAction( {
 			return result;
 		};
 	};
+}
+
+export function buildExecutableSurfaceApplyThunk(
+	config,
+	suggestion,
+	currentRequestSignature = null,
+	liveRequestInput = null,
+	{
+		getCurrentActivityScope,
+		guardSurfaceApplyFreshness,
+		guardSurfaceApplyResolvedFreshness,
+		recordActivityEntry,
+		syncActivitySession,
+	}
+) {
+	return createExecutableSurfaceApplyAction( {
+		...config,
+		getCurrentActivityScope,
+		guardSurfaceApplyFreshness,
+		guardSurfaceApplyResolvedFreshness,
+		recordActivityEntry,
+		syncActivitySession,
+	} )( suggestion, currentRequestSignature, liveRequestInput );
 }

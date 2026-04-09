@@ -5,6 +5,11 @@ import {
 	collectViewportVisibilitySummary,
 	describeEditorBlockLabel,
 } from '../utils/editor-context-metadata';
+import {
+	collectNestedBlockStats,
+	normalizeVisiblePatternNames,
+	summarizeBlockAttributes,
+} from '../utils/live-structure-snapshots';
 export { formatCount } from '../utils/format-count';
 
 export const ENTITY_PART = 'part';
@@ -76,67 +81,13 @@ export function formatTemplateTypeLabel( templateType ) {
 		.join( ' ' ) } Template`;
 }
 
-export function normalizeVisiblePatternNames( visiblePatternNames ) {
-	if ( ! Array.isArray( visiblePatternNames ) ) {
-		return null;
-	}
-
-	return Array.from( new Set( visiblePatternNames.filter( Boolean ) ) );
-}
-
 function summarizeTemplateBlockAttributes( attributes = {} ) {
-	const summary = {};
-
-	for ( const field of TEMPLATE_TOP_LEVEL_ATTRIBUTE_FIELDS ) {
-		const value = attributes?.[ field ];
-
-		if (
-			typeof value === 'string' ||
-			typeof value === 'number' ||
-			typeof value === 'boolean'
-		) {
-			summary[ field ] = value;
-		}
-	}
-
-	return summary;
-}
-
-function collectTemplateBlockStats( blocks = [] ) {
-	const stats = {
-		blockCount: 0,
-		maxDepth: 0,
-		blockCounts: {},
-	};
-
-	const visit = ( branch = [], depth = 1 ) => {
-		if ( ! Array.isArray( branch ) ) {
-			return;
-		}
-
-		branch.forEach( ( block ) => {
-			if ( ! block || typeof block !== 'object' || ! block.name ) {
-				return;
-			}
-
-			stats.blockCount += 1;
-			stats.maxDepth = Math.max( stats.maxDepth, depth );
-			stats.blockCounts[ block.name ] =
-				( stats.blockCounts[ block.name ] || 0 ) + 1;
-
-			visit( block.innerBlocks, depth + 1 );
-		} );
-	};
-
-	visit( blocks );
-
-	return stats;
+	return summarizeBlockAttributes( attributes, TEMPLATE_TOP_LEVEL_ATTRIBUTE_FIELDS );
 }
 
 function buildTemplateStructureStats( blocks = [], topLevelBlockTree = [] ) {
-	const { blockCount, maxDepth, blockCounts } = collectTemplateBlockStats(
-		blocks
-	);
+	const { blockCount, maxDepth, blockCounts } =
+		collectNestedBlockStats( blocks );
 
 	return {
 		blockCount,
