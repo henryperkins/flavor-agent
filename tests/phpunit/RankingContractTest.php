@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Support\RankingContract;
-use WP_UnitTestCase;
+use PHPUnit\Framework\TestCase;
 
-final class RankingContractTest extends WP_UnitTestCase {
+final class RankingContractTest extends TestCase {
 
 	public function test_normalize_builds_required_fields_from_defaults(): void {
 		$result = RankingContract::normalize(
 			[],
 			[
-				'score' => 0.82,
-				'reason' => 'Matches user intent',
+				'score'         => 0.82,
+				'reason'        => 'Matches user intent',
 				'sourceSignals' => [ 'llm_response', 'llm_response', 'vector' ],
-				'safetyMode' => 'validated',
+				'safetyMode'    => 'validated',
 				'freshnessMeta' => [ 'indexStatus' => 'ready' ],
 			]
 		);
@@ -25,14 +25,17 @@ final class RankingContractTest extends WP_UnitTestCase {
 		$this->assertSame( 'Matches user intent', $result['reason'] );
 		$this->assertSame( [ 'llm_response', 'vector' ], $result['sourceSignals'] );
 		$this->assertSame( 'validated', $result['safetyMode'] );
-		$this->assertSame( [ 'indexstatus' => 'ready' ], $result['freshnessMeta'] );
+		$this->assertSame( [ 'indexStatus' => 'ready' ], $result['freshnessMeta'] );
 	}
 
 	public function test_normalize_accepts_operations_and_ranking_hint(): void {
 		$result = RankingContract::normalize(
 			[
-				'operations' => [
-					[ 'type' => 'insert_pattern', 'patternName' => 'theme/hero' ],
+				'operations'  => [
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => 'theme/hero',
+					],
 				],
 				'rankingHint' => [
 					'summary' => 'Matches slot constraints.',
@@ -42,15 +45,26 @@ final class RankingContractTest extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 'insert_pattern', $result['operations'][0]['type'] );
-		$this->assertSame( 'theme/hero', $result['operations'][0]['patternname'] );
+		$this->assertSame( 'theme/hero', $result['operations'][0]['patternName'] );
 		$this->assertSame( 'Matches slot constraints.', $result['rankingHint']['summary'] );
+	}
+
+	public function test_normalize_coerces_malformed_scores_without_warnings(): void {
+		$result = RankingContract::normalize(
+			[
+				'score' => [ 'bad-input' ],
+			],
+			[]
+		);
+
+		$this->assertSame( 0.0, $result['score'] );
 	}
 
 	public function test_normalize_accepts_advisory_type_for_navigation_and_block_surfaces(): void {
 		$result = RankingContract::normalize(
 			[
-				'score' => 1.7,
-				'advisoryType' => 'Structural_Recommendation',
+				'score'        => 1.7,
+				'advisoryType' => 'structural_recommendation',
 			],
 			[]
 		);
@@ -63,9 +77,9 @@ final class RankingContractTest extends WP_UnitTestCase {
 		$result = RankingContract::derive_score(
 			0.45,
 			[
-				'executable' => 0.35,
+				'executable'  => 0.35,
 				'description' => 0.2,
-				'operations' => 0.1,
+				'operations'  => 0.1,
 			]
 		);
 

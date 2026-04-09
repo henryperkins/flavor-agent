@@ -1121,4 +1121,45 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
+
+	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+		$context = [
+			'assignedParts'  => [],
+			'availableParts' => [],
+			'allowedAreas'   => [ 'header', 'footer' ],
+			'emptyAreas'     => [ 'header', 'footer' ],
+			'patterns'       => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Explicit score template idea',
+						'description'        => 'This should sort first.',
+						'patternSuggestions' => [ 'theme/hero' ],
+						'score'              => 0.92,
+						'confidence'         => 0.18,
+					],
+					[
+						'label'              => 'Confidence template idea',
+						'description'        => 'This should sort second.',
+						'patternSuggestions' => [ 'theme/hero' ],
+						'confidence'         => 0.84,
+					],
+				],
+				'explanation' => 'Explicit scores should drive ordering.',
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Explicit score template idea', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.92, $result['suggestions'][0]['ranking']['score'] );
+	}
 }

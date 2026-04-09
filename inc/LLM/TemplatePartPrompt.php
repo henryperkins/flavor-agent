@@ -436,12 +436,12 @@ SYSTEM;
 
 			if ( $path !== null ) {
 				$lookup[ self::block_path_key( $path ) ] = [
-					'name' => (string) ( $node['name'] ?? '' ),
-					'path' => $path,
-					'label' => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
+					'name'       => (string) ( $node['name'] ?? '' ),
+					'path'       => $path,
+					'label'      => sanitize_text_field( (string) ( $node['label'] ?? '' ) ),
 					'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
 					'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
-					'slot' => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
+					'slot'       => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
 				];
 			}
 
@@ -677,8 +677,17 @@ SYSTEM;
 				'operations'         => $operations,
 			];
 
-			$computed_score   = isset( $suggestion['confidence'] )
-				? max( 0.0, min( 1.0, (float) $suggestion['confidence'] ) )
+			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
+			$score_input    = [
+				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
+					? $ranking_input['score']
+					: ( $suggestion['score'] ?? null ),
+				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
+					? $ranking_input['confidence']
+					: ( $suggestion['confidence'] ?? null ),
+			];
+			$computed_score = null !== $score_input['score'] || null !== $score_input['confidence']
+				? RankingContract::normalize( $score_input )['score']
 				: RankingContract::derive_score(
 					0.45,
 					[
@@ -688,7 +697,7 @@ SYSTEM;
 						'has_description'   => '' !== $description ? 0.05 : 0.0,
 					]
 				);
-			$source_signals   = [ 'llm_response', 'template_part_surface' ];
+			$source_signals = [ 'llm_response', 'template_part_surface' ];
 
 			if ( [] !== $operations ) {
 				$source_signals[] = 'has_operations';
@@ -702,13 +711,16 @@ SYSTEM;
 
 			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
 				$entry['ranking'] = RankingContract::normalize(
-					is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [],
+					$ranking_input,
 					[
 						'score'         => $computed_score,
 						'reason'        => $description,
 						'sourceSignals' => $source_signals,
 						'safetyMode'    => 'validated',
-						'freshnessMeta' => [ 'source' => 'llm', 'surface' => 'template_part' ],
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'template_part',
+						],
 						'operations'    => $operations,
 					]
 				);

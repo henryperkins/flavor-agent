@@ -86,17 +86,17 @@ SYSTEM;
 	}
 
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$scope              = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
-		$style_context      = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$theme_tokens       = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
-		$supported_paths    = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$style_book_target  = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
-		$block_manifest     = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
-		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
-		$design_semantics   = is_array( $style_context['designSemantics'] ?? null ) ? $style_context['designSemantics'] : [];
+		$scope               = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
+		$style_context       = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$theme_tokens        = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
+		$supported_paths     = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
+		$style_book_target   = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
+		$block_manifest      = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
+		$template_structure  = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$design_semantics    = is_array( $style_context['designSemantics'] ?? null ) ? $style_context['designSemantics'] : [];
 		$template_visibility = is_array( $style_context['templateVisibility'] ?? null ) ? $style_context['templateVisibility'] : [];
-		$surface            = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
-		$sections           = [];
+		$surface             = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
+		$sections            = [];
 
 		$sections[] = '## Scope';
 		$sections[] = 'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' );
@@ -724,18 +724,27 @@ SYSTEM;
 				'operations'  => 'executable' === $tone ? $operations : [],
 			];
 
-			$computed_score   = isset( $suggestion['confidence'] )
-				? max( 0.0, min( 1.0, (float) $suggestion['confidence'] ) )
+			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
+			$score_input    = [
+				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
+					? $ranking_input['score']
+					: ( $suggestion['score'] ?? null ),
+				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
+					? $ranking_input['confidence']
+					: ( $suggestion['confidence'] ?? null ),
+			];
+			$computed_score = null !== $score_input['score'] || null !== $score_input['confidence']
+				? RankingContract::normalize( $score_input )['score']
 				: RankingContract::derive_score(
 					0.45,
 					[
-						'is_executable'  => 'executable' === $tone ? 0.25 : 0.0,
-						'has_operations' => [] !== $operations ? 0.15 : 0.0,
+						'is_executable'   => 'executable' === $tone ? 0.25 : 0.0,
+						'has_operations'  => [] !== $operations ? 0.15 : 0.0,
 						'has_description' => '' !== $entry['description'] ? 0.1 : 0.0,
-						'has_category'   => '' !== $entry['category'] ? 0.05 : 0.0,
+						'has_category'    => '' !== $entry['category'] ? 0.05 : 0.0,
 					]
 				);
-			$source_signals   = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
+			$source_signals = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
 
 			if ( [] !== $operations ) {
 				$source_signals[] = 'has_operations';
@@ -743,13 +752,16 @@ SYSTEM;
 
 			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
 				$entry['ranking'] = RankingContract::normalize(
-					is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [],
+					$ranking_input,
 					[
 						'score'         => $computed_score,
 						'reason'        => (string) ( $suggestion['description'] ?? '' ),
 						'sourceSignals' => $source_signals,
 						'safetyMode'    => 'validated',
-						'freshnessMeta' => [ 'source' => 'llm', 'surface' => 'style' ],
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'style',
+						],
 						'operations'    => 'executable' === $tone ? $operations : [],
 					]
 				);
@@ -757,7 +769,7 @@ SYSTEM;
 
 			$entry['_rankScore'] = $computed_score;
 			$entry['_rankOrder'] = $order++;
-			$validated[] = $entry;
+			$validated[]         = $entry;
 		}
 
 		$filtered = array_values(

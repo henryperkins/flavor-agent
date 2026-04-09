@@ -69,14 +69,13 @@ final class RankingContract {
 	}
 
 	/**
-	 * @param array<string, float|int|bool> $signals
+	 * @param array<string, float|int> $signals
 	 */
 	public static function derive_score( float $baseline, array $signals ): float {
 		$score = $baseline;
 
 		foreach ( $signals as $signal ) {
 			if ( is_bool( $signal ) ) {
-				$score += $signal ? 0.0 : 0.0;
 				continue;
 			}
 
@@ -87,7 +86,15 @@ final class RankingContract {
 	}
 
 	private static function coerce_score( mixed $value ): float {
-		return max( 0.0, min( 1.0, (float) $value ) );
+		if ( is_bool( $value ) ) {
+			$numeric_value = (float) $value;
+		} elseif ( is_scalar( $value ) && is_numeric( $value ) ) {
+			$numeric_value = (float) $value;
+		} else {
+			$numeric_value = 0.0;
+		}
+
+		return max( 0.0, min( 1.0, $numeric_value ) );
 	}
 
 	/**
@@ -119,7 +126,7 @@ final class RankingContract {
 
 		$meta = [];
 		foreach ( $value as $key => $entry ) {
-			$normalized_key = sanitize_key( (string) $key );
+			$normalized_key = sanitize_text_field( (string) $key );
 			if ( '' === $normalized_key ) {
 				continue;
 			}
@@ -168,7 +175,7 @@ final class RankingContract {
 					continue;
 				}
 
-				$sanitized_key = sanitize_key( (string) $key );
+				$sanitized_key = sanitize_text_field( (string) $key );
 				if ( '' === $sanitized_key ) {
 					continue;
 				}

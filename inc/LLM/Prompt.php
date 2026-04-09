@@ -519,8 +519,17 @@ SYSTEM;
 			];
 
 			$has_executable_updates = ! empty( $normalized['attributeUpdates'] );
-			$computed_score         = isset( $s['confidence'] )
-				? max( 0.0, min( 1.0, (float) $s['confidence'] ) )
+			$ranking_input          = is_array( $s['ranking'] ?? null ) ? $s['ranking'] : [];
+			$score_input            = [
+				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
+					? $ranking_input['score']
+					: ( $s['score'] ?? null ),
+				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
+					? $ranking_input['confidence']
+					: ( $s['confidence'] ?? null ),
+			];
+			$computed_score         = null !== $score_input['score'] || null !== $score_input['confidence']
+				? RankingContract::normalize( $score_input )['score']
 				: RankingContract::derive_score(
 					0.45,
 					[
@@ -542,13 +551,16 @@ SYSTEM;
 
 			if ( array_key_exists( 'ranking', $s ) || isset( $s['confidence'] ) || isset( $s['score'] ) ) {
 				$normalized['ranking'] = RankingContract::normalize(
-					is_array( $s['ranking'] ?? null ) ? $s['ranking'] : [],
+					$ranking_input,
 					[
 						'score'         => $computed_score,
 						'reason'        => (string) ( $s['description'] ?? '' ),
 						'sourceSignals' => $source_signals,
 						'safetyMode'    => 'validated',
-						'freshnessMeta' => [ 'source' => 'llm', 'group' => $group ],
+						'freshnessMeta' => [
+							'source' => 'llm',
+							'group'  => $group,
+						],
 						'advisoryType'  => 'block' === $group ? (string) ( $s['type'] ?? '' ) : '',
 					]
 				);

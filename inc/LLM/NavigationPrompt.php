@@ -367,10 +367,10 @@ SYSTEM;
 					}
 
 					$changes[] = [
-						'type'   => $type,
+						'type'       => $type,
 						'targetPath' => $target_path,
-						'target' => $target,
-						'detail' => $detail,
+						'target'     => $target,
+						'detail'     => $detail,
 					];
 				}
 			}
@@ -386,18 +386,27 @@ SYSTEM;
 				'changes'     => $changes,
 			];
 
-			$computed_score   = isset( $suggestion['confidence'] )
-				? max( 0.0, min( 1.0, (float) $suggestion['confidence'] ) )
+			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
+			$score_input    = [
+				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
+					? $ranking_input['score']
+					: ( $suggestion['score'] ?? null ),
+				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
+					? $ranking_input['confidence']
+					: ( $suggestion['confidence'] ?? null ),
+			];
+			$computed_score = null !== $score_input['score'] || null !== $score_input['confidence']
+				? RankingContract::normalize( $score_input )['score']
 				: RankingContract::derive_score(
 					0.45,
 					[
-						'change_count'   => min( 0.25, count( $changes ) * 0.08 ),
-						'is_structure'   => 'structure' === $category ? 0.1 : 0.0,
-						'is_overlay'     => 'overlay' === $category ? 0.08 : 0.0,
-						'has_detail'     => '' !== $description ? 0.07 : 0.0,
+						'change_count' => min( 0.25, count( $changes ) * 0.08 ),
+						'is_structure' => 'structure' === $category ? 0.1 : 0.0,
+						'is_overlay'   => 'overlay' === $category ? 0.08 : 0.0,
+						'has_detail'   => '' !== $description ? 0.07 : 0.0,
 					]
 				);
-			$source_signals   = [ 'llm_response', 'navigation_surface', 'category_' . $category ];
+			$source_signals = [ 'llm_response', 'navigation_surface', 'category_' . $category ];
 
 			if ( count( $changes ) > 0 ) {
 				$source_signals[] = 'has_changes';
@@ -405,13 +414,16 @@ SYSTEM;
 
 			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) || isset( $suggestion['advisoryType'] ) ) {
 				$entry['ranking'] = RankingContract::normalize(
-					is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [],
+					$ranking_input,
 					[
 						'score'         => $computed_score,
 						'reason'        => $description,
 						'sourceSignals' => $source_signals,
 						'safetyMode'    => 'validated',
-						'freshnessMeta' => [ 'source' => 'llm', 'surface' => 'navigation' ],
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'navigation',
+						],
 						'advisoryType'  => (string) ( $suggestion['advisoryType'] ?? $category ),
 					]
 				);
@@ -419,7 +431,7 @@ SYSTEM;
 
 			$entry['_rankScore'] = $computed_score;
 			$entry['_rankOrder'] = $order++;
-			$valid[] = $entry;
+			$valid[]             = $entry;
 		}
 
 		usort(
@@ -514,7 +526,7 @@ SYSTEM;
 				$line .= " \"{$label}\"";
 			}
 
-			$line .= ' depth=' . $depth;
+			$line   .= ' depth=' . $depth;
 			$lines[] = $line;
 		}
 
@@ -561,13 +573,13 @@ SYSTEM;
 			$lines[] = '- `siblingsAfter`: ' . implode( ', ', array_map( 'strval', $siblings_after ) );
 		}
 
-		$ancestors = is_array( $editor_context['structuralAncestors'] ?? null ) ? $editor_context['structuralAncestors'] : [];
+		$ancestors        = is_array( $editor_context['structuralAncestors'] ?? null ) ? $editor_context['structuralAncestors'] : [];
 		$ancestor_summary = self::format_structural_summaries( $ancestors );
 		if ( '' !== $ancestor_summary ) {
 			$lines[] = "- `structuralAncestors`: {$ancestor_summary}";
 		}
 
-		$branch = is_array( $editor_context['structuralBranch'] ?? null ) ? $editor_context['structuralBranch'] : [];
+		$branch         = is_array( $editor_context['structuralBranch'] ?? null ) ? $editor_context['structuralBranch'] : [];
 		$branch_summary = self::format_structural_branch( $branch );
 		if ( '' !== $branch_summary ) {
 			$lines[] = "- `structuralBranch`: {$branch_summary}";
@@ -639,7 +651,7 @@ SYSTEM;
 	 * @return array<string, true>
 	 */
 	private static function build_target_lookup( array $context ): array {
-		$lookup          = [];
+		$lookup           = [];
 		$target_inventory = is_array( $context['targetInventory'] ?? null ) ? $context['targetInventory'] : [];
 
 		if ( [] === $target_inventory ) {

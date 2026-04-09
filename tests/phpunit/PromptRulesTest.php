@@ -519,7 +519,35 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( 0.71, $result['block'][0]['ranking']['score'] );
 		$this->assertSame( 'validated', $result['block'][0]['ranking']['safetyMode'] );
 		$this->assertSame( 'structural_recommendation', $result['block'][0]['ranking']['advisoryType'] );
-		$this->assertSame( [ 'llm_response', 'block_surface' ], $result['block'][0]['ranking']['sourceSignals'] );
+		$this->assertSame( [ 'llm_response', 'block_surface', 'has_description' ], $result['block'][0]['ranking']['sourceSignals'] );
+	}
+
+	public function test_parse_response_prefers_explicit_score_over_confidence_when_ranking_blocks(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Explicit score wins',
+							'description' => 'The score should drive ordering.',
+							'type'        => 'structural_recommendation',
+							'score'       => 0.91,
+							'confidence'  => 0.14,
+						],
+						[
+							'label'       => 'Confidence only',
+							'description' => 'Still valid, but lower-ranked.',
+							'type'        => 'structural_recommendation',
+							'confidence'  => 0.82,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Explicit score wins', $result['block'][0]['label'] );
+		$this->assertSame( 0.91, $result['block'][0]['ranking']['score'] );
 	}
 
 	public function test_parse_response_ranks_block_suggestions_by_computed_quality_signals(): void {
