@@ -383,6 +383,9 @@ final class BlockAbilities {
 		$normalized  = [];
 
 		foreach ( $summaries as $summary ) {
+			if ( ! is_array( $summary ) ) {
+				continue;
+			}
 			$block = is_string( $summary['block'] ?? null ) ? sanitize_text_field( $summary['block'] ) : '';
 
 			if ( '' === $block ) {
