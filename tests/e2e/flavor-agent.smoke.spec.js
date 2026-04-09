@@ -616,7 +616,7 @@ async function getVisibleSearchInput( page ) {
 		return roleSearch;
 	}
 
-	return page.locator( 'input[type="search"]' ).first();
+	return page.locator( 'input[type="search"]:visible' ).first();
 }
 
 async function getTemplateTarget( page ) {

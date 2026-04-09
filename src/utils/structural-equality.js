@@ -28,7 +28,12 @@ export function shallowStructuralEqual( left, right ) {
 		return true;
 	}
 
-	if ( ! left || ! right || typeof left !== 'object' || typeof right !== 'object' ) {
+	if (
+		! left ||
+		! right ||
+		typeof left !== 'object' ||
+		typeof right !== 'object'
+	) {
 		return false;
 	}
 
@@ -61,6 +66,10 @@ export function shallowStructuralEqual( left, right ) {
 export function deepStructuralEqual( left, right ) {
 	if ( left === right ) {
 		return true;
+	}
+
+	if ( left === null || right === null ) {
+		return false;
 	}
 
 	if ( typeof left !== typeof right ) {
