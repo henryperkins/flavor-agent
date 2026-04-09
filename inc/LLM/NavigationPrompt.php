@@ -59,6 +59,8 @@ Rules:
 - Use the provided location, overlay, and structure summaries to explain why a suggestion fits this navigation's current role.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented navigation block practices.
 - Respect the theme's design tokens when suggesting visual changes.
+- Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.
+- When a recommendation depends on color, spacing, typography, border, background, or layout controls, do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.
 - Return 1-3 suggestions. Each should be distinct and actionable.
 - Keep labels under 60 characters. Keep descriptions under 200 characters.
 SYSTEM;
@@ -207,7 +209,7 @@ SYSTEM;
 
 		// Theme tokens.
 		$tokens      = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
-		$token_lines = self::format_theme_tokens( $tokens );
+		$token_lines = ThemeTokenFormatter::format( $tokens );
 		if ( $token_lines !== '' ) {
 			$sections[] = "## Theme Design Tokens\n{$token_lines}";
 		}
@@ -732,23 +734,5 @@ SYSTEM;
 	 */
 	private static function target_path_key( array $path ): string {
 		return implode( '.', $path );
-	}
-
-	/**
-	 * Format theme tokens into a compact string for the prompt.
-	 */
-	private static function format_theme_tokens( array $tokens ): string {
-		$parts = [];
-
-		$string_keys = [ 'colors', 'fontSizes', 'fontFamilies', 'spacing' ];
-		foreach ( $string_keys as $key ) {
-			$values = $tokens[ $key ] ?? [];
-			if ( is_array( $values ) && count( $values ) > 0 ) {
-				$label   = ucfirst( (string) preg_replace( '/([A-Z])/', ' $1', $key ) );
-				$parts[] = "{$label}: " . implode( ', ', array_slice( $values, 0, 8 ) );
-			}
-		}
-
-		return implode( "\n", $parts );
 	}
 }

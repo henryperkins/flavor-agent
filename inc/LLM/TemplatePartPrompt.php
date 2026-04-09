@@ -79,6 +79,8 @@ Rules:
 - Use blockHints to point at the most relevant places in the current structure when specific focus areas exist.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Respect the theme's design tokens when suggesting patterns or structural changes.
+- Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.
+- When a recommendation depends on color, spacing, typography, border, background, or layout controls, do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.
 - When Current Pattern Override Blocks are listed, treat them as intentional override boundaries. Prefer suggestions that preserve or work with those customizable blocks, and call out the tradeoff if you suggest replacing around them.
 - When multiple operations are returned, keep the plan small, explicit, and ordered.
 - If no matching patterns are available, leave patternSuggestions as an empty array.
@@ -239,7 +241,7 @@ SYSTEM;
 			$sections[] = "## Available Patterns\nNo area-relevant patterns are available.";
 		}
 
-		$theme_tokens = self::format_theme_tokens(
+		$theme_tokens = ThemeTokenFormatter::format(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
 		);
 		if ( $theme_tokens !== '' ) {
@@ -1158,27 +1160,5 @@ SYSTEM;
 		}
 
 		return ucwords( str_replace( '-', ' ', $block_name ) );
-	}
-
-	private static function format_theme_tokens( array $tokens ): string {
-		$lines = [];
-
-		if ( ! empty( $tokens['colors'] ) ) {
-			$lines[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 12 ) );
-		}
-
-		if ( ! empty( $tokens['fontFamilies'] ) ) {
-			$lines[] = 'Fonts: ' . implode( ', ', (array) $tokens['fontFamilies'] );
-		}
-
-		if ( ! empty( $tokens['fontSizes'] ) ) {
-			$lines[] = 'Font sizes: ' . implode( ', ', (array) $tokens['fontSizes'] );
-		}
-
-		if ( ! empty( $tokens['spacing'] ) ) {
-			$lines[] = 'Spacing scale: ' . implode( ', ', array_slice( (array) $tokens['spacing'], 0, 7 ) );
-		}
-
-		return implode( "\n", $lines );
 	}
 }

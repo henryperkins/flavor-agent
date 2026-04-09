@@ -106,6 +106,57 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringNotContainsString( '- `theme/pattern-31`', $prompt );
 	}
 
+	public function test_build_user_includes_enriched_theme_tokens(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef' => 'theme//header',
+				'slug'            => 'header',
+				'title'           => 'Header',
+				'area'            => 'header',
+				'blockTree'       => [],
+				'patterns'        => [],
+				'themeTokens'     => [
+					'colors'            => [ 'primary: #0073aa' ],
+					'gradients'         => [ 'hero: linear-gradient(180deg, #fff, #ddd)' ],
+					'fontSizes'         => [ 'small: 0.875rem' ],
+					'fontFamilies'      => [ 'inter: Inter, sans-serif' ],
+					'spacing'           => [ '20: 0.5rem' ],
+					'shadows'           => [ 'natural: 6px 6px 9px rgba(0,0,0,0.2)' ],
+					'fontFamilyPresets' => [
+						[
+							'slug'   => 'inter',
+							'cssVar' => 'var(--wp--preset--font-family--inter)',
+						],
+					],
+					'layout'            => [
+						'content'                       => '650px',
+						'wide'                          => '1200px',
+						'allowEditing'                  => true,
+						'allowCustomContentAndWideSize' => true,
+					],
+					'enabledFeatures'   => [
+						'backgroundColor' => true,
+						'textColor'       => true,
+					],
+				],
+			]
+		);
+
+		$this->assertStringContainsString( '## Theme Tokens', $prompt );
+		$this->assertStringContainsString( 'Colors: primary: #0073aa', $prompt );
+		$this->assertStringContainsString( 'Gradients: hero: linear-gradient', $prompt );
+		$this->assertStringContainsString( 'Font family preset refs: inter (var(--wp--preset--font-family--inter))', $prompt );
+		$this->assertStringContainsString( 'Layout: {"content":"650px","wide":"1200px","allowEditing":true,"allowCustomContentAndWideSize":true}', $prompt );
+		$this->assertStringContainsString( 'Enabled features: {"backgroundColor":true,"textColor":true}', $prompt );
+	}
+
+	public function test_build_system_includes_theme_capability_constraints(): void {
+		$system = TemplatePartPrompt::build_system();
+
+		$this->assertStringContainsString( 'Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.', $system );
+		$this->assertStringContainsString( 'do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.', $system );
+	}
+
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {
 		$context = [
 			'blockTree'        => [
