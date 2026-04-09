@@ -15,18 +15,18 @@ final class ThemeTokenFormatter {
 	 * @var array<string, int>
 	 */
 	private const ITEM_LIMITS = [
-		'colors'                   => 20,
-		'color_preset_refs'        => 20,
-		'gradients'                => 12,
-		'font_sizes'               => 20,
-		'font_size_preset_refs'    => 20,
-		'font_families'            => 12,
-		'font_family_preset_refs'  => 12,
-		'spacing'                  => 12,
-		'spacing_preset_refs'      => 12,
-		'shadows'                  => 8,
-		'duotone'                  => 8,
-		'element_style_keys'       => 8,
+		'colors'                  => 20,
+		'color_preset_refs'       => 20,
+		'gradients'               => 12,
+		'font_sizes'              => 20,
+		'font_size_preset_refs'   => 20,
+		'font_families'           => 12,
+		'font_family_preset_refs' => 12,
+		'spacing'                 => 12,
+		'spacing_preset_refs'     => 12,
+		'shadows'                 => 8,
+		'duotone'                 => 8,
+		'element_style_keys'      => 8,
 	];
 
 	/**
@@ -41,32 +41,32 @@ final class ThemeTokenFormatter {
 
 		$lines = [];
 
-		$lines['colors'] = self::build_value_line(
+		$lines['colors']                  = self::build_value_line(
 			'Colors',
 			$tokens['colors'] ?? null,
 			self::ITEM_LIMITS['colors']
 		);
-		$lines['color_preset_refs'] = self::build_preset_ref_line(
+		$lines['color_preset_refs']       = self::build_preset_ref_line(
 			'Color preset refs',
 			$tokens['colorPresets'] ?? null,
 			self::ITEM_LIMITS['color_preset_refs']
 		);
-		$lines['gradients'] = self::build_value_line(
+		$lines['gradients']               = self::build_value_line(
 			'Gradients',
 			$tokens['gradients'] ?? null,
 			self::ITEM_LIMITS['gradients']
 		);
-		$lines['font_sizes'] = self::build_value_line(
+		$lines['font_sizes']              = self::build_value_line(
 			'Font sizes',
 			$tokens['fontSizes'] ?? null,
 			self::ITEM_LIMITS['font_sizes']
 		);
-		$lines['font_size_preset_refs'] = self::build_preset_ref_line(
+		$lines['font_size_preset_refs']   = self::build_preset_ref_line(
 			'Font size preset refs',
 			$tokens['fontSizePresets'] ?? null,
 			self::ITEM_LIMITS['font_size_preset_refs']
 		);
-		$lines['font_families'] = self::build_value_line(
+		$lines['font_families']           = self::build_value_line(
 			'Font families',
 			$tokens['fontFamilies'] ?? null,
 			self::ITEM_LIMITS['font_families']
@@ -76,28 +76,28 @@ final class ThemeTokenFormatter {
 			$tokens['fontFamilyPresets'] ?? null,
 			self::ITEM_LIMITS['font_family_preset_refs']
 		);
-		$lines['spacing'] = self::build_value_line(
+		$lines['spacing']                 = self::build_value_line(
 			'Spacing',
 			$tokens['spacing'] ?? null,
 			self::ITEM_LIMITS['spacing']
 		);
-		$lines['spacing_preset_refs'] = self::build_preset_ref_line(
+		$lines['spacing_preset_refs']     = self::build_preset_ref_line(
 			'Spacing preset refs',
 			$tokens['spacingPresets'] ?? null,
 			self::ITEM_LIMITS['spacing_preset_refs']
 		);
-		$lines['shadows'] = self::build_value_line(
+		$lines['shadows']                 = self::build_value_line(
 			'Shadows',
 			$tokens['shadows'] ?? null,
 			self::ITEM_LIMITS['shadows']
 		);
-		$lines['duotone'] = self::build_duotone_line(
+		$lines['duotone']                 = self::build_duotone_line(
 			$tokens['duotone'] ?? null,
 			self::ITEM_LIMITS['duotone']
 		);
-		$lines['layout'] = self::build_json_line( 'Layout', $tokens['layout'] ?? null );
-		$lines['enabled_features'] = self::build_json_line( 'Enabled features', $tokens['enabledFeatures'] ?? null );
-		$lines['element_style_keys'] = self::build_element_style_keys_line(
+		$lines['layout']                  = self::build_json_line( 'Layout', $tokens['layout'] ?? null );
+		$lines['enabled_features']        = self::build_json_line( 'Enabled features', $tokens['enabledFeatures'] ?? null );
+		$lines['element_style_keys']      = self::build_element_style_keys_line(
 			$tokens['elementStyles'] ?? null,
 			self::ITEM_LIMITS['element_style_keys']
 		);
@@ -120,7 +120,6 @@ final class ThemeTokenFormatter {
 			'shadows',
 			'duotone',
 			'gradients',
-			'font_family_preset_refs',
 			'font_families',
 			'spacing',
 			'font_sizes',
@@ -139,7 +138,46 @@ final class ThemeTokenFormatter {
 			unset( $lines[ $line_key ] );
 		}
 
+		$lines = self::trim_longest_lines_to_budget( $lines );
+
 		return implode( "\n", array_values( $lines ) );
+	}
+
+	/**
+	 * @param array<string, string> $lines
+	 * @return array<string, string>
+	 */
+	private static function trim_longest_lines_to_budget( array $lines ): array {
+		while ( [] !== $lines && self::joined_length( $lines ) > self::MAX_FORMATTED_LENGTH ) {
+			$longest_key = self::find_longest_line_key( $lines );
+			if ( null === $longest_key ) {
+				break;
+			}
+
+			unset( $lines[ $longest_key ] );
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * @param array<string, string> $lines
+	 */
+	private static function find_longest_line_key( array $lines ): ?string {
+		$longest_key    = null;
+		$longest_length = 0;
+
+		foreach ( $lines as $line_key => $line ) {
+			$line_length = strlen( $line );
+			if ( $line_length <= $longest_length ) {
+				continue;
+			}
+
+			$longest_key    = $line_key;
+			$longest_length = $line_length;
+		}
+
+		return $longest_key;
 	}
 
 	private static function joined_length( array $lines ): int {

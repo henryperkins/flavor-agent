@@ -261,8 +261,8 @@ final class NavigationAbilitiesTest extends TestCase {
 	public function test_navigation_prompt_build_system_includes_theme_capability_constraints(): void {
 		$system = NavigationPrompt::build_system();
 
-		$this->assertStringContainsString( 'Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.', $system );
-		$this->assertStringContainsString( 'do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.', $system );
+		$this->assertStringContainsString( 'Treat enabledFeatures and layout in Theme Design Tokens as hard capability constraints.', $system );
+		$this->assertStringContainsString( 'do not recommend changes that rely on disabled features or unsupported layout capabilities.', $system );
 	}
 
 	public function test_prompt_build_user_handles_empty_menu(): void {

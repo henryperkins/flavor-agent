@@ -59,8 +59,8 @@ Rules:
 - Use the provided location, overlay, and structure summaries to explain why a suggestion fits this navigation's current role.
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented navigation block practices.
 - Respect the theme's design tokens when suggesting visual changes.
-- Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.
-- When a recommendation depends on color, spacing, typography, border, background, or layout controls, do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.
+- Treat enabledFeatures and layout in Theme Design Tokens as hard capability constraints.
+- When a recommendation depends on color, spacing, typography, border, background, or layout controls, do not recommend changes that rely on disabled features or unsupported layout capabilities.
 - Return 1-3 suggestions. Each should be distinct and actionable.
 - Keep labels under 60 characters. Keep descriptions under 200 characters.
 SYSTEM;

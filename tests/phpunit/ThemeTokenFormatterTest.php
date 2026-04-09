@@ -141,7 +141,7 @@ final class ThemeTokenFormatterTest extends TestCase {
 		$colors = [];
 		$keys   = [];
 		for ( $index = 0; $index < 25; $index++ ) {
-			$colors[] = sprintf( 'color-%d: #%06d', $index, $index );
+			$colors[]                    = sprintf( 'color-%d: #%06d', $index, $index );
 			$keys[ 'element-' . $index ] = [];
 		}
 
@@ -173,7 +173,12 @@ final class ThemeTokenFormatterTest extends TestCase {
 				'gradients'       => $long_values,
 				'shadows'         => $long_values,
 				'duotone'         => $long_values,
-				'colorPresets'    => [ [ 'slug' => 'primary', 'cssVar' => 'var(--wp--preset--color--primary)' ] ],
+				'colorPresets'    => [
+					[
+						'slug'   => 'primary',
+						'cssVar' => 'var(--wp--preset--color--primary)',
+					],
+				],
 				'layout'          => [
 					'content'                       => '650px',
 					'wide'                          => '1200px',
@@ -191,5 +196,22 @@ final class ThemeTokenFormatterTest extends TestCase {
 		$this->assertStringContainsString( 'Layout:', $formatted );
 		$this->assertStringContainsString( 'Enabled features:', $formatted );
 		$this->assertStringNotContainsString( 'Color preset refs:', $formatted );
+	}
+
+	public function test_format_drops_oversized_json_lines_without_emitting_partial_lines(): void {
+		$formatted = ThemeTokenFormatter::format(
+			[
+				'layout'          => [
+					'content' => str_repeat( 'x', 2100 ),
+				],
+				'enabledFeatures' => [
+					'backgroundColor' => true,
+				],
+			]
+		);
+
+		$this->assertLessThanOrEqual( 2000, strlen( $formatted ) );
+		$this->assertSame( 'Enabled features: {"backgroundColor":true}', $formatted );
+		$this->assertStringNotContainsString( 'Layout:', $formatted );
 	}
 }
