@@ -83,7 +83,10 @@ export function formatTemplateTypeLabel( templateType ) {
 }
 
 function summarizeTemplateBlockAttributes( attributes = {} ) {
-	return summarizeBlockAttributes( attributes, TEMPLATE_TOP_LEVEL_ATTRIBUTE_FIELDS );
+	return summarizeBlockAttributes(
+		attributes,
+		TEMPLATE_TOP_LEVEL_ATTRIBUTE_FIELDS
+	);
 }
 
 function buildTemplateStructureStats( blocks = [], topLevelBlockTree = [] ) {

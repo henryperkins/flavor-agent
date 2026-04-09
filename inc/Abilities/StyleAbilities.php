@@ -10,11 +10,13 @@ use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\RecommendationResolvedSignature;
+use FlavorAgent\Support\RecommendationReviewSignature;
 
 final class StyleAbilities {
 
 	private const SURFACE_GLOBAL_STYLES     = 'global-styles';
 	private const SURFACE_STYLE_BOOK        = 'style-book';
+	private const REVIEW_DOCS_GUIDANCE_LIMIT = 3;
 	private const BLOCK_STYLE_SUPPORT_PATHS = [
 		[
 			'path'         => [ 'color', 'background' ],
@@ -107,13 +109,20 @@ final class StyleAbilities {
 			]
 		);
 
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		$review_context_signature = self::build_review_context_signature(
+			$scope_surface,
+			$context,
+			$docs_guidance
+		);
+
 		if ( $resolve_signature_only ) {
 			return [
+				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
 			];
 		}
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
 		$system_prompt = StylePrompt::build_system();
 		$user_prompt   = StylePrompt::build_user(
 			$context,
@@ -136,6 +145,7 @@ final class StyleAbilities {
 			return $payload;
 		}
 
+		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 
 		return $payload;
@@ -307,6 +317,114 @@ final class StyleAbilities {
 		}
 
 		return $context;
+	}
+
+	private static function build_review_context_signature( string $surface, array $context, array $docs_guidance ): string {
+		$style_context = self::normalize_map( $context['styleContext'] ?? [] );
+		$payload       = [
+			'themeTokens'  => self::normalize_review_theme_tokens(
+				self::normalize_map( $style_context['themeTokens'] ?? [] )
+			),
+			'docsGuidance' => self::normalize_review_docs_guidance( $docs_guidance ),
+		];
+
+		if ( self::SURFACE_STYLE_BOOK === $surface ) {
+			$payload['blockManifest'] = self::normalize_review_block_manifest(
+				self::normalize_map( $style_context['blockManifest'] ?? [] )
+			);
+		}
+
+		return RecommendationReviewSignature::from_payload( $surface, $payload );
+	}
+
+	/**
+	 * @param array<string, mixed> $theme_tokens
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_review_theme_tokens( array $theme_tokens ): array {
+		$normalized = [];
+
+		foreach ( [ 'colors', 'gradients', 'fontSizes', 'fontFamilies', 'spacing', 'shadows', 'duotone' ] as $key ) {
+			$values = array_values(
+				array_filter(
+					array_map(
+						static fn( mixed $value ): string => is_string( $value )
+							? sanitize_text_field( $value )
+							: '',
+						self::normalize_list( $theme_tokens[ $key ] ?? [] )
+					),
+					static fn( string $value ): bool => '' !== $value
+				)
+			);
+
+			if ( [] !== $values ) {
+				$normalized[ $key ] = $values;
+			}
+		}
+
+		foreach ( [ 'diagnostics', 'layout', 'enabledFeatures', 'elementStyles', 'blockPseudoStyles' ] as $key ) {
+			$value = self::sanitize_structured_context_value( $theme_tokens[ $key ] ?? [] );
+
+			if ( is_array( $value ) && [] !== $value ) {
+				$normalized[ $key ] = $value;
+			}
+		}
+
+		$duotone_presets = self::sanitize_structured_context_value( $theme_tokens['duotonePresets'] ?? [] );
+		if ( is_array( $duotone_presets ) && [] !== $duotone_presets ) {
+			$normalized['duotonePresets'] = $duotone_presets;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<string, mixed> $block_manifest
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_review_block_manifest( array $block_manifest ): array {
+		$normalized = [];
+
+		foreach ( [ 'supports', 'inspectorPanels' ] as $key ) {
+			$value = self::sanitize_structured_context_value( $block_manifest[ $key ] ?? [] );
+
+			if ( is_array( $value ) && [] !== $value ) {
+				$normalized[ $key ] = $value;
+			}
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $docs_guidance
+	 * @return array<int, array<string, string>>
+	 */
+	private static function normalize_review_docs_guidance( array $docs_guidance ): array {
+		$normalized = [];
+
+		foreach ( array_slice( $docs_guidance, 0, self::REVIEW_DOCS_GUIDANCE_LIMIT ) as $guidance ) {
+			if ( ! is_array( $guidance ) ) {
+				continue;
+			}
+
+			$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+
+			if ( $excerpt === '' ) {
+				continue;
+			}
+
+			$normalized[] = [
+				'id'      => sanitize_text_field( (string) ( $guidance['id'] ?? '' ) ),
+				'title'   => sanitize_text_field(
+					(string) ( $guidance['title'] ?? $guidance['sourceKey'] ?? '' )
+				),
+				'url'     => sanitize_text_field( (string) ( $guidance['url'] ?? '' ) ),
+				'excerpt' => $excerpt,
+			];
+		}
+
+		return $normalized;
 	}
 
 	/**

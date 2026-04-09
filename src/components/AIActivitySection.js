@@ -118,11 +118,15 @@ function getPayloadSummaryLabel( requestMeta ) {
 		return '';
 	}
 
-	const bodyBytes = getNumericMetric( requestMeta?.requestSummary?.bodyBytes );
+	const bodyBytes = getNumericMetric(
+		requestMeta?.requestSummary?.bodyBytes
+	);
 	const instructionsChars = getNumericMetric(
 		requestMeta?.requestSummary?.instructionsChars
 	);
-	const inputChars = getNumericMetric( requestMeta?.requestSummary?.inputChars );
+	const inputChars = getNumericMetric(
+		requestMeta?.requestSummary?.inputChars
+	);
 	const maxOutputTokens = getNumericMetric(
 		requestMeta?.requestSummary?.maxOutputTokens
 	);
@@ -137,7 +141,9 @@ function getPayloadSummaryLabel( requestMeta ) {
 			? `${ instructionsChars } instruction chars`
 			: null,
 		inputChars !== null ? `${ inputChars } input chars` : null,
-		maxOutputTokens !== null ? `${ maxOutputTokens } max output tokens` : null,
+		maxOutputTokens !== null
+			? `${ maxOutputTokens } max output tokens`
+			: null,
 		reasoningEffort ? `reasoning ${ reasoningEffort }` : null,
 	];
 
@@ -149,12 +155,18 @@ function getResponseSummaryLabel( requestMeta ) {
 		return '';
 	}
 
-	const httpStatus = getNumericMetric( requestMeta?.responseSummary?.httpStatus );
-	const bodyBytes = getNumericMetric( requestMeta?.responseSummary?.bodyBytes );
+	const httpStatus = getNumericMetric(
+		requestMeta?.responseSummary?.httpStatus
+	);
+	const bodyBytes = getNumericMetric(
+		requestMeta?.responseSummary?.bodyBytes
+	);
 	const processingMs = getNumericMetric(
 		requestMeta?.responseSummary?.processingMs
 	);
-	const retryAfter = getNumericMetric( requestMeta?.responseSummary?.retryAfter );
+	const retryAfter = getNumericMetric(
+		requestMeta?.responseSummary?.retryAfter
+	);
 	const region =
 		typeof requestMeta?.responseSummary?.region === 'string'
 			? requestMeta.responseSummary.region.trim()
@@ -194,9 +206,13 @@ function getWrappedTransportErrorLabel( requestMeta ) {
 function getExecutionDetailLines( entry ) {
 	const requestMeta = getRequestMeta( entry );
 	const selectedProvider =
-		requestMeta?.selectedProviderLabel || requestMeta?.selectedProvider || '';
+		requestMeta?.selectedProviderLabel ||
+		requestMeta?.selectedProvider ||
+		'';
 	const credentialSource =
-		requestMeta?.credentialSourceLabel || requestMeta?.credentialSource || '';
+		requestMeta?.credentialSourceLabel ||
+		requestMeta?.credentialSource ||
+		'';
 	const lines = [];
 
 	if ( getExecutionPathLabel( entry ) ) {
@@ -251,7 +267,9 @@ function getExecutionDetailLines( entry ) {
 
 	if ( getWrappedTransportErrorLabel( requestMeta ) ) {
 		lines.push(
-			`Transport detail: ${ getWrappedTransportErrorLabel( requestMeta ) }`
+			`Transport detail: ${ getWrappedTransportErrorLabel(
+				requestMeta
+			) }`
 		);
 	}
 
@@ -456,17 +474,17 @@ export default function AIActivitySection( {
 			{ isOpen && visibleEntries.length > 0 && (
 				<div className="flavor-agent-panel__group-body">
 					{ visibleEntries.map( ( entry ) => {
-							const canUndo =
-								entry?.undo?.status === 'available' &&
-								entry?.undo?.canUndo === true &&
-								typeof onUndo === 'function';
-							const hasPendingUndoSync =
-								entry?.persistence?.status !== 'server' &&
-								entry?.persistence?.syncType === 'undo';
-							const executionDetailLines =
-								getExecutionDetailLines( entry );
+						const canUndo =
+							entry?.undo?.status === 'available' &&
+							entry?.undo?.canUndo === true &&
+							typeof onUndo === 'function';
+						const hasPendingUndoSync =
+							entry?.persistence?.status !== 'server' &&
+							entry?.persistence?.syncType === 'undo';
+						const executionDetailLines =
+							getExecutionDetailLines( entry );
 
-							return (
+						return (
 							<div
 								key={ entry.id }
 								className="flavor-agent-activity-row"
@@ -478,29 +496,29 @@ export default function AIActivitySection( {
 									<div className="flavor-agent-activity-row__meta">
 										{ describeActivity( entry ) }
 									</div>
-										{ getExecutionSummary( entry ) && (
-											<div className="flavor-agent-activity-row__meta">
-												{ getExecutionSummary( entry ) }
-											</div>
-										) }
-										{ executionDetailLines.length > 0 && (
-											<details className="flavor-agent-activity-row__details">
-												<summary className="flavor-agent-activity-row__meta">
-													Execution details
-												</summary>
-												{ executionDetailLines.map(
-													( line, index ) => (
-														<div
-															key={ `${ entry.id }:execution:${ index }` }
-															className="flavor-agent-activity-row__meta"
-														>
-															{ line }
-														</div>
-													)
-												) }
-											</details>
-										) }
-										{ getDiagnosticDetailLines( entry ).map(
+									{ getExecutionSummary( entry ) && (
+										<div className="flavor-agent-activity-row__meta">
+											{ getExecutionSummary( entry ) }
+										</div>
+									) }
+									{ executionDetailLines.length > 0 && (
+										<details className="flavor-agent-activity-row__details">
+											<summary className="flavor-agent-activity-row__meta">
+												Execution details
+											</summary>
+											{ executionDetailLines.map(
+												( line, index ) => (
+													<div
+														key={ `${ entry.id }:execution:${ index }` }
+														className="flavor-agent-activity-row__meta"
+													>
+														{ line }
+													</div>
+												)
+											) }
+										</details>
+									) }
+									{ getDiagnosticDetailLines( entry ).map(
 										( line, index ) => (
 											<div
 												key={ `${ entry.id }:diagnostic:${ index }` }

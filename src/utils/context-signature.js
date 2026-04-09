@@ -7,7 +7,9 @@ export function buildContextSignature( scopeOrInputs = {}, maybeInputs ) {
 
 		return stableSerialize( {
 			...( scope ? { scope } : {} ),
-			...( maybeInputs && typeof maybeInputs === 'object' ? maybeInputs : {} ),
+			...( maybeInputs && typeof maybeInputs === 'object'
+				? maybeInputs
+				: {} ),
 		} );
 	}
 

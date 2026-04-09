@@ -35,6 +35,10 @@ import {
 	buildTemplateStructureSnapshot,
 	collectViewportVisibilitySummary,
 } from '../utils/editor-context-metadata';
+import {
+	getExecutableSurfaceEffectiveStaleReason,
+	getExecutableSurfaceStaleMessage,
+} from '../utils/recommendation-stale-reasons';
 import { buildStyleBookDesignSemantics } from '../utils/style-design-semantics';
 import { STORE_NAME } from '../store';
 import {
@@ -123,10 +127,11 @@ function StyleBookPanel( {
 	if ( isStale ) {
 		reviewHint =
 			'This review is stale. Refresh recommendations before applying these operations.';
-		staleReason =
-			staleReasonType === 'server'
-				? 'This Style Book result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
-				: 'This Style Book result no longer matches the current live block styles or prompt. Refresh before reviewing or applying anything from the previous result.';
+		staleReason = getExecutableSurfaceStaleMessage( {
+			surfaceLabel: 'Style Book',
+			staleReasonType,
+			liveContextLabel: 'the current live block styles or prompt',
+		} );
 	} else if ( showSecondaryGuidance ) {
 		reviewHint =
 			'Only the operations shown here will run against the active Style Book example.';
@@ -382,9 +387,11 @@ export default function StyleBookRecommender() {
 		rawSuggestions,
 		currentExplanation,
 		currentRequestPrompt,
+		currentReviewContextSignature,
 		currentResultToken,
 		currentResultContextSignature,
 		currentResultRef,
+		reviewStaleReason,
 		storedStaleReason,
 		status,
 		selectedSuggestionKey,
@@ -504,10 +511,14 @@ export default function StyleBookRecommender() {
 				currentExplanation: store?.getStyleBookExplanation?.() || '',
 				currentRequestPrompt:
 					store?.getStyleBookRequestPrompt?.() || '',
+				currentReviewContextSignature:
+					store?.getStyleBookReviewContextSignature?.() || null,
 				currentResultToken: store?.getStyleBookResultToken?.() || 0,
 				currentResultContextSignature:
 					store?.getStyleBookContextSignature?.() || null,
 				currentResultRef: store?.getStyleBookResultRef?.() || null,
+				reviewStaleReason:
+					store?.getStyleBookReviewStaleReason?.() || null,
 				storedStaleReason: store?.getStyleBookStaleReason?.() || null,
 				status: store?.getStyleBookStatus?.() || 'idle',
 				selectedSuggestionKey:
@@ -613,9 +624,11 @@ export default function StyleBookRecommender() {
 		resultRequestSignature !== recommendationRequestSignature
 			? 'client'
 			: null;
-	const effectiveStaleReason =
-		clientStaleReason ||
-		( storedStaleReason === 'server' ? 'server' : null );
+	const effectiveStaleReason = getExecutableSurfaceEffectiveStaleReason( {
+		clientStaleReason,
+		reviewStaleReason,
+		storedStaleReason,
+	} );
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
@@ -658,6 +671,7 @@ export default function StyleBookRecommender() {
 		clearUndoError,
 		clearStyleBookRecommendations,
 		fetchStyleBookRecommendations,
+		revalidateStyleBookReviewFreshness,
 		setStyleBookApplyState,
 		setStyleBookSelectedSuggestion,
 		setStyleBookStatus,
@@ -876,6 +890,26 @@ export default function StyleBookRecommender() {
 		currentResultToken,
 		hasStoredResultForScope,
 		resultRequestSignature,
+		status,
+	] );
+
+	useEffect( () => {
+		if ( ! hasStoredResultForScope || status !== 'ready' ) {
+			return;
+		}
+
+		revalidateStyleBookReviewFreshness(
+			recommendationRequestSignature,
+			currentRequestInput
+		);
+	}, [
+		currentRequestInput,
+		currentReviewContextSignature,
+		currentResultRef,
+		currentResultToken,
+		hasStoredResultForScope,
+		recommendationRequestSignature,
+		revalidateStyleBookReviewFreshness,
 		status,
 	] );
 

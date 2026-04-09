@@ -280,8 +280,8 @@ describe( 'InspectorInjector', () => {
 
 		act( () => {
 			Array.from( getContainer().querySelectorAll( 'button' ) )
-				.find( ( button ) =>
-					button.textContent === 'Change block prompt'
+				.find(
+					( button ) => button.textContent === 'Change block prompt'
 				)
 				?.click();
 		} );

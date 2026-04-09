@@ -611,7 +611,12 @@ function sanitizeSuggestionGroupForThemeSafety( suggestions ) {
 }
 
 function hasExplicitlyEmptyInspectorPanels( blockContext = {} ) {
-	if ( ! Object.prototype.hasOwnProperty.call( blockContext, 'inspectorPanels' ) ) {
+	if (
+		! Object.prototype.hasOwnProperty.call(
+			blockContext,
+			'inspectorPanels'
+		)
+	) {
 		return false;
 	}
 
@@ -631,17 +636,13 @@ function summarizeSuggestionCounts( counts = {} ) {
 
 	if ( Number.isInteger( counts.settings ) && counts.settings > 0 ) {
 		parts.push(
-			`${ counts.settings } setting${
-				counts.settings === 1 ? '' : 's'
-			}`
+			`${ counts.settings } setting${ counts.settings === 1 ? '' : 's' }`
 		);
 	}
 
 	if ( Number.isInteger( counts.styles ) && counts.styles > 0 ) {
 		parts.push(
-			`${ counts.styles } style${
-				counts.styles === 1 ? '' : 's'
-			}`
+			`${ counts.styles } style${ counts.styles === 1 ? '' : 's' }`
 		);
 	}
 
@@ -681,7 +682,9 @@ export function buildBlockRecommendationDiagnostics(
 	blockContext = {}
 ) {
 	const rawCounts = getRecommendationGroupCounts( rawRecommendations );
-	const finalCounts = getRecommendationGroupCounts( sanitizedRecommendations );
+	const finalCounts = getRecommendationGroupCounts(
+		sanitizedRecommendations
+	);
 
 	if ( finalCounts.block > 0 ) {
 		return null;
@@ -709,12 +712,12 @@ export function buildBlockRecommendationDiagnostics(
 		contentSafeBlockSuggestions = [];
 	} else if ( restrictions.contentOnly ) {
 		if ( usesInnerBlocksAsContent( blockContext ) ) {
-			contentSafeBlockSuggestions =
-				bindingSafeBlockSuggestions.filter( ( suggestion ) =>
-					isAdvisoryOnlyBlockSuggestion( suggestion )
-				);
+			contentSafeBlockSuggestions = bindingSafeBlockSuggestions.filter(
+				( suggestion ) => isAdvisoryOnlyBlockSuggestion( suggestion )
+			);
 		} else {
-			const contentAttributeKeys = getContentAttributeKeys( blockContext );
+			const contentAttributeKeys =
+				getContentAttributeKeys( blockContext );
 
 			contentSafeBlockSuggestions = bindingSafeBlockSuggestions
 				.map( ( suggestion ) =>
@@ -757,7 +760,8 @@ export function buildBlockRecommendationDiagnostics(
 		}
 
 		if (
-			bindingSafeBlockSuggestions.length < themeSafeBlockSuggestions.length
+			bindingSafeBlockSuggestions.length <
+			themeSafeBlockSuggestions.length
 		) {
 			reasonCodes.push( 'binding_filters_removed_block_items' );
 			detailLines.push(

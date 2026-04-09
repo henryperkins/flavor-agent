@@ -12,10 +12,18 @@ describe( 'template apply state', () => {
 	test( 'preview selection and apply success are tracked separately from fetched suggestions', () => {
 		let state = reducer(
 			undefined,
-			actions.setTemplateRecommendations( 'theme//home', {
-				suggestions: [ { label: 'Refresh header' } ],
-				explanation: 'Review before applying.',
-			} )
+			actions.setTemplateRecommendations(
+				'theme//home',
+				{
+					suggestions: [ { label: 'Refresh header' } ],
+					explanation: 'Review before applying.',
+				},
+				'',
+				null,
+				null,
+				'review-template',
+				'resolved-template'
+			)
 		);
 
 		state = reducer(
@@ -79,6 +87,14 @@ describe( 'template apply state', () => {
 				]
 			)
 		);
+		state = reducer(
+			state,
+			actions.setTemplateReviewFreshnessState(
+				'stale',
+				2,
+				'server-review'
+			)
+		);
 		state = reducer( state, actions.setTemplateStatus( 'loading' ) );
 
 		expect( selectors.getTemplateSelectedSuggestionKey( state ) ).toBe(
@@ -92,6 +108,10 @@ describe( 'template apply state', () => {
 		expect( selectors.getTemplateLastAppliedOperations( state ) ).toEqual(
 			[]
 		);
+		expect( selectors.getTemplateReviewFreshnessStatus( state ) ).toBe(
+			'idle'
+		);
+		expect( selectors.getTemplateReviewStaleReason( state ) ).toBeNull();
 	} );
 
 	test( 'selecting a new preview clears stale apply errors', () => {
@@ -182,7 +202,10 @@ describe( 'template apply state', () => {
 					explanation: 'Review before applying.',
 				},
 				'Prompt',
-				1
+				1,
+				null,
+				'review-template',
+				'resolved-template'
 			)
 		);
 		state = reducer(
@@ -240,6 +263,53 @@ describe( 'template apply state', () => {
 		expect( selectors.getTemplateLastAppliedOperations( state ) ).toEqual(
 			[]
 		);
+	} );
+
+	test( 'template loading invalidates in-flight review freshness completions', () => {
+		let state = reducer(
+			undefined,
+			actions.setTemplateRecommendations(
+				'theme//home',
+				{
+					suggestions: [ { label: 'Refresh header' } ],
+					explanation: 'Review before applying.',
+				},
+				'Prompt',
+				1,
+				'template-signature',
+				'review-template',
+				'resolved-template'
+			)
+		);
+
+		expect( selectors.getTemplateReviewFreshnessStatus( state ) ).toBe(
+			'fresh'
+		);
+
+		state = reducer(
+			state,
+			actions.setTemplateStatus( 'loading', null, 2 )
+		);
+
+		expect( selectors.getTemplateReviewFreshnessStatus( state ) ).toBe(
+			'idle'
+		);
+
+		const staleCompletion = reducer(
+			state,
+			actions.setTemplateReviewFreshnessState(
+				'stale',
+				1,
+				'server-review'
+			)
+		);
+
+		expect(
+			selectors.getTemplateReviewFreshnessStatus( staleCompletion )
+		).toBe( 'idle' );
+		expect(
+			selectors.getTemplateReviewStaleReason( staleCompletion )
+		).toBeNull();
 	} );
 
 	test( 'loading a fresh template-part recommendation set keeps the active review target but resets apply feedback', () => {

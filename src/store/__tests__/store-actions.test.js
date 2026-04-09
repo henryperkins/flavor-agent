@@ -1,17 +1,23 @@
-jest.mock('@wordpress/api-fetch', () => jest.fn());
-jest.mock('../../utils/template-actions', () => ({
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '../../utils/template-actions', () => ( {
 	applyTemplatePartSuggestionOperations: jest.fn(),
 	applyTemplateSuggestionOperations: jest.fn(),
-	getTemplateActivityUndoState: jest.fn((activity) => activity?.undo || {}),
-	getTemplatePartActivityUndoState: jest.fn((activity) => activity?.undo || {}),
+	getTemplateActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
+	getTemplatePartActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	undoTemplatePartSuggestionOperations: jest.fn(),
 	undoTemplateSuggestionOperations: jest.fn(),
-}));
-jest.mock('../../utils/style-operations', () => ({
+} ) );
+jest.mock( '../../utils/style-operations', () => ( {
 	applyGlobalStyleSuggestionOperations: jest.fn(),
-	getGlobalStylesActivityUndoState: jest.fn((activity) => activity?.undo || {}),
+	getGlobalStylesActivityUndoState: jest.fn(
+		( activity ) => activity?.undo || {}
+	),
 	undoGlobalStyleSuggestionOperations: jest.fn(),
-}));
+} ) );
 
 import apiFetch from '@wordpress/api-fetch';
 
@@ -41,8 +47,8 @@ import {
 } from '../activity-history';
 import { actions } from '../index';
 
-describe('store action thunks', () => {
-	beforeEach(() => {
+describe( 'store action thunks', () => {
+	beforeEach( () => {
 		jest.clearAllMocks();
 		jest.useFakeTimers();
 		window.sessionStorage.clear();
@@ -57,58 +63,59 @@ describe('store action thunks', () => {
 		actions._globalStylesAbort = null;
 		actions._styleBookAbort = null;
 		getTemplateActivityUndoState.mockImplementation(
-			(activity) => activity?.undo || {}
+			( activity ) => activity?.undo || {}
 		);
 		getTemplatePartActivityUndoState.mockImplementation(
-			(activity) => activity?.undo || {}
+			( activity ) => activity?.undo || {}
 		);
 		getGlobalStylesActivityUndoState.mockImplementation(
-			(activity) => activity?.undo || {}
+			( activity ) => activity?.undo || {}
 		);
-	});
+	} );
 
-	afterEach(() => {
-		if (actions._activitySessionRetryTimer) {
-			window.clearTimeout(actions._activitySessionRetryTimer);
+	afterEach( () => {
+		if ( actions._activitySessionRetryTimer ) {
+			window.clearTimeout( actions._activitySessionRetryTimer );
 			actions._activitySessionRetryTimer = null;
 		}
 
 		jest.useRealTimers();
-	});
+	} );
 
-	test('fetchBlockRecommendations reads request state from thunk selectors', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'fetchBlockRecommendations reads request state from thunk selectors', async () => {
+		apiFetch.mockResolvedValue( {
 			payload: {
 				settings: [],
 				styles: [],
-				block: [{ label: 'Rewrite intro' }],
+				block: [ { label: 'Rewrite intro' } ],
 				explanation: 'Mocked response',
 			},
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getBlockRequestToken: jest.fn().mockReturnValue(2),
+			getBlockRequestToken: jest.fn().mockReturnValue( 2 ),
 		};
 		const context = {
 			block: {
 				name: 'core/paragraph',
 			},
 		};
-		const contextSignature = buildBlockRecommendationContextSignature(context);
+		const contextSignature =
+			buildBlockRecommendationContextSignature( context );
 
 		await actions.fetchBlockRecommendations(
 			'block-1',
 			context,
 			'Tighten this copy.'
-		)({
+		)( {
 			dispatch,
 			select,
-		});
+		} );
 
-		expect(select.getBlockRequestToken).toHaveBeenCalledWith('block-1');
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getBlockRequestToken ).toHaveBeenCalledWith( 'block-1' );
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-block',
 				method: 'POST',
 				data: {
@@ -116,41 +123,41 @@ describe('store action thunks', () => {
 					prompt: 'Tighten this copy.',
 					clientId: 'block-1',
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setBlockRequestState('block-1', 'loading', null, 3)
+			actions.setBlockRequestState( 'block-1', 'loading', null, 3 )
 		);
-		expect(dispatch.mock.calls[1][0]).toEqual(
-			expect.objectContaining({
+		expect( dispatch.mock.calls[ 1 ][ 0 ] ).toEqual(
+			expect.objectContaining( {
 				type: 'SET_BLOCK_RECS',
 				clientId: 'block-1',
 				requestToken: 3,
 				contextSignature,
-				recommendations: expect.objectContaining({
+				recommendations: expect.objectContaining( {
 					blockName: 'core/paragraph',
 					blockContext: context.block,
 					explanation: 'Mocked response',
-				}),
-			})
+				} ),
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			3,
-			actions.setBlockRequestState('block-1', 'ready', null, 3)
+			actions.setBlockRequestState( 'block-1', 'ready', null, 3 )
 		);
-	});
+	} );
 
-	test('fetchNavigationRecommendations reads request token from thunk selectors', async () => {
-		apiFetch.mockImplementation(({ path, method }) => {
+	test( 'fetchNavigationRecommendations reads request token from thunk selectors', async () => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/recommend-navigation' &&
 				method === 'POST'
 			) {
-				return Promise.resolve({
-					suggestions: [{ label: 'Group utility links' }],
+				return Promise.resolve( {
+					suggestions: [ { label: 'Group utility links' } ],
 					explanation: 'Mocked navigation response',
-				});
+				} );
 			}
 
 			if (
@@ -158,15 +165,17 @@ describe('store action thunks', () => {
 					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({ entries: [] });
+				return Promise.resolve( { entries: [] } );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getNavigationRequestToken: jest.fn().mockReturnValue(1),
+			getNavigationRequestToken: jest.fn().mockReturnValue( 1 ),
 		};
 		const input = {
 			blockClientId: 'nav-1',
@@ -177,10 +186,10 @@ describe('store action thunks', () => {
 			prompt: 'Simplify the header menu.',
 		};
 
-		await actions.fetchNavigationRecommendations(input)({
+		await actions.fetchNavigationRecommendations( input )( {
 			dispatch,
 			registry: {
-				select: jest.fn((storeName) =>
+				select: jest.fn( ( storeName ) =>
 					storeName === 'core/editor'
 						? {
 								getCurrentPostType: () => 'wp_template',
@@ -190,11 +199,11 @@ describe('store action thunks', () => {
 				),
 			},
 			select,
-		});
+		} );
 
-		expect(select.getNavigationRequestToken).toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getNavigationRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-navigation',
 				method: 'POST',
 				data: {
@@ -211,18 +220,18 @@ describe('store action thunks', () => {
 						'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->',
 					prompt: 'Simplify the header menu.',
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setNavigationStatus('loading', null, 2, 'nav-1')
+			actions.setNavigationStatus( 'loading', null, 2, 'nav-1' )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setNavigationRecommendations(
 				'nav-1',
 				{
-					suggestions: [{ label: 'Group utility links' }],
+					suggestions: [ { label: 'Group utility links' } ],
 					explanation: 'Mocked navigation response',
 				},
 				'Simplify the header menu.',
@@ -230,14 +239,14 @@ describe('store action thunks', () => {
 				'navigation-signature'
 			)
 		);
-	});
+	} );
 
-	test('fetchBlockRecommendations stores fallback diagnostics after surfacing request errors', async () => {
-		apiFetch.mockRejectedValue(new Error('Network blew up.'));
+	test( 'fetchBlockRecommendations stores fallback diagnostics after surfacing request errors', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network blew up.' ) );
 
 		const dispatch = jest.fn();
 		const select = {
-			getBlockRequestToken: jest.fn().mockReturnValue(4),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 		const context = {
 			block: {
@@ -247,33 +256,39 @@ describe('store action thunks', () => {
 				},
 			},
 		};
-		const contextSignature = buildBlockRecommendationContextSignature(context);
+		const contextSignature =
+			buildBlockRecommendationContextSignature( context );
 
 		await actions.fetchBlockRecommendations(
 			'block-1',
 			context,
 			'Tighten this copy.'
-		)({
+		)( {
 			dispatch,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setBlockRequestState('block-1', 'loading', null, 5)
+			actions.setBlockRequestState( 'block-1', 'loading', null, 5 )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
-			actions.setBlockRequestState('block-1', 'error', 'Network blew up.', 5)
+			actions.setBlockRequestState(
+				'block-1',
+				'error',
+				'Network blew up.',
+				5
+			)
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			3,
-			expect.objectContaining({
+			expect.objectContaining( {
 				type: 'SET_BLOCK_RECS',
 				clientId: 'block-1',
 				requestToken: 5,
 				contextSignature,
-				recommendations: expect.objectContaining({
+				recommendations: expect.objectContaining( {
 					blockName: 'core/paragraph',
 					blockContext: context.block,
 					prompt: 'Tighten this copy.',
@@ -282,25 +297,25 @@ describe('store action thunks', () => {
 					block: [],
 					explanation: '',
 					requestMeta: null,
-					timestamp: expect.any(Number),
-				}),
-				diagnostics: expect.objectContaining({
+					timestamp: expect.any( Number ),
+				} ),
+				diagnostics: expect.objectContaining( {
 					type: 'failure',
 					errorMessage: 'Network blew up.',
 					prompt: 'Tighten this copy.',
 					requestToken: 5,
-				}),
-			})
+				} ),
+			} )
 		);
-	});
+	} );
 
-	test('fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
-		apiFetch.mockImplementation(({ path, method }) => {
+	test( 'fetchNavigationRecommendations dispatches fallback data on request failures', async () => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/recommend-navigation' &&
 				method === 'POST'
 			) {
-				return Promise.reject(new Error('Network blew up.'));
+				return Promise.reject( new Error( 'Network blew up.' ) );
 			}
 
 			if (
@@ -308,15 +323,17 @@ describe('store action thunks', () => {
 					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({ entries: [] });
+				return Promise.resolve( { entries: [] } );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getNavigationRequestToken: jest.fn().mockReturnValue(3),
+			getNavigationRequestToken: jest.fn().mockReturnValue( 3 ),
 		};
 		const input = {
 			blockClientId: 'nav-2',
@@ -324,10 +341,10 @@ describe('store action thunks', () => {
 			prompt: 'Tighten the utility links.',
 		};
 
-		await actions.fetchNavigationRecommendations(input)({
+		await actions.fetchNavigationRecommendations( input )( {
 			dispatch,
 			registry: {
-				select: jest.fn((storeName) =>
+				select: jest.fn( ( storeName ) =>
 					storeName === 'core/editor'
 						? {
 								getCurrentPostType: () => 'wp_template',
@@ -337,13 +354,13 @@ describe('store action thunks', () => {
 				),
 			},
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setNavigationStatus('loading', null, 4, 'nav-2')
+			actions.setNavigationStatus( 'loading', null, 4, 'nav-2' )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setNavigationRecommendations(
 				'nav-2',
@@ -355,23 +372,29 @@ describe('store action thunks', () => {
 				4
 			)
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			3,
-			actions.setNavigationStatus('error', 'Network blew up.', 4, 'nav-2')
+			actions.setNavigationStatus(
+				'error',
+				'Network blew up.',
+				4,
+				'nav-2'
+			)
 		);
-		expect(actions._navigationAbort).toBeNull();
-	});
+		expect( actions._navigationAbort ).toBeNull();
+	} );
 
-	test('fetchTemplateRecommendations reads request token from thunk selectors', async () => {
-		apiFetch.mockResolvedValue({
-			suggestions: [{ label: 'Refresh template hierarchy' }],
+	test( 'fetchTemplateRecommendations reads request token from thunk selectors', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Refresh template hierarchy' } ],
 			explanation: 'Mocked template response',
+			reviewContextSignature: 'review-template',
 			resolvedContextSignature: 'resolved-template',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getTemplateRequestToken: jest.fn().mockReturnValue(4),
+			getTemplateRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 		const input = {
 			contextSignature: 'template-signature',
@@ -380,14 +403,14 @@ describe('store action thunks', () => {
 			templateType: 'home',
 		};
 
-		await actions.fetchTemplateRecommendations(input)({
+		await actions.fetchTemplateRecommendations( input )( {
 			dispatch,
 			select,
-		});
+		} );
 
-		expect(select.getTemplateRequestToken).toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getTemplateRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-template',
 				method: 'POST',
 				data: {
@@ -395,39 +418,42 @@ describe('store action thunks', () => {
 					prompt: 'Tighten the structure.',
 					templateType: 'home',
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setTemplateStatus('loading', null, 5)
+			actions.setTemplateStatus( 'loading', null, 5 )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setTemplateRecommendations(
 				'theme//home',
 				{
-					suggestions: [{ label: 'Refresh template hierarchy' }],
+					suggestions: [ { label: 'Refresh template hierarchy' } ],
 					explanation: 'Mocked template response',
+					reviewContextSignature: 'review-template',
 					resolvedContextSignature: 'resolved-template',
 				},
 				'Tighten the structure.',
 				5,
 				'template-signature',
+				'review-template',
 				'resolved-template'
 			)
 		);
-	});
+	} );
 
-	test('fetchGlobalStylesRecommendations stores the request context signature without posting it to the API', async () => {
-		apiFetch.mockResolvedValue({
-			suggestions: [{ label: 'Use accent canvas' }],
+	test( 'fetchGlobalStylesRecommendations stores the request context signature without posting it to the API', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Use accent canvas' } ],
 			explanation: 'Mocked Global Styles response',
+			reviewContextSignature: 'review-global-styles',
 			resolvedContextSignature: 'resolved-global-styles',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getGlobalStylesRequestToken: jest.fn().mockReturnValue(2),
+			getGlobalStylesRequestToken: jest.fn().mockReturnValue( 2 ),
 		};
 		const input = {
 			scope: {
@@ -446,17 +472,18 @@ describe('store action thunks', () => {
 				},
 			},
 			prompt: 'Make the site feel more editorial.',
-			contextSignature: '{"scopeKey":"global_styles:17","globalStylesId":"17"}',
+			contextSignature:
+				'{"scopeKey":"global_styles:17","globalStylesId":"17"}',
 		};
 
-		await actions.fetchGlobalStylesRecommendations(input)({
+		await actions.fetchGlobalStylesRecommendations( input )( {
 			dispatch,
 			select,
-		});
+		} );
 
-		expect(select.getGlobalStylesRequestToken).toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getGlobalStylesRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-style',
 				method: 'POST',
 				data: {
@@ -464,49 +491,56 @@ describe('store action thunks', () => {
 					styleContext: input.styleContext,
 					prompt: input.prompt,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setGlobalStylesStatus('loading', null, 3)
+			actions.setGlobalStylesStatus( 'loading', null, 3 )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setGlobalStylesRecommendations(
 				input.scope,
 				{
-					suggestions: [{ label: 'Use accent canvas' }],
+					suggestions: [ { label: 'Use accent canvas' } ],
 					explanation: 'Mocked Global Styles response',
+					reviewContextSignature: 'review-global-styles',
 					resolvedContextSignature: 'resolved-global-styles',
 				},
 				'Make the site feel more editorial.',
 				3,
 				input.contextSignature,
+				'review-global-styles',
 				'resolved-global-styles'
 			)
 		);
-	});
+	} );
 
-	test('fetchPatternRecommendations aborts the previous request and ignores abort errors', async () => {
+	test( 'fetchPatternRecommendations aborts the previous request and ignores abort errors', async () => {
 		const previousAbort = jest.fn();
 		actions._patternAbort = { abort: previousAbort };
-		apiFetch.mockImplementation(({ path, method }) => {
-			if (path === '/flavor-agent/v1/recommend-patterns' && method === 'POST') {
-				return Promise.reject({ name: 'AbortError' });
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-patterns' &&
+				method === 'POST'
+			) {
+				return Promise.reject( { name: 'AbortError' } );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
 		const dispatch = jest.fn();
 
-		await actions.fetchPatternRecommendations({
+		await actions.fetchPatternRecommendations( {
 			postType: 'page',
 			prompt: 'Find cleaner pattern options.',
-		})({
+		} )( {
 			dispatch,
 			registry: {
-				select: jest.fn((storeName) =>
+				select: jest.fn( ( storeName ) =>
 					storeName === 'core/editor'
 						? {
 								getCurrentPostType: () => 'post',
@@ -516,45 +550,54 @@ describe('store action thunks', () => {
 				),
 			},
 			select: {},
-		});
+		} );
 
-		expect(previousAbort).toHaveBeenCalledTimes(1);
-		expect(dispatch).toHaveBeenCalledTimes(1);
-		expect(dispatch).toHaveBeenCalledWith(actions.setPatternStatus('loading'));
-		expect(actions._patternAbort).toBeNull();
-	});
+		expect( previousAbort ).toHaveBeenCalledTimes( 1 );
+		expect( dispatch ).toHaveBeenCalledTimes( 1 );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setPatternStatus( 'loading' )
+		);
+		expect( actions._patternAbort ).toBeNull();
+	} );
 
-	test('fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {
-		apiFetch.mockImplementation(({ path, method }) => {
-			if (path === '/flavor-agent/v1/recommend-content' && method === 'POST') {
-				return Promise.resolve({
+	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-content' &&
+				method === 'POST'
+			) {
+				return Promise.resolve( {
 					mode: 'edit',
 					title: 'Retail floors to agent workflows',
-					summary: 'Lead with the progression and tighten the opener.',
-					content: 'Retail floors. WordPress themes. Cloud platforms.',
-					notes: ['Keep the first paragraph shorter.'],
+					summary:
+						'Lead with the progression and tighten the opener.',
+					content:
+						'Retail floors. WordPress themes. Cloud platforms.',
+					notes: [ 'Keep the first paragraph shorter.' ],
 					issues: [],
-				});
+				} );
 			}
 
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({ entries: [] });
+				return Promise.resolve( { entries: [] } );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityLog: jest.fn().mockReturnValue([]),
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getContentRequestToken: jest.fn().mockReturnValue(2),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getContentRequestToken: jest.fn().mockReturnValue( 2 ),
 		};
 
-		await actions.fetchContentRecommendations({
+		await actions.fetchContentRecommendations( {
 			mode: 'edit',
 			prompt: 'Tighten the opener and keep the rhythm brisk.',
 			postContext: {
@@ -562,10 +605,10 @@ describe('store action thunks', () => {
 				title: 'Working draft',
 				content: 'Retail floors. WordPress themes.',
 			},
-		})({
+		} )( {
 			dispatch,
 			registry: {
-				select: jest.fn((storeName) =>
+				select: jest.fn( ( storeName ) =>
 					storeName === 'core/editor'
 						? {
 								getCurrentPostType: () => 'post',
@@ -575,10 +618,10 @@ describe('store action thunks', () => {
 				),
 			},
 			select,
-		});
+		} );
 
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-content',
 				method: 'POST',
 				data: {
@@ -598,21 +641,23 @@ describe('store action thunks', () => {
 						stylesheet: '',
 					},
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setContentStatus('loading', null, 3)
+			actions.setContentStatus( 'loading', null, 3 )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setContentRecommendation(
 				{
 					mode: 'edit',
 					title: 'Retail floors to agent workflows',
-					summary: 'Lead with the progression and tighten the opener.',
-					content: 'Retail floors. WordPress themes. Cloud platforms.',
-					notes: ['Keep the first paragraph shorter.'],
+					summary:
+						'Lead with the progression and tighten the opener.',
+					content:
+						'Retail floors. WordPress themes. Cloud platforms.',
+					notes: [ 'Keep the first paragraph shorter.' ],
 					issues: [],
 				},
 				'Tighten the opener and keep the rhythm brisk.',
@@ -620,22 +665,23 @@ describe('store action thunks', () => {
 				3
 			)
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			3,
-			actions.setActivitySession('post:42', [])
+			actions.setActivitySession( 'post:42', [] )
 		);
-	});
+	} );
 
-	test('fetchStyleBookRecommendations stores block-scoped request metadata without posting the context signature', async () => {
-		apiFetch.mockResolvedValue({
-			suggestions: [{ label: 'Tighten paragraph rhythm' }],
+	test( 'fetchStyleBookRecommendations stores block-scoped request metadata without posting the context signature', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Tighten paragraph rhythm' } ],
 			explanation: 'Mocked Style Book response',
+			reviewContextSignature: 'review-style-book',
 			resolvedContextSignature: 'resolved-style-book',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getStyleBookRequestToken: jest.fn().mockReturnValue(1),
+			getStyleBookRequestToken: jest.fn().mockReturnValue( 1 ),
 		};
 		const input = {
 			scope: {
@@ -665,14 +711,14 @@ describe('store action thunks', () => {
 				'{"scopeKey":"style_book:17:core/paragraph","globalStylesId":"17"}',
 		};
 
-		await actions.fetchStyleBookRecommendations(input)({
+		await actions.fetchStyleBookRecommendations( input )( {
 			dispatch,
 			select,
-		});
+		} );
 
-		expect(select.getStyleBookRequestToken).toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getStyleBookRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-style',
 				method: 'POST',
 				data: {
@@ -680,38 +726,372 @@ describe('store action thunks', () => {
 					styleContext: input.styleContext,
 					prompt: input.prompt,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setStyleBookStatus('loading', null, 2)
+			actions.setStyleBookStatus( 'loading', null, 2 )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setStyleBookRecommendations(
 				input.scope,
 				{
-					suggestions: [{ label: 'Tighten paragraph rhythm' }],
+					suggestions: [ { label: 'Tighten paragraph rhythm' } ],
 					explanation: 'Mocked Style Book response',
+					reviewContextSignature: 'review-style-book',
 					resolvedContextSignature: 'resolved-style-book',
 				},
 				input.prompt,
 				2,
 				input.contextSignature,
+				'review-style-book',
 				'resolved-style-book'
 			)
 		);
-	});
+	} );
 
-	test('loadActivitySession migrates in-memory unsaved activity into the first concrete document scope when explicitly allowed', async () => {
-		const draftEntry = createActivityEntry({
+	test( 'revalidateTemplateReviewFreshness marks stored template reviews stale when the server review signature drifts', async () => {
+		apiFetch.mockResolvedValue( {
+			reviewContextSignature: 'review-template-next',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getTemplateReviewRequestToken: jest.fn().mockReturnValue( 2 ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Tighten the structure.' ),
+			getTemplateContextSignature: jest
+				.fn()
+				.mockReturnValue( 'template-signature' ),
+			getTemplateReviewContextSignature: jest
+				.fn()
+				.mockReturnValue( 'review-template-stored' ),
+		};
+		const currentRequestSignature =
+			buildTemplateRecommendationRequestSignature( {
+				templateRef: 'theme//home',
+				prompt: 'Tighten the structure.',
+				contextSignature: 'template-signature',
+			} );
+
+		const result = await actions.revalidateTemplateReviewFreshness(
+			currentRequestSignature,
+			{
+				templateRef: 'theme//home',
+				prompt: 'Tighten the structure.',
+				contextSignature: 'template-signature',
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-template',
+				method: 'POST',
+				data: {
+					templateRef: 'theme//home',
+					prompt: 'Tighten the structure.',
+					resolveSignatureOnly: true,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setTemplateReviewFreshnessState( 'checking', 3 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setTemplateReviewFreshnessState(
+				'stale',
+				3,
+				'server-review'
+			)
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			staleReason: 'server-review',
+			surface: 'template',
+		} );
+	} );
+
+	test( 'revalidateGlobalStylesReviewFreshness marks stored global styles reviews fresh when the server review signature matches', async () => {
+		apiFetch.mockResolvedValue( {
+			reviewContextSignature: 'review-global-styles',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getGlobalStylesReviewRequestToken: jest.fn().mockReturnValue( 4 ),
+			getGlobalStylesScopeKey: jest
+				.fn()
+				.mockReturnValue( 'global_styles:17' ),
+			getGlobalStylesResultRef: jest.fn().mockReturnValue( '17' ),
+			getGlobalStylesRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Keep the palette restrained.' ),
+			getGlobalStylesContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-style-context' ),
+			getGlobalStylesReviewContextSignature: jest
+				.fn()
+				.mockReturnValue( 'review-global-styles' ),
+		};
+		const currentRequestSignature =
+			buildGlobalStylesRecommendationRequestSignature( {
+				scope: {
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
+				},
+				prompt: 'Keep the palette restrained.',
+				contextSignature: 'shared-style-context',
+			} );
+
+		const result = await actions.revalidateGlobalStylesReviewFreshness(
+			currentRequestSignature,
+			{
+				scope: {
+					surface: 'global-styles',
+					scopeKey: 'global_styles:17',
+					globalStylesId: '17',
+				},
+				styleContext: {
+					currentConfig: { styles: {} },
+					mergedConfig: { styles: {} },
+				},
+				prompt: 'Keep the palette restrained.',
+				contextSignature: 'shared-style-context',
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-style',
+				method: 'POST',
+				data: {
+					scope: {
+						surface: 'global-styles',
+						scopeKey: 'global_styles:17',
+						globalStylesId: '17',
+					},
+					styleContext: {
+						currentConfig: { styles: {} },
+						mergedConfig: { styles: {} },
+					},
+					prompt: 'Keep the palette restrained.',
+					resolveSignatureOnly: true,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setGlobalStylesReviewFreshnessState( 'checking', 5 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setGlobalStylesReviewFreshnessState( 'fresh', 5 )
+		);
+		expect( result ).toEqual( {
+			ok: true,
+			reviewContextSignature: 'review-global-styles',
+			surface: 'global-styles',
+		} );
+	} );
+
+	test( 'revalidateTemplatePartReviewFreshness marks stored template-part reviews stale when the server review signature drifts', async () => {
+		apiFetch.mockResolvedValue( {
+			reviewContextSignature: 'review-template-part-next',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getTemplatePartReviewRequestToken: jest.fn().mockReturnValue( 1 ),
+			getTemplatePartResultRef: jest
+				.fn()
+				.mockReturnValue( 'theme//header' ),
+			getTemplatePartRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Add a compact utility row.' ),
+			getTemplatePartContextSignature: jest
+				.fn()
+				.mockReturnValue( 'template-part-signature' ),
+			getTemplatePartReviewContextSignature: jest
+				.fn()
+				.mockReturnValue( 'review-template-part-stored' ),
+		};
+		const currentRequestSignature =
+			buildTemplatePartRecommendationRequestSignature( {
+				templatePartRef: 'theme//header',
+				prompt: 'Add a compact utility row.',
+				contextSignature: 'template-part-signature',
+			} );
+
+		const result = await actions.revalidateTemplatePartReviewFreshness(
+			currentRequestSignature,
+			{
+				templatePartRef: 'theme//header',
+				prompt: 'Add a compact utility row.',
+				visiblePatternNames: [ 'theme/header-utility' ],
+				contextSignature: 'template-part-signature',
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-template-part',
+				method: 'POST',
+				data: {
+					templatePartRef: 'theme//header',
+					prompt: 'Add a compact utility row.',
+					visiblePatternNames: [ 'theme/header-utility' ],
+					resolveSignatureOnly: true,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setTemplatePartReviewFreshnessState( 'checking', 2 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setTemplatePartReviewFreshnessState(
+				'stale',
+				2,
+				'server-review'
+			)
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			staleReason: 'server-review',
+			surface: 'template-part',
+		} );
+	} );
+
+	test( 'revalidateStyleBookReviewFreshness marks stored style book reviews fresh when the server review signature matches', async () => {
+		apiFetch.mockResolvedValue( {
+			reviewContextSignature: 'review-style-book',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getStyleBookReviewRequestToken: jest.fn().mockReturnValue( 3 ),
+			getStyleBookScopeKey: jest
+				.fn()
+				.mockReturnValue( 'style_book:17:core/paragraph' ),
+			getStyleBookGlobalStylesId: jest.fn().mockReturnValue( '17' ),
+			getStyleBookBlockName: jest
+				.fn()
+				.mockReturnValue( 'core/paragraph' ),
+			getStyleBookRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Keep the paragraph understated.' ),
+			getStyleBookContextSignature: jest
+				.fn()
+				.mockReturnValue( 'shared-style-book-context' ),
+			getStyleBookReviewContextSignature: jest
+				.fn()
+				.mockReturnValue( 'review-style-book' ),
+		};
+		const currentRequestSignature =
+			buildStyleBookRecommendationRequestSignature( {
+				scope: {
+					scopeKey: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					blockName: 'core/paragraph',
+				},
+				prompt: 'Keep the paragraph understated.',
+				contextSignature: 'shared-style-book-context',
+			} );
+
+		const result = await actions.revalidateStyleBookReviewFreshness(
+			currentRequestSignature,
+			{
+				scope: {
+					surface: 'style-book',
+					scopeKey: 'style_book:17:core/paragraph',
+					globalStylesId: '17',
+					entityId: 'core/paragraph',
+					blockName: 'core/paragraph',
+				},
+				styleContext: {
+					currentConfig: { styles: {} },
+					mergedConfig: { styles: {} },
+					styleBookTarget: {
+						blockName: 'core/paragraph',
+						blockTitle: 'Paragraph',
+						currentStyles: {},
+						mergedStyles: {},
+					},
+				},
+				prompt: 'Keep the paragraph understated.',
+				contextSignature: 'shared-style-book-context',
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-style',
+				method: 'POST',
+				data: {
+					scope: {
+						surface: 'style-book',
+						scopeKey: 'style_book:17:core/paragraph',
+						globalStylesId: '17',
+						entityId: 'core/paragraph',
+						blockName: 'core/paragraph',
+					},
+					styleContext: {
+						currentConfig: { styles: {} },
+						mergedConfig: { styles: {} },
+						styleBookTarget: {
+							blockName: 'core/paragraph',
+							blockTitle: 'Paragraph',
+							currentStyles: {},
+							mergedStyles: {},
+						},
+					},
+					prompt: 'Keep the paragraph understated.',
+					resolveSignatureOnly: true,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setStyleBookReviewFreshnessState( 'checking', 4 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setStyleBookReviewFreshnessState( 'fresh', 4 )
+		);
+		expect( result ).toEqual( {
+			ok: true,
+			reviewContextSignature: 'review-style-book',
+			surface: 'style-book',
+		} );
+	} );
+
+	test( 'loadActivitySession migrates in-memory unsaved activity into the first concrete document scope when explicitly allowed', async () => {
+		const draftEntry = createActivityEntry( {
 			type: 'apply_suggestion',
 			surface: 'block',
 			suggestion: 'Refresh content',
 			target: {
 				clientId: 'block-1',
 			},
-		});
+		} );
 		const persistedEntry = {
 			...draftEntry,
 			document: {
@@ -724,9 +1104,9 @@ describe('store action thunks', () => {
 				updatedAt: draftEntry.timestamp,
 			},
 		};
-		apiFetch.mockImplementation(({ path, method, data }) => {
-			if (path === '/flavor-agent/v1/activity' && method === 'POST') {
-				return Promise.resolve({
+		apiFetch.mockImplementation( ( { path, method, data } ) => {
+			if ( path === '/flavor-agent/v1/activity' && method === 'POST' ) {
+				return Promise.resolve( {
 					entry: {
 						...data.entry,
 						persistence: {
@@ -734,27 +1114,29 @@ describe('store action thunks', () => {
 							updatedAt: draftEntry.timestamp,
 						},
 					},
-				});
+				} );
 			}
 
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({
-					entries: [persistedEntry],
-				});
+				return Promise.resolve( {
+					entries: [ persistedEntry ],
+				} );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([draftEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [ draftEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -764,70 +1146,70 @@ describe('store action thunks', () => {
 			),
 		};
 
-		await actions.loadActivitySession({
+		await actions.loadActivitySession( {
 			allowUnsavedMigration: true,
-		})({
+		} )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity',
 				method: 'POST',
-			})
+			} )
 		);
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
 				method: 'GET',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [
-				expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
 					id: draftEntry.id,
-					document: expect.objectContaining({
+					document: expect.objectContaining( {
 						scopeKey: 'post:42',
 						postType: 'post',
 						entityId: '42',
-					}),
-				}),
-			])
+					} ),
+				} ),
+			] )
 		);
-		expect(readPersistedActivityLog('post:42')).toEqual([
-			expect.objectContaining({
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
+			expect.objectContaining( {
 				id: persistedEntry.id,
-				document: expect.objectContaining({
+				document: expect.objectContaining( {
 					scopeKey: 'post:42',
 					postType: 'post',
 					entityId: '42',
-				}),
-				persistence: expect.objectContaining({
+				} ),
+				persistence: expect.objectContaining( {
 					status: 'server',
 					updatedAt: draftEntry.timestamp,
-				}),
-			}),
-		]);
-	});
+				} ),
+			} ),
+		] );
+	} );
 
-	test('loadActivitySession does not reassign unsaved activity without an explicit save migration signal', async () => {
-		const draftEntry = createActivityEntry({
+	test( 'loadActivitySession does not reassign unsaved activity without an explicit save migration signal', async () => {
+		const draftEntry = createActivityEntry( {
 			type: 'apply_suggestion',
 			surface: 'block',
 			suggestion: 'Refresh content',
 			target: {
 				clientId: 'block-1',
 			},
-		});
+		} );
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([draftEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [ draftEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -837,51 +1219,51 @@ describe('store action thunks', () => {
 			),
 		};
 
-		apiFetch.mockResolvedValue({
+		apiFetch.mockResolvedValue( {
 			entries: [],
-		});
+		} );
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(apiFetch).toHaveBeenCalledTimes(1);
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
 				method: 'GET',
-			})
+			} )
 		);
-		expect(apiFetch).not.toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity',
 				method: 'POST',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [])
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [] )
 		);
-		expect(readPersistedActivityLog('post:42')).toEqual([]);
-	});
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [] );
+	} );
 
-	test('loadActivitySession ignores stale async completions from a previous scope', async () => {
+	test( 'loadActivitySession ignores stale async completions from a previous scope', async () => {
 		let resolveFirstRequest;
-		const firstRequest = new Promise((resolve) => {
+		const firstRequest = new Promise( ( resolve ) => {
 			resolveFirstRequest = resolve;
-		});
+		} );
 		const dispatch = jest.fn();
 		const firstSelect = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
 		};
 		const secondSelect = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
 		};
 		const firstRegistry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -891,7 +1273,7 @@ describe('store action thunks', () => {
 			),
 		};
 		const secondRegistry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -901,7 +1283,7 @@ describe('store action thunks', () => {
 			),
 		};
 
-		apiFetch.mockImplementation(({ path, method }) => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
@@ -913,60 +1295,62 @@ describe('store action thunks', () => {
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A99' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({
+				return Promise.resolve( {
 					entries: [
 						{
 							id: 'activity-fresh',
 							timestamp: '2026-03-24T10:00:00Z',
 						},
 					],
-				});
+				} );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
-		const firstLoad = actions.loadActivitySession()({
+		const firstLoad = actions.loadActivitySession()( {
 			dispatch,
 			registry: firstRegistry,
 			select: firstSelect,
-		});
-		const secondLoad = actions.loadActivitySession()({
+		} );
+		const secondLoad = actions.loadActivitySession()( {
 			dispatch,
 			registry: secondRegistry,
 			select: secondSelect,
-		});
+		} );
 
 		await secondLoad;
-		resolveFirstRequest({
+		resolveFirstRequest( {
 			entries: [
 				{
 					id: 'activity-stale',
 					timestamp: '2026-03-24T09:00:00Z',
 				},
 			],
-		});
+		} );
 		await firstLoad;
 
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:99', [
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:99', [
 				{
 					id: 'activity-fresh',
 					timestamp: '2026-03-24T10:00:00Z',
 				},
-			])
+			] )
 		);
-		expect(dispatch).not.toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
 				{
 					id: 'activity-stale',
 					timestamp: '2026-03-24T09:00:00Z',
 				},
-			])
+			] )
 		);
-	});
+	} );
 
-	test('loadActivitySession retries pending undo sync before refreshing server history', async () => {
+	test( 'loadActivitySession retries pending undo sync before refreshing server history', async () => {
 		const pendingEntry = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -997,11 +1381,11 @@ describe('store action thunks', () => {
 		};
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([pendingEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -1011,46 +1395,48 @@ describe('store action thunks', () => {
 			),
 		};
 
-		apiFetch.mockImplementation(({ path, method }) => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/activity/activity-1/undo' &&
 				method === 'POST'
 			) {
-				return Promise.resolve({
+				return Promise.resolve( {
 					entry: syncedEntry,
-				});
+				} );
 			}
 
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({
-					entries: [syncedEntry],
-				});
+				return Promise.resolve( {
+					entries: [ syncedEntry ],
+				} );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity/activity-1/undo',
 				method: 'POST',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [syncedEntry])
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [ syncedEntry ] )
 		);
-	});
+	} );
 
-	test('loadActivitySession preserves local retry state when the server copy is stale', async () => {
+	test( 'loadActivitySession preserves local retry state when the server copy is stale', async () => {
 		const pendingEntry = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -1088,11 +1474,11 @@ describe('store action thunks', () => {
 		};
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([pendingEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -1102,38 +1488,40 @@ describe('store action thunks', () => {
 			),
 		};
 
-		apiFetch.mockImplementation(({ path, method }) => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/activity/activity-1/undo' &&
 				method === 'POST'
 			) {
-				return Promise.reject(new Error('Network unavailable.'));
+				return Promise.reject( new Error( 'Network unavailable.' ) );
 			}
 
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({
-					entries: [staleServerEntry],
-				});
+				return Promise.resolve( {
+					entries: [ staleServerEntry ],
+				} );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [pendingEntry])
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [ pendingEntry ] )
 		);
-	});
+	} );
 
-	test('loadActivitySession preserves an authoritative terminal undo failure across a successful server refresh', async () => {
+	test( 'loadActivitySession preserves an authoritative terminal undo failure across a successful server refresh', async () => {
 		const pendingEntry = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -1143,7 +1531,7 @@ describe('store action thunks', () => {
 			},
 			target: {
 				clientId: 'block-1',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			undo: {
 				canUndo: false,
@@ -1176,11 +1564,11 @@ describe('store action thunks', () => {
 		const expectedTerminalError = 'Undo blocked by newer AI actions.';
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([pendingEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -1190,71 +1578,73 @@ describe('store action thunks', () => {
 			),
 		};
 
-		apiFetch.mockImplementation(({ path, method }) => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/activity/activity-1/undo' &&
 				method === 'POST'
 			) {
-				return Promise.reject({
+				return Promise.reject( {
 					code: 'flavor_agent_activity_undo_blocked',
 					message: 'Undo blocked by newer AI actions.',
 					data: {
 						status: 409,
 					},
-				});
+				} );
 			}
 
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({
-					entries: [serverEntry],
-				});
+				return Promise.resolve( {
+					entries: [ serverEntry ],
+				} );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [
-				expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
 					id: 'activity-1',
-					persistence: expect.objectContaining({
+					persistence: expect.objectContaining( {
 						status: 'server',
 						syncType: null,
-					}),
-					undo: expect.objectContaining({
+					} ),
+					undo: expect.objectContaining( {
 						status: 'failed',
 						canUndo: false,
 						error: expectedTerminalError,
-					}),
-				}),
-			])
+					} ),
+				} ),
+			] )
 		);
-		expect(readPersistedActivityLog('post:42')).toEqual([
-			expect.objectContaining({
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
+			expect.objectContaining( {
 				id: 'activity-1',
-				persistence: expect.objectContaining({
+				persistence: expect.objectContaining( {
 					status: 'server',
 					syncType: null,
-				}),
-				undo: expect.objectContaining({
+				} ),
+				undo: expect.objectContaining( {
 					status: 'failed',
 					canUndo: false,
 					error: expectedTerminalError,
-				}),
-			}),
-		]);
-	});
+				} ),
+			} ),
+		] );
+	} );
 
-	test('loadActivitySession honors an explicit scope when registry selectors are late on reload', async () => {
+	test( 'loadActivitySession honors an explicit scope when registry selectors are late on reload', async () => {
 		const serverEntry = {
 			id: 'activity-hydrated',
 			type: 'apply_suggestion',
@@ -1262,7 +1652,7 @@ describe('store action thunks', () => {
 			timestamp: '2026-03-24T10:00:00Z',
 			target: {
 				clientId: 'block-1',
-				blockPath: [0],
+				blockPath: [ 0 ],
 				blockName: 'core/paragraph',
 			},
 			document: {
@@ -1280,79 +1670,81 @@ describe('store action thunks', () => {
 		};
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
 		};
 		const registry = {
-			select: jest.fn().mockReturnValue({}),
+			select: jest.fn().mockReturnValue( {} ),
 		};
 
-		apiFetch.mockImplementation(({ path, method }) => {
+		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
 				method === 'GET'
 			) {
-				return Promise.resolve({
-					entries: [serverEntry],
-				});
+				return Promise.resolve( {
+					entries: [ serverEntry ],
+				} );
 			}
 
-			return Promise.reject(new Error(`Unexpected apiFetch: ${path}`));
-		});
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
 
-		await actions.loadActivitySession({
+		await actions.loadActivitySession( {
 			scope: {
 				key: 'post:42',
 				hint: 'post:42',
 				postType: 'post',
 				entityId: '42',
 			},
-		})({
+		} )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
 				method: 'GET',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [serverEntry])
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [ serverEntry ] )
 		);
-		expect(readPersistedActivityLog('post:42')).toEqual([
-			expect.objectContaining({
+		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [
+			expect.objectContaining( {
 				id: 'activity-hydrated',
 				surface: 'block',
 				type: 'apply_suggestion',
-				target: expect.objectContaining({
+				target: expect.objectContaining( {
 					clientId: 'block-1',
 					blockName: 'core/paragraph',
-					blockPath: [0],
-				}),
-				document: expect.objectContaining({
+					blockPath: [ 0 ],
+				} ),
+				document: expect.objectContaining( {
 					scopeKey: 'post:42',
 					postType: 'post',
 					entityId: '42',
-				}),
-				undo: expect.objectContaining({
+				} ),
+				undo: expect.objectContaining( {
 					status: 'available',
 					canUndo: true,
-				}),
-				persistence: expect.objectContaining({
+				} ),
+				persistence: expect.objectContaining( {
 					status: 'server',
-				}),
-			}),
-		]);
-	});
+				} ),
+			} ),
+		] );
+	} );
 
-	test('loadActivitySession retries once when reload scope is temporarily unavailable', async () => {
+	test( 'loadActivitySession retries once when reload scope is temporarily unavailable', async () => {
 		const loadActivitySession = jest.fn();
 		window.wp = {
 			data: {
-				dispatch: jest.fn((storeName) =>
+				dispatch: jest.fn( ( storeName ) =>
 					storeName === 'flavor-agent'
 						? {
 								loadActivitySession,
@@ -1364,46 +1756,46 @@ describe('store action thunks', () => {
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
 		};
 		const registry = {
-			select: jest.fn().mockReturnValue({}),
+			select: jest.fn().mockReturnValue( {} ),
 		};
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(dispatch).not.toHaveBeenCalled();
-		expect(loadActivitySession).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalled();
+		expect( loadActivitySession ).not.toHaveBeenCalled();
 
-		jest.advanceTimersByTime(150);
+		jest.advanceTimersByTime( 150 );
 
-		expect(loadActivitySession).toHaveBeenCalledWith({
+		expect( loadActivitySession ).toHaveBeenCalledWith( {
 			retryIfScopeUnavailable: false,
-		});
+		} );
 
 		delete window.wp;
-	});
+	} );
 
-	test('applySuggestion uses registry-backed block-editor access inside thunks', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applySuggestion uses registry-backed block-editor access inside thunks', async () => {
+		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block',
 			},
-		});
+		} );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-block'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Tighten the copy.',
 				requestMeta: {
@@ -1411,14 +1803,14 @@ describe('store action thunks', () => {
 					model: 'gpt-5.3-chat',
 					pathLabel: 'Azure OpenAI via Settings > Flavor Agent',
 				},
-			}),
-			getBlockRequestToken: jest.fn().mockReturnValue(4),
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([
+							getBlocks: jest.fn().mockReturnValue( [
 								{
 									clientId: 'block-1',
 									name: 'core/paragraph',
@@ -1426,299 +1818,321 @@ describe('store action thunks', () => {
 										content: 'Old copy',
 									},
 								},
-							]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Old copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.applySuggestion('block-1', {
-			label: 'Refresh content',
-			attributeUpdates: {
-				content: 'New copy',
-			},
-		}, null, {
-			clientId: 'block-1',
-			editorContext: {
-				block: {
-					name: 'core/paragraph',
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Refresh content',
+				attributeUpdates: {
+					content: 'New copy',
 				},
 			},
-			prompt: 'Tighten the copy.',
-		})({
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
+					},
+				},
+				prompt: 'Tighten the copy.',
+			}
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(select.getBlockRecommendations).toHaveBeenCalledWith('block-1');
-		expect(registry.select).toHaveBeenCalledWith('core/block-editor');
-		expect(registry.dispatch).toHaveBeenCalledWith('core/block-editor');
-		expect(updateBlockAttributes).toHaveBeenCalledWith('block-1', {
+		expect( select.getBlockRecommendations ).toHaveBeenCalledWith(
+			'block-1'
+		);
+		expect( registry.select ).toHaveBeenCalledWith( 'core/block-editor' );
+		expect( registry.dispatch ).toHaveBeenCalledWith( 'core/block-editor' );
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
 			content: 'New copy',
-		});
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'LOG_ACTIVITY',
-				entry: expect.objectContaining({
+				entry: expect.objectContaining( {
 					type: 'apply_suggestion',
-					target: expect.objectContaining({
+					target: expect.objectContaining( {
 						clientId: 'block-1',
-						blockPath: [0],
-					}),
-					request: expect.objectContaining({
+						blockPath: [ 0 ],
+					} ),
+					request: expect.objectContaining( {
 						prompt: 'Tighten the copy.',
 						reference: 'block:block-1:4',
-						ai: expect.objectContaining({
+						ai: expect.objectContaining( {
 							backendLabel: 'Azure OpenAI responses',
 							model: 'gpt-5.3-chat',
-						}),
-					}),
+						} ),
+					} ),
 					suggestion: 'Refresh content',
-				}),
-			})
+				} ),
+			} )
 		);
-		expect(result).toBe(true);
-	});
+		expect( result ).toBe( true );
+	} );
 
-	test('applySuggestion surfaces a deterministic error when no safe attribute updates remain', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applySuggestion surfaces a deterministic error when no safe attribute updates remain', async () => {
+		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block',
 			},
-		});
+		} );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-block'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Tighten the copy.',
-			}),
-			getBlockRequestToken: jest.fn().mockReturnValue(4),
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Old copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.applySuggestion('block-1', {
-			label: 'Inject CSS',
-			attributeUpdates: {
-				customCSS: '.wp-block-paragraph { color: red; }',
-			},
-		}, null, {
-			clientId: 'block-1',
-			editorContext: {
-				block: {
-					name: 'core/paragraph',
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Inject CSS',
+				attributeUpdates: {
+					customCSS: '.wp-block-paragraph { color: red; }',
 				},
 			},
-			prompt: 'Tighten the copy.',
-		})({
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
+					},
+				},
+				prompt: 'Tighten the copy.',
+			}
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockApplyState(
 				'block-1',
 				'error',
 				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.'
 			)
 		);
-		expect(result).toBe(false);
-	});
+		expect( result ).toBe( false );
+	} );
 
-	test('applySuggestion ignores no-op updates without surfacing an error or logging activity', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applySuggestion ignores no-op updates without surfacing an error or logging activity', async () => {
+		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block',
 			},
-		});
+		} );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-block'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Keep the same content.',
-			}),
-			getBlockRequestToken: jest.fn().mockReturnValue(4),
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Same copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.applySuggestion('block-1', {
-			label: 'Keep current copy',
-			attributeUpdates: {
-				content: 'Same copy',
-			},
-		}, null, {
-			clientId: 'block-1',
-			editorContext: {
-				block: {
-					name: 'core/paragraph',
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Keep current copy',
+				attributeUpdates: {
+					content: 'Same copy',
 				},
 			},
-			prompt: 'Keep the same content.',
-		})({
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
+					},
+				},
+				prompt: 'Keep the same content.',
+			}
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
 		expect(
 			dispatch.mock.calls.some(
-				([action]) =>
+				( [ action ] ) =>
 					action?.type === 'LOG_ACTIVITY' ||
 					action?.type === 'SET_BLOCK_REQUEST_STATE'
 			)
-		).toBe(false);
-		expect(result).toBe(false);
-	});
+		).toBe( false );
+		expect( result ).toBe( false );
+	} );
 
-	test('applySuggestion rejects advisory block suggestions even when they include safe local updates', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applySuggestion rejects advisory block suggestions even when they include safe local updates', async () => {
+		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block',
 			},
-		});
+		} );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-block'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Improve the layout.',
-			}),
-			getBlockRequestToken: jest.fn().mockReturnValue(7),
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 7 ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Old copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.applySuggestion('block-1', {
-			label: 'Wrap this block in a Group',
-			type: 'structural_recommendation',
-			attributeUpdates: {
-				metadata: {
-					blockVisibility: {
-						viewport: {
-							mobile: false,
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Wrap this block in a Group',
+				type: 'structural_recommendation',
+				attributeUpdates: {
+					metadata: {
+						blockVisibility: {
+							viewport: {
+								mobile: false,
+							},
 						},
 					},
 				},
 			},
-		}, null, {
-			clientId: 'block-1',
-			editorContext: {
-				block: {
-					name: 'core/paragraph',
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
+					},
 				},
-			},
-			prompt: 'Improve the layout.',
-		})({
+				prompt: 'Improve the layout.',
+			}
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockApplyState(
 				'block-1',
 				'error',
 				'This suggestion is advisory and requires manual follow-through or a broader preview/apply flow.'
 			)
 		);
-		expect(result).toBe(false);
-	});
+		expect( result ).toBe( false );
+	} );
 
-	test('applySuggestion blocks stale block results before mutating attributes', async () => {
+	test( 'applySuggestion blocks stale block results before mutating attributes', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockRecommendationContextSignature: jest
 				.fn()
-				.mockReturnValue('stored-context'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'stored-context' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Refresh content.',
-			}),
+			} ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Old copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
 		const result = await actions.applySuggestion(
@@ -1730,15 +2144,15 @@ describe('store action thunks', () => {
 				},
 			},
 			'live-context'
-		)({
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
-		expect(apiFetch).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockApplyState(
 				'block-1',
 				'error',
@@ -1747,52 +2161,52 @@ describe('store action thunks', () => {
 				'client'
 			)
 		);
-		expect(result).toBe(false);
-	});
+		expect( result ).toBe( false );
+	} );
 
-	test('applySuggestion blocks server-stale block results after resolveSignatureOnly drift', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applySuggestion blocks server-stale block results after resolveSignatureOnly drift', async () => {
+		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block-next',
 			},
-		});
+		} );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockRecommendationContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-context'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'shared-context' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Refresh content.',
-			}),
+			} ),
 			getBlockResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-block-stored'),
+				.mockReturnValue( 'resolved-block-stored' ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Old copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 		const currentRequestSignature =
-			buildBlockRecommendationRequestSignature({
+			buildBlockRecommendationRequestSignature( {
 				clientId: 'block-1',
 				prompt: 'Refresh content.',
 				contextSignature: 'shared-context',
-			});
+			} );
 
 		const result = await actions.applySuggestion(
 			'block-1',
@@ -1813,15 +2227,15 @@ describe('store action thunks', () => {
 				prompt: 'Refresh content.',
 				contextSignature: 'shared-context',
 			}
-		)({
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-block',
 				method: 'POST',
 				data: {
@@ -1834,54 +2248,54 @@ describe('store action thunks', () => {
 					prompt: 'Refresh content.',
 					resolveSignatureOnly: true,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockApplyState(
 				'block-1',
 				'error',
-				'This result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
+				'This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 				null,
-				'server'
+				'server-apply'
 			)
 		);
-		expect(result).toBe(false);
-	});
+		expect( result ).toBe( false );
+	} );
 
-	test('applySuggestion blocks prompt-stale block results before mutating attributes', async () => {
+	test( 'applySuggestion blocks prompt-stale block results before mutating attributes', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockRecommendationContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-context'),
-			getBlockRecommendations: jest.fn().mockReturnValue({
+				.mockReturnValue( 'shared-context' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
 				blockContext: { name: 'core/paragraph' },
 				prompt: 'Keep the copy concise.',
-			}),
+			} ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue([]),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Old copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 		const currentRequestSignature =
-			buildBlockRecommendationRequestSignature({
+			buildBlockRecommendationRequestSignature( {
 				clientId: 'block-1',
 				prompt: 'Make the copy more conversational.',
 				contextSignature: 'shared-context',
-			});
+			} );
 
 		const result = await actions.applySuggestion(
 			'block-1',
@@ -1892,15 +2306,15 @@ describe('store action thunks', () => {
 				},
 			},
 			currentRequestSignature
-		)({
+		)( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
-		expect(apiFetch).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setBlockApplyState(
 				'block-1',
 				'error',
@@ -1909,24 +2323,24 @@ describe('store action thunks', () => {
 				'client'
 			)
 		);
-		expect(result).toBe(false);
-	});
+		expect( result ).toBe( false );
+	} );
 
-	test('applyGlobalStylesSuggestion converts thrown executor exceptions into apply errors', async () => {
-		applyGlobalStyleSuggestionOperations.mockImplementation(() => {
-			throw new Error('Global Styles executor crashed.');
-		});
-		apiFetch.mockResolvedValue({
+	test( 'applyGlobalStylesSuggestion converts thrown executor exceptions into apply errors', async () => {
+		applyGlobalStyleSuggestionOperations.mockImplementation( () => {
+			throw new Error( 'Global Styles executor crashed.' );
+		} );
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-global-styles',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
 			getGlobalStylesResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-global-styles'),
+				.mockReturnValue( 'resolved-global-styles' ),
 		};
 
 		const result = await actions.applyGlobalStylesSuggestion(
@@ -1945,17 +2359,17 @@ describe('store action thunks', () => {
 					mergedConfig: { styles: {} },
 				},
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setGlobalStylesApplyState('applying')
+			actions.setGlobalStylesApplyState( 'applying' )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setGlobalStylesApplyState(
 				'error',
@@ -1963,29 +2377,31 @@ describe('store action thunks', () => {
 			)
 		);
 		expect(
-			dispatch.mock.calls.some(([action]) => action?.type === 'LOG_ACTIVITY')
-		).toBe(false);
-		expect(result).toEqual({
+			dispatch.mock.calls.some(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
 			ok: false,
 			error: 'Global Styles executor crashed.',
-		});
-	});
+		} );
+	} );
 
-	test('applyStyleBookSuggestion converts thrown executor exceptions into apply errors', async () => {
-		applyGlobalStyleSuggestionOperations.mockImplementation(() => {
-			throw new Error('Style Book executor crashed.');
-		});
-		apiFetch.mockResolvedValue({
+	test( 'applyStyleBookSuggestion converts thrown executor exceptions into apply errors', async () => {
+		applyGlobalStyleSuggestionOperations.mockImplementation( () => {
+			throw new Error( 'Style Book executor crashed.' );
+		} );
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-style-book',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getActivityLog: jest.fn().mockReturnValue([]),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
 			getStyleBookResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-style-book'),
+				.mockReturnValue( 'resolved-style-book' ),
 		};
 
 		const result = await actions.applyStyleBookSuggestion(
@@ -2011,67 +2427,72 @@ describe('store action thunks', () => {
 					},
 				},
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setStyleBookApplyState('applying')
+			actions.setStyleBookApplyState( 'applying' )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
-			actions.setStyleBookApplyState('error', 'Style Book executor crashed.')
+			actions.setStyleBookApplyState(
+				'error',
+				'Style Book executor crashed.'
+			)
 		);
 		expect(
-			dispatch.mock.calls.some(([action]) => action?.type === 'LOG_ACTIVITY')
-		).toBe(false);
-		expect(result).toEqual({
+			dispatch.mock.calls.some(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
 			ok: false,
 			error: 'Style Book executor crashed.',
-		});
-	});
+		} );
+	} );
 
-	test('applyGlobalStylesSuggestion rejects prompt-stale results before running the executor', async () => {
+	test( 'applyGlobalStylesSuggestion rejects prompt-stale results before running the executor', async () => {
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getGlobalStylesScopeKey: jest
 				.fn()
-				.mockReturnValue('global_styles:17'),
-			getGlobalStylesResultRef: jest.fn().mockReturnValue('17'),
+				.mockReturnValue( 'global_styles:17' ),
+			getGlobalStylesResultRef: jest.fn().mockReturnValue( '17' ),
 			getGlobalStylesContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-style-context'),
+				.mockReturnValue( 'shared-style-context' ),
 			getGlobalStylesRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Keep the palette restrained.'),
+				.mockReturnValue( 'Keep the palette restrained.' ),
 		};
 		const currentRequestSignature =
-			buildGlobalStylesRecommendationRequestSignature({
+			buildGlobalStylesRecommendationRequestSignature( {
 				scope: {
 					scopeKey: 'global_styles:17',
 					globalStylesId: '17',
 				},
 				prompt: 'Push the palette further.',
 				contextSignature: 'shared-style-context',
-			});
+			} );
 
 		const result = await actions.applyGlobalStylesSuggestion(
 			{
 				label: 'Use accent canvas',
 			},
 			currentRequestSignature
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyGlobalStyleSuggestionOperations).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( applyGlobalStyleSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setGlobalStylesApplyState(
 				'error',
 				'This Global Styles result is stale. Refresh recommendations before applying it.',
@@ -2080,45 +2501,44 @@ describe('store action thunks', () => {
 				'client'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This Global Styles result is stale. Refresh recommendations before applying it.',
+			error: 'This Global Styles result is stale. Refresh recommendations before applying it.',
 			staleReason: 'client',
-		});
-	});
+		} );
+	} );
 
-	test('applyGlobalStylesSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applyGlobalStylesSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-global-styles-next',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getGlobalStylesScopeKey: jest
 				.fn()
-				.mockReturnValue('global_styles:17'),
-			getGlobalStylesResultRef: jest.fn().mockReturnValue('17'),
+				.mockReturnValue( 'global_styles:17' ),
+			getGlobalStylesResultRef: jest.fn().mockReturnValue( '17' ),
 			getGlobalStylesContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-style-context'),
+				.mockReturnValue( 'shared-style-context' ),
 			getGlobalStylesRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Keep the palette restrained.'),
+				.mockReturnValue( 'Keep the palette restrained.' ),
 			getGlobalStylesResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-global-styles-stored'),
+				.mockReturnValue( 'resolved-global-styles-stored' ),
 		};
 		const currentRequestSignature =
-			buildGlobalStylesRecommendationRequestSignature({
+			buildGlobalStylesRecommendationRequestSignature( {
 				scope: {
 					scopeKey: 'global_styles:17',
 					globalStylesId: '17',
 				},
 				prompt: 'Keep the palette restrained.',
 				contextSignature: 'shared-style-context',
-			});
+			} );
 
 		const result = await actions.applyGlobalStylesSuggestion(
 			{
@@ -2139,15 +2559,15 @@ describe('store action thunks', () => {
 				prompt: 'Keep the palette restrained.',
 				contextSignature: 'shared-style-context',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyGlobalStyleSuggestionOperations).not.toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( applyGlobalStyleSuggestionOperations ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-style',
 				method: 'POST',
 				data: {
@@ -2164,43 +2584,44 @@ describe('store action thunks', () => {
 					prompt: 'Keep the palette restrained.',
 					resolveSignatureOnly: true,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setGlobalStylesApplyState(
 				'error',
-				'This Global Styles result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
+				'This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 				null,
 				[],
-				'server'
+				'server-apply'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This Global Styles result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
-			staleReason: 'server',
-		});
-	});
+			error: 'This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+			staleReason: 'server-apply',
+		} );
+	} );
 
-	test('applyStyleBookSuggestion rejects prompt-stale results before running the executor', async () => {
+	test( 'applyStyleBookSuggestion rejects prompt-stale results before running the executor', async () => {
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getStyleBookScopeKey: jest
 				.fn()
-				.mockReturnValue('style_book:17:core/paragraph'),
-			getStyleBookGlobalStylesId: jest.fn().mockReturnValue('17'),
-			getStyleBookBlockName: jest.fn().mockReturnValue('core/paragraph'),
+				.mockReturnValue( 'style_book:17:core/paragraph' ),
+			getStyleBookGlobalStylesId: jest.fn().mockReturnValue( '17' ),
+			getStyleBookBlockName: jest
+				.fn()
+				.mockReturnValue( 'core/paragraph' ),
 			getStyleBookContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-style-book-context'),
+				.mockReturnValue( 'shared-style-book-context' ),
 			getStyleBookRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Keep the paragraph understated.'),
+				.mockReturnValue( 'Keep the paragraph understated.' ),
 		};
 		const currentRequestSignature =
-			buildStyleBookRecommendationRequestSignature({
+			buildStyleBookRecommendationRequestSignature( {
 				scope: {
 					scopeKey: 'style_book:17:core/paragraph',
 					globalStylesId: '17',
@@ -2208,21 +2629,21 @@ describe('store action thunks', () => {
 				},
 				prompt: 'Make the paragraph feel more editorial.',
 				contextSignature: 'shared-style-book-context',
-			});
+			} );
 
 		const result = await actions.applyStyleBookSuggestion(
 			{
 				label: 'Refine paragraph rhythm',
 			},
 			currentRequestSignature
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyGlobalStyleSuggestionOperations).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( applyGlobalStyleSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setStyleBookApplyState(
 				'error',
 				'This Style Book result is stale. Refresh recommendations before applying it.',
@@ -2231,39 +2652,40 @@ describe('store action thunks', () => {
 				'client'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This Style Book result is stale. Refresh recommendations before applying it.',
+			error: 'This Style Book result is stale. Refresh recommendations before applying it.',
 			staleReason: 'client',
-		});
-	});
+		} );
+	} );
 
-	test('applyStyleBookSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applyStyleBookSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-style-book-next',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getStyleBookScopeKey: jest
 				.fn()
-				.mockReturnValue('style_book:17:core/paragraph'),
-			getStyleBookGlobalStylesId: jest.fn().mockReturnValue('17'),
-			getStyleBookBlockName: jest.fn().mockReturnValue('core/paragraph'),
+				.mockReturnValue( 'style_book:17:core/paragraph' ),
+			getStyleBookGlobalStylesId: jest.fn().mockReturnValue( '17' ),
+			getStyleBookBlockName: jest
+				.fn()
+				.mockReturnValue( 'core/paragraph' ),
 			getStyleBookContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-style-book-context'),
+				.mockReturnValue( 'shared-style-book-context' ),
 			getStyleBookRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Keep the paragraph understated.'),
+				.mockReturnValue( 'Keep the paragraph understated.' ),
 			getStyleBookResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-style-book-stored'),
+				.mockReturnValue( 'resolved-style-book-stored' ),
 		};
 		const currentRequestSignature =
-			buildStyleBookRecommendationRequestSignature({
+			buildStyleBookRecommendationRequestSignature( {
 				scope: {
 					scopeKey: 'style_book:17:core/paragraph',
 					globalStylesId: '17',
@@ -2271,7 +2693,7 @@ describe('store action thunks', () => {
 				},
 				prompt: 'Keep the paragraph understated.',
 				contextSignature: 'shared-style-book-context',
-			});
+			} );
 
 		const result = await actions.applyStyleBookSuggestion(
 			{
@@ -2299,15 +2721,15 @@ describe('store action thunks', () => {
 				prompt: 'Keep the paragraph understated.',
 				contextSignature: 'shared-style-book-context',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyGlobalStyleSuggestionOperations).not.toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( applyGlobalStyleSuggestionOperations ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-style',
 				method: 'POST',
 				data: {
@@ -2331,32 +2753,31 @@ describe('store action thunks', () => {
 					prompt: 'Keep the paragraph understated.',
 					resolveSignatureOnly: true,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setStyleBookApplyState(
 				'error',
-				'This Style Book result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
+				'This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 				null,
 				[],
-				'server'
+				'server-apply'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This Style Book result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
-			staleReason: 'server',
-		});
-	});
+			error: 'This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+			staleReason: 'server-apply',
+		} );
+	} );
 
-	test('applyTemplateSuggestion rejects stale results before running the executor', async () => {
+	test( 'applyTemplateSuggestion rejects stale results before running the executor', async () => {
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplateContextSignature: jest
 				.fn()
-				.mockReturnValue('stored-template-signature'),
+				.mockReturnValue( 'stored-template-signature' ),
 		};
 
 		const result = await actions.applyTemplateSuggestion(
@@ -2371,15 +2792,15 @@ describe('store action thunks', () => {
 				],
 			},
 			'live-template-signature'
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyTemplateSuggestionOperations).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledTimes(1);
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledTimes( 1 );
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplateApplyState(
 				'error',
 				'This template result is stale. Refresh recommendations before applying it.',
@@ -2389,34 +2810,35 @@ describe('store action thunks', () => {
 			)
 		);
 		expect(
-			dispatch.mock.calls.some(([action]) => action?.type === 'LOG_ACTIVITY')
-		).toBe(false);
-		expect(result).toEqual({
+			dispatch.mock.calls.some(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This template result is stale. Refresh recommendations before applying it.',
+			error: 'This template result is stale. Refresh recommendations before applying it.',
 			staleReason: 'client',
-		});
-	});
+		} );
+	} );
 
-	test('applyTemplateSuggestion rejects prompt-stale results before running the executor', async () => {
+	test( 'applyTemplateSuggestion rejects prompt-stale results before running the executor', async () => {
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplateContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-template-context'),
+				.mockReturnValue( 'shared-template-context' ),
 			getTemplateRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Clarify the structure.'),
-			getTemplateResultRef: jest.fn().mockReturnValue('theme//home'),
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
 		};
 		const currentRequestSignature =
-			buildTemplateRecommendationRequestSignature({
+			buildTemplateRecommendationRequestSignature( {
 				templateRef: 'theme//home',
 				prompt: 'Make the template feel more editorial.',
 				contextSignature: 'shared-template-context',
-			});
+			} );
 
 		const result = await actions.applyTemplateSuggestion(
 			{
@@ -2430,14 +2852,14 @@ describe('store action thunks', () => {
 				],
 			},
 			currentRequestSignature
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyTemplateSuggestionOperations).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplateApplyState(
 				'error',
 				'This template result is stale. Refresh recommendations before applying it.',
@@ -2446,39 +2868,38 @@ describe('store action thunks', () => {
 				'client'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This template result is stale. Refresh recommendations before applying it.',
+			error: 'This template result is stale. Refresh recommendations before applying it.',
 			staleReason: 'client',
-		});
-	});
+		} );
+	} );
 
-	test('applyTemplateSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applyTemplateSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-template-next',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplateContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-template-context'),
+				.mockReturnValue( 'shared-template-context' ),
 			getTemplateRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Clarify the structure.'),
-			getTemplateResultRef: jest.fn().mockReturnValue('theme//home'),
+				.mockReturnValue( 'Clarify the structure.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
 			getTemplateResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-template-stored'),
+				.mockReturnValue( 'resolved-template-stored' ),
 		};
 		const currentRequestSignature =
-			buildTemplateRecommendationRequestSignature({
+			buildTemplateRecommendationRequestSignature( {
 				templateRef: 'theme//home',
 				prompt: 'Clarify the structure.',
 				contextSignature: 'shared-template-context',
-			});
+			} );
 
 		const result = await actions.applyTemplateSuggestion(
 			{
@@ -2496,15 +2917,15 @@ describe('store action thunks', () => {
 				templateRef: 'theme//home',
 				prompt: 'Clarify the structure.',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyTemplateSuggestionOperations).not.toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( applyTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-template',
 				method: 'POST',
 				data: {
@@ -2512,27 +2933,26 @@ describe('store action thunks', () => {
 					prompt: 'Clarify the structure.',
 					resolveSignatureOnly: true,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplateApplyState(
 				'error',
-				'This template result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
+				'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 				null,
 				[],
-				'server'
+				'server-apply'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This template result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
-			staleReason: 'server',
-		});
-	});
+			error: 'This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+			staleReason: 'server-apply',
+		} );
+	} );
 
-	test('applyTemplateSuggestion records success with thunk selector methods', async () => {
-		applyTemplateSuggestionOperations.mockReturnValue({
+	test( 'applyTemplateSuggestion records success with thunk selector methods', async () => {
+		applyTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,
 			operations: [
 				{
@@ -2540,22 +2960,22 @@ describe('store action thunks', () => {
 					patternName: 'theme/hero',
 				},
 			],
-		});
-		apiFetch.mockResolvedValue({
+		} );
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-template',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplateRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Make the layout more editorial.'),
-			getTemplateResultRef: jest.fn().mockReturnValue('theme//home'),
-			getTemplateResultToken: jest.fn().mockReturnValue(3),
+				.mockReturnValue( 'Make the layout more editorial.' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResultToken: jest.fn().mockReturnValue( 3 ),
 			getTemplateResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-template'),
+				.mockReturnValue( 'resolved-template' ),
 		};
 		const suggestion = {
 			label: 'Clarify template hierarchy',
@@ -2580,35 +3000,35 @@ describe('store action thunks', () => {
 				templateRef: 'theme//home',
 				prompt: 'Make the layout more editorial.',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(select.getTemplateResultRef).toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getTemplateResultRef ).toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'LOG_ACTIVITY',
-				entry: expect.objectContaining({
+				entry: expect.objectContaining( {
 					type: 'apply_template_suggestion',
-					target: expect.objectContaining({
+					target: expect.objectContaining( {
 						templateRef: 'theme//home',
-					}),
-					request: expect.objectContaining({
+					} ),
+					request: expect.objectContaining( {
 						prompt: 'Make the layout more editorial.',
 						reference: 'template:theme//home:3',
-						ai: expect.objectContaining({
+						ai: expect.objectContaining( {
 							backendLabel: 'WordPress AI Client',
 							model: 'provider-managed',
-						}),
-					}),
+						} ),
+					} ),
 					suggestion: 'Clarify template hierarchy',
 					suggestionKey: 'Clarify template hierarchy-0',
-				}),
-			})
+				} ),
+			} )
 		);
-		expect(dispatch).toHaveBeenLastCalledWith(
+		expect( dispatch ).toHaveBeenLastCalledWith(
 			actions.setTemplateApplyState(
 				'success',
 				null,
@@ -2621,7 +3041,7 @@ describe('store action thunks', () => {
 				]
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: true,
 			operations: [
 				{
@@ -2629,28 +3049,27 @@ describe('store action thunks', () => {
 					patternName: 'theme/hero',
 				},
 			],
-		});
-	});
+		} );
+	} );
 
-	test('applyTemplateSuggestion surfaces executor validation errors without logging activity', async () => {
-		applyTemplateSuggestionOperations.mockReturnValue({
+	test( 'applyTemplateSuggestion surfaces executor validation errors without logging activity', async () => {
+		applyTemplateSuggestionOperations.mockReturnValue( {
 			ok: false,
-			error:
-				'This suggestion targets the “header” area more than once and cannot be applied automatically.',
-		});
-		apiFetch.mockResolvedValue({
+			error: 'This suggestion targets the “header” area more than once and cannot be applied automatically.',
+		} );
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-template',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
-			getTemplateRequestPrompt: jest.fn().mockReturnValue(''),
-			getTemplateResultRef: jest.fn().mockReturnValue('theme//home'),
-			getTemplateResultToken: jest.fn().mockReturnValue(3),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getTemplateRequestPrompt: jest.fn().mockReturnValue( '' ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResultToken: jest.fn().mockReturnValue( 3 ),
 			getTemplateResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-template'),
+				.mockReturnValue( 'resolved-template' ),
 		};
 
 		const result = await actions.applyTemplateSuggestion(
@@ -2663,17 +3082,17 @@ describe('store action thunks', () => {
 				templateRef: 'theme//home',
 				prompt: '',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setTemplateApplyState('applying')
+			actions.setTemplateApplyState( 'applying' )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setTemplateApplyState(
 				'error',
@@ -2681,73 +3100,77 @@ describe('store action thunks', () => {
 			)
 		);
 		expect(
-			dispatch.mock.calls.some(([action]) => action?.type === 'LOG_ACTIVITY')
-		).toBe(false);
-		expect(result).toEqual({
+			dispatch.mock.calls.some(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)
+		).toBe( false );
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This suggestion targets the “header” area more than once and cannot be applied automatically.',
-		});
-	});
+			error: 'This suggestion targets the “header” area more than once and cannot be applied automatically.',
+		} );
+	} );
 
-	test('fetchTemplatePartRecommendations reads request token from thunk selectors', async () => {
-		apiFetch.mockResolvedValue({
-			suggestions: [{ label: 'Add utility row' }],
+	test( 'fetchTemplatePartRecommendations reads request token from thunk selectors', async () => {
+		apiFetch.mockResolvedValue( {
+			suggestions: [ { label: 'Add utility row' } ],
 			explanation: 'Mocked template-part response',
+			reviewContextSignature: 'review-template-part',
 			resolvedContextSignature: 'resolved-template-part',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getTemplatePartRequestToken: jest.fn().mockReturnValue(2),
+			getTemplatePartRequestToken: jest.fn().mockReturnValue( 2 ),
 		};
 		const input = {
 			contextSignature: 'template-part-signature',
 			templatePartRef: 'theme//header',
 			prompt: 'Add a compact utility row.',
-			visiblePatternNames: ['theme/header-utility'],
+			visiblePatternNames: [ 'theme/header-utility' ],
 		};
 
-		await actions.fetchTemplatePartRecommendations(input)({
+		await actions.fetchTemplatePartRecommendations( input )( {
 			dispatch,
 			select,
-		});
+		} );
 
-		expect(select.getTemplatePartRequestToken).toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getTemplatePartRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-template-part',
 				method: 'POST',
 				data: {
 					templatePartRef: 'theme//header',
 					prompt: 'Add a compact utility row.',
-					visiblePatternNames: ['theme/header-utility'],
+					visiblePatternNames: [ 'theme/header-utility' ],
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			1,
-			actions.setTemplatePartStatus('loading', null, 3)
+			actions.setTemplatePartStatus( 'loading', null, 3 )
 		);
-		expect(dispatch).toHaveBeenNthCalledWith(
+		expect( dispatch ).toHaveBeenNthCalledWith(
 			2,
 			actions.setTemplatePartRecommendations(
 				'theme//header',
 				{
-					suggestions: [{ label: 'Add utility row' }],
+					suggestions: [ { label: 'Add utility row' } ],
 					explanation: 'Mocked template-part response',
+					reviewContextSignature: 'review-template-part',
 					resolvedContextSignature: 'resolved-template-part',
 				},
 				'Add a compact utility row.',
 				3,
 				'template-part-signature',
+				'review-template-part',
 				'resolved-template-part'
 			)
 		);
-	});
+	} );
 
-	test('applyTemplatePartSuggestion records success with thunk selector methods', async () => {
-		applyTemplatePartSuggestionOperations.mockReturnValue({
+	test( 'applyTemplatePartSuggestion records success with thunk selector methods', async () => {
+		applyTemplatePartSuggestionOperations.mockReturnValue( {
 			ok: true,
 			operations: [
 				{
@@ -2756,22 +3179,24 @@ describe('store action thunks', () => {
 					placement: 'start',
 				},
 			],
-		});
-		apiFetch.mockResolvedValue({
+		} );
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-template-part',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplatePartRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Add a utility row.'),
-			getTemplatePartResultRef: jest.fn().mockReturnValue('theme//header'),
-			getTemplatePartResultToken: jest.fn().mockReturnValue(4),
+				.mockReturnValue( 'Add a utility row.' ),
+			getTemplatePartResultRef: jest
+				.fn()
+				.mockReturnValue( 'theme//header' ),
+			getTemplatePartResultToken: jest.fn().mockReturnValue( 4 ),
 			getTemplatePartResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-template-part'),
+				.mockReturnValue( 'resolved-template-part' ),
 		};
 		const suggestion = {
 			label: 'Add utility row',
@@ -2796,45 +3221,50 @@ describe('store action thunks', () => {
 				templatePartRef: 'theme//header',
 				prompt: 'Add a utility row.',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(select.getTemplatePartResultRef).toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( select.getTemplatePartResultRef ).toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'LOG_ACTIVITY',
-				entry: expect.objectContaining({
+				entry: expect.objectContaining( {
 					type: 'apply_template_part_suggestion',
 					surface: 'template-part',
-					target: expect.objectContaining({
+					target: expect.objectContaining( {
 						templatePartRef: 'theme//header',
-					}),
-					request: expect.objectContaining({
+					} ),
+					request: expect.objectContaining( {
 						prompt: 'Add a utility row.',
 						reference: 'template-part:theme//header:4',
-						ai: expect.objectContaining({
+						ai: expect.objectContaining( {
 							backendLabel: 'Azure OpenAI responses',
 							model: 'gpt-5.3-chat',
-						}),
-					}),
+						} ),
+					} ),
 					suggestion: 'Add utility row',
 					suggestionKey: 'Add utility row-0',
-				}),
-			})
+				} ),
+			} )
 		);
-		expect(dispatch).toHaveBeenLastCalledWith(
-			actions.setTemplatePartApplyState('success', null, 'Add utility row-0', [
-				{
-					type: 'insert_pattern',
-					patternName: 'theme/header-utility',
-					placement: 'start',
-				},
-			])
+		expect( dispatch ).toHaveBeenLastCalledWith(
+			actions.setTemplatePartApplyState(
+				'success',
+				null,
+				'Add utility row-0',
+				[
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/header-utility',
+						placement: 'start',
+					},
+				]
+			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: true,
 			operations: [
 				{
@@ -2843,27 +3273,29 @@ describe('store action thunks', () => {
 					placement: 'start',
 				},
 			],
-		});
-	});
+		} );
+	} );
 
-	test('applyTemplatePartSuggestion rejects prompt-stale results before running the executor', async () => {
+	test( 'applyTemplatePartSuggestion rejects prompt-stale results before running the executor', async () => {
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplatePartContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-template-part-context'),
+				.mockReturnValue( 'shared-template-part-context' ),
 			getTemplatePartRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Keep the header compact.'),
-			getTemplatePartResultRef: jest.fn().mockReturnValue('theme//header'),
+				.mockReturnValue( 'Keep the header compact.' ),
+			getTemplatePartResultRef: jest
+				.fn()
+				.mockReturnValue( 'theme//header' ),
 		};
 		const currentRequestSignature =
-			buildTemplatePartRecommendationRequestSignature({
+			buildTemplatePartRecommendationRequestSignature( {
 				templatePartRef: 'theme//header',
 				prompt: 'Add more breathing room to the header.',
 				contextSignature: 'shared-template-part-context',
-			});
+			} );
 
 		const result = await actions.applyTemplatePartSuggestion(
 			{
@@ -2878,14 +3310,14 @@ describe('store action thunks', () => {
 				],
 			},
 			currentRequestSignature
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyTemplatePartSuggestionOperations).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( applyTemplatePartSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplatePartApplyState(
 				'error',
 				'This template-part result is stale. Refresh recommendations before applying it.',
@@ -2894,39 +3326,40 @@ describe('store action thunks', () => {
 				'client'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This template-part result is stale. Refresh recommendations before applying it.',
+			error: 'This template-part result is stale. Refresh recommendations before applying it.',
 			staleReason: 'client',
-		});
-	});
+		} );
+	} );
 
-	test('applyTemplatePartSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
-		apiFetch.mockResolvedValue({
+	test( 'applyTemplatePartSuggestion blocks server-stale results after resolveSignatureOnly drift', async () => {
+		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-template-part-next',
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue(null),
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getTemplatePartContextSignature: jest
 				.fn()
-				.mockReturnValue('shared-template-part-context'),
+				.mockReturnValue( 'shared-template-part-context' ),
 			getTemplatePartRequestPrompt: jest
 				.fn()
-				.mockReturnValue('Keep the header compact.'),
-			getTemplatePartResultRef: jest.fn().mockReturnValue('theme//header'),
+				.mockReturnValue( 'Keep the header compact.' ),
+			getTemplatePartResultRef: jest
+				.fn()
+				.mockReturnValue( 'theme//header' ),
 			getTemplatePartResolvedContextSignature: jest
 				.fn()
-				.mockReturnValue('resolved-template-part-stored'),
+				.mockReturnValue( 'resolved-template-part-stored' ),
 		};
 		const currentRequestSignature =
-			buildTemplatePartRecommendationRequestSignature({
+			buildTemplatePartRecommendationRequestSignature( {
 				templatePartRef: 'theme//header',
 				prompt: 'Keep the header compact.',
 				contextSignature: 'shared-template-part-context',
-			});
+			} );
 
 		const result = await actions.applyTemplatePartSuggestion(
 			{
@@ -2944,51 +3377,50 @@ describe('store action thunks', () => {
 			{
 				templatePartRef: 'theme//header',
 				prompt: 'Keep the header compact.',
-				visiblePatternNames: ['theme/header-utility'],
+				visiblePatternNames: [ 'theme/header-utility' ],
 				contextSignature: 'shared-template-part-context',
 			}
-		)({
+		)( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(applyTemplatePartSuggestionOperations).not.toHaveBeenCalled();
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( applyTemplatePartSuggestionOperations ).not.toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/recommend-template-part',
 				method: 'POST',
 				data: {
 					templatePartRef: 'theme//header',
 					prompt: 'Keep the header compact.',
-					visiblePatternNames: ['theme/header-utility'],
+					visiblePatternNames: [ 'theme/header-utility' ],
 					resolveSignatureOnly: true,
 				},
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
+		expect( dispatch ).toHaveBeenCalledWith(
 			actions.setTemplatePartApplyState(
 				'error',
-				'This template-part result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
+				'This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
 				null,
 				[],
-				'server'
+				'server-apply'
 			)
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'This template-part result no longer matches the current server-resolved context. Refresh recommendations before applying it.',
-			staleReason: 'server',
-		});
-	});
+			error: 'This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+			staleReason: 'server-apply',
+		} );
+	} );
 
-	test('undoActivity restores the latest block suggestion and marks it undone', async () => {
+	test( 'undoActivity restores the latest block suggestion and marks it undone', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [
 				{
 					id: 'activity-1',
 					type: 'apply_suggestion',
@@ -3012,8 +3444,8 @@ describe('store action thunks', () => {
 						status: 'available',
 					},
 				},
-			]),
-			getLatestAppliedActivity: jest.fn().mockReturnValue({
+			] ),
+			getLatestAppliedActivity: jest.fn().mockReturnValue( {
 				id: 'activity-1',
 				type: 'apply_suggestion',
 				surface: 'block',
@@ -3035,60 +3467,60 @@ describe('store action thunks', () => {
 					canUndo: true,
 					status: 'available',
 				},
-			}),
+			} ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlock: jest.fn().mockReturnValue({
+							getBlock: jest.fn().mockReturnValue( {
 								clientId: 'block-1',
 								name: 'core/paragraph',
 								attributes: {
 									content: 'New copy',
 									className: 'is-style-contrast',
 								},
-							}),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'New copy',
 								className: 'is-style-contrast',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.undoActivity('activity-1')({
+		const result = await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).toHaveBeenCalledWith('block-1', {
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
 			content: 'Old copy',
 			className: undefined,
-		});
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'UPDATE_ACTIVITY_UNDO_STATE',
 				activityId: 'activity-1',
 				status: 'undone',
-			})
+			} )
 		);
-		expect(result).toEqual({ ok: true });
-	});
+		expect( result ).toEqual( { ok: true } );
+	} );
 
-	test('undoActivity marks applied undos as pending when the audit write fails', async () => {
-		apiFetch.mockRejectedValue(new Error('Network unavailable.'));
+	test( 'undoActivity marks applied undos as pending when the audit write fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'Network unavailable.' ) );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [
 				{
 					id: 'activity-1',
 					type: 'apply_suggestion',
@@ -3119,67 +3551,71 @@ describe('store action thunks', () => {
 						updatedAt: '2026-03-24T10:00:00Z',
 					},
 				},
-			]),
+			] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlock: jest.fn().mockReturnValue({
+							getBlock: jest.fn().mockReturnValue( {
 								clientId: 'block-1',
 								name: 'core/paragraph',
 								attributes: {
 									content: 'New copy',
 								},
-							}),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'New copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.undoActivity('activity-1')({
+		const result = await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).toHaveBeenCalledWith('block-1', {
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
 			content: 'Old copy',
-		});
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'UPDATE_ACTIVITY_UNDO_STATE',
 				activityId: 'activity-1',
 				status: 'undone',
-				persistence: expect.objectContaining({
+				persistence: expect.objectContaining( {
 					status: 'local',
 					syncType: 'undo',
-				}),
-			})
+				} ),
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'SET_UNDO_STATE',
 				status: 'error',
 				activityId: 'activity-1',
-				error: expect.stringContaining('will retry on the next activity sync'),
-			})
+				error: expect.stringContaining(
+					'will retry on the next activity sync'
+				),
+			} )
 		);
-		expect(result).toEqual(
-			expect.objectContaining({
+		expect( result ).toEqual(
+			expect.objectContaining( {
 				ok: false,
-				error: expect.stringContaining('will retry on the next activity sync'),
-			})
+				error: expect.stringContaining(
+					'will retry on the next activity sync'
+				),
+			} )
 		);
-	});
+	} );
 
-	test('undoActivity reconciles terminal 409 undo conflicts against server state instead of marking the action failed locally', async () => {
+	test( 'undoActivity reconciles terminal 409 undo conflicts against server state instead of marking the action failed locally', async () => {
 		const localActivity = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -3187,7 +3623,7 @@ describe('store action thunks', () => {
 			target: {
 				clientId: 'block-1',
 				blockName: 'core/paragraph',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			before: {
 				attributes: {
@@ -3221,10 +3657,10 @@ describe('store action thunks', () => {
 		};
 
 		apiFetch
-			.mockResolvedValueOnce({
-				entries: [localActivity],
-			})
-			.mockRejectedValueOnce({
+			.mockResolvedValueOnce( {
+				entries: [ localActivity ],
+			} )
+			.mockRejectedValueOnce( {
 				code: 'flavor_agent_activity_invalid_undo_transition',
 				message:
 					'Flavor Agent only allows undo status changes from the available state.',
@@ -3232,82 +3668,84 @@ describe('store action thunks', () => {
 					status: 409,
 					code: 'flavor_agent_activity_invalid_undo_transition',
 				},
-			})
-			.mockResolvedValueOnce({
-				entries: [reconciledServerEntry],
-			});
+			} )
+			.mockResolvedValueOnce( {
+				entries: [ reconciledServerEntry ],
+			} );
 
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
 			getActivityLog: jest
 				.fn()
-				.mockReturnValueOnce([localActivity])
-				.mockReturnValue([reconciledServerEntry]),
+				.mockReturnValueOnce( [ localActivity ] )
+				.mockReturnValue( [ reconciledServerEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlock: jest.fn().mockReturnValue({
+							getBlock: jest.fn().mockReturnValue( {
 								clientId: 'block-1',
 								name: 'core/paragraph',
 								attributes: {
 									content: 'New copy',
 								},
-							}),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'New copy',
-							}),
+							} ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.undoActivity('activity-1')({
+		const result = await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(result).toEqual(
-			expect.objectContaining({
+		expect( result ).toEqual(
+			expect.objectContaining( {
 				ok: true,
-			})
+			} )
 		);
-		expect(dispatch).not.toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'SET_UNDO_STATE',
 				status: 'error',
 				activityId: 'activity-1',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [
-				expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
 					id: 'activity-1',
-					undo: expect.objectContaining({
+					undo: expect.objectContaining( {
 						status: 'undone',
-					}),
-				}),
-			])
+					} ),
+				} ),
+			] )
 		);
-	});
+	} );
 
-	test('undoActivity delegates template rollback to template-actions helpers', async () => {
-		undoTemplateSuggestionOperations.mockReturnValue({
+	test( 'undoActivity delegates template rollback to template-actions helpers', async () => {
+		undoTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,
 			operations: [],
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('wp_template:home'),
-			getActivityLog: jest.fn().mockReturnValue([
+			getActivityScopeKey: jest
+				.fn()
+				.mockReturnValue( 'wp_template:home' ),
+			getActivityLog: jest.fn().mockReturnValue( [
 				{
 					id: 'activity-1',
 					type: 'apply_template_suggestion',
@@ -3320,8 +3758,8 @@ describe('store action thunks', () => {
 						status: 'available',
 					},
 				},
-			]),
-			getLatestAppliedActivity: jest.fn().mockReturnValue({
+			] ),
+			getLatestAppliedActivity: jest.fn().mockReturnValue( {
 				id: 'activity-1',
 				type: 'apply_template_suggestion',
 				surface: 'template',
@@ -3332,31 +3770,31 @@ describe('store action thunks', () => {
 					canUndo: true,
 					status: 'available',
 				},
-			}),
+			} ),
 		};
 
-		await actions.undoActivity('activity-1')({
+		await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(undoTemplateSuggestionOperations).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( undoTemplateSuggestionOperations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				id: 'activity-1',
 				surface: 'template',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'SET_UNDO_STATE',
 				status: 'success',
 				activityId: 'activity-1',
-			})
+			} )
 		);
-	});
+	} );
 
-	test('undoActivity blocks historical undo until newer entity actions are already undone', async () => {
+	test( 'undoActivity blocks historical undo until newer entity actions are already undone', async () => {
 		const dispatch = jest.fn();
 		const olderActivity = {
 			id: 'activity-older',
@@ -3365,7 +3803,7 @@ describe('store action thunks', () => {
 			timestamp: '2026-03-24T10:00:00Z',
 			target: {
 				clientId: 'block-1',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			document: {
 				scopeKey: 'post:42',
@@ -3382,7 +3820,7 @@ describe('store action thunks', () => {
 			timestamp: '2026-03-24T10:00:01Z',
 			target: {
 				clientId: 'block-1',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			document: {
 				scopeKey: 'post:42',
@@ -3393,31 +3831,33 @@ describe('store action thunks', () => {
 			},
 		};
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([olderActivity, newerActivity]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest
+				.fn()
+				.mockReturnValue( [ olderActivity, newerActivity ] ),
 		};
 
-		const result = await actions.undoActivity('activity-older')({
+		const result = await actions.undoActivity( 'activity-older' )( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'SET_UNDO_STATE',
 				status: 'error',
 				activityId: 'activity-older',
 				error: 'Undo blocked by newer AI actions.',
-			})
+			} )
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
 			error: 'Undo blocked by newer AI actions.',
-		});
-	});
+		} );
+	} );
 
-	test('undoActivity allows an older block action once native undo has already reverted the newer AI action', async () => {
+	test( 'undoActivity allows an older block action once native undo has already reverted the newer AI action', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const olderActivity = {
@@ -3428,7 +3868,7 @@ describe('store action thunks', () => {
 			target: {
 				clientId: 'block-1',
 				blockName: 'core/paragraph',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			document: {
 				scopeKey: 'post:42',
@@ -3456,7 +3896,7 @@ describe('store action thunks', () => {
 			target: {
 				clientId: 'block-1',
 				blockName: 'core/paragraph',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			document: {
 				scopeKey: 'post:42',
@@ -3477,24 +3917,26 @@ describe('store action thunks', () => {
 			},
 		};
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([olderActivity, newerActivity]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest
+				.fn()
+				.mockReturnValue( [ olderActivity, newerActivity ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlock: jest.fn().mockReturnValue({
+							getBlock: jest.fn().mockReturnValue( {
 								clientId: 'block-1',
 								name: 'core/paragraph',
 								attributes: {
 									content: 'Beta',
 								},
-							}),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Beta',
-							}),
-							getBlocks: jest.fn().mockReturnValue([
+							} ),
+							getBlocks: jest.fn().mockReturnValue( [
 								{
 									clientId: 'block-1',
 									name: 'core/paragraph',
@@ -3503,40 +3945,40 @@ describe('store action thunks', () => {
 									},
 									innerBlocks: [],
 								},
-							]),
+							] ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.undoActivity('activity-older')({
+		const result = await actions.undoActivity( 'activity-older' )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).toHaveBeenCalledWith('block-1', {
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
 			content: 'Alpha',
-		});
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'UPDATE_ACTIVITY_UNDO_STATE',
 				activityId: 'activity-older',
 				status: 'undone',
-			})
+			} )
 		);
-		expect(result).toEqual({ ok: true });
-	});
+		expect( result ).toEqual( { ok: true } );
+	} );
 
-	test('undoActivity treats a block action already reverted by native undo as already undone', async () => {
+	test( 'undoActivity treats a block action already reverted by native undo as already undone', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [
 				{
 					id: 'activity-1',
 					type: 'apply_suggestion',
@@ -3544,7 +3986,7 @@ describe('store action thunks', () => {
 					target: {
 						clientId: 'block-1',
 						blockName: 'core/paragraph',
-						blockPath: [0],
+						blockPath: [ 0 ],
 					},
 					before: {
 						attributes: {
@@ -3564,23 +4006,23 @@ describe('store action thunks', () => {
 						status: 'available',
 					},
 				},
-			]),
+			] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlock: jest.fn().mockReturnValue({
+							getBlock: jest.fn().mockReturnValue( {
 								clientId: 'block-1',
 								name: 'core/paragraph',
 								attributes: {
 									content: 'Before',
 								},
-							}),
-							getBlockAttributes: jest.fn().mockReturnValue({
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'Before',
-							}),
-							getBlocks: jest.fn().mockReturnValue([
+							} ),
+							getBlocks: jest.fn().mockReturnValue( [
 								{
 									clientId: 'block-1',
 									name: 'core/paragraph',
@@ -3589,35 +4031,35 @@ describe('store action thunks', () => {
 									},
 									innerBlocks: [],
 								},
-							]),
+							] ),
 					  }
 					: {}
 			),
-			dispatch: jest.fn().mockReturnValue({
+			dispatch: jest.fn().mockReturnValue( {
 				updateBlockAttributes,
-			}),
+			} ),
 		};
 
-		const result = await actions.undoActivity('activity-1')({
+		const result = await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(updateBlockAttributes).not.toHaveBeenCalled();
-		expect(dispatch).not.toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'SET_UNDO_STATE',
 				status: 'error',
-			})
+			} )
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: true,
 			alreadyUndone: true,
-		});
-	});
+		} );
+	} );
 
-	test('undoActivity refreshes server-backed activity before allowing a historical undo', async () => {
+	test( 'undoActivity refreshes server-backed activity before allowing a historical undo', async () => {
 		const dispatch = jest.fn();
 		const olderActivity = {
 			id: 'activity-older',
@@ -3627,7 +4069,7 @@ describe('store action thunks', () => {
 			target: {
 				clientId: 'block-1',
 				blockName: 'core/paragraph',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			document: {
 				scopeKey: 'post:42',
@@ -3648,7 +4090,7 @@ describe('store action thunks', () => {
 			target: {
 				clientId: 'block-1',
 				blockName: 'core/paragraph',
-				blockPath: [0],
+				blockPath: [ 0 ],
 			},
 			document: {
 				scopeKey: 'post:42',
@@ -3662,45 +4104,50 @@ describe('store action thunks', () => {
 			},
 		};
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([olderActivity]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ olderActivity ] ),
 		};
 
-		apiFetch.mockResolvedValue({
-			entries: [olderActivity, newerActivity],
-		});
+		apiFetch.mockResolvedValue( {
+			entries: [ olderActivity, newerActivity ],
+		} );
 
-		const result = await actions.undoActivity('activity-older')({
+		const result = await actions.undoActivity( 'activity-older' )( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(apiFetch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
 				method: 'GET',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [olderActivity, newerActivity])
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				olderActivity,
+				newerActivity,
+			] )
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
 			error: 'Undo blocked by newer AI actions.',
-		});
-	});
+		} );
+	} );
 
-	test('undoActivity delegates template-part rollback to template-actions helpers', async () => {
-		undoTemplatePartSuggestionOperations.mockReturnValue({
+	test( 'undoActivity delegates template-part rollback to template-actions helpers', async () => {
+		undoTemplatePartSuggestionOperations.mockReturnValue( {
 			ok: true,
 			operations: [],
-		});
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('wp_template_part:header'),
-			getActivityLog: jest.fn().mockReturnValue([
+			getActivityScopeKey: jest
+				.fn()
+				.mockReturnValue( 'wp_template_part:header' ),
+			getActivityLog: jest.fn().mockReturnValue( [
 				{
 					id: 'activity-1',
 					type: 'apply_template_part_suggestion',
@@ -3713,8 +4160,8 @@ describe('store action thunks', () => {
 						status: 'available',
 					},
 				},
-			]),
-			getLatestAppliedActivity: jest.fn().mockReturnValue({
+			] ),
+			getLatestAppliedActivity: jest.fn().mockReturnValue( {
 				id: 'activity-1',
 				type: 'apply_template_part_suggestion',
 				surface: 'template-part',
@@ -3725,42 +4172,43 @@ describe('store action thunks', () => {
 					canUndo: true,
 					status: 'available',
 				},
-			}),
+			} ),
 		};
 
-		await actions.undoActivity('activity-1')({
+		await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(undoTemplatePartSuggestionOperations).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( undoTemplatePartSuggestionOperations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				id: 'activity-1',
 				surface: 'template-part',
-			})
+			} )
 		);
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'SET_UNDO_STATE',
 				status: 'success',
 				activityId: 'activity-1',
-			})
+			} )
 		);
-	});
+	} );
 
-	test('undoActivity marks template actions failed when dynamic undo resolution rejects them', async () => {
-		getTemplateActivityUndoState.mockReturnValue({
+	test( 'undoActivity marks template actions failed when dynamic undo resolution rejects them', async () => {
+		getTemplateActivityUndoState.mockReturnValue( {
 			canUndo: false,
 			status: 'failed',
-			error:
-				'Inserted pattern content changed after apply and cannot be undone automatically.',
-		});
+			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+		} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('wp_template:home'),
-			getActivityLog: jest.fn().mockReturnValue([
+			getActivityScopeKey: jest
+				.fn()
+				.mockReturnValue( 'wp_template:home' ),
+			getActivityLog: jest.fn().mockReturnValue( [
 				{
 					id: 'activity-1',
 					type: 'apply_template_suggestion',
@@ -3773,8 +4221,8 @@ describe('store action thunks', () => {
 						status: 'available',
 					},
 				},
-			]),
-			getLatestAppliedActivity: jest.fn().mockReturnValue({
+			] ),
+			getLatestAppliedActivity: jest.fn().mockReturnValue( {
 				id: 'activity-1',
 				type: 'apply_template_suggestion',
 				surface: 'template',
@@ -3785,31 +4233,30 @@ describe('store action thunks', () => {
 					canUndo: true,
 					status: 'available',
 				},
-			}),
+			} ),
 		};
 
-		const result = await actions.undoActivity('activity-1')({
+		const result = await actions.undoActivity( 'activity-1' )( {
 			dispatch,
 			registry: null,
 			select,
-		});
+		} );
 
-		expect(undoTemplateSuggestionOperations).not.toHaveBeenCalled();
-		expect(dispatch).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( undoTemplateSuggestionOperations ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				type: 'UPDATE_ACTIVITY_UNDO_STATE',
 				activityId: 'activity-1',
 				status: 'failed',
-			})
+			} )
 		);
-		expect(result).toEqual({
+		expect( result ).toEqual( {
 			ok: false,
-			error:
-				'Inserted pattern content changed after apply and cannot be undone automatically.',
-		});
-	});
+			error: 'Inserted pattern content changed after apply and cannot be undone automatically.',
+		} );
+	} );
 
-	test('loadActivitySession reconciles pending undo sync 409 conflicts against the server entry', async () => {
+	test( 'loadActivitySession reconciles pending undo sync 409 conflicts against the server entry', async () => {
 		const pendingUndoEntry = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -3842,7 +4289,7 @@ describe('store action thunks', () => {
 		};
 
 		apiFetch
-			.mockRejectedValueOnce({
+			.mockRejectedValueOnce( {
 				code: 'flavor_agent_activity_invalid_undo_transition',
 				message:
 					'Flavor Agent only allows undo status changes from the available state.',
@@ -3850,21 +4297,21 @@ describe('store action thunks', () => {
 					status: 409,
 					code: 'flavor_agent_activity_invalid_undo_transition',
 				},
-			})
-			.mockResolvedValueOnce({
-				entries: [persistedUndoEntry],
-			})
-			.mockResolvedValueOnce({
-				entries: [persistedUndoEntry],
-			});
+			} )
+			.mockResolvedValueOnce( {
+				entries: [ persistedUndoEntry ],
+			} )
+			.mockResolvedValueOnce( {
+				entries: [ persistedUndoEntry ],
+			} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([pendingUndoEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingUndoEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -3874,28 +4321,28 @@ describe('store action thunks', () => {
 			),
 		};
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [
-				expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
 					id: 'activity-1',
-					undo: expect.objectContaining({
+					undo: expect.objectContaining( {
 						status: 'undone',
-					}),
-					persistence: expect.objectContaining({
+					} ),
+					persistence: expect.objectContaining( {
 						status: 'server',
-					}),
-				}),
-			])
+					} ),
+				} ),
+			] )
 		);
-	});
+	} );
 
-	test('loadActivitySession falls back to failedEntries when conflict reconciliation cannot reach the server', async () => {
+	test( 'loadActivitySession falls back to failedEntries when conflict reconciliation cannot reach the server', async () => {
 		const pendingUndoEntry = {
 			id: 'activity-1',
 			type: 'apply_suggestion',
@@ -3934,7 +4381,7 @@ describe('store action thunks', () => {
 		};
 
 		apiFetch
-			.mockRejectedValueOnce({
+			.mockRejectedValueOnce( {
 				code: 'flavor_agent_activity_invalid_undo_transition',
 				message:
 					'Flavor Agent only allows undo status changes from the available state.',
@@ -3942,19 +4389,21 @@ describe('store action thunks', () => {
 					status: 409,
 					code: 'flavor_agent_activity_invalid_undo_transition',
 				},
-			})
-			.mockRejectedValueOnce(new Error('Conflict reconciliation fetch failed.'))
-			.mockResolvedValueOnce({
-				entries: [staleServerEntry],
-			});
+			} )
+			.mockRejectedValueOnce(
+				new Error( 'Conflict reconciliation fetch failed.' )
+			)
+			.mockResolvedValueOnce( {
+				entries: [ staleServerEntry ],
+			} );
 
 		const dispatch = jest.fn();
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue('post:42'),
-			getActivityLog: jest.fn().mockReturnValue([pendingUndoEntry]),
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ pendingUndoEntry ] ),
 		};
 		const registry = {
-			select: jest.fn((storeName) =>
+			select: jest.fn( ( storeName ) =>
 				storeName === 'core/editor'
 					? {
 							getCurrentPostType: () => 'post',
@@ -3964,25 +4413,25 @@ describe('store action thunks', () => {
 			),
 		};
 
-		await actions.loadActivitySession()({
+		await actions.loadActivitySession()( {
 			dispatch,
 			registry,
 			select,
-		});
+		} );
 
-		expect(dispatch).toHaveBeenCalledWith(
-			actions.setActivitySession('post:42', [
-				expect.objectContaining({
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession( 'post:42', [
+				expect.objectContaining( {
 					id: 'activity-1',
-					persistence: expect.objectContaining({
+					persistence: expect.objectContaining( {
 						status: 'local',
 						syncType: 'undo',
-					}),
-					undo: expect.objectContaining({
+					} ),
+					undo: expect.objectContaining( {
 						status: 'undone',
-					}),
-				}),
-			])
+					} ),
+				} ),
+			] )
 		);
-	});
-});
+	} );
+} );

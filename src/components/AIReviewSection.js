@@ -1,10 +1,7 @@
 import { Button } from '@wordpress/components';
 
 import { formatCount, joinClassNames } from '../utils/format-count';
-import {
-	EXECUTABLE_LABEL,
-	REVIEW_SECTION_TITLE,
-} from './surface-labels';
+import { EXECUTABLE_LABEL, REVIEW_SECTION_TITLE } from './surface-labels';
 
 export default function AIReviewSection( {
 	title = REVIEW_SECTION_TITLE,

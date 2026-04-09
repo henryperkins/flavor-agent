@@ -816,27 +816,33 @@ function getRequestDiagnostics( request = {} ) {
 		timeoutLabel = `${ timeoutSeconds } s`;
 	}
 
-	requestPayloadLabel = [
-		requestBodyBytes !== null ? `${ requestBodyBytes } bytes` : null,
-		instructionsChars !== null
-			? `${ instructionsChars } instruction chars`
-			: null,
-		requestInputChars !== null ? `${ requestInputChars } input chars` : null,
-		maxOutputTokens !== null ? `${ maxOutputTokens } max output tokens` : null,
-		reasoningEffort ? `reasoning ${ reasoningEffort }` : null,
-	]
-		.filter( Boolean )
-		.join( ' · ' ) || EMPTY_VALUE;
+	requestPayloadLabel =
+		[
+			requestBodyBytes !== null ? `${ requestBodyBytes } bytes` : null,
+			instructionsChars !== null
+				? `${ instructionsChars } instruction chars`
+				: null,
+			requestInputChars !== null
+				? `${ requestInputChars } input chars`
+				: null,
+			maxOutputTokens !== null
+				? `${ maxOutputTokens } max output tokens`
+				: null,
+			reasoningEffort ? `reasoning ${ reasoningEffort }` : null,
+		]
+			.filter( Boolean )
+			.join( ' · ' ) || EMPTY_VALUE;
 
-	responseLabel = [
-		httpStatus !== null ? `HTTP ${ httpStatus }` : null,
-		responseBodyBytes !== null ? `${ responseBodyBytes } bytes` : null,
-		processingMs !== null ? `${ processingMs } ms processing` : null,
-		retryAfter !== null ? `${ retryAfter } s retry-after` : null,
-		responseRegion ? `region ${ responseRegion }` : null,
-	]
-		.filter( Boolean )
-		.join( ' · ' ) || EMPTY_VALUE;
+	responseLabel =
+		[
+			httpStatus !== null ? `HTTP ${ httpStatus }` : null,
+			responseBodyBytes !== null ? `${ responseBodyBytes } bytes` : null,
+			processingMs !== null ? `${ processingMs } ms processing` : null,
+			retryAfter !== null ? `${ retryAfter } s retry-after` : null,
+			responseRegion ? `region ${ responseRegion }` : null,
+		]
+			.filter( Boolean )
+			.join( ' · ' ) || EMPTY_VALUE;
 
 	return {
 		provider: provider || EMPTY_VALUE,

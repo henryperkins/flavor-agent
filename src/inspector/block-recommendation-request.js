@@ -13,8 +13,7 @@ export function buildBlockRecommendationRequestData( {
 		};
 	}
 
-	const trimmedPrompt =
-		typeof prompt === 'string' ? prompt.trim() : '';
+	const trimmedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
 	const requestSignature = buildBlockRecommendationRequestSignature( {
 		clientId,
 		prompt: trimmedPrompt,
@@ -59,7 +58,10 @@ export function getBlockRecommendationFreshness( {
 			? 'client'
 			: null;
 	const effectiveStaleReason =
-		clientStaleReason || ( storedStaleReason === 'server' ? 'server' : null );
+		clientStaleReason ||
+		( storedStaleReason === 'server' || storedStaleReason === 'server-apply'
+			? 'server-apply'
+			: null );
 
 	return {
 		clientStaleReason,

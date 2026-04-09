@@ -70,9 +70,7 @@ describe( 'AIReviewSection', () => {
 	test( 'disables the confirm action when no confirm handler is provided', () => {
 		act( () => {
 			getRoot().render(
-				<AIReviewSection
-					summary="Review the validated structural changes before mutating content."
-				/>
+				<AIReviewSection summary="Review the validated structural changes before mutating content." />
 			);
 		} );
 

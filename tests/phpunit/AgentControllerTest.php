@@ -250,6 +250,14 @@ final class AgentControllerTest extends TestCase {
 			[ 'theme/hero' ],
 			$response->get_data()['suggestions'][0]['patternSuggestions'] ?? []
 		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
 		$request_body = json_decode(
 			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
 			true
@@ -274,10 +282,6 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_signature_only_returns_minimal_payload_and_skips_model_call(): void {
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
-
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
 		$request->set_param( 'templateRef', 'theme//home' );
 		$request->set_param( 'templateType', 'home' );
@@ -290,8 +294,15 @@ final class AgentControllerTest extends TestCase {
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
-			[ 'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null ],
+			[
+				'reviewContextSignature'   => $response->get_data()['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null,
+			],
 			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
 		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
@@ -733,6 +744,14 @@ final class AgentControllerTest extends TestCase {
 			'Midnight',
 			$response->get_data()['suggestions'][0]['operations'][0]['variationTitle'] ?? null
 		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
 
 		$request_body = json_decode(
 			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
@@ -757,9 +776,6 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_style_signature_only_returns_minimal_payload_and_skips_model_call(): void {
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-style' );
 		$request->set_param(
@@ -795,8 +811,15 @@ final class AgentControllerTest extends TestCase {
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
-			[ 'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null ],
+			[
+				'reviewContextSignature'   => $response->get_data()['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null,
+			],
 			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
 		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
@@ -1384,13 +1407,17 @@ final class AgentControllerTest extends TestCase {
 			'flavor-agent/recommend-template-part',
 			'POST /flavor-agent/v1/recommend-template-part'
 		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
 	}
 
 	public function test_handle_recommend_template_part_signature_only_returns_minimal_payload_and_skips_model_call(): void {
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
-
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
 		$request->set_param( 'templatePartRef', 'theme//header' );
 		$request->set_param( 'prompt', 'Make the header feel lighter.' );
@@ -1402,8 +1429,15 @@ final class AgentControllerTest extends TestCase {
 		$this->assertInstanceOf( \WP_REST_Response::class, $response );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
-			[ 'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null ],
+			[
+				'reviewContextSignature'   => $response->get_data()['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $response->get_data()['resolvedContextSignature'] ?? null,
+			],
 			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
 		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',

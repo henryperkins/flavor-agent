@@ -127,10 +127,12 @@ describe( 'template-part recommender helpers', () => {
 			},
 		};
 
-		const firstSignature = buildTemplatePartRecommendationContextSignature( {
-			visiblePatternNames: [ 'theme/header-utility' ],
-			editorStructure: baseStructure,
-		} );
+		const firstSignature = buildTemplatePartRecommendationContextSignature(
+			{
+				visiblePatternNames: [ 'theme/header-utility' ],
+				editorStructure: baseStructure,
+			}
+		);
 		const secondSignature = buildTemplatePartRecommendationContextSignature(
 			{
 				visiblePatternNames: [ 'theme/header-utility' ],

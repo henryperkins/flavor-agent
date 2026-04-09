@@ -54,27 +54,27 @@ const SEARCH_DEBOUNCE_MS = 400;
 const OBSERVER_TIMEOUT_MS = 3000;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
 
-function getRegistryVersion(entries, prefix, includeLabel = false) {
-	if (!Array.isArray(entries)) {
-		return `${prefix}:none`;
+function getRegistryVersion( entries, prefix, includeLabel = false ) {
+	if ( ! Array.isArray( entries ) ) {
+		return `${ prefix }:none`;
 	}
 
-	return `${prefix}:${entries
-		.map((entry, index) => {
+	return `${ prefix }:${ entries
+		.map( ( entry, index ) => {
 			const name =
 				typeof entry?.name === 'string' && entry.name
 					? entry.name
-					: `index-${index}`;
+					: `index-${ index }`;
 
-			if (!includeLabel) {
+			if ( ! includeLabel ) {
 				return name;
 			}
 
 			const label = typeof entry?.label === 'string' ? entry.label : '';
 
-			return `${name}:${label}`;
-		})
-		.join('|')}`;
+			return `${ name }:${ label }`;
+		} )
+		.join( '|' ) }`;
 }
 
 function createPatchState() {
@@ -87,39 +87,42 @@ function createPatchState() {
 	};
 }
 
-function getNonEmptyString(value) {
+function getNonEmptyString( value ) {
 	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
 }
 
-function buildAncestorEntries(editor, inserterRootClientId) {
-	if (!inserterRootClientId) {
+function buildAncestorEntries( editor, inserterRootClientId ) {
+	if ( ! inserterRootClientId ) {
 		return [];
 	}
 
 	const ancestors = [];
 	let parentId = inserterRootClientId;
 
-	while (parentId) {
-		ancestors.unshift({
+	while ( parentId ) {
+		ancestors.unshift( {
 			clientId: parentId,
-			blockName: editor.getBlockName?.(parentId) || '',
-			attributes: editor.getBlockAttributes?.(parentId) || {},
-		});
-		parentId = editor.getBlockRootClientId?.(parentId) ?? null;
+			blockName: editor.getBlockName?.( parentId ) || '',
+			attributes: editor.getBlockAttributes?.( parentId ) || {},
+		} );
+		parentId = editor.getBlockRootClientId?.( parentId ) ?? null;
 	}
 
 	return ancestors;
 }
 
-function buildInsertionContext(editor, inserterRootClientId, insertionPoint) {
-	const ancestorEntries = buildAncestorEntries(editor, inserterRootClientId);
-	const rootEntry = ancestorEntries[ancestorEntries.length - 1] || null;
+function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
+	const ancestorEntries = buildAncestorEntries(
+		editor,
+		inserterRootClientId
+	);
+	const rootEntry = ancestorEntries[ ancestorEntries.length - 1 ] || null;
 	const areaLookup = getTemplatePartAreaLookup();
-	const nearestTemplatePart = [...ancestorEntries]
+	const nearestTemplatePart = [ ...ancestorEntries ]
 		.reverse()
-		.find((entry) => entry.blockName === 'core/template-part');
+		.find( ( entry ) => entry.blockName === 'core/template-part' );
 	const templatePartArea = nearestTemplatePart
-		? inferTemplatePartArea(nearestTemplatePart.attributes, areaLookup)
+		? inferTemplatePartArea( nearestTemplatePart.attributes, areaLookup )
 		: '';
 	const templatePartSlug = getNonEmptyString(
 		nearestTemplatePart?.attributes?.slug
@@ -127,27 +130,29 @@ function buildInsertionContext(editor, inserterRootClientId, insertionPoint) {
 	const containerLayout = getNonEmptyString(
 		rootEntry?.attributes?.layout?.type
 	);
-	const siblingOrder = editor.getBlockOrder?.(inserterRootClientId) || [];
+	const siblingOrder = editor.getBlockOrder?.( inserterRootClientId ) || [];
 	const insertIndex = insertionPoint?.index ?? siblingOrder.length;
 	const nearbySiblings = [];
-	const start = Math.max(0, insertIndex - 3);
-	const end = Math.min(siblingOrder.length, insertIndex + 3);
+	const start = Math.max( 0, insertIndex - 3 );
+	const end = Math.min( siblingOrder.length, insertIndex + 3 );
 
-	for (let i = start; i < end; i++) {
-		const name = editor.getBlockName?.(siblingOrder[i]);
+	for ( let i = start; i < end; i++ ) {
+		const name = editor.getBlockName?.( siblingOrder[ i ] );
 
-		if (name) {
-			nearbySiblings.push(name);
+		if ( name ) {
+			nearbySiblings.push( name );
 		}
 	}
 
 	return {
 		rootBlock: rootEntry?.blockName || null,
-		ancestors: ancestorEntries.map((entry) => entry.blockName).filter(Boolean),
+		ancestors: ancestorEntries
+			.map( ( entry ) => entry.blockName )
+			.filter( Boolean ),
 		nearbySiblings,
-		...(templatePartArea ? { templatePartArea } : {}),
-		...(templatePartSlug ? { templatePartSlug } : {}),
-		...(containerLayout ? { containerLayout } : {}),
+		...( templatePartArea ? { templatePartArea } : {} ),
+		...( templatePartSlug ? { templatePartSlug } : {} ),
+		...( containerLayout ? { containerLayout } : {} ),
 	};
 }
 
@@ -167,7 +172,7 @@ function patchInserterPatterns(
 ) {
 	const patterns = getBlockPatterns();
 
-	if (patterns.length === 0) {
+	if ( patterns.length === 0 ) {
 		return;
 	}
 
@@ -179,7 +184,7 @@ function patchInserterPatterns(
 		recommendedCategory
 	);
 
-	setBlockPatterns(patched);
+	setBlockPatterns( patched );
 	setBlockPatternCategories(
 		patchPatternCategoryRegistry(
 			categories,
@@ -190,7 +195,7 @@ function patchInserterPatterns(
 	);
 }
 
-function PatternSummary({ count }) {
+function PatternSummary( { count } ) {
 	return (
 		<div
 			className="flavor-agent-pattern-summary"
@@ -200,27 +205,28 @@ function PatternSummary({ count }) {
 			<div className="flavor-agent-pattern-summary__header">
 				<span className="flavor-agent-pill">Flavor Agent</span>
 				<span className="flavor-agent-pill">
-					{formatCount(count, 'recommendation')}
+					{ formatCount( count, 'recommendation' ) }
 				</span>
 			</div>
 			<p className="flavor-agent-pattern-summary__copy">
-				Recommended now includes {formatCount(count, 'AI-ranked pattern')} for
-				this insertion point.
+				Recommended now includes{ ' ' }
+				{ formatCount( count, 'AI-ranked pattern' ) } for this insertion
+				point.
 			</p>
 		</div>
 	);
 }
 
-function PatternInserterNotice({ status, error = '', onRetry }) {
+function PatternInserterNotice( { status, error = '', onRetry } ) {
 	let message = 'Preparing pattern recommendations for this insertion point.';
 
-	if (status === 'loading') {
+	if ( status === 'loading' ) {
 		message = 'Ranking patterns for this insertion point.';
-	} else if (status === 'error') {
+	} else if ( status === 'error' ) {
 		message =
 			error ||
 			'Pattern recommendation request failed for this insertion point.';
-	} else if (status === 'empty') {
+	} else if ( status === 'empty' ) {
 		message =
 			'Flavor Agent did not find a strong pattern match for this insertion point yet.';
 	}
@@ -233,71 +239,72 @@ function PatternInserterNotice({ status, error = '', onRetry }) {
 		>
 			<div className="flavor-agent-pattern-summary__header">
 				<span className="flavor-agent-pill">Flavor Agent</span>
-				{status === 'empty' && (
+				{ status === 'empty' && (
 					<span className="flavor-agent-pill">No matches yet</span>
-				)}
-				{status === 'error' && (
+				) }
+				{ status === 'error' && (
 					<span className="flavor-agent-pill">Ranking failed</span>
-				)}
+				) }
 			</div>
-			<p className="flavor-agent-pattern-summary__copy">{message}</p>
-			{status === 'error' && typeof onRetry === 'function' && (
+			<p className="flavor-agent-pattern-summary__copy">{ message }</p>
+			{ status === 'error' && typeof onRetry === 'function' && (
 				<Button
 					variant="link"
-					onClick={onRetry}
+					onClick={ onRetry }
 					className="flavor-agent-pattern-summary__retry"
 				>
 					Retry
 				</Button>
-			)}
+			) }
 		</div>
 	);
 }
 
 export default function PatternRecommender() {
-	const canRecommend = getSurfaceCapability('pattern').available;
+	const canRecommend = getSurfaceCapability( 'pattern' ).available;
 	const postType = useSelect(
-		(select) => select(editorStore).getCurrentPostType(),
+		( select ) => select( editorStore ).getCurrentPostType(),
 		[]
 	);
 	const isInserterOpen = useSelect(
-		(select) => select(editorStore).isInserterOpened(),
+		( select ) => select( editorStore ).isInserterOpened(),
 		[]
 	);
-	const templateType = useSelect((select) => {
-		const editSite = select('core/edit-site');
+	const templateType = useSelect( ( select ) => {
+		const editSite = select( 'core/edit-site' );
 
-		if (!editSite?.getEditedPostType) {
+		if ( ! editSite?.getEditedPostType ) {
 			return undefined;
 		}
 
-		if (editSite.getEditedPostType() !== 'wp_template') {
+		if ( editSite.getEditedPostType() !== 'wp_template' ) {
 			return undefined;
 		}
 
-		return normalizeTemplateType(editSite.getEditedPostId());
-	}, []);
-	const patternContract = usePostTypeEntityContract('wp_block');
-	const selectedBlockName = useSelect((select) => {
-		const clientId = select(blockEditorStore).getSelectedBlockClientId();
+		return normalizeTemplateType( editSite.getEditedPostId() );
+	}, [] );
+	const patternContract = usePostTypeEntityContract( 'wp_block' );
+	const selectedBlockName = useSelect( ( select ) => {
+		const clientId = select( blockEditorStore ).getSelectedBlockClientId();
 
-		if (!clientId) {
+		if ( ! clientId ) {
 			return null;
 		}
 
-		return select(blockEditorStore).getBlockName(clientId);
-	}, []);
-	const inserterRootClientId = useSelect((select) => {
+		return select( blockEditorStore ).getBlockName( clientId );
+	}, [] );
+	const inserterRootClientId = useSelect( ( select ) => {
 		return (
-			select(blockEditorStore).getBlockInsertionPoint?.()?.rootClientId ?? null
+			select( blockEditorStore ).getBlockInsertionPoint?.()
+				?.rootClientId ?? null
 		);
-	}, []);
+	}, [] );
 	const insertionContext = useSelect(
-		(select) => {
-			const editor = select(blockEditorStore);
+		( select ) => {
+			const editor = select( blockEditorStore );
 			const insertionPoint = editor.getBlockInsertionPoint?.();
 
-			if (!insertionPoint) {
+			if ( ! insertionPoint ) {
 				return null;
 			}
 
@@ -307,32 +314,32 @@ export default function PatternRecommender() {
 				insertionPoint
 			);
 		},
-		[inserterRootClientId]
+		[ inserterRootClientId ]
 	);
 	const visiblePatternNames = useSelect(
-		(select) => {
+		( select ) => {
 			return getVisiblePatternNames(
 				inserterRootClientId,
-				select(blockEditorStore)
+				select( blockEditorStore )
 			);
 		},
-		[inserterRootClientId]
+		[ inserterRootClientId ]
 	);
-	const patternRegistryVersion = useSelect((select) => {
-		const settings = select(blockEditorStore).getSettings?.() || {};
+	const patternRegistryVersion = useSelect( ( select ) => {
+		const settings = select( blockEditorStore ).getSettings?.() || {};
 
-		if (Array.isArray(settings.blockPatterns)) {
-			return getRegistryVersion(settings.blockPatterns, 'stable');
+		if ( Array.isArray( settings.blockPatterns ) ) {
+			return getRegistryVersion( settings.blockPatterns, 'stable' );
 		}
 
-		if (Array.isArray(settings.__experimentalAdditionalBlockPatterns)) {
+		if ( Array.isArray( settings.__experimentalAdditionalBlockPatterns ) ) {
 			return getRegistryVersion(
 				settings.__experimentalAdditionalBlockPatterns,
 				'experimental-additional'
 			);
 		}
 
-		if (Array.isArray(settings.__experimentalBlockPatterns)) {
+		if ( Array.isArray( settings.__experimentalBlockPatterns ) ) {
 			return getRegistryVersion(
 				settings.__experimentalBlockPatterns,
 				'experimental'
@@ -340,11 +347,11 @@ export default function PatternRecommender() {
 		}
 
 		return 'none:0';
-	}, []);
-	const categoryRegistryVersion = useSelect((select) => {
-		const settings = select(blockEditorStore).getSettings?.() || {};
+	}, [] );
+	const categoryRegistryVersion = useSelect( ( select ) => {
+		const settings = select( blockEditorStore ).getSettings?.() || {};
 
-		if (Array.isArray(settings.blockPatternCategories)) {
+		if ( Array.isArray( settings.blockPatternCategories ) ) {
 			return getRegistryVersion(
 				settings.blockPatternCategories,
 				'stable',
@@ -353,7 +360,9 @@ export default function PatternRecommender() {
 		}
 
 		if (
-			Array.isArray(settings.__experimentalAdditionalBlockPatternCategories)
+			Array.isArray(
+				settings.__experimentalAdditionalBlockPatternCategories
+			)
 		) {
 			return getRegistryVersion(
 				settings.__experimentalAdditionalBlockPatternCategories,
@@ -362,7 +371,7 @@ export default function PatternRecommender() {
 			);
 		}
 
-		if (Array.isArray(settings.__experimentalBlockPatternCategories)) {
+		if ( Array.isArray( settings.__experimentalBlockPatternCategories ) ) {
 			return getRegistryVersion(
 				settings.__experimentalBlockPatternCategories,
 				'experimental',
@@ -371,10 +380,10 @@ export default function PatternRecommender() {
 		}
 
 		return 'none:0';
-	}, []);
+	}, [] );
 	const { patternError, patternStatus, recommendations } = useSelect(
-		(select) => {
-			const store = select(STORE_NAME);
+		( select ) => {
+			const store = select( STORE_NAME );
 
 			return {
 				patternError: store.getPatternError?.() || '',
@@ -384,80 +393,90 @@ export default function PatternRecommender() {
 		},
 		[]
 	);
-	const { fetchPatternRecommendations } = useDispatch(STORE_NAME);
-	const patchStateRef = useRef(createPatchState());
-	const observerRef = useRef(null);
-	const listenerRef = useRef(null);
-	const debounceRef = useRef(null);
-	const noticeObserverRef = useRef(null);
-	const noticeSlotRef = useRef(null);
+	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
+	const patchStateRef = useRef( createPatchState() );
+	const observerRef = useRef( null );
+	const listenerRef = useRef( null );
+	const debounceRef = useRef( null );
+	const noticeObserverRef = useRef( null );
+	const noticeSlotRef = useRef( null );
 
-	if (!noticeSlotRef.current && typeof document !== 'undefined') {
-		const noticeSlot = document.createElement('div');
+	if ( ! noticeSlotRef.current && typeof document !== 'undefined' ) {
+		const noticeSlot = document.createElement( 'div' );
 		noticeSlot.className = INSERTER_SLOT_CLASS;
 		noticeSlotRef.current = noticeSlot;
 	}
 
 	const shouldRenderInserterAffordance =
 		isInserterOpen &&
-		(!canRecommend ||
+		( ! canRecommend ||
 			patternStatus === 'loading' ||
 			patternStatus === 'error' ||
 			patternStatus === 'ready' ||
-			patternStatus === 'idle');
+			patternStatus === 'idle' );
 
-	const buildBaseInput = useCallback(() => {
+	const buildBaseInput = useCallback( () => {
 		const input = {
 			postType,
 			visiblePatternNames,
 		};
 
-		if (templateType) {
+		if ( templateType ) {
 			input.templateType = templateType;
 		}
 
-		if (insertionContext) {
+		if ( insertionContext ) {
 			input.insertionContext = insertionContext;
 		}
 
 		return input;
-	}, [postType, templateType, visiblePatternNames, insertionContext]);
+	}, [ postType, templateType, visiblePatternNames, insertionContext ] );
 
-	const clearSearchDebounce = useCallback(() => {
-		if (debounceRef.current) {
-			clearTimeout(debounceRef.current);
+	const clearSearchDebounce = useCallback( () => {
+		if ( debounceRef.current ) {
+			clearTimeout( debounceRef.current );
 			debounceRef.current = null;
 		}
-	}, []);
+	}, [] );
 
 	const scheduleSearchFetch = useCallback(
-		(callback) => {
+		( callback ) => {
 			clearSearchDebounce();
-			debounceRef.current = setTimeout(() => {
+			debounceRef.current = setTimeout( () => {
 				debounceRef.current = null;
 				callback();
-			}, SEARCH_DEBOUNCE_MS);
+			}, SEARCH_DEBOUNCE_MS );
 		},
-		[clearSearchDebounce]
+		[ clearSearchDebounce ]
 	);
 
-	const handleRetry = useCallback(() => {
-		if (!canRecommend || !postType) {
+	const handleRetry = useCallback( () => {
+		if ( ! canRecommend || ! postType ) {
 			return;
 		}
 
-		fetchPatternRecommendations(buildBaseInput());
-	}, [canRecommend, postType, buildBaseInput, fetchPatternRecommendations]);
+		fetchPatternRecommendations( buildBaseInput() );
+	}, [
+		canRecommend,
+		postType,
+		buildBaseInput,
+		fetchPatternRecommendations,
+	] );
 
-	useEffect(() => {
-		if (!canRecommend || !postType) {
+	useEffect( () => {
+		if ( ! canRecommend || ! postType ) {
 			return;
 		}
 
-		fetchPatternRecommendations(buildBaseInput());
-	}, [canRecommend, postType, buildBaseInput, fetchPatternRecommendations]);
+		fetchPatternRecommendations( buildBaseInput() );
+	}, [
+		canRecommend,
+		postType,
+		buildBaseInput,
+		fetchPatternRecommendations,
+	] );
 
-	useEffect(() => {
+	useEffect( () => {
 		patchInserterPatterns(
 			recommendations,
 			patternContract.recommendedPatternCategory,
@@ -468,84 +487,87 @@ export default function PatternRecommender() {
 		patternRegistryVersion,
 		categoryRegistryVersion,
 		patternContract.recommendedPatternCategory,
-	]);
+	] );
 
-	useEffect(() => {
+	useEffect( () => {
 		const noticeSlot = noticeSlotRef.current;
 
-		if (!noticeSlot) {
+		if ( ! noticeSlot ) {
 			return undefined;
 		}
 
 		const cleanupNotice = () => {
-			if (noticeObserverRef.current) {
+			if ( noticeObserverRef.current ) {
 				noticeObserverRef.current.disconnect();
 				noticeObserverRef.current = null;
 			}
 
-			if (noticeSlot?.parentNode) {
-				noticeSlot.parentNode.removeChild(noticeSlot);
+			if ( noticeSlot?.parentNode ) {
+				noticeSlot.parentNode.removeChild( noticeSlot );
 			}
 		};
 
-		const attachNotice = (inserterContainer) => {
-			if (!noticeSlot || !inserterContainer) {
+		const attachNotice = ( inserterContainer ) => {
+			if ( ! noticeSlot || ! inserterContainer ) {
 				return;
 			}
 
-			if (noticeSlot.parentNode === inserterContainer) {
+			if ( noticeSlot.parentNode === inserterContainer ) {
 				return;
 			}
 
-			if (noticeSlot.parentNode) {
-				noticeSlot.parentNode.removeChild(noticeSlot);
+			if ( noticeSlot.parentNode ) {
+				noticeSlot.parentNode.removeChild( noticeSlot );
 			}
 
-			inserterContainer.insertBefore(noticeSlot, inserterContainer.firstChild);
+			inserterContainer.insertBefore(
+				noticeSlot,
+				inserterContainer.firstChild
+			);
 		};
 
 		const syncNotice = () => {
-			const inserterContainer = findInserterContainer(document);
+			const inserterContainer = findInserterContainer( document );
 
-			if (!inserterContainer) {
+			if ( ! inserterContainer ) {
 				return;
 			}
 
-			attachNotice(inserterContainer);
+			attachNotice( inserterContainer );
 		};
 
-		if (!shouldRenderInserterAffordance) {
+		if ( ! shouldRenderInserterAffordance ) {
 			cleanupNotice();
 			return undefined;
 		}
 
 		syncNotice();
 
-		if (!window.MutationObserver) {
+		if ( ! window.MutationObserver ) {
 			return cleanupNotice;
 		}
 
 		// Gutenberg can replace the inserter container without toggling the
 		// open state, so keep the slot attached for the whole affordance lifetime.
-		const observer = new window.MutationObserver(() => {
+		const observer = new window.MutationObserver( () => {
 			syncNotice();
-		});
+		} );
 
-		observer.observe(document.body, {
+		observer.observe( document.body, {
 			childList: true,
 			subtree: true,
-		});
+		} );
 		noticeObserverRef.current = observer;
 
 		return () => {
 			cleanupNotice();
 		};
-	}, [shouldRenderInserterAffordance]);
+	}, [ shouldRenderInserterAffordance ] );
 
 	const handleSearchInput = useCallback(
-		(value) => {
-			scheduleSearchFetch(() => {
-				if (!postType) {
+		( value ) => {
+			scheduleSearchFetch( () => {
+				if ( ! postType ) {
 					return;
 				}
 
@@ -553,16 +575,16 @@ export default function PatternRecommender() {
 				const input = buildBaseInput();
 				const trimmedValue = value.trim();
 
-				if (trimmedValue) {
+				if ( trimmedValue ) {
 					input.prompt = trimmedValue;
 				}
 
-				if (selectedBlockName) {
+				if ( selectedBlockName ) {
 					input.blockContext = { blockName: selectedBlockName };
 				}
 
-				fetchPatternRecommendations(input);
-			});
+				fetchPatternRecommendations( input );
+			} );
 		},
 		[
 			postType,
@@ -573,16 +595,16 @@ export default function PatternRecommender() {
 		]
 	);
 
-	useEffect(() => {
+	useEffect( () => {
 		const cleanupBindings = () => {
 			clearSearchDebounce();
 
-			if (observerRef.current) {
+			if ( observerRef.current ) {
 				observerRef.current.disconnect();
 				observerRef.current = null;
 			}
 
-			if (listenerRef.current) {
+			if ( listenerRef.current ) {
 				listenerRef.current.el.removeEventListener(
 					'input',
 					listenerRef.current.fn
@@ -591,89 +613,94 @@ export default function PatternRecommender() {
 			}
 		};
 
-		if (!canRecommend || !isInserterOpen) {
+		if ( ! canRecommend || ! isInserterOpen ) {
 			cleanupBindings();
 			return undefined;
 		}
 
-		function attachToSearch(searchInput) {
-			if (listenerRef.current) {
+		function attachToSearch( searchInput ) {
+			if ( listenerRef.current ) {
 				listenerRef.current.el.removeEventListener(
 					'input',
 					listenerRef.current.fn
 				);
 			}
 
-			const fn = (event) => handleSearchInput(event.target.value);
+			const fn = ( event ) => handleSearchInput( event.target.value );
 
-			searchInput.addEventListener('input', fn);
+			searchInput.addEventListener( 'input', fn );
 			listenerRef.current = { el: searchInput, fn };
 		}
 
-		const existing = findInserterSearchInput(document);
+		const existing = findInserterSearchInput( document );
 
-		if (existing) {
-			attachToSearch(existing);
+		if ( existing ) {
+			attachToSearch( existing );
 			return cleanupBindings;
 		}
 
-		if (!window.MutationObserver) {
+		if ( ! window.MutationObserver ) {
 			return cleanupBindings;
 		}
 
-		const observer = new window.MutationObserver(() => {
-			const input = findInserterSearchInput(document);
+		const observer = new window.MutationObserver( () => {
+			const input = findInserterSearchInput( document );
 
-			if (!input) {
+			if ( ! input ) {
 				return;
 			}
 
-			attachToSearch(input);
+			attachToSearch( input );
 			observer.disconnect();
 			observerRef.current = null;
-		});
+		} );
 
-		observer.observe(document.body, {
+		observer.observe( document.body, {
 			childList: true,
 			subtree: true,
-		});
+		} );
 		observerRef.current = observer;
 
-		const timeout = setTimeout(() => {
-			if (observerRef.current) {
+		const timeout = setTimeout( () => {
+			if ( observerRef.current ) {
 				observerRef.current.disconnect();
 				observerRef.current = null;
 			}
-		}, OBSERVER_TIMEOUT_MS);
+		}, OBSERVER_TIMEOUT_MS );
 
 		return () => {
-			clearTimeout(timeout);
+			clearTimeout( timeout );
 			cleanupBindings();
 		};
-	}, [canRecommend, clearSearchDebounce, isInserterOpen, handleSearchInput]);
+	}, [
+		canRecommend,
+		clearSearchDebounce,
+		isInserterOpen,
+		handleSearchInput,
+	] );
 
-	if (shouldRenderInserterAffordance && noticeSlotRef.current) {
+	if ( shouldRenderInserterAffordance && noticeSlotRef.current ) {
 		let notice = null;
 
-		if (!canRecommend) {
+		if ( ! canRecommend ) {
 			notice = <CapabilityNotice surface="pattern" />;
-		} else if (patternStatus === 'ready' && recommendations.length > 0) {
-			notice = <PatternSummary count={recommendations.length} />;
-		} else if (patternStatus === 'error') {
+		} else if ( patternStatus === 'ready' && recommendations.length > 0 ) {
+			notice = <PatternSummary count={ recommendations.length } />;
+		} else if ( patternStatus === 'error' ) {
 			notice = (
 				<PatternInserterNotice
 					status="error"
-					error={patternError}
-					onRetry={handleRetry}
+					error={ patternError }
+					onRetry={ handleRetry }
 				/>
 			);
-		} else if (patternStatus === 'ready') {
+		} else if ( patternStatus === 'ready' ) {
 			notice = <PatternInserterNotice status="empty" />;
 		} else {
 			notice = <PatternInserterNotice status="loading" />;
 		}
 
-		return createPortal(notice, noticeSlotRef.current);
+		return createPortal( notice, noticeSlotRef.current );
 	}
 
 	return null;

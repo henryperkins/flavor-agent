@@ -104,11 +104,11 @@ Undo sync retries follow a similar reconciliation model:
 
 ## Scope Hydration Retry
 
-`loadActivitySession()` also supports an explicit `scope` option for refresh-safe editor restores. If the current editor selectors cannot resolve a scope key yet, the client:
+`loadActivitySession()` also supports an explicit `scope` option for refresh-safe editor restores. If the current editor selectors cannot resolve a scope key yet (i.e. `getScopeKey()` returns falsy) and `retryIfScopeUnavailable` is not `false`, the client:
 
-1. syncs the locally persisted session immediately
-2. schedules a one-shot delayed reload with the same explicit scope
-3. disables further retries on that delayed pass
+1. syncs the locally persisted session immediately so cached activity entries are visible
+2. schedules a one-shot delayed reload (150 ms) that conditionally re-passes the original scope only if `getScopeKey(scope)` resolves on the retry pass, otherwise omits it so the retry falls through to implicit scope resolution
+3. sets `retryIfScopeUnavailable: false` on the retry pass to prevent further retries
 
 This keeps recent AI activity visible across Site Editor refreshes without bypassing the normal server merge once the scope becomes available.
 

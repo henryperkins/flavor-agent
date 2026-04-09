@@ -1,6 +1,7 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockFetchStyleBookRecommendations = jest.fn();
+const mockRevalidateStyleBookReviewFreshness = jest.fn();
 const mockApplyStyleBookSuggestion = jest.fn();
 const mockClearStyleBookRecommendations = jest.fn();
 const mockSetStyleBookSelectedSuggestion = jest.fn();
@@ -353,10 +354,13 @@ beforeEach( () => {
 		activityLog: [],
 		recommendations: [],
 		explanation: '',
+		requestPrompt: '',
 		status: 'idle',
 		error: null,
 		resultRef: null,
 		contextSignature: null,
+		reviewContextSignature: null,
+		reviewStaleReason: null,
 		selectedSuggestionKey: null,
 		applyStatus: 'idle',
 		undoStatus: 'idle',
@@ -425,13 +429,19 @@ beforeEach( () => {
 						currentStoreState.recommendations,
 					getStyleBookExplanation: () =>
 						currentStoreState.explanation,
+					getStyleBookRequestPrompt: () =>
+						currentStoreState.requestPrompt,
 					getStyleBookStatus: () => currentStoreState.status,
 					getStyleBookError: () => currentStoreState.error,
 					getStyleBookResultRef: () => currentStoreState.resultRef,
 					getStyleBookContextSignature: () =>
 						currentStoreState.contextSignature,
+					getStyleBookReviewContextSignature: () =>
+						currentStoreState.reviewContextSignature,
 					getStyleBookSelectedSuggestionKey: () =>
 						currentStoreState.selectedSuggestionKey,
+					getStyleBookReviewStaleReason: () =>
+						currentStoreState.reviewStaleReason,
 					getStyleBookApplyStatus: () =>
 						currentStoreState.applyStatus,
 					getUndoStatus: () => currentStoreState.undoStatus,
@@ -513,6 +523,8 @@ beforeEach( () => {
 		fetchStyleBookRecommendations: mockFetchStyleBookRecommendations,
 		applyStyleBookSuggestion: mockApplyStyleBookSuggestion,
 		clearStyleBookRecommendations: mockClearStyleBookRecommendations,
+		revalidateStyleBookReviewFreshness:
+			mockRevalidateStyleBookReviewFreshness,
 		setStyleBookSelectedSuggestion: mockSetStyleBookSelectedSuggestion,
 		undoActivity: mockUndoActivity,
 	} ) );

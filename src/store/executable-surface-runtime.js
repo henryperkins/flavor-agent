@@ -1,5 +1,20 @@
+import apiFetch from '@wordpress/api-fetch';
+
 function normalizeRequestInput( requestInput ) {
 	return requestInput && typeof requestInput === 'object' ? requestInput : {};
+}
+
+function normalizeStringMessage( value ) {
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function stripContextSignatureFromRequestInput( requestInput = null ) {
+	const normalizedInput = normalizeRequestInput( requestInput );
+	const { contextSignature, ...requestData } = normalizedInput;
+
+	void contextSignature;
+
+	return requestData;
 }
 
 export function createExecutableSurfaceFetchConfig( {
@@ -20,6 +35,27 @@ export function createExecutableSurfaceFetchConfig( {
 			setStatusAction( 'error', message, requestToken ),
 		setLoadingState: ( requestToken ) =>
 			setStatusAction( 'loading', null, requestToken ),
+	};
+}
+
+export function createExecutableSurfaceReviewFreshnessConfig( {
+	endpoint,
+	getReviewRequestToken,
+	getStoredRequestSignature,
+	getStoredReviewContextSignature,
+	setReviewStateAction,
+	surface,
+} ) {
+	return {
+		endpoint,
+		getReviewRequestToken,
+		getStoredRequestSignature,
+		getStoredReviewContextSignature,
+		setReviewState: (
+			status,
+			{ requestToken = null, staleReason = null } = {}
+		) => setReviewStateAction( status, requestToken, staleReason ),
+		surface,
 	};
 }
 
@@ -67,6 +103,7 @@ export function createExecutableSurfaceFetchAction( {
 	attachRequestMetaToRecommendationPayload,
 	dispatchRecommendations,
 	endpoint,
+	getReviewContextSignatureFromResponse,
 	getResolvedContextSignatureFromResponse,
 	getRequestToken,
 	requestErrorMessage,
@@ -121,6 +158,8 @@ export function createExecutableSurfaceFetchAction( {
 						payload:
 							attachRequestMetaToRecommendationPayload( result ),
 						requestToken,
+						reviewContextSignature:
+							getReviewContextSignatureFromResponse( result ),
 						resolvedContextSignature:
 							getResolvedContextSignatureFromResponse( result ),
 					} );
@@ -135,6 +174,7 @@ export function buildExecutableSurfaceFetchThunk(
 	input,
 	{
 		attachRequestMetaToRecommendationPayload,
+		getReviewContextSignatureFromResponse,
 		getResolvedContextSignatureFromResponse,
 		runAbortableRecommendationRequest,
 	}
@@ -142,9 +182,129 @@ export function buildExecutableSurfaceFetchThunk(
 	return createExecutableSurfaceFetchAction( {
 		...config,
 		attachRequestMetaToRecommendationPayload,
+		getReviewContextSignatureFromResponse,
 		getResolvedContextSignatureFromResponse,
 		runAbortableRecommendationRequest,
 	} )( input );
+}
+
+export function createExecutableSurfaceReviewFreshnessAction( {
+	endpoint,
+	getReviewContextSignatureFromResponse,
+	getReviewRequestToken,
+	getStoredRequestSignature,
+	getStoredReviewContextSignature,
+	setReviewState,
+	surface,
+} ) {
+	return function revalidateExecutableSurfaceReviewFreshness(
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
+		return async ( { dispatch: localDispatch, select } ) => {
+			const requestToken = ( getReviewRequestToken( select ) || 0 ) + 1;
+			const storedRequestSignature =
+				getStoredRequestSignature( select ) || null;
+			const storedReviewContextSignature = normalizeStringMessage(
+				getStoredReviewContextSignature( select )
+			);
+			const requestData =
+				stripContextSignatureFromRequestInput( liveRequestInput );
+
+			if (
+				! storedRequestSignature ||
+				! currentRequestSignature ||
+				storedRequestSignature !== currentRequestSignature ||
+				! storedReviewContextSignature ||
+				Object.keys( requestData ).length === 0
+			) {
+				localDispatch(
+					setReviewState( 'idle', {
+						requestToken,
+					} )
+				);
+
+				return {
+					ok: false,
+					skipped: true,
+				};
+			}
+
+			localDispatch(
+				setReviewState( 'checking', {
+					requestToken,
+				} )
+			);
+
+			try {
+				const result = await apiFetch( {
+					path: endpoint,
+					method: 'POST',
+					data: {
+						...requestData,
+						resolveSignatureOnly: true,
+					},
+				} );
+				const reviewContextSignature = normalizeStringMessage(
+					getReviewContextSignatureFromResponse( result )
+				);
+
+				if (
+					! reviewContextSignature ||
+					reviewContextSignature !== storedReviewContextSignature
+				) {
+					localDispatch(
+						setReviewState( 'stale', {
+							requestToken,
+							staleReason: 'server-review',
+						} )
+					);
+
+					return {
+						ok: false,
+						staleReason: 'server-review',
+						surface,
+					};
+				}
+
+				localDispatch(
+					setReviewState( 'fresh', {
+						requestToken,
+					} )
+				);
+
+				return {
+					ok: true,
+					reviewContextSignature,
+					surface,
+				};
+			} catch {
+				localDispatch(
+					setReviewState( 'idle', {
+						requestToken,
+					} )
+				);
+
+				return {
+					ok: false,
+					error: 'review-revalidation-failed',
+					surface,
+				};
+			}
+		};
+	};
+}
+
+export function buildExecutableSurfaceReviewFreshnessThunk(
+	config,
+	currentRequestSignature = null,
+	liveRequestInput = null,
+	{ getReviewContextSignatureFromResponse }
+) {
+	return createExecutableSurfaceReviewFreshnessAction( {
+		...config,
+		getReviewContextSignatureFromResponse,
+	} )( currentRequestSignature, liveRequestInput );
 }
 
 export function createExecutableSurfaceApplyAction( {

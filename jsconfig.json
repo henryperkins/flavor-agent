@@ -6,11 +6,5 @@
 		"maxNodeModuleJsDepth": 0,
 		"skipLibCheck": true
 	},
-	"exclude": [
-		"node_modules",
-		"build",
-		"dist",
-		"output",
-		"vendor"
-	]
+	"exclude": [ "node_modules", "build", "dist", "output", "vendor" ]
 }

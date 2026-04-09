@@ -38,6 +38,13 @@ Session-scoped AI activity schema, scope resolution, `sessionStorage` cache/fall
 | `getResolvedActivityEntries(entries, runtimeUndoResolver)` | Batch-resolves undo states for all entries, applying ordered-undo rules across the full log                                                         |
 | `getLatestUndoableActivity(entries, runtimeUndoResolver)`  | Returns the most recent tail entry that is both `canUndo: true` and `status: 'available'` after full resolution                                     |
 | `ORDERED_UNDO_BLOCKED_ERROR`                               | Error message constant displayed when undo is blocked because newer AI actions exist                                                                |
+| `sortActivityEntries(entries)`                                | Sorts activity entries by timestamp for chronological display                                                                                        |
+| `limitActivityLog(entries)`                                   | Trims the activity log to the maximum history size                                                                                                   |
+| `isLocalActivityEntry(entry)`                                 | Returns `true` when the entry has local-only persistence status (`local` or `create`), used to identify entries needing server sync                  |
+| `getPendingActivitySyncType(entry)`                           | Returns the pending sync operation type (`undo` or `create`) for an unsynchronized entry                                                            |
+| `getActivityEntityKey(entry)`                                 | Generates a stable entity key from an activity entry for deduplication and lookup                                                                    |
+| `getResolvedActivityUndoState(entry, entries, resolver)`      | Resolves undo state for a single entry considering ordered-undo rules across the full log                                                            |
+| `getLatestAppliedActivity(entries)`                           | Returns the most recent entry that is still in applied (non-undone) state                                                                            |
 
 **Session cache contract:** The server-backed activity repository is the source of truth. `sessionStorage` acts only as a cache/fallback so the current editor session can display activity entries before server hydration completes and handle transient offline periods. On entity change, `loadActivitySession()` merges server entries with pending local entries and writes the merged set back to `sessionStorage`. Entries that have been persisted to the server carry `persistence.status === 'server'`; local-only entries carry `'local'` or `'create'` status and are synced on the next opportunity.
 
@@ -56,6 +63,9 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 | `attributeSnapshotsMatch(previousSnapshot, currentSnapshot)`       | Deep structural equality check between two attribute snapshots, used by undo logic to determine whether a block's attributes still match the expected state                |
 | `sanitizeRecommendationsForContext(recommendations, blockContext)` | Main sanitization pipeline: normalizes suggestion groups, strips theme-unsafe CSS, filters binding-unsafe attributes, enforces editing-mode restrictions                   |
 | `getBlockSuggestionExecutionInfo(suggestion, blockContext)`        | Returns `{ allowedUpdates, isAdvisory, isAdvisoryOnly, isExecutable }` describing whether a suggestion is purely informational or carries executable attribute changes     |
+| `filterAttributeUpdatesForContentOnly(updates, blockContext)` | Filters attribute updates to only content attributes when the block is in content-only editing mode                                                  |
+| `buildBlockRecommendationDiagnostics(suggestion, context)`    | Builds diagnostic metadata for a block recommendation (advisory status, allowed updates, execution info)                                             |
+| `getSuggestionAttributeUpdates(suggestion)`                   | Extracts the raw attribute update object from a suggestion payload                                                                                   |
 
 **Consumers:** `src/store/index.js` (uses all apply/undo helpers), `src/store/activity-history.js` (uses `attributeSnapshotsMatch`), `src/inspector/BlockRecommendationsPanel.js` (uses `getBlockSuggestionExecutionInfo`)
 
@@ -175,6 +185,21 @@ Small shared helpers for live template and template-part snapshot assembly. Thes
 
 **Consumers:** `src/templates/template-recommender-helpers.js`, `src/template-parts/template-part-recommender-helpers.js`
 
+### `src/context/collector.js`
+
+Core composition point for block recommendation context. Combines block introspection, theme token summaries, sibling context, and structural context into a single payload for the `/flavor-agent/v1/recommend-block` route. Maintains a memoized annotated tree cache to avoid redundant structural analysis.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `collectBlockContext(clientId, options)` | Assembles the full block recommendation context for a single block |
+| `getAnnotatedBlockTree(rootClientId)`    | Returns the cached (or freshly computed) annotated structural tree |
+| `invalidateAnnotatedTreeCache()`         | Clears the memoized tree so the next call recomputes |
+| `getLiveBlockContextSignature(clientId)`  | Returns a comparable signature for the current block context state |
+
+**Consumers:** `src/store/index.js`
+
 ### `src/context/block-inspector.js`
 
 Client-side block introspection. Queries the `@wordpress/blocks` and `@wordpress/block-editor` stores to build comprehensive block manifests including supports, inspector panels, bindable/content/config attribute splits, styles, variations, editing mode, and content-only status.
@@ -187,6 +212,8 @@ Client-side block introspection. Queries the `@wordpress/blocks` and `@wordpress
 | `introspectBlockTree(rootClientId, maxDepth)` | Recursively introspects child blocks from a root, returning a nested tree of instance manifests                                                    |
 | `summarizeTree(tree, options, depth)`         | Compresses an introspected tree into a token-budget-friendly summary for LLM prompts                                                               |
 | `buildCapabilityIndex(tree)`                  | Deduplicated map of unique block types to their capability summaries                                                                               |
+| `resolveInspectorPanels(supports)`                           | Maps block `supports` declarations to Inspector panel names (must stay synchronized with `ServerCollector::SUPPORT_TO_PANEL`)                        |
+| `introspectBlockType(blockName)`                             | Returns type-level metadata for a block name (supports, attributes, styles, variations) without requiring a live instance                            |
 
 **Consumers:** `src/context/collector.js`
 
@@ -202,8 +229,31 @@ Design token extraction from `theme.json` and global styles. Produces a full tok
 | `summarizeTokens(tokens)`                             | Compresses the manifest into a compact, prompt-friendly summary                                  |
 | `buildGlobalStylesExecutionContract(tokens)`          | Combines supported style paths with sorted preset slug maps for the LLM to validate style writes |
 | `buildBlockStyleExecutionContract(tokens, blockType)` | Same as above but scoped to a specific block type's supports                                     |
+| `collectThemeTokenDiagnosticsFromSettings(settings)`         | Collects diagnostic data (coverage gaps, missing presets) from provided editor settings                                                              |
+| `collectThemeTokensFromSettings(settings)`                   | Token extraction from an explicit settings object (used when editor store is not available)                                                          |
+| `getGlobalStylesSupportedStylePathsFromTokens(tokens)`       | Returns the set of style paths (e.g. `color.text`, `typography.fontSize`) supported at the global scope                                             |
+| `getBlockStyleSupportedStylePathsFromTokens(tokens, type)`   | Same as above but scoped to a specific block type's style supports                                                                                  |
+| `buildGlobalStylesExecutionContractFromSettings(settings)`   | Builds the execution contract directly from settings without calling `collectThemeTokens()`                                                          |
+| `buildBlockStyleExecutionContractFromSettings(settings, type)` | Same as above but scoped to a specific block type                                                                                                  |
 
 **Consumers:** `src/context/collector.js`, `src/utils/style-operations.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
+
+### `src/context/theme-settings.js`
+
+Theme editor settings adapter. Resolves the active theme features key (stable `features` vs. experimental `__experimentalFeatures`) and provides access to the raw theme token source from the `core/block-editor` store.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `STABLE_THEME_FEATURES_KEY`         | Constant: `'features'` |
+| `EXPERIMENTAL_THEME_FEATURES_KEY`   | Constant: `'__experimentalFeatures'` |
+| `getThemeEditorSettings()`           | Reads the full editor settings object from `core/block-editor` |
+| `getThemeTokenSource()`              | Returns which features key is active (`'stable'`, `'experimental'`, or `null`) |
+| `getThemeTokenSourceDetails()`       | Returns detailed parity information between stable and experimental features |
+| `getThemeTokenFeatures()`            | Returns the resolved theme features object |
+
+**Consumers:** `src/context/theme-tokens.js`
 
 ### `src/utils/editor-context-metadata.js`
 
@@ -230,6 +280,8 @@ Block structural role inference. Recursively annotates a block tree with semanti
 | `annotateStructuralIdentity(tree, options)`               | Recursive tree walker that attaches `structuralIdentity` objects to every node                       |
 | `buildStructuralContext(tree, selectedClientId, options)` | Orchestrates annotation + path finding to produce a complete structural context for a selected block |
 | `toStructuralSummary(node)`                               | Extracts a compact summary for LLM prompt use                                                        |
+| `findNodePath(tree, predicate)`                              | Finds the path (array of tree indices) to the first node matching a predicate                                                                        |
+| `findBranchRoot(tree, path)`                                 | Finds the nearest template-part root ancestor in a node path                                                                                         |
 
 **Consumers:** `src/context/collector.js`
 
@@ -246,6 +298,14 @@ Canonical abstraction layer between WordPress's dual editor stores (`core/editor
 | `getEditedPostTypeEntity(select, expectedPostType?)` | Resolves the currently edited entity from `core/editor` or `core/edit-site`                                             |
 | `getPostTypeFieldDefinitions(postType)`              | Returns frozen `{ id, label }` field descriptors appropriate for each post type                                         |
 | `usePostTypeEntityContract(postType)`                | React hook: composes entity fields, view/layout defaults, area options, and recommended category into a single contract |
+| `normalizeEditedEntityRef(ref)`                              | Normalizes an entity reference to a consistent string or integer form                                                                                |
+| `getPostTypeFieldMap(postType)`                              | Returns a frozen map of field descriptors keyed by field ID                                                                                          |
+| `normalizeViewConfigContract(view, fields)`                  | Normalizes a DataViews view configuration to a canonical form                                                                                        |
+| `getLockedViewFilterValue(view, fieldId)`                    | Extracts a locked filter value from a view configuration                                                                                             |
+| `getLockedViewOptions(views, fieldId)`                       | Returns the set of locked filter options across multiple views                                                                                        |
+| `buildOptionLabelMap(options)`                               | Builds a value-to-label lookup from an options array                                                                                                 |
+| `getRecommendedPatternCategorySlug(postType)`                | Returns the recommended pattern category slug for a given post type                                                                                  |
+| `buildPostTypeEntityContract(postType, entity, ...args)`     | Non-hook equivalent of `usePostTypeEntityContract` for imperative contexts                                                                           |
 
 **Consumers:** `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/patterns/PatternRecommender.js`
 
@@ -260,6 +320,82 @@ Derives surface capability flags from the server-localized `flavorAgentData` boo
 Micro-utility providing `formatCount()` (count formatting with noun pluralization), `humanizeString()` (string humanization), and `joinClassNames()` (CSS class-name concatenation).
 
 **Consumers:** `src/components/AIAdvisorySection.js`, `src/components/AIReviewSection.js`, `src/components/AIStatusNotice.js`
+
+## Style Utilities
+
+### `src/utils/style-operations.js`
+
+Shared helpers for Global Styles and Style Book apply/undo execution. Provides configuration normalization, operation application, and undo-state resolution for style recommendation results.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `getComparableGlobalStylesConfig(config)`                     | Normalizes a global styles config object for stable comparison |
+| `buildGlobalStylesRecommendationContextSignature(config, ...)` | Builds a context signature for global styles recommendation freshness |
+| `getGlobalStylesUserConfig()`                                 | Reads the user's current global styles configuration from the editor store |
+| `applyGlobalStyleSuggestionOperations(operations, contract)`  | Applies style operations to the global styles entity |
+| `undoGlobalStyleSuggestionOperations(snapshot)`               | Reverts style operations using a stored pre-apply snapshot |
+| `getGlobalStylesActivityUndoState(entry, select)`             | Resolves live undo state for a style-surface activity entry |
+
+**Consumers:** `src/store/index.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
+
+### `src/utils/style-design-semantics.js`
+
+Builds semantic design metadata (intent labels, hierarchy annotations, accessibility notes) for style recommendation prompts.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `buildGlobalStyleDesignSemantics(tokens, config)` | Builds semantic metadata for global styles recommendations |
+| `buildStyleBookDesignSemantics(tokens, config, blockName)` | Builds semantic metadata scoped to a specific Style Book block |
+
+**Consumers:** `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
+
+### `src/utils/style-validation.js`
+
+Style value validation and normalization helpers used by the style operation pipeline.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `sanitizeStyleKey(key)`                            | Sanitizes a style key to lowercase alphanumeric-dash-underscore |
+| `normalizePresetType(type)`                        | Normalizes a preset type string by removing dashes |
+| `displayPresetType(type)`                          | Returns a display-friendly name for a preset type |
+| `validateFreeformStyleValueByKind(value, kind)`    | Validates a freeform style value against its kind (color, length, etc.) |
+| `FREEFORM_STYLE_VALIDATORS`                        | Constant: map of validator types for freeform style values |
+| `CSS_LENGTH_UNITS`                                 | Constant: array of valid CSS length unit strings |
+
+**Consumers:** `src/utils/style-operations.js`, `inc/LLM/StylePrompt.php` (contract parity)
+
+### `src/utils/context-signature.js`
+
+Fundamental utility that produces stable, comparable signature strings from arbitrary context data objects. Used by all surfaces that need freshness detection.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `buildContextSignature(data)` | Normalizes and hashes context data into a stable comparable string |
+
+**Consumers:** `src/utils/block-recommendation-context.js`, `src/utils/style-operations.js`, `src/utils/recommendation-request-signature.js`
+
+### `src/utils/structural-equality.js`
+
+Deep and shallow structural equality helpers used for comparing block attributes, style configs, and context objects without reference identity.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `normalizeComparableValue(value)`     | Recursively normalizes a value (strips `undefined`, sorts keys) for stable comparison |
+| `stableSerialize(value)`              | Serializes a value to JSON with deterministic key ordering |
+| `shallowStructuralEqual(a, b)`        | Shallow equality check for objects and arrays |
+| `deepStructuralEqual(a, b)`           | Deep recursive equality check for objects and arrays |
+
+**Consumers:** `src/store/update-helpers.js`, `src/utils/style-operations.js`, `src/utils/context-signature.js`
 
 ## Pattern Internals
 
@@ -280,6 +416,18 @@ CSS selector constants and DOM finders for the inserter container, search input,
 Pure state-machine function `getInserterBadgeState()` that maps pattern recommendation status (`loading`, `error`, `ready`) into a badge view-model with `status`, `count`, `content`, `tooltip`, `ariaLabel`, and `className`.
 
 **Consumers:** `src/patterns/InserterBadge.js`
+
+### `src/utils/visible-patterns.js`
+
+Returns the set of editor-visible pattern names for the current inserter context. Used by pattern recommendations to scope similarity search to patterns the user can actually see.
+
+**Consumers:** `src/patterns/PatternRecommender.js`, `src/store/index.js`
+
+### `src/utils/pattern-names.js`
+
+Single export `extractPatternNames()` that extracts distinct pattern names from a pattern collection. Used by pattern recommendation context assembly.
+
+**Consumers:** `src/patterns/PatternRecommender.js`
 
 ### `src/patterns/recommendation-utils.js`
 
@@ -302,6 +450,24 @@ Template-part area resolution from attributes, slug, or the server-localized are
 | `matchesTemplatePartArea(block, area, areaLookup)` | Predicate: does the block's inferred area match the given area?   |
 
 **Consumers:** `src/utils/structural-identity.js`, `src/utils/editor-context-metadata.js`, `src/utils/template-actions.js`, `src/templates/template-recommender-helpers.js`, `src/template-parts/TemplatePartRecommender.js`
+
+### `src/utils/template-operation-sequence.js`
+
+Validates and normalizes LLM-proposed template and template-part operation sequences. Ensures operations use known types, valid placements, and well-formed parameters before the deterministic executor runs.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `validateTemplateOperationSequence(operations)` | Validates and normalizes a template operation sequence |
+| `validateTemplatePartOperationSequence(operations)` | Same for template-part operations |
+| `TEMPLATE_OPERATION_ASSIGN`                     | Constant: `'assign_template_part'` |
+| `TEMPLATE_OPERATION_INSERT_PATTERN`              | Constant: `'insert_pattern'` |
+| `TEMPLATE_OPERATION_REMOVE_BLOCK`                | Constant: `'remove_block'` |
+| `TEMPLATE_OPERATION_REPLACE`                     | Constant: `'replace_template_part'` |
+| `TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN`  | Constant: `'replace_block_with_pattern'` |
+
+**Consumers:** `src/store/index.js`, `src/templates/template-recommender-helpers.js`, `src/template-parts/template-part-recommender-helpers.js`
 
 ### `src/utils/template-types.js`
 
@@ -346,6 +512,26 @@ pattern-settings.js + inserter-dom.js  (pattern + inserter adapters)
 
 block-targeting.js -> activity-history.js -> store/index.js
 update-helpers.js -> store/index.js + activity-history.js
+
+context-signature.js  (leaf -- pure hashing)
+        |
+        +-- block-recommendation-context.js
+        +-- style-operations.js
+        +-- recommendation-request-signature.js
+
+style-validation.js  (leaf -- pure validation)
+        |
+        +-- style-operations.js
+
+structural-equality.js  (leaf -- pure comparison)
+        |
+        +-- update-helpers.js
+        +-- style-operations.js
+        +-- context-signature.js
+
+style-operations.js -> store/index.js + GlobalStylesRecommender + StyleBookRecommender
+style-design-semantics.js -> GlobalStylesRecommender + StyleBookRecommender
+template-operation-sequence.js -> store/index.js + template-recommender-helpers + template-part-recommender-helpers
 ```
 
 ## Primary Source Files
@@ -371,3 +557,17 @@ update-helpers.js -> store/index.js + activity-history.js
 - `src/patterns/inserter-dom.js`
 - `src/patterns/inserter-badge-state.js`
 - `src/patterns/recommendation-utils.js`
+- `src/context/collector.js`
+- `src/context/theme-settings.js`
+- `src/utils/context-signature.js`
+- `src/utils/structural-equality.js`
+- `src/utils/style-operations.js`
+- `src/utils/style-design-semantics.js`
+- `src/utils/style-validation.js`
+- `src/utils/visible-patterns.js`
+- `src/utils/pattern-names.js`
+- `src/utils/template-operation-sequence.js`
+- `src/utils/block-recommendation-context.js`
+- `src/utils/recommendation-request-signature.js`
+- `src/store/executable-surface-runtime.js`
+- `inc/Support/RecommendationResolvedSignature.php`

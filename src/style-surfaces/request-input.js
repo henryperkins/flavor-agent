@@ -9,9 +9,12 @@ function buildStyleScope( surface, scope = {} ) {
 			( surface === 'style-book'
 				? scope?.blockName || ''
 				: scope?.globalStylesId || '' ),
-		entityKind: scope?.entityKind || ( surface === 'style-book' ? 'block' : 'root' ),
+		entityKind:
+			scope?.entityKind ||
+			( surface === 'style-book' ? 'block' : 'root' ),
 		entityName:
-			scope?.entityName || ( surface === 'style-book' ? 'styleBook' : 'globalStyles' ),
+			scope?.entityName ||
+			( surface === 'style-book' ? 'styleBook' : 'globalStyles' ),
 		stylesheet: scope?.stylesheet || '',
 		templateSlug: scope?.templateSlug || '',
 		templateType: scope?.templateType || '',

@@ -126,8 +126,8 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				status,
 				storedContextSignature,
 				storedStaleReason,
-				]
-			);
+			]
+		);
 		const {
 			requestSignature: currentRequestSignature,
 			requestInput: currentRequestInput,
@@ -241,9 +241,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							clientId={ clientId }
 							suggestions={ visibleStyleRecommendations }
 							isStale={ isStaleResult }
-							currentRequestSignature={
-								currentRequestSignature
-							}
+							currentRequestSignature={ currentRequestSignature }
 							currentRequestInput={ currentRequestInput }
 						/>
 					</InspectorControls>

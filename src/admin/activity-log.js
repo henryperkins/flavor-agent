@@ -808,7 +808,7 @@ export function ActivityLogApp( { bootData } ) {
 	const [ view, setView ] = useState( () =>
 		readPersistedActivityView( undefined, viewOptions )
 	);
-		const [ responseData, setResponseData ] = useState( () => ( {
+	const [ responseData, setResponseData ] = useState( () => ( {
 		entries: [],
 		filterOptions: null,
 		paginationInfo: {
@@ -817,15 +817,15 @@ export function ActivityLogApp( { bootData } ) {
 			totalItems: 0,
 			totalPages: 0,
 		},
-			summary: {
-				total: 0,
-				applied: 0,
-				undone: 0,
-				review: 0,
-				blocked: 0,
-				failed: 0,
-			},
-		} ) );
+		summary: {
+			total: 0,
+			applied: 0,
+			undone: 0,
+			review: 0,
+			blocked: 0,
+			failed: 0,
+		},
+	} ) );
 	const [ error, setError ] = useState( '' );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ reloadToken, setReloadToken ] = useState( 0 );
@@ -918,15 +918,15 @@ export function ActivityLogApp( { bootData } ) {
 						totalItems: 0,
 						totalPages: 0,
 					},
-						summary: {
-							total: 0,
-							applied: 0,
-							undone: 0,
-							review: 0,
-							blocked: 0,
-							failed: 0,
-						},
-					} );
+					summary: {
+						total: 0,
+						applied: 0,
+						undone: 0,
+						review: 0,
+						blocked: 0,
+						failed: 0,
+					},
+				} );
 				setError(
 					fetchError?.message ||
 						'Flavor Agent could not load the recent AI activity log.'

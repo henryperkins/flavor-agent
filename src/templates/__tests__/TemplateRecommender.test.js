@@ -2,6 +2,7 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockClearTemplateRecommendations = jest.fn();
 const mockFetchTemplateRecommendations = jest.fn();
+const mockRevalidateTemplateReviewFreshness = jest.fn();
 const mockSetTemplateSelectedSuggestion = jest.fn();
 const mockUndoActivity = jest.fn();
 const mockGetAllowedPatterns = jest.fn();
@@ -225,6 +226,9 @@ function createSelectors() {
 			getTemplateExplanation: jest.fn(
 				() => getState().store.templateExplanation
 			),
+			getTemplateRequestPrompt: jest.fn(
+				() => getState().store.templateRequestPrompt
+			),
 			getTemplateLastAppliedOperations: jest.fn(
 				() => getState().store.templateLastAppliedOperations
 			),
@@ -237,6 +241,9 @@ function createSelectors() {
 			getTemplateContextSignature: jest.fn(
 				() => getState().store.templateContextSignature
 			),
+			getTemplateReviewContextSignature: jest.fn(
+				() => getState().store.templateReviewContextSignature
+			),
 			getTemplateResultRef: jest.fn(
 				() => getState().store.templateResultRef
 			),
@@ -246,6 +253,9 @@ function createSelectors() {
 			getTemplateStatus: jest.fn( () => getState().store.templateStatus ),
 			getTemplateSelectedSuggestionKey: jest.fn(
 				() => getState().store.templateSelectedSuggestionKey
+			),
+			getTemplateReviewStaleReason: jest.fn(
+				() => getState().store.templateReviewStaleReason
 			),
 			getUndoError: jest.fn( () => getState().store.undoError ),
 			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
@@ -264,6 +274,8 @@ function createDispatchers() {
 		clearTemplateRecommendations: mockClearTemplateRecommendations,
 		clearUndoError: jest.fn(),
 		fetchTemplateRecommendations: mockFetchTemplateRecommendations,
+		revalidateTemplateReviewFreshness:
+			mockRevalidateTemplateReviewFreshness,
 		setTemplateSelectedSuggestion: mockSetTemplateSelectedSuggestion,
 		undoActivity: mockUndoActivity,
 	};
@@ -344,10 +356,13 @@ function createState( overrides = {} ) {
 			templateError: null,
 			templateExplanation:
 				'A focused hero pattern would strengthen the intro.',
+			templateRequestPrompt: '',
 			templateLastAppliedOperations: [],
 			templateLastAppliedSuggestionKey: null,
 			templateRecommendations: [ SUGGESTION ],
 			templateContextSignature: null,
+			templateReviewContextSignature: null,
+			templateReviewStaleReason: null,
 			templateResultRef: TEMPLATE_REF,
 			templateResultToken: 1,
 			templateSelectedSuggestionKey: SUGGESTION_KEY,
@@ -476,6 +491,8 @@ beforeEach( async () => {
 				templateStatus: 'idle',
 				templateResultRef: null,
 				templateContextSignature: null,
+				templateReviewContextSignature: null,
+				templateReviewStaleReason: null,
 				templateResultToken: getState().store.templateResultToken + 1,
 				templateSelectedSuggestionKey: null,
 				templateApplyStatus: 'idle',

@@ -12,10 +12,17 @@ use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
+use FlavorAgent\Support\RecommendationReviewSignature;
 use FlavorAgent\Support\StringArray;
 
 final class TemplateAbilities {
 	use NormalizesInput;
+
+	private const REVIEW_DOCS_GUIDANCE_LIMIT         = 3;
+	private const REVIEW_TEMPLATE_PATTERN_LIMIT      = 30;
+	private const REVIEW_TEMPLATE_PART_PATTERN_LIMIT = 30;
+	private const REVIEW_THEME_TOKEN_COLOR_LIMIT     = 12;
+	private const REVIEW_THEME_TOKEN_SPACING_LIMIT   = 7;
 
 	public static function list_template_parts( mixed $input ): array {
 		$input = self::normalize_input( $input );
@@ -82,13 +89,19 @@ final class TemplateAbilities {
 			]
 		);
 
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
+		$review_context_signature = self::build_template_review_context_signature(
+			$context,
+			$docs_guidance
+		);
+
 		if ( $resolve_signature_only ) {
 			return [
+				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
 			];
 		}
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
 		$system        = TemplatePrompt::build_system();
 		$user          = TemplatePrompt::build_user(
 			$context,
@@ -108,6 +121,7 @@ final class TemplateAbilities {
 			return $payload;
 		}
 
+		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 
 		return $payload;
@@ -162,13 +176,19 @@ final class TemplateAbilities {
 			]
 		);
 
+		$docs_guidance = self::collect_template_part_wordpress_docs_guidance( $context, $prompt );
+		$review_context_signature = self::build_template_part_review_context_signature(
+			$context,
+			$docs_guidance
+		);
+
 		if ( $resolve_signature_only ) {
 			return [
+				'reviewContextSignature'   => $review_context_signature,
 				'resolvedContextSignature' => $resolved_context_signature,
 			];
 		}
 
-		$docs_guidance = self::collect_template_part_wordpress_docs_guidance( $context, $prompt );
 		$system        = TemplatePartPrompt::build_system();
 		$user          = TemplatePartPrompt::build_user(
 			$context,
@@ -188,6 +208,7 @@ final class TemplateAbilities {
 			return $payload;
 		}
 
+		$payload['reviewContextSignature']   = $review_context_signature;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 
 		return $payload;
@@ -1377,6 +1398,136 @@ final class TemplateAbilities {
 		];
 
 		return array_values( $anchors );
+	}
+
+	private static function build_template_review_context_signature( array $context, array $docs_guidance ): string {
+		return RecommendationReviewSignature::from_payload(
+			'template',
+			[
+				'patterns'     => self::normalize_template_review_patterns(
+					is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
+					self::REVIEW_TEMPLATE_PATTERN_LIMIT
+				),
+				'themeTokens'  => self::normalize_template_review_theme_tokens(
+					is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
+				),
+				'docsGuidance' => self::normalize_review_docs_guidance( $docs_guidance ),
+			]
+		);
+	}
+
+	private static function build_template_part_review_context_signature( array $context, array $docs_guidance ): string {
+		return RecommendationReviewSignature::from_payload(
+			'template-part',
+			[
+				'patterns'     => self::normalize_template_review_patterns(
+					is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
+					self::REVIEW_TEMPLATE_PART_PATTERN_LIMIT
+				),
+				'themeTokens'  => self::normalize_template_review_theme_tokens(
+					is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
+				),
+				'docsGuidance' => self::normalize_review_docs_guidance( $docs_guidance ),
+			]
+		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $patterns
+	 * @return array<int, array<string, string>>
+	 */
+	private static function normalize_template_review_patterns( array $patterns, int $limit ): array {
+		$normalized = [];
+
+		foreach ( array_slice( $patterns, 0, $limit ) as $pattern ) {
+			if ( ! is_array( $pattern ) ) {
+				continue;
+			}
+
+			$name = sanitize_text_field( (string) ( $pattern['name'] ?? '' ) );
+
+			if ( $name === '' ) {
+				continue;
+			}
+
+			$normalized[] = [
+				'name'        => $name,
+				'title'       => sanitize_text_field( (string) ( $pattern['title'] ?? '' ) ),
+				'description' => sanitize_textarea_field( (string) ( $pattern['description'] ?? '' ) ),
+				'matchType'   => sanitize_key( (string) ( $pattern['matchType'] ?? '' ) ),
+			];
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<string, mixed> $theme_tokens
+	 * @return array<string, array<int, string>>
+	 */
+	private static function normalize_template_review_theme_tokens( array $theme_tokens ): array {
+		$normalized = [];
+
+		$colors = array_slice(
+			StringArray::sanitize( $theme_tokens['colors'] ?? [] ),
+			0,
+			self::REVIEW_THEME_TOKEN_COLOR_LIMIT
+		);
+		if ( [] !== $colors ) {
+			$normalized['colors'] = $colors;
+		}
+
+		$font_families = StringArray::sanitize( $theme_tokens['fontFamilies'] ?? [] );
+		if ( [] !== $font_families ) {
+			$normalized['fontFamilies'] = $font_families;
+		}
+
+		$font_sizes = StringArray::sanitize( $theme_tokens['fontSizes'] ?? [] );
+		if ( [] !== $font_sizes ) {
+			$normalized['fontSizes'] = $font_sizes;
+		}
+
+		$spacing = array_slice(
+			StringArray::sanitize( $theme_tokens['spacing'] ?? [] ),
+			0,
+			self::REVIEW_THEME_TOKEN_SPACING_LIMIT
+		);
+		if ( [] !== $spacing ) {
+			$normalized['spacing'] = $spacing;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $docs_guidance
+	 * @return array<int, array<string, string>>
+	 */
+	private static function normalize_review_docs_guidance( array $docs_guidance ): array {
+		$normalized = [];
+
+		foreach ( array_slice( $docs_guidance, 0, self::REVIEW_DOCS_GUIDANCE_LIMIT ) as $guidance ) {
+			if ( ! is_array( $guidance ) ) {
+				continue;
+			}
+
+			$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+
+			if ( $excerpt === '' ) {
+				continue;
+			}
+
+			$normalized[] = [
+				'id'      => sanitize_text_field( (string) ( $guidance['id'] ?? '' ) ),
+				'title'   => sanitize_text_field(
+					(string) ( $guidance['title'] ?? $guidance['sourceKey'] ?? '' )
+				),
+				'url'     => sanitize_text_field( (string) ( $guidance['url'] ?? '' ) ),
+				'excerpt' => $excerpt,
+			];
+		}
+
+		return $normalized;
 	}
 
 	/**

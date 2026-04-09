@@ -124,7 +124,7 @@ The remaining defect class is not saved-state leakage. It is freshness drift bet
 - Merge/overlay points:
   `apply_template_live_slot_context()` and `apply_template_live_structure_context()` replace the mutable template slot and structure slices in `inc/Abilities/TemplateAbilities.php:379-427`. The overlay keeps `availableParts`, server-selected `patterns`, and `themeTokens` from PHP, but live `assignedParts`, `emptyAreas`, `allowedAreas`, `topLevelBlockTree`, `topLevelInsertionAnchors`, `structureStats`, `currentPatternOverrides`, and `currentViewportVisibility` take precedence when provided.
 - Docs grounding path:
-  `TemplateAbilities::collect_wordpress_docs_guidance()` calls `CollectsDocsGuidance::collect()` with template-specific query and family builders in `inc/Abilities/TemplateAbilities.php:1353-1677`.
+  `TemplateAbilities::collect_wordpress_docs_guidance()` calls `CollectsDocsGuidance::collect()` with template-specific query and family builders in `inc/Abilities/TemplateAbilities.php:1353-1677`. The current query shaping includes bounded `visiblePatternNames`, while the family context keeps that scope coarse through markers such as `hasVisiblePatternScope` and `visiblePatternCount`.
 - Final prompt/model input builder:
   `TemplatePrompt::build_system()` and `TemplatePrompt::build_user()` build the review-first prompt, then `ResponsesClient::rank()` sends it to the backend.
 - Response parsing/review constraints:
@@ -145,7 +145,7 @@ The remaining defect class is not saved-state leakage. It is freshness drift bet
 - Merge/overlay points:
   `apply_template_part_live_structure_context()` atomically replaces the whole mutable structure slice in `inc/Abilities/TemplateAbilities.php:435-455`. That includes `allBlockPaths`, so target-path validation can stay live even when the prompt-facing `blockTree` is summarized.
 - Docs grounding path:
-  `TemplateAbilities::collect_template_part_wordpress_docs_guidance()` uses the template-part docs query and family builders in `inc/Abilities/TemplateAbilities.php:1457-1710`.
+  `TemplateAbilities::collect_template_part_wordpress_docs_guidance()` uses the template-part docs query and family builders in `inc/Abilities/TemplateAbilities.php:1457-1710`. The current query shaping includes `currentPatternOverrides`, while the family context records only bounded override markers such as `hasPatternOverrides` and `patternOverrideCount`.
 - Final prompt/model input builder:
   `TemplatePartPrompt::build_system()` and `TemplatePartPrompt::build_user()` build the review-first prompt, then `ResponsesClient::rank()` sends it.
 - Response parsing/review constraints:
@@ -243,35 +243,11 @@ Impact:
 
 This is still a freshness-model gap rather than an apply-safety break. The local attribute executor remains guarded by block-context validation; the problem is that the stored freshness proof is not fully aligned with the resolved backend prompt inputs.
 
-### Low
+### Resolved Since The Original Review
 
-3. Template docs grounding does not use `visiblePatternNames`, even though the template request and docs describe that field as part of the live recommendation context.
-
-Evidence:
-
-- the client request and client freshness signature both include `visiblePatternNames` in `src/templates/template-recommender-helpers.js:239-303`
-- the template docs query and family builders never read `visiblePatternNames` in `inc/Abilities/TemplateAbilities.php:1353-1454` and `inc/Abilities/TemplateAbilities.php:1590-1677`
-- the shipped docs say the component captures and sends the template-global visible pattern scope in `docs/features/template-recommendations.md`
-
-Impact:
-
-- template docs grounding can stay generic even when the live template surface is scoped to a narrower visible-pattern subset
-- this does not weaken apply safety, but it reduces prompt grounding relevance for pattern-aware template guidance
-
-### Low
-
-4. Template-part docs grounding ignores `currentPatternOverrides`, even though the template-part prompt explicitly uses override boundaries.
-
-Evidence:
-
-- the live template-part request and signature include `currentPatternOverrides` in `src/template-parts/template-part-recommender-helpers.js:460-492`
-- the template-part docs query and family builders use `topLevelBlocks`, `blockCounts`, `operationTargets`, `insertionAnchors`, and `structuralConstraints`, but not `currentPatternOverrides`, in `inc/Abilities/TemplateAbilities.php:1457-1585` and `inc/Abilities/TemplateAbilities.php:1683-1710`
-- the prompt itself consumes override data in `inc/LLM/TemplatePartPrompt.php:196-203`
-
-Impact:
-
-- docs grounding can miss override-aware guidance for template parts that are structurally executable but override-constrained
-- again, this does not weaken validation, but it makes the grounding less surface-specific than the prompt actually is
+- Template docs grounding now uses bounded `visiblePatternNames` in `TemplateAbilities::build_wordpress_docs_query()`, and the family cache context records only coarse scope markers such as `hasVisiblePatternScope` and `visiblePatternCount`.
+- Template-part docs grounding now uses `currentPatternOverrides` in `TemplateAbilities::build_template_part_wordpress_docs_query()`, and the family cache context records only bounded override markers such as `hasPatternOverrides` and `patternOverrideCount`.
+- The current feature docs match that implementation in `docs/features/template-recommendations.md` and `docs/features/template-part-recommendations.md`.
 
 Verified non-findings:
 
@@ -281,13 +257,10 @@ Verified non-findings:
 
 ## 4. Gaps In Tests And Current Regression Coverage
 
-Current regression coverage I ran:
+Current regression coverage present in the repo:
 
 - `npm run test:unit -- --runInBand src/templates/__tests__/template-recommender-helpers.test.js src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/template-part-recommender-helpers.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js`
-- result: 6 suites passed, 96 tests passed
 - `vendor/bin/phpunit --filter 'TemplatePromptTest|TemplatePartPromptTest|AgentControllerTest|DocsGroundingEntityCacheTest'`
-- result: 71 tests, 1 failure
-- current failing test: `tests/phpunit/DocsGroundingEntityCacheTest.php:439`
 
 What the passing coverage already proves:
 
@@ -295,19 +268,19 @@ What the passing coverage already proves:
 - the template and template-part recommender UIs still respect the review-first flow
 - the global-styles and style-book recommenders still preserve the current review/apply behavior
 - the global-styles freshness UI already invalidates results when theme token diagnostics, supported style paths, or preset slugs drift through the client execution contract
+- `DocsGroundingEntityCacheTest` now covers related PHP docs-grounding behavior for template structure summaries, template-part executable context, and style-book query-cache precedence
 
 What is still missing:
 
 - there is no regression test that compares the client freshness signature with the actual resolved server input and proves staleness when template or template-part server `patterns`, full `themeTokens`, or docs guidance change
 - there is no regression test that proves block freshness changes when server docs guidance changes while the live editor snapshot stays identical
-- there is no focused PHP test asserting that template docs grounding query/family context includes `visiblePatternNames`
-- there is no focused PHP test asserting that template-part docs grounding query/family context includes `currentPatternOverrides`
+- there is no dedicated PHPUnit assertion that template docs grounding query and family context preserve the bounded visible-pattern markers now used in production
+- there is no dedicated PHPUnit assertion that template-part docs grounding query and family context preserve the override-aware markers derived from `currentPatternOverrides`
 - there is no style-book regression with parity to the global-styles coverage that proves prompt-only `blockManifest` drift or server docs-guidance drift invalidates a stored review result
-- the current PHP failure is not about live-state overlay correctness, but it does show that style-book docs-grounding cache and fallback semantics are not fully locked down right now
 
 ## 5. Actionable Checklist
 
-This checklist addresses Findings 1-4 above and also closes the two review gaps in the original fix plan:
+This checklist now focuses on the remaining freshness findings above and the narrower regression gaps that are still open:
 
 - freshness needs a client/store revalidation path, not only a server-returned hash
 - docs-family cache keys must stay coarse enough to preserve fallback reuse
@@ -325,53 +298,29 @@ This checklist addresses Findings 1-4 above and also closes the two review gaps 
 
 ### B. Add server-side resolved-input fingerprinting
 
-- [ ] Add a deterministic PHP helper that computes `resolvedContextSignature` after:
-  - server collection
-  - live overlay
-  - pattern/theme/block-manifest resolution
-  - docs-guidance preparation
-- [ ] Compute and return `resolvedContextSignature` for:
-  - `template`
-  - `template-part`
-  - `global-styles`
-  - `style-book`
-- [ ] Include, at minimum:
-  - merged context after overlay
-  - server-selected `patterns`
-  - server `themeTokens`
-  - style-book prompt-only `blockManifest` fields
-  - available or active variation data where relevant
-  - a stable digest of the docs guidance payload that reached prompt assembly, or the final assembled user prompt string
-- [ ] For style surfaces, avoid duplicating fields that are already covered by the client `executionContract` unless the server representation can diverge from the client representation in practice.
-- [ ] For `block`, either:
-  - compute the same server-resolved signature including docs guidance or final prompt inputs, or
-  - explicitly leave `block` on the client-only freshness model and document that choice in the feature docs and tests
-- [ ] Return `resolvedContextSignature` as a first-class response field and persist it separately from the existing client signature.
+- [x] Add a deterministic PHP helper that computes `resolvedContextSignature` after server collection, live overlay, and prompt-shaping context resolution such as patterns, theme tokens, supported style paths, and style-book block-manifest data.
+- [x] Compute and return `resolvedContextSignature` for `template`, `template-part`, `global-styles`, `style-book`, and `block`, and persist it separately from the existing client signature.
+- [ ] Expand the resolved signature to include docs-guidance preparation, or a stable digest of the final assembled prompt input, so server-only docs drift invalidates review results before apply.
+- [ ] For `block`, either compute the same fully prompt-sensitive server signature or explicitly document that its hybrid freshness contract still excludes docs-guidance drift.
 
 ### C. Wire client/store freshness correctly
 
-- [ ] Keep the current client signature as the fast local invalidation signal for prompt changes and live editor changes.
-- [ ] Add a pre-apply freshness revalidation path for server-sensitive surfaces. Acceptable implementations:
-  - a lightweight REST endpoint that resolves the current `resolvedContextSignature` from the latest live payload, or
-  - a `validateOnly` or `resolveSignature` mode on the existing recommendation endpoints
-- [ ] On apply for `template`, `template-part`, `global-styles`, and `style-book`, compare:
-  - current client request signature from live editor state
-  - stored client request signature from result generation
-  - current server `resolvedContextSignature` from revalidation
-  - stored server `resolvedContextSignature` from the original recommendation result
-- [ ] Do not treat "returning a server hash with the recommendation result" as sufficient by itself. That alone cannot detect server-only drift that happens after the recommendation was generated.
-- [ ] Update stale notices so the UI can distinguish local client drift from server-side drift when possible.
+- [x] Keep the current client signature as the fast local invalidation signal for prompt changes and live editor changes.
+- [x] Add a pre-apply freshness revalidation path through `resolveSignatureOnly` on the executable recommendation endpoints.
+- [x] On apply for `template`, `template-part`, `global-styles`, and `style-book`, compare live and stored client signatures first, then compare the stored and revalidated server `resolvedContextSignature`.
+- [x] Distinguish local client drift from server-side drift in apply-time stale handling.
+- [ ] If review freshness itself must reflect server-only prompt shapers before apply, add a server-issued review signature or smaller prompt-shaper fingerprints to recommendation responses and fold them into the UI freshness model.
 
 ### D. Tighten docs grounding inputs without fragmenting cache keys
 
-- [ ] Extend `TemplateAbilities::build_wordpress_docs_query()` to include a bounded visible-pattern scope summary.
-- [ ] Extend `TemplateAbilities::build_template_part_wordpress_docs_query()` to include a bounded override summary.
-- [ ] Keep the added query shaping bounded:
+- [x] Extend `TemplateAbilities::build_wordpress_docs_query()` to include a bounded visible-pattern scope summary.
+- [x] Extend `TemplateAbilities::build_template_part_wordpress_docs_query()` to include a bounded override summary.
+- [x] Keep the added query shaping bounded:
   - count of visible patterns or overrides
   - first N names only when needed
   - booleans or normalized markers for scope families
-- [ ] Keep `build_wordpress_docs_family_context()` and `build_template_part_wordpress_docs_family_context()` coarse and stable. Prefer counts, booleans, and normalized markers over raw name lists so family-cache reuse remains effective.
-- [ ] Review every family-context addition against `AISearchClient::maybe_search_with_cache_fallbacks()` and `AISearchClient::build_family_cache_key()` to avoid exploding cache cardinality.
+- [x] Keep `build_wordpress_docs_family_context()` and `build_template_part_wordpress_docs_family_context()` coarse and stable. Prefer counts, booleans, and normalized markers over raw name lists so family-cache reuse remains effective.
+- [ ] Add focused regression assertions that lock the bounded visible-pattern and override-aware docs-grounding markers in place.
 
 ### E. Add regression coverage at the right boundary
 

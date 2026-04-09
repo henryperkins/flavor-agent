@@ -54,8 +54,7 @@ describe( 'AIActivitySection', () => {
 										'Settings > Flavor Agent',
 									selectedProviderLabel: 'Azure OpenAI',
 									ability: 'flavor-agent/recommend-block',
-									route:
-										'POST /flavor-agent/v1/recommend-block',
+									route: 'POST /flavor-agent/v1/recommend-block',
 									tokenUsage: {
 										total: 96,
 									},
@@ -199,9 +198,7 @@ describe( 'AIActivitySection', () => {
 		expect( getContainer().textContent ).toContain(
 			'Token usage: 96 total tokens'
 		);
-		expect( getContainer().textContent ).toContain(
-			'Latency: 420 ms'
-		);
+		expect( getContainer().textContent ).toContain( 'Latency: 420 ms' );
 		expect( getContainer().textContent ).toContain(
 			'WordPress AI Client via Settings > Connectors'
 		);
@@ -263,8 +260,7 @@ describe( 'AIActivitySection', () => {
 						{
 							id: 'diagnostic-1',
 							type: 'request_diagnostic',
-							suggestion:
-								'No block-lane suggestions returned',
+							suggestion: 'No block-lane suggestions returned',
 							surface: 'block',
 							target: {
 								blockName: 'core/paragraph',

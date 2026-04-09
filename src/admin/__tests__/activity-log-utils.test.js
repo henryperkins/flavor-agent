@@ -209,8 +209,7 @@ describe( 'activity log utils', () => {
 			connectorPlugin: 'Not recorded',
 			requestAbility: 'flavor-agent/recommend-block',
 			requestRoute: 'POST /flavor-agent/v1/recommend-block',
-			transportEndpoint:
-				'judas2.openai.azure.com/openai/v1/responses',
+			transportEndpoint: 'judas2.openai.azure.com/openai/v1/responses',
 			timeout: '180 s',
 			requestPayload:
 				'18420 bytes · 17200 instruction chars · 512 input chars · reasoning high',

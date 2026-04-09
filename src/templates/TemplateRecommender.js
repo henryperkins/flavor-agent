@@ -82,13 +82,17 @@ import {
 	getEditedPostTypeEntity,
 	usePostTypeEntityContract,
 } from '../utils/editor-entity-contracts';
+import {
+	getExecutableSurfaceEffectiveStaleReason,
+	getExecutableSurfaceStaleMessage,
+} from '../utils/recommendation-stale-reasons';
 
-function formatBlockLabel(block) {
-	if (!block) {
+function formatBlockLabel( block ) {
+	if ( ! block ) {
 		return 'the template';
 	}
 
-	if (block.name === 'core/template-part') {
+	if ( block.name === 'core/template-part' ) {
 		return (
 			block.attributes?.slug ||
 			block.attributes?.area ||
@@ -97,22 +101,22 @@ function formatBlockLabel(block) {
 	}
 
 	return block.name
-		? block.name.replace('core/', '').replaceAll('-', ' ')
+		? block.name.replace( 'core/', '' ).replaceAll( '-', ' ' )
 		: 'the current block';
 }
 
-function getBlockByPath(blocks, path = []) {
+function getBlockByPath( blocks, path = [] ) {
 	let currentBlocks = blocks;
 	let block = null;
 
-	for (const index of path) {
-		if (!Array.isArray(currentBlocks)) {
+	for ( const index of path ) {
+		if ( ! Array.isArray( currentBlocks ) ) {
 			return null;
 		}
 
-		block = currentBlocks[index] || null;
+		block = currentBlocks[ index ] || null;
 
-		if (!block) {
+		if ( ! block ) {
 			return null;
 		}
 
@@ -122,16 +126,18 @@ function getBlockByPath(blocks, path = []) {
 	return block;
 }
 
-function formatBlockPath(path = []) {
-	if (!Array.isArray(path) || path.length === 0) {
+function formatBlockPath( path = [] ) {
+	if ( ! Array.isArray( path ) || path.length === 0 ) {
 		return '';
 	}
 
-	return `Path ${path.map((value) => Number(value) + 1).join(' > ')}`;
+	return `Path ${ path
+		.map( ( value ) => Number( value ) + 1 )
+		.join( ' > ' ) }`;
 }
 
-function formatPlacementLabel(placement = '') {
-	switch (placement) {
+function formatPlacementLabel( placement = '' ) {
+	switch ( placement ) {
 		case 'start':
 			return 'Start of template';
 		case 'end':
@@ -151,75 +157,97 @@ function describeTemplatePatternPlacement(
 	insertionPointLabel
 ) {
 	const placement = operation?.placement || '';
-	const targetPath = Array.isArray(operation?.targetPath)
+	const targetPath = Array.isArray( operation?.targetPath )
 		? operation.targetPath
 		: null;
 	const targetBlock = targetPath
-		? getBlockByPath(templateBlocks, targetPath)
+		? getBlockByPath( templateBlocks, targetPath )
 		: null;
 
-	if (placement === 'start') {
+	if ( placement === 'start' ) {
 		return {
-			mappingLabel: formatPlacementLabel(placement),
+			mappingLabel: formatPlacementLabel( placement ),
 			reason: 'at the start of the template.',
 		};
 	}
 
-	if (placement === 'end') {
+	if ( placement === 'end' ) {
 		return {
-			mappingLabel: formatPlacementLabel(placement),
+			mappingLabel: formatPlacementLabel( placement ),
 			reason: 'at the end of the template.',
 		};
 	}
 
-	if (placement === 'before_block_path' || placement === 'after_block_path') {
+	if (
+		placement === 'before_block_path' ||
+		placement === 'after_block_path'
+	) {
 		const relation = placement === 'before_block_path' ? 'before' : 'after';
 		const blockLabel = targetBlock
-			? formatBlockLabel(targetBlock)
+			? formatBlockLabel( targetBlock )
 			: 'target block';
-		const pathLabel = targetPath ? formatBlockPath(targetPath) : 'target path';
+		const pathLabel = targetPath
+			? formatBlockPath( targetPath )
+			: 'target path';
 
 		return {
-			mappingLabel: `${formatPlacementLabel(placement)} (${pathLabel})`,
-			reason: `${relation} ${blockLabel} at ${pathLabel}.`,
+			mappingLabel: `${ formatPlacementLabel(
+				placement
+			) } (${ pathLabel })`,
+			reason: `${ relation } ${ blockLabel } at ${ pathLabel }.`,
 		};
 	}
 
 	return {
 		mappingLabel: '',
-		reason: `${insertionPointLabel}.`,
+		reason: `${ insertionPointLabel }.`,
 	};
 }
 
-function describeInsertionPoint({ selectedBlock, rootBlock, insertionPoint }) {
-	if (selectedBlock) {
-		return `after ${formatBlockLabel(selectedBlock)}`;
+function describeInsertionPoint( {
+	selectedBlock,
+	rootBlock,
+	insertionPoint,
+} ) {
+	if ( selectedBlock ) {
+		return `after ${ formatBlockLabel( selectedBlock ) }`;
 	}
 
-	if (rootBlock) {
-		return `inside ${formatBlockLabel(rootBlock)}`;
+	if ( rootBlock ) {
+		return `inside ${ formatBlockLabel( rootBlock ) }`;
 	}
 
-	if (Number.isFinite(insertionPoint?.index) && insertionPoint.index === 0) {
+	if (
+		Number.isFinite( insertionPoint?.index ) &&
+		insertionPoint.index === 0
+	) {
 		return 'at the start of the template';
 	}
 
 	return 'at the end of the template';
 }
 
+function getTemplateStaleMessage( staleReasonType ) {
+	return getExecutableSurfaceStaleMessage( {
+		surfaceLabel: 'template',
+		staleReasonType,
+		liveContextLabel: 'the current live template or prompt',
+	} );
+}
+
 export default function TemplateRecommender() {
-	const canRecommend = getSurfaceCapability('template').available;
-	const templateContract = usePostTypeEntityContract('wp_template');
+	const canRecommend = getSurfaceCapability( 'template' ).available;
+	const templateContract = usePostTypeEntityContract( 'wp_template' );
 	const templateBlocks = useSelect(
-		(select) => select(blockEditorStore)?.getBlocks?.() || [],
+		( select ) => select( blockEditorStore )?.getBlocks?.() || [],
 		[]
 	);
 	const templateRef = useSelect(
-		(select) =>
-			getEditedPostTypeEntity(select, 'wp_template')?.entityId || null,
+		( select ) =>
+			getEditedPostTypeEntity( select, 'wp_template' )?.entityId || null,
 		[]
 	);
-	const templateType = normalizeTemplateType(templateRef);
+	const templateType = normalizeTemplateType( templateRef );
 	const {
 		recommendations,
 		explanation,
@@ -227,6 +255,7 @@ export default function TemplateRecommender() {
 		resultPrompt,
 		resultRef,
 		resultContextSignature,
+		resultReviewContextSignature,
 		resultToken,
 		isLoading,
 		status,
@@ -235,13 +264,14 @@ export default function TemplateRecommender() {
 		applyError,
 		lastAppliedSuggestionKey,
 		lastAppliedOperations,
+		reviewStaleReason,
 		storedStaleReason,
 		activityLog,
 		undoError,
 		undoStatus,
 		lastUndoneActivityId,
-	} = useSelect((select) => {
-		const store = select(STORE_NAME);
+	} = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
 
 		return {
 			recommendations: store.getTemplateRecommendations(),
@@ -250,133 +280,140 @@ export default function TemplateRecommender() {
 			resultPrompt: store.getTemplateRequestPrompt?.() || '',
 			resultRef: store.getTemplateResultRef(),
 			resultContextSignature: store.getTemplateContextSignature(),
+			resultReviewContextSignature:
+				store.getTemplateReviewContextSignature?.() || null,
 			resultToken: store.getTemplateResultToken(),
 			isLoading: store.isTemplateLoading(),
 			status: store.getTemplateStatus(),
 			selectedSuggestionKey: store.getTemplateSelectedSuggestionKey(),
 			applyStatus: store.getTemplateApplyStatus(),
 			applyError: store.getTemplateApplyError(),
-			lastAppliedSuggestionKey: store.getTemplateLastAppliedSuggestionKey(),
+			lastAppliedSuggestionKey:
+				store.getTemplateLastAppliedSuggestionKey(),
 			lastAppliedOperations: store.getTemplateLastAppliedOperations(),
+			reviewStaleReason: store.getTemplateReviewStaleReason?.() || null,
 			storedStaleReason: store.getTemplateStaleReason?.() || null,
 			activityLog: store.getActivityLog() || [],
 			undoError: store.getUndoError(),
 			undoStatus: store.getUndoStatus(),
 			lastUndoneActivityId: store.getLastUndoneActivityId(),
 		};
-	}, []);
+	}, [] );
 	const editorBlocks = useSelect(
-		(select) => select(blockEditorStore).getBlocks?.() || [],
+		( select ) => select( blockEditorStore ).getBlocks?.() || [],
 		[]
 	);
 	const blockEditorSelection = useMemo(
-		() => ({
+		() => ( {
 			getBlocks: () => editorBlocks,
-		}),
-		[editorBlocks]
+		} ),
+		[ editorBlocks ]
 	);
 	const resolvedTemplateActivities = useMemo(
 		() =>
 			getResolvedActivityEntries(
 				activityLog.filter(
-					(entry) =>
+					( entry ) =>
 						entry?.surface === 'template' &&
 						entry?.target?.templateRef === templateRef
 				),
-				(entry) => getTemplateActivityUndoState(entry, blockEditorSelection)
+				( entry ) =>
+					getTemplateActivityUndoState( entry, blockEditorSelection )
 			),
-		[activityLog, blockEditorSelection, templateRef]
+		[ activityLog, blockEditorSelection, templateRef ]
 	);
 	const templateActivityEntries = useMemo(
-		() => [...resolvedTemplateActivities].slice(-3).reverse(),
-		[resolvedTemplateActivities]
+		() => [ ...resolvedTemplateActivities ].slice( -3 ).reverse(),
+		[ resolvedTemplateActivities ]
 	);
 	const latestTemplateActivity = useMemo(
-		() => getLatestAppliedActivity(resolvedTemplateActivities),
-		[resolvedTemplateActivities]
+		() => getLatestAppliedActivity( resolvedTemplateActivities ),
+		[ resolvedTemplateActivities ]
 	);
 	const latestUndoableActivityId = useMemo(
-		() => getLatestUndoableActivity(resolvedTemplateActivities)?.id || null,
-		[resolvedTemplateActivities]
+		() =>
+			getLatestUndoableActivity( resolvedTemplateActivities )?.id || null,
+		[ resolvedTemplateActivities ]
 	);
 	const lastUndoneTemplateActivity = useMemo(
 		() =>
 			resolvedTemplateActivities.find(
-				(entry) => entry?.id === lastUndoneActivityId
+				( entry ) => entry?.id === lastUndoneActivityId
 			) || null,
-		[resolvedTemplateActivities, lastUndoneActivityId]
+		[ resolvedTemplateActivities, lastUndoneActivityId ]
 	);
-	const patternTitleMap = useSelect(() => {
+	const patternTitleMap = useSelect( () => {
 		const patterns = getCompatBlockPatterns();
 
-		return patterns.reduce((acc, pattern) => {
-			if (pattern?.name) {
-				acc[pattern.name] = pattern.title || pattern.name;
+		return patterns.reduce( ( acc, pattern ) => {
+			if ( pattern?.name ) {
+				acc[ pattern.name ] = pattern.title || pattern.name;
 			}
 
 			return acc;
-		}, {});
-	}, []);
-	const insertionPointLabel = useSelect((select) => {
-		const blockEditorStoreSelect = select(blockEditorStore);
+		}, {} );
+	}, [] );
+	const insertionPointLabel = useSelect( ( select ) => {
+		const blockEditorStoreSelect = select( blockEditorStore );
 		const selectedBlockClientId =
 			blockEditorStoreSelect?.getSelectedBlockClientId?.() || null;
 		const selectedBlock = selectedBlockClientId
-			? blockEditorStoreSelect?.getBlock?.(selectedBlockClientId)
+			? blockEditorStoreSelect?.getBlock?.( selectedBlockClientId )
 			: null;
 		const insertionPoint =
 			blockEditorStoreSelect?.getBlockInsertionPoint?.() || null;
 		const rootClientId = insertionPoint?.rootClientId || null;
 		const rootBlock = rootClientId
-			? blockEditorStoreSelect?.getBlock?.(rootClientId)
+			? blockEditorStoreSelect?.getBlock?.( rootClientId )
 			: null;
 
-		return describeInsertionPoint({
+		return describeInsertionPoint( {
 			selectedBlock,
 			rootBlock,
 			insertionPoint,
-		});
-	}, []);
-	const visiblePatternNames = useSelect((select) => {
-		const blockEditorStoreSelect = select(blockEditorStore);
+		} );
+	}, [] );
+	const visiblePatternNames = useSelect( ( select ) => {
+		const blockEditorStoreSelect = select( blockEditorStore );
 
-		return getVisiblePatternNames(null, blockEditorStoreSelect);
-	}, []);
+		return getVisiblePatternNames( null, blockEditorStoreSelect );
+	}, [] );
 	const {
 		applyTemplateSuggestion,
 		clearUndoError,
 		clearTemplateRecommendations,
 		fetchTemplateRecommendations,
+		revalidateTemplateReviewFreshness,
 		setTemplateApplyState,
 		setTemplateSelectedSuggestion,
 		setTemplateStatus,
 		undoActivity,
-	} = useDispatch(STORE_NAME);
-	const [prompt, setPrompt] = useState('');
-	const hydratedResultKeyRef = useRef(null);
-	const previousTemplateRef = useRef(templateRef);
+	} = useDispatch( STORE_NAME );
+	const [ prompt, setPrompt ] = useState( '' );
+	const hydratedResultKeyRef = useRef( null );
+	const previousTemplateRef = useRef( templateRef );
 	const editorSlots = useMemo(
 		() =>
-			Array.isArray(templateBlocks)
-				? buildEditorTemplateSlotSnapshot(templateBlocks)
+			Array.isArray( templateBlocks )
+				? buildEditorTemplateSlotSnapshot( templateBlocks )
 				: null,
-		[templateBlocks]
+		[ templateBlocks ]
 	);
 	const editorStructure = useMemo(
 		() =>
-			Array.isArray(templateBlocks)
-				? buildEditorTemplateTopLevelStructureSnapshot(templateBlocks)
+			Array.isArray( templateBlocks )
+				? buildEditorTemplateTopLevelStructureSnapshot( templateBlocks )
 				: null,
-		[templateBlocks]
+		[ templateBlocks ]
 	);
 	const recommendationContextSignature = useMemo(
 		() =>
-			buildTemplateRecommendationContextSignature({
+			buildTemplateRecommendationContextSignature( {
 				editorSlots,
 				editorStructure,
 				visiblePatternNames,
-			}),
-		[editorSlots, editorStructure, visiblePatternNames]
+			} ),
+		[ editorSlots, editorStructure, visiblePatternNames ]
 	);
 	const currentPatternOverrideCount =
 		editorStructure?.currentPatternOverrides?.blockCount || 0;
@@ -388,16 +425,16 @@ export default function TemplateRecommender() {
 	const hasStoredResultForTemplate = resultRef === templateRef;
 	const recommendationRequestSignature = useMemo(
 		() =>
-			buildTemplateRecommendationRequestSignature({
+			buildTemplateRecommendationRequestSignature( {
 				templateRef,
 				prompt,
 				contextSignature: recommendationContextSignature,
-			}),
-		[templateRef, prompt, recommendationContextSignature]
+			} ),
+		[ templateRef, prompt, recommendationContextSignature ]
 	);
 	const currentRequestInput = useMemo(
 		() =>
-			buildTemplateFetchInput({
+			buildTemplateFetchInput( {
 				templateRef,
 				templateType,
 				prompt,
@@ -405,7 +442,7 @@ export default function TemplateRecommender() {
 				editorStructure,
 				visiblePatternNames,
 				contextSignature: recommendationContextSignature,
-			}),
+			} ),
 		[
 			editorSlots,
 			editorStructure,
@@ -418,21 +455,23 @@ export default function TemplateRecommender() {
 	);
 	const resultRequestSignature = useMemo(
 		() =>
-			buildTemplateRecommendationRequestSignature({
+			buildTemplateRecommendationRequestSignature( {
 				templateRef: resultRef,
 				prompt: resultPrompt,
 				contextSignature: resultContextSignature,
-			}),
-		[resultContextSignature, resultPrompt, resultRef]
+			} ),
+		[ resultContextSignature, resultPrompt, resultRef ]
 	);
 	const clientStaleReason =
 		hasStoredResultForTemplate &&
 		resultRequestSignature !== recommendationRequestSignature
 			? 'client'
 			: null;
-	const effectiveStaleReason =
-		clientStaleReason ||
-		(storedStaleReason === 'server' ? 'server' : null);
+	const effectiveStaleReason = getExecutableSurfaceEffectiveStaleReason( {
+		clientStaleReason,
+		reviewStaleReason,
+		storedStaleReason,
+	} );
 	const hasMatchingResult =
 		hasStoredResultForTemplate &&
 		status === 'ready' &&
@@ -440,20 +479,23 @@ export default function TemplateRecommender() {
 		resultRequestSignature === recommendationRequestSignature;
 	const isStaleResult =
 		hasStoredResultForTemplate && effectiveStaleReason !== null;
+	const staleScopeReason = isStaleResult
+		? getTemplateStaleMessage( effectiveStaleReason )
+		: '';
 	const visibleRecommendations = useMemo(
-		() => (hasMatchingResult || isStaleResult ? recommendations : []),
-		[hasMatchingResult, isStaleResult, recommendations]
+		() => ( hasMatchingResult || isStaleResult ? recommendations : [] ),
+		[ hasMatchingResult, isStaleResult, recommendations ]
 	);
 	const hasResult = hasMatchingResult || isStaleResult;
 	const hasSuggestions = visibleRecommendations.length > 0;
 
-	useEffect(() => {
+	useEffect( () => {
 		const templateChanged = previousTemplateRef.current !== templateRef;
 		const recommendationContextChanged =
 			previousRecommendationContextSignature.current !==
 			recommendationContextSignature;
 
-		if (!templateChanged && !recommendationContextChanged) {
+		if ( ! templateChanged && ! recommendationContextChanged ) {
 			return;
 		}
 
@@ -461,34 +503,36 @@ export default function TemplateRecommender() {
 		previousRecommendationContextSignature.current =
 			recommendationContextSignature;
 
-		if (!templateChanged) {
+		if ( ! templateChanged ) {
 			return;
 		}
 
 		hydratedResultKeyRef.current = null;
 		clearTemplateRecommendations();
 
-		if (templateChanged) {
-			setPrompt('');
+		if ( templateChanged ) {
+			setPrompt( '' );
 		}
 	}, [
 		clearTemplateRecommendations,
 		recommendationContextSignature,
 		templateRef,
-	]);
+	] );
 
-	useEffect(() => {
+	useEffect( () => {
 		const hydrationKey =
 			hasStoredResultForTemplate && status === 'ready'
-				? `${resultRef || ''}:${resultToken || resultRequestSignature}`
+				? `${ resultRef || '' }:${
+						resultToken || resultRequestSignature
+				  }`
 				: '';
 
-		if (!hydrationKey || hydratedResultKeyRef.current === hydrationKey) {
+		if ( ! hydrationKey || hydratedResultKeyRef.current === hydrationKey ) {
 			return;
 		}
 
 		hydratedResultKeyRef.current = hydrationKey;
-		setPrompt(resultPrompt);
+		setPrompt( resultPrompt );
 	}, [
 		hasStoredResultForTemplate,
 		resultPrompt,
@@ -496,39 +540,63 @@ export default function TemplateRecommender() {
 		resultRequestSignature,
 		resultToken,
 		status,
-	]);
+	] );
+
+	useEffect( () => {
+		if ( ! hasStoredResultForTemplate || status !== 'ready' ) {
+			return;
+		}
+
+		revalidateTemplateReviewFreshness(
+			recommendationRequestSignature,
+			currentRequestInput
+		);
+	}, [
+		currentRequestInput,
+		hasStoredResultForTemplate,
+		recommendationRequestSignature,
+		revalidateTemplateReviewFreshness,
+		resultRef,
+		resultReviewContextSignature,
+		resultToken,
+		status,
+	] );
 
 	const entityMap = useMemo(
-		() => buildEntityMap(visibleRecommendations, patternTitleMap),
-		[visibleRecommendations, patternTitleMap]
+		() => buildEntityMap( visibleRecommendations, patternTitleMap ),
+		[ visibleRecommendations, patternTitleMap ]
 	);
 	const suggestionCards = useMemo(
 		() =>
-			visibleRecommendations.map((suggestion, index) =>
+			visibleRecommendations.map( ( suggestion, index ) =>
 				buildTemplateSuggestionViewModel(
 					{
 						...suggestion,
-						suggestionKey: getSuggestionCardKey(suggestion, index),
+						suggestionKey: getSuggestionCardKey(
+							suggestion,
+							index
+						),
 					},
 					patternTitleMap
 				)
 			),
-		[visibleRecommendations, patternTitleMap]
+		[ visibleRecommendations, patternTitleMap ]
 	);
 	const executableSuggestionCards = useMemo(
-		() => suggestionCards.filter((suggestion) => suggestion.canApply),
-		[suggestionCards]
+		() => suggestionCards.filter( ( suggestion ) => suggestion.canApply ),
+		[ suggestionCards ]
 	);
 	const advisorySuggestionCards = useMemo(
-		() => suggestionCards.filter((suggestion) => !suggestion.canApply),
-		[suggestionCards]
+		() => suggestionCards.filter( ( suggestion ) => ! suggestion.canApply ),
+		[ suggestionCards ]
 	);
 	const selectedSuggestion = useMemo(
 		() =>
 			executableSuggestionCards.find(
-				(suggestion) => suggestion.suggestionKey === selectedSuggestionKey
+				( suggestion ) =>
+					suggestion.suggestionKey === selectedSuggestionKey
 			) || null,
-		[executableSuggestionCards, selectedSuggestionKey]
+		[ executableSuggestionCards, selectedSuggestionKey ]
 	);
 	const hasApplySuccess =
 		applyStatus === 'success' &&
@@ -540,10 +608,10 @@ export default function TemplateRecommender() {
 		undoStatus === 'success' &&
 		lastUndoneTemplateActivity?.undo?.status === 'undone';
 	const statusNotice = useSelect(
-		(select) => {
-			const store = select(STORE_NAME);
+		( select ) => {
+			const store = select( STORE_NAME );
 
-			return store.getSurfaceStatusNotice('template', {
+			return store.getSurfaceStatusNotice( 'template', {
 				requestStatus: status,
 				requestError: error,
 				isStale: isStaleResult,
@@ -553,25 +621,28 @@ export default function TemplateRecommender() {
 				applyStatus,
 				hasResult,
 				hasSuggestions,
-				hasPreview: Boolean(selectedSuggestionKey),
-				hasSuccess: Boolean(hasApplySuccess),
+				hasPreview: Boolean( selectedSuggestionKey ),
+				hasSuccess: Boolean( hasApplySuccess ),
 				hasUndoSuccess,
 				applySuccessMessage: hasApplySuccess
-					? `Applied ${formatCount(
+					? `Applied ${ formatCount(
 							lastAppliedOperations.length,
 							'template operation'
-					  )}.`
+					  ) }.`
 					: '',
 				undoSuccessMessage: hasUndoSuccess
-					? `Undid ${lastUndoneTemplateActivity?.suggestion || 'suggestion'}.`
+					? `Undid ${
+							lastUndoneTemplateActivity?.suggestion ||
+							'suggestion'
+					  }.`
 					: '',
-				onDismissAction: Boolean(error),
-				onApplyDismissAction: Boolean(applyError),
-				onUndoDismissAction: Boolean(undoError),
+				onDismissAction: Boolean( error ),
+				onApplyDismissAction: Boolean( applyError ),
+				onUndoDismissAction: Boolean( undoError ),
 				emptyMessage: hasResult
 					? 'No template suggestions were returned for this request.'
 					: '',
-			});
+			} );
 		},
 		[
 			applyError,
@@ -591,19 +662,23 @@ export default function TemplateRecommender() {
 		]
 	);
 	const showSecondaryGuidance =
-		!hasResult &&
+		! hasResult &&
 		templateActivityEntries.length === 0 &&
-		!selectedSuggestionKey;
+		! selectedSuggestionKey;
 	const featuredSuggestionCard = isStaleResult
 		? null
-		: executableSuggestionCards[0] || advisorySuggestionCards[0] || null;
-	const dismissStatusNotice = useCallback(() => {
-		switch (statusNotice?.source) {
+		: executableSuggestionCards[ 0 ] ||
+		  advisorySuggestionCards[ 0 ] ||
+		  null;
+	const dismissStatusNotice = useCallback( () => {
+		switch ( statusNotice?.source ) {
 			case 'request':
-				setTemplateStatus(hasStoredResultForTemplate ? 'ready' : 'idle');
+				setTemplateStatus(
+					hasStoredResultForTemplate ? 'ready' : 'idle'
+				);
 				break;
 			case 'apply':
-				setTemplateApplyState('idle');
+				setTemplateApplyState( 'idle' );
 				break;
 			case 'undo':
 				clearUndoError();
@@ -615,63 +690,59 @@ export default function TemplateRecommender() {
 		setTemplateApplyState,
 		setTemplateStatus,
 		statusNotice?.source,
-	]);
+	] );
 
-	const handleFetch = useCallback(() => {
-		if (!canRecommend) {
+	const handleFetch = useCallback( () => {
+		if ( ! canRecommend ) {
 			return;
 		}
 
-		fetchTemplateRecommendations(currentRequestInput);
-	}, [
-		canRecommend,
-		fetchTemplateRecommendations,
-		currentRequestInput,
-	]);
+		fetchTemplateRecommendations( currentRequestInput );
+	}, [ canRecommend, fetchTemplateRecommendations, currentRequestInput ] );
 
-	const handleEntityAction = useCallback((entity) => {
-		switch (entity?.actionType) {
+	const handleEntityAction = useCallback( ( entity ) => {
+		switch ( entity?.actionType ) {
 			case ENTITY_ACTION_SELECT_PART:
-				selectBlockBySlugOrArea(entity.slug, entity.area);
+				selectBlockBySlugOrArea( entity.slug, entity.area );
 				break;
 			case ENTITY_ACTION_SELECT_AREA:
-				selectBlockByArea(entity.area);
+				selectBlockByArea( entity.area );
 				break;
 			case ENTITY_ACTION_BROWSE_PATTERN:
-				openInserterForPattern(entity.filterValue || entity.name);
+				openInserterForPattern( entity.filterValue || entity.name );
 				break;
 		}
-	}, []);
+	}, [] );
 	const handlePreviewSuggestion = useCallback(
-		(suggestionKey) => {
-			setTemplateSelectedSuggestion(suggestionKey);
+		( suggestionKey ) => {
+			setTemplateSelectedSuggestion( suggestionKey );
 		},
-		[setTemplateSelectedSuggestion]
+		[ setTemplateSelectedSuggestion ]
 	);
-	const handleCancelPreview = useCallback(() => {
-		setTemplateSelectedSuggestion(null);
-	}, [setTemplateSelectedSuggestion]);
+	const handleCancelPreview = useCallback( () => {
+		setTemplateSelectedSuggestion( null );
+	}, [ setTemplateSelectedSuggestion ] );
 	const handleApplySuggestion = useCallback(
-		(suggestion, currentRequestSignature) => {
+		( suggestion, currentRequestSignature ) => {
 			applyTemplateSuggestion(
 				suggestion,
 				currentRequestSignature,
 				currentRequestInput
 			);
 		},
-		[applyTemplateSuggestion, currentRequestInput]
+		[ applyTemplateSuggestion, currentRequestInput ]
 	);
 	const handleUndo = useCallback(
-		(activityId) => {
-			undoActivity(activityId);
+		( activityId ) => {
+			undoActivity( activityId );
 		},
-		[undoActivity]
+		[ undoActivity ]
 	);
 
 	if (
-		!templateRef ||
-		!templateContract.hasConfig ||
-		!templateContract.titleField
+		! templateRef ||
+		! templateContract.hasConfig ||
+		! templateContract.titleField
 	) {
 		return null;
 	}
@@ -683,105 +754,101 @@ export default function TemplateRecommender() {
 		>
 			<div className="flavor-agent-panel">
 				<SurfacePanelIntro
-					eyebrow={formatTemplateTypeLabel(templateType)}
+					eyebrow={ formatTemplateTypeLabel( templateType ) }
 					introCopy="Describe the structure or layout you want. Review each suggested template-part change or pattern insertion, then confirm before Flavor Agent mutates the template."
 					meta={
 						<>
-							{currentPatternOverrideCount > 0 && (
+							{ currentPatternOverrideCount > 0 && (
 								<span className="flavor-agent-pill">
-									{formatCount(
+									{ formatCount(
 										currentPatternOverrideCount,
 										'override-ready block'
-									)}
+									) }
 								</span>
-							)}
-							{currentVisibilityConstraintCount > 0 && (
+							) }
+							{ currentVisibilityConstraintCount > 0 && (
 								<span className="flavor-agent-pill">
-									{formatCount(
+									{ formatCount(
 										currentVisibilityConstraintCount,
 										'viewport constraint'
-									)}
+									) }
 								</span>
-							)}
+							) }
 						</>
 					}
 				/>
 
 				<SurfaceScopeBar
-					scopeLabel={formatTemplateTypeLabel(templateType)}
-					scopeDetails={templateRef ? [templateRef] : []}
-					isFresh={hasMatchingResult}
-					hasResult={hasResult}
+					scopeLabel={ formatTemplateTypeLabel( templateType ) }
+					scopeDetails={ templateRef ? [ templateRef ] : [] }
+					isFresh={ hasMatchingResult }
+					hasResult={ hasResult }
 					announceChanges
-					staleReason={
-						isStaleResult
-							? effectiveStaleReason === 'server'
-								? 'This template result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
-								: 'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.'
-							: ''
-					}
-					onRefresh={isStaleResult ? handleFetch : undefined}
-					isRefreshing={isLoading}
+					staleReason={ staleScopeReason }
+					onRefresh={ isStaleResult ? handleFetch : undefined }
+					isRefreshing={ isLoading }
 				/>
 
-				{!canRecommend && <CapabilityNotice surface="template" />}
+				{ ! canRecommend && <CapabilityNotice surface="template" /> }
 
-				{canRecommend && (
+				{ canRecommend && (
 					<SurfaceComposer
 						title="Ask Flavor Agent"
-						prompt={prompt}
-						onPromptChange={setPrompt}
-						onFetch={handleFetch}
+						prompt={ prompt }
+						onPromptChange={ setPrompt }
+						onFetch={ handleFetch }
 						placeholder="Describe the structure or layout you want."
 						label="What are you trying to achieve with this template?"
 						helperText="Flavor Agent keeps executable template suggestions bounded to validated template-part assignments and pattern insertions."
-						starterPrompts={[
+						starterPrompts={ [
 							'Strengthen the page hierarchy',
 							'Create a clearer opening section',
 							'Balance the template structure',
-						]}
+						] }
 						submitHint="Press Cmd/Ctrl+Enter to submit."
-						isLoading={isLoading}
+						isLoading={ isLoading }
 					/>
-				)}
+				) }
 
-				{canRecommend && isLoading && (
+				{ canRecommend && isLoading && (
 					<AIStatusNotice
-						notice={{
+						notice={ {
 							tone: 'info',
 							message: 'Analyzing template structure…',
-						}}
+						} }
 					/>
-				)}
+				) }
 
 				<AIStatusNotice
-					notice={statusNotice}
+					notice={ statusNotice }
 					onAction={
-						statusNotice?.actionType === 'undo' && latestTemplateActivity
-							? () => handleUndo(latestTemplateActivity.id)
+						statusNotice?.actionType === 'undo' &&
+						latestTemplateActivity
+							? () => handleUndo( latestTemplateActivity.id )
 							: undefined
 					}
-					onDismiss={dismissStatusNotice}
+					onDismiss={ dismissStatusNotice }
 				/>
 
-				{canRecommend && isStaleResult && (
+				{ canRecommend && isStaleResult && (
 					<RecommendationHero
 						title="Refresh recommendations for this template"
 						description="Flavor Agent kept the previous result visible so you can compare it against the current template."
-						tone={STALE_STATUS_LABEL}
+						tone={ STALE_STATUS_LABEL }
 						why="Review and apply actions stay disabled until you refresh against the live template context and current prompt."
-						primaryActionLabel={REFRESH_ACTION_LABEL}
-						onPrimaryAction={handleFetch}
-						primaryActionDisabled={isLoading}
+						primaryActionLabel={ REFRESH_ACTION_LABEL }
+						onPrimaryAction={ handleFetch }
+						primaryActionDisabled={ isLoading }
 					/>
-				)}
+				) }
 
-				{canRecommend && featuredSuggestionCard && (
+				{ canRecommend && featuredSuggestionCard && (
 					<RecommendationHero
 						title={
-							featuredSuggestionCard.label || 'Recommended template change'
+							featuredSuggestionCard.label ||
+							'Recommended template change'
 						}
-						description={featuredSuggestionCard.description || ''}
+						description={ featuredSuggestionCard.description || '' }
 						tone={
 							featuredSuggestionCard.canApply
 								? REVIEW_LANE_LABEL
@@ -793,51 +860,59 @@ export default function TemplateRecommender() {
 								: 'This is the strongest next idea, but it still needs manual follow-through.'
 						}
 					/>
-				)}
+				) }
 
-				{canRecommend && hasResult && explanation && (
+				{ canRecommend && hasResult && explanation && (
 					<p className="flavor-agent-explanation flavor-agent-panel__note">
 						<LinkedEntityText
-							text={explanation}
-							entities={entityMap}
-							onEntityClick={handleEntityAction}
+							text={ explanation }
+							entities={ entityMap }
+							onEntityClick={ handleEntityAction }
 						/>
 					</p>
-				)}
+				) }
 
-				{canRecommend && executableSuggestionCards.length > 0 && (
+				{ canRecommend && executableSuggestionCards.length > 0 && (
 					<RecommendationLane
-						title={REVIEW_LANE_LABEL}
-						tone={REVIEW_LANE_LABEL}
-						count={executableSuggestionCards.length}
+						title={ REVIEW_LANE_LABEL }
+						tone={ REVIEW_LANE_LABEL }
+						count={ executableSuggestionCards.length }
 						countNoun="suggestion"
 						description="Preview the validated operations below before Flavor Agent mutates the template."
 					>
-						{executableSuggestionCards.map((suggestion, index) => (
-							<TemplateSuggestionCard
-								key={`${resultToken}-${getSuggestionCardKey(
-									suggestion,
-									index
-								)}`}
-								suggestion={suggestion}
-								entityMap={entityMap}
-								isApplied={
-									lastAppliedSuggestionKey === suggestion.suggestionKey
-								}
-								isApplying={applyStatus === 'applying'}
-								isStale={isStaleResult}
-								isSelected={selectedSuggestionKey === suggestion.suggestionKey}
-								onEntityClick={handleEntityAction}
-								onPreviewSuggestion={handlePreviewSuggestion}
-							/>
-						))}
+						{ executableSuggestionCards.map(
+							( suggestion, index ) => (
+								<TemplateSuggestionCard
+									key={ `${ resultToken }-${ getSuggestionCardKey(
+										suggestion,
+										index
+									) }` }
+									suggestion={ suggestion }
+									entityMap={ entityMap }
+									isApplied={
+										lastAppliedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									isApplying={ applyStatus === 'applying' }
+									isStale={ isStaleResult }
+									isSelected={
+										selectedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									onEntityClick={ handleEntityAction }
+									onPreviewSuggestion={
+										handlePreviewSuggestion
+									}
+								/>
+							)
+						) }
 					</RecommendationLane>
-				)}
+				) }
 
-				{canRecommend && advisorySuggestionCards.length > 0 && (
+				{ canRecommend && advisorySuggestionCards.length > 0 && (
 					<AIAdvisorySection
-						title={MANUAL_IDEAS_LABEL}
-						count={advisorySuggestionCards.length}
+						title={ MANUAL_IDEAS_LABEL }
+						count={ advisorySuggestionCards.length }
 						countNoun="suggestion"
 						initialOpen
 						description={
@@ -846,32 +921,40 @@ export default function TemplateRecommender() {
 								: ''
 						}
 					>
-						{advisorySuggestionCards.map((suggestion, index) => (
-							<TemplateSuggestionCard
-								key={`advisory-${resultToken}-${getSuggestionCardKey(
-									suggestion,
-									index
-								)}`}
-								suggestion={suggestion}
-								entityMap={entityMap}
-								isApplied={
-									lastAppliedSuggestionKey === suggestion.suggestionKey
-								}
-								isApplying={applyStatus === 'applying'}
-								isStale={isStaleResult}
-								isSelected={selectedSuggestionKey === suggestion.suggestionKey}
-								onEntityClick={handleEntityAction}
-								onPreviewSuggestion={handlePreviewSuggestion}
-							/>
-						))}
+						{ advisorySuggestionCards.map(
+							( suggestion, index ) => (
+								<TemplateSuggestionCard
+									key={ `advisory-${ resultToken }-${ getSuggestionCardKey(
+										suggestion,
+										index
+									) }` }
+									suggestion={ suggestion }
+									entityMap={ entityMap }
+									isApplied={
+										lastAppliedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									isApplying={ applyStatus === 'applying' }
+									isStale={ isStaleResult }
+									isSelected={
+										selectedSuggestionKey ===
+										suggestion.suggestionKey
+									}
+									onEntityClick={ handleEntityAction }
+									onPreviewSuggestion={
+										handlePreviewSuggestion
+									}
+								/>
+							)
+						) }
 					</AIAdvisorySection>
-				)}
+				) }
 
-				{canRecommend && selectedSuggestion && (
+				{ canRecommend && selectedSuggestion && (
 					<AIReviewSection
-						title={REVIEW_SECTION_TITLE}
-						statusLabel={REVIEW_LANE_LABEL}
-						count={selectedSuggestion.operations?.length || 0}
+						title={ REVIEW_SECTION_TITLE }
+						statusLabel={ REVIEW_LANE_LABEL }
+						count={ selectedSuggestion.operations?.length || 0 }
 						countNoun="operation"
 						summary={
 							selectedSuggestion.description ||
@@ -883,44 +966,48 @@ export default function TemplateRecommender() {
 								: 'Pattern insertions use the validated template structure shown below, and Flavor Agent will refuse to apply them if that target has drifted.'
 						}
 						confirmLabel={
-							applyStatus === 'applying' ? 'Applying…' : 'Confirm Apply'
+							applyStatus === 'applying'
+								? 'Applying…'
+								: 'Confirm Apply'
 						}
-						confirmDisabled={applyStatus === 'applying' || isStaleResult}
-						onConfirm={() =>
+						confirmDisabled={
+							applyStatus === 'applying' || isStaleResult
+						}
+						onConfirm={ () =>
 							handleApplySuggestion(
 								selectedSuggestion,
 								recommendationRequestSignature
 							)
 						}
-						onCancel={handleCancelPreview}
+						onCancel={ handleCancelPreview }
 						className="flavor-agent-template-review"
 					>
-						{selectedSuggestion.operations.map((operation) => (
+						{ selectedSuggestion.operations.map( ( operation ) => (
 							<TemplateOperationPreviewRow
-								key={operation.key}
-								insertionPointLabel={insertionPointLabel}
-								operation={operation}
-								templateBlocks={templateBlocks}
+								key={ operation.key }
+								insertionPointLabel={ insertionPointLabel }
+								operation={ operation }
+								templateBlocks={ templateBlocks }
 							/>
-						))}
+						) ) }
 					</AIReviewSection>
-				)}
+				) }
 
 				<AIActivitySection
 					description="Template actions use the same latest-valid undo rule as the block review surface."
-					entries={templateActivityEntries}
-					isUndoing={undoStatus === 'undoing'}
-					onUndo={handleUndo}
-					initialOpen={!hasResult || !canRecommend}
-					resetKey={templateRef || 'template'}
-					maxVisible={3}
+					entries={ templateActivityEntries }
+					isUndoing={ undoStatus === 'undoing' }
+					onUndo={ handleUndo }
+					initialOpen={ ! hasResult || ! canRecommend }
+					resetKey={ templateRef || 'template' }
+					maxVisible={ 3 }
 				/>
 			</div>
 		</PluginDocumentSettingPanel>
 	);
 }
 
-function TemplateSuggestionCard({
+function TemplateSuggestionCard( {
 	suggestion,
 	entityMap = [],
 	isApplied = false,
@@ -929,194 +1016,236 @@ function TemplateSuggestionCard({
 	isSelected = false,
 	onEntityClick,
 	onPreviewSuggestion,
-}) {
+} ) {
 	const hasParts = suggestion.templateParts?.length > 0;
 	const hasPatterns = suggestion.patternSuggestions?.length > 0;
 	const summaryParts = [];
 
-	if (hasParts) {
-		summaryParts.push(formatCount(suggestion.templateParts.length, 'part'));
+	if ( hasParts ) {
+		summaryParts.push(
+			formatCount( suggestion.templateParts.length, 'part' )
+		);
 	}
 
-	if (hasPatterns) {
+	if ( hasPatterns ) {
 		summaryParts.push(
-			formatCount(suggestion.patternSuggestions.length, 'pattern')
+			formatCount( suggestion.patternSuggestions.length, 'pattern' )
 		);
 	}
 
 	return (
 		<div
-			className={`flavor-agent-card flavor-agent-card--template${
+			className={ `flavor-agent-card flavor-agent-card--template${
 				isApplied ? ' is-applied' : ''
-			}${isSelected ? ' is-review-selected' : ''}`}
+			}${ isSelected ? ' is-review-selected' : '' }` }
 		>
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
-					<div className="flavor-agent-card__label">{suggestion.label}</div>
+					<div className="flavor-agent-card__label">
+						{ suggestion.label }
+					</div>
 					<div className="flavor-agent-card__meta">
 						<span className="flavor-agent-pill">
-							{suggestion.canApply
+							{ suggestion.canApply
 								? REVIEW_LANE_LABEL
-								: MANUAL_IDEAS_LABEL}
+								: MANUAL_IDEAS_LABEL }
 						</span>
-						{summaryParts.length > 0 && (
+						{ summaryParts.length > 0 && (
 							<span className="flavor-agent-pill">
-								{summaryParts.join(' • ')}
+								{ summaryParts.join( ' • ' ) }
 							</span>
-						)}
-						{isSelected && (
+						) }
+						{ isSelected && (
 							<span className="flavor-agent-pill flavor-agent-pill--success">
 								Review open
 							</span>
-						)}
-						{isApplied && (
-							<span className="flavor-agent-done-badge">Applied</span>
-						)}
+						) }
+						{ isApplied && (
+							<span className="flavor-agent-done-badge">
+								Applied
+							</span>
+						) }
 					</div>
 				</div>
 
-				{suggestion.canApply && (
+				{ suggestion.canApply && (
 					<Button
 						size="small"
-						variant={isSelected ? 'secondary' : 'primary'}
-						onClick={() => onPreviewSuggestion(suggestion.suggestionKey)}
+						variant={ isSelected ? 'secondary' : 'primary' }
+						onClick={ () =>
+							onPreviewSuggestion( suggestion.suggestionKey )
+						}
 						className="flavor-agent-card__apply"
-						disabled={isApplying || isStale}
+						disabled={ isApplying || isStale }
 					>
-						{isSelected ? 'Reviewing' : 'Review'}
+						{ isSelected ? 'Reviewing' : 'Review' }
 					</Button>
-				)}
+				) }
 			</div>
 
-			{suggestion.description && (
+			{ suggestion.description && (
 				<p className="flavor-agent-card__description">
 					<LinkedEntityText
-						text={suggestion.description}
-						entities={entityMap}
-						onEntityClick={onEntityClick}
+						text={ suggestion.description }
+						entities={ entityMap }
+						onEntityClick={ onEntityClick }
 					/>
 				</p>
-			)}
+			) }
 
-			{suggestion.executionError && (
+			{ suggestion.executionError && (
 				<p className="flavor-agent-card__description">
-					{suggestion.executionError}
+					{ suggestion.executionError }
 				</p>
-			)}
+			) }
 
-			{hasParts && (
+			{ hasParts && (
 				<div className="flavor-agent-template-list">
 					<div className="flavor-agent-template-list__header">
-						<div className="flavor-agent-section-label">Template Parts</div>
+						<div className="flavor-agent-section-label">
+							Template Parts
+						</div>
 						<span className="flavor-agent-pill">
-							{formatCount(suggestion.templateParts.length, 'part')}
+							{ formatCount(
+								suggestion.templateParts.length,
+								'part'
+							) }
 						</span>
 					</div>
-					{suggestion.templateParts.map((part) => (
-						<div key={part.key} className="flavor-agent-tpl-row">
+					{ suggestion.templateParts.map( ( part ) => (
+						<div key={ part.key } className="flavor-agent-tpl-row">
 							<span className="flavor-agent-tpl-row__mapping">
-								<Tooltip text={`Select “${part.slug}” block in editor`}>
+								<Tooltip
+									text={ `Select “${ part.slug }” block in editor` }
+								>
 									<Button
 										size="small"
 										variant="link"
-										onClick={() =>
-											selectBlockBySlugOrArea(part.slug, part.area)
+										onClick={ () =>
+											selectBlockBySlugOrArea(
+												part.slug,
+												part.area
+											)
 										}
 										className="flavor-agent-action-link flavor-agent-action-link--part"
 									>
-										{part.slug}
+										{ part.slug }
 									</Button>
 								</Tooltip>
 
-								<span className="flavor-agent-tpl-row__arrow">→</span>
+								<span className="flavor-agent-tpl-row__arrow">
+									→
+								</span>
 
-								<Tooltip text={`Select “${part.area}” area in editor`}>
+								<Tooltip
+									text={ `Select “${ part.area }” area in editor` }
+								>
 									<Button
 										size="small"
 										variant="link"
-										onClick={() => selectBlockByArea(part.area)}
+										onClick={ () =>
+											selectBlockByArea( part.area )
+										}
 										className="flavor-agent-action-link flavor-agent-action-link--area"
 									>
-										{part.area}
+										{ part.area }
 									</Button>
 								</Tooltip>
 							</span>
 
-							<span className="flavor-agent-pill">{part.ctaLabel}</span>
+							<span className="flavor-agent-pill">
+								{ part.ctaLabel }
+							</span>
 
-							{part.reason && (
+							{ part.reason && (
 								<div className="flavor-agent-tpl-row__reason">
 									<LinkedEntityText
-										text={part.reason}
-										entities={entityMap}
-										onEntityClick={onEntityClick}
+										text={ part.reason }
+										entities={ entityMap }
+										onEntityClick={ onEntityClick }
 									/>
 								</div>
-							)}
+							) }
 						</div>
-					))}
+					) ) }
 				</div>
-			)}
+			) }
 
-			{hasPatterns && (
+			{ hasPatterns && (
 				<div className="flavor-agent-template-list">
 					<div className="flavor-agent-template-list__header">
-						<div className="flavor-agent-section-label">Suggested Patterns</div>
+						<div className="flavor-agent-section-label">
+							Suggested Patterns
+						</div>
 						<span className="flavor-agent-pill">
-							{formatCount(suggestion.patternSuggestions.length, 'pattern')}
+							{ formatCount(
+								suggestion.patternSuggestions.length,
+								'pattern'
+							) }
 						</span>
 					</div>
-					{suggestion.patternSuggestions.map((pattern) => (
-						<div key={pattern.name} className="flavor-agent-tpl-row">
-							<Tooltip text={`Browse “${pattern.title}” in pattern inserter`}>
+					{ suggestion.patternSuggestions.map( ( pattern ) => (
+						<div
+							key={ pattern.name }
+							className="flavor-agent-tpl-row"
+						>
+							<Tooltip
+								text={ `Browse “${ pattern.title }” in pattern inserter` }
+							>
 								<Button
 									size="small"
 									variant="link"
-									onClick={() => openInserterForPattern(pattern.title)}
+									onClick={ () =>
+										openInserterForPattern( pattern.title )
+									}
 									className="flavor-agent-action-link flavor-agent-action-link--pattern"
 								>
-									{pattern.title}
+									{ pattern.title }
 								</Button>
 							</Tooltip>
 
 							<Button
 								size="small"
 								variant="tertiary"
-								onClick={() => openInserterForPattern(pattern.title)}
+								onClick={ () =>
+									openInserterForPattern( pattern.title )
+								}
 								className="flavor-agent-assign-btn"
 							>
-								{pattern.ctaLabel}
+								{ pattern.ctaLabel }
 							</Button>
 						</div>
-					))}
+					) ) }
 				</div>
-			)}
+			) }
 		</div>
 	);
 }
 
-function TemplateOperationPreviewRow({
+function TemplateOperationPreviewRow( {
 	operation,
 	insertionPointLabel,
 	templateBlocks = [],
-}) {
-	switch (operation.type) {
+} ) {
+	switch ( operation.type ) {
 		case TEMPLATE_OPERATION_ASSIGN:
 			return (
 				<div className="flavor-agent-tpl-row">
 					<span className="flavor-agent-tpl-row__mapping">
 						<span className="flavor-agent-preview-token flavor-agent-preview-token--part">
-							{operation.slug}
+							{ operation.slug }
 						</span>
 						<span className="flavor-agent-tpl-row__arrow">→</span>
 						<span className="flavor-agent-preview-token flavor-agent-preview-token--area">
-							{operation.area}
+							{ operation.area }
 						</span>
 					</span>
-					<span className="flavor-agent-pill">{operation.badgeLabel}</span>
+					<span className="flavor-agent-pill">
+						{ operation.badgeLabel }
+					</span>
 					<div className="flavor-agent-tpl-row__reason">
-						Assign <code>{operation.slug}</code> to the{' '}
-						<code>{operation.area}</code> area.
+						Assign <code>{ operation.slug }</code> to the{ ' ' }
+						<code>{ operation.area }</code> area.
 					</div>
 				</div>
 			);
@@ -1126,18 +1255,21 @@ function TemplateOperationPreviewRow({
 				<div className="flavor-agent-tpl-row">
 					<span className="flavor-agent-tpl-row__mapping">
 						<span className="flavor-agent-preview-token flavor-agent-preview-token--part">
-							{operation.currentSlug}
+							{ operation.currentSlug }
 						</span>
 						<span className="flavor-agent-tpl-row__arrow">→</span>
 						<span className="flavor-agent-preview-token flavor-agent-preview-token--part">
-							{operation.slug}
+							{ operation.slug }
 						</span>
 					</span>
-					<span className="flavor-agent-pill">{operation.badgeLabel}</span>
+					<span className="flavor-agent-pill">
+						{ operation.badgeLabel }
+					</span>
 					<div className="flavor-agent-tpl-row__reason">
-						Replace the current <code>{operation.currentSlug}</code> template
-						part in the <code>{operation.area}</code> area with{' '}
-						<code>{operation.slug}</code>.
+						Replace the current{ ' ' }
+						<code>{ operation.currentSlug }</code> template part in
+						the <code>{ operation.area }</code> area with{ ' ' }
+						<code>{ operation.slug }</code>.
 					</div>
 				</div>
 			);
@@ -1153,21 +1285,25 @@ function TemplateOperationPreviewRow({
 				<div className="flavor-agent-tpl-row">
 					<span className="flavor-agent-tpl-row__mapping">
 						<span className="flavor-agent-preview-token flavor-agent-preview-token--pattern">
-							{operation.patternTitle}
+							{ operation.patternTitle }
 						</span>
-						{placementDetails.mappingLabel && (
+						{ placementDetails.mappingLabel && (
 							<>
-								<span className="flavor-agent-tpl-row__arrow">→</span>
+								<span className="flavor-agent-tpl-row__arrow">
+									→
+								</span>
 								<span className="flavor-agent-preview-token flavor-agent-preview-token--area">
-									{placementDetails.mappingLabel}
+									{ placementDetails.mappingLabel }
 								</span>
 							</>
-						)}
+						) }
 					</span>
-					<span className="flavor-agent-pill">{operation.badgeLabel}</span>
+					<span className="flavor-agent-pill">
+						{ operation.badgeLabel }
+					</span>
 					<div className="flavor-agent-tpl-row__reason">
-						Insert <code>{operation.patternTitle}</code>{' '}
-						{placementDetails.reason}
+						Insert <code>{ operation.patternTitle }</code>{ ' ' }
+						{ placementDetails.reason }
 					</div>
 				</div>
 			);

@@ -1,63 +1,63 @@
 services:
-  db:
-    image: mariadb:11.4
-    restart: unless-stopped
-    environment:
-      MARIADB_DATABASE: ${MYSQL_DATABASE}
-      MARIADB_USER: ${MYSQL_USER}
-      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
-      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    volumes:
-      - db_data:/var/lib/mysql
+    db:
+        image: mariadb:11.4
+        restart: unless-stopped
+        environment:
+            MARIADB_DATABASE: ${MYSQL_DATABASE}
+            MARIADB_USER: ${MYSQL_USER}
+            MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+            MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        healthcheck:
+            test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 20s
+        volumes:
+            - db_data:/var/lib/mysql
 
-  wordpress:
-    build:
-      context: .
-      dockerfile: docker/wordpress/Dockerfile
-      args:
-        WORDPRESS_BASE_IMAGE: ${WORDPRESS_BASE_IMAGE}
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      WORDPRESS_DB_HOST: db:3306
-      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
-      WORDPRESS_DB_USER: ${MYSQL_USER}
-      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
-      WORDPRESS_CONFIG_EXTRA: |
-        define( 'WP_DEBUG', true );
-        define( 'WP_DEBUG_LOG', true );
-        define( 'WP_DEBUG_DISPLAY', false );
-        define( 'SCRIPT_DEBUG', true );
-        define( 'DISALLOW_FILE_MODS', false );
-    ports:
-      - "${WORDPRESS_PORT}:80"
-    volumes:
-      - wordpress_data:/var/www/html
-      - ./:/var/www/html/wp-content/plugins/flavor-agent
-      - ./tests/e2e/wp70-theme:/var/www/html/wp-content/themes/flavor-agent-e2e
-    working_dir: /var/www/html
+    wordpress:
+        build:
+            context: .
+            dockerfile: docker/wordpress/Dockerfile
+            args:
+                WORDPRESS_BASE_IMAGE: ${WORDPRESS_BASE_IMAGE}
+        restart: unless-stopped
+        depends_on:
+            db:
+                condition: service_healthy
+        environment:
+            WORDPRESS_DB_HOST: db:3306
+            WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+            WORDPRESS_DB_USER: ${MYSQL_USER}
+            WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+            WORDPRESS_CONFIG_EXTRA: |
+                define( 'WP_DEBUG', true );
+                define( 'WP_DEBUG_LOG', true );
+                define( 'WP_DEBUG_DISPLAY', false );
+                define( 'SCRIPT_DEBUG', true );
+                define( 'DISALLOW_FILE_MODS', false );
+        ports:
+            - '${WORDPRESS_PORT}:80'
+        volumes:
+            - wordpress_data:/var/www/html
+            - ./:/var/www/html/wp-content/plugins/flavor-agent
+            - ./tests/e2e/wp70-theme:/var/www/html/wp-content/themes/flavor-agent-e2e
+        working_dir: /var/www/html
 
-  phpmyadmin:
-    image: phpmyadmin:5-apache
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      PMA_HOST: db
-      PMA_USER: root
-      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-    ports:
-      - "${PHPMYADMIN_PORT}:80"
+    phpmyadmin:
+        image: phpmyadmin:5-apache
+        restart: unless-stopped
+        depends_on:
+            db:
+                condition: service_healthy
+        environment:
+            PMA_HOST: db
+            PMA_USER: root
+            PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        ports:
+            - '${PHPMYADMIN_PORT}:80'
 
 volumes:
-  db_data:
-  wordpress_data:
+    db_data:
+    wordpress_data:

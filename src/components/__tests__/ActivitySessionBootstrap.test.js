@@ -49,12 +49,14 @@ beforeEach( () => {
 		target: null,
 	} );
 	styleBookUiSubscription = null;
-	mockSubscribeToStyleBookUi.mockImplementation( ( documentRef, callback ) => {
-		void documentRef;
-		styleBookUiSubscription = callback;
+	mockSubscribeToStyleBookUi.mockImplementation(
+		( documentRef, callback ) => {
+			void documentRef;
+			styleBookUiSubscription = callback;
 
-		return () => {};
-	} );
+			return () => {};
+		}
+	);
 
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
 		mapSelect( ( storeName ) => {

@@ -3,77 +3,79 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockCollectBlockContext = jest.fn();
 
-jest.mock('@wordpress/data', () => ({
-	useDispatch: (...args) => mockUseDispatch(...args),
-	useSelect: (...args) => mockUseSelect(...args),
-}));
+jest.mock( '@wordpress/data', () => ( {
+	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useSelect: ( ...args ) => mockUseSelect( ...args ),
+} ) );
 
-jest.mock('@wordpress/components', () =>
-	require('../../test-utils/wp-components').mockWpComponents()
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
 );
 
-jest.mock('@wordpress/icons', () => ({
+jest.mock( '@wordpress/icons', () => ( {
 	arrowRight: 'arrow-right',
 	check: 'check',
 	styles: 'styles-icon',
-}));
+} ) );
 
-jest.mock('../../store', () => ({
+jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
-}));
+} ) );
 
-jest.mock('../../context/collector', () => ({
-	collectBlockContext: (...args) => mockCollectBlockContext(...args),
+jest.mock( '../../context/collector', () => ( {
+	collectBlockContext: ( ...args ) => mockCollectBlockContext( ...args ),
 	getLiveBlockContextSignature: jest.fn(
-		(_select, clientId) => `live-context:${clientId}`
+		( _select, clientId ) => `live-context:${ clientId }`
 	),
-}));
+} ) );
 
 import { createElement } from '@wordpress/element';
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { act } = require('react');
-const { setupReactTest } = require('../../test-utils/setup-react-test');
+const { act } = require( 'react' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import StylesRecommendations from '../StylesRecommendations';
 import { buildBlockRecommendationRequestSignature } from '../../utils/recommendation-request-signature';
 
 const { getContainer, getRoot } = setupReactTest();
 
-beforeEach(() => {
+beforeEach( () => {
 	jest.clearAllMocks();
-	mockApplySuggestion.mockResolvedValue(true);
-	mockCollectBlockContext.mockReturnValue({
+	mockApplySuggestion.mockResolvedValue( true );
+	mockCollectBlockContext.mockReturnValue( {
 		block: { name: 'core/paragraph' },
-	});
-	mockUseDispatch.mockReturnValue({
+	} );
+	mockUseDispatch.mockReturnValue( {
 		applySuggestion: mockApplySuggestion,
 		clearBlockError: jest.fn(),
-	});
-	mockUseSelect.mockImplementation((callback) =>
-		callback(() => ({
-			getBlockApplyError: jest.fn(() => null),
-			getSurfaceStatusNotice: jest.fn(() => null),
-			getBlockRecommendations: jest.fn(() => ({ prompt: 'Warm up the palette' })),
-		}))
+	} );
+	mockUseSelect.mockImplementation( ( callback ) =>
+		callback( () => ( {
+			getBlockApplyError: jest.fn( () => null ),
+			getSurfaceStatusNotice: jest.fn( () => null ),
+			getBlockRecommendations: jest.fn( () => ( {
+				prompt: 'Warm up the palette',
+			} ) ),
+		} ) )
 	);
-});
+} );
 
-function renderComponent(suggestions, extraProps = {}) {
-	act(() => {
+function renderComponent( suggestions, extraProps = {} ) {
+	act( () => {
 		getRoot().render(
-			createElement(StylesRecommendations, {
+			createElement( StylesRecommendations, {
 				clientId: 'block-1',
 				suggestions,
 				...extraProps,
-			})
+			} )
 		);
-	});
+	} );
 }
 
-function makeSuggestion(panel, label = `Suggestion for ${panel}`) {
+function makeSuggestion( panel, label = `Suggestion for ${ panel }` ) {
 	return {
 		label,
-		description: `${panel} description`,
+		description: `${ panel } description`,
 		panel,
 		type: 'attribute_change',
 		attributeUpdates: {},
@@ -81,53 +83,61 @@ function makeSuggestion(panel, label = `Suggestion for ${panel}`) {
 	};
 }
 
-describe('StylesRecommendations', () => {
-	test('does not render suggestions for delegated style panels', () => {
+describe( 'StylesRecommendations', () => {
+	test( 'does not render suggestions for delegated style panels', () => {
 		const delegated = [
-			makeSuggestion('color'),
-			makeSuggestion('typography'),
-			makeSuggestion('dimensions'),
-			makeSuggestion('border'),
-			makeSuggestion('filter'),
-			makeSuggestion('background'),
+			makeSuggestion( 'color' ),
+			makeSuggestion( 'typography' ),
+			makeSuggestion( 'dimensions' ),
+			makeSuggestion( 'border' ),
+			makeSuggestion( 'filter' ),
+			makeSuggestion( 'background' ),
 		];
-		const kept = [makeSuggestion('shadow')];
+		const kept = [ makeSuggestion( 'shadow' ) ];
 
-		renderComponent([...delegated, ...kept]);
-
-		const text = getContainer().textContent;
-
-		expect(text).not.toContain('Suggestion for color');
-		expect(text).not.toContain('Suggestion for typography');
-		expect(text).not.toContain('Suggestion for dimensions');
-		expect(text).not.toContain('Suggestion for border');
-		expect(text).not.toContain('Suggestion for filter');
-		expect(text).not.toContain('Suggestion for background');
-		expect(text).toContain('Suggestion for shadow');
-	});
-
-	test('renders non-delegated panels in the panel body', () => {
-		renderComponent([makeSuggestion('shadow'), makeSuggestion('general')]);
+		renderComponent( [ ...delegated, ...kept ] );
 
 		const text = getContainer().textContent;
-		expect(text).toContain('Suggestion for shadow');
-		expect(text).toContain('Suggestion for general');
-	});
 
-	test('shows hint when delegated style panels have suggestions', () => {
-		renderComponent([makeSuggestion('filter'), makeSuggestion('shadow')]);
+		expect( text ).not.toContain( 'Suggestion for color' );
+		expect( text ).not.toContain( 'Suggestion for typography' );
+		expect( text ).not.toContain( 'Suggestion for dimensions' );
+		expect( text ).not.toContain( 'Suggestion for border' );
+		expect( text ).not.toContain( 'Suggestion for filter' );
+		expect( text ).not.toContain( 'Suggestion for background' );
+		expect( text ).toContain( 'Suggestion for shadow' );
+	} );
 
-		expect(getContainer().textContent).toContain('Native Style Panels');
-		expect(getContainer().textContent).toContain('Filter');
-	});
+	test( 'renders non-delegated panels in the panel body', () => {
+		renderComponent( [
+			makeSuggestion( 'shadow' ),
+			makeSuggestion( 'general' ),
+		] );
 
-	test('does not show hint when no delegated panels have suggestions', () => {
-		renderComponent([makeSuggestion('shadow')]);
+		const text = getContainer().textContent;
+		expect( text ).toContain( 'Suggestion for shadow' );
+		expect( text ).toContain( 'Suggestion for general' );
+	} );
 
-		expect(getContainer().textContent).not.toContain('Native Style Panels');
-	});
+	test( 'shows hint when delegated style panels have suggestions', () => {
+		renderComponent( [
+			makeSuggestion( 'filter' ),
+			makeSuggestion( 'shadow' ),
+		] );
 
-	test('renders style variations separately', () => {
+		expect( getContainer().textContent ).toContain( 'Native Style Panels' );
+		expect( getContainer().textContent ).toContain( 'Filter' );
+	} );
+
+	test( 'does not show hint when no delegated panels have suggestions', () => {
+		renderComponent( [ makeSuggestion( 'shadow' ) ] );
+
+		expect( getContainer().textContent ).not.toContain(
+			'Native Style Panels'
+		);
+	} );
+
+	test( 'renders style variations separately', () => {
 		const variation = {
 			label: 'Outline',
 			description: 'Outline style',
@@ -138,13 +148,13 @@ describe('StylesRecommendations', () => {
 			isRecommended: true,
 		};
 
-		renderComponent([variation]);
+		renderComponent( [ variation ] );
 
-		expect(getContainer().textContent).toContain('Outline');
-		expect(getContainer().textContent).toContain('Style Variations');
-	});
+		expect( getContainer().textContent ).toContain( 'Outline' );
+		expect( getContainer().textContent ).toContain( 'Style Variations' );
+	} );
 
-	test('disables the current style variation', () => {
+	test( 'disables the current style variation', () => {
 		const variation = {
 			label: 'Outline',
 			description: 'Outline style',
@@ -154,43 +164,43 @@ describe('StylesRecommendations', () => {
 			isCurrentStyle: true,
 		};
 
-		renderComponent([variation]);
+		renderComponent( [ variation ] );
 
-		const button = Array.from(getContainer().querySelectorAll('button')).find(
-			(candidate) => candidate.textContent === 'Outline'
-		);
+		const button = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( candidate ) => candidate.textContent === 'Outline' );
 
-		expect(button?.disabled).toBe(true);
-		expect(mockApplySuggestion).not.toHaveBeenCalled();
-	});
+		expect( button?.disabled ).toBe( true );
+		expect( mockApplySuggestion ).not.toHaveBeenCalled();
+	} );
 
-	test('returns null for empty suggestions', () => {
-		renderComponent([]);
-		expect(getContainer().innerHTML).toBe('');
-	});
+	test( 'returns null for empty suggestions', () => {
+		renderComponent( [] );
+		expect( getContainer().innerHTML ).toBe( '' );
+	} );
 
-	test('shows inline apply feedback after a style row is applied', async () => {
-		const suggestion = makeSuggestion('shadow', 'Use softer shadow');
+	test( 'shows inline apply feedback after a style row is applied', async () => {
+		const suggestion = makeSuggestion( 'shadow', 'Use softer shadow' );
 
-		renderComponent([suggestion]);
+		renderComponent( [ suggestion ] );
 
 		const applyButton = Array.from(
-			getContainer().querySelectorAll('button')
-		).find((button) => button.textContent === 'Apply');
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Apply' );
 
-		await act(async () => {
+		await act( async () => {
 			applyButton.click();
 			await Promise.resolve();
-		});
+		} );
 
-		expect(mockApplySuggestion).toHaveBeenCalledWith(
+		expect( mockApplySuggestion ).toHaveBeenCalledWith(
 			'block-1',
 			suggestion,
-			buildBlockRecommendationRequestSignature({
+			buildBlockRecommendationRequestSignature( {
 				clientId: 'block-1',
 				prompt: 'Warm up the palette',
 				contextSignature: 'live-context:block-1',
-			}),
+			} ),
 			{
 				clientId: 'block-1',
 				editorContext: {
@@ -201,12 +211,13 @@ describe('StylesRecommendations', () => {
 			}
 		);
 		expect(
-			getContainer().querySelector('.flavor-agent-inline-feedback')?.textContent
-		).toBe('AppliedUse softer shadow.');
-	});
+			getContainer().querySelector( '.flavor-agent-inline-feedback' )
+				?.textContent
+		).toBe( 'AppliedUse softer shadow.' );
+	} );
 
-	test('prefers the live block request metadata passed from the main panel when applying', async () => {
-		const suggestion = makeSuggestion('shadow', 'Use softer shadow');
+	test( 'prefers the live block request metadata passed from the main panel when applying', async () => {
+		const suggestion = makeSuggestion( 'shadow', 'Use softer shadow' );
 		const currentRequestInput = {
 			clientId: 'block-1',
 			editorContext: {
@@ -216,37 +227,37 @@ describe('StylesRecommendations', () => {
 			prompt: 'Make the block feel more editorial.',
 		};
 
-		renderComponent([suggestion], {
+		renderComponent( [ suggestion ], {
 			currentRequestSignature: 'live-signature:block-1',
 			currentRequestInput,
-		});
+		} );
 
 		const applyButton = Array.from(
-			getContainer().querySelectorAll('button')
-		).find((button) => button.textContent === 'Apply');
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Apply' );
 
-		await act(async () => {
+		await act( async () => {
 			applyButton.click();
 			await Promise.resolve();
-		});
+		} );
 
-		expect(mockApplySuggestion).toHaveBeenCalledWith(
+		expect( mockApplySuggestion ).toHaveBeenCalledWith(
 			'block-1',
 			suggestion,
 			'live-signature:block-1',
 			currentRequestInput
 		);
-	});
+	} );
 
-	test('renders block apply errors from the shared store notice path', () => {
-		mockUseSelect.mockImplementation((callback) =>
-			callback(() => ({
+	test( 'renders block apply errors from the shared store notice path', () => {
+		mockUseSelect.mockImplementation( ( callback ) =>
+			callback( () => ( {
 				getBlockApplyError: jest
 					.fn()
 					.mockReturnValue(
 						'This result is stale. Refresh recommendations before applying it.'
 					),
-				getSurfaceStatusNotice: jest.fn((surface, options = {}) => {
+				getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 					void surface;
 					return options.applyError
 						? {
@@ -256,26 +267,26 @@ describe('StylesRecommendations', () => {
 								isDismissible: true,
 						  }
 						: null;
-				}),
-			}))
+				} ),
+			} ) )
 		);
 
-		renderComponent([makeSuggestion('shadow', 'Use softer shadow')]);
+		renderComponent( [ makeSuggestion( 'shadow', 'Use softer shadow' ) ] );
 
-		expect(getContainer().textContent).toContain(
+		expect( getContainer().textContent ).toContain(
 			'This result is stale. Refresh recommendations before applying it.'
 		);
-	});
+	} );
 
-	test('shows stale projection guidance that points back to the main AI Recommendations panel', () => {
-		renderComponent([makeSuggestion('shadow', 'Use softer shadow')], {
+	test( 'shows stale projection guidance that points back to the main AI Recommendations panel', () => {
+		renderComponent( [ makeSuggestion( 'shadow', 'Use softer shadow' ) ], {
 			isStale: true,
-		});
+		} );
 
-		expect(getContainer().textContent).toContain(
+		expect( getContainer().textContent ).toContain(
 			'These style suggestions reflect the last block request.'
 		);
-		expect(getContainer().textContent).toContain(
+		expect( getContainer().textContent ).toContain(
 			'Refresh the main AI Recommendations panel before applying anything from Styles.'
 		);
 		expect(
@@ -284,13 +295,13 @@ describe('StylesRecommendations', () => {
 			)
 		).not.toBeNull();
 		expect(
-			Array.from(getContainer().querySelectorAll('button')).find(
-				(button) => button.textContent === 'Refresh'
+			Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Refresh'
 			)
 		).toBeUndefined();
-	});
+	} );
 
-	test('disables inline apply controls when stale suggestions are shown', () => {
+	test( 'disables inline apply controls when stale suggestions are shown', () => {
 		const variation = {
 			label: 'Outline',
 			description: 'Outline style',
@@ -299,56 +310,59 @@ describe('StylesRecommendations', () => {
 			attributeUpdates: { className: 'is-style-outline' },
 		};
 
-		renderComponent([variation, makeSuggestion('shadow')], {
+		renderComponent( [ variation, makeSuggestion( 'shadow' ) ], {
 			isStale: true,
-		});
+		} );
 
-		const buttons = Array.from(getContainer().querySelectorAll('button'));
+		const buttons = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		);
 		const outlineButton = buttons.find(
-			(button) => button.textContent === 'Outline'
+			( button ) => button.textContent === 'Outline'
 		);
 		const applyButton = buttons.find(
-			(button) => button.textContent === 'Apply'
+			( button ) => button.textContent === 'Apply'
 		);
 
-		expect(outlineButton?.disabled).toBe(true);
-		expect(applyButton).toBeUndefined();
-		expect(getContainer().textContent).not.toContain('Apply now');
-		expect(getContainer().textContent).toContain(
+		expect( outlineButton?.disabled ).toBe( true );
+		expect( applyButton ).toBeUndefined();
+		expect( getContainer().textContent ).not.toContain( 'Apply now' );
+		expect( getContainer().textContent ).toContain(
 			'Refresh in AI Recommendations'
 		);
-		expect(getContainer().textContent).toContain('Stale');
-		expect(mockApplySuggestion).not.toHaveBeenCalled();
-	});
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( mockApplySuggestion ).not.toHaveBeenCalled();
+	} );
 
-	test('keeps row feedback visible across rerenders with cloned suggestions', async () => {
-		const suggestion = makeSuggestion('shadow', 'Use softer shadow');
+	test( 'keeps row feedback visible across rerenders with cloned suggestions', async () => {
+		const suggestion = makeSuggestion( 'shadow', 'Use softer shadow' );
 
-		renderComponent([suggestion]);
+		renderComponent( [ suggestion ] );
 
 		const applyButton = Array.from(
-			getContainer().querySelectorAll('button')
-		).find((button) => button.textContent === 'Apply');
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Apply' );
 
-		await act(async () => {
+		await act( async () => {
 			applyButton.click();
 			await Promise.resolve();
-		});
+		} );
 
-		renderComponent([{ ...suggestion }]);
+		renderComponent( [ { ...suggestion } ] );
 
 		expect(
-			getContainer().querySelector('.flavor-agent-inline-feedback')?.textContent
-		).toBe('AppliedUse softer shadow.');
+			getContainer().querySelector( '.flavor-agent-inline-feedback' )
+				?.textContent
+		).toBe( 'AppliedUse softer shadow.' );
 		const rerenderedApplyButton = getContainer().querySelector(
 			'.flavor-agent-style-row__apply'
 		);
-		expect(rerenderedApplyButton?.disabled).toBe(true);
-	});
-});
+		expect( rerenderedApplyButton?.disabled ).toBe( true );
+	} );
+} );
 
-describe('color preview swatch', () => {
-	test('renders swatch for oklch preview value', () => {
+describe( 'color preview swatch', () => {
+	test( 'renders swatch for oklch preview value', () => {
 		const suggestion = {
 			label: 'Accent color',
 			description: 'Use accent',
@@ -359,15 +373,15 @@ describe('color preview swatch', () => {
 			preview: 'oklch(0.7 0.15 240)',
 		};
 
-		renderComponent([suggestion]);
+		renderComponent( [ suggestion ] );
 
 		const swatch = getContainer().querySelector(
 			'.flavor-agent-style-row__preview'
 		);
-		expect(swatch).not.toBeNull();
-	});
+		expect( swatch ).not.toBeNull();
+	} );
 
-	test('renders swatch for var() preview value', () => {
+	test( 'renders swatch for var() preview value', () => {
 		const suggestion = {
 			label: 'Accent var',
 			description: 'Use var',
@@ -378,15 +392,15 @@ describe('color preview swatch', () => {
 			preview: 'var(--wp--preset--color--accent)',
 		};
 
-		renderComponent([suggestion]);
+		renderComponent( [ suggestion ] );
 
 		const swatch = getContainer().querySelector(
 			'.flavor-agent-style-row__preview'
 		);
-		expect(swatch).not.toBeNull();
-	});
+		expect( swatch ).not.toBeNull();
+	} );
 
-	test('does not render swatch for non-color preview value', () => {
+	test( 'does not render swatch for non-color preview value', () => {
 		const suggestion = {
 			label: 'Font size',
 			description: 'Bigger text',
@@ -397,11 +411,11 @@ describe('color preview swatch', () => {
 			preview: '1.5rem',
 		};
 
-		renderComponent([suggestion]);
+		renderComponent( [ suggestion ] );
 
 		const swatch = getContainer().querySelector(
 			'.flavor-agent-style-row__preview'
 		);
-		expect(swatch).toBeNull();
-	});
-});
+		expect( swatch ).toBeNull();
+	} );
+} );

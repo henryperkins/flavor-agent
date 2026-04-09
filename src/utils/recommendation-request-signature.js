@@ -86,12 +86,11 @@ export function buildStyleBookRecommendationRequestSignature( {
 		prompt,
 		contextSignature,
 		scopeKey: scope?.scopeKey || '',
-		entityRef:
-			[
-				scope?.globalStylesId || scope?.entityId || '',
-				scope?.blockName || '',
-			]
-				.filter( Boolean )
-				.join( ':' ),
+		entityRef: [
+			scope?.globalStylesId || scope?.entityId || '',
+			scope?.blockName || '',
+		]
+			.filter( Boolean )
+			.join( ':' ),
 	} );
 }

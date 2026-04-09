@@ -568,8 +568,8 @@ export function BlockRecommendationsContent( {
 
 	if ( isStaleResult ) {
 		staleScopeReason =
-			effectiveStaleReason === 'server'
-				? 'This result no longer matches the current server-resolved recommendation context. Refresh before applying anything from the previous result.'
+			effectiveStaleReason === 'server-apply'
+				? 'This result no longer matches the current server-resolved apply context. Refresh before applying anything from the previous result.'
 				: 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.';
 	}
 

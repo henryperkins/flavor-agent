@@ -163,7 +163,9 @@ describe( 'ContentRecommender', () => {
 			getRoot().render( <ContentRecommender /> );
 		} );
 
-		const modeButtons = Array.from( getContainer().querySelectorAll( 'button' ) );
+		const modeButtons = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		);
 		const draftButton = modeButtons.find(
 			( button ) => button.textContent === 'Draft'
 		);
@@ -179,7 +181,9 @@ describe( 'ContentRecommender', () => {
 		} );
 
 		expect( mockSetContentMode ).toHaveBeenCalledWith( 'edit' );
-		expect( getContainer().textContent ).not.toContain( 'Current document' );
+		expect( getContainer().textContent ).not.toContain(
+			'Current document'
+		);
 	} );
 
 	test( 'does not render for unsupported editor entities', () => {

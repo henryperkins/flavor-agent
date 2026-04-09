@@ -46,8 +46,7 @@ const GLOBAL_STYLES_LINE_HEIGHT_VALUE = 1.73;
 const GLOBAL_STYLES_STALE_TEXT_COLOR = '#101010';
 const GLOBAL_STYLES_STALE_NOTICE =
 	'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.';
-const GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE =
-	'resolved-global-styles';
+const GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE = 'resolved-global-styles';
 const GLOBAL_STYLES_SIDEBAR_SELECTOR =
 	'.editor-global-styles-sidebar__panel, .editor-global-styles-sidebar, [role="region"][aria-label="Styles"]';
 const GLOBAL_STYLES_RESPONSE = {
@@ -111,14 +110,13 @@ const STYLE_BOOK_RESPONSE = {
 					cssVar: 'var(--wp--preset--color--signal)',
 				},
 			],
-			},
-		],
-	};
+		},
+	],
+};
 const TEMPLATE_STALE_NOTICE =
 	'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.';
 const TEMPLATE_RESOLVED_CONTEXT_SIGNATURE = 'resolved-template';
-const TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE =
-	'resolved-template-part';
+const TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE = 'resolved-template-part';
 
 async function dismissWelcomeGuide( page ) {
 	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
@@ -593,12 +591,13 @@ async function ensurePanelOpen( page, title, content ) {
 		.getByRole( 'button', { name: title, exact: true } )
 		.first();
 	const genericToggle = page
-		.locator( `button:has-text("${ title }"), [role="button"]:has-text("${ title }")` )
+		.locator(
+			`button:has-text("${ title }"), [role="button"]:has-text("${ title }")`
+		)
 		.first();
-	const toggle =
-		( await buttonToggle.isVisible().catch( () => false ) )
-			? buttonToggle
-			: genericToggle;
+	const toggle = ( await buttonToggle.isVisible().catch( () => false ) )
+		? buttonToggle
+		: genericToggle;
 
 	await expect( toggle ).toBeVisible();
 
@@ -1964,14 +1963,16 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 			exact: true,
 		} )
 	).toBeDisabled();
-		await expect(
-			recommendationsPanel.getByRole( 'button', {
-				name: 'Confirm Apply',
-				exact: true,
-			} )
-		).toBeDisabled();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Confirm Apply',
+			exact: true,
+		} )
+	).toBeDisabled();
 
-	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
+	await recommendationsPanel
+		.locator( '.flavor-agent-scope-bar__refresh' )
+		.click();
 
 	await expect.poll( () => styleRequests.length ).toBe( 2 );
 	expect( styleRequests[ 1 ].scope.surface ).toBe( 'global-styles' );
@@ -2085,14 +2086,16 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 			exact: true,
 		} )
 	).toBeDisabled();
-		await expect(
-			recommendationsPanel.getByRole( 'button', {
-				name: 'Confirm Apply',
-				exact: true,
-			} )
-		).toBeDisabled();
+	await expect(
+		recommendationsPanel.getByRole( 'button', {
+			name: 'Confirm Apply',
+			exact: true,
+		} )
+	).toBeDisabled();
 
-	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
+	await recommendationsPanel
+		.locator( '.flavor-agent-scope-bar__refresh' )
+		.click();
 
 	await expect.poll( () => styleRequests.length ).toBe( 2 );
 	expect( styleRequests[ 1 ].scope.surface ).toBe( 'style-book' );
@@ -2366,7 +2369,9 @@ test( 'template surface keeps stale results visible but disables review and appl
 		} )
 	).toBeDisabled();
 
-	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
+	await recommendationsPanel
+		.locator( '.flavor-agent-scope-bar__refresh' )
+		.click();
 
 	await expect.poll( () => templateRequests.length ).toBe( 2 );
 	expect(
@@ -2822,7 +2827,9 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 		} )
 	).toBeDisabled();
 
-	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
+	await recommendationsPanel
+		.locator( '.flavor-agent-scope-bar__refresh' )
+		.click();
 
 	await expect.poll( () => templatePartRequests.length ).toBe( 2 );
 	expect(

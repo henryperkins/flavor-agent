@@ -525,10 +525,14 @@ describe( 'ActivityLogApp', () => {
 		expect(
 			fields.find( ( field ) => field.id === 'provider' ).elements
 		).toEqual( [
-			{ value: 'Azure OpenAI responses', label: 'Azure OpenAI responses' },
+			{
+				value: 'Azure OpenAI responses',
+				label: 'Azure OpenAI responses',
+			},
 		] );
 		expect(
-			fields.find( ( field ) => field.id === 'configurationOwner' ).elements
+			fields.find( ( field ) => field.id === 'configurationOwner' )
+				.elements
 		).toEqual( [
 			{
 				value: 'Settings > Flavor Agent',
@@ -591,7 +595,9 @@ describe( 'ActivityLogApp', () => {
 		const blockPathField = fields.find(
 			( field ) => field.id === 'blockPath'
 		);
-		const providerField = fields.find( ( field ) => field.id === 'provider' );
+		const providerField = fields.find(
+			( field ) => field.id === 'provider'
+		);
 		const providerPathField = fields.find(
 			( field ) => field.id === 'providerPath'
 		);
@@ -617,7 +623,10 @@ describe( 'ActivityLogApp', () => {
 		expect( providerField.enableSorting ).toBe( true );
 		expect( providerField.filterBy.operators ).toEqual( [ 'is', 'isNot' ] );
 		expect( providerPathField.enableSorting ).toBe( true );
-		expect( providerPathField.filterBy.operators ).toEqual( [ 'is', 'isNot' ] );
+		expect( providerPathField.filterBy.operators ).toEqual( [
+			'is',
+			'isNot',
+		] );
 		expect( configurationOwnerField.enableSorting ).toBe( true );
 		expect( configurationOwnerField.filterBy.operators ).toEqual( [
 			'is',

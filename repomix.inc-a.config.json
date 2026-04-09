@@ -1,26 +1,26 @@
 {
-  "$schema": "https://repomix.com/schemas/latest/schema.json",
-  "output": {
-    "filePath": "output/flavor-agent-inc-a-repomix.md",
-    "style": "markdown"
-  },
-  "include": [
-    "inc/Abilities/**/*.php",
-    "inc/Admin/**/*.php",
-    "inc/AzureOpenAI/**/*.php",
-    "inc/Cloudflare/**/*.php",
-    "inc/Context/**/*.php",
-    "inc/REST/**/*.php"
-  ],
-  "ignore": {
-    "useGitignore": true,
-    "useDotIgnore": true,
-    "useDefaultPatterns": true,
-    "customPatterns": [
-      "output/**",
-      "node_modules/**",
-      "vendor/**",
-      "tmp/**"
-    ]
-  }
+	"$schema": "https://repomix.com/schemas/latest/schema.json",
+	"output": {
+		"filePath": "output/flavor-agent-inc-a-repomix.md",
+		"style": "markdown"
+	},
+	"include": [
+		"inc/Abilities/**/*.php",
+		"inc/Admin/**/*.php",
+		"inc/AzureOpenAI/**/*.php",
+		"inc/Cloudflare/**/*.php",
+		"inc/Context/**/*.php",
+		"inc/REST/**/*.php"
+	],
+	"ignore": {
+		"useGitignore": true,
+		"useDotIgnore": true,
+		"useDefaultPatterns": true,
+		"customPatterns": [
+			"output/**",
+			"node_modules/**",
+			"vendor/**",
+			"tmp/**"
+		]
+	}
 }

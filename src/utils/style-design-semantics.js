@@ -18,10 +18,7 @@ function getNodeIdentity( node = {} ) {
 
 function getNodeLabel( node = {} ) {
 	return (
-		getNodeIdentity( node )?.label ||
-		node?.title ||
-		node?.name ||
-		'Block'
+		getNodeIdentity( node )?.label || node?.title || node?.name || 'Block'
 	);
 }
 
@@ -95,7 +92,11 @@ function getOverallDensityHint( entries = [] ) {
 	return 'balanced';
 }
 
-function getOccurrenceConfidence( occurrenceCount, roleSummary, locationSummary ) {
+function getOccurrenceConfidence(
+	occurrenceCount,
+	roleSummary,
+	locationSummary
+) {
 	if ( occurrenceCount <= 1 ) {
 		return 'high';
 	}
@@ -211,7 +212,9 @@ function buildNearbyBlocks( siblings = [], index = 0 ) {
 
 function buildSemanticEntry( node, path, visibilityMap, siblings, index ) {
 	const identity = getNodeIdentity( node );
-	const childNodes = Array.isArray( node?.innerBlocks ) ? node.innerBlocks : [];
+	const childNodes = Array.isArray( node?.innerBlocks )
+		? node.innerBlocks
+		: [];
 	const childRoles = uniqueNonEmptyValues(
 		childNodes.map( ( child ) => getNodeIdentity( child )?.role || '' )
 	);

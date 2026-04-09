@@ -72,8 +72,7 @@ export default function SuggestionChips( {
 	);
 	const resolvedRequestSignature =
 		currentRequestSignature || fallbackRequestSignature;
-	const resolvedRequestInput =
-		currentRequestInput || fallbackRequestInput;
+	const resolvedRequestInput = currentRequestInput || fallbackRequestInput;
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion: ( targetClientId, suggestion ) =>
 			applySuggestion(

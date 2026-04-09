@@ -31,14 +31,14 @@ import GlobalStylesRecommender from './global-styles/GlobalStylesRecommender';
 import StyleBookRecommender from './style-book/StyleBookRecommender';
 
 registerPlugin( 'flavor-agent', {
-		render: () => (
-			<>
-				<ActivitySessionBootstrap />
-				<BlockRecommendationsDocumentPanel />
-				<ContentRecommender />
-				<PatternRecommender />
-				<InserterBadge />
-				<TemplateRecommender />
+	render: () => (
+		<>
+			<ActivitySessionBootstrap />
+			<BlockRecommendationsDocumentPanel />
+			<ContentRecommender />
+			<PatternRecommender />
+			<InserterBadge />
+			<TemplateRecommender />
 			<TemplatePartRecommender />
 			<GlobalStylesRecommender />
 			<StyleBookRecommender />

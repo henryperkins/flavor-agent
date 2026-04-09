@@ -488,16 +488,20 @@ function normalizeBlockGuidelines( value ) {
 
 function buildGuidelinesPayload( root, blockGuidelines ) {
 	const categories = Object.fromEntries(
-		Object.entries( GUIDELINE_CATEGORY_FIELDS ).map( ( [ key, fieldId ] ) => {
-			const field = root.querySelector( `#${ fieldId }` );
+		Object.entries( GUIDELINE_CATEGORY_FIELDS ).map(
+			( [ key, fieldId ] ) => {
+				const field = root.querySelector( `#${ fieldId }` );
 
-			return [
-				key,
-				{
-					guidelines: field ? normalizeText( field.value ).trim() : '',
-				},
-			];
-		} )
+				return [
+					key,
+					{
+						guidelines: field
+							? normalizeText( field.value ).trim()
+							: '',
+					},
+				];
+			}
+		)
 	);
 
 	return {
@@ -530,7 +534,9 @@ function initializeGuidelinesManager( root ) {
 	const optionsNode = guidelinesRoot.querySelector(
 		'[data-guidelines-block-options]'
 	);
-	const listRoot = guidelinesRoot.querySelector( '[data-guidelines-block-list]' );
+	const listRoot = guidelinesRoot.querySelector(
+		'[data-guidelines-block-list]'
+	);
 	const blockSelect = guidelinesRoot.querySelector(
 		'[data-guidelines-block-select]'
 	);
@@ -549,8 +555,12 @@ function initializeGuidelinesManager( root ) {
 	const exportButton = guidelinesRoot.querySelector(
 		'[data-guidelines-export-button]'
 	);
-	const fileInput = guidelinesRoot.querySelector( '[data-guidelines-file-input]' );
-	const noticeRoot = guidelinesRoot.querySelector( '[data-guidelines-notice]' );
+	const fileInput = guidelinesRoot.querySelector(
+		'[data-guidelines-file-input]'
+	);
+	const noticeRoot = guidelinesRoot.querySelector(
+		'[data-guidelines-notice]'
+	);
 	const blocksPanel = guidelinesRoot.querySelector(
 		'.flavor-agent-guidelines__blocks-panel'
 	);
@@ -575,7 +585,9 @@ function initializeGuidelinesManager( root ) {
 		? parsedOptions
 				.map( ( option ) => ( {
 					value: normalizeText( option?.value ).trim(),
-					label: normalizeText( option?.label || option?.value ).trim(),
+					label: normalizeText(
+						option?.label || option?.value
+					).trim(),
 				} ) )
 				.filter( ( option ) => option.value && option.label )
 		: [];
@@ -616,7 +628,8 @@ function initializeGuidelinesManager( root ) {
 		const availableOptions = blockOptions.filter(
 			( option ) => ! usedBlocks.has( option.value )
 		);
-		const selectedValue = editingBlock || normalizeText( blockSelect.value );
+		const selectedValue =
+			editingBlock || normalizeText( blockSelect.value );
 
 		blockSelect.innerHTML = '';
 
@@ -627,7 +640,9 @@ function initializeGuidelinesManager( root ) {
 
 		if (
 			editingBlock &&
-			! availableOptions.find( ( option ) => option.value === editingBlock )
+			! availableOptions.find(
+				( option ) => option.value === editingBlock
+			)
 		) {
 			availableOptions.unshift( {
 				value: editingBlock,
@@ -718,7 +733,9 @@ function initializeGuidelinesManager( root ) {
 			editButton.type = 'button';
 			editButton.className = 'button button-secondary';
 			editButton.textContent = 'Edit';
-			editButton.addEventListener( 'click', () => startEditing( blockName ) );
+			editButton.addEventListener( 'click', () =>
+				startEditing( blockName )
+			);
 
 			const removeButton = document.createElement( 'button' );
 			removeButton.type = 'button';
@@ -811,7 +828,8 @@ function initializeGuidelinesManager( root ) {
 	resetEditor();
 
 	saveButton.addEventListener( 'click', () => {
-		const blockName = editingBlock || normalizeText( blockSelect.value ).trim();
+		const blockName =
+			editingBlock || normalizeText( blockSelect.value ).trim();
 		const guidelines = normalizeText( blockText.value ).trim();
 
 		if ( ! blockName ) {

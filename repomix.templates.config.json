@@ -1,24 +1,22 @@
 {
-  "$schema": "https://repomix.com/schemas/latest/schema.json",
-  "output": {
-    "filePath": "output/flavor-agent-templates-repomix.md",
-    "style": "markdown"
-  },
-  "include": [
-    "src/templates/*.js"
-  ],
-  "ignore": {
-    "useGitignore": true,
-    "useDotIgnore": true,
-    "useDefaultPatterns": true,
-    "customPatterns": [
-      "src/templates/**/__tests__/**",
-      "src/templates/**/*.test.*",
-      "src/templates/**/*.spec.*",
-      "output/**",
-      "node_modules/**",
-      "vendor/**",
-      "tmp/**"
-    ]
-  }
+	"$schema": "https://repomix.com/schemas/latest/schema.json",
+	"output": {
+		"filePath": "output/flavor-agent-templates-repomix.md",
+		"style": "markdown"
+	},
+	"include": [ "src/templates/*.js" ],
+	"ignore": {
+		"useGitignore": true,
+		"useDotIgnore": true,
+		"useDefaultPatterns": true,
+		"customPatterns": [
+			"src/templates/**/__tests__/**",
+			"src/templates/**/*.test.*",
+			"src/templates/**/*.spec.*",
+			"output/**",
+			"node_modules/**",
+			"vendor/**",
+			"tmp/**"
+		]
+	}
 }

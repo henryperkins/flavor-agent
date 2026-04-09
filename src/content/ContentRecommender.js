@@ -100,7 +100,7 @@ function ContentBody( { content = '' } ) {
 				>
 					{ paragraph }
 				</p>
-			)) }
+			) ) }
 		</div>
 	);
 }
@@ -116,7 +116,9 @@ function ContentIssueCard( { issue = {} } ) {
 				{ issue?.original || 'Voice issue' }
 			</div>
 			{ issue?.problem && (
-				<p className="flavor-agent-card__description">{ issue.problem }</p>
+				<p className="flavor-agent-card__description">
+					{ issue.problem }
+				</p>
 			) }
 			{ issue?.revision && (
 				<p className="flavor-agent-card__description">
@@ -159,18 +161,16 @@ export default function ContentRecommender() {
 			},
 		};
 	}, [] );
-	const {
-		clearContentError,
-		fetchContentRecommendations,
-		setContentMode,
-	} = useDispatch( STORE_NAME );
+	const { clearContentError, fetchContentRecommendations, setContentMode } =
+		useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const hasSupportedPost =
 		Boolean( postContext.postId ) &&
 		SUPPORTED_POST_TYPES.has( postContext.postType );
 	const hasResult =
 		contentStatus === 'ready' && Boolean( contentRecommendation );
-	const hasOutput = hasResult && hasRecommendationOutput( contentRecommendation );
+	const hasOutput =
+		hasResult && hasRecommendationOutput( contentRecommendation );
 	const activeMode = getContentModeConfig( contentMode );
 	const documentTypeLabel =
 		formatContextLabel( postContext.postType ) || 'Post';
@@ -195,23 +195,20 @@ export default function ContentRecommender() {
 			} ),
 		[ contentError, contentStatus, hasOutput, hasResult ]
 	);
-	const handleFetch = useCallback(
-		() => {
-			fetchContentRecommendations( {
-				mode: contentMode,
-				prompt,
-				postContext: {
-					postType: postContext.postType,
-					title: postContext.title,
-					excerpt: postContext.excerpt,
-					content: postContext.content,
-					slug: postContext.slug,
-					status: postContext.status,
-				},
-			} );
-		},
-		[ contentMode, fetchContentRecommendations, postContext, prompt ]
-	);
+	const handleFetch = useCallback( () => {
+		fetchContentRecommendations( {
+			mode: contentMode,
+			prompt,
+			postContext: {
+				postType: postContext.postType,
+				title: postContext.title,
+				excerpt: postContext.excerpt,
+				content: postContext.content,
+				slug: postContext.slug,
+				status: postContext.status,
+			},
+		} );
+	}, [ contentMode, fetchContentRecommendations, postContext, prompt ] );
 
 	if ( ! hasSupportedPost ) {
 		return null;
@@ -259,11 +256,17 @@ export default function ContentRecommender() {
 											key={ mode }
 											variant="secondary"
 											size="small"
-											aria-pressed={ mode === contentMode }
+											aria-pressed={
+												mode === contentMode
+											}
 											className={ `flavor-agent-content-recommender__mode-button${
-												mode === contentMode ? ' is-active' : ''
+												mode === contentMode
+													? ' is-active'
+													: ''
 											}` }
-											onClick={ () => setContentMode( mode ) }
+											onClick={ () =>
+												setContentMode( mode )
+											}
 										>
 											{ formatModeLabel( mode ) }
 										</Button>
@@ -296,17 +299,24 @@ export default function ContentRecommender() {
 								title={
 									contentRecommendation?.title ||
 									`${ formatModeLabel(
-										contentRecommendation?.mode || contentMode
+										contentRecommendation?.mode ||
+											contentMode
 									) } result`
 								}
-								description={ contentRecommendation?.summary || '' }
+								description={
+									contentRecommendation?.summary || ''
+								}
 								tone={ formatModeLabel(
 									contentRecommendation?.mode || contentMode
 								) }
 							>
-								<ContentBody content={ contentRecommendation?.content || '' } />
+								<ContentBody
+									content={
+										contentRecommendation?.content || ''
+									}
+								/>
 							</RecommendationHero>
-						)}
+						) }
 
 						{ ( Array.isArray( contentRecommendation?.notes ) &&
 							contentRecommendation.notes.length > 0 ) ||
@@ -316,20 +326,34 @@ export default function ContentRecommender() {
 								title="Editorial Notes"
 								advisoryLabel="Review"
 								count={
-									( contentRecommendation?.notes || [] ).length +
-									( contentRecommendation?.issues || [] ).length
+									( contentRecommendation?.notes || [] )
+										.length +
+									( contentRecommendation?.issues || [] )
+										.length
 								}
 								countNoun="note"
 								initialOpen={ true }
 							>
-								{ ( contentRecommendation?.notes || [] ).map( ( note, index ) => (
-									<div className="flavor-agent-card" key={ `note-${ index }` }>
-										<p className="flavor-agent-card__description">{ note }</p>
-									</div>
-								) ) }
-								{ ( contentRecommendation?.issues || [] ).map( ( issue, index ) => (
-									<ContentIssueCard key={ `issue-${ index }` } issue={ issue } />
-								) ) }
+								{ ( contentRecommendation?.notes || [] ).map(
+									( note, index ) => (
+										<div
+											className="flavor-agent-card"
+											key={ `note-${ index }` }
+										>
+											<p className="flavor-agent-card__description">
+												{ note }
+											</p>
+										</div>
+									)
+								) }
+								{ ( contentRecommendation?.issues || [] ).map(
+									( issue, index ) => (
+										<ContentIssueCard
+											key={ `issue-${ index }` }
+											issue={ issue }
+										/>
+									)
+								) }
 							</AIAdvisorySection>
 						) : null }
 

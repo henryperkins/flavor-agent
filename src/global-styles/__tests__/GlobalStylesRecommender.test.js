@@ -1,6 +1,7 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockFetchGlobalStylesRecommendations = jest.fn();
+const mockRevalidateGlobalStylesReviewFreshness = jest.fn();
 const mockApplyGlobalStylesSuggestion = jest.fn();
 const mockClearGlobalStylesRecommendations = jest.fn();
 const mockSetGlobalStylesSelectedSuggestion = jest.fn();
@@ -330,10 +331,13 @@ beforeEach( () => {
 		activityLog: [],
 		recommendations: [],
 		explanation: '',
+		requestPrompt: '',
 		status: 'idle',
 		error: null,
 		resultRef: null,
 		contextSignature: null,
+		reviewContextSignature: null,
+		reviewStaleReason: null,
 		selectedSuggestionKey: null,
 		applyStatus: 'idle',
 		undoStatus: 'idle',
@@ -391,13 +395,19 @@ beforeEach( () => {
 						currentStoreState.recommendations,
 					getGlobalStylesExplanation: () =>
 						currentStoreState.explanation,
+					getGlobalStylesRequestPrompt: () =>
+						currentStoreState.requestPrompt,
 					getGlobalStylesStatus: () => currentStoreState.status,
 					getGlobalStylesError: () => currentStoreState.error,
 					getGlobalStylesResultRef: () => currentStoreState.resultRef,
 					getGlobalStylesContextSignature: () =>
 						currentStoreState.contextSignature,
+					getGlobalStylesReviewContextSignature: () =>
+						currentStoreState.reviewContextSignature,
 					getGlobalStylesSelectedSuggestionKey: () =>
 						currentStoreState.selectedSuggestionKey,
+					getGlobalStylesReviewStaleReason: () =>
+						currentStoreState.reviewStaleReason,
 					getGlobalStylesApplyStatus: () =>
 						currentStoreState.applyStatus,
 					getUndoStatus: () => currentStoreState.undoStatus,
@@ -473,6 +483,8 @@ beforeEach( () => {
 		fetchGlobalStylesRecommendations: mockFetchGlobalStylesRecommendations,
 		applyGlobalStylesSuggestion: mockApplyGlobalStylesSuggestion,
 		clearGlobalStylesRecommendations: mockClearGlobalStylesRecommendations,
+		revalidateGlobalStylesReviewFreshness:
+			mockRevalidateGlobalStylesReviewFreshness,
 		setGlobalStylesSelectedSuggestion:
 			mockSetGlobalStylesSelectedSuggestion,
 		undoActivity: mockUndoActivity,

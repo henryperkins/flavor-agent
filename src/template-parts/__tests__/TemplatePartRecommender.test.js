@@ -2,76 +2,78 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockGetBlockPatterns = jest.fn();
 const mockFetchTemplatePartRecommendations = jest.fn();
+const mockRevalidateTemplatePartReviewFreshness = jest.fn();
 const mockGetTemplatePartActivityUndoState = jest.fn(
-	(activity) => activity?.undo || {}
+	( activity ) => activity?.undo || {}
 );
-const mockGetTemplatePartAreaLookup = jest.fn(() => ({}));
+const mockGetTemplatePartAreaLookup = jest.fn( () => ( {} ) );
 const mockOpenInserterForPattern = jest.fn();
 const mockSelectBlockByPath = jest.fn();
 const mockUndoActivity = jest.fn();
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
-jest.mock('@wordpress/block-editor', () => ({
+jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
-}));
+} ) );
 
-jest.mock('@wordpress/components', () =>
-	require('../../test-utils/wp-components').mockWpComponents()
+jest.mock( '@wordpress/components', () =>
+	require( '../../test-utils/wp-components' ).mockWpComponents()
 );
 
-jest.mock('@wordpress/data', () => ({
-	useDispatch: (...args) => mockUseDispatch(...args),
-	useSelect: (...args) => mockUseSelect(...args),
-}));
+jest.mock( '@wordpress/data', () => ( {
+	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
+	useSelect: ( ...args ) => mockUseSelect( ...args ),
+} ) );
 
-jest.mock('@wordpress/editor', () => {
-	const { createElement } = require('@wordpress/element');
+jest.mock( '@wordpress/editor', () => {
+	const { createElement } = require( '@wordpress/element' );
 
 	return {
-		PluginDocumentSettingPanel: ({ children, title }) =>
-			createElement('section', { 'data-panel-title': title }, children),
+		PluginDocumentSettingPanel: ( { children, title } ) =>
+			createElement( 'section', { 'data-panel-title': title }, children ),
 	};
-});
+} );
 
-jest.mock('../../patterns/compat', () => ({
-	getBlockPatterns: (...args) => mockGetBlockPatterns(...args),
-}));
+jest.mock( '../../patterns/compat', () => ( {
+	getBlockPatterns: ( ...args ) => mockGetBlockPatterns( ...args ),
+} ) );
 
-jest.mock('../../store', () => ({
+jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
-}));
+} ) );
 
-jest.mock('../../utils/template-actions', () => ({
-	getTemplatePartActivityUndoState: (...args) =>
-		mockGetTemplatePartActivityUndoState(...args),
-	openInserterForPattern: (...args) => mockOpenInserterForPattern(...args),
-	selectBlockByPath: (...args) => mockSelectBlockByPath(...args),
-}));
+jest.mock( '../../utils/template-actions', () => ( {
+	getTemplatePartActivityUndoState: ( ...args ) =>
+		mockGetTemplatePartActivityUndoState( ...args ),
+	openInserterForPattern: ( ...args ) =>
+		mockOpenInserterForPattern( ...args ),
+	selectBlockByPath: ( ...args ) => mockSelectBlockByPath( ...args ),
+} ) );
 
-jest.mock('../../utils/visible-patterns', () => ({
-	getVisiblePatternNames: jest.fn(() => []),
-}));
+jest.mock( '../../utils/visible-patterns', () => ( {
+	getVisiblePatternNames: jest.fn( () => [] ),
+} ) );
 
-jest.mock('../../utils/template-part-areas', () => ({
-	getTemplatePartAreaLookup: (...args) =>
-		mockGetTemplatePartAreaLookup(...args),
-}));
+jest.mock( '../../utils/template-part-areas', () => ( {
+	getTemplatePartAreaLookup: ( ...args ) =>
+		mockGetTemplatePartAreaLookup( ...args ),
+} ) );
 
-jest.mock('../../utils/template-operation-sequence', () => ({
+jest.mock( '../../utils/template-operation-sequence', () => ( {
 	TEMPLATE_OPERATION_INSERT_PATTERN: 'insert_pattern',
 	TEMPLATE_OPERATION_REMOVE_BLOCK: 'remove_block',
 	TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN: 'replace_block_with_pattern',
 	TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH: 'after_block_path',
 	TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH: 'before_block_path',
-	validateTemplatePartOperationSequence: jest.fn((operations) => ({
+	validateTemplatePartOperationSequence: jest.fn( ( operations ) => ( {
 		ok: true,
 		operations,
-	})),
-}));
+	} ) ),
+} ) );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { act } = require('react');
-const { setupReactTest } = require('../../test-utils/setup-react-test');
+const { act } = require( 'react' );
+const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import TemplatePartRecommender from '../TemplatePartRecommender';
 import {
@@ -96,7 +98,7 @@ function buildTemplatePartContextSignature( state = getState() ) {
 	} );
 }
 
-function createState(overrides = {}) {
+function createState( overrides = {} ) {
 	return {
 		editSite: {
 			postId: 'theme//header',
@@ -114,10 +116,13 @@ function createState(overrides = {}) {
 			templatePartApplyStatus: 'idle',
 			templatePartError: null,
 			templatePartExplanation: '',
+			templatePartRequestPrompt: '',
 			templatePartLastAppliedOperations: [],
 			templatePartLastAppliedSuggestionKey: null,
 			templatePartRecommendations: [],
 			templatePartContextSignature: null,
+			templatePartReviewContextSignature: null,
+			templatePartReviewStaleReason: null,
 			templatePartResultRef: null,
 			templatePartResultToken: 1,
 			templatePartSelectedSuggestionKey: null,
@@ -129,30 +134,30 @@ function createState(overrides = {}) {
 	};
 }
 
-function selectStore(storeName) {
-	if (storeName === 'core/block-editor') {
+function selectStore( storeName ) {
+	if ( storeName === 'core/block-editor' ) {
 		return {
-			getBlocks: jest.fn(() => getState().blockEditor.blocks),
+			getBlocks: jest.fn( () => getState().blockEditor.blocks ),
 		};
 	}
 
-	if (storeName === 'core/edit-site') {
+	if ( storeName === 'core/edit-site' ) {
 		return {
-			getEditedPostId: jest.fn(() => getState().editSite.postId),
-			getEditedPostType: jest.fn(() => getState().editSite.postType),
+			getEditedPostId: jest.fn( () => getState().editSite.postId ),
+			getEditedPostType: jest.fn( () => getState().editSite.postType ),
 		};
 	}
 
-	if (storeName === 'flavor-agent') {
+	if ( storeName === 'flavor-agent' ) {
 		return {
-			getActivityLog: jest.fn(() => getState().store.activityLog),
+			getActivityLog: jest.fn( () => getState().store.activityLog ),
 			getLastUndoneActivityId: jest.fn(
 				() => getState().store.lastUndoneActivityId
 			),
-			getSurfaceStatusNotice: jest.fn((surface, options = {}) => {
+			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 				void surface;
 
-				if (options.requestError) {
+				if ( options.requestError ) {
 					return {
 						source: 'request',
 						tone: 'error',
@@ -160,7 +165,7 @@ function selectStore(storeName) {
 					};
 				}
 
-				if (options.undoError) {
+				if ( options.undoError ) {
 					return {
 						source: 'undo',
 						tone: 'error',
@@ -169,7 +174,7 @@ function selectStore(storeName) {
 					};
 				}
 
-				if (options.undoSuccessMessage) {
+				if ( options.undoSuccessMessage ) {
 					return {
 						source: 'undo',
 						tone: 'success',
@@ -177,7 +182,7 @@ function selectStore(storeName) {
 					};
 				}
 
-				if (options.applyError) {
+				if ( options.applyError ) {
 					return {
 						source: 'apply',
 						tone: 'error',
@@ -185,7 +190,7 @@ function selectStore(storeName) {
 					};
 				}
 
-				if (options.applySuccessMessage) {
+				if ( options.applySuccessMessage ) {
 					return {
 						source: 'apply',
 						tone: 'success',
@@ -195,27 +200,34 @@ function selectStore(storeName) {
 					};
 				}
 
-				if (options.emptyMessage) {
+				if ( options.emptyMessage ) {
 					return {
 						source: 'empty',
 						tone: 'info',
 						message:
-							options.requestStatus === 'loading' ? '' : options.emptyMessage,
+							options.requestStatus === 'loading'
+								? ''
+								: options.emptyMessage,
 					};
 				}
 
 				return null;
-			}),
+			} ),
 			getTemplatePartApplyError: jest.fn(
 				() => getState().store.templatePartApplyError
 			),
-			getTemplatePartInteractionState: jest.fn(() => 'idle'),
+			getTemplatePartInteractionState: jest.fn( () => 'idle' ),
 			getTemplatePartApplyStatus: jest.fn(
 				() => getState().store.templatePartApplyStatus
 			),
-			getTemplatePartError: jest.fn(() => getState().store.templatePartError),
+			getTemplatePartError: jest.fn(
+				() => getState().store.templatePartError
+			),
 			getTemplatePartExplanation: jest.fn(
 				() => getState().store.templatePartExplanation
+			),
+			getTemplatePartRequestPrompt: jest.fn(
+				() => getState().store.templatePartRequestPrompt
 			),
 			getTemplatePartLastAppliedOperations: jest.fn(
 				() => getState().store.templatePartLastAppliedOperations
@@ -229,18 +241,26 @@ function selectStore(storeName) {
 			getTemplatePartContextSignature: jest.fn(
 				() => getState().store.templatePartContextSignature
 			),
+			getTemplatePartReviewContextSignature: jest.fn(
+				() => getState().store.templatePartReviewContextSignature
+			),
 			getTemplatePartResultRef: jest.fn(
 				() => getState().store.templatePartResultRef
 			),
 			getTemplatePartResultToken: jest.fn(
 				() => getState().store.templatePartResultToken
 			),
-			getTemplatePartStatus: jest.fn(() => getState().store.templatePartStatus),
+			getTemplatePartStatus: jest.fn(
+				() => getState().store.templatePartStatus
+			),
 			getTemplatePartSelectedSuggestionKey: jest.fn(
 				() => getState().store.templatePartSelectedSuggestionKey
 			),
-			getUndoError: jest.fn(() => getState().store.undoError),
-			getUndoStatus: jest.fn(() => getState().store.undoStatus),
+			getTemplatePartReviewStaleReason: jest.fn(
+				() => getState().store.templatePartReviewStaleReason
+			),
+			getUndoError: jest.fn( () => getState().store.undoError ),
+			getUndoStatus: jest.fn( () => getState().store.undoStatus ),
 			isTemplatePartLoading: jest.fn(
 				() => getState().store.templatePartStatus === 'loading'
 			),
@@ -250,61 +270,65 @@ function selectStore(storeName) {
 	return {};
 }
 
-function hasText(value) {
-	return getContainer().textContent.includes(value);
+function hasText( value ) {
+	return getContainer().textContent.includes( value );
 }
 
 function getTextarea() {
-	return getContainer().querySelector('textarea');
+	return getContainer().querySelector( 'textarea' );
 }
 
-function getButton(label) {
-	return Array.from(getContainer().querySelectorAll('button')).find(
-		(element) => element.textContent === label
+function getButton( label ) {
+	return Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+		( element ) => element.textContent === label
 	);
 }
 
 function getReviewSections() {
 	return Array.from(
-		getContainer().querySelectorAll('.flavor-agent-review-section')
+		getContainer().querySelectorAll( '.flavor-agent-review-section' )
 	);
 }
 
 async function renderPanel() {
-	await act(async () => {
-		getRoot().render(<TemplatePartRecommender />);
-	});
+	await act( async () => {
+		getRoot().render( <TemplatePartRecommender /> );
+	} );
 }
 
-beforeEach(async () => {
+beforeEach( async () => {
 	jest.clearAllMocks();
 	currentState = createState();
 	window.flavorAgentData = {
 		canRecommendTemplateParts: true,
 	};
-	mockGetBlockPatterns.mockReturnValue([]);
+	mockGetBlockPatterns.mockReturnValue( [] );
 	mockOpenInserterForPattern.mockReset();
 	mockSelectBlockByPath.mockReset();
-	mockUseDispatch.mockImplementation(() => ({
+	mockUseDispatch.mockImplementation( () => ( {
 		applyTemplatePartSuggestion: jest.fn(),
 		clearTemplatePartRecommendations: jest.fn(),
 		clearUndoError: jest.fn(),
 		fetchTemplatePartRecommendations: mockFetchTemplatePartRecommendations,
+		revalidateTemplatePartReviewFreshness:
+			mockRevalidateTemplatePartReviewFreshness,
 		setTemplatePartSelectedSuggestion: jest.fn(),
 		undoActivity: mockUndoActivity,
-	}));
-	mockUseSelect.mockImplementation((mapSelect) => mapSelect(selectStore));
+	} ) );
+	mockUseSelect.mockImplementation( ( mapSelect ) =>
+		mapSelect( selectStore )
+	);
 	await renderPanel();
-});
+} );
 
-afterEach(async () => {
+afterEach( async () => {
 	delete window.flavorAgentData;
 	currentState = null;
-});
+} );
 
-describe('TemplatePartRecommender', () => {
-	test('renders inline entity links in explanation and card descriptions', async () => {
-		currentState = createState({
+describe( 'TemplatePartRecommender', () => {
+	test( 'renders inline entity links in explanation and card descriptions', async () => {
+		currentState = createState( {
 			store: {
 				templatePartExplanation:
 					'Focus Navigation block first, then browse Utility Links.',
@@ -315,48 +339,50 @@ describe('TemplatePartRecommender', () => {
 							'Focus Navigation block first, then browse Utility Links.',
 						blockHints: [
 							{
-								path: [0],
+								path: [ 0 ],
 								label: 'Navigation block',
 								reason: 'Keep the utility actions near the main nav.',
 							},
 						],
-						patternSuggestions: ['theme/utility-links'],
+						patternSuggestions: [ 'theme/utility-links' ],
 					},
 				],
 				templatePartResultRef: 'theme//header',
 				templatePartStatus: 'ready',
 			},
-		});
-		mockGetBlockPatterns.mockReturnValue([
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
 			{
 				name: 'theme/utility-links',
 				title: 'Utility Links',
 			},
-		]);
+		] );
 
 		await renderPanel();
 
 		const navigationButtons = Array.from(
-			getContainer().querySelectorAll('button')
-		).filter((element) => element.textContent === 'Navigation block');
+			getContainer().querySelectorAll( 'button' )
+		).filter( ( element ) => element.textContent === 'Navigation block' );
 		const patternButtons = Array.from(
-			getContainer().querySelectorAll('button')
-		).filter((element) => element.textContent === 'Utility Links');
+			getContainer().querySelectorAll( 'button' )
+		).filter( ( element ) => element.textContent === 'Utility Links' );
 
-		expect(navigationButtons.length).toBeGreaterThan(1);
-		expect(patternButtons.length).toBeGreaterThan(1);
+		expect( navigationButtons.length ).toBeGreaterThan( 1 );
+		expect( patternButtons.length ).toBeGreaterThan( 1 );
 
-		act(() => {
-			navigationButtons[0].click();
-			patternButtons[0].click();
-		});
+		act( () => {
+			navigationButtons[ 0 ].click();
+			patternButtons[ 0 ].click();
+		} );
 
-		expect(mockSelectBlockByPath).toHaveBeenCalledWith([0]);
-		expect(mockOpenInserterForPattern).toHaveBeenCalledWith('Utility Links');
-	});
+		expect( mockSelectBlockByPath ).toHaveBeenCalledWith( [ 0 ] );
+		expect( mockOpenInserterForPattern ).toHaveBeenCalledWith(
+			'Utility Links'
+		);
+	} );
 
-	test('renders one shared review panel below the lanes instead of nesting it in the selected card', async () => {
-		currentState = createState({
+	test( 'renders one shared review panel below the lanes instead of nesting it in the selected card', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
@@ -368,7 +394,7 @@ describe('TemplatePartRecommender', () => {
 								type: 'replace_block_with_pattern',
 								patternName: 'theme/utility-links',
 								expectedBlockName: 'core/navigation',
-								targetPath: [0],
+								targetPath: [ 0 ],
 							},
 						],
 					},
@@ -377,7 +403,7 @@ describe('TemplatePartRecommender', () => {
 				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
 				templatePartStatus: 'ready',
 			},
-		});
+		} );
 
 		await renderPanel();
 
@@ -385,20 +411,20 @@ describe('TemplatePartRecommender', () => {
 			'.flavor-agent-card--template.is-review-selected'
 		);
 		const reviewSections = getReviewSections();
-		const reviewSection = reviewSections[0] || null;
+		const reviewSection = reviewSections[ 0 ] || null;
 
-		expect(selectedCard).not.toBeNull();
-		expect(reviewSections.length).toBe(1);
-		expect(selectedCard?.textContent).toContain('Review open');
-		expect(selectedCard?.textContent).toContain('Reviewing');
-		expect(selectedCard?.contains(reviewSection)).toBe(false);
-		expect(selectedCard?.compareDocumentPosition(reviewSection)).toBe(
+		expect( selectedCard ).not.toBeNull();
+		expect( reviewSections.length ).toBe( 1 );
+		expect( selectedCard?.textContent ).toContain( 'Review open' );
+		expect( selectedCard?.textContent ).toContain( 'Reviewing' );
+		expect( selectedCard?.contains( reviewSection ) ).toBe( false );
+		expect( selectedCard?.compareDocumentPosition( reviewSection ) ).toBe(
 			DOCUMENT_POSITION_FOLLOWING
 		);
-	});
+	} );
 
-	test('keeps stale template-part results visible but disables confirm apply when the stored context signature mismatches', async () => {
-		currentState = createState({
+	test( 'keeps stale template-part results visible but disables confirm apply when the stored context signature mismatches', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
@@ -410,7 +436,7 @@ describe('TemplatePartRecommender', () => {
 								type: 'replace_block_with_pattern',
 								patternName: 'theme/utility-links',
 								expectedBlockName: 'core/navigation',
-								targetPath: [0],
+								targetPath: [ 0 ],
 							},
 						],
 					},
@@ -420,16 +446,16 @@ describe('TemplatePartRecommender', () => {
 				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
 				templatePartStatus: 'ready',
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		expect(hasText('Replace navigation block')).toBe(true);
-		expect(getButton('Confirm Apply')?.disabled).toBe(true);
-	});
+		expect( hasText( 'Replace navigation block' ) ).toBe( true );
+		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
+	} );
 
-	test('shows a stale scope badge when the stored template-part result context mismatches', async () => {
-		currentState = createState({
+	test( 'shows a stale scope badge when the stored template-part result context mismatches', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
@@ -439,7 +465,7 @@ describe('TemplatePartRecommender', () => {
 								type: 'replace_block_with_pattern',
 								patternName: 'theme/utility-links',
 								expectedBlockName: 'core/navigation',
-								targetPath: [0],
+								targetPath: [ 0 ],
 							},
 						],
 					},
@@ -449,27 +475,27 @@ describe('TemplatePartRecommender', () => {
 				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
 				templatePartStatus: 'ready',
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		expect(hasText('Header Template Part')).toBe(true);
-		expect(hasText('Slug: header')).toBe(true);
-		expect(hasText('Stale')).toBe(true);
+		expect( hasText( 'Header Template Part' ) ).toBe( true );
+		expect( hasText( 'Slug: header' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
 		expect(
 			hasText(
 				'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.'
 			)
-		).toBe(true);
+		).toBe( true );
 		expect(
 			getContainer()
-				.querySelector('.flavor-agent-scope-bar')
-				?.getAttribute('role')
-		).toBe('status');
-	});
+				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBe( 'status' );
+	} );
 
-	test('does not show the current scope badge when the latest template-part request failed', async () => {
-		currentState = createState({
+	test( 'does not show the current scope badge when the latest template-part request failed', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [],
 				templatePartExplanation: '',
@@ -477,16 +503,16 @@ describe('TemplatePartRecommender', () => {
 				templatePartStatus: 'error',
 				templatePartResultRef: 'theme//header',
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		expect(hasText('Template-part request failed.')).toBe(true);
-		expect(hasText('Current')).toBe(false);
-	});
+		expect( hasText( 'Template-part request failed.' ) ).toBe( true );
+		expect( hasText( 'Current' ) ).toBe( false );
+	} );
 
-	test('treats an empty successful template-part response as a current result', async () => {
-		currentState = createState({
+	test( 'treats an empty successful template-part response as a current result', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [],
 				templatePartExplanation: '',
@@ -496,25 +522,27 @@ describe('TemplatePartRecommender', () => {
 				),
 				templatePartStatus: 'ready',
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		expect(hasText('Current')).toBe(true);
+		expect( hasText( 'Current' ) ).toBe( true );
 		expect(
-			hasText('No template-part suggestions were returned for this request.')
-		).toBe(true);
-	});
+			hasText(
+				'No template-part suggestions were returned for this request.'
+			)
+		).toBe( true );
+	} );
 
-	test('keeps advisory template-part suggestions expanded when they are returned', async () => {
-		currentState = createState({
+	test( 'keeps advisory template-part suggestions expanded when they are returned', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
 						label: 'Introduce utility links',
 						description:
 							'Add a compact utility-links pattern near the navigation block.',
-						patternSuggestions: ['theme/utility-links'],
+						patternSuggestions: [ 'theme/utility-links' ],
 						operations: [],
 					},
 				],
@@ -522,31 +550,31 @@ describe('TemplatePartRecommender', () => {
 				templatePartResultRef: 'theme//header',
 				templatePartStatus: 'ready',
 			},
-		});
-		mockGetBlockPatterns.mockReturnValue([
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
 			{
 				name: 'theme/utility-links',
 				title: 'Utility Links',
 			},
-		]);
+		] );
 
 		await renderPanel();
 
-		expect(hasText('Manual ideas')).toBe(true);
-		expect(hasText('Advisory only')).toBe(true);
-		expect(hasText('Introduce utility links')).toBe(true);
-		expect(hasText('Browse pattern')).toBe(true);
+		expect( hasText( 'Manual ideas' ) ).toBe( true );
+		expect( hasText( 'Advisory only' ) ).toBe( true );
+		expect( hasText( 'Introduce utility links' ) ).toBe( true );
+		expect( hasText( 'Browse pattern' ) ).toBe( true );
 		expect(
 			getContainer()
-				.querySelector('.flavor-agent-recommendation-hero')
+				.querySelector( '.flavor-agent-recommendation-hero' )
 				?.compareDocumentPosition(
-					getContainer().querySelector('.flavor-agent-explanation'),
+					getContainer().querySelector( '.flavor-agent-explanation' )
 				)
-		).toBe(DOCUMENT_POSITION_FOLLOWING);
-	});
+		).toBe( DOCUMENT_POSITION_FOLLOWING );
+	} );
 
-	test('submits live pattern override metadata with template-part requests', async () => {
-		currentState = createState({
+	test( 'submits live pattern override metadata with template-part requests', async () => {
+		currentState = createState( {
 			blockEditor: {
 				blocks: [
 					{
@@ -570,30 +598,32 @@ describe('TemplatePartRecommender', () => {
 					},
 				],
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		await act(async () => {
-			Array.from(getContainer().querySelectorAll('button'))
-				.find((element) => element.textContent === 'Get Suggestions')
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
 				.click();
-		});
+		} );
 
-		expect(mockFetchTemplatePartRecommendations).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( mockFetchTemplatePartRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				templatePartRef: 'theme//header',
-				editorStructure: expect.objectContaining({
+				editorStructure: expect.objectContaining( {
 					blockTree: [
 						{
-							path: [0],
+							path: [ 0 ],
 							name: 'core/group',
 							label: 'Group',
 							attributes: {},
 							childCount: 1,
 							children: [
 								{
-									path: [0, 0],
+									path: [ 0, 0 ],
 									name: 'core/navigation',
 									label: 'Navigation',
 									attributes: {},
@@ -605,21 +635,21 @@ describe('TemplatePartRecommender', () => {
 					],
 					allBlockPaths: [
 						{
-							path: [0],
+							path: [ 0 ],
 							name: 'core/group',
 							label: 'Group',
 							attributes: {},
 							childCount: 1,
 						},
 						{
-							path: [0, 0],
+							path: [ 0, 0 ],
 							name: 'core/navigation',
 							label: 'Navigation',
 							attributes: {},
 							childCount: 0,
 						},
 					],
-					topLevelBlocks: ['core/group'],
+					topLevelBlocks: [ 'core/group' ],
 					blockCounts: {
 						'core/group': 1,
 						'core/navigation': 1,
@@ -645,20 +675,20 @@ describe('TemplatePartRecommender', () => {
 					currentPatternOverrides: {
 						hasOverrides: true,
 						blockCount: 1,
-						blockNames: ['core/navigation'],
+						blockNames: [ 'core/navigation' ],
 						blocks: [
 							{
-								path: [0, 0],
+								path: [ 0, 0 ],
 								name: 'core/navigation',
 								label: 'Navigation',
-								overrideAttributes: ['overlayMenu'],
+								overrideAttributes: [ 'overlayMenu' ],
 								usesDefaultBinding: false,
 							},
 						],
 					},
 					operationTargets: [
 						{
-							path: [0],
+							path: [ 0 ],
 							name: 'core/group',
 							label: 'Group',
 							allowedOperations: [
@@ -671,7 +701,7 @@ describe('TemplatePartRecommender', () => {
 							],
 						},
 						{
-							path: [0, 0],
+							path: [ 0, 0 ],
 							name: 'core/navigation',
 							label: 'Navigation',
 							allowedOperations: [
@@ -695,25 +725,25 @@ describe('TemplatePartRecommender', () => {
 						},
 						{
 							placement: 'before_block_path',
-							targetPath: [0],
+							targetPath: [ 0 ],
 							blockName: 'core/group',
 							label: 'Before Group',
 						},
 						{
 							placement: 'after_block_path',
-							targetPath: [0],
+							targetPath: [ 0 ],
 							blockName: 'core/group',
 							label: 'After Group',
 						},
 						{
 							placement: 'before_block_path',
-							targetPath: [0, 0],
+							targetPath: [ 0, 0 ],
 							blockName: 'core/navigation',
 							label: 'Before Navigation',
 						},
 						{
 							placement: 'after_block_path',
-							targetPath: [0, 0],
+							targetPath: [ 0, 0 ],
 							blockName: 'core/navigation',
 							label: 'After Navigation',
 						},
@@ -724,28 +754,30 @@ describe('TemplatePartRecommender', () => {
 						hasContentOnly: false,
 						hasLockedBlocks: false,
 					},
-				}),
-			})
+				} ),
+			} )
 		);
-	});
+	} );
 
-	test('handles template-part requests without live override metadata and keeps empty structure explicit', async () => {
-		currentState = createState({
+	test( 'handles template-part requests without live override metadata and keeps empty structure explicit', async () => {
+		currentState = createState( {
 			blockEditor: {
 				blocks: [],
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		await act(async () => {
-			Array.from(getContainer().querySelectorAll('button'))
-				.find((element) => element.textContent === 'Get Suggestions')
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
 				.click();
-		});
+		} );
 
-		expect(mockFetchTemplatePartRecommendations).toHaveBeenCalledWith(
-			expect.objectContaining({
+		expect( mockFetchTemplatePartRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
 				templatePartRef: 'theme//header',
 				editorStructure: {
 					blockTree: [],
@@ -794,12 +826,12 @@ describe('TemplatePartRecommender', () => {
 						hasLockedBlocks: false,
 					},
 				},
-			})
+			} )
 		);
-	});
+	} );
 
-	test('renders non-interactive preview tokens in the review overlay', async () => {
-		currentState = createState({
+	test( 'renders non-interactive preview tokens in the review overlay', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
@@ -811,7 +843,7 @@ describe('TemplatePartRecommender', () => {
 								type: 'replace_block_with_pattern',
 								patternName: 'theme/utility-links',
 								expectedBlockName: 'core/navigation',
-								targetPath: [0],
+								targetPath: [ 0 ],
 							},
 						],
 					},
@@ -820,13 +852,13 @@ describe('TemplatePartRecommender', () => {
 				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
 				templatePartStatus: 'ready',
 			},
-		});
-		mockGetBlockPatterns.mockReturnValue([
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
 			{
 				name: 'theme/utility-links',
 				title: 'Utility Links',
 			},
-		]);
+		] );
 
 		await renderPanel();
 
@@ -840,10 +872,10 @@ describe('TemplatePartRecommender', () => {
 				'.flavor-agent-template-preview .flavor-agent-action-link'
 			)
 		).toBeNull();
-	});
+	} );
 
-	test('formats template-part preview paths with one-based labels', async () => {
-		currentState = createState({
+	test( 'formats template-part preview paths with one-based labels', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
@@ -855,7 +887,7 @@ describe('TemplatePartRecommender', () => {
 								type: 'insert_pattern',
 								patternName: 'theme/utility-links',
 								placement: 'after_block_path',
-								targetPath: [0, 1],
+								targetPath: [ 0, 1 ],
 							},
 						],
 					},
@@ -864,25 +896,25 @@ describe('TemplatePartRecommender', () => {
 				templatePartSelectedSuggestionKey: 'Add utility links-0',
 				templatePartStatus: 'ready',
 			},
-		});
-		mockGetBlockPatterns.mockReturnValue([
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
 			{
 				name: 'theme/utility-links',
 				title: 'Utility Links',
 			},
-		]);
+		] );
 
 		await renderPanel();
 
-		expect(hasText('After target block (Path 1 > 2)')).toBe(true);
-		expect(getContainer().textContent.replace(/\s+/g, ' ')).toContain(
+		expect( hasText( 'After target block (Path 1 > 2)' ) ).toBe( true );
+		expect( getContainer().textContent.replace( /\s+/g, ' ' ) ).toContain(
 			'relative to Path 1 > 2.'
 		);
-		expect(hasText('Path 0 > 1')).toBe(false);
-	});
+		expect( hasText( 'Path 0 > 1' ) ).toBe( false );
+	} );
 
-	test('formats template-part start placements without raw tokens', async () => {
-		currentState = createState({
+	test( 'formats template-part start placements without raw tokens', async () => {
+		currentState = createState( {
 			store: {
 				templatePartRecommendations: [
 					{
@@ -902,26 +934,26 @@ describe('TemplatePartRecommender', () => {
 				templatePartSelectedSuggestionKey: 'Add hero pattern-0',
 				templatePartStatus: 'ready',
 			},
-		});
-		mockGetBlockPatterns.mockReturnValue([
+		} );
+		mockGetBlockPatterns.mockReturnValue( [
 			{
 				name: 'theme/hero',
 				title: 'Hero',
 			},
-		]);
+		] );
 
 		await renderPanel();
 
-		expect(hasText('Start of this template part')).toBe(true);
+		expect( hasText( 'Start of this template part' ) ).toBe( true );
 		expect(
-			Array.from(getContainer().querySelectorAll('code')).some(
-				(element) => element.textContent === 'start'
+			Array.from( getContainer().querySelectorAll( 'code' ) ).some(
+				( element ) => element.textContent === 'start'
 			)
-		).toBe(false);
-	});
+		).toBe( false );
+	} );
 
-	test('shows an undo action on apply success notices and dispatches undo for the latest template-part activity', async () => {
-		currentState = createState({
+	test( 'shows an undo action on apply success notices and dispatches undo for the latest template-part activity', async () => {
+		currentState = createState( {
 			store: {
 				activityLog: [
 					{
@@ -950,45 +982,47 @@ describe('TemplatePartRecommender', () => {
 				],
 				templatePartSelectedSuggestionKey: null,
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		expect(hasText('Applied 1 template-part operation.')).toBe(true);
+		expect( hasText( 'Applied 1 template-part operation.' ) ).toBe( true );
 
 		const undoButton = Array.from(
-			getContainer().querySelectorAll('button')
-		).find((element) => element.textContent === 'Undo');
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Undo' );
 
-		expect(undoButton).toBeDefined();
+		expect( undoButton ).toBeDefined();
 
-		await act(async () => {
+		await act( async () => {
 			undoButton.click();
-		});
+		} );
 
-		expect(mockUndoActivity).toHaveBeenCalledWith('activity-1');
-	});
+		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+	} );
 
-	test('does not show an empty-state notice while reloading the same template part', async () => {
-		currentState = createState({
+	test( 'does not show an empty-state notice while reloading the same template part', async () => {
+		currentState = createState( {
 			store: {
 				templatePartExplanation: '',
 				templatePartRecommendations: [],
 				templatePartResultRef: 'theme//header',
 				templatePartStatus: 'loading',
 			},
-		});
+		} );
 
 		await renderPanel();
 
-		expect(hasText('Analyzing template-part structure…')).toBe(true);
+		expect( hasText( 'Analyzing template-part structure…' ) ).toBe( true );
 		expect(
-			hasText('No template-part suggestions were returned for this request.')
-		).toBe(false);
-	});
+			hasText(
+				'No template-part suggestions were returned for this request.'
+			)
+		).toBe( false );
+	} );
 
-	test('keeps undo history visible when template-part recommendations are unavailable', async () => {
-		currentState = createState({
+	test( 'keeps undo history visible when template-part recommendations are unavailable', async () => {
+		currentState = createState( {
 			store: {
 				activityLog: [
 					{
@@ -1010,7 +1044,7 @@ describe('TemplatePartRecommender', () => {
 					},
 				],
 			},
-		});
+		} );
 		window.flavorAgentData = {
 			canRecommendTemplateParts: false,
 			settingsUrl:
@@ -1024,16 +1058,16 @@ describe('TemplatePartRecommender', () => {
 				'[data-panel-title="AI Template Part Recommendations"]'
 			)
 		).not.toBeNull();
-		expect(hasText('Settings > Flavor Agent')).toBe(true);
-		expect(hasText('Recent AI Actions')).toBe(true);
+		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
+		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
 		expect(
 			hasText(
 				'Template-part actions share the same history and latest-valid undo behavior as the other executable review surfaces.'
 			)
-		).toBe(true);
-		expect(hasText('Add utility links')).toBe(true);
-		expect(hasText('Undo available')).toBe(true);
-		expect(hasText('Suggested Composition')).toBe(false);
-		expect(getTextarea()).toBeNull();
-	});
-});
+		).toBe( true );
+		expect( hasText( 'Add utility links' ) ).toBe( true );
+		expect( hasText( 'Undo available' ) ).toBe( true );
+		expect( hasText( 'Suggested Composition' ) ).toBe( false );
+		expect( getTextarea() ).toBeNull();
+	} );
+} );

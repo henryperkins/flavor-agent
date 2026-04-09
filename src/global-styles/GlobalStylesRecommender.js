@@ -35,6 +35,10 @@ import {
 	buildTemplateStructureSnapshot,
 	collectViewportVisibilitySummary,
 } from '../utils/editor-context-metadata';
+import {
+	getExecutableSurfaceEffectiveStaleReason,
+	getExecutableSurfaceStaleMessage,
+} from '../utils/recommendation-stale-reasons';
 import { buildGlobalStyleDesignSemantics } from '../utils/style-design-semantics';
 import {
 	findStylesSidebarMountNode,
@@ -108,10 +112,11 @@ function GlobalStylesPanel( {
 	if ( isStale ) {
 		reviewHint =
 			'This review is stale. Refresh recommendations before applying these operations.';
-		staleReason =
-			staleReasonType === 'server'
-				? 'This Global Styles result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
-				: 'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.';
+		staleReason = getExecutableSurfaceStaleMessage( {
+			surfaceLabel: 'Global Styles',
+			staleReasonType,
+			liveContextLabel: 'the current live style state or prompt',
+		} );
 	} else if ( showSecondaryGuidance ) {
 		reviewHint =
 			'Only the operations shown here will run against the current Global Styles scope.';
@@ -371,9 +376,11 @@ export default function GlobalStylesRecommender() {
 		rawSuggestions,
 		currentExplanation,
 		currentRequestPrompt,
+		currentReviewContextSignature,
 		currentResultToken,
 		currentResultContextSignature,
 		currentResultRef,
+		reviewStaleReason,
 		storedStaleReason,
 		status,
 		selectedSuggestionKey,
@@ -472,10 +479,14 @@ export default function GlobalStylesRecommender() {
 			rawSuggestions: mappedSuggestions,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
 			currentRequestPrompt: store?.getGlobalStylesRequestPrompt?.() || '',
+			currentReviewContextSignature:
+				store?.getGlobalStylesReviewContextSignature?.() || null,
 			currentResultToken: store?.getGlobalStylesResultToken?.() || 0,
 			currentResultContextSignature:
 				store?.getGlobalStylesContextSignature?.() || null,
 			currentResultRef: store?.getGlobalStylesResultRef?.() || null,
+			reviewStaleReason:
+				store?.getGlobalStylesReviewStaleReason?.() || null,
 			storedStaleReason: store?.getGlobalStylesStaleReason?.() || null,
 			status: store?.getGlobalStylesStatus?.() || 'idle',
 			selectedSuggestionKey:
@@ -560,9 +571,11 @@ export default function GlobalStylesRecommender() {
 		resultRequestSignature !== recommendationRequestSignature
 			? 'client'
 			: null;
-	const effectiveStaleReason =
-		clientStaleReason ||
-		( storedStaleReason === 'server' ? 'server' : null );
+	const effectiveStaleReason = getExecutableSurfaceEffectiveStaleReason( {
+		clientStaleReason,
+		reviewStaleReason,
+		storedStaleReason,
+	} );
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
@@ -606,6 +619,7 @@ export default function GlobalStylesRecommender() {
 		clearUndoError,
 		clearGlobalStylesRecommendations,
 		fetchGlobalStylesRecommendations,
+		revalidateGlobalStylesReviewFreshness,
 		setGlobalStylesApplyState,
 		setGlobalStylesSelectedSuggestion,
 		setGlobalStylesStatus,
@@ -817,6 +831,26 @@ export default function GlobalStylesRecommender() {
 		currentResultToken,
 		hasStoredResultForScope,
 		resultRequestSignature,
+		status,
+	] );
+
+	useEffect( () => {
+		if ( ! hasStoredResultForScope || status !== 'ready' ) {
+			return;
+		}
+
+		revalidateGlobalStylesReviewFreshness(
+			recommendationRequestSignature,
+			currentRequestInput
+		);
+	}, [
+		currentRequestInput,
+		currentReviewContextSignature,
+		currentResultRef,
+		currentResultToken,
+		hasStoredResultForScope,
+		recommendationRequestSignature,
+		revalidateGlobalStylesReviewFreshness,
 		status,
 	] );
 

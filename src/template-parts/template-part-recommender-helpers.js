@@ -75,10 +75,7 @@ function summarizeTemplatePartBlockAttributes( attributes = {} ) {
 		summary.layoutType = layout.type;
 	}
 
-	if (
-		typeof layout?.justifyContent === 'string' &&
-		layout.justifyContent
-	) {
+	if ( typeof layout?.justifyContent === 'string' && layout.justifyContent ) {
 		summary.layoutJustifyContent = layout.justifyContent;
 	}
 
@@ -355,7 +352,8 @@ export function buildEditorTemplatePartStructureSnapshot(
 	areaLookup
 ) {
 	const normalizedBlocks = Array.isArray( blocks ) ? blocks : [];
-	const topLevelBlocks = collectTemplatePartTopLevelBlocks( normalizedBlocks );
+	const topLevelBlocks =
+		collectTemplatePartTopLevelBlocks( normalizedBlocks );
 	const structureStats = buildTemplatePartStructureStats(
 		normalizedBlocks,
 		topLevelBlocks
@@ -364,15 +362,11 @@ export function buildEditorTemplatePartStructureSnapshot(
 		normalizedBlocks,
 		areaLookup
 	);
-	const structuralConstraints = collectTemplatePartStructuralConstraints(
-		normalizedBlocks
-	);
+	const structuralConstraints =
+		collectTemplatePartStructuralConstraints( normalizedBlocks );
 
 	return {
-		blockTree: buildTemplatePartBlockTree(
-			normalizedBlocks,
-			areaLookup
-		),
+		blockTree: buildTemplatePartBlockTree( normalizedBlocks, areaLookup ),
 		allBlockPaths: collectAllTemplatePartPaths(
 			normalizedBlocks,
 			areaLookup
@@ -402,9 +396,7 @@ export function buildEditorTemplatePartStructureSnapshot(
 			areaLookup
 		),
 		operationTargets,
-		insertionAnchors: buildTemplatePartInsertionAnchors(
-			operationTargets
-		),
+		insertionAnchors: buildTemplatePartInsertionAnchors( operationTargets ),
 		structuralConstraints: {
 			contentOnlyPaths: structuralConstraints.contentOnlyPaths,
 			lockedPaths: structuralConstraints.lockedPaths,
@@ -439,8 +431,7 @@ export function buildTemplatePartRecommendationContextSignature( {
 		insertionAnchors: Array.isArray( editorStructure?.insertionAnchors )
 			? editorStructure.insertionAnchors
 			: null,
-		structuralConstraints:
-			editorStructure?.structuralConstraints || null,
+		structuralConstraints: editorStructure?.structuralConstraints || null,
 		currentPatternOverrides:
 			editorStructure?.currentPatternOverrides || null,
 		visiblePatternNames: Array.isArray( normalizedVisiblePatternNames )

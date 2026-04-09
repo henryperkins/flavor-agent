@@ -268,6 +268,14 @@ final class RegistrationTest extends TestCase {
 			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
 		);
 		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['reviewContextSignature']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['resolvedContextSignature']['type'] ?? null
+		);
+		$this->assertSame(
 			'object',
 			$ability['input_schema']['properties']['editorSlots']['type'] ?? null
 		);
@@ -394,6 +402,14 @@ final class RegistrationTest extends TestCase {
 			'string',
 			$suggestion['properties']['operations']['items']['properties']['expectedBlockName']['type'] ?? null
 		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['reviewContextSignature']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['resolvedContextSignature']['type'] ?? null
+		);
 	}
 
 	public function test_register_abilities_exposes_navigation_change_target_paths(): void {
@@ -466,6 +482,14 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'string',
 			$style_ability['output_schema']['properties']['suggestions']['items']['properties']['operations']['items']['properties']['variationTitle']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$style_ability['output_schema']['properties']['reviewContextSignature']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$style_ability['output_schema']['properties']['resolvedContextSignature']['type'] ?? null
 		);
 
 		$this->assertIsArray( $status_ability );

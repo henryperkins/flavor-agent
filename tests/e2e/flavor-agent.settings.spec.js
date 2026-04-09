@@ -28,9 +28,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	await expect(
 		page.getByRole( 'heading', { name: 'Flavor Agent Settings' } )
 	).toBeVisible();
-	await expect(
-		page.locator( '.flavor-agent-admin-hero__copy' )
-	).toHaveText(
+	await expect( page.locator( '.flavor-agent-admin-hero__copy' ) ).toHaveText(
 		'Configure site-specific settings here. Use Help for setup reference and troubleshooting.'
 	);
 	await expect(
@@ -60,12 +58,12 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	await expect( chatSection.locator( sectionSummarySelector ) ).toContainText(
 		'Choose the chat path Flavor Agent should prefer.'
 	);
-	await expect( patternSection.locator( sectionSummarySelector ) ).toContainText(
-		'Optional'
-	);
-	await expect( patternSection.locator( sectionSummarySelector ) ).toContainText(
-		'Add vector search for pattern recommendations.'
-	);
+	await expect(
+		patternSection.locator( sectionSummarySelector )
+	).toContainText( 'Optional' );
+	await expect(
+		patternSection.locator( sectionSummarySelector )
+	).toContainText( 'Add vector search for pattern recommendations.' );
 	await expect( docsSection.locator( sectionSummarySelector ) ).toContainText(
 		'Optional'
 	);

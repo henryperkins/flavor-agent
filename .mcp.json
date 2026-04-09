@@ -1,17 +1,17 @@
 {
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp"],
-      "type": "stdio"
-    },
-    "wpds": {
-      "command": "node",
-      "args": [
-        "C:\\Users\\htper\\AppData\\Local\\codex-mcp\\wpds-mcp\\server.ts",
-        "--stdio"
-      ],
-      "type": "stdio"
-    }
-  }
+	"mcpServers": {
+		"playwright": {
+			"command": "npx",
+			"args": [ "-y", "@playwright/mcp" ],
+			"type": "stdio"
+		},
+		"wpds": {
+			"command": "node",
+			"args": [
+				"C:\\Users\\htper\\AppData\\Local\\codex-mcp\\wpds-mcp\\server.ts",
+				"--stdio"
+			],
+			"type": "stdio"
+		}
+	}
 }

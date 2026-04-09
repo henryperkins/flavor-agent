@@ -148,8 +148,12 @@ function renderGuidelinesSettingsPage( {
 				<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
 				<textarea id="flavor_agent_guideline_site">${ categories.site || '' }</textarea>
 				<textarea id="flavor_agent_guideline_copy">${ categories.copy || '' }</textarea>
-				<textarea id="flavor_agent_guideline_images">${ categories.images || '' }</textarea>
-				<textarea id="flavor_agent_guideline_additional">${ categories.additional || '' }</textarea>
+				<textarea id="flavor_agent_guideline_images">${
+					categories.images || ''
+				}</textarea>
+				<textarea id="flavor_agent_guideline_additional">${
+					categories.additional || ''
+				}</textarea>
 				<details class="flavor-agent-guidelines__blocks-panel">
 					<div data-guidelines-block-list></div>
 					<textarea data-guidelines-block-input hidden>${ JSON.stringify(
@@ -371,7 +375,9 @@ describe( 'settings page controller', () => {
 			const blockSelect = root.querySelector(
 				'[data-guidelines-block-select]'
 			);
-			const blockText = root.querySelector( '[data-guidelines-block-text]' );
+			const blockText = root.querySelector(
+				'[data-guidelines-block-text]'
+			);
 			const hiddenInput = root.querySelector(
 				'[data-guidelines-block-input]'
 			);
@@ -443,7 +449,8 @@ describe( 'settings page controller', () => {
 						},
 						blocks: {
 							'core/image': {
-								guidelines: 'All images need meaningful alt text.',
+								guidelines:
+									'All images need meaningful alt text.',
 							},
 							'invalid block': {
 								guidelines: 'Ignore this entry.',
@@ -487,7 +494,9 @@ describe( 'settings page controller', () => {
 		).toBe( true );
 		expect(
 			root.querySelector( '[data-guidelines-notice]' ).textContent
-		).toContain( 'Guidelines imported into the form. Save Changes to persist.' );
+		).toContain(
+			'Guidelines imported into the form. Save Changes to persist.'
+		);
 	} );
 
 	test( 'guidelines manager exports the current form as Gutenberg-compatible JSON', async () => {

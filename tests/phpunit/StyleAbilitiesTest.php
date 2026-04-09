@@ -12,10 +12,18 @@ use ReflectionMethod;
 
 final class StyleAbilitiesTest extends TestCase {
 
+	/** @var callable */
+	private $disable_public_docs_filter;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->disable_public_docs_filter = static fn(): string => '';
+		\add_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			$this->disable_public_docs_filter
+		);
 		WordPressTestState::$options         = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
@@ -31,6 +39,15 @@ final class StyleAbilitiesTest extends TestCase {
 				],
 			],
 		];
+	}
+
+	protected function tearDown(): void {
+		\remove_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			$this->disable_public_docs_filter
+		);
+
+		parent::tearDown();
 	}
 
 	public function test_recommend_style_requires_global_styles_scope(): void {
@@ -132,19 +149,17 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Use accent canvas', $result['suggestions'][0]['label'] ?? null );
 		$this->assertSame( 'set_styles', $result['suggestions'][0]['operations'][0]['type'] ?? null );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['resolvedContextSignature'] ?? '' )
+		);
 	}
 
 	public function test_recommend_style_resolve_signature_only_returns_minimal_payload_and_changes_when_prompt_changes(): void {
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
-
-		$disable_public_docs = static fn(): string => '';
-		\add_filter(
-			'flavor_agent_cloudflare_ai_search_public_search_url',
-			$disable_public_docs
-		);
-
 		$input = [
 			'scope'        => [
 				'surface'        => 'global-styles',
@@ -163,58 +178,69 @@ final class StyleAbilitiesTest extends TestCase {
 			],
 		];
 
-		try {
-			$baseline = StyleAbilities::recommend_style(
-				array_merge(
-					$input,
-					[
-						'prompt'               => 'Keep the palette restrained.',
-						'resolveSignatureOnly' => true,
-					]
-				)
-			);
-			$changed  = StyleAbilities::recommend_style(
-				array_merge(
-					$input,
-					[
-						'prompt'               => 'Make the palette warmer and more editorial.',
-						'resolveSignatureOnly' => true,
-					]
-				)
-			);
+		$baseline = StyleAbilities::recommend_style(
+			array_merge(
+				$input,
+				[
+					'prompt'               => 'Keep the palette restrained.',
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+		$changed  = StyleAbilities::recommend_style(
+			array_merge(
+				$input,
+				[
+					'prompt'               => 'Make the palette warmer and more editorial.',
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
 
-			$this->assertIsArray( $baseline );
-			$this->assertSame(
-				[ 'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null ],
-				$baseline
-			);
-			$this->assertMatchesRegularExpression(
-				'/^[a-f0-9]{64}$/',
-				(string) ( $baseline['resolvedContextSignature'] ?? '' )
-			);
-			$this->assertIsArray( $changed );
-			$this->assertSame(
-				[ 'resolvedContextSignature' => $changed['resolvedContextSignature'] ?? null ],
-				$changed
-			);
-			$this->assertMatchesRegularExpression(
-				'/^[a-f0-9]{64}$/',
-				(string) ( $changed['resolvedContextSignature'] ?? '' )
-			);
-			$this->assertNotSame(
-				$baseline['resolvedContextSignature'] ?? null,
-				$changed['resolvedContextSignature'] ?? null
-			);
-			$this->assertSame( [], WordPressTestState::$last_remote_post );
-		} finally {
-			\remove_filter(
-				'flavor_agent_cloudflare_ai_search_public_search_url',
-				$disable_public_docs
-			);
-		}
+		$this->assertIsArray( $baseline );
+		$this->assertSame(
+			[
+				'reviewContextSignature'   => $baseline['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null,
+			],
+			$baseline
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			[
+				'reviewContextSignature'   => $changed['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $changed['resolvedContextSignature'] ?? null,
+			],
+			$changed
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $changed['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $changed['resolvedContextSignature'] ?? '' )
+		);
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_style_resolve_signature_only_ignores_docs_guidance_cache_changes(): void {
+	public function test_recommend_style_resolve_signature_only_changes_review_signature_but_not_resolved_signature_when_docs_guidance_changes(): void {
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
@@ -256,12 +282,30 @@ final class StyleAbilitiesTest extends TestCase {
 			]
 		);
 
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
+			[
+				'id'        => 'chunk-style-a',
+				'title'     => 'Global styles reference',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
+				'excerpt'   => 'Use theme.json preset families for color and typography changes.',
+				'score'     => 0.91,
+			],
+		];
+
 		$baseline = StyleAbilities::recommend_style( $input );
 
 		$this->assertIsArray( $baseline );
 		$this->assertSame(
-			[ 'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null ],
+			[
+				'reviewContextSignature'   => $baseline['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $baseline['resolvedContextSignature'] ?? null,
+			],
 			$baseline
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline['reviewContextSignature'] ?? '' )
 		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
@@ -271,12 +315,12 @@ final class StyleAbilitiesTest extends TestCase {
 
 		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ] = [
 			[
-				'id'        => 'chunk-1',
-				'title'     => 'Global styles reference',
-				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/settings',
-				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/settings/',
-				'excerpt'   => 'Use theme.json preset families for color and typography changes.',
-				'score'     => 0.91,
+				'id'        => 'chunk-style-b',
+				'title'     => 'Theme.json styles',
+				'sourceKey' => 'developer.wordpress.org/themes/global-settings-and-styles/styles/',
+				'url'       => 'https://developer.wordpress.org/themes/global-settings-and-styles/styles/',
+				'excerpt'   => 'Keep site-wide style adjustments inside supported Global Styles controls.',
+				'score'     => 0.93,
 			],
 		];
 		WordPressTestState::$last_remote_post = [];
@@ -285,12 +329,19 @@ final class StyleAbilitiesTest extends TestCase {
 
 		$this->assertIsArray( $with_docs );
 		$this->assertSame(
-			[ 'resolvedContextSignature' => $with_docs['resolvedContextSignature'] ?? null ],
+			[
+				'reviewContextSignature'   => $with_docs['reviewContextSignature'] ?? null,
+				'resolvedContextSignature' => $with_docs['resolvedContextSignature'] ?? null,
+			],
 			$with_docs
 		);
 		$this->assertSame(
 			$baseline['resolvedContextSignature'] ?? null,
 			$with_docs['resolvedContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$with_docs['reviewContextSignature'] ?? null
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
