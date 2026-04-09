@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RankingContract;
 
 final class StylePrompt {
 
@@ -85,17 +86,17 @@ SYSTEM;
 	}
 
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$scope              = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
-		$style_context      = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
-		$theme_tokens       = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
-		$supported_paths    = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
-		$style_book_target  = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
-		$block_manifest     = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
-		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
-		$design_semantics   = is_array( $style_context['designSemantics'] ?? null ) ? $style_context['designSemantics'] : [];
+		$scope               = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
+		$style_context       = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$theme_tokens        = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
+		$supported_paths     = is_array( $style_context['supportedStylePaths'] ?? null ) ? $style_context['supportedStylePaths'] : [];
+		$style_book_target   = is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
+		$block_manifest      = is_array( $style_context['blockManifest'] ?? null ) ? $style_context['blockManifest'] : [];
+		$template_structure  = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$design_semantics    = is_array( $style_context['designSemantics'] ?? null ) ? $style_context['designSemantics'] : [];
 		$template_visibility = is_array( $style_context['templateVisibility'] ?? null ) ? $style_context['templateVisibility'] : [];
-		$surface            = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
-		$sections           = [];
+		$surface             = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
+		$sections            = [];
 
 		$sections[] = '## Scope';
 		$sections[] = 'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' );
@@ -699,6 +700,7 @@ SYSTEM;
 	 */
 	private static function validate_suggestions( array $suggestions, array $context ): array {
 		$validated = [];
+		$order     = 0;
 
 		foreach ( array_slice( $suggestions, 0, 4 ) as $suggestion ) {
 			if ( ! is_array( $suggestion ) ) {
@@ -714,20 +716,87 @@ SYSTEM;
 				? 'executable'
 				: 'advisory';
 
-			$validated[] = [
+			$entry = [
 				'label'       => sanitize_text_field( (string) ( $suggestion['label'] ?? '' ) ),
 				'description' => sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) ),
 				'category'    => sanitize_key( (string) ( $suggestion['category'] ?? 'advisory' ) ),
 				'tone'        => $tone,
 				'operations'  => 'executable' === $tone ? $operations : [],
 			];
+
+			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
+			$computed_score = RankingContract::resolve_score_candidate(
+				$ranking_input['score'] ?? null,
+				$suggestion['score'] ?? null,
+				$ranking_input['confidence'] ?? null,
+				$suggestion['confidence'] ?? null
+			);
+			if ( null === $computed_score ) {
+				$computed_score = RankingContract::derive_score(
+					0.45,
+					[
+						'is_executable'   => 'executable' === $tone ? 0.25 : 0.0,
+						'has_operations'  => [] !== $operations ? 0.15 : 0.0,
+						'has_description' => '' !== $entry['description'] ? 0.1 : 0.0,
+						'has_category'    => '' !== $entry['category'] ? 0.05 : 0.0,
+					]
+				);
+			}
+			$source_signals = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
+
+			if ( [] !== $operations ) {
+				$source_signals[] = 'has_operations';
+			}
+
+			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
+				$entry['ranking'] = RankingContract::normalize(
+					$ranking_input,
+					[
+						'score'         => $computed_score,
+						'reason'        => (string) ( $suggestion['description'] ?? '' ),
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [
+							'source'  => 'llm',
+							'surface' => 'style',
+						],
+						'operations'    => 'executable' === $tone ? $operations : [],
+					]
+				);
+			}
+
+			$entry['_rankScore'] = $computed_score;
+			$entry['_rankOrder'] = $order++;
+			$validated[]         = $entry;
 		}
 
-		return array_values(
+		$filtered = array_values(
 			array_filter(
 				$validated,
 				static fn( array $suggestion ): bool => '' !== $suggestion['label']
 			)
+		);
+
+		usort(
+			$filtered,
+			static function ( array $left, array $right ): int {
+				$score_compare = (float) ( $right['_rankScore'] ?? 0.0 ) <=> (float) ( $left['_rankScore'] ?? 0.0 );
+
+				if ( 0 !== $score_compare ) {
+					return $score_compare;
+				}
+
+				return (int) ( $left['_rankOrder'] ?? 0 ) <=> (int) ( $right['_rankOrder'] ?? 0 );
+			}
+		);
+
+		return array_map(
+			static function ( array $suggestion ): array {
+				unset( $suggestion['_rankOrder'] );
+				unset( $suggestion['_rankScore'] );
+				return $suggestion;
+			},
+			$filtered
 		);
 	}
 

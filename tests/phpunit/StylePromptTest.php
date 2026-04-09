@@ -225,34 +225,34 @@ final class StylePromptTest extends TestCase {
 			],
 			'mergedStyles'  => [
 				'typography' => [
-				'fontSize' => 'var:preset|font-size|body',
+					'fontSize' => 'var:preset|font-size|body',
+				],
 			],
-		],
 		];
 		$context['styleContext']['designSemantics'] = [
-			'surface'              => 'style-book',
-			'templateType'         => 'home',
-			'targetBlockName'      => 'core/paragraph',
-			'targetBlockTitle'     => 'Paragraph',
-			'occurrenceCount'      => 1,
+			'surface'                => 'style-book',
+			'templateType'           => 'home',
+			'targetBlockName'        => 'core/paragraph',
+			'targetBlockTitle'       => 'Paragraph',
+			'occurrenceCount'        => 1,
 			'sampledOccurrenceCount' => 1,
 			'omittedOccurrenceCount' => 0,
-			'confidence'           => 'high',
-			'dominantRole'         => 'footer-paragraph',
-			'dominantLocation'     => 'footer',
-			'densitySummary'       => [
+			'confidence'             => 'high',
+			'dominantRole'           => 'footer-paragraph',
+			'dominantLocation'       => 'footer',
+			'densitySummary'         => [
 				[
 					'value' => 'balanced',
 					'count' => 1,
 				],
 			],
-			'emphasisSummary'      => [
+			'emphasisSummary'        => [
 				[
 					'value' => 'supporting',
 					'count' => 1,
 				],
 			],
-			'occurrences'          => [
+			'occurrences'            => [
 				[
 					'path'             => [ 0, 1 ],
 					'block'            => 'core/paragraph',
@@ -316,7 +316,7 @@ final class StylePromptTest extends TestCase {
 	}
 
 	public function test_build_user_includes_template_visibility_constraints(): void {
-		$context                                     = $this->build_context();
+		$context                                       = $this->build_context();
 		$context['styleContext']['templateVisibility'] = [
 			'hasVisibilityRules' => true,
 			'blockCount'         => 1,
@@ -798,5 +798,67 @@ final class StylePromptTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
 		$this->assertSame( [], $result['suggestions'][0]['operations'] );
+	}
+
+	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Explicit score suggestion',
+							'description' => 'This should sort first.',
+							'category'    => 'color',
+							'score'       => 0.93,
+							'confidence'  => 0.12,
+						],
+						[
+							'label'       => 'Confidence-only suggestion',
+							'description' => 'This should sort second.',
+							'category'    => 'color',
+							'confidence'  => 0.81,
+						],
+					],
+					'explanation' => 'Explicit scores should outrank confidence-only entries.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Explicit score suggestion', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.93, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Fallback confidence suggestion',
+							'description' => 'A malformed nested score should not zero this out.',
+							'category'    => 'color',
+							'ranking'     => [
+								'score' => [],
+							],
+							'confidence'  => 0.87,
+						],
+						[
+							'label'       => 'Lower confidence suggestion',
+							'description' => 'This should sort second.',
+							'category'    => 'color',
+							'confidence'  => 0.81,
+						],
+					],
+					'explanation' => 'Malformed nested scores should not suppress valid fallback confidence.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence suggestion', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.87, $result['suggestions'][0]['ranking']['score'] );
 	}
 }

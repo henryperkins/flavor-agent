@@ -14,6 +14,7 @@ use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
+use FlavorAgent\Support\RankingContract;
 use FlavorAgent\Support\StringArray;
 
 final class PatternAbilities {
@@ -21,24 +22,24 @@ final class PatternAbilities {
 	use FormatsDocsGuidance;
 	use NormalizesInput;
 
-	private const DEFAULT_SEMANTIC_LIMIT    = 8;
-	private const DEFAULT_STRUCTURAL_LIMIT  = 6;
-	private const FILTERED_SEMANTIC_LIMIT   = 24;
-	private const FILTERED_STRUCTURAL_LIMIT = 18;
-	private const GENERAL_BLOCK_OVERRIDE_BONUS = 0.03;
-	private const CUSTOM_BLOCK_MATCHING_OVERRIDE_BONUS = 0.04;
-	private const CUSTOM_BLOCK_GENERIC_OVERRIDE_BONUS  = 0.02;
-	private const SIBLING_OVERRIDE_BONUS_PER_MATCH = 0.01;
-	private const SIBLING_OVERRIDE_BONUS_CAP       = 0.02;
-	private const TOTAL_OVERRIDE_BONUS_CAP         = 0.05;
-	private const MAX_NEARBY_SIBLING_BLOCK_TYPES   = 4;
-	private const MAX_LLM_CANDIDATES        = 12;
-	private const DEFAULT_MAX_RECOMMENDATIONS           = 8;
+	private const DEFAULT_SEMANTIC_LIMIT                 = 8;
+	private const DEFAULT_STRUCTURAL_LIMIT               = 6;
+	private const FILTERED_SEMANTIC_LIMIT                = 24;
+	private const FILTERED_STRUCTURAL_LIMIT              = 18;
+	private const GENERAL_BLOCK_OVERRIDE_BONUS           = 0.03;
+	private const CUSTOM_BLOCK_MATCHING_OVERRIDE_BONUS   = 0.04;
+	private const CUSTOM_BLOCK_GENERIC_OVERRIDE_BONUS    = 0.02;
+	private const SIBLING_OVERRIDE_BONUS_PER_MATCH       = 0.01;
+	private const SIBLING_OVERRIDE_BONUS_CAP             = 0.02;
+	private const TOTAL_OVERRIDE_BONUS_CAP               = 0.05;
+	private const MAX_NEARBY_SIBLING_BLOCK_TYPES         = 4;
+	private const MAX_LLM_CANDIDATES                     = 12;
+	private const DEFAULT_MAX_RECOMMENDATIONS            = 8;
 	private const DEFAULT_RECOMMENDATION_SCORE_THRESHOLD = 0.3;
-	private const MAX_LLM_INPUT_CHARS                   = 24000;
-	private const MAX_LLM_STRUCTURE_BLOCKS             = 14;
-	private const MAX_LLM_STRUCTURE_LINES              = 18;
-	private const MAX_LLM_CONTENT_PREVIEW_CHARS        = 240;
+	private const MAX_LLM_INPUT_CHARS                    = 24000;
+	private const MAX_LLM_STRUCTURE_BLOCKS               = 14;
+	private const MAX_LLM_STRUCTURE_LINES                = 18;
+	private const MAX_LLM_CONTENT_PREVIEW_CHARS          = 240;
 
 	public static function list_patterns( mixed $input ): array {
 		$input          = self::normalize_input( $input );
@@ -144,35 +145,35 @@ final class PatternAbilities {
 		}
 
 		// Step 2: Build query string.
-		$post_type        = isset( $input['postType'] ) && is_string( $input['postType'] ) && sanitize_key( $input['postType'] ) !== ''
+		$post_type               = isset( $input['postType'] ) && is_string( $input['postType'] ) && sanitize_key( $input['postType'] ) !== ''
 			? sanitize_key( $input['postType'] )
 			: 'post';
-		$block_context    = self::normalize_input( $input['blockContext'] ?? [] );
-		$block_name       = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+		$block_context           = self::normalize_input( $input['blockContext'] ?? [] );
+		$block_name              = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
 			? sanitize_text_field( $block_context['blockName'] )
 			: '';
-		$template_type    = isset( $input['templateType'] ) && is_string( $input['templateType'] )
+		$template_type           = isset( $input['templateType'] ) && is_string( $input['templateType'] )
 			? sanitize_text_field( $input['templateType'] )
 			: '';
-		$prompt           = isset( $input['prompt'] ) && is_string( $input['prompt'] )
+		$prompt                  = isset( $input['prompt'] ) && is_string( $input['prompt'] )
 			? sanitize_textarea_field( $input['prompt'] )
 			: '';
-		$insertion_context    = self::normalize_input( $input['insertionContext'] ?? [] );
-		$root_block           = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
+		$insertion_context       = self::normalize_input( $input['insertionContext'] ?? [] );
+		$root_block              = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
 			? sanitize_text_field( $insertion_context['rootBlock'] )
 			: '';
-		$ancestors            = StringArray::sanitize( $insertion_context['ancestors'] ?? [] );
-		$nearby_siblings      = StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] );
-		$template_part_area   = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
+		$ancestors               = StringArray::sanitize( $insertion_context['ancestors'] ?? [] );
+		$nearby_siblings         = StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] );
+		$template_part_area      = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
 			? sanitize_key( $insertion_context['templatePartArea'] )
 			: '';
-		$template_part_slug   = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
+		$template_part_slug      = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
 			? sanitize_text_field( $insertion_context['templatePartSlug'] )
 			: '';
-		$container_layout     = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
+		$container_layout        = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
 			? sanitize_key( $insertion_context['containerLayout'] )
 			: '';
-		$has_insertion_context = array_key_exists( 'insertionContext', $input )
+		$has_insertion_context   = array_key_exists( 'insertionContext', $input )
 			|| $root_block !== ''
 			|| ! empty( $ancestors )
 			|| ! empty( $nearby_siblings )
@@ -180,12 +181,12 @@ final class PatternAbilities {
 			|| $template_part_slug !== ''
 			|| $container_layout !== '';
 		$is_custom_block_context = self::is_custom_block_name( $block_name );
-		$visible_lookup   = is_array( $visible_pattern_names )
+		$visible_lookup          = is_array( $visible_pattern_names )
 			? array_fill_keys( $visible_pattern_names, true )
 			: null;
-		$semantic_limit   = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
-		$structural_limit = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
-		$docs_guidance    = self::collect_wordpress_docs_guidance(
+		$semantic_limit          = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
+		$structural_limit        = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
+		$docs_guidance           = self::collect_wordpress_docs_guidance(
 			[
 				'postType'            => $post_type,
 				'templateType'        => $template_type,
@@ -216,7 +217,7 @@ final class PatternAbilities {
 			return $query_vector;
 		}
 
-		$active_signature  = EmbeddingClient::build_signature_for_dimension( count( $query_vector ) );
+		$active_signature    = EmbeddingClient::build_signature_for_dimension( count( $query_vector ) );
 		$expected_collection = QdrantClient::get_collection_name( $active_signature );
 
 		if (
@@ -281,8 +282,8 @@ final class PatternAbilities {
 			return $pass_a;
 		}
 
-		$pass_b         = [];
-		$should_clauses = self::build_structural_should_clauses(
+		$pass_b              = [];
+		$should_clauses      = self::build_structural_should_clauses(
 			$post_type,
 			$block_name,
 			$template_type,
@@ -292,8 +293,9 @@ final class PatternAbilities {
 			$template_part_area,
 			$has_insertion_context
 		);
+		$ran_structural_pass = ! empty( $should_clauses );
 
-		if ( ! empty( $should_clauses ) ) {
+		if ( $ran_structural_pass ) {
 			$pass_b = QdrantClient::search(
 				$query_vector,
 				$structural_limit,
@@ -306,7 +308,7 @@ final class PatternAbilities {
 		}
 
 		// Union, dedupe by payload.name, keep best score.
-		$candidates               = [];
+		$candidates                = [];
 		$retrieved_candidate_names = [];
 		foreach ( array_merge( $pass_a, $pass_b ) as $point ) {
 			$name  = $point['payload']['name'] ?? '';
@@ -400,7 +402,7 @@ final class PatternAbilities {
 			);
 		}
 
-		$recommendations = [];
+		$recommendations     = [];
 		$max_recommendations = self::max_recommendations();
 		$score_threshold     = self::recommendation_score_threshold();
 		foreach ( (array) $data['recommendations'] as $rec ) {
@@ -412,31 +414,50 @@ final class PatternAbilities {
 				continue;
 			}
 
-			$payload       = $candidates[ $name ]['payload'];
-			$overrides     = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
+			$payload      = $candidates[ $name ]['payload'];
+			$overrides    = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
 			$ranking_hint = is_array( $candidates[ $name ]['rankingHint'] ?? null )
 				? $candidates[ $name ]['rankingHint']
 				: [];
-			$score   = isset( $rec['score'] ) ? max( 0.0, min( 1.0, (float) $rec['score'] ) ) : 0.0;
+			$score        = isset( $rec['score'] ) ? max( 0.0, min( 1.0, (float) $rec['score'] ) ) : 0.0;
 			if ( $score < $score_threshold ) {
 				continue;
 			}
-			$reason = self::append_pattern_override_reason_hint(
+			$reason         = self::append_pattern_override_reason_hint(
 				sanitize_text_field( $rec['reason'] ?? '' ),
 				$ranking_hint
 			);
+			$source_signals = [ 'qdrant_semantic', 'llm_ranker' ];
+			if ( $ran_structural_pass ) {
+				$source_signals[] = 'qdrant_structural';
+			}
 			$recommendations[] = [
-				'name'       => $name,
-				'title'      => $payload['title'] ?? '',
-				'score'      => $score,
-				'reason'     => $reason,
-				'categories' => $payload['categories'] ?? [],
-				'patternOverrides' => $overrides,
+				'name'                 => $name,
+				'title'                => $payload['title'] ?? '',
+				'score'                => $score,
+				'reason'               => $reason,
+				'categories'           => $payload['categories'] ?? [],
+				'patternOverrides'     => $overrides,
 				'overrideCapabilities' => self::build_override_capabilities(
 					$overrides,
 					$ranking_hint
 				),
-				'content'    => $payload['content'] ?? '',
+				'ranking'              => RankingContract::normalize(
+					is_array( $rec['ranking'] ?? null ) ? $rec['ranking'] : [],
+					[
+						'score'         => $score,
+						'reason'        => $reason,
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [
+							'indexStatus'        => (string) ( $state['status'] ?? '' ),
+							'embeddingSignature' => (string) ( $state['embedding_signature'] ?? '' ),
+							'qdrantCollection'   => (string) ( $state['qdrant_collection'] ?? '' ),
+						],
+						'rankingHint'   => $ranking_hint,
+					]
+				),
+				'content'              => $payload['content'] ?? '',
 			];
 		}
 
@@ -705,16 +726,16 @@ SYSTEM;
 		$trait_counts    = [];
 
 		foreach ( $candidates as $candidate ) {
-			$categories = $candidate['payload']['categories'] ?? [];
-			$primary    = $categories[0] ?? '_uncategorized';
-			$traits     = is_array( $candidate['payload']['traits'] ?? null ) ? $candidate['payload']['traits'] : [];
+			$categories    = $candidate['payload']['categories'] ?? [];
+			$primary       = $categories[0] ?? '_uncategorized';
+			$traits        = is_array( $candidate['payload']['traits'] ?? null ) ? $candidate['payload']['traits'] : [];
 			$primary_trait = $traits[0] ?? '_untyped';
 
-			$category_counts[ $primary ] = ( $category_counts[ $primary ] ?? 0 ) + 1;
+			$category_counts[ $primary ]    = ( $category_counts[ $primary ] ?? 0 ) + 1;
 			$trait_counts[ $primary_trait ] = ( $trait_counts[ $primary_trait ] ?? 0 ) + 1;
 		}
 
-		$threshold      = max( 3, (int) ceil( $max * 0.4 ) );
+		$threshold       = max( 3, (int) ceil( $max * 0.4 ) );
 		$needs_diversity = false;
 
 		foreach ( array_merge( array_values( $category_counts ), array_values( $trait_counts ) ) as $count ) {
@@ -738,16 +759,16 @@ SYSTEM;
 				break;
 			}
 
-			$categories    = $candidate['payload']['categories'] ?? [];
-			$primary       = $categories[0] ?? '_uncategorized';
-			$traits        = is_array( $candidate['payload']['traits'] ?? null ) ? $candidate['payload']['traits'] : [];
-			$primary_trait = $traits[0] ?? '_untyped';
-			$current_count = $category_picked[ $primary ] ?? 0;
+			$categories          = $candidate['payload']['categories'] ?? [];
+			$primary             = $categories[0] ?? '_uncategorized';
+			$traits              = is_array( $candidate['payload']['traits'] ?? null ) ? $candidate['payload']['traits'] : [];
+			$primary_trait       = $traits[0] ?? '_untyped';
+			$current_count       = $category_picked[ $primary ] ?? 0;
 			$current_trait_count = $trait_picked[ $primary_trait ] ?? 0;
 
 			if ( $current_count < $threshold && $current_trait_count < $threshold ) {
-				$picked[ $name ]             = $candidate;
-				$category_picked[ $primary ] = $current_count + 1;
+				$picked[ $name ]                = $candidate;
+				$category_picked[ $primary ]    = $current_count + 1;
 				$trait_picked[ $primary_trait ] = $current_trait_count + 1;
 			} else {
 				$overflow[ $name ] = $candidate;
@@ -830,7 +851,7 @@ SYSTEM;
 			return [];
 		}
 
-		$manifest = ServerCollector::introspect_block_type( $block_name );
+		$manifest            = ServerCollector::introspect_block_type( $block_name );
 		$bindable_attributes = is_array( $manifest['bindableAttributes'] ?? null )
 			? StringArray::sanitize( $manifest['bindableAttributes'] )
 			: [];
@@ -901,9 +922,9 @@ SYSTEM;
 	 * @return array<string, mixed>
 	 */
 	private static function build_candidate_ranking_hint( array $payload, string $block_name, array $nearby_siblings, bool $is_custom_block_context ): array {
-		$pattern_overrides = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
-		$override_attributes_map = self::sanitize_override_attribute_map( $pattern_overrides['overrideAttributes'] ?? [] );
-		$override_block_names = array_values(
+		$pattern_overrides           = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
+		$override_attributes_map     = self::sanitize_override_attribute_map( $pattern_overrides['overrideAttributes'] ?? [] );
+		$override_block_names        = array_values(
 			array_unique(
 				array_merge(
 					StringArray::sanitize( $pattern_overrides['blockNames'] ?? [] ),
@@ -931,7 +952,7 @@ SYSTEM;
 
 		foreach ( self::dedupe_nearby_sibling_block_names( $nearby_siblings ) as $sibling_block_name ) {
 			if ( [] !== self::resolve_override_overlap_attrs( $sibling_block_name, $override_attributes_map ) ) {
-				$sibling_override_count++;
+				++$sibling_override_count;
 			}
 		}
 
@@ -959,16 +980,16 @@ SYSTEM;
 		);
 
 		return [
-			'customBlockContext'        => $is_custom_block_context,
-			'matchesNearbyBlock'        => $matches_nearby_block,
-			'nearbyBlockOverlapAttrs'   => $nearby_block_overlap_attrs,
-			'siblingOverrideCount'      => $sibling_override_count,
-			'matchesNearbyCustomBlock'  => $matches_nearby_custom_block,
-			'supportsCustomBlocks'      => $supports_custom_blocks,
-			'usesDefaultBinding'        => $uses_default_binding,
-			'customOverrideBlockNames'  => $custom_override_block_names,
-			'summary'                   => $summary,
-			'bonus'                     => min(
+			'customBlockContext'       => $is_custom_block_context,
+			'matchesNearbyBlock'       => $matches_nearby_block,
+			'nearbyBlockOverlapAttrs'  => $nearby_block_overlap_attrs,
+			'siblingOverrideCount'     => $sibling_override_count,
+			'matchesNearbyCustomBlock' => $matches_nearby_custom_block,
+			'supportsCustomBlocks'     => $supports_custom_blocks,
+			'usesDefaultBinding'       => $uses_default_binding,
+			'customOverrideBlockNames' => $custom_override_block_names,
+			'summary'                  => $summary,
+			'bonus'                    => min(
 				self::TOTAL_OVERRIDE_BONUS_CAP,
 				$general_bonus + $custom_bonus + $sibling_bonus
 			),
@@ -980,11 +1001,11 @@ SYSTEM;
 	 * @return array<string, mixed>
 	 */
 	private static function prepare_candidate_ranking_hint_for_llm( array $ranking_hint ): array {
-		$summary                   = isset( $ranking_hint['summary'] ) && is_string( $ranking_hint['summary'] )
+		$summary                    = isset( $ranking_hint['summary'] ) && is_string( $ranking_hint['summary'] )
 			? sanitize_text_field( $ranking_hint['summary'] )
 			: '';
 		$nearby_block_overlap_attrs = StringArray::sanitize( $ranking_hint['nearbyBlockOverlapAttrs'] ?? [] );
-		$hint                      = [
+		$hint                       = [
 			'matchesNearbyBlock'       => ! empty( $ranking_hint['matchesNearbyBlock'] ),
 			'nearbyBlockOverlapAttrs'  => $nearby_block_overlap_attrs,
 			'siblingOverrideCount'     => max( 0, (int) ( $ranking_hint['siblingOverrideCount'] ?? 0 ) ),
@@ -1052,16 +1073,16 @@ SYSTEM;
 			: [];
 
 		return [
-			'hasPatternOverrides'     => ! empty( $pattern_overrides['hasOverrides'] ),
-			'overrideBlockCount'      => max( 0, (int) ( $pattern_overrides['blockCount'] ?? 0 ) ),
-			'usesDefaultBinding'      => ! empty( $pattern_overrides['usesDefaultBinding'] ),
-			'hasBindableOverrides'    => [] !== $override_attributes,
-			'hasUnsupportedOverrides' => [] !== $unsupported_attributes,
-			'matchesNearbyBlock'      => ! empty( $ranking_hint['matchesNearbyBlock'] ),
-			'nearbyBlockOverlapAttrs' => StringArray::sanitize( $ranking_hint['nearbyBlockOverlapAttrs'] ?? [] ),
-			'siblingOverrideCount'    => max( 0, (int) ( $ranking_hint['siblingOverrideCount'] ?? 0 ) ),
+			'hasPatternOverrides'      => ! empty( $pattern_overrides['hasOverrides'] ),
+			'overrideBlockCount'       => max( 0, (int) ( $pattern_overrides['blockCount'] ?? 0 ) ),
+			'usesDefaultBinding'       => ! empty( $pattern_overrides['usesDefaultBinding'] ),
+			'hasBindableOverrides'     => [] !== $override_attributes,
+			'hasUnsupportedOverrides'  => [] !== $unsupported_attributes,
+			'matchesNearbyBlock'       => ! empty( $ranking_hint['matchesNearbyBlock'] ),
+			'nearbyBlockOverlapAttrs'  => StringArray::sanitize( $ranking_hint['nearbyBlockOverlapAttrs'] ?? [] ),
+			'siblingOverrideCount'     => max( 0, (int) ( $ranking_hint['siblingOverrideCount'] ?? 0 ) ),
 			'matchesNearbyCustomBlock' => ! empty( $ranking_hint['matchesNearbyCustomBlock'] ),
-			'supportsCustomBlocks'    => ! empty( $ranking_hint['supportsCustomBlocks'] ),
+			'supportsCustomBlocks'     => ! empty( $ranking_hint['supportsCustomBlocks'] ),
 		];
 	}
 
@@ -1297,26 +1318,26 @@ SYSTEM;
 		$shown_candidates  = $total_candidates;
 
 		for ( $i = 0; $i < 2; $i++ ) {
-			$meta = self::build_candidate_budget_section( $shown_candidates, $total_candidates )
+			$meta             = self::build_candidate_budget_section( $shown_candidates, $total_candidates )
 				. self::build_visible_pattern_scope_section(
 					$visible_pattern_names,
 					$shown_candidates,
 					$total_candidates,
 					$retrieved_candidate_count
 				);
-			$available = self::MAX_LLM_INPUT_CHARS - strlen( $base_input . $meta . "\n## Candidate Patterns\n" );
-			$selected  = self::select_candidates_for_budget( $candidate_entries, $available );
+			$available        = self::MAX_LLM_INPUT_CHARS - strlen( $base_input . $meta . "\n## Candidate Patterns\n" );
+			$selected         = self::select_candidates_for_budget( $candidate_entries, $available );
 			$shown_candidates = count( $selected );
 		}
 
-		$meta = self::build_candidate_budget_section( $shown_candidates, $total_candidates )
+		$meta            = self::build_candidate_budget_section( $shown_candidates, $total_candidates )
 			. self::build_visible_pattern_scope_section(
 				$visible_pattern_names,
 				$shown_candidates,
 				$total_candidates,
 				$retrieved_candidate_count
 			);
-		$selected = self::select_candidates_for_budget(
+		$selected        = self::select_candidates_for_budget(
 			$candidate_entries,
 			self::MAX_LLM_INPUT_CHARS - strlen( $base_input . $meta . "\n## Candidate Patterns\n" )
 		);
@@ -1336,13 +1357,13 @@ SYSTEM;
 		$entries = [];
 
 		foreach ( $candidates as $name => $candidate ) {
-			$payload         = is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [];
-			$ranking_hint    = is_array( $candidate['rankingHint'] ?? null ) ? $candidate['rankingHint'] : [];
+			$payload           = is_array( $candidate['payload'] ?? null ) ? $candidate['payload'] : [];
+			$ranking_hint      = is_array( $candidate['rankingHint'] ?? null ) ? $candidate['rankingHint'] : [];
 			$pattern_overrides = self::normalize_pattern_overrides_metadata( $payload['patternOverrides'] ?? [] );
-			$content         = is_string( $payload['content'] ?? null ) ? $payload['content'] : '';
-			$traits          = is_array( $payload['traits'] ?? null ) ? StringArray::sanitize( $payload['traits'] ) : [];
-			$structure       = self::build_pattern_structure_summary( $content );
-			$content_preview = self::build_pattern_content_preview( $content );
+			$content           = is_string( $payload['content'] ?? null ) ? $payload['content'] : '';
+			$traits            = is_array( $payload['traits'] ?? null ) ? StringArray::sanitize( $payload['traits'] ) : [];
+			$structure         = self::build_pattern_structure_summary( $content );
+			$content_preview   = self::build_pattern_content_preview( $content );
 
 			$entry = [
 				'name'                 => $name,
@@ -1498,7 +1519,7 @@ SYSTEM;
 
 			$block_name = is_string( $block['blockName'] ?? null ) ? $block['blockName'] : 'unknown';
 			$lines[]    = str_repeat( '  ', min( 4, $depth ) ) . '- ' . $block_name;
-			$seen_blocks++;
+			++$seen_blocks;
 
 			if ( is_array( $block['innerBlocks'] ?? null ) && ! empty( $block['innerBlocks'] ) ) {
 				self::collect_pattern_structure_lines( $block['innerBlocks'], $depth + 1, $lines, $seen_blocks );
@@ -1579,33 +1600,33 @@ SYSTEM;
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
-		$post_type     = isset( $context['postType'] ) && is_string( $context['postType'] )
+		$post_type             = isset( $context['postType'] ) && is_string( $context['postType'] )
 			? sanitize_key( $context['postType'] )
 			: 'post';
-		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+		$template_type         = isset( $context['templateType'] ) && is_string( $context['templateType'] )
 			? sanitize_key( $context['templateType'] )
 			: '';
-		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
-		$insertion_context = self::normalize_input( $context['insertionContext'] ?? [] );
-		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+		$block_context         = self::normalize_input( $context['blockContext'] ?? [] );
+		$insertion_context     = self::normalize_input( $context['insertionContext'] ?? [] );
+		$block_name            = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
 			? sanitize_text_field( $block_context['blockName'] )
 			: '';
-		$root_block    = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
+		$root_block            = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
 			? sanitize_text_field( $insertion_context['rootBlock'] )
 			: '';
-		$ancestors     = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
-		$nearby_siblings = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
-		$template_part_area = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
+		$ancestors             = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
+		$nearby_siblings       = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
+		$template_part_area    = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
 			? sanitize_key( $insertion_context['templatePartArea'] )
 			: '';
-		$template_part_slug = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
+		$template_part_slug    = isset( $insertion_context['templatePartSlug'] ) && is_string( $insertion_context['templatePartSlug'] )
 			? sanitize_text_field( $insertion_context['templatePartSlug'] )
 			: '';
-		$container_layout = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
+		$container_layout      = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
 			? sanitize_key( $insertion_context['containerLayout'] )
 			: '';
 		$visible_pattern_names = array_slice( StringArray::sanitize( $context['visiblePatternNames'] ?? [] ), 0, 6 );
-		$parts         = [ 'WordPress block patterns, inserter, and editor composition best practices' ];
+		$parts                 = [ 'WordPress block patterns, inserter, and editor composition best practices' ];
 
 		if ( $post_type !== '' ) {
 			$parts[] = "post type {$post_type}";
@@ -1697,30 +1718,30 @@ SYSTEM;
 	 * @return array<string, mixed>
 	 */
 	private static function build_wordpress_docs_family_context( array $context, string $entity_key ): array {
-		$post_type     = isset( $context['postType'] ) && is_string( $context['postType'] )
+		$post_type             = isset( $context['postType'] ) && is_string( $context['postType'] )
 			? sanitize_key( $context['postType'] )
 			: 'post';
-		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+		$template_type         = isset( $context['templateType'] ) && is_string( $context['templateType'] )
 			? sanitize_key( $context['templateType'] )
 			: '';
-		$block_context = self::normalize_input( $context['blockContext'] ?? [] );
-		$insertion_context = self::normalize_input( $context['insertionContext'] ?? [] );
-		$block_name    = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
+		$block_context         = self::normalize_input( $context['blockContext'] ?? [] );
+		$insertion_context     = self::normalize_input( $context['insertionContext'] ?? [] );
+		$block_name            = isset( $block_context['blockName'] ) && is_string( $block_context['blockName'] )
 			? sanitize_text_field( $block_context['blockName'] )
 			: '';
-		$root_block    = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
+		$root_block            = isset( $insertion_context['rootBlock'] ) && is_string( $insertion_context['rootBlock'] )
 			? sanitize_text_field( $insertion_context['rootBlock'] )
 			: '';
-		$template_part_area = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
+		$template_part_area    = isset( $insertion_context['templatePartArea'] ) && is_string( $insertion_context['templatePartArea'] )
 			? sanitize_key( $insertion_context['templatePartArea'] )
 			: '';
-		$container_layout = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
+		$container_layout      = isset( $insertion_context['containerLayout'] ) && is_string( $insertion_context['containerLayout'] )
 			? sanitize_key( $insertion_context['containerLayout'] )
 			: '';
-		$ancestors = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
-		$nearby_siblings = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
+		$ancestors             = array_slice( StringArray::sanitize( $insertion_context['ancestors'] ?? [] ), 0, 4 );
+		$nearby_siblings       = array_slice( StringArray::sanitize( $insertion_context['nearbySiblings'] ?? [] ), 0, 4 );
 		$visible_pattern_names = array_slice( StringArray::sanitize( $context['visiblePatternNames'] ?? [] ), 0, 6 );
-		$surface       = 'block';
+		$surface               = 'block';
 
 		if ( $entity_key === 'core/template-part' || str_starts_with( $block_name, 'core/template-part/' ) ) {
 			$surface = 'template-part';
