@@ -50,6 +50,8 @@ import {
 	getGlobalStylesUserConfig,
 } from '../utils/style-operations';
 import { normalizeTemplateType } from '../utils/template-types';
+import { getSuggestionKey } from '../inspector/suggestion-keys';
+import { buildStyleRecommendationRequestInput } from '../style-surfaces/request-input';
 import {
 	findStylesSidebarMountNode,
 	getStyleBookUiState,
@@ -62,76 +64,12 @@ import {
 	StyleSuggestionCard,
 } from '../style-surfaces/presentation';
 
-function getSuggestionKey( suggestion, index ) {
-	if (
-		typeof suggestion?.suggestionKey === 'string' &&
-		suggestion.suggestionKey
-	) {
-		return suggestion.suggestionKey;
-	}
-
-	return `style-book-${ index }-${
-		suggestion?.label || 'suggestion'
-	}-${ JSON.stringify( suggestion?.operations || [] ) }`;
-}
-
 function getBlockStyleBranch( config = {}, blockName = '' ) {
 	if ( ! blockName ) {
 		return {};
 	}
 
 	return config?.styles?.blocks?.[ blockName ] || {};
-}
-
-function buildRequestInput( {
-	scope,
-	prompt,
-	currentConfig,
-	mergedConfig,
-	themeTokenDiagnostics,
-	blockDescription,
-	currentStyles,
-	mergedStyles,
-	templateStructure,
-	templateVisibility,
-	designSemantics,
-	contextSignature,
-} ) {
-	const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
-
-	return {
-		scope: {
-			surface: 'style-book',
-			scopeKey: scope?.scopeKey || '',
-			globalStylesId: scope?.globalStylesId || '',
-			postType: scope?.postType || 'global_styles',
-			entityId: scope?.entityId || scope?.blockName || '',
-			entityKind: scope?.entityKind || 'block',
-			entityName: scope?.entityName || 'styleBook',
-			stylesheet: scope?.stylesheet || '',
-			templateSlug: scope?.templateSlug || '',
-			templateType: scope?.templateType || '',
-			blockName: scope?.blockName || '',
-			blockTitle: scope?.blockTitle || '',
-		},
-		styleContext: {
-			currentConfig,
-			mergedConfig,
-			themeTokenDiagnostics,
-			styleBookTarget: {
-				blockName: scope?.blockName || '',
-				blockTitle: scope?.blockTitle || '',
-				description: blockDescription || '',
-				currentStyles,
-				mergedStyles,
-			},
-			templateStructure,
-			templateVisibility,
-			designSemantics,
-		},
-		contextSignature,
-		...( normalizedPrompt ? { prompt: normalizedPrompt } : {} ),
-	};
 }
 
 function StyleBookPanel( {
@@ -620,19 +558,24 @@ export default function StyleBookRecommender() {
 	const currentRequestInput = useMemo(
 		() =>
 			scope && blockType
-				? buildRequestInput( {
+				? buildStyleRecommendationRequestInput( {
+						surface: 'style-book',
 						scope,
 						prompt,
 						currentConfig,
 						mergedConfig,
 						themeTokenDiagnostics,
-						blockDescription: blockType?.description || '',
-						currentStyles,
-						mergedStyles,
 						templateStructure,
 						templateVisibility,
 						designSemantics,
 						contextSignature: recommendationContextSignature,
+						styleBookTarget: {
+							blockName: scope?.blockName || '',
+							blockTitle: scope?.blockTitle || '',
+							description: blockType?.description || '',
+							currentStyles,
+							mergedStyles,
+						},
 				  } )
 				: null,
 		[

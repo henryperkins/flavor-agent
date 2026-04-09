@@ -39,6 +39,7 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
+import { buildContextSignature } from '../../utils/context-signature';
 import NavigationRecommendations, {
 	buildNavigationFetchInput,
 } from '../NavigationRecommendations';
@@ -117,7 +118,7 @@ function buildStoredNavigationSignature(
 
 	signature.editorContext = getRequestNavigationEditorContext();
 
-	return JSON.stringify( signature );
+	return buildContextSignature( signature );
 }
 
 function createSelectors() {

@@ -33,6 +33,7 @@ import {
 	isTemplatePartSlugRegisteredForArea,
 	matchesTemplatePartArea,
 } from './template-part-areas';
+import { deepStructuralEqual } from './structural-equality';
 
 /* ------------------------------------------------------------------ */
 /*  Block-tree helpers                                                 */
@@ -1622,8 +1623,10 @@ function validateRemovalAnchor(
 
 		if (
 			! currentSlice ||
-			JSON.stringify( normalizeBlockSnapshots( currentSlice.blocks ) ) !==
-				JSON.stringify( expectedBlocks )
+			! deepStructuralEqual(
+				normalizeBlockSnapshots( currentSlice.blocks ),
+				expectedBlocks
+			)
 		) {
 			return {
 				ok: false,
@@ -2738,8 +2741,7 @@ export function resolveInsertedPatternSlice(
 	const currentSnapshot = normalizeBlockSnapshots( slice.blocks );
 
 	if (
-		JSON.stringify( currentSnapshot ) !==
-			JSON.stringify( insertedBlocksSnapshot ) &&
+		! deepStructuralEqual( currentSnapshot, insertedBlocksSnapshot ) &&
 		! snapshotMatchesExpectedBlocks(
 			currentSnapshot,
 			insertedBlocksSnapshot

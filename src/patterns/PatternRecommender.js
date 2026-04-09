@@ -423,6 +423,24 @@ export default function PatternRecommender() {
 		return input;
 	}, [postType, templateType, visiblePatternNames, insertionContext]);
 
+	const clearSearchDebounce = useCallback(() => {
+		if (debounceRef.current) {
+			clearTimeout(debounceRef.current);
+			debounceRef.current = null;
+		}
+	}, []);
+
+	const scheduleSearchFetch = useCallback(
+		(callback) => {
+			clearSearchDebounce();
+			debounceRef.current = setTimeout(() => {
+				debounceRef.current = null;
+				callback();
+			}, SEARCH_DEBOUNCE_MS);
+		},
+		[clearSearchDebounce]
+	);
+
 	const handleRetry = useCallback(() => {
 		if (!canRecommend || !postType) {
 			return;
@@ -526,15 +544,12 @@ export default function PatternRecommender() {
 
 	const handleSearchInput = useCallback(
 		(value) => {
-			if (debounceRef.current) {
-				clearTimeout(debounceRef.current);
-			}
-
-			debounceRef.current = setTimeout(() => {
+			scheduleSearchFetch(() => {
 				if (!postType) {
 					return;
 				}
 
+				// buildBaseInput() already carries the latest insertionContext.
 				const input = buildBaseInput();
 				const trimmedValue = value.trim();
 
@@ -546,28 +561,21 @@ export default function PatternRecommender() {
 					input.blockContext = { blockName: selectedBlockName };
 				}
 
-				if (insertionContext) {
-					input.insertionContext = insertionContext;
-				}
-
 				fetchPatternRecommendations(input);
-			}, SEARCH_DEBOUNCE_MS);
+			});
 		},
 		[
 			postType,
 			buildBaseInput,
 			selectedBlockName,
-			insertionContext,
 			fetchPatternRecommendations,
+			scheduleSearchFetch,
 		]
 	);
 
 	useEffect(() => {
 		const cleanupBindings = () => {
-			if (debounceRef.current) {
-				clearTimeout(debounceRef.current);
-				debounceRef.current = null;
-			}
+			clearSearchDebounce();
 
 			if (observerRef.current) {
 				observerRef.current.disconnect();
@@ -642,7 +650,7 @@ export default function PatternRecommender() {
 			clearTimeout(timeout);
 			cleanupBindings();
 		};
-	}, [canRecommend, isInserterOpen, handleSearchInput]);
+	}, [canRecommend, clearSearchDebounce, isInserterOpen, handleSearchInput]);
 
 	if (shouldRenderInserterAffordance && noticeSlotRef.current) {
 		let notice = null;

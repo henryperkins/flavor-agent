@@ -5,6 +5,8 @@ import {
 	buildBlockStyleExecutionContractFromSettings,
 	buildGlobalStylesExecutionContractFromSettings,
 } from '../context/theme-tokens';
+import { buildContextSignature } from './context-signature';
+import { deepStructuralEqual } from './structural-equality';
 import {
 	displayPresetType,
 	normalizePresetType,
@@ -253,34 +255,32 @@ export function buildGlobalStylesRecommendationContextSignature( {
 } ) {
 	const includeVariations = scope?.surface !== 'style-book';
 
-	return JSON.stringify(
-		sortObjectKeysDeep( {
-			scopeKey: scope?.scopeKey || '',
-			globalStylesId: scope?.globalStylesId || '',
-			stylesheet: scope?.stylesheet || '',
-			templateSlug: scope?.templateSlug || '',
-			templateType: scope?.templateType || '',
-			currentConfig: getComparableGlobalStylesConfig( currentConfig ),
-			mergedConfig: getComparableGlobalStylesConfig( mergedConfig ),
-			availableVariations:
-				includeVariations && Array.isArray( availableVariations )
-					? availableVariations.map( normalizeComparableVariation )
-					: [],
-			templateStructure:
-				normalizeComparableTemplateStructure( templateStructure ),
-			templateVisibility: sortObjectKeysDeep(
-				normalizeOperationValue( templateVisibility || {} )
-			),
-			designSemantics: sortObjectKeysDeep(
-				normalizeOperationValue( designSemantics || {} )
-			),
-			themeTokenDiagnostics: sortObjectKeysDeep(
-				normalizeOperationValue( themeTokenDiagnostics || {} )
-			),
-			executionContract:
-				normalizeComparableExecutionContract( executionContract ),
-		} )
-	);
+	return buildContextSignature( {
+		scopeKey: scope?.scopeKey || '',
+		globalStylesId: scope?.globalStylesId || '',
+		stylesheet: scope?.stylesheet || '',
+		templateSlug: scope?.templateSlug || '',
+		templateType: scope?.templateType || '',
+		currentConfig: getComparableGlobalStylesConfig( currentConfig ),
+		mergedConfig: getComparableGlobalStylesConfig( mergedConfig ),
+		availableVariations:
+			includeVariations && Array.isArray( availableVariations )
+				? availableVariations.map( normalizeComparableVariation )
+				: [],
+		templateStructure:
+			normalizeComparableTemplateStructure( templateStructure ),
+		templateVisibility: sortObjectKeysDeep(
+			normalizeOperationValue( templateVisibility || {} )
+		),
+		designSemantics: sortObjectKeysDeep(
+			normalizeOperationValue( designSemantics || {} )
+		),
+		themeTokenDiagnostics: sortObjectKeysDeep(
+			normalizeOperationValue( themeTokenDiagnostics || {} )
+		),
+		executionContract:
+			normalizeComparableExecutionContract( executionContract ),
+	} );
 }
 
 function mergeConfigValue( baseValue, overrideValue ) {
@@ -563,9 +563,9 @@ function getGlobalStylesExecutionContract( registry ) {
 }
 
 function configsMatch( left, right ) {
-	return (
-		JSON.stringify( getComparableGlobalStylesConfig( left ) ) ===
-		JSON.stringify( getComparableGlobalStylesConfig( right ) )
+	return deepStructuralEqual(
+		getComparableGlobalStylesConfig( left ),
+		getComparableGlobalStylesConfig( right )
 	);
 }
 

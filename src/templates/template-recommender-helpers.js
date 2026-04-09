@@ -5,6 +5,7 @@ import {
 	collectViewportVisibilitySummary,
 	describeEditorBlockLabel,
 } from '../utils/editor-context-metadata';
+import { buildContextSignature } from '../utils/context-signature';
 import {
 	collectNestedBlockStats,
 	normalizeVisiblePatternNames,
@@ -195,7 +196,7 @@ export function buildTemplateRecommendationContextSignature( {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
 
-	return JSON.stringify( {
+	return buildContextSignature( {
 		assignedParts: Array.isArray( editorSlots?.assignedParts )
 			? editorSlots.assignedParts
 			: null,

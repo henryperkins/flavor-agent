@@ -1,23 +1,4 @@
-function normalizeComparableValue( value ) {
-	if ( Array.isArray( value ) ) {
-		return value.map( ( item ) => normalizeComparableValue( item ) );
-	}
-
-	if ( value && typeof value === 'object' ) {
-		return Object.fromEntries(
-			Object.entries( value )
-				.sort( ( [ leftKey ], [ rightKey ] ) =>
-					leftKey.localeCompare( rightKey )
-				)
-				.map( ( [ key, entryValue ] ) => [
-					key,
-					normalizeComparableValue( entryValue ),
-				] )
-		);
-	}
-
-	return value;
-}
+import { buildContextSignature } from './context-signature';
 
 function normalizeStringValue( value ) {
 	return typeof value === 'string' ? value.trim() : '';
@@ -30,15 +11,13 @@ export function buildRecommendationRequestSignature( {
 	scopeKey = '',
 	entityRef = '',
 } = {} ) {
-	return JSON.stringify(
-		normalizeComparableValue( {
-			surface: normalizeStringValue( surface ),
-			prompt: normalizeStringValue( prompt ),
-			contextSignature: normalizeStringValue( contextSignature ),
-			scopeKey: normalizeStringValue( scopeKey ),
-			entityRef: normalizeStringValue( entityRef ),
-		} )
-	);
+	return buildContextSignature( {
+		surface: normalizeStringValue( surface ),
+		prompt: normalizeStringValue( prompt ),
+		contextSignature: normalizeStringValue( contextSignature ),
+		scopeKey: normalizeStringValue( scopeKey ),
+		entityRef: normalizeStringValue( entityRef ),
+	} );
 }
 
 export function buildBlockRecommendationRequestSignature( {
