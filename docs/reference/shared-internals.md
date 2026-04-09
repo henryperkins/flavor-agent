@@ -4,6 +4,21 @@ Cross-cutting store utilities, shared UI components, and context helpers used by
 
 ## Store Utilities
 
+### `src/store/executable-surface-runtime.js`
+
+Shared store-runtime helpers for the four review-before-apply surfaces: template, template-part, Global Styles, and Style Book. This module keeps the executable surface lifecycle generic while leaving request shape, selector wiring, activity metadata, and the actual apply executors in `src/store/index.js`.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `createExecutableSurfaceFetchConfig()` | Normalizes per-surface fetch config into loading/error handlers plus route/request-token wiring |
+| `buildExecutableSurfaceFetchThunk()` | Binds the shared fetch runtime to store-owned transport dependencies such as abortable requests and request-meta decoration |
+| `createExecutableSurfaceApplyConfig()` | Normalizes per-surface apply config into shared apply-state transitions while leaving the real executor surface-owned |
+| `buildExecutableSurfaceApplyThunk()` | Binds the shared apply runtime to stale guards, server freshness revalidation, activity recording, and activity-session sync |
+
+**Consumers:** `src/store/index.js`
+
 ### `src/store/activity-history.js`
 
 Session-scoped AI activity schema, scope resolution, `sessionStorage` cache/fallback layer, and undo-state resolution. This is the most heavily imported store module (10+ callers).
@@ -144,6 +159,21 @@ Renders the shared recent-actions list for executable surfaces, including ordere
 **Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book, admin-adjacent activity helpers (5 editor surfaces plus shared activity utilities)
 
 ## Context Helpers
+
+### `src/utils/live-structure-snapshots.js`
+
+Small shared helpers for live template and template-part snapshot assembly. These helpers intentionally stop at low-level normalization: they dedupe visible pattern names, summarize allowed scalar block attributes, and collect nested block counts/depth without flattening template slot semantics or template-part path-target semantics into one generic contract.
+
+**Key exports:**
+
+| Export | Role |
+| --- | --- |
+| `getInnerBlocks(block)` | Safe child-block accessor for nested editor snapshots |
+| `summarizeBlockAttributes(attributes, fields)` | Returns only scalar values from an allowed field list for prompt-safe structural snapshots |
+| `collectNestedBlockStats(blocks, getBlockChildren?)` | Shared recursive block-count and depth collector used by template and template-part structure snapshots |
+| `normalizeVisiblePatternNames(visiblePatternNames)` | Deduplicates and filters inserter-visible pattern names before request and signature assembly |
+
+**Consumers:** `src/templates/template-recommender-helpers.js`, `src/template-parts/template-part-recommender-helpers.js`
 
 ### `src/context/block-inspector.js`
 
