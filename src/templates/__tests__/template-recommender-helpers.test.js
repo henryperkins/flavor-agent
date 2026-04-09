@@ -106,11 +106,35 @@ describe( 'template recommender helpers', () => {
 			buildContextSignature( {
 				assignedParts: [ { slug: 'site-header', area: 'header' } ],
 				emptyAreas: [ 'footer' ],
+				allowedAreas: null,
 				topLevelBlockTree: null,
 				structureStats: null,
 				currentPatternOverrides: null,
 				currentViewportVisibility: null,
 				visiblePatternNames: [ 'theme/footer', 'theme/hero' ],
+			} )
+		);
+	} );
+
+	test( 'buildTemplateRecommendationContextSignature includes normalized allowed areas', () => {
+		expect(
+			buildTemplateRecommendationContextSignature( {
+				editorSlots: {
+					assignedParts: [],
+					emptyAreas: [],
+					allowedAreas: [ 'footer', '', 'header', 'footer' ],
+				},
+			} )
+		).toBe(
+			buildContextSignature( {
+				assignedParts: [],
+				emptyAreas: [],
+				allowedAreas: [ 'footer', 'header' ],
+				topLevelBlockTree: null,
+				structureStats: null,
+				currentPatternOverrides: null,
+				currentViewportVisibility: null,
+				visiblePatternNames: null,
 			} )
 		);
 	} );
@@ -173,6 +197,7 @@ describe( 'template recommender helpers', () => {
 			buildContextSignature( {
 				assignedParts: [],
 				emptyAreas: [],
+				allowedAreas: null,
 				topLevelBlockTree: [
 					{
 						path: [ 0 ],

@@ -4,6 +4,7 @@ const mockSerialize = jest.fn();
 const mockFetchNavigationRecommendations = jest.fn();
 const mockClearNavigationError = jest.fn();
 const mockClearNavigationRecommendations = jest.fn();
+const mockRevalidateNavigationReviewFreshness = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockGetLiveBlockContextSignature = jest.fn();
 
@@ -169,6 +170,21 @@ function createSelectors() {
 					? getState().store.navigationContextSignature
 					: null
 			),
+			getNavigationReviewContextSignature: jest.fn( ( clientId ) =>
+				getState().store.navigationBlockClientId === clientId
+					? getState().store.navigationReviewContextSignature || null
+					: null
+			),
+			getNavigationReviewFreshnessStatus: jest.fn( ( clientId ) =>
+				getState().store.navigationBlockClientId === clientId
+					? getState().store.navigationReviewFreshnessStatus || 'idle'
+					: 'idle'
+			),
+			getNavigationReviewStaleReason: jest.fn( ( clientId ) =>
+				getState().store.navigationBlockClientId === clientId
+					? getState().store.navigationReviewStaleReason || null
+					: null
+			),
 			getSurfaceStatusNotice: jest.fn( ( surface, options = {} ) => {
 				void surface;
 
@@ -234,6 +250,9 @@ beforeEach( () => {
 			navigationStatus: 'idle',
 			navigationRequestPrompt: '',
 			navigationContextSignature: null,
+			navigationReviewContextSignature: null,
+			navigationReviewFreshnessStatus: 'idle',
+			navigationReviewStaleReason: null,
 		},
 	};
 	window.flavorAgentData = {
@@ -264,6 +283,8 @@ beforeEach( () => {
 		clearNavigationError: mockClearNavigationError,
 		clearNavigationRecommendations: mockClearNavigationRecommendations,
 		fetchNavigationRecommendations: mockFetchNavigationRecommendations,
+		revalidateNavigationReviewFreshness:
+			mockRevalidateNavigationReviewFreshness,
 	} ) );
 	mockClearNavigationRecommendations.mockImplementation( () => {
 		currentState.store = {
@@ -275,6 +296,9 @@ beforeEach( () => {
 			navigationStatus: 'idle',
 			navigationRequestPrompt: '',
 			navigationContextSignature: null,
+			navigationReviewContextSignature: null,
+			navigationReviewFreshnessStatus: 'idle',
+			navigationReviewStaleReason: null,
 		};
 	} );
 } );
@@ -432,6 +456,51 @@ describe( 'NavigationRecommendations', () => {
 					'<!-- wp:navigation {"ref":42,"overlayMenu":"always"} /-->',
 				contextSignature: expect.any( String ),
 			} )
+		);
+	} );
+
+	test( 'revalidates ready navigation results against the server freshness contract when the live input still matches', () => {
+		const navigationMarkup = '<!-- wp:navigation {"ref":42} /-->';
+
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the header navigation.',
+			navigationContextSignature: buildStoredNavigationSignature(
+				navigationMarkup,
+				42,
+				'Simplify the header navigation.'
+			),
+			navigationReviewContextSignature: 'review-navigation-stored',
+			navigationReviewFreshnessStatus: 'fresh',
+			navigationReviewStaleReason: null,
+		};
+		mockSerialize.mockReturnValue( navigationMarkup );
+
+		renderComponent();
+		renderComponent();
+
+		expect( mockRevalidateNavigationReviewFreshness ).toHaveBeenCalledWith(
+			expect.any( String ),
+			{
+				menuId: 42,
+				navigationMarkup,
+				prompt: 'Simplify the header navigation.',
+				editorContext: getRequestNavigationEditorContext(),
+			}
 		);
 	} );
 
@@ -627,6 +696,50 @@ describe( 'NavigationRecommendations', () => {
 			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
 		);
 		expect( getContainer().textContent ).not.toContain( 'Stale' );
+	} );
+
+	test( 'marks ref-only navigation results stale when the saved menu context drifts on the server', () => {
+		const navigationMarkup = '<!-- wp:navigation {"ref":42} /-->';
+
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the header navigation.',
+			navigationContextSignature: buildStoredNavigationSignature(
+				navigationMarkup,
+				42,
+				'Simplify the header navigation.'
+			),
+			navigationReviewContextSignature: 'review-navigation-stored',
+			navigationReviewFreshnessStatus: 'stale',
+			navigationReviewStaleReason: 'server-review',
+		};
+		mockSerialize.mockReturnValue( navigationMarkup );
+
+		renderComponent();
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'Server-resolved navigation context changed after the last request. Menu structure, overlay context, or theme constraints may have shifted. Refresh before relying on the previous guidance.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
+		);
 	} );
 
 	test( 'shows a stale scope badge when the stored navigation result context mismatches', () => {

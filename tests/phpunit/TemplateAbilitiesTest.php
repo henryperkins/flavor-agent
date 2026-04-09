@@ -20,7 +20,7 @@ final class TemplateAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter = static fn(): string => '';
+		$this->disable_public_docs_filter    = static fn(): string => '';
 		\add_filter(
 			'flavor_agent_cloudflare_ai_search_public_search_url',
 			$this->disable_public_docs_filter
@@ -129,7 +129,7 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_template_review_signature_changes_when_docs_guidance_changes_but_resolved_signature_does_not(): void {
+	public function test_recommend_template_review_and_resolved_signatures_ignore_docs_guidance_changes(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -146,7 +146,7 @@ final class TemplateAbilitiesTest extends TestCase {
 		$context = ServerCollector::for_template( 'theme//home', 'home', [ 'theme/hero' ] );
 		$this->assertIsArray( $context );
 		$context['visiblePatternNames'] = [ 'theme/hero' ];
-		$query = $this->invoke_private_string_method(
+		$query                          = $this->invoke_private_string_method(
 			TemplateAbilities::class,
 			'build_wordpress_docs_query',
 			[
@@ -178,7 +178,7 @@ final class TemplateAbilitiesTest extends TestCase {
 				'score'     => 0.93,
 			],
 		];
-		WordPressTestState::$last_remote_post = [];
+		WordPressTestState::$last_remote_post                                  = [];
 
 		$changed = TemplateAbilities::recommend_template( $input );
 
@@ -188,14 +188,14 @@ final class TemplateAbilitiesTest extends TestCase {
 			$baseline['resolvedContextSignature'] ?? null,
 			$changed['resolvedContextSignature'] ?? null
 		);
-		$this->assertNotSame(
+		$this->assertSame(
 			$baseline['reviewContextSignature'] ?? null,
 			$changed['reviewContextSignature'] ?? null
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_template_part_review_signature_changes_when_docs_guidance_changes_but_resolved_signature_does_not(): void {
+	public function test_recommend_template_part_review_and_resolved_signatures_ignore_docs_guidance_changes(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -211,7 +211,7 @@ final class TemplateAbilitiesTest extends TestCase {
 		$context = ServerCollector::for_template_part( 'theme//header', [ 'theme/header-utility' ] );
 		$this->assertIsArray( $context );
 		$context['visiblePatternNames'] = [ 'theme/header-utility' ];
-		$query = $this->invoke_private_string_method(
+		$query                          = $this->invoke_private_string_method(
 			TemplateAbilities::class,
 			'build_template_part_wordpress_docs_query',
 			[
@@ -243,7 +243,7 @@ final class TemplateAbilitiesTest extends TestCase {
 				'score'     => 0.92,
 			],
 		];
-		WordPressTestState::$last_remote_post = [];
+		WordPressTestState::$last_remote_post                                  = [];
 
 		$changed = TemplateAbilities::recommend_template_part( $input );
 
@@ -253,11 +253,249 @@ final class TemplateAbilitiesTest extends TestCase {
 			$baseline['resolvedContextSignature'] ?? null,
 			$changed['resolvedContextSignature'] ?? null
 		);
-		$this->assertNotSame(
+		$this->assertSame(
 			$baseline['reviewContextSignature'] ?? null,
 			$changed['reviewContextSignature'] ?? null
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	/**
+	 * @dataProvider template_review_theme_token_signature_provider
+	 */
+	public function test_template_review_signature_changes_when_formatter_relevant_theme_tokens_change( array $baseline_theme_tokens, array $changed_theme_tokens ): void {
+		$baseline_signature = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				[
+					'patterns'    => [],
+					'themeTokens' => $baseline_theme_tokens,
+				],
+			]
+		);
+		$changed_signature  = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				[
+					'patterns'    => [],
+					'themeTokens' => $changed_theme_tokens,
+				],
+			]
+		);
+
+		$this->assertNotSame( $baseline_signature, $changed_signature );
+	}
+
+	/**
+	 * @dataProvider template_review_theme_token_signature_provider
+	 */
+	public function test_template_part_review_signature_changes_when_formatter_relevant_theme_tokens_change( array $baseline_theme_tokens, array $changed_theme_tokens ): void {
+		$baseline_signature = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_part_review_context_signature',
+			[
+				[
+					'patterns'    => [],
+					'themeTokens' => $baseline_theme_tokens,
+				],
+			]
+		);
+		$changed_signature  = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_part_review_context_signature',
+			[
+				[
+					'patterns'    => [],
+					'themeTokens' => $changed_theme_tokens,
+				],
+			]
+		);
+
+		$this->assertNotSame( $baseline_signature, $changed_signature );
+	}
+
+	public function test_template_review_signature_ignores_theme_token_changes_removed_by_formatter_budget(): void {
+		$baseline_signature = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				[
+					'patterns'    => [],
+					'themeTokens' => [
+						'layout'          => [
+							'content' => str_repeat( 'x', 2100 ),
+						],
+						'enabledFeatures' => [
+							'backgroundColor' => true,
+						],
+					],
+				],
+			]
+		);
+		$changed_signature  = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				[
+					'patterns'    => [],
+					'themeTokens' => [
+						'layout'          => [
+							'content' => str_repeat( 'y', 2100 ),
+						],
+						'enabledFeatures' => [
+							'backgroundColor' => true,
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame( $baseline_signature, $changed_signature );
+	}
+
+	public function test_template_review_signature_changes_when_server_template_inventory_changes(): void {
+		$baseline_signature = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				$this->build_template_review_signature_context(),
+			]
+		);
+		$changed_signature  = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				$this->build_template_review_signature_context(
+					[
+						'allowedAreas'  => [ 'footer', 'header' ],
+						'availableParts' => [
+							[
+								'slug'  => 'site-header',
+								'title' => 'Site Header',
+								'area'  => 'header',
+							],
+							[
+								'slug'  => 'footer-secondary',
+								'title' => 'Footer Secondary',
+								'area'  => 'footer',
+							],
+						],
+					]
+				),
+			]
+		);
+
+		$this->assertNotSame( $baseline_signature, $changed_signature );
+	}
+
+	public function test_template_review_signature_changes_when_template_identity_changes(): void {
+		$baseline_signature = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				$this->build_template_review_signature_context(),
+			]
+		);
+		$changed_signature  = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_review_context_signature',
+			[
+				$this->build_template_review_signature_context(
+					[
+						'templateType' => 'front-page',
+						'title'        => 'Front Page',
+					]
+				),
+			]
+		);
+
+		$this->assertNotSame( $baseline_signature, $changed_signature );
+	}
+
+	public function test_template_part_review_signature_changes_when_template_part_identity_changes(): void {
+		$baseline_signature = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_part_review_context_signature',
+			[
+				$this->build_template_part_review_signature_context(),
+			]
+		);
+		$changed_signature  = $this->invoke_private_string_method(
+			TemplateAbilities::class,
+			'build_template_part_review_context_signature',
+			[
+				$this->build_template_part_review_signature_context(
+					[
+						'title' => 'Utility Header',
+						'area'  => 'navigation-overlay',
+					]
+				),
+			]
+		);
+
+		$this->assertNotSame( $baseline_signature, $changed_signature );
+	}
+
+	/**
+	 * @return array<string, array<int, array<string, mixed>>>
+	 */
+	public static function template_review_theme_token_signature_provider(): array {
+		return [
+			'gradients'          => [
+				[],
+				[
+					'gradients' => [ 'hero: linear-gradient(180deg, #fff, #ddd)' ],
+				],
+			],
+			'shadows'            => [
+				[],
+				[
+					'shadows' => [ 'natural: 6px 6px 9px rgba(0,0,0,0.2)' ],
+				],
+			],
+			'preset refs'        => [
+				[],
+				[
+					'colorPresets' => [
+						[
+							'slug'   => 'accent',
+							'cssVar' => 'var(--wp--preset--color--accent)',
+						],
+					],
+				],
+			],
+			'layout'             => [
+				[],
+				[
+					'layout' => [
+						'content'                       => '650px',
+						'wide'                          => '1200px',
+						'allowEditing'                  => true,
+						'allowCustomContentAndWideSize' => true,
+					],
+				],
+			],
+			'enabled features'   => [
+				[],
+				[
+					'enabledFeatures' => [
+						'backgroundColor' => true,
+						'textColor'       => true,
+					],
+				],
+			],
+			'element style keys' => [
+				[],
+				[
+					'elementStyles' => [
+						'link'   => [ 'color' => [ 'text' => '#ff5500' ] ],
+						'button' => [ 'color' => [ 'text' => '#ffffff' ] ],
+					],
+				],
+			],
+		];
 	}
 
 	private function register_pattern( string $name, array $properties ): void {
@@ -276,6 +514,58 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertIsString( $result );
 
 		return $result;
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function build_template_review_signature_context( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'templateType'  => 'home',
+				'title'         => 'Home',
+				'assignedParts' => [
+					[
+						'slug' => 'site-header',
+						'area' => 'header',
+					],
+				],
+				'allowedAreas'  => [ 'header' ],
+				'availableParts' => [
+					[
+						'slug'  => 'site-header',
+						'title' => 'Site Header',
+						'area'  => 'header',
+					],
+					[
+						'slug'  => 'footer-main',
+						'title' => 'Footer Main',
+						'area'  => 'footer',
+					],
+				],
+				'patterns'      => [],
+				'themeTokens'   => [],
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function build_template_part_review_signature_context( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'slug'       => 'header',
+				'title'      => 'Header',
+				'area'       => 'header',
+				'patterns'   => [],
+				'themeTokens' => [],
+			],
+			$overrides
+		);
 	}
 
 	/**

@@ -33,9 +33,18 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `buildNavigationFetchInput()` extracts the prompt, menu ID, and/or serialized navigation markup
 3. `fetchNavigationRecommendations()` in the `flavor-agent` store posts the request to `POST /flavor-agent/v1/recommend-navigation`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_navigation()` adapts the request to `FlavorAgent\Abilities\NavigationAbilities::recommend_navigation()`
-5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, builds prompt text through `FlavorAgent\LLM\NavigationPrompt`, optionally adds WordPress docs grounding, and calls `ResponsesClient::rank()`
-6. The parsed response returns advisory suggestion groups plus an explanation string
+5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, computes a docs-free `reviewContextSignature`, returns early for signature-only revalidation, and only then builds prompt text, optionally adds WordPress docs grounding, and calls `ResponsesClient::rank()`
+6. The parsed response returns advisory suggestion groups, an explanation string, and a `reviewContextSignature`
 7. The store caches the result against the current block client ID and the UI renders suggestion cards and per-change rows
+
+## Server Review Freshness
+
+Navigation participates in the server review-freshness contract even though it is advisory-only. This is important because `ref`-based (saved) menus can drift server-side in ways the client cannot observe:
+
+1. When a stored `ready` result is displayed, the UI triggers a background `resolveSignatureOnly` request via `revalidateNavigationReviewFreshness()`
+2. The backend resolves the server context that participates in review freshness (menu structure, target inventory, overlay parts, overlay context, and theme tokens) and returns only the `reviewContextSignature` hash — no docs lookup or model call is made
+3. If the returned signature differs from the stored result's `reviewContextSignature`, the UI marks the result as stale and exposes a refresh affordance
+4. Full recommendation requests still collect docs grounding after the signature-only fast path, but docs churn alone does not make a stored navigation result stale
 
 ## What This Surface Can Do
 
@@ -53,6 +62,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
 - The panel clears results when the selected block changes to a different navigation scope, but when the same selected navigation block drifts in place it now preserves the previous result as stale reference material and exposes a refresh affordance
 - If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled
+- Background `resolveSignatureOnly` revalidation detects server-side drift (e.g., saved menu changes, overlay-part changes, or theme token updates) and marks stored results as stale; this costs a server round-trip and context collection but no model call
 
 ## Primary Functions And Handlers
 
@@ -61,8 +71,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | UI shell | `NavigationRecommendations()` in `src/inspector/NavigationRecommendations.js` | Renders the advisory navigation section inside block recommendations |
 | Input builder | `buildNavigationFetchInput()` | Normalizes the request contract from the selected navigation block |
 | Store request | `fetchNavigationRecommendations()` in `src/store/index.js` | Sends the request and stores block-scoped results |
+| Store revalidation | `revalidateNavigationReviewFreshness()` in `src/store/index.js` | Background `resolveSignatureOnly` check for server-side drift |
 | REST handler | `Agent_Controller::handle_recommend_navigation()` | Adapts the REST request to the backend ability |
-| Backend ability | `NavigationAbilities::recommend_navigation()` | Builds context, prompt, and parsed advisory output |
+| Backend ability | `NavigationAbilities::recommend_navigation()` | Builds context, prompt, and parsed advisory output; returns `reviewContextSignature` |
 | Prompt contract | `NavigationPrompt::build_user()` / `NavigationPrompt::parse_response()` | Defines the structure of the returned guidance |
 
 ## Related Routes And Abilities

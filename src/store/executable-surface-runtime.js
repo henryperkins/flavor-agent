@@ -237,6 +237,7 @@ export function createExecutableSurfaceReviewFreshnessAction( {
 			);
 
 			try {
+				// Server review freshness is based on docs-free server context, not grounded prompt churn.
 				const result = await apiFetch( {
 					path: endpoint,
 					method: 'POST',

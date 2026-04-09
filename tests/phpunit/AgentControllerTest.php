@@ -1886,6 +1886,10 @@ final class AgentControllerTest extends TestCase {
 			'The top-level navigation is crowded.',
 			$response->get_data()['explanation'] ?? ''
 		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
+		);
 
 		$request_body = json_decode(
 			(string) ( WordPressTestState::$last_remote_post['args']['body'] ?? '' ),
@@ -1956,6 +1960,68 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( 'request_diagnostic', $entries[0]['type'] ?? null );
 		$this->assertSame( 'navigation', $entries[0]['surface'] ?? null );
 		$this->assertSame( 'nav-1', $entries[0]['target']['clientId'] ?? null );
+	}
+
+	public function test_handle_recommend_navigation_signature_only_returns_minimal_payload_and_skips_model_call(): void {
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-navigation' );
+		$request->set_param( 'blockClientId', 'nav-1' );
+		$request->set_param(
+			'navigationMarkup',
+			'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->'
+		);
+		$request->set_param( 'prompt', 'Simplify the header navigation.' );
+		$request->set_param( 'resolveSignatureOnly', true );
+
+		$response = Agent_Controller::handle_recommend_navigation( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'reviewContextSignature' => $response->get_data()['reviewContextSignature'] ?? null,
+			],
+			$response->get_data()
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $response->get_data()['reviewContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_handle_recommend_navigation_signature_only_failure_stays_quiet(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-navigation' );
+		$request->set_param( 'blockClientId', 'nav-1' );
+		$request->set_param( 'menuId', 999 );
+		$request->set_param( 'resolveSignatureOnly', true );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_navigation( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'navigation_not_found', $response->get_error_code() );
+		$this->assertSame(
+			'flavor-agent/recommend-navigation',
+			$response->get_error_data()['requestMeta']['ability'] ?? null
+		);
+		$this->assertSame(
+			'POST /flavor-agent/v1/recommend-navigation',
+			$response->get_error_data()['requestMeta']['route'] ?? null
+		);
+		$this->assertSame(
+			[],
+			ActivityRepository::query( [ 'scopeKey' => 'wp_template:theme//home' ] )
+		);
 	}
 
 	public function test_handle_sync_patterns_appends_sync_route_metadata(): void {

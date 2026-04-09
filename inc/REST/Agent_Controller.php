@@ -219,6 +219,11 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'resolveSignatureOnly' => [
+						'required'          => false,
+						'type'              => 'boolean',
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					],
 					'editorContext'    => [
 						'required'          => false,
 						'type'              => 'object',
@@ -817,8 +822,11 @@ final class Agent_Controller {
 	 * Handle POST /recommend-navigation with a thin ability adapter.
 	 */
 	public static function handle_recommend_navigation( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$input   = [];
-		$menu_id = \max( 0, (int) $request->get_param( 'menuId' ) );
+		$resolve_signature_only = self::is_signature_only_request( $request );
+		$input                  = [
+			'resolveSignatureOnly' => $resolve_signature_only,
+		];
+		$menu_id                = \max( 0, (int) $request->get_param( 'menuId' ) );
 
 		if ( $menu_id > 0 ) {
 			$input['menuId'] = $menu_id;
@@ -845,19 +853,26 @@ final class Agent_Controller {
 
 		if ( \is_wp_error( $result ) ) {
 			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-navigation' );
-			self::persist_request_diagnostic_failure_activity(
-				'navigation',
-				$result,
-				self::sanitize_activity_document( $request->get_param( 'document' ) ),
-				[
-					'clientId'  => sanitize_text_field( (string) $request->get_param( 'blockClientId' ) ),
-					'blockName' => 'core/navigation',
-					'menuId'    => $menu_id > 0 ? $menu_id : 0,
-				],
-				$input
-			);
+
+			if ( ! $resolve_signature_only ) {
+				self::persist_request_diagnostic_failure_activity(
+					'navigation',
+					$result,
+					self::sanitize_activity_document( $request->get_param( 'document' ) ),
+					[
+						'clientId'  => sanitize_text_field( (string) $request->get_param( 'blockClientId' ) ),
+						'blockName' => 'core/navigation',
+						'menuId'    => $menu_id > 0 ? $menu_id : 0,
+					],
+					$input
+				);
+			}
 
 			return $result;
+		}
+
+		if ( $resolve_signature_only ) {
+			return new \WP_REST_Response( $result, 200 );
 		}
 
 		$payload = self::append_request_meta_for_route( $result, 'recommend-navigation' );

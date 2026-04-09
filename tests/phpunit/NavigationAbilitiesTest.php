@@ -5,16 +5,26 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\NavigationAbilities;
+use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\NavigationPrompt;
 use PHPUnit\Framework\TestCase;
 use FlavorAgent\Tests\Support\WordPressTestState;
 
 final class NavigationAbilitiesTest extends TestCase {
 
+	/** @var callable */
+	private $disable_public_docs_filter;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->disable_public_docs_filter    = static fn(): string => '';
+		\add_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			$this->disable_public_docs_filter
+		);
 		WordPressTestState::$block_templates = [
 			'wp_template_part' => [
 				(object) [
@@ -39,6 +49,15 @@ final class NavigationAbilitiesTest extends TestCase {
 		];
 	}
 
+	protected function tearDown(): void {
+		\remove_filter(
+			'flavor_agent_cloudflare_ai_search_public_search_url',
+			$this->disable_public_docs_filter
+		);
+
+		parent::tearDown();
+	}
+
 	public function test_recommend_navigation_rejects_missing_input(): void {
 		$result = NavigationAbilities::recommend_navigation( [] );
 
@@ -59,6 +78,231 @@ final class NavigationAbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'missing_navigation_input', $result->get_error_code() );
+	}
+
+	public function test_recommend_navigation_resolve_signature_only_returns_review_signature(): void {
+		$result = NavigationAbilities::recommend_navigation(
+			[
+				'navigationMarkup'     => '<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
+				'prompt'               => 'Simplify the header navigation.',
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				'reviewContextSignature' => $result['reviewContextSignature'] ?? null,
+			],
+			$result
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $result['reviewContextSignature'] ?? '' )
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_navigation_review_signature_changes_when_theme_constraints_change(): void {
+		$method = new \ReflectionMethod( NavigationAbilities::class, 'build_review_context_signature' );
+		$method->setAccessible( true );
+
+		$baseline_signature = $method->invoke(
+			null,
+			[
+				'location'    => 'header',
+				'themeTokens' => [],
+			]
+		);
+		$changed_signature  = $method->invoke(
+			null,
+			[
+				'location'    => 'header',
+				'themeTokens' => [
+					'layout'          => [
+						'content'                       => '650px',
+						'wide'                          => '1200px',
+						'allowEditing'                  => false,
+						'allowCustomContentAndWideSize' => false,
+					],
+					'enabledFeatures' => [
+						'backgroundColor' => false,
+						'textColor'       => true,
+					],
+				],
+			]
+		);
+
+		$this->assertIsString( $baseline_signature );
+		$this->assertIsString( $changed_signature );
+		$this->assertNotSame( $baseline_signature, $changed_signature );
+	}
+
+	public function test_navigation_review_signature_ignores_overlay_ordering_changes(): void {
+		$method = new \ReflectionMethod( NavigationAbilities::class, 'build_review_context_signature' );
+		$method->setAccessible( true );
+
+		$baseline_signature = $method->invoke(
+			null,
+			[
+				'location'       => 'header',
+				'overlayContext' => [
+					'usesOverlay'                  => true,
+					'overlayMode'                  => 'mobile',
+					'hasDedicatedOverlayParts'     => true,
+					'overlayTemplatePartCount'     => 2,
+					'overlayTemplatePartSlugs'     => [ 'mobile-overlay', 'header-overlay' ],
+					'siteHasDedicatedOverlayParts' => true,
+					'siteOverlayTemplatePartCount' => 2,
+					'siteOverlayTemplatePartSlugs' => [ 'mobile-overlay', 'header-overlay' ],
+					'overlayReferenceScope'        => 'scoped',
+					'overlayReferenceSource'       => 'location-heuristic',
+				],
+				'overlayTemplateParts' => [
+					[
+						'slug'  => 'mobile-overlay',
+						'title' => 'Mobile Overlay',
+					],
+					[
+						'slug'  => 'header-overlay',
+						'title' => 'Header Overlay',
+					],
+				],
+			]
+		);
+		$changed_signature  = $method->invoke(
+			null,
+			[
+				'location'       => 'header',
+				'overlayContext' => [
+					'usesOverlay'                  => true,
+					'overlayMode'                  => 'mobile',
+					'hasDedicatedOverlayParts'     => true,
+					'overlayTemplatePartCount'     => 2,
+					'overlayTemplatePartSlugs'     => [ 'header-overlay', 'mobile-overlay' ],
+					'siteHasDedicatedOverlayParts' => true,
+					'siteOverlayTemplatePartCount' => 2,
+					'siteOverlayTemplatePartSlugs' => [ 'header-overlay', 'mobile-overlay' ],
+					'overlayReferenceScope'        => 'scoped',
+					'overlayReferenceSource'       => 'location-heuristic',
+				],
+				'overlayTemplateParts' => [
+					[
+						'slug'  => 'header-overlay',
+						'title' => 'Header Overlay',
+					],
+					[
+						'slug'  => 'mobile-overlay',
+						'title' => 'Mobile Overlay',
+					],
+				],
+			]
+		);
+
+		$this->assertIsString( $baseline_signature );
+		$this->assertIsString( $changed_signature );
+		$this->assertSame( $baseline_signature, $changed_signature );
+	}
+
+	public function test_recommend_navigation_review_signature_ignores_docs_guidance_changes(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		$input   = [
+			'navigationMarkup'     => '<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home","url":"/"} /--><!-- /wp:navigation -->',
+			'prompt'               => 'Simplify the header navigation.',
+			'resolveSignatureOnly' => true,
+		];
+		$context = ServerCollector::for_navigation( 0, $input['navigationMarkup'], [] );
+		$this->assertIsArray( $context );
+
+		$query_method = new \ReflectionMethod( NavigationAbilities::class, 'build_wordpress_docs_query' );
+		$query_method->setAccessible( true );
+		$query = $query_method->invoke( null, $context, $input['prompt'] );
+
+		$cache_key_method = new \ReflectionMethod( AISearchClient::class, 'build_cache_key' );
+		$cache_key_method->setAccessible( true );
+		$cache_key = $cache_key_method->invoke( null, $query, 4 );
+
+		WordPressTestState::$transients[ $cache_key ] = [
+			[
+				'id'        => 'nav-a',
+				'title'     => 'Navigation reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Use responsive overlay menus for large navigation sets.',
+				'score'     => 0.91,
+			],
+		];
+
+		$baseline = NavigationAbilities::recommend_navigation( $input );
+
+		WordPressTestState::$transients[ $cache_key ] = [
+			[
+				'id'        => 'nav-b',
+				'title'     => 'Navigation accessibility',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Keep top-level navigation labels short and predictable for keyboard users.',
+				'score'     => 0.93,
+			],
+		];
+		WordPressTestState::$last_remote_post         = [];
+
+		$changed = NavigationAbilities::recommend_navigation( $input );
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_navigation_review_signature_changes_when_saved_menu_structure_changes_for_ref_only_markup(): void {
+		$input = [
+			'menuId'               => 42,
+			'navigationMarkup'     => '<!-- wp:navigation {"ref":42} /-->',
+			'prompt'               => 'Simplify the header navigation.',
+			'resolveSignatureOnly' => true,
+		];
+
+		WordPressTestState::$posts[42] = (object) [
+			'ID'           => 42,
+			'post_type'    => 'wp_navigation',
+			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->'
+				. '<!-- wp:navigation-link {"label":"Contact","url":"/contact"} /-->',
+		];
+
+		$baseline_result = NavigationAbilities::recommend_navigation( $input );
+
+		WordPressTestState::$posts[42]->post_content =
+			'<!-- wp:navigation-link {"label":"Home","url":"/"} /-->'
+			. '<!-- wp:navigation-submenu {"label":"Company","url":"/company"} -->'
+			. '<!-- wp:navigation-link {"label":"Team","url":"/company/team"} /-->'
+			. '<!-- /wp:navigation-submenu -->';
+
+		$changed_result = NavigationAbilities::recommend_navigation( $input );
+
+		$this->assertIsArray( $baseline_result );
+		$this->assertIsArray( $changed_result );
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $baseline_result['reviewContextSignature'] ?? '' )
+		);
+		$this->assertMatchesRegularExpression(
+			'/^[a-f0-9]{64}$/',
+			(string) ( $changed_result['reviewContextSignature'] ?? '' )
+		);
+		$this->assertNotSame(
+			$baseline_result['reviewContextSignature'] ?? null,
+			$changed_result['reviewContextSignature'] ?? null
+		);
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_build_wordpress_docs_query_includes_nested_navigation_guidance_for_deep_menus(): void {

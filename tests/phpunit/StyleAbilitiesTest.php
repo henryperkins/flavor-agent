@@ -19,7 +19,7 @@ final class StyleAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter = static fn(): string => '';
+		$this->disable_public_docs_filter    = static fn(): string => '';
 		\add_filter(
 			'flavor_agent_cloudflare_ai_search_public_search_url',
 			$this->disable_public_docs_filter
@@ -240,18 +240,18 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_recommend_style_resolve_signature_only_changes_review_signature_but_not_resolved_signature_when_docs_guidance_changes(): void {
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+	public function test_recommend_style_resolve_signature_only_ignores_docs_guidance_changes(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id']  = 'account-123';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']   = 'token-xyz';
 
 		$input = [
-			'scope'        => [
+			'scope'                => [
 				'surface'        => 'global-styles',
 				'scopeKey'       => 'global_styles:17',
 				'globalStylesId' => '17',
 			],
-			'styleContext' => [
+			'styleContext'         => [
 				'currentConfig'         => [ 'styles' => [] ],
 				'mergedConfig'          => [ 'styles' => [] ],
 				'availableVariations'   => [],
@@ -261,7 +261,7 @@ final class StyleAbilitiesTest extends TestCase {
 					'reason'      => 'stable-parity',
 				],
 			],
-			'prompt'       => 'Keep the palette restrained.',
+			'prompt'               => 'Keep the palette restrained.',
 			'resolveSignatureOnly' => true,
 		];
 
@@ -323,7 +323,7 @@ final class StyleAbilitiesTest extends TestCase {
 				'score'     => 0.93,
 			],
 		];
-		WordPressTestState::$last_remote_post = [];
+		WordPressTestState::$last_remote_post                                  = [];
 
 		$with_docs = StyleAbilities::recommend_style( $input );
 
@@ -339,7 +339,7 @@ final class StyleAbilitiesTest extends TestCase {
 			$baseline['resolvedContextSignature'] ?? null,
 			$with_docs['resolvedContextSignature'] ?? null
 		);
-		$this->assertNotSame(
+		$this->assertSame(
 			$baseline['reviewContextSignature'] ?? null,
 			$with_docs['reviewContextSignature'] ?? null
 		);
@@ -675,7 +675,7 @@ final class StyleAbilitiesTest extends TestCase {
 							],
 						],
 					],
-					'designSemantics'      => [
+					'designSemantics'       => [
 						'surface'          => 'style-book',
 						'targetBlockName'  => 'core/paragraph',
 						'occurrenceCount'  => 1,
@@ -818,9 +818,9 @@ final class StyleAbilitiesTest extends TestCase {
 							[
 								'name' => 'core/site-title',
 							],
-							],
 						],
 					],
+				],
 				'designSemantics'       => [
 					'surface'            => 'global-styles',
 					'templateType'       => 'home',

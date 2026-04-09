@@ -23,7 +23,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
 - Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the same shared status notice pattern as block and template
 - Suggestions that fail deterministic validation stay visible in the shared advisory shell so the user can still review focus blocks and pattern ideas without getting an apply affordance
-- Template-part freshness also uses a stored server `resolvedContextSignature`, so apply is blocked when the server-resolved apply context drifts even if the local request signature still matches. Docs warming alone does not invalidate apply.
+- Template-part freshness uses the local request signature plus docs-free server review/apply hashes. PHP stores `reviewContextSignature` for background review revalidation and `resolvedContextSignature` for apply safety, so docs warming alone does not invalidate either server freshness check.
 
 ## End-To-End Flow
 
@@ -31,7 +31,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. The component builds the request through `buildTemplatePartFetchInput()`, including `visiblePatternNames` plus a full live template-part structure snapshot from `buildEditorTemplatePartStructureSnapshot()`
 3. `fetchTemplatePartRecommendations()` in the store posts the request to `POST /flavor-agent/v1/recommend-template-part`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template_part()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template_part()`
-5. `TemplateAbilities::recommend_template_part()` gathers canonical template-part metadata through `ServerCollector::for_template_part()`, atomically overlays the live unsaved structural slice from the editor, validates path-based targets and anchors against the full live path index, computes `resolvedContextSignature` from that server-normalized apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then scopes docs grounding with `currentPatternOverrides` before calling `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
+5. `TemplateAbilities::recommend_template_part()` gathers canonical template-part metadata through `ServerCollector::for_template_part()`, atomically overlays the live unsaved structural slice from the editor, validates path-based targets and anchors against the full live path index, computes a docs-free `reviewContextSignature` from the server review context and `resolvedContextSignature` from the apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then scopes docs grounding with `currentPatternOverrides` before calling `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePartPrompt`
 6. The parsed response returns explanation text, advisory `blockHints`, advisory `patternSuggestions`, and optional structured `operations`
 7. `buildTemplatePartSuggestionViewModel()` validates the operation sequence before the UI offers preview or apply controls
 8. The user can jump to focus blocks through path-based selection links, browse suggested patterns in the inserter, open the shared lower review panel for validated operations, and confirm apply
@@ -219,8 +219,8 @@ The prompt-facing `blockTree` may stay summarized, but `editorStructure.allBlock
 ## Request Freshness And Server Revalidation
 
 - The panel still computes a local request signature from `templatePartRef + prompt + contextSignature` so stale review cards are detected immediately when the prompt or live structure drifts.
-- Normal template-part responses also store a PHP-computed `resolvedContextSignature` based on the server-normalized structural apply context plus the sanitized prompt after live overlays and server-only context have been resolved.
-- `applyTemplatePartSuggestion()` keeps the local stale guard first, then re-posts the same request with `resolveSignatureOnly: true` and only allows apply when the current `resolvedContextSignature` still matches the stored result.
+- Normal template-part responses now also store docs-free `reviewContextSignature` and a PHP-computed `resolvedContextSignature`. The review hash is used by background `revalidateTemplatePartReviewFreshness()` checks, while the resolved hash is based on the server-normalized structural apply context plus the sanitized prompt after live overlays and server-only context have been resolved.
+- `applyTemplatePartSuggestion()` keeps the local stale guard first, then re-posts the same request with `resolveSignatureOnly: true` and only allows apply when the current `resolvedContextSignature` still matches the stored result; review revalidation compares `reviewContextSignature` without treating docs grounding churn as stale state.
 - Template-part docs grounding now uses `currentPatternOverrides` in the query text, while the family cache key stays coarse and records only bounded override booleans and counters.
 
 ## Example Preview Contract

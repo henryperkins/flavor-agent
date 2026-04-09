@@ -23,7 +23,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The strongest validated suggestion now appears first in a shared recommendation hero; executable suggestions stay in the `Review first` lane and non-deterministic ideas move to `Manual ideas`
 - Preview uses the shared `AIReviewSection` shell in a dedicated lower panel and post-apply / post-undo feedback uses the shared status notice pattern
 - Executable suggestions still require validated operations, while advisory-only suggestions survive server-side parsing when their template-part or pattern summaries validate without a safe deterministic apply path
-- Template freshness now uses both the local request signature and a server `resolvedContextSignature` hashed from the canonical server-normalized template apply context plus the sanitized prompt after live slot overlays are applied. Docs warming alone does not invalidate apply.
+- Template freshness now uses the local request signature plus docs-free server review/apply hashes. PHP stores `reviewContextSignature` for background review revalidation and `resolvedContextSignature` for apply safety, so docs warming alone does not invalidate either server freshness check.
 
 ## End-To-End Flow
 
@@ -31,7 +31,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. The component derives editor slot state through `buildEditorTemplateSlotSnapshot()`, captures the template-global `visiblePatternNames`, and always sends an explicit live template snapshot through `buildEditorTemplateTopLevelStructureSnapshot()`, including zeroed empty-state stats, live pattern-override summaries, and viewport-visibility summaries
 3. `buildTemplateFetchInput()` creates the request payload and `fetchTemplateRecommendations()` posts it to `POST /flavor-agent/v1/recommend-template`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_template()` adapts the request to `FlavorAgent\Abilities\TemplateAbilities::recommend_template()`
-5. `TemplateAbilities::recommend_template()` gathers canonical template metadata through `ServerCollector::for_template()`, atomically overlays the mutable live slot and structure slices from the editor, merges effective `allowedAreas` from server-known capabilities plus unsaved live areas, computes `resolvedContextSignature` from that server-normalized apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then scopes docs grounding with bounded `visiblePatternNames` before calling `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
+5. `TemplateAbilities::recommend_template()` gathers canonical template metadata through `ServerCollector::for_template()`, atomically overlays the mutable live slot and structure slices from the editor, merges effective `allowedAreas` from server-known capabilities plus unsaved live areas, computes a docs-free `reviewContextSignature` from the server review context and `resolvedContextSignature` from the apply context plus the sanitized prompt, returns early for signature-only revalidation, and only then scopes docs grounding with bounded `visiblePatternNames` before calling `ResponsesClient::rank()` through `FlavorAgent\LLM\TemplatePrompt`
 6. The parsed response returns up to three suggestion cards, preserving validated structured operations for executable ideas and validated summaries for advisory ideas
 7. The UI builds an entity map so template-part slugs, areas, and pattern names inside descriptions and explanations become clickable actions
 8. Selecting an executable suggestion opens the shared lower review panel, which shows the exact validated operations that would run if the user confirms apply
@@ -163,8 +163,8 @@ User prompt in wp_template editor
 ## Request Freshness And Server Revalidation
 
 - The panel still computes a local request signature from `templateRef + prompt + contextSignature` so stale cards can stay visible immediately when the prompt or live editor snapshot drifts.
-- Normal template responses now also store `resolvedContextSignature`, which is computed in PHP from the canonical server-normalized template apply context plus the sanitized prompt after live overlays and server-only context such as theme tokens and pattern candidates have been resolved.
-- `applyTemplateSuggestion()` keeps the current client-side stale guard first. If the local request signature still matches, it re-posts the same request with `resolveSignatureOnly: true` and only allows apply when the returned `resolvedContextSignature` still matches the stored result.
+- Normal template responses now also store docs-free `reviewContextSignature` and `resolvedContextSignature`. The review hash is used by background `revalidateTemplateReviewFreshness()` checks, while the resolved hash is computed in PHP from the canonical server-normalized template apply context plus the sanitized prompt after live overlays and server-only context such as theme tokens and pattern candidates have been resolved.
+- `applyTemplateSuggestion()` keeps the current client-side stale guard first. If the local request signature still matches, it re-posts the same request with `resolveSignatureOnly: true` and only allows apply when the returned `resolvedContextSignature` still matches the stored result; review revalidation compares `reviewContextSignature` without treating docs grounding churn as stale state.
 - Template docs grounding uses `visiblePatternNames` in the query text, but the family cache key stays coarse and only records bounded booleans and counters such as `hasVisiblePatternScope` and `visiblePatternCount`.
 
 ## Example Preview Contract

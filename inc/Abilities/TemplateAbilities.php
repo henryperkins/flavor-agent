@@ -9,6 +9,7 @@ use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
+use FlavorAgent\LLM\ThemeTokenFormatter;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
 use FlavorAgent\Support\RecommendationResolvedSignature;
@@ -18,11 +19,8 @@ use FlavorAgent\Support\StringArray;
 final class TemplateAbilities {
 	use NormalizesInput;
 
-	private const REVIEW_DOCS_GUIDANCE_LIMIT         = 3;
 	private const REVIEW_TEMPLATE_PATTERN_LIMIT      = 30;
 	private const REVIEW_TEMPLATE_PART_PATTERN_LIMIT = 30;
-	private const REVIEW_THEME_TOKEN_COLOR_LIMIT     = 12;
-	private const REVIEW_THEME_TOKEN_SPACING_LIMIT   = 7;
 
 	public static function list_template_parts( mixed $input ): array {
 		$input = self::normalize_input( $input );
@@ -42,7 +40,7 @@ final class TemplateAbilities {
 	 * @return array|\WP_Error Suggestions payload or error.
 	 */
 	public static function recommend_template( mixed $input ): array|\WP_Error {
-		$input = self::normalize_input( $input );
+		$input                  = self::normalize_input( $input );
 		$resolve_signature_only = filter_var(
 			$input['resolveSignatureOnly'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
@@ -89,11 +87,7 @@ final class TemplateAbilities {
 			]
 		);
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
-		$review_context_signature = self::build_template_review_context_signature(
-			$context,
-			$docs_guidance
-		);
+		$review_context_signature = self::build_template_review_context_signature( $context );
 
 		if ( $resolve_signature_only ) {
 			return [
@@ -102,6 +96,7 @@ final class TemplateAbilities {
 			];
 		}
 
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
 		$system        = TemplatePrompt::build_system();
 		$user          = TemplatePrompt::build_user(
 			$context,
@@ -134,7 +129,7 @@ final class TemplateAbilities {
 	 * @return array|\WP_Error Suggestions payload or error.
 	 */
 	public static function recommend_template_part( mixed $input ): array|\WP_Error {
-		$input = self::normalize_input( $input );
+		$input                  = self::normalize_input( $input );
 		$resolve_signature_only = filter_var(
 			$input['resolveSignatureOnly'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
@@ -176,11 +171,7 @@ final class TemplateAbilities {
 			]
 		);
 
-		$docs_guidance = self::collect_template_part_wordpress_docs_guidance( $context, $prompt );
-		$review_context_signature = self::build_template_part_review_context_signature(
-			$context,
-			$docs_guidance
-		);
+		$review_context_signature = self::build_template_part_review_context_signature( $context );
 
 		if ( $resolve_signature_only ) {
 			return [
@@ -189,6 +180,7 @@ final class TemplateAbilities {
 			];
 		}
 
+		$docs_guidance = self::collect_template_part_wordpress_docs_guidance( $context, $prompt );
 		$system        = TemplatePartPrompt::build_system();
 		$user          = TemplatePartPrompt::build_user(
 			$context,
@@ -413,7 +405,7 @@ final class TemplateAbilities {
 		}
 
 		if ( array_key_exists( 'currentPatternOverrides', $input ) ) {
-			$overrides = self::normalize_pattern_override_summary(
+			$overrides                         = self::normalize_pattern_override_summary(
 				$input['currentPatternOverrides']
 			);
 			$result['currentPatternOverrides'] = $has_live_path_coverage
@@ -735,22 +727,22 @@ final class TemplateAbilities {
 		}
 
 		return [
-			'blockCount'          => max( 0, (int) ( $input['blockCount'] ?? 0 ) ),
-			'maxDepth'            => max( 0, (int) ( $input['maxDepth'] ?? 0 ) ),
-			'hasNavigation'       => ! empty( $input['hasNavigation'] ),
-			'containsLogo'        => ! empty( $input['containsLogo'] ),
-			'containsSiteTitle'   => ! empty( $input['containsSiteTitle'] ),
-			'containsSearch'      => ! empty( $input['containsSearch'] ),
-			'containsSocialLinks' => ! empty( $input['containsSocialLinks'] ),
-			'containsQuery'       => ! empty( $input['containsQuery'] ),
-			'containsColumns'     => ! empty( $input['containsColumns'] ),
-			'containsButtons'     => ! empty( $input['containsButtons'] ),
-			'containsSpacer'      => ! empty( $input['containsSpacer'] ),
-			'containsSeparator'   => ! empty( $input['containsSeparator'] ),
-			'firstTopLevelBlock'  => sanitize_text_field( (string) ( $input['firstTopLevelBlock'] ?? '' ) ),
-			'lastTopLevelBlock'   => sanitize_text_field( (string) ( $input['lastTopLevelBlock'] ?? '' ) ),
+			'blockCount'            => max( 0, (int) ( $input['blockCount'] ?? 0 ) ),
+			'maxDepth'              => max( 0, (int) ( $input['maxDepth'] ?? 0 ) ),
+			'hasNavigation'         => ! empty( $input['hasNavigation'] ),
+			'containsLogo'          => ! empty( $input['containsLogo'] ),
+			'containsSiteTitle'     => ! empty( $input['containsSiteTitle'] ),
+			'containsSearch'        => ! empty( $input['containsSearch'] ),
+			'containsSocialLinks'   => ! empty( $input['containsSocialLinks'] ),
+			'containsQuery'         => ! empty( $input['containsQuery'] ),
+			'containsColumns'       => ! empty( $input['containsColumns'] ),
+			'containsButtons'       => ! empty( $input['containsButtons'] ),
+			'containsSpacer'        => ! empty( $input['containsSpacer'] ),
+			'containsSeparator'     => ! empty( $input['containsSeparator'] ),
+			'firstTopLevelBlock'    => sanitize_text_field( (string) ( $input['firstTopLevelBlock'] ?? '' ) ),
+			'lastTopLevelBlock'     => sanitize_text_field( (string) ( $input['lastTopLevelBlock'] ?? '' ) ),
 			'hasSingleWrapperGroup' => ! empty( $input['hasSingleWrapperGroup'] ),
-			'isNearlyEmpty'       => ! empty( $input['isNearlyEmpty'] ),
+			'isNearlyEmpty'         => ! empty( $input['isNearlyEmpty'] ),
 		];
 	}
 
@@ -1249,19 +1241,19 @@ final class TemplateAbilities {
 
 		$result         = [];
 		$allowed_fields = [
-			'tagName'         => 'text',
-			'align'           => 'text',
-			'overlayMenu'     => 'text',
-			'maxNestingLevel' => 'int',
-			'showSubmenuIcon' => 'bool',
-			'placeholder'     => 'text',
-			'slug'            => 'key',
-			'area'            => 'key',
-			'ref'             => 'int',
-			'templateLock'    => 'text',
-			'layoutType'      => 'text',
+			'tagName'              => 'text',
+			'align'                => 'text',
+			'overlayMenu'          => 'text',
+			'maxNestingLevel'      => 'int',
+			'showSubmenuIcon'      => 'bool',
+			'placeholder'          => 'text',
+			'slug'                 => 'key',
+			'area'                 => 'key',
+			'ref'                  => 'int',
+			'templateLock'         => 'text',
+			'layoutType'           => 'text',
 			'layoutJustifyContent' => 'text',
-			'layoutOrientation' => 'text',
+			'layoutOrientation'    => 'text',
 		];
 
 		foreach ( $allowed_fields as $field => $type ) {
@@ -1400,35 +1392,53 @@ final class TemplateAbilities {
 		return array_values( $anchors );
 	}
 
-	private static function build_template_review_context_signature( array $context, array $docs_guidance ): string {
+	private static function build_template_review_context_signature( array $context ): string {
+		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
+		$payload      = [
+			'template'      => self::normalize_template_review_identity( $context ),
+			'allowedAreas'  => self::normalize_template_review_allowed_areas(
+				is_array( $context['allowedAreas'] ?? null ) ? $context['allowedAreas'] : []
+			),
+			'availableParts' => self::normalize_template_review_available_parts( $context ),
+			'patterns' => self::normalize_template_review_patterns(
+				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
+				self::REVIEW_TEMPLATE_PATTERN_LIMIT
+			),
+		];
+		$theme_tokens = self::format_template_review_theme_tokens(
+			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
+		);
+
+		if ( '' !== $theme_tokens ) {
+			$payload['themeTokens'] = $theme_tokens;
+		}
+
 		return RecommendationReviewSignature::from_payload(
 			'template',
-			[
-				'patterns'     => self::normalize_template_review_patterns(
-					is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
-					self::REVIEW_TEMPLATE_PATTERN_LIMIT
-				),
-				'themeTokens'  => self::normalize_template_review_theme_tokens(
-					is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
-				),
-				'docsGuidance' => self::normalize_review_docs_guidance( $docs_guidance ),
-			]
+			$payload
 		);
 	}
 
-	private static function build_template_part_review_context_signature( array $context, array $docs_guidance ): string {
+	private static function build_template_part_review_context_signature( array $context ): string {
+		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
+		$payload      = [
+			'templatePart' => self::normalize_template_part_review_identity( $context ),
+			'patterns' => self::normalize_template_review_patterns(
+				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
+				self::REVIEW_TEMPLATE_PART_PATTERN_LIMIT
+			),
+		];
+		$theme_tokens = self::format_template_review_theme_tokens(
+			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
+		);
+
+		if ( '' !== $theme_tokens ) {
+			$payload['themeTokens'] = $theme_tokens;
+		}
+
 		return RecommendationReviewSignature::from_payload(
 			'template-part',
-			[
-				'patterns'     => self::normalize_template_review_patterns(
-					is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
-					self::REVIEW_TEMPLATE_PART_PATTERN_LIMIT
-				),
-				'themeTokens'  => self::normalize_template_review_theme_tokens(
-					is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
-				),
-				'docsGuidance' => self::normalize_review_docs_guidance( $docs_guidance ),
-			]
+			$payload
 		);
 	}
 
@@ -1462,72 +1472,104 @@ final class TemplateAbilities {
 	}
 
 	/**
-	 * @param array<string, mixed> $theme_tokens
-	 * @return array<string, array<int, string>>
+	 * @return array<string, string>
 	 */
-	private static function normalize_template_review_theme_tokens( array $theme_tokens ): array {
-		$normalized = [];
+	private static function normalize_template_review_identity( array $context ): array {
+		return [
+			'templateType' => sanitize_key( (string) ( $context['templateType'] ?? '' ) ),
+			'title'        => sanitize_text_field( (string) ( $context['title'] ?? '' ) ),
+		];
+	}
 
-		$colors = array_slice(
-			StringArray::sanitize( $theme_tokens['colors'] ?? [] ),
-			0,
-			self::REVIEW_THEME_TOKEN_COLOR_LIMIT
+	/**
+	 * @param string[] $allowed_areas
+	 * @return string[]
+	 */
+	private static function normalize_template_review_allowed_areas( array $allowed_areas ): array {
+		$normalized = array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						'sanitize_key',
+						StringArray::sanitize( $allowed_areas )
+					),
+					static fn( string $area ): bool => '' !== $area
+				)
+			)
 		);
-		if ( [] !== $colors ) {
-			$normalized['colors'] = $colors;
-		}
-
-		$font_families = StringArray::sanitize( $theme_tokens['fontFamilies'] ?? [] );
-		if ( [] !== $font_families ) {
-			$normalized['fontFamilies'] = $font_families;
-		}
-
-		$font_sizes = StringArray::sanitize( $theme_tokens['fontSizes'] ?? [] );
-		if ( [] !== $font_sizes ) {
-			$normalized['fontSizes'] = $font_sizes;
-		}
-
-		$spacing = array_slice(
-			StringArray::sanitize( $theme_tokens['spacing'] ?? [] ),
-			0,
-			self::REVIEW_THEME_TOKEN_SPACING_LIMIT
-		);
-		if ( [] !== $spacing ) {
-			$normalized['spacing'] = $spacing;
-		}
+		sort( $normalized );
 
 		return $normalized;
 	}
 
 	/**
-	 * @param array<int, array<string, mixed>> $docs_guidance
 	 * @return array<int, array<string, string>>
 	 */
-	private static function normalize_review_docs_guidance( array $docs_guidance ): array {
-		$normalized = [];
+	private static function normalize_template_review_available_parts( array $context ): array {
+		$assigned_slugs = [];
 
-		foreach ( array_slice( $docs_guidance, 0, self::REVIEW_DOCS_GUIDANCE_LIMIT ) as $guidance ) {
-			if ( ! is_array( $guidance ) ) {
+		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
+			if ( ! is_array( $part ) ) {
 				continue;
 			}
 
-			$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
+			$slug = sanitize_key( (string) ( $part['slug'] ?? '' ) );
 
-			if ( $excerpt === '' ) {
+			if ( '' !== $slug ) {
+				$assigned_slugs[ $slug ] = true;
+			}
+		}
+
+		$normalized = [];
+
+		foreach ( is_array( $context['availableParts'] ?? null ) ? $context['availableParts'] : [] as $part ) {
+			if ( ! is_array( $part ) ) {
+				continue;
+			}
+
+			$slug = sanitize_key( (string) ( $part['slug'] ?? '' ) );
+
+			if ( '' === $slug || isset( $assigned_slugs[ $slug ] ) ) {
 				continue;
 			}
 
 			$normalized[] = [
-				'id'      => sanitize_text_field( (string) ( $guidance['id'] ?? '' ) ),
-				'title'   => sanitize_text_field(
-					(string) ( $guidance['title'] ?? $guidance['sourceKey'] ?? '' )
-				),
-				'url'     => sanitize_text_field( (string) ( $guidance['url'] ?? '' ) ),
-				'excerpt' => $excerpt,
+				'slug'  => $slug,
+				'title' => sanitize_text_field( (string) ( $part['title'] ?? '' ) ),
+				'area'  => sanitize_key( (string) ( $part['area'] ?? '' ) ),
 			];
 		}
 
+		usort(
+			$normalized,
+			static function ( array $left, array $right ): int {
+				$left_key  = sanitize_key( (string) ( $left['area'] ?? '' ) ) . '|' . sanitize_key( (string) ( $left['slug'] ?? '' ) );
+				$right_key = sanitize_key( (string) ( $right['area'] ?? '' ) ) . '|' . sanitize_key( (string) ( $right['slug'] ?? '' ) );
+
+				return $left_key <=> $right_key;
+			}
+		);
+
 		return $normalized;
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private static function normalize_template_part_review_identity( array $context ): array {
+		return [
+			'slug'  => sanitize_key( (string) ( $context['slug'] ?? '' ) ),
+			'title' => sanitize_text_field( (string) ( $context['title'] ?? '' ) ),
+			'area'  => sanitize_key( (string) ( $context['area'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $theme_tokens
+	 * @return string
+	 */
+	private static function format_template_review_theme_tokens( array $theme_tokens ): string {
+		return ThemeTokenFormatter::format( $theme_tokens );
 	}
 
 	/**
@@ -1567,19 +1609,19 @@ final class TemplateAbilities {
 	}
 
 	private static function build_wordpress_docs_query( array $context, string $prompt ): string {
-		$template_type = isset( $context['templateType'] ) && is_string( $context['templateType'] )
+		$template_type               = isset( $context['templateType'] ) && is_string( $context['templateType'] )
 			? sanitize_key( $context['templateType'] )
 			: '';
-		$allowed_areas = StringArray::sanitize( $context['allowedAreas'] ?? [] );
-		$empty_areas   = StringArray::sanitize( $context['emptyAreas'] ?? [] );
-		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $context )
+		$allowed_areas               = StringArray::sanitize( $context['allowedAreas'] ?? [] );
+		$empty_areas                 = StringArray::sanitize( $context['emptyAreas'] ?? [] );
+		$visible_pattern_names       = array_key_exists( 'visiblePatternNames', $context )
 			? StringArray::sanitize( $context['visiblePatternNames'] ?? [] )
 			: null;
-		$top_level_block_tree = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
-		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
-		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
+		$top_level_block_tree        = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
+		$structure_stats             = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$current_pattern_overrides   = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
 		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null ) ? $context['currentViewportVisibility'] : [];
-		$top_level_block_names = array_values(
+		$top_level_block_names       = array_values(
 			array_filter(
 				array_map(
 					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
@@ -1589,7 +1631,7 @@ final class TemplateAbilities {
 				)
 			)
 		);
-		$assigned      = [];
+		$assigned                    = [];
 
 		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
 			if ( ! is_array( $part ) ) {
@@ -1685,19 +1727,19 @@ final class TemplateAbilities {
 	}
 
 	private static function build_template_part_wordpress_docs_query( array $context, string $prompt ): string {
-		$area         = isset( $context['area'] ) && is_string( $context['area'] )
+		$area                      = isset( $context['area'] ) && is_string( $context['area'] )
 			? sanitize_key( $context['area'] )
 			: '';
-		$slug         = isset( $context['slug'] ) && is_string( $context['slug'] )
+		$slug                      = isset( $context['slug'] ) && is_string( $context['slug'] )
 			? sanitize_key( $context['slug'] )
 			: '';
-		$top_level    = StringArray::sanitize( $context['topLevelBlocks'] ?? [] );
-		$block_counts = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
+		$top_level                 = StringArray::sanitize( $context['topLevelBlocks'] ?? [] );
+		$block_counts              = is_array( $context['blockCounts'] ?? null ) ? $context['blockCounts'] : [];
 		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
-		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
-		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
-		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
-		$parts        = [ 'WordPress block theme template part best practices' ];
+		$operation_targets         = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
+		$insertion_anchors         = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
+		$structural_constraints    = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
+		$parts                     = [ 'WordPress block theme template part best practices' ];
 
 		if ( $area !== '' ) {
 			$parts[] = "template part area {$area}";
@@ -1765,7 +1807,7 @@ final class TemplateAbilities {
 					continue;
 				}
 
-				$label = sanitize_text_field(
+				$label              = sanitize_text_field(
 					(string) ( $target['label'] ?? $target['name'] ?? '' )
 				);
 				$allowed_operations = array_slice(
@@ -1798,10 +1840,10 @@ final class TemplateAbilities {
 					continue;
 				}
 
-				$label = sanitize_text_field( (string) ( $anchor['label'] ?? '' ) );
-				$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+				$label      = sanitize_text_field( (string) ( $anchor['label'] ?? '' ) );
+				$placement  = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
 				$block_name = sanitize_text_field( (string) ( $anchor['blockName'] ?? '' ) );
-				$summary = '' !== $label ? $label : $placement;
+				$summary    = '' !== $label ? $label : $placement;
 
 				if ( '' !== $block_name && '' !== $placement && '' === $label ) {
 					$summary .= ' near ' . $block_name;
@@ -1863,12 +1905,12 @@ final class TemplateAbilities {
 			return [];
 		}
 
-		$allowed_areas  = StringArray::sanitize( $context['allowedAreas'] ?? [] );
-		$empty_areas    = StringArray::sanitize( $context['emptyAreas'] ?? [] );
+		$allowed_areas         = StringArray::sanitize( $context['allowedAreas'] ?? [] );
+		$empty_areas           = StringArray::sanitize( $context['emptyAreas'] ?? [] );
 		$visible_pattern_names = array_key_exists( 'visiblePatternNames', $context )
 			? StringArray::sanitize( $context['visiblePatternNames'] ?? [] )
 			: null;
-		$assigned_areas = [];
+		$assigned_areas        = [];
 
 		foreach ( is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [] as $part ) {
 			if ( ! is_array( $part ) ) {
@@ -1910,7 +1952,7 @@ final class TemplateAbilities {
 			$family_context['visiblePatternCount']    = count( $visible_pattern_names );
 		}
 
-		$top_level_block_names = array_values(
+		$top_level_block_names       = array_values(
 			array_filter(
 				array_map(
 					static fn( mixed $node ): string => is_array( $node ) && is_string( $node['name'] ?? null )
@@ -1924,8 +1966,8 @@ final class TemplateAbilities {
 				)
 			)
 		);
-		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
-		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
+		$structure_stats             = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
+		$current_pattern_overrides   = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
 		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null ) ? $context['currentViewportVisibility'] : [];
 
 		if ( ! empty( $top_level_block_names ) ) {
@@ -1975,11 +2017,11 @@ final class TemplateAbilities {
 			$family_context['slug'] = $slug;
 		}
 
-		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
-		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
-		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
+		$operation_targets         = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
+		$insertion_anchors         = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
+		$structural_constraints    = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
 		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null ) ? $context['currentPatternOverrides'] : [];
-		$target_names = array_values(
+		$target_names              = array_values(
 			array_filter(
 				array_map(
 					static fn( mixed $target ): string => is_array( $target ) && is_string( $target['name'] ?? null )
@@ -1989,7 +2031,7 @@ final class TemplateAbilities {
 				)
 			)
 		);
-		$anchor_placements = array_values(
+		$anchor_placements         = array_values(
 			array_filter(
 				array_map(
 					static fn( mixed $anchor ): string => is_array( $anchor ) && is_string( $anchor['placement'] ?? null )
@@ -2009,7 +2051,7 @@ final class TemplateAbilities {
 		}
 
 		if ( array_key_exists( 'currentPatternOverrides', $context ) ) {
-			$family_context['hasPatternOverrides'] = ! empty( $current_pattern_overrides['hasOverrides'] )
+			$family_context['hasPatternOverrides']  = ! empty( $current_pattern_overrides['hasOverrides'] )
 				|| ! empty( $current_pattern_overrides['blockCount'] );
 			$family_context['patternOverrideCount'] = (int) ( $current_pattern_overrides['blockCount'] ?? 0 );
 		}

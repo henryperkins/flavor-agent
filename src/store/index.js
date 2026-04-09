@@ -13,6 +13,7 @@ import { buildBlockRecommendationContextSignature } from '../utils/block-recomme
 import {
 	buildBlockRecommendationRequestSignature,
 	buildGlobalStylesRecommendationRequestSignature,
+	buildNavigationRecommendationRequestSignature,
 	buildStyleBookRecommendationRequestSignature,
 	buildTemplatePartRecommendationRequestSignature,
 	buildTemplateRecommendationRequestSignature,
@@ -94,8 +95,12 @@ const DEFAULT_STATE = {
 	navigationRequestPrompt: '',
 	navigationBlockClientId: null,
 	navigationContextSignature: null,
+	navigationReviewContextSignature: null,
 	navigationRequestToken: 0,
 	navigationResultToken: 0,
+	navigationReviewRequestToken: 0,
+	navigationReviewFreshnessStatus: 'idle',
+	navigationReviewStaleReason: null,
 	activityScopeKey: null,
 	activityLog: [],
 	undoStatus: 'idle',
@@ -831,6 +836,14 @@ function isStaleNavigationRequest( state, requestToken ) {
 	return requestToken < ( state.navigationRequestToken || 0 );
 }
 
+function isStaleNavigationReviewRequest( state, requestToken ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	return requestToken < ( state.navigationReviewRequestToken || 0 );
+}
+
 function isStaleGlobalStylesRequest( state, requestToken ) {
 	if ( requestToken === null || requestToken === undefined ) {
 		return false;
@@ -1469,6 +1482,14 @@ function getTemplateStoredRequestSignature( select ) {
 	} );
 }
 
+function getNavigationStoredRequestSignature( select ) {
+	return buildNavigationRecommendationRequestSignature( {
+		blockClientId: select.getNavigationBlockClientId?.() || '',
+		prompt: select.getNavigationRequestPrompt?.() || '',
+		contextSignature: select.getNavigationContextSignature?.() || null,
+	} );
+}
+
 function getTemplatePartStoredRequestSignature( select ) {
 	return buildTemplatePartRecommendationRequestSignature( {
 		templatePartRef: select.getTemplatePartResultRef?.() || '',
@@ -1640,6 +1661,19 @@ function getStyleBookExecutableSurfaceFetchConfig() {
 			( select.getStyleBookRequestToken?.() || 0 ) + 1,
 		requestErrorMessage: 'Style Book recommendation request failed.',
 		setStatusAction: actions.setStyleBookStatus,
+	} );
+}
+
+function getNavigationReviewConfig() {
+	return createExecutableSurfaceReviewFreshnessConfig( {
+		endpoint: '/flavor-agent/v1/recommend-navigation',
+		getReviewRequestToken: ( select ) =>
+			select.getNavigationReviewRequestToken?.() || 0,
+		getStoredRequestSignature: getNavigationStoredRequestSignature,
+		getStoredReviewContextSignature: ( select ) =>
+			select.getNavigationReviewContextSignature?.() || null,
+		setReviewStateAction: actions.setNavigationReviewFreshnessState,
+		surface: 'navigation',
 	} );
 }
 
@@ -2844,7 +2878,8 @@ const actions = {
 		payload,
 		prompt = '',
 		requestToken = null,
-		contextSignature = null
+		contextSignature = null,
+		reviewContextSignature = null
 	) {
 		return {
 			type: 'SET_NAVIGATION_RECS',
@@ -2853,6 +2888,20 @@ const actions = {
 			prompt,
 			requestToken,
 			contextSignature,
+			reviewContextSignature,
+		};
+	},
+
+	setNavigationReviewFreshnessState(
+		status,
+		requestToken = null,
+		staleReason = null
+	) {
+		return {
+			type: 'SET_NAVIGATION_REVIEW_FRESHNESS_STATE',
+			status,
+			requestToken,
+			staleReason,
 		};
 	},
 
@@ -3035,7 +3084,8 @@ const actions = {
 							getEmptySuggestionResponse(),
 							requestData.prompt || '',
 							requestToken,
-							contextSignature
+							contextSignature,
+							null
 						)
 					);
 					localDispatch(
@@ -3081,7 +3131,8 @@ const actions = {
 							result,
 							requestData.prompt || '',
 							requestToken,
-							contextSignature
+							contextSignature,
+							getReviewContextSignatureFromResponse( result )
 						)
 					);
 					return reloadScopedActivitySession(
@@ -3847,6 +3898,18 @@ const actions = {
 		);
 	},
 
+	revalidateNavigationReviewFreshness(
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
+		return buildExecutableSurfaceReviewFreshnessThunk(
+			getNavigationReviewConfig(),
+			currentRequestSignature,
+			liveRequestInput,
+			EXECUTABLE_SURFACE_REVIEW_DEPS
+		);
+	},
+
 	revalidateTemplatePartReviewFreshness(
 		currentRequestSignature = null,
 		liveRequestInput = null
@@ -4308,6 +4371,18 @@ function reducer( state = DEFAULT_STATE, action ) {
 					action.requestToken ?? state.navigationRequestToken,
 				navigationBlockClientId:
 					action.blockClientId ?? state.navigationBlockClientId,
+				navigationReviewRequestToken:
+					action.status === 'loading'
+						? state.navigationReviewRequestToken + 1
+						: state.navigationReviewRequestToken,
+				navigationReviewFreshnessStatus:
+					action.status === 'loading'
+						? 'idle'
+						: state.navigationReviewFreshnessStatus,
+				navigationReviewStaleReason:
+					action.status === 'loading'
+						? null
+						: state.navigationReviewStaleReason,
 			};
 		case 'SET_NAVIGATION_RECS':
 			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
@@ -4321,11 +4396,34 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationRequestPrompt: action.prompt ?? '',
 				navigationBlockClientId: action.blockClientId ?? null,
 				navigationContextSignature: action.contextSignature ?? null,
+				navigationReviewContextSignature:
+					action.reviewContextSignature ?? null,
 				navigationRequestToken:
 					action.requestToken ?? state.navigationRequestToken,
 				navigationResultToken: state.navigationResultToken + 1,
+				navigationReviewRequestToken:
+					state.navigationReviewRequestToken + 1,
+				navigationReviewFreshnessStatus:
+					action.reviewContextSignature ? 'fresh' : 'idle',
 				navigationStatus: 'ready',
 				navigationError: null,
+				navigationReviewStaleReason: null,
+			};
+		case 'SET_NAVIGATION_REVIEW_FRESHNESS_STATE':
+			if ( isStaleNavigationReviewRequest( state, action.requestToken ) ) {
+				return state;
+			}
+
+			return {
+				...state,
+				navigationReviewRequestToken:
+					action.requestToken ?? state.navigationReviewRequestToken,
+				navigationReviewFreshnessStatus:
+					action.status ?? state.navigationReviewFreshnessStatus,
+				navigationReviewStaleReason:
+					action.status === 'stale'
+						? action.staleReason ?? null
+						: null,
 			};
 		case 'CLEAR_NAVIGATION_ERROR':
 			return {
@@ -4346,8 +4444,13 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationRequestPrompt: '',
 				navigationBlockClientId: null,
 				navigationContextSignature: null,
+				navigationReviewContextSignature: null,
 				navigationRequestToken: state.navigationRequestToken + 1,
 				navigationResultToken: state.navigationResultToken + 1,
+				navigationReviewRequestToken:
+					state.navigationReviewRequestToken + 1,
+				navigationReviewFreshnessStatus: 'idle',
+				navigationReviewStaleReason: null,
 			};
 		case 'SET_TEMPLATE_STATUS':
 			if ( isStaleTemplateRequest( state, action.requestToken ) ) {
@@ -5067,11 +5170,25 @@ const selectors = {
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? null
 			: state.navigationContextSignature,
+	getNavigationReviewContextSignature: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? null
+			: state.navigationReviewContextSignature,
 	getNavigationRequestToken: ( state ) => state.navigationRequestToken,
+	getNavigationReviewRequestToken: ( state ) =>
+		state.navigationReviewRequestToken,
 	getNavigationResultToken: ( state, blockClientId = null ) =>
 		blockClientId && state.navigationBlockClientId !== blockClientId
 			? 0
 			: state.navigationResultToken,
+	getNavigationReviewFreshnessStatus: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? 'idle'
+			: state.navigationReviewFreshnessStatus,
+	getNavigationReviewStaleReason: ( state, blockClientId = null ) =>
+		blockClientId && state.navigationBlockClientId !== blockClientId
+			? null
+			: state.navigationReviewStaleReason,
 	isNavigationLoading: ( state, blockClientId = null ) =>
 		( ! blockClientId ||
 			state.navigationBlockClientId === blockClientId ) &&

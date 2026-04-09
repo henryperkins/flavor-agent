@@ -37,6 +37,7 @@ import { buildBlockRecommendationContextSignature } from '../../utils/block-reco
 import {
 	buildBlockRecommendationRequestSignature,
 	buildGlobalStylesRecommendationRequestSignature,
+	buildNavigationRecommendationRequestSignature,
 	buildStyleBookRecommendationRequestSignature,
 	buildTemplatePartRecommendationRequestSignature,
 	buildTemplateRecommendationRequestSignature,
@@ -157,6 +158,7 @@ describe( 'store action thunks', () => {
 				return Promise.resolve( {
 					suggestions: [ { label: 'Group utility links' } ],
 					explanation: 'Mocked navigation response',
+					reviewContextSignature: 'review-navigation',
 				} );
 			}
 
@@ -233,10 +235,12 @@ describe( 'store action thunks', () => {
 				{
 					suggestions: [ { label: 'Group utility links' } ],
 					explanation: 'Mocked navigation response',
+					reviewContextSignature: 'review-navigation',
 				},
 				'Simplify the header menu.',
 				2,
-				'navigation-signature'
+				'navigation-signature',
+				'review-navigation'
 			)
 		);
 	} );
@@ -816,6 +820,87 @@ describe( 'store action thunks', () => {
 			ok: false,
 			staleReason: 'server-review',
 			surface: 'template',
+		} );
+	} );
+
+	test( 'revalidateNavigationReviewFreshness marks stored navigation reviews stale when the server review signature drifts', async () => {
+		apiFetch.mockResolvedValue( {
+			reviewContextSignature: 'review-navigation-next',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getNavigationReviewRequestToken: jest.fn().mockReturnValue( 2 ),
+			getNavigationBlockClientId: jest.fn().mockReturnValue( 'nav-1' ),
+			getNavigationRequestPrompt: jest
+				.fn()
+				.mockReturnValue( 'Simplify the header navigation.' ),
+			getNavigationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'navigation-context-signature' ),
+			getNavigationReviewContextSignature: jest
+				.fn()
+				.mockReturnValue( 'review-navigation-stored' ),
+		};
+		const currentRequestSignature =
+			buildNavigationRecommendationRequestSignature( {
+				blockClientId: 'nav-1',
+				prompt: 'Simplify the header navigation.',
+				contextSignature: 'navigation-context-signature',
+			} );
+
+		const result = await actions.revalidateNavigationReviewFreshness(
+			currentRequestSignature,
+			{
+				menuId: 42,
+				navigationMarkup:
+					'<!-- wp:navigation {"ref":42} /-->',
+				prompt: 'Simplify the header navigation.',
+				editorContext: {
+					block: {
+						name: 'core/navigation',
+					},
+				},
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-navigation',
+				method: 'POST',
+				data: {
+					menuId: 42,
+					navigationMarkup:
+						'<!-- wp:navigation {"ref":42} /-->',
+					prompt: 'Simplify the header navigation.',
+					editorContext: {
+						block: {
+							name: 'core/navigation',
+						},
+					},
+					resolveSignatureOnly: true,
+				},
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setNavigationReviewFreshnessState( 'checking', 3 )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setNavigationReviewFreshnessState(
+				'stale',
+				3,
+				'server-review'
+			)
+		);
+		expect( result ).toEqual( {
+			ok: false,
+			staleReason: 'server-review',
+			surface: 'navigation',
 		} );
 	} );
 
