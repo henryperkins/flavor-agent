@@ -260,6 +260,283 @@ final class TemplateAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_recommend_template_review_signature_ignores_visible_pattern_scope_changes(): void {
+		$baseline = TemplateAbilities::recommend_template(
+			array_merge(
+				$this->build_template_recommendation_input(),
+				[
+					'visiblePatternNames'  => [ 'theme/hero' ],
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+		$changed  = TemplateAbilities::recommend_template(
+			array_merge(
+				$this->build_template_recommendation_input(),
+				[
+					'visiblePatternNames'  => [ 'theme/header-utility' ],
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+	}
+
+	public function test_recommend_template_review_signature_ignores_live_slot_and_structure_overlays(): void {
+		$baseline = TemplateAbilities::recommend_template(
+			array_merge(
+				$this->build_template_recommendation_input(),
+				[
+					'editorSlots'          => $this->build_template_editor_slots_payload(),
+					'editorStructure'      => $this->build_template_editor_structure_payload(),
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+		$changed  = TemplateAbilities::recommend_template(
+			array_merge(
+				$this->build_template_recommendation_input(),
+				[
+					'editorSlots'          => $this->build_template_editor_slots_payload(
+						[
+							'assignedParts' => [
+								[
+									'slug' => 'footer-main',
+									'area' => 'footer',
+								],
+							],
+							'emptyAreas'    => [ 'header' ],
+							'allowedAreas'  => [ 'header', 'footer' ],
+						]
+					),
+					'editorStructure'      => $this->build_template_editor_structure_payload(
+						[
+							'topLevelBlockTree' => [
+								[
+									'path'       => [ 0 ],
+									'name'       => 'core/query',
+									'label'      => 'Query Loop',
+									'attributes' => [
+										'tagName' => 'main',
+									],
+									'childCount' => 3,
+								],
+							],
+							'structureStats'    => [
+								'blockCount'         => 6,
+								'maxDepth'           => 3,
+								'topLevelBlockCount' => 1,
+								'hasNavigation'      => false,
+								'hasQuery'           => true,
+								'hasTemplateParts'   => false,
+								'firstTopLevelBlock' => 'core/query',
+								'lastTopLevelBlock'  => 'core/query',
+							],
+							'currentPatternOverrides' => [
+								'hasOverrides' => true,
+								'blockCount'   => 1,
+								'blockNames'   => [ 'core/query' ],
+								'blocks'       => [
+									[
+										'path'               => [ 0 ],
+										'name'               => 'core/query',
+										'label'              => 'Query Loop',
+										'overrideAttributes' => [ 'query' ],
+										'usesDefaultBinding' => false,
+									],
+								],
+							],
+							'currentViewportVisibility' => [
+								'hasVisibilityRules' => true,
+								'blockCount'         => 1,
+								'blocks'             => [
+									[
+										'path'             => [ 0 ],
+										'name'             => 'core/query',
+										'label'            => 'Query Loop',
+										'hiddenViewports'  => [ 'mobile' ],
+										'visibleViewports' => [ 'desktop' ],
+									],
+								],
+							],
+						]
+					),
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+	}
+
+	public function test_recommend_template_part_review_signature_ignores_visible_pattern_scope_changes(): void {
+		$baseline = TemplateAbilities::recommend_template_part(
+			array_merge(
+				$this->build_template_part_recommendation_input(),
+				[
+					'visiblePatternNames'  => [ 'theme/header-utility' ],
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+		$changed  = TemplateAbilities::recommend_template_part(
+			array_merge(
+				$this->build_template_part_recommendation_input(),
+				[
+					'visiblePatternNames'  => [ 'theme/hero' ],
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+	}
+
+	public function test_recommend_template_part_review_signature_ignores_live_structure_overlays(): void {
+		$baseline = TemplateAbilities::recommend_template_part(
+			array_merge(
+				$this->build_template_part_recommendation_input(),
+				[
+					'editorStructure'      => $this->build_template_part_editor_structure_payload(),
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+		$changed  = TemplateAbilities::recommend_template_part(
+			array_merge(
+				$this->build_template_part_recommendation_input(),
+				[
+					'editorStructure'      => $this->build_template_part_editor_structure_payload(
+						[
+							'blockTree' => [
+								[
+									'path'       => [ 0 ],
+									'name'       => 'core/navigation',
+									'label'      => 'Navigation',
+									'attributes' => [
+										'overlayMenu' => 'mobile',
+									],
+									'childCount' => 0,
+									'children'   => [],
+								],
+							],
+							'allBlockPaths' => [
+								[
+									'path'       => [ 0 ],
+									'name'       => 'core/navigation',
+									'label'      => 'Navigation',
+									'attributes' => [
+										'overlayMenu' => 'mobile',
+									],
+									'childCount' => 0,
+								],
+							],
+							'topLevelBlocks' => [ 'core/navigation' ],
+							'blockCounts'    => [
+								'core/navigation' => 1,
+							],
+							'structureStats' => [
+								'blockCount'            => 1,
+								'maxDepth'              => 1,
+								'hasNavigation'         => true,
+								'containsLogo'          => false,
+								'containsSiteTitle'     => false,
+								'containsSearch'        => false,
+								'containsSocialLinks'   => false,
+								'containsQuery'         => false,
+								'containsColumns'       => false,
+								'containsButtons'       => false,
+								'containsSpacer'        => false,
+								'containsSeparator'     => false,
+								'firstTopLevelBlock'    => 'core/navigation',
+								'lastTopLevelBlock'     => 'core/navigation',
+								'hasSingleWrapperGroup' => false,
+								'isNearlyEmpty'         => true,
+							],
+							'currentPatternOverrides' => [
+								'hasOverrides' => false,
+								'blockCount'   => 0,
+								'blockNames'   => [],
+								'blocks'       => [],
+							],
+							'operationTargets' => [
+								[
+									'path'              => [ 0 ],
+									'name'              => 'core/navigation',
+									'label'             => 'Navigation',
+									'allowedOperations' => [ 'remove_block' ],
+									'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+								],
+							],
+							'insertionAnchors' => [
+								[
+									'placement' => 'start',
+									'label'     => 'Start of template part',
+								],
+								[
+									'placement'  => 'before_block_path',
+									'targetPath' => [ 0 ],
+									'blockName'  => 'core/navigation',
+									'label'      => 'Before Navigation',
+								],
+								[
+									'placement' => 'end',
+									'label'     => 'End of template part',
+								],
+							],
+							'structuralConstraints' => [
+								'contentOnlyPaths' => [],
+								'lockedPaths'      => [],
+								'hasContentOnly'   => false,
+								'hasLockedBlocks'  => false,
+							],
+						]
+					),
+					'resolveSignatureOnly' => true,
+				]
+			)
+		);
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		$this->assertSame(
+			$baseline['reviewContextSignature'] ?? null,
+			$changed['reviewContextSignature'] ?? null
+		);
+		$this->assertNotSame(
+			$baseline['resolvedContextSignature'] ?? null,
+			$changed['resolvedContextSignature'] ?? null
+		);
+	}
+
 	/**
 	 * @dataProvider template_review_theme_token_signature_provider
 	 */
@@ -563,6 +840,202 @@ final class TemplateAbilitiesTest extends TestCase {
 				'area'       => 'header',
 				'patterns'   => [],
 				'themeTokens' => [],
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_template_recommendation_input(): array {
+		return [
+			'templateRef'  => 'theme//home',
+			'templateType' => 'home',
+			'prompt'       => 'Make the home template feel more editorial.',
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function build_template_editor_slots_payload( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'assignedParts' => [
+					[
+						'slug' => 'site-header',
+						'area' => 'header',
+					],
+				],
+				'emptyAreas'    => [ 'footer' ],
+				'allowedAreas'  => [ 'header', 'footer' ],
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function build_template_editor_structure_payload( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'topLevelBlockTree' => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/group',
+						'label'      => 'Group',
+						'attributes' => [
+							'tagName' => 'main',
+						],
+						'childCount' => 2,
+					],
+				],
+				'structureStats' => [
+					'blockCount'         => 4,
+					'maxDepth'           => 2,
+					'topLevelBlockCount' => 1,
+					'hasNavigation'      => false,
+					'hasQuery'           => false,
+					'hasTemplateParts'   => true,
+					'firstTopLevelBlock' => 'core/group',
+					'lastTopLevelBlock'  => 'core/group',
+				],
+				'currentPatternOverrides' => [
+					'hasOverrides' => false,
+					'blockCount'   => 0,
+					'blockNames'   => [],
+					'blocks'       => [],
+				],
+				'currentViewportVisibility' => [
+					'hasVisibilityRules' => false,
+					'blockCount'         => 0,
+					'blocks'             => [],
+				],
+			],
+			$overrides
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_template_part_recommendation_input(): array {
+		return [
+			'templatePartRef' => 'theme//header',
+			'prompt'          => 'Give the header a cleaner utility rhythm.',
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $overrides
+	 * @return array<string, mixed>
+	 */
+	private function build_template_part_editor_structure_payload( array $overrides = [] ): array {
+		return array_merge(
+			[
+				'blockTree' => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/group',
+						'label'      => 'Group',
+						'attributes' => [
+							'tagName' => 'header',
+						],
+						'childCount' => 1,
+						'children'   => [
+							[
+								'path'       => [ 0, 0 ],
+								'name'       => 'core/site-title',
+								'label'      => 'Site Title',
+								'attributes' => [],
+								'childCount' => 0,
+								'children'   => [],
+							],
+						],
+					],
+				],
+				'allBlockPaths' => [
+					[
+						'path'       => [ 0 ],
+						'name'       => 'core/group',
+						'label'      => 'Group',
+						'attributes' => [
+							'tagName' => 'header',
+						],
+						'childCount' => 1,
+					],
+					[
+						'path'       => [ 0, 0 ],
+						'name'       => 'core/site-title',
+						'label'      => 'Site Title',
+						'attributes' => [],
+						'childCount' => 0,
+					],
+				],
+				'topLevelBlocks' => [ 'core/group' ],
+				'blockCounts'    => [
+					'core/group'      => 1,
+					'core/site-title' => 1,
+				],
+				'structureStats' => [
+					'blockCount'            => 2,
+					'maxDepth'              => 2,
+					'hasNavigation'         => false,
+					'containsLogo'          => false,
+					'containsSiteTitle'     => true,
+					'containsSearch'        => false,
+					'containsSocialLinks'   => false,
+					'containsQuery'         => false,
+					'containsColumns'       => false,
+					'containsButtons'       => false,
+					'containsSpacer'        => false,
+					'containsSeparator'     => false,
+					'firstTopLevelBlock'    => 'core/group',
+					'lastTopLevelBlock'     => 'core/group',
+					'hasSingleWrapperGroup' => true,
+					'isNearlyEmpty'         => false,
+				],
+				'currentPatternOverrides' => [
+					'hasOverrides' => false,
+					'blockCount'   => 0,
+					'blockNames'   => [],
+					'blocks'       => [],
+				],
+				'operationTargets' => [
+					[
+						'path'              => [ 0 ],
+						'name'              => 'core/group',
+						'label'             => 'Group',
+						'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+						'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+					],
+				],
+				'insertionAnchors' => [
+					[
+						'placement' => 'start',
+						'label'     => 'Start of template part',
+					],
+					[
+						'placement'  => 'before_block_path',
+						'targetPath' => [ 0 ],
+						'blockName'  => 'core/group',
+						'label'      => 'Before Group',
+					],
+					[
+						'placement' => 'end',
+						'label'     => 'End of template part',
+					],
+				],
+				'structuralConstraints' => [
+					'contentOnlyPaths' => [],
+					'lockedPaths'      => [],
+					'hasContentOnly'   => false,
+					'hasLockedBlocks'  => false,
+				],
 			],
 			$overrides
 		);

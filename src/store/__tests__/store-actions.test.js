@@ -83,7 +83,7 @@ describe( 'store action thunks', () => {
 		jest.useRealTimers();
 	} );
 
-	test( 'fetchBlockRecommendations reads request state from thunk selectors', async () => {
+	test( 'fetchBlockRecommendations stores the request signature without posting it to the API', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
 				settings: [],
@@ -124,6 +124,13 @@ describe( 'store action thunks', () => {
 					prompt: 'Tighten this copy.',
 					clientId: 'block-1',
 				},
+			} )
+		);
+		expect( apiFetch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				data: expect.objectContaining( {
+					contextSignature,
+				} ),
 			} )
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(

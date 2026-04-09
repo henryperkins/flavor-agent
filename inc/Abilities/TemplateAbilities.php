@@ -70,6 +70,17 @@ final class TemplateAbilities {
 			return $context;
 		}
 
+		$review_context = ServerCollector::for_template(
+			$template_ref,
+			is_string( $context['templateType'] ?? null ) && '' !== $context['templateType']
+				? sanitize_key( (string) $context['templateType'] )
+				: $template_type,
+			null
+		);
+		if ( is_wp_error( $review_context ) ) {
+			return $review_context;
+		}
+
 		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
 			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
 		}
@@ -87,7 +98,7 @@ final class TemplateAbilities {
 			]
 		);
 
-		$review_context_signature = self::build_template_review_context_signature( $context );
+		$review_context_signature = self::build_template_review_context_signature( $review_context );
 
 		if ( $resolve_signature_only ) {
 			return [
@@ -156,6 +167,11 @@ final class TemplateAbilities {
 			return $context;
 		}
 
+		$review_context = ServerCollector::for_template_part( $template_part_ref, null );
+		if ( is_wp_error( $review_context ) ) {
+			return $review_context;
+		}
+
 		if ( array_key_exists( 'visiblePatternNames', $input ) ) {
 			$context['visiblePatternNames'] = is_array( $visible_pattern_names ) ? $visible_pattern_names : [];
 		}
@@ -171,7 +187,7 @@ final class TemplateAbilities {
 			]
 		);
 
-		$review_context_signature = self::build_template_part_review_context_signature( $context );
+		$review_context_signature = self::build_template_part_review_context_signature( $review_context );
 
 		if ( $resolve_signature_only ) {
 			return [
