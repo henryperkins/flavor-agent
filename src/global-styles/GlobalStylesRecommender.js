@@ -1,4 +1,3 @@
-import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import {
@@ -42,6 +41,12 @@ import {
 	getStyleBookUiState,
 	subscribeToStyleBookUi,
 } from '../style-book/dom';
+import {
+	getStyleSuggestionToneLabel,
+	isInlineStyleNotice,
+	StyleOperationList,
+	StyleSuggestionCard,
+} from '../style-surfaces/presentation';
 import { STORE_NAME } from '../store';
 import {
 	getLatestAppliedActivity,
@@ -68,45 +73,6 @@ function getSuggestionKey( suggestion, index ) {
 	return `global-styles-${ index }-${
 		suggestion?.label || 'suggestion'
 	}-${ JSON.stringify( suggestion?.operations || [] ) }`;
-}
-
-function formatPath( path = [] ) {
-	return Array.isArray( path ) ? path.join( '.' ) : '';
-}
-
-function getCanonicalPresetSlug( operation = {} ) {
-	if ( typeof operation?.value === 'string' ) {
-		const match = operation.value.match(
-			/^var:preset\|[a-z0-9-]+\|([a-z0-9_-]+)$/i
-		);
-
-		if ( match?.[ 1 ] ) {
-			return match[ 1 ];
-		}
-	}
-
-	return typeof operation?.presetSlug === 'string'
-		? operation.presetSlug
-		: '';
-}
-
-function formatOperation( operation = {} ) {
-	if ( operation?.type === 'set_theme_variation' ) {
-		return `Switch to variation: ${ operation.variationTitle }`;
-	}
-
-	if ( operation?.type === 'set_styles' ) {
-		const pathLabel = formatPath( operation.path );
-		const presetSlug = getCanonicalPresetSlug( operation );
-
-		if ( presetSlug ) {
-			return `${ pathLabel } → ${ presetSlug }`;
-		}
-
-		return `${ pathLabel } → ${ String( operation.value || '' ) }`;
-	}
-
-	return 'Review this change before applying it.';
 }
 
 function buildRequestInput( {
@@ -150,46 +116,6 @@ function buildRequestInput( {
 	};
 }
 
-function isInlineStyleNotice( notice ) {
-	return notice?.source === 'apply' || notice?.source === 'undo';
-}
-
-function formatBadgeLabel( value = '' ) {
-	return String( value )
-		.replace( /[-_]+/g, ' ' )
-		.replace( /\b\w/g, ( char ) => char.toUpperCase() );
-}
-
-function getToneLabel( suggestion ) {
-	return suggestion?.tone === 'executable'
-		? REVIEW_LANE_LABEL
-		: MANUAL_IDEAS_LABEL;
-}
-
-function OperationList( {
-	operations = [],
-	compact = false,
-	suggestionKey = '',
-} ) {
-	if ( operations.length === 0 ) {
-		return null;
-	}
-
-	return (
-		<ul
-			className={ `flavor-agent-style-operations${
-				compact ? ' flavor-agent-style-operations--compact' : ''
-			}` }
-		>
-			{ operations.map( ( operation, index ) => (
-				<li key={ `${ suggestionKey }-${ index }` }>
-					{ formatOperation( operation ) }
-				</li>
-			) ) }
-		</ul>
-	);
-}
-
 function GlobalStylesPanel( {
 	prompt,
 	setPrompt,
@@ -229,89 +155,19 @@ function GlobalStylesPanel( {
 		? null
 		: executableSuggestions[ 0 ] || manualSuggestions[ 0 ] || null;
 	let reviewHint = '';
+	let staleReason = '';
 
 	if ( isStale ) {
 		reviewHint =
 			'This review is stale. Refresh recommendations before applying these operations.';
+		staleReason =
+			staleReasonType === 'server'
+				? 'This Global Styles result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
+				: 'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.';
 	} else if ( showSecondaryGuidance ) {
 		reviewHint =
 			'Only the operations shown here will run against the current Global Styles scope.';
 	}
-
-	const renderSuggestionCard = ( suggestion ) => (
-		<div
-			key={ suggestion.suggestionKey }
-			className={ `flavor-agent-card flavor-agent-style-card${
-				selectedSuggestion?.suggestionKey === suggestion.suggestionKey
-					? ' flavor-agent-style-card--active'
-					: ''
-			}` }
-		>
-			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
-				<div className="flavor-agent-card__lead">
-					<div className="flavor-agent-card__label">
-						{ suggestion.label }
-					</div>
-					{ suggestion.description && (
-						<p className="flavor-agent-card__description">
-							{ suggestion.description }
-						</p>
-					) }
-				</div>
-				<div className="flavor-agent-style-card__badges">
-					<span className="flavor-agent-pill">
-						{ getToneLabel( suggestion ) }
-					</span>
-					{ suggestion.category && (
-						<span className="flavor-agent-pill">
-							{ formatBadgeLabel( suggestion.category ) }
-						</span>
-					) }
-					{ selectedSuggestion?.suggestionKey ===
-						suggestion.suggestionKey && (
-						<span className="flavor-agent-pill flavor-agent-pill--success">
-							Review open
-						</span>
-					) }
-				</div>
-			</div>
-
-			<OperationList
-				operations={ suggestion.operations || [] }
-				compact
-				suggestionKey={ suggestion.suggestionKey }
-			/>
-
-			<div className="flavor-agent-style-card__footer">
-				{ showSecondaryGuidance && (
-					<span className="flavor-agent-panel__intro-copy">
-						{ suggestion.tone === 'executable'
-							? 'Preview the exact operations before applying them to the current Global Styles scope.'
-							: 'This stays advisory until the backend can express it as a safe theme-backed operation set.' }
-					</span>
-				) }
-
-				{ suggestion.tone === 'executable' && (
-					<div className="flavor-agent-style-card__actions">
-						<Button
-							variant="secondary"
-							size="small"
-							onClick={ () =>
-								onReview( suggestion.suggestionKey )
-							}
-							className="flavor-agent-card__apply"
-							disabled={ isStale }
-						>
-							{ selectedSuggestion?.suggestionKey ===
-							suggestion.suggestionKey
-								? 'Reviewing'
-								: 'Review' }
-						</Button>
-					</div>
-				) }
-			</div>
-		</div>
-	);
 
 	return (
 		<div className="flavor-agent-panel flavor-agent-global-styles-panel">
@@ -346,13 +202,7 @@ function GlobalStylesPanel( {
 				isFresh={ hasMatchingResult }
 				hasResult={ hasResult }
 				announceChanges
-				staleReason={
-					isStale
-						? staleReasonType === 'server'
-							? 'This Global Styles result no longer matches the current server-resolved recommendation context. Refresh before reviewing or applying anything from the previous result.'
-							: 'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.'
-						: ''
-				}
+				staleReason={ staleReason }
 				onRefresh={ isStale ? onRequest : undefined }
 				isRefreshing={ isLoading }
 			/>
@@ -415,7 +265,7 @@ function GlobalStylesPanel( {
 						'Recommended style adjustment'
 					}
 					description={ featuredSuggestion.description || '' }
-					tone={ getToneLabel( featuredSuggestion ) }
+					tone={ getStyleSuggestionToneLabel( featuredSuggestion ) }
 					why={
 						featuredSuggestion.tone === 'executable'
 							? 'Start here first, then review the exact operations before applying them.'
@@ -442,7 +292,21 @@ function GlobalStylesPanel( {
 							: ''
 					}
 				>
-					{ executableSuggestions.map( renderSuggestionCard ) }
+					{ executableSuggestions.map( ( suggestion ) => (
+						<StyleSuggestionCard
+							key={ suggestion.suggestionKey }
+							suggestion={ suggestion }
+							isSelected={
+								selectedSuggestion?.suggestionKey ===
+								suggestion.suggestionKey
+							}
+							isStale={ isStale }
+							onReview={ onReview }
+							showSecondaryGuidance={ showSecondaryGuidance }
+							executableGuidance="Preview the exact operations before applying them to the current Global Styles scope."
+							manualGuidance="This stays advisory until the backend can express it as a safe theme-backed operation set."
+						/>
+					) ) }
 				</RecommendationLane>
 			) }
 
@@ -458,7 +322,21 @@ function GlobalStylesPanel( {
 							: ''
 					}
 				>
-					{ manualSuggestions.map( renderSuggestionCard ) }
+					{ manualSuggestions.map( ( suggestion ) => (
+						<StyleSuggestionCard
+							key={ suggestion.suggestionKey }
+							suggestion={ suggestion }
+							isSelected={
+								selectedSuggestion?.suggestionKey ===
+								suggestion.suggestionKey
+							}
+							isStale={ isStale }
+							onReview={ onReview }
+							showSecondaryGuidance={ showSecondaryGuidance }
+							executableGuidance="Preview the exact operations before applying them to the current Global Styles scope."
+							manualGuidance="This stays advisory until the backend can express it as a safe theme-backed operation set."
+						/>
+					) ) }
 				</AIAdvisorySection>
 			) }
 
@@ -483,7 +361,7 @@ function GlobalStylesPanel( {
 							className="flavor-agent-style-feedback-notice"
 						/>
 					) }
-					<OperationList
+					<StyleOperationList
 						operations={ selectedSuggestion.operations || [] }
 						suggestionKey={ selectedSuggestion.suggestionKey }
 					/>
@@ -645,14 +523,12 @@ export default function GlobalStylesRecommender() {
 			} ),
 			rawSuggestions: mappedSuggestions,
 			currentExplanation: store?.getGlobalStylesExplanation?.() || '',
-			currentRequestPrompt:
-				store?.getGlobalStylesRequestPrompt?.() || '',
+			currentRequestPrompt: store?.getGlobalStylesRequestPrompt?.() || '',
 			currentResultToken: store?.getGlobalStylesResultToken?.() || 0,
 			currentResultContextSignature:
 				store?.getGlobalStylesContextSignature?.() || null,
 			currentResultRef: store?.getGlobalStylesResultRef?.() || null,
-			storedStaleReason:
-				store?.getGlobalStylesStaleReason?.() || null,
+			storedStaleReason: store?.getGlobalStylesStaleReason?.() || null,
 			status: store?.getGlobalStylesStatus?.() || 'idle',
 			selectedSuggestionKey:
 				store?.getGlobalStylesSelectedSuggestionKey?.() || null,
@@ -737,7 +613,7 @@ export default function GlobalStylesRecommender() {
 			: null;
 	const effectiveStaleReason =
 		clientStaleReason ||
-		(storedStaleReason === 'server' ? 'server' : null);
+		( storedStaleReason === 'server' ? 'server' : null );
 	const hasMatchingResult = Boolean(
 		hasStoredResultForScope &&
 			status === 'ready' &&
@@ -976,8 +852,8 @@ export default function GlobalStylesRecommender() {
 		const hydrationKey =
 			hasStoredResultForScope && status === 'ready'
 				? `${ currentResultRef || '' }:${
-					currentResultToken || resultRequestSignature
-				}`
+						currentResultToken || resultRequestSignature
+				  }`
 				: '';
 
 		if ( ! hydrationKey || hydratedResultKeyRef.current === hydrationKey ) {
@@ -1001,10 +877,7 @@ export default function GlobalStylesRecommender() {
 		}
 
 		fetchGlobalStylesRecommendations( currentRequestInput );
-	}, [
-		fetchGlobalStylesRecommendations,
-		currentRequestInput,
-	] );
+	}, [ fetchGlobalStylesRecommendations, currentRequestInput ] );
 
 	const handleApply = useCallback( () => {
 		if ( selectedSuggestion ) {

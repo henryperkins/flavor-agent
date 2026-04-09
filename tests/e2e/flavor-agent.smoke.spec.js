@@ -22,6 +22,7 @@ const TEMPLATE_PROMPT =
 const TEMPLATE_INSERTED_CONTENT = 'Inserted by Flavor Agent';
 const TEMPLATE_PATTERN_NAME = 'flavor-agent/editorial-banner';
 const TEMPLATE_PATTERN_TITLE = 'Editorial Banner';
+const TEMPLATE_SUGGESTION_LABEL = 'Clarify template hierarchy';
 const TEMPLATE_STALE_INSERTED_CONTENT = 'Template freshness check';
 const TEMPLATE_MAIN_CONTENT_TARGET_PATH = [ 1, 0 ];
 const TEMPLATE_MAIN_CONTENT_TARGET = {
@@ -33,15 +34,24 @@ const TEMPLATE_PART_INSERTED_CONTENT =
 	'Inserted into the template part by Flavor Agent';
 const TEMPLATE_PART_PATTERN_NAME = 'flavor-agent/header-utility-row';
 const TEMPLATE_PART_PATTERN_TITLE = 'Header Utility Row';
+const TEMPLATE_PART_SUGGESTION_LABEL = 'Add utility row';
 const TEMPLATE_PART_STALE_INSERTED_CONTENT = 'Template part freshness check';
+const TEMPLATE_PART_STALE_NOTICE =
+	'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.';
 const GLOBAL_STYLES_PROMPT =
 	'Warm the canvas slightly and tighten the site-wide vertical rhythm.';
+const GLOBAL_STYLES_SUGGESTION_LABEL = 'Adjust canvas tone and rhythm';
 const GLOBAL_STYLES_BACKGROUND_VALUE = 'var:preset|color|signal';
 const GLOBAL_STYLES_LINE_HEIGHT_VALUE = 1.73;
 const GLOBAL_STYLES_STALE_TEXT_COLOR = '#101010';
+const GLOBAL_STYLES_STALE_NOTICE =
+	'This Global Styles result no longer matches the current live style state or prompt. Refresh before reviewing or applying anything from the previous result.';
+const GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE =
+	'resolved-global-styles';
 const GLOBAL_STYLES_SIDEBAR_SELECTOR =
 	'.editor-global-styles-sidebar__panel, .editor-global-styles-sidebar, [role="region"][aria-label="Styles"]';
 const GLOBAL_STYLES_RESPONSE = {
+	resolvedContextSignature: GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE,
 	explanation:
 		'Use the theme signal preset for the canvas and tighten line height slightly.',
 	suggestions: [
@@ -76,7 +86,11 @@ const STYLE_BOOK_BLOCK_TITLE = 'Paragraph';
 const STYLE_BOOK_PROMPT =
 	'Make this paragraph style feel more like a print pull quote.';
 const STYLE_BOOK_STALE_TEXT_COLOR = '#123456';
+const STYLE_BOOK_STALE_NOTICE =
+	'This Style Book result no longer matches the current live block styles or prompt. Refresh before reviewing or applying anything from the previous result.';
+const STYLE_BOOK_RESOLVED_CONTEXT_SIGNATURE = 'resolved-style-book';
 const STYLE_BOOK_RESPONSE = {
+	resolvedContextSignature: STYLE_BOOK_RESOLVED_CONTEXT_SIGNATURE,
 	explanation:
 		'Increase emphasis in the paragraph example with a stronger text treatment.',
 	suggestions: [
@@ -97,9 +111,14 @@ const STYLE_BOOK_RESPONSE = {
 					cssVar: 'var(--wp--preset--color--signal)',
 				},
 			],
-		},
-	],
-};
+			},
+		],
+	};
+const TEMPLATE_STALE_NOTICE =
+	'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.';
+const TEMPLATE_RESOLVED_CONTEXT_SIGNATURE = 'resolved-template';
+const TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE =
+	'resolved-template-part';
 
 async function dismissWelcomeGuide( page ) {
 	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
@@ -165,12 +184,40 @@ async function dismissSiteEditorWelcomeGuide( page ) {
 }
 
 async function mockGlobalStylesRecommendations( page, styleRequests ) {
-	await page.route( '**/*recommend-style*', async ( route ) => {
-		styleRequests.push( route.request().postDataJSON() );
+	await mockRecommendationRoute(
+		page,
+		'**/*recommend-style*',
+		styleRequests,
+		GLOBAL_STYLES_RESPONSE
+	);
+}
+
+async function mockStyleBookRecommendations( page, styleRequests ) {
+	await mockRecommendationRoute(
+		page,
+		'**/*recommend-style*',
+		styleRequests,
+		STYLE_BOOK_RESPONSE
+	);
+}
+
+async function mockRecommendationRoute(
+	page,
+	urlPattern,
+	recordedRequests,
+	responseBody
+) {
+	await page.route( urlPattern, async ( route ) => {
+		const requestData = route.request().postDataJSON();
+
+		if ( ! requestData?.resolveSignatureOnly && recordedRequests ) {
+			recordedRequests.push( requestData );
+		}
+
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify( GLOBAL_STYLES_RESPONSE ),
+			body: JSON.stringify( responseBody ),
 		} );
 	} );
 }
@@ -645,13 +692,9 @@ async function openFirstTemplateEditor( page ) {
 		exact: true,
 	} );
 
-	if ( await templatesNavButton.count() ) {
+	if ( await templatesNavButton.isVisible().catch( () => false ) ) {
 		await templatesNavButton.click();
 	}
-
-	await expect(
-		page.getByRole( 'region', { name: 'Templates' } )
-	).toBeVisible();
 
 	const templateButton = page
 		.getByRole( 'button', {
@@ -1712,6 +1755,9 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 
 	expect( initialState.globalStylesId ).toBeTruthy();
 
+	const recommendationsPanel = page
+		.locator( '.flavor-agent-global-styles-panel' )
+		.first();
 	const promptInput = page.getByLabel( 'Describe the style direction' );
 
 	await expect( promptInput ).toBeVisible();
@@ -1729,7 +1775,7 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 	);
 
 	await expect(
-		page.getByText( 'Adjust canvas tone and rhythm' )
+		recommendationsPanel.getByText( GLOBAL_STYLES_SUGGESTION_LABEL ).first()
 	).toBeVisible();
 	await page.getByRole( 'button', { name: 'Review', exact: true } ).click();
 	await expect(
@@ -1738,7 +1784,7 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 			.getByText( 'Review Before Apply', { exact: true } )
 	).toBeVisible();
 	await page
-		.getByRole( 'button', { name: 'Apply Style Change', exact: true } )
+		.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
 		.click();
 
 	await expect
@@ -1798,6 +1844,9 @@ test( '@wp70-site-editor global styles surface requests defaults when the prompt
 	await enableSiteEditorGlobalStylesSidebar( page );
 
 	const initialState = await getGlobalStylesState( page );
+	const recommendationsPanel = page
+		.locator( '.flavor-agent-global-styles-panel' )
+		.first();
 	const promptInput = page.getByLabel( 'Describe the style direction' );
 
 	await expect( promptInput ).toBeVisible();
@@ -1814,7 +1863,7 @@ test( '@wp70-site-editor global styles surface requests defaults when the prompt
 	expect( styleRequests[ 0 ] ).not.toHaveProperty( 'prompt' );
 
 	await expect(
-		page.getByText( 'Adjust canvas tone and rhythm' )
+		recommendationsPanel.getByText( GLOBAL_STYLES_SUGGESTION_LABEL ).first()
 	).toBeVisible();
 } );
 
@@ -1898,9 +1947,7 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 		.toBe( GLOBAL_STYLES_STALE_TEXT_COLOR );
 
 	await expect(
-		recommendationsPanel.getByText(
-			'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( GLOBAL_STYLES_STALE_NOTICE )
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -1908,16 +1955,14 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 			exact: true,
 		} )
 	).toBeDisabled();
-	await expect(
-		recommendationsPanel.getByRole( 'button', {
-			name: 'Apply Style Change',
-			exact: true,
-		} )
-	).toBeDisabled();
+		await expect(
+			recommendationsPanel.getByRole( 'button', {
+				name: 'Confirm Apply',
+				exact: true,
+			} )
+		).toBeDisabled();
 
-	await recommendationsPanel
-		.getByRole( 'button', { name: 'Refresh', exact: true } )
-		.click();
+	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
 
 	await expect.poll( () => styleRequests.length ).toBe( 2 );
 	expect( styleRequests[ 1 ].scope.surface ).toBe( 'global-styles' );
@@ -1925,9 +1970,7 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 		styleRequests[ 1 ].styleContext.currentConfig.styles.color.text
 	).toBe( GLOBAL_STYLES_STALE_TEXT_COLOR );
 	await expect(
-		recommendationsPanel.getByText(
-			'Global Styles changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( GLOBAL_STYLES_STALE_NOTICE )
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -1942,14 +1985,7 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 } ) => {
 	const styleRequests = [];
 
-	await page.route( '**/*recommend-style*', async ( route ) => {
-		styleRequests.push( route.request().postDataJSON() );
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( STYLE_BOOK_RESPONSE ),
-		} );
-	} );
+	await mockStyleBookRecommendations( page, styleRequests );
 
 	await page.goto( '/wp-admin/site-editor.php', {
 		waitUntil: 'domcontentloaded',
@@ -2032,9 +2068,7 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 		.toBe( STYLE_BOOK_STALE_TEXT_COLOR );
 
 	await expect(
-		recommendationsPanel.getByText(
-			'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( STYLE_BOOK_STALE_NOTICE )
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -2042,16 +2076,14 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 			exact: true,
 		} )
 	).toBeDisabled();
-	await expect(
-		recommendationsPanel.getByRole( 'button', {
-			name: 'Apply Style Change',
-			exact: true,
-		} )
-	).toBeDisabled();
+		await expect(
+			recommendationsPanel.getByRole( 'button', {
+				name: 'Confirm Apply',
+				exact: true,
+			} )
+		).toBeDisabled();
 
-	await recommendationsPanel
-		.getByRole( 'button', { name: 'Refresh', exact: true } )
-		.click();
+	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
 
 	await expect.poll( () => styleRequests.length ).toBe( 2 );
 	expect( styleRequests[ 1 ].scope.surface ).toBe( 'style-book' );
@@ -2059,9 +2091,7 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 		styleRequests[ 1 ].styleContext.styleBookTarget.currentStyles.color.text
 	).toBe( STYLE_BOOK_STALE_TEXT_COLOR );
 	await expect(
-		recommendationsPanel.getByText(
-			'This Style Book block changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( STYLE_BOOK_STALE_NOTICE )
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -2084,6 +2114,7 @@ test( 'template surface smoke previews and applies executable template recommend
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
 				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
 				suggestions: [
 					{
@@ -2151,7 +2182,9 @@ test( 'template surface smoke previews and applies executable template recommend
 		TEMPLATE_PATTERN_NAME
 	);
 
-	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
+	await expect(
+		page.getByText( TEMPLATE_SUGGESTION_LABEL ).first()
+	).toBeVisible();
 	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await expect(
 		page
@@ -2215,6 +2248,7 @@ test( 'template surface keeps stale results visible but disables review and appl
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
 				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
 				suggestions: [
 					{
@@ -2308,9 +2342,7 @@ test( 'template surface keeps stale results visible but disables review and appl
 	recommendationsPanel = getPanelBody( promptInput );
 
 	await expect(
-		recommendationsPanel.getByText(
-			'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( TEMPLATE_STALE_NOTICE )
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -2325,9 +2357,7 @@ test( 'template surface keeps stale results visible but disables review and appl
 		} )
 	).toBeDisabled();
 
-	await recommendationsPanel
-		.getByRole( 'button', { name: 'Refresh', exact: true } )
-		.click();
+	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
 
 	await expect.poll( () => templateRequests.length ).toBe( 2 );
 	expect(
@@ -2343,9 +2373,7 @@ test( 'template surface keeps stale results visible but disables review and appl
 		] )
 	);
 	await expect(
-		recommendationsPanel.getByText(
-			'This template changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( TEMPLATE_STALE_NOTICE )
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -2388,6 +2416,7 @@ test( 'template surface keeps advisory-only suggestions visible without executab
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
 				explanation: 'One advisory idea is available.',
 				suggestions: [
 					{
@@ -2526,6 +2555,8 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature:
+					TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
 				explanation:
 					'Add a compact utility row at the end of the header part.',
 				suggestions: [
@@ -2605,7 +2636,9 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 		TEMPLATE_PART_PATTERN_NAME
 	);
 
-	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
+	await expect(
+		page.getByText( TEMPLATE_PART_SUGGESTION_LABEL ).first()
+	).toBeVisible();
 	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await expect(
 		page
@@ -2654,6 +2687,8 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature:
+					TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
 				explanation:
 					'Add a compact utility row at the end of the header part.',
 				suggestions: [
@@ -2763,9 +2798,7 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 	recommendationsPanel = getPanelBody( promptInput );
 
 	await expect(
-		recommendationsPanel.getByText(
-			'This template part changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( TEMPLATE_PART_STALE_NOTICE )
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -2780,9 +2813,7 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 		} )
 	).toBeDisabled();
 
-	await recommendationsPanel
-		.getByRole( 'button', { name: 'Refresh', exact: true } )
-		.click();
+	await recommendationsPanel.locator( '.flavor-agent-scope-bar__refresh' ).click();
 
 	await expect.poll( () => templatePartRequests.length ).toBe( 2 );
 	expect(
@@ -2806,9 +2837,7 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 		] )
 	);
 	await expect(
-		recommendationsPanel.getByText(
-			'This template part changed after the last request. Refresh before reviewing or applying anything from the previous result.'
-		)
+		recommendationsPanel.getByText( TEMPLATE_PART_STALE_NOTICE )
 	).toHaveCount( 0 );
 	await expect(
 		recommendationsPanel.getByRole( 'button', {
@@ -2829,6 +2858,8 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature:
+					TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE,
 				explanation: 'One advisory idea is available.',
 				suggestions: [
 					{
@@ -2938,6 +2969,7 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
 				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
 				suggestions: [
 					{
@@ -2993,7 +3025,9 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 	const promptInput = await openTemplateRecommendationsPanel( page );
 	await promptInput.fill( TEMPLATE_PROMPT );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
-	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
+	await expect(
+		page.getByText( TEMPLATE_SUGGESTION_LABEL ).first()
+	).toBeVisible();
 	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await page.evaluate( () => {
 		window.wp.data.dispatch( 'core/block-editor' ).clearSelectedBlock();
@@ -3067,6 +3101,7 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
+				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
 				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
 				suggestions: [
 					{
@@ -3122,7 +3157,9 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 	const promptInput = await openTemplateRecommendationsPanel( page );
 	await promptInput.fill( TEMPLATE_PROMPT );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
-	await expect( page.getByText( 'Suggested Composition' ) ).toBeVisible();
+	await expect(
+		page.getByText( TEMPLATE_SUGGESTION_LABEL ).first()
+	).toBeVisible();
 	await page.getByRole( 'button', { name: 'Review' } ).click();
 	await page.evaluate( () => {
 		window.wp.data.dispatch( 'core/block-editor' ).clearSelectedBlock();

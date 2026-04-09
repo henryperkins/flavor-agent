@@ -366,6 +366,7 @@ describe('store action thunks', () => {
 		apiFetch.mockResolvedValue({
 			suggestions: [{ label: 'Refresh template hierarchy' }],
 			explanation: 'Mocked template response',
+			resolvedContextSignature: 'resolved-template',
 		});
 
 		const dispatch = jest.fn();
@@ -407,10 +408,12 @@ describe('store action thunks', () => {
 				{
 					suggestions: [{ label: 'Refresh template hierarchy' }],
 					explanation: 'Mocked template response',
+					resolvedContextSignature: 'resolved-template',
 				},
 				'Tighten the structure.',
 				5,
-				'template-signature'
+				'template-signature',
+				'resolved-template'
 			)
 		);
 	});
@@ -419,6 +422,7 @@ describe('store action thunks', () => {
 		apiFetch.mockResolvedValue({
 			suggestions: [{ label: 'Use accent canvas' }],
 			explanation: 'Mocked Global Styles response',
+			resolvedContextSignature: 'resolved-global-styles',
 		});
 
 		const dispatch = jest.fn();
@@ -473,10 +477,12 @@ describe('store action thunks', () => {
 				{
 					suggestions: [{ label: 'Use accent canvas' }],
 					explanation: 'Mocked Global Styles response',
+					resolvedContextSignature: 'resolved-global-styles',
 				},
 				'Make the site feel more editorial.',
 				3,
-				input.contextSignature
+				input.contextSignature,
+				'resolved-global-styles'
 			)
 		);
 	});
@@ -624,6 +630,7 @@ describe('store action thunks', () => {
 		apiFetch.mockResolvedValue({
 			suggestions: [{ label: 'Tighten paragraph rhythm' }],
 			explanation: 'Mocked Style Book response',
+			resolvedContextSignature: 'resolved-style-book',
 		});
 
 		const dispatch = jest.fn();
@@ -686,10 +693,12 @@ describe('store action thunks', () => {
 				{
 					suggestions: [{ label: 'Tighten paragraph rhythm' }],
 					explanation: 'Mocked Style Book response',
+					resolvedContextSignature: 'resolved-style-book',
 				},
 				input.prompt,
 				2,
-				input.contextSignature
+				input.contextSignature,
+				'resolved-style-book'
 			)
 		);
 	});
@@ -2685,6 +2694,7 @@ describe('store action thunks', () => {
 		apiFetch.mockResolvedValue({
 			suggestions: [{ label: 'Add utility row' }],
 			explanation: 'Mocked template-part response',
+			resolvedContextSignature: 'resolved-template-part',
 		});
 
 		const dispatch = jest.fn();
@@ -2726,10 +2736,12 @@ describe('store action thunks', () => {
 				{
 					suggestions: [{ label: 'Add utility row' }],
 					explanation: 'Mocked template-part response',
+					resolvedContextSignature: 'resolved-template-part',
 				},
 				'Add a compact utility row.',
 				3,
-				'template-part-signature'
+				'template-part-signature',
+				'resolved-template-part'
 			)
 		);
 	});

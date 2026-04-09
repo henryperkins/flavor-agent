@@ -1311,6 +1311,376 @@ function buildExecutableSurfaceApplyThunk(
 	})(suggestion, currentRequestSignature, liveRequestInput);
 }
 
+function createExecutableSurfaceFetchConfig({
+	abortKey,
+	dispatchRecommendations,
+	endpoint,
+	getRequestToken,
+	requestErrorMessage,
+	setStatusAction,
+}) {
+	return {
+		abortKey,
+		dispatchRecommendations,
+		endpoint,
+		getRequestToken,
+		requestErrorMessage,
+		setErrorState: (message, requestToken) =>
+			setStatusAction('error', message, requestToken),
+		setLoadingState: (requestToken) =>
+			setStatusAction('loading', null, requestToken),
+	};
+}
+
+function createExecutableSurfaceApplyConfig({
+	applyFailureMessage,
+	buildActivityEntry,
+	endpoint,
+	executeSuggestion,
+	getStoredRequestSignature,
+	getStoredResolvedContextSignature,
+	setApplyStateAction,
+	surface,
+	unexpectedErrorMessage,
+}) {
+	return {
+		applyFailureMessage,
+		buildActivityEntry,
+		endpoint,
+		executeSuggestion,
+		getStoredRequestSignature,
+		getStoredResolvedContextSignature,
+		setApplyState: (
+			status,
+			{
+				error = null,
+				suggestionKey = null,
+				operations = [],
+				staleReason = null,
+			} = {}
+		) =>
+			setApplyStateAction(
+				status,
+				error,
+				suggestionKey,
+				operations,
+				staleReason
+			),
+		surface,
+		unexpectedErrorMessage,
+	};
+}
+
+function dispatchTemplateRecommendations({
+	contextSignature,
+	dispatch,
+	input: requestInput,
+	payload,
+	requestToken,
+	resolvedContextSignature,
+}) {
+	dispatch(
+		actions.setTemplateRecommendations(
+			requestInput.templateRef,
+			payload,
+			requestInput.prompt || '',
+			requestToken,
+			contextSignature,
+			resolvedContextSignature
+		)
+	);
+}
+
+function dispatchTemplatePartRecommendations({
+	contextSignature,
+	dispatch,
+	input: requestInput,
+	payload,
+	requestToken,
+	resolvedContextSignature,
+}) {
+	dispatch(
+		actions.setTemplatePartRecommendations(
+			requestInput.templatePartRef,
+			payload,
+			requestInput.prompt || '',
+			requestToken,
+			contextSignature,
+			resolvedContextSignature
+		)
+	);
+}
+
+function dispatchGlobalStylesRecommendations({
+	contextSignature,
+	dispatch,
+	input: requestInput,
+	payload,
+	requestToken,
+	resolvedContextSignature,
+}) {
+	dispatch(
+		actions.setGlobalStylesRecommendations(
+			requestInput.scope,
+			payload,
+			requestInput.prompt || '',
+			requestToken,
+			contextSignature,
+			resolvedContextSignature
+		)
+	);
+}
+
+function dispatchStyleBookRecommendations({
+	contextSignature,
+	dispatch,
+	input: requestInput,
+	payload,
+	requestToken,
+	resolvedContextSignature,
+}) {
+	dispatch(
+		actions.setStyleBookRecommendations(
+			requestInput.scope,
+			payload,
+			requestInput.prompt || '',
+			requestToken,
+			contextSignature,
+			resolvedContextSignature
+		)
+	);
+}
+
+function getTemplateStoredRequestSignature(select) {
+	return buildTemplateRecommendationRequestSignature({
+		templateRef: select.getTemplateResultRef?.() || '',
+		prompt: select.getTemplateRequestPrompt?.() || '',
+		contextSignature: select.getTemplateContextSignature?.() || null,
+	});
+}
+
+function getTemplatePartStoredRequestSignature(select) {
+	return buildTemplatePartRecommendationRequestSignature({
+		templatePartRef: select.getTemplatePartResultRef?.() || '',
+		prompt: select.getTemplatePartRequestPrompt?.() || '',
+		contextSignature: select.getTemplatePartContextSignature?.() || null,
+	});
+}
+
+function getGlobalStylesStoredRequestSignature(select) {
+	return buildGlobalStylesRecommendationRequestSignature({
+		scope: {
+			scopeKey: select.getGlobalStylesScopeKey?.() || '',
+			globalStylesId: select.getGlobalStylesResultRef?.() || '',
+			entityId: select.getGlobalStylesResultRef?.() || '',
+		},
+		prompt: select.getGlobalStylesRequestPrompt?.() || '',
+		contextSignature: select.getGlobalStylesContextSignature?.() || null,
+	});
+}
+
+function getStyleBookStoredRequestSignature(select) {
+	return buildStyleBookRecommendationRequestSignature({
+		scope: {
+			scopeKey: select.getStyleBookScopeKey?.() || '',
+			globalStylesId: select.getStyleBookGlobalStylesId?.() || '',
+			entityId: select.getStyleBookGlobalStylesId?.() || '',
+			blockName: select.getStyleBookBlockName?.() || '',
+		},
+		prompt: select.getStyleBookRequestPrompt?.() || '',
+		contextSignature: select.getStyleBookContextSignature?.() || null,
+	});
+}
+
+function buildTemplateActivityEntryFromStore({
+	result,
+	scope,
+	select,
+	suggestion,
+}) {
+	return buildTemplateActivityEntry({
+		operations: result.operations,
+		requestPrompt: select.getTemplateRequestPrompt?.() || '',
+		requestMeta: suggestion?.requestMeta || null,
+		requestToken: select.getTemplateResultToken?.() || 0,
+		scope,
+		suggestion,
+		templateRef: select.getTemplateResultRef(),
+	});
+}
+
+function buildTemplatePartActivityEntryFromStore({
+	result,
+	scope,
+	select,
+	suggestion,
+}) {
+	return buildTemplatePartActivityEntry({
+		operations: result.operations,
+		requestPrompt: select.getTemplatePartRequestPrompt?.() || '',
+		requestMeta: suggestion?.requestMeta || null,
+		requestToken: select.getTemplatePartResultToken?.() || 0,
+		scope,
+		suggestion,
+		templatePartRef: select.getTemplatePartResultRef(),
+	});
+}
+
+function buildGlobalStylesActivityEntryFromStore({
+	result,
+	scope,
+	select,
+	suggestion,
+}) {
+	return buildGlobalStylesActivityEntry({
+		operations: result.operations,
+		beforeConfig: result.beforeConfig,
+		afterConfig: result.afterConfig,
+		requestPrompt: select.getGlobalStylesRequestPrompt?.() || '',
+		requestMeta: suggestion?.requestMeta || null,
+		requestToken: select.getGlobalStylesResultToken?.() || 0,
+		scope,
+		suggestion,
+		globalStylesId: result.globalStylesId,
+	});
+}
+
+function buildStyleBookActivityEntryFromStore({
+	result,
+	scope,
+	select,
+	suggestion,
+}) {
+	return buildStyleBookActivityEntry({
+		operations: result.operations,
+		beforeConfig: result.beforeConfig,
+		afterConfig: result.afterConfig,
+		requestPrompt: select.getStyleBookRequestPrompt?.() || '',
+		requestMeta: suggestion?.requestMeta || null,
+		requestToken: select.getStyleBookResultToken?.() || 0,
+		scope,
+		suggestion,
+		globalStylesId: result.globalStylesId,
+		blockName: scope?.blockName || '',
+		blockTitle: scope?.blockTitle || '',
+	});
+}
+
+function getTemplateExecutableSurfaceFetchConfig() {
+	return createExecutableSurfaceFetchConfig({
+		abortKey: '_templateAbort',
+		dispatchRecommendations: dispatchTemplateRecommendations,
+		endpoint: '/flavor-agent/v1/recommend-template',
+		getRequestToken: (select) => (select.getTemplateRequestToken?.() || 0) + 1,
+		requestErrorMessage: 'Template recommendation request failed.',
+		setStatusAction: actions.setTemplateStatus,
+	});
+}
+
+function getTemplatePartExecutableSurfaceFetchConfig() {
+	return createExecutableSurfaceFetchConfig({
+		abortKey: '_templatePartAbort',
+		dispatchRecommendations: dispatchTemplatePartRecommendations,
+		endpoint: '/flavor-agent/v1/recommend-template-part',
+		getRequestToken: (select) =>
+			(select.getTemplatePartRequestToken?.() || 0) + 1,
+		requestErrorMessage: 'Template-part recommendation request failed.',
+		setStatusAction: actions.setTemplatePartStatus,
+	});
+}
+
+function getGlobalStylesExecutableSurfaceFetchConfig() {
+	return createExecutableSurfaceFetchConfig({
+		abortKey: '_globalStylesAbort',
+		dispatchRecommendations: dispatchGlobalStylesRecommendations,
+		endpoint: '/flavor-agent/v1/recommend-style',
+		getRequestToken: (select) =>
+			(select.getGlobalStylesRequestToken?.() || 0) + 1,
+		requestErrorMessage: 'Global Styles recommendation request failed.',
+		setStatusAction: actions.setGlobalStylesStatus,
+	});
+}
+
+function getStyleBookExecutableSurfaceFetchConfig() {
+	return createExecutableSurfaceFetchConfig({
+		abortKey: '_styleBookAbort',
+		dispatchRecommendations: dispatchStyleBookRecommendations,
+		endpoint: '/flavor-agent/v1/recommend-style',
+		getRequestToken: (select) =>
+			(select.getStyleBookRequestToken?.() || 0) + 1,
+		requestErrorMessage: 'Style Book recommendation request failed.',
+		setStatusAction: actions.setStyleBookStatus,
+	});
+}
+
+function getTemplateExecutableSurfaceApplyConfig() {
+	return createExecutableSurfaceApplyConfig({
+		applyFailureMessage: 'Template apply failed.',
+		buildActivityEntry: buildTemplateActivityEntryFromStore,
+		endpoint: '/flavor-agent/v1/recommend-template',
+		executeSuggestion: ({ suggestion }) =>
+			applyTemplateSuggestionOperations(suggestion),
+		getStoredRequestSignature: getTemplateStoredRequestSignature,
+		getStoredResolvedContextSignature: (select) =>
+			select.getTemplateResolvedContextSignature?.() || null,
+		setApplyStateAction: actions.setTemplateApplyState,
+		surface: 'template',
+		unexpectedErrorMessage: 'Template apply failed unexpectedly.',
+	});
+}
+
+function getTemplatePartExecutableSurfaceApplyConfig() {
+	return createExecutableSurfaceApplyConfig({
+		applyFailureMessage: 'Template-part apply failed.',
+		buildActivityEntry: buildTemplatePartActivityEntryFromStore,
+		endpoint: '/flavor-agent/v1/recommend-template-part',
+		executeSuggestion: ({ suggestion }) =>
+			applyTemplatePartSuggestionOperations(suggestion),
+		getStoredRequestSignature: getTemplatePartStoredRequestSignature,
+		getStoredResolvedContextSignature: (select) =>
+			select.getTemplatePartResolvedContextSignature?.() || null,
+		setApplyStateAction: actions.setTemplatePartApplyState,
+		surface: 'template-part',
+		unexpectedErrorMessage: 'Template-part apply failed unexpectedly.',
+	});
+}
+
+function getGlobalStylesExecutableSurfaceApplyConfig() {
+	return createExecutableSurfaceApplyConfig({
+		applyFailureMessage: 'Global Styles apply failed.',
+		buildActivityEntry: buildGlobalStylesActivityEntryFromStore,
+		endpoint: '/flavor-agent/v1/recommend-style',
+		executeSuggestion: ({ registry, suggestion }) =>
+			applyGlobalStyleSuggestionOperations(suggestion, registry, {
+				surface: 'global-styles',
+			}),
+		getStoredRequestSignature: getGlobalStylesStoredRequestSignature,
+		getStoredResolvedContextSignature: (select) =>
+			select.getGlobalStylesResolvedContextSignature?.() || null,
+		setApplyStateAction: actions.setGlobalStylesApplyState,
+		surface: 'global-styles',
+		unexpectedErrorMessage: 'Global Styles apply failed unexpectedly.',
+	});
+}
+
+function getStyleBookExecutableSurfaceApplyConfig() {
+	return createExecutableSurfaceApplyConfig({
+		applyFailureMessage: 'Style Book apply failed.',
+		buildActivityEntry: buildStyleBookActivityEntryFromStore,
+		endpoint: '/flavor-agent/v1/recommend-style',
+		executeSuggestion: ({ registry, suggestion }) =>
+			applyGlobalStyleSuggestionOperations(suggestion, registry, {
+				surface: 'style-book',
+			}),
+		getStoredRequestSignature: getStyleBookStoredRequestSignature,
+		getStoredResolvedContextSignature: (select) =>
+			select.getStyleBookResolvedContextSignature?.() || null,
+		setApplyStateAction: actions.setStyleBookApplyState,
+		surface: 'style-book',
+		unexpectedErrorMessage: 'Style Book apply failed unexpectedly.',
+	});
+}
+
 function getEntityActivityEntries(activityLog, activity) {
 	const entityKey = getActivityEntityKey(activity);
 
@@ -3110,48 +3480,7 @@ const actions = {
 		liveRequestInput = null
 	) {
 		return buildExecutableSurfaceApplyThunk(
-			{
-				surface: 'template',
-				endpoint: '/flavor-agent/v1/recommend-template',
-				setApplyState: (
-					status,
-					{
-						error = null,
-						suggestionKey = null,
-						operations = [],
-						staleReason = null,
-					} = {}
-				) =>
-					actions.setTemplateApplyState(
-						status,
-						error,
-						suggestionKey,
-						operations,
-						staleReason
-					),
-				getStoredRequestSignature: (select) =>
-					buildTemplateRecommendationRequestSignature({
-						templateRef: select.getTemplateResultRef?.() || '',
-						prompt: select.getTemplateRequestPrompt?.() || '',
-						contextSignature: select.getTemplateContextSignature?.() || null,
-					}),
-				getStoredResolvedContextSignature: (select) =>
-					select.getTemplateResolvedContextSignature?.() || null,
-				executeSuggestion: ({ suggestion }) =>
-					applyTemplateSuggestionOperations(suggestion),
-				unexpectedErrorMessage: 'Template apply failed unexpectedly.',
-				applyFailureMessage: 'Template apply failed.',
-				buildActivityEntry: ({ result, scope, select, suggestion }) =>
-					buildTemplateActivityEntry({
-						operations: result.operations,
-						requestPrompt: select.getTemplateRequestPrompt?.() || '',
-						requestMeta: suggestion?.requestMeta || null,
-						requestToken: select.getTemplateResultToken?.() || 0,
-						scope,
-						suggestion,
-						templateRef: select.getTemplateResultRef(),
-					}),
-			},
+			getTemplateExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
 			liveRequestInput
@@ -3164,50 +3493,7 @@ const actions = {
 		liveRequestInput = null
 	) {
 		return buildExecutableSurfaceApplyThunk(
-			{
-				surface: 'template-part',
-				endpoint: '/flavor-agent/v1/recommend-template-part',
-				setApplyState: (
-					status,
-					{
-						error = null,
-						suggestionKey = null,
-						operations = [],
-						staleReason = null,
-					} = {}
-				) =>
-					actions.setTemplatePartApplyState(
-						status,
-						error,
-						suggestionKey,
-						operations,
-						staleReason
-					),
-				getStoredRequestSignature: (select) =>
-					buildTemplatePartRecommendationRequestSignature({
-						templatePartRef: select.getTemplatePartResultRef?.() || '',
-						prompt: select.getTemplatePartRequestPrompt?.() || '',
-						contextSignature:
-							select.getTemplatePartContextSignature?.() || null,
-					}),
-				getStoredResolvedContextSignature: (select) =>
-					select.getTemplatePartResolvedContextSignature?.() || null,
-				executeSuggestion: ({ suggestion }) =>
-					applyTemplatePartSuggestionOperations(suggestion),
-				unexpectedErrorMessage:
-					'Template-part apply failed unexpectedly.',
-				applyFailureMessage: 'Template-part apply failed.',
-				buildActivityEntry: ({ result, scope, select, suggestion }) =>
-					buildTemplatePartActivityEntry({
-						operations: result.operations,
-						requestPrompt: select.getTemplatePartRequestPrompt?.() || '',
-						requestMeta: suggestion?.requestMeta || null,
-						requestToken: select.getTemplatePartResultToken?.() || 0,
-						scope,
-						suggestion,
-						templatePartRef: select.getTemplatePartResultRef(),
-					}),
-			},
+			getTemplatePartExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
 			liveRequestInput
@@ -3220,58 +3506,7 @@ const actions = {
 		liveRequestInput = null
 	) {
 		return buildExecutableSurfaceApplyThunk(
-			{
-				surface: 'global-styles',
-				endpoint: '/flavor-agent/v1/recommend-style',
-				setApplyState: (
-					status,
-					{
-						error = null,
-						suggestionKey = null,
-						operations = [],
-						staleReason = null,
-					} = {}
-				) =>
-					actions.setGlobalStylesApplyState(
-						status,
-						error,
-						suggestionKey,
-						operations,
-						staleReason
-					),
-				getStoredRequestSignature: (select) =>
-					buildGlobalStylesRecommendationRequestSignature({
-						scope: {
-							scopeKey: select.getGlobalStylesScopeKey?.() || '',
-							globalStylesId: select.getGlobalStylesResultRef?.() || '',
-							entityId: select.getGlobalStylesResultRef?.() || '',
-						},
-						prompt: select.getGlobalStylesRequestPrompt?.() || '',
-						contextSignature:
-							select.getGlobalStylesContextSignature?.() || null,
-					}),
-				getStoredResolvedContextSignature: (select) =>
-					select.getGlobalStylesResolvedContextSignature?.() || null,
-				executeSuggestion: ({ registry, suggestion }) =>
-					applyGlobalStyleSuggestionOperations(suggestion, registry, {
-						surface: 'global-styles',
-					}),
-				unexpectedErrorMessage:
-					'Global Styles apply failed unexpectedly.',
-				applyFailureMessage: 'Global Styles apply failed.',
-				buildActivityEntry: ({ result, scope, select, suggestion }) =>
-					buildGlobalStylesActivityEntry({
-						operations: result.operations,
-						beforeConfig: result.beforeConfig,
-						afterConfig: result.afterConfig,
-						requestPrompt: select.getGlobalStylesRequestPrompt?.() || '',
-						requestMeta: suggestion?.requestMeta || null,
-						requestToken: select.getGlobalStylesResultToken?.() || 0,
-						scope,
-						suggestion,
-						globalStylesId: result.globalStylesId,
-					}),
-			},
+			getGlobalStylesExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
 			liveRequestInput
@@ -3284,60 +3519,7 @@ const actions = {
 		liveRequestInput = null
 	) {
 		return buildExecutableSurfaceApplyThunk(
-			{
-				surface: 'style-book',
-				endpoint: '/flavor-agent/v1/recommend-style',
-				setApplyState: (
-					status,
-					{
-						error = null,
-						suggestionKey = null,
-						operations = [],
-						staleReason = null,
-					} = {}
-				) =>
-					actions.setStyleBookApplyState(
-						status,
-						error,
-						suggestionKey,
-						operations,
-						staleReason
-					),
-				getStoredRequestSignature: (select) =>
-					buildStyleBookRecommendationRequestSignature({
-						scope: {
-							scopeKey: select.getStyleBookScopeKey?.() || '',
-							globalStylesId: select.getStyleBookGlobalStylesId?.() || '',
-							entityId: select.getStyleBookGlobalStylesId?.() || '',
-							blockName: select.getStyleBookBlockName?.() || '',
-						},
-						prompt: select.getStyleBookRequestPrompt?.() || '',
-						contextSignature:
-							select.getStyleBookContextSignature?.() || null,
-					}),
-				getStoredResolvedContextSignature: (select) =>
-					select.getStyleBookResolvedContextSignature?.() || null,
-				executeSuggestion: ({ registry, suggestion }) =>
-					applyGlobalStyleSuggestionOperations(suggestion, registry, {
-						surface: 'style-book',
-					}),
-				unexpectedErrorMessage: 'Style Book apply failed unexpectedly.',
-				applyFailureMessage: 'Style Book apply failed.',
-				buildActivityEntry: ({ result, scope, select, suggestion }) =>
-					buildStyleBookActivityEntry({
-						operations: result.operations,
-						beforeConfig: result.beforeConfig,
-						afterConfig: result.afterConfig,
-						requestPrompt: select.getStyleBookRequestPrompt?.() || '',
-						requestMeta: suggestion?.requestMeta || null,
-						requestToken: select.getStyleBookResultToken?.() || 0,
-						scope,
-						suggestion,
-						globalStylesId: result.globalStylesId,
-						blockName: scope?.blockName || '',
-						blockTitle: scope?.blockTitle || '',
-					}),
-			},
+			getStyleBookExecutableSurfaceApplyConfig(),
 			suggestion,
 			currentRequestSignature,
 			liveRequestInput
@@ -3346,142 +3528,28 @@ const actions = {
 
 	fetchTemplateRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
-			{
-				abortKey: '_templateAbort',
-				endpoint: '/flavor-agent/v1/recommend-template',
-				getRequestToken: (select) =>
-					(select.getTemplateRequestToken?.() || 0) + 1,
-				requestErrorMessage: 'Template recommendation request failed.',
-				setErrorState: (message, requestToken) =>
-					actions.setTemplateStatus('error', message, requestToken),
-				setLoadingState: (requestToken) =>
-					actions.setTemplateStatus('loading', null, requestToken),
-				dispatchRecommendations: ({
-					contextSignature,
-					dispatch,
-					input: requestInput,
-					payload,
-					requestToken,
-					resolvedContextSignature,
-				}) =>
-					dispatch(
-						actions.setTemplateRecommendations(
-							requestInput.templateRef,
-							payload,
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature,
-							resolvedContextSignature
-						)
-					),
-			},
+			getTemplateExecutableSurfaceFetchConfig(),
 			input
 		);
 	},
 
 	fetchTemplatePartRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
-			{
-				abortKey: '_templatePartAbort',
-				endpoint: '/flavor-agent/v1/recommend-template-part',
-				getRequestToken: (select) =>
-					(select.getTemplatePartRequestToken?.() || 0) + 1,
-				requestErrorMessage:
-					'Template-part recommendation request failed.',
-				setErrorState: (message, requestToken) =>
-					actions.setTemplatePartStatus('error', message, requestToken),
-				setLoadingState: (requestToken) =>
-					actions.setTemplatePartStatus('loading', null, requestToken),
-				dispatchRecommendations: ({
-					contextSignature,
-					dispatch,
-					input: requestInput,
-					payload,
-					requestToken,
-					resolvedContextSignature,
-				}) =>
-					dispatch(
-						actions.setTemplatePartRecommendations(
-							requestInput.templatePartRef,
-							payload,
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature,
-							resolvedContextSignature
-						)
-					),
-			},
+			getTemplatePartExecutableSurfaceFetchConfig(),
 			input
 		);
 	},
 
 	fetchGlobalStylesRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
-			{
-				abortKey: '_globalStylesAbort',
-				endpoint: '/flavor-agent/v1/recommend-style',
-				getRequestToken: (select) =>
-					(select.getGlobalStylesRequestToken?.() || 0) + 1,
-				requestErrorMessage:
-					'Global Styles recommendation request failed.',
-				setErrorState: (message, requestToken) =>
-					actions.setGlobalStylesStatus('error', message, requestToken),
-				setLoadingState: (requestToken) =>
-					actions.setGlobalStylesStatus('loading', null, requestToken),
-				dispatchRecommendations: ({
-					contextSignature,
-					dispatch,
-					input: requestInput,
-					payload,
-					requestToken,
-					resolvedContextSignature,
-				}) =>
-					dispatch(
-						actions.setGlobalStylesRecommendations(
-							requestInput.scope,
-							payload,
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature,
-							resolvedContextSignature
-						)
-					),
-			},
+			getGlobalStylesExecutableSurfaceFetchConfig(),
 			input
 		);
 	},
 
 	fetchStyleBookRecommendations(input) {
 		return buildExecutableSurfaceFetchThunk(
-			{
-				abortKey: '_styleBookAbort',
-				endpoint: '/flavor-agent/v1/recommend-style',
-				getRequestToken: (select) =>
-					(select.getStyleBookRequestToken?.() || 0) + 1,
-				requestErrorMessage: 'Style Book recommendation request failed.',
-				setErrorState: (message, requestToken) =>
-					actions.setStyleBookStatus('error', message, requestToken),
-				setLoadingState: (requestToken) =>
-					actions.setStyleBookStatus('loading', null, requestToken),
-				dispatchRecommendations: ({
-					contextSignature,
-					dispatch,
-					input: requestInput,
-					payload,
-					requestToken,
-					resolvedContextSignature,
-				}) =>
-					dispatch(
-						actions.setStyleBookRecommendations(
-							requestInput.scope,
-							payload,
-							requestInput.prompt || '',
-							requestToken,
-							contextSignature,
-							resolvedContextSignature
-						)
-					),
-			},
+			getStyleBookExecutableSurfaceFetchConfig(),
 			input
 		);
 	},
