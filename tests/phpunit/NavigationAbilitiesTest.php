@@ -529,11 +529,36 @@ final class NavigationAbilitiesTest extends TestCase {
 			$raw,
 			[
 				'targetInventory' => [
-					[ 'path' => [ 0 ], 'label' => 'Item 1', 'type' => 'navigation-link', 'depth' => 0 ],
-					[ 'path' => [ 1 ], 'label' => 'Item 2', 'type' => 'navigation-link', 'depth' => 0 ],
-					[ 'path' => [ 2 ], 'label' => 'Item 3', 'type' => 'navigation-link', 'depth' => 0 ],
-					[ 'path' => [ 3 ], 'label' => 'Item 4', 'type' => 'navigation-link', 'depth' => 0 ],
-					[ 'path' => [ 4 ], 'label' => 'Item 5', 'type' => 'navigation-link', 'depth' => 0 ],
+					[
+						'path'  => [ 0 ],
+						'label' => 'Item 1',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 1 ],
+						'label' => 'Item 2',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 2 ],
+						'label' => 'Item 3',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 3 ],
+						'label' => 'Item 4',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 4 ],
+						'label' => 'Item 5',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
 				],
 			]
 		);
@@ -559,5 +584,133 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'targetPath', $system );
 		$this->assertStringContainsString( 'overlayMenu', $system );
 		$this->assertStringContainsString( 'openSubmenusOnClick', $system );
+	}
+
+	public function test_parse_response_prefers_explicit_score_over_confidence_for_sorting(): void {
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Explicit score navigation idea',
+						'description' => 'This should sort first.',
+						'category'    => 'structure',
+						'score'       => 0.9,
+						'confidence'  => 0.11,
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 1 ],
+								'target'     => 'About link',
+								'detail'     => 'Move About later.',
+							],
+						],
+					],
+					[
+						'label'       => 'Confidence navigation idea',
+						'description' => 'This should sort second.',
+						'category'    => 'structure',
+						'confidence'  => 0.82,
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 0 ],
+								'target'     => 'Home link',
+								'detail'     => 'Move Home later.',
+							],
+						],
+					],
+				],
+				'explanation' => 'Explicit scores should drive ordering.',
+			]
+		);
+
+		$result = NavigationPrompt::parse_response(
+			$raw,
+			[
+				'targetInventory' => [
+					[
+						'path'  => [ 0 ],
+						'label' => 'Home',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 1 ],
+						'label' => 'About',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Explicit score navigation idea', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.9, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Fallback confidence navigation idea',
+						'description' => 'A malformed nested score should not zero this out.',
+						'category'    => 'structure',
+						'ranking'     => [
+							'score' => [],
+						],
+						'confidence'  => 0.86,
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 1 ],
+								'target'     => 'About link',
+								'detail'     => 'Move About later.',
+							],
+						],
+					],
+					[
+						'label'       => 'Lower confidence navigation idea',
+						'description' => 'This should sort second.',
+						'category'    => 'structure',
+						'confidence'  => 0.82,
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 0 ],
+								'target'     => 'Home link',
+								'detail'     => 'Move Home later.',
+							],
+						],
+					],
+				],
+				'explanation' => 'Malformed nested scores should not suppress valid fallback confidence.',
+			]
+		);
+
+		$result = NavigationPrompt::parse_response(
+			$raw,
+			[
+				'targetInventory' => [
+					[
+						'path'  => [ 0 ],
+						'label' => 'Home',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 1 ],
+						'label' => 'About',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence navigation idea', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.86, $result['suggestions'][0]['ranking']['score'] );
 	}
 }

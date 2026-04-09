@@ -498,4 +498,112 @@ final class PromptRulesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( [], $result['styles'] );
 	}
+
+	public function test_parse_response_normalizes_ranking_contract_when_confidence_present(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Refine heading hierarchy',
+							'description' => 'Use a more structured heading level.',
+							'type'        => 'structural_recommendation',
+							'confidence'  => 0.71,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 0.71, $result['block'][0]['ranking']['score'] );
+		$this->assertSame( 'validated', $result['block'][0]['ranking']['safetyMode'] );
+		$this->assertSame( 'structural_recommendation', $result['block'][0]['ranking']['advisoryType'] );
+		$this->assertSame( [ 'llm_response', 'block_surface', 'has_description' ], $result['block'][0]['ranking']['sourceSignals'] );
+	}
+
+	public function test_parse_response_prefers_explicit_score_over_confidence_when_ranking_blocks(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Explicit score wins',
+							'description' => 'The score should drive ordering.',
+							'type'        => 'structural_recommendation',
+							'score'       => 0.91,
+							'confidence'  => 0.14,
+						],
+						[
+							'label'       => 'Confidence only',
+							'description' => 'Still valid, but lower-ranked.',
+							'type'        => 'structural_recommendation',
+							'confidence'  => 0.82,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Explicit score wins', $result['block'][0]['label'] );
+		$this->assertSame( 0.91, $result['block'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Fallback confidence wins',
+							'description' => 'A malformed nested score should not zero this out.',
+							'type'        => 'structural_recommendation',
+							'ranking'     => [
+								'score' => [],
+							],
+							'confidence'  => 0.88,
+						],
+						[
+							'label'       => 'Lower confidence',
+							'description' => 'Still valid, but should sort second.',
+							'type'        => 'structural_recommendation',
+							'confidence'  => 0.82,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence wins', $result['block'][0]['label'] );
+		$this->assertSame( 0.88, $result['block'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_ranks_block_suggestions_by_computed_quality_signals(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Advisory only',
+							'description' => 'General suggestion.',
+							'type'        => 'structural_recommendation',
+						],
+						[
+							'label'            => 'Executable update',
+							'description'      => 'Apply a concrete attribute update.',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => [
+								'level' => 2,
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Executable update', $result['block'][0]['label'] );
+	}
 }
