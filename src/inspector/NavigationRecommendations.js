@@ -30,6 +30,7 @@ import {
 } from '../context/collector';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { buildContextSignature } from '../utils/context-signature';
+import { buildNavigationRecommendationRequestSignature } from '../utils/recommendation-request-signature';
 
 function formatChangeType( type ) {
 	return humanizeString( type || 'change' );
@@ -304,6 +305,9 @@ export default function NavigationRecommendations( {
 		status,
 		resultBlockClientId,
 		currentResultContextSignature,
+		currentReviewContextSignature,
+		currentReviewFreshnessStatus,
+		currentReviewStaleReason,
 	} = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -320,6 +324,12 @@ export default function NavigationRecommendations( {
 				resultBlockClientId: store.getNavigationBlockClientId(),
 				currentResultContextSignature:
 					store.getNavigationContextSignature( clientId ),
+				currentReviewContextSignature:
+					store.getNavigationReviewContextSignature( clientId ),
+				currentReviewFreshnessStatus:
+					store.getNavigationReviewFreshnessStatus( clientId ),
+				currentReviewStaleReason:
+					store.getNavigationReviewStaleReason( clientId ),
 			};
 		},
 		[ clientId ]
@@ -328,6 +338,7 @@ export default function NavigationRecommendations( {
 		clearNavigationError,
 		clearNavigationRecommendations,
 		fetchNavigationRecommendations,
+		revalidateNavigationReviewFreshness,
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const previousClientId = useRef( clientId );
@@ -361,16 +372,44 @@ export default function NavigationRecommendations( {
 			} ),
 		[ clientId, liveNavigationContext, navigationBlock, prompt ]
 	);
+	const recommendationRequestSignature = useMemo(
+		() =>
+			buildNavigationRecommendationRequestSignature( {
+				blockClientId: clientId,
+				prompt,
+				contextSignature: recommendationContextSignature,
+			} ),
+		[ clientId, prompt, recommendationContextSignature ]
+	);
+	const reviewRequestInput = useMemo( () => {
+		if ( ! requestInput ) {
+			return null;
+		}
+
+		const { blockClientId, ...serverRequestInput } = requestInput;
+
+		void blockClientId;
+
+		return serverRequestInput;
+	}, [ requestInput ] );
 	const hasStoredResult =
 		resultBlockClientId === clientId && status === 'ready';
-	const hasMatchingResult =
+	const hasMatchingStoredContext =
 		hasStoredResult &&
 		( ! currentResultContextSignature ||
 			currentResultContextSignature === recommendationContextSignature );
-	const isStaleResult =
+	const isClientStaleResult =
 		hasStoredResult &&
 		Boolean( currentResultContextSignature ) &&
 		currentResultContextSignature !== recommendationContextSignature;
+	const isServerStaleResult =
+		hasMatchingStoredContext && currentReviewFreshnessStatus === 'stale';
+	const hasMatchingResult = hasMatchingStoredContext && ! isServerStaleResult;
+	const isStaleResult = isClientStaleResult || isServerStaleResult;
+	const staleMessage =
+		isServerStaleResult && currentReviewStaleReason === 'server-review'
+			? 'Server-resolved navigation context changed after the last request. Menu structure, overlay context, or theme constraints may have shifted. Refresh before relying on the previous guidance.'
+			: 'This navigation changed after the last request. Refresh before relying on the previous guidance.';
 	const visibleRecommendations = useMemo(
 		() => ( hasMatchingResult || isStaleResult ? recommendations : [] ),
 		[ hasMatchingResult, isStaleResult, recommendations ]
@@ -451,6 +490,24 @@ export default function NavigationRecommendations( {
 		currentResultContextSignature,
 		requestPrompt,
 		resultBlockClientId,
+		status,
+	] );
+
+	useEffect( () => {
+		if ( ! hasStoredResult || status !== 'ready' ) {
+			return;
+		}
+
+		revalidateNavigationReviewFreshness(
+			recommendationRequestSignature,
+			reviewRequestInput
+		);
+	}, [
+		currentReviewContextSignature,
+		hasStoredResult,
+		recommendationRequestSignature,
+		revalidateNavigationReviewFreshness,
+		reviewRequestInput,
 		status,
 	] );
 
@@ -611,9 +668,7 @@ export default function NavigationRecommendations( {
 						{ isStaleResult && (
 							<div className="flavor-agent-navigation-embedded__stale">
 								<p className="flavor-agent-explanation flavor-agent-panel__note">
-									This navigation changed after the last
-									request. Refresh before relying on the
-									previous guidance.
+									{ staleMessage }
 								</p>
 								<Button
 									size="small"
@@ -688,11 +743,7 @@ export default function NavigationRecommendations( {
 							isFresh={ hasMatchingResult }
 							hasResult={ hasResult }
 							announceChanges
-							staleReason={
-								isStaleResult
-									? 'This navigation changed after the last request. Refresh before relying on the previous guidance.'
-									: ''
-							}
+							staleReason={ isStaleResult ? staleMessage : '' }
 							onRefresh={
 								isStaleResult ? handleRefresh : undefined
 							}

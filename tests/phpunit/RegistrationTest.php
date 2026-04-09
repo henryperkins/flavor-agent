@@ -138,6 +138,29 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
+	public function test_register_abilities_describes_resolve_signature_only_contracts_accurately(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$block_ability    = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? null;
+		$template_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-template'] ?? null;
+
+		$this->assertIsArray( $block_ability );
+		$this->assertIsArray( $template_ability );
+		$this->assertStringContainsString(
+			'apply-context signature',
+			(string) ( $block_ability['input_schema']['properties']['resolveSignatureOnly']['description'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'review/apply context signatures',
+			(string) ( $block_ability['input_schema']['properties']['resolveSignatureOnly']['description'] ?? '' )
+		);
+		$this->assertStringContainsString(
+			'review/apply context signatures',
+			(string) ( $template_ability['input_schema']['properties']['resolveSignatureOnly']['description'] ?? '' )
+		);
+	}
+
 	public function test_register_abilities_exposes_pattern_override_metadata_in_pattern_schemas(): void {
 		Registration::register_category();
 		Registration::register_abilities();
@@ -424,6 +447,10 @@ final class RegistrationTest extends TestCase {
 			$ability['input_schema']['properties']['editorContext']['type'] ?? null
 		);
 		$this->assertSame(
+			'boolean',
+			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
+		);
+		$this->assertSame(
 			'array',
 			$ability['output_schema']['properties']['suggestions']['items']['properties']['changes']['type'] ?? null
 		);
@@ -434,6 +461,10 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame(
 			'integer',
 			$ability['output_schema']['properties']['suggestions']['items']['properties']['changes']['items']['properties']['targetPath']['items']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$ability['output_schema']['properties']['reviewContextSignature']['type'] ?? null
 		);
 	}
 

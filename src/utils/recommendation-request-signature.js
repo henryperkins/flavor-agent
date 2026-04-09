@@ -48,6 +48,20 @@ export function buildTemplateRecommendationRequestSignature( {
 	} );
 }
 
+export function buildNavigationRecommendationRequestSignature( {
+	blockClientId = '',
+	prompt = '',
+	contextSignature = '',
+} = {} ) {
+	return buildRecommendationRequestSignature( {
+		surface: 'navigation',
+		prompt,
+		contextSignature,
+		scopeKey: blockClientId,
+		entityRef: blockClientId,
+	} );
+}
+
 export function buildTemplatePartRecommendationRequestSignature( {
 	templatePartRef = '',
 	prompt = '',

@@ -198,6 +198,9 @@ export function buildTemplateRecommendationContextSignature( {
 } = {} ) {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
+	const normalizedAllowedAreas = Array.isArray( editorSlots?.allowedAreas )
+		? [ ...new Set( editorSlots.allowedAreas.filter( Boolean ) ) ].sort()
+		: null;
 
 	return buildContextSignature( {
 		assignedParts: Array.isArray( editorSlots?.assignedParts )
@@ -206,6 +209,7 @@ export function buildTemplateRecommendationContextSignature( {
 		emptyAreas: Array.isArray( editorSlots?.emptyAreas )
 			? editorSlots.emptyAreas
 			: null,
+		allowedAreas: normalizedAllowedAreas,
 		topLevelBlockTree: Array.isArray( editorStructure?.topLevelBlockTree )
 			? editorStructure.topLevelBlockTree
 			: null,

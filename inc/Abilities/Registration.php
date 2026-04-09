@@ -46,7 +46,7 @@ final class Registration {
 						],
 						'resolveSignatureOnly' => [
 							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
+							'description' => 'When true, only resolve the server-issued apply-context signature without calling the model.',
 						],
 					],
 					'required'   => [ 'selectedBlock' ],
@@ -305,7 +305,7 @@ final class Registration {
 						'prompt'              => [ 'type' => 'string' ],
 						'resolveSignatureOnly' => [
 							'type'        => 'boolean',
-							'description' => 'When true, only resolve the server-resolved apply-context signature without calling the model.',
+							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
 						],
 						'visiblePatternNames' => [
 							'type'  => 'array',
@@ -729,6 +729,10 @@ final class Registration {
 							'type'        => 'object',
 							'description' => 'Selected navigation block context snapshot from the editor.',
 						],
+						'resolveSignatureOnly' => [
+							'type'        => 'boolean',
+							'description' => 'When true, only resolve the server-backed review freshness signature without calling the model.',
+						],
 						'prompt'           => [ 'type' => 'string' ],
 					],
 				],
@@ -762,6 +766,7 @@ final class Registration {
 							],
 						],
 						'explanation' => [ 'type' => 'string' ],
+						'reviewContextSignature' => [ 'type' => 'string' ],
 					],
 				],
 				'meta'                => self::public_recommendation_meta(),

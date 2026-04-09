@@ -6,16 +6,18 @@ Cross-cutting store utilities, shared UI components, and context helpers used by
 
 ### `src/store/executable-surface-runtime.js`
 
-Shared store-runtime helpers for the four review-before-apply surfaces: template, template-part, Global Styles, and Style Book. This module keeps the executable surface lifecycle generic while leaving request shape, selector wiring, activity metadata, and the actual apply executors in `src/store/index.js`.
+Shared store-runtime helpers for the executable review/apply surfaces (template, template-part, Global Styles, and Style Book) plus the shared review-freshness path used by advisory navigation. This module keeps the fetch/review/apply lifecycle generic while leaving request shape, selector wiring, activity metadata, and the actual apply executors in `src/store/index.js`.
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `createExecutableSurfaceFetchConfig()` | Normalizes per-surface fetch config into loading/error handlers plus route/request-token wiring |
-| `buildExecutableSurfaceFetchThunk()` | Binds the shared fetch runtime to store-owned transport dependencies such as abortable requests and request-meta decoration |
-| `createExecutableSurfaceApplyConfig()` | Normalizes per-surface apply config into shared apply-state transitions while leaving the real executor surface-owned |
-| `buildExecutableSurfaceApplyThunk()` | Binds the shared apply runtime to stale guards, server freshness revalidation, activity recording, and activity-session sync |
+| Export                                           | Role                                                                                                                         |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `createExecutableSurfaceFetchConfig()`           | Normalizes per-surface fetch config into loading/error handlers plus route/request-token wiring                              |
+| `buildExecutableSurfaceFetchThunk()`             | Binds the shared fetch runtime to store-owned transport dependencies such as abortable requests and request-meta decoration  |
+| `createExecutableSurfaceReviewFreshnessConfig()` | Normalizes per-surface review-freshness config into route/request-token wiring and stale/fresh state transitions             |
+| `buildExecutableSurfaceReviewFreshnessThunk()`   | Binds the shared review-freshness runtime to the store-owned signature extractors and request transport                      |
+| `createExecutableSurfaceApplyConfig()`           | Normalizes per-surface apply config into shared apply-state transitions while leaving the real executor surface-owned        |
+| `buildExecutableSurfaceApplyThunk()`             | Binds the shared apply runtime to stale guards, server freshness revalidation, activity recording, and activity-session sync |
 
 **Consumers:** `src/store/index.js`
 
@@ -38,13 +40,13 @@ Session-scoped AI activity schema, scope resolution, `sessionStorage` cache/fall
 | `getResolvedActivityEntries(entries, runtimeUndoResolver)` | Batch-resolves undo states for all entries, applying ordered-undo rules across the full log                                                         |
 | `getLatestUndoableActivity(entries, runtimeUndoResolver)`  | Returns the most recent tail entry that is both `canUndo: true` and `status: 'available'` after full resolution                                     |
 | `ORDERED_UNDO_BLOCKED_ERROR`                               | Error message constant displayed when undo is blocked because newer AI actions exist                                                                |
-| `sortActivityEntries(entries)`                                | Sorts activity entries by timestamp for chronological display                                                                                        |
-| `limitActivityLog(entries)`                                   | Trims the activity log to the maximum history size                                                                                                   |
-| `isLocalActivityEntry(entry)`                                 | Returns `true` when the entry has local-only persistence status (`local` or `create`), used to identify entries needing server sync                  |
-| `getPendingActivitySyncType(entry)`                           | Returns the pending sync operation type (`undo` or `create`) for an unsynchronized entry                                                            |
-| `getActivityEntityKey(entry)`                                 | Generates a stable entity key from an activity entry for deduplication and lookup                                                                    |
-| `getResolvedActivityUndoState(entry, entries, resolver)`      | Resolves undo state for a single entry considering ordered-undo rules across the full log                                                            |
-| `getLatestAppliedActivity(entries)`                           | Returns the most recent entry that is still in applied (non-undone) state                                                                            |
+| `sortActivityEntries(entries)`                             | Sorts activity entries by timestamp for chronological display                                                                                       |
+| `limitActivityLog(entries)`                                | Trims the activity log to the maximum history size                                                                                                  |
+| `isLocalActivityEntry(entry)`                              | Returns `true` when the entry has local-only persistence status (`local` or `create`), used to identify entries needing server sync                 |
+| `getPendingActivitySyncType(entry)`                        | Returns the pending sync operation type (`undo` or `create`) for an unsynchronized entry                                                            |
+| `getActivityEntityKey(entry)`                              | Generates a stable entity key from an activity entry for deduplication and lookup                                                                   |
+| `getResolvedActivityUndoState(entry, entries, resolver)`   | Resolves undo state for a single entry considering ordered-undo rules across the full log                                                           |
+| `getLatestAppliedActivity(entries)`                        | Returns the most recent entry that is still in applied (non-undone) state                                                                           |
 
 **Session cache contract:** The server-backed activity repository is the source of truth. `sessionStorage` acts only as a cache/fallback so the current editor session can display activity entries before server hydration completes and handle transient offline periods. On entity change, `loadActivitySession()` merges server entries with pending local entries and writes the merged set back to `sessionStorage`. Entries that have been persisted to the server carry `persistence.status === 'server'`; local-only entries carry `'local'` or `'create'` status and are synced on the next opportunity.
 
@@ -63,9 +65,9 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 | `attributeSnapshotsMatch(previousSnapshot, currentSnapshot)`       | Deep structural equality check between two attribute snapshots, used by undo logic to determine whether a block's attributes still match the expected state                |
 | `sanitizeRecommendationsForContext(recommendations, blockContext)` | Main sanitization pipeline: normalizes suggestion groups, strips theme-unsafe CSS, filters binding-unsafe attributes, enforces editing-mode restrictions                   |
 | `getBlockSuggestionExecutionInfo(suggestion, blockContext)`        | Returns `{ allowedUpdates, isAdvisory, isAdvisoryOnly, isExecutable }` describing whether a suggestion is purely informational or carries executable attribute changes     |
-| `filterAttributeUpdatesForContentOnly(updates, blockContext)` | Filters attribute updates to only content attributes when the block is in content-only editing mode                                                  |
-| `buildBlockRecommendationDiagnostics(suggestion, context)`    | Builds diagnostic metadata for a block recommendation (advisory status, allowed updates, execution info)                                             |
-| `getSuggestionAttributeUpdates(suggestion)`                   | Extracts the raw attribute update object from a suggestion payload                                                                                   |
+| `filterAttributeUpdatesForContentOnly(updates, blockContext)`      | Filters attribute updates to only content attributes when the block is in content-only editing mode                                                                        |
+| `buildBlockRecommendationDiagnostics(suggestion, context)`         | Builds diagnostic metadata for a block recommendation (advisory status, allowed updates, execution info)                                                                   |
+| `getSuggestionAttributeUpdates(suggestion)`                        | Extracts the raw attribute update object from a suggestion payload                                                                                                         |
 
 **Consumers:** `src/store/index.js` (uses all apply/undo helpers), `src/store/activity-history.js` (uses `attributeSnapshotsMatch`), `src/inspector/BlockRecommendationsPanel.js` (uses `getBlockSuggestionExecutionInfo`)
 
@@ -84,27 +86,23 @@ Minimal module (2 exports) that resolves activity entry targets to live editor b
 
 ### `src/utils/recommendation-request-signature.js`
 
-Local request-signature builder shared by the executable recommendation surfaces. It normalizes the surface id, scoped entity ref, composer prompt, and surface-owned context signature into a comparable string that the UI uses for immediate stale-state rendering and the first apply guard. These signatures intentionally stay client-local; PHP still receives the underlying context payload plus the server-facing context fields.
+Local request-signature builder shared by the executable recommendation surfaces plus advisory navigation review freshness. It normalizes the surface id, scoped entity ref, composer prompt, and surface-owned context signature into a comparable string that the UI uses for immediate stale-state rendering and the first apply guard. These signatures intentionally stay client-local; PHP still receives the underlying context payload plus the server-facing context fields.
 
 **Key exports:**
 
-| Export                                                   | Role                                                                                                  |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `buildRecommendationRequestSignature()`                  | Shared normalizer for `{ surface, prompt, contextSignature, scopeKey, entityRef }`                   |
-| `buildBlockRecommendationRequestSignature()`             | Freshness/apply guard for direct block apply results                                                  |
-| `buildTemplateRecommendationRequestSignature()`          | Freshness/apply guard for template review/apply results                                               |
-| `buildTemplatePartRecommendationRequestSignature()`      | Freshness/apply guard for template-part review/apply results                                          |
-| `buildGlobalStylesRecommendationRequestSignature()`      | Freshness/apply guard for Global Styles review/apply results                                          |
-| `buildStyleBookRecommendationRequestSignature()`         | Freshness/apply guard for Style Book review/apply results                                             |
+| Export                                              | Role                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `buildRecommendationRequestSignature()`             | Shared normalizer for `{ surface, prompt, contextSignature, scopeKey, entityRef }` |
+| `buildBlockRecommendationRequestSignature()`        | Freshness/apply guard for direct block apply results                               |
+| `buildTemplateRecommendationRequestSignature()`     | Freshness/apply guard for template review/apply results                            |
+| `buildNavigationRecommendationRequestSignature()`   | Freshness guard for advisory navigation review results                             |
+| `buildTemplatePartRecommendationRequestSignature()` | Freshness/apply guard for template-part review/apply results                       |
+| `buildGlobalStylesRecommendationRequestSignature()` | Freshness/apply guard for Global Styles review/apply results                       |
+| `buildStyleBookRecommendationRequestSignature()`    | Freshness/apply guard for Style Book review/apply results                          |
 
 **Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/inspector/SuggestionChips.js`
 
-`src/store/index.js` now pairs these local request signatures with server freshness signatures:
-
-- `resolvedContextSignature` on block, template, template-part, Global Styles, and Style Book results for apply-time server revalidation.
-- `reviewContextSignature` on template, template-part, Global Styles, and Style Book results for server review-freshness revalidation while the local request signature still matches.
-
-Apply actions keep the existing local stale check first, then re-post the same request with `resolveSignatureOnly: true` and compare the returned `resolvedContextSignature` before deterministic mutation runs. Review surfaces run a parallel signature-only revalidation path against `reviewContextSignature` to surface server-only prompt-shaper drift before apply.
+`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety, template/template-part/Global Styles/Style Book also store a docs-free `reviewContextSignature` for background review revalidation, and navigation stores a docs-free `reviewContextSignature` without an apply hash. Apply actions keep the existing local stale check first, then re-post the same request with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
 
 ### `inc/Support/RecommendationResolvedSignature.php`
 
@@ -114,11 +112,11 @@ Server-side apply-freshness helper shared by the executable recommendation abili
 
 ### `inc/Support/RecommendationReviewSignature.php`
 
-Server-side review-freshness helper used by template, template-part, Global Styles, and Style Book recommendation abilities. `RecommendationReviewSignature::from_payload()` hashes a stable normalized `{ surface, payload }` structure with deterministic key ordering for associative arrays and preserved order for lists.
+Server-side review-freshness helper shared by template, template-part, style, and navigation recommendation abilities. `RecommendationReviewSignature::from_payload()` hashes a stable normalized `{ surface, payload }` structure with deterministic key ordering for associative arrays and preserved order for lists.
 
-Review payloads are intentionally bounded to prompt-shaper inputs that affect review fidelity (for example prompt-visible patterns, bounded theme tokens, bounded docs-guidance excerpts, and style-book review manifest details), while apply-time mutation safety continues to rely on `resolvedContextSignature`.
+Review payloads are intentionally limited to docs-free server review context so freshness tracks real server-owned drift instead of docs guidance or grounded prompt text churn, while apply-time mutation safety continues to rely on `resolvedContextSignature`.
 
-**Consumers:** `inc/Abilities/TemplateAbilities.php`, `inc/Abilities/StyleAbilities.php`
+**Consumers:** `inc/Abilities/TemplateAbilities.php`, `inc/Abilities/StyleAbilities.php`, `inc/Abilities/NavigationAbilities.php`
 
 ## Shared UI Components
 
@@ -189,12 +187,12 @@ Small shared helpers for live template and template-part snapshot assembly. Thes
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `getInnerBlocks(block)` | Safe child-block accessor for nested editor snapshots |
-| `summarizeBlockAttributes(attributes, fields)` | Returns only scalar values from an allowed field list for prompt-safe structural snapshots |
+| Export                                               | Role                                                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `getInnerBlocks(block)`                              | Safe child-block accessor for nested editor snapshots                                                   |
+| `summarizeBlockAttributes(attributes, fields)`       | Returns only scalar values from an allowed field list for prompt-safe structural snapshots              |
 | `collectNestedBlockStats(blocks, getBlockChildren?)` | Shared recursive block-count and depth collector used by template and template-part structure snapshots |
-| `normalizeVisiblePatternNames(visiblePatternNames)` | Deduplicates and filters inserter-visible pattern names before request and signature assembly |
+| `normalizeVisiblePatternNames(visiblePatternNames)`  | Deduplicates and filters inserter-visible pattern names before request and signature assembly           |
 
 **Consumers:** `src/templates/template-recommender-helpers.js`, `src/template-parts/template-part-recommender-helpers.js`
 
@@ -204,12 +202,12 @@ Core composition point for block recommendation context. Combines block introspe
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
+| Export                                   | Role                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------ |
 | `collectBlockContext(clientId, options)` | Assembles the full block recommendation context for a single block |
 | `getAnnotatedBlockTree(rootClientId)`    | Returns the cached (or freshly computed) annotated structural tree |
-| `invalidateAnnotatedTreeCache()`         | Clears the memoized tree so the next call recomputes |
-| `getLiveBlockContextSignature(clientId)`  | Returns a comparable signature for the current block context state |
+| `invalidateAnnotatedTreeCache()`         | Clears the memoized tree so the next call recomputes               |
+| `getLiveBlockContextSignature(clientId)` | Returns a comparable signature for the current block context state |
 
 **Consumers:** `src/store/index.js`
 
@@ -225,8 +223,8 @@ Client-side block introspection. Queries the `@wordpress/blocks` and `@wordpress
 | `introspectBlockTree(rootClientId, maxDepth)` | Recursively introspects child blocks from a root, returning a nested tree of instance manifests                                                    |
 | `summarizeTree(tree, options, depth)`         | Compresses an introspected tree into a token-budget-friendly summary for LLM prompts                                                               |
 | `buildCapabilityIndex(tree)`                  | Deduplicated map of unique block types to their capability summaries                                                                               |
-| `resolveInspectorPanels(supports)`                           | Maps block `supports` declarations to Inspector panel names (must stay synchronized with `ServerCollector::SUPPORT_TO_PANEL`)                        |
-| `introspectBlockType(blockName)`                             | Returns type-level metadata for a block name (supports, attributes, styles, variations) without requiring a live instance                            |
+| `resolveInspectorPanels(supports)`            | Maps block `supports` declarations to Inspector panel names (must stay synchronized with `ServerCollector::SUPPORT_TO_PANEL`)                      |
+| `introspectBlockType(blockName)`              | Returns type-level metadata for a block name (supports, attributes, styles, variations) without requiring a live instance                          |
 
 **Consumers:** `src/context/collector.js`
 
@@ -236,18 +234,18 @@ Design token extraction from `theme.json` and global styles. Produces a full tok
 
 **Key exports:**
 
-| Export                                                | Role                                                                                             |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `collectThemeTokens()`                                | Entry point: reads current editor settings and returns the full design-token manifest            |
-| `summarizeTokens(tokens)`                             | Compresses the manifest into a compact, prompt-friendly summary                                  |
-| `buildGlobalStylesExecutionContract(tokens)`          | Combines supported style paths with sorted preset slug maps for the LLM to validate style writes |
-| `buildBlockStyleExecutionContract(tokens, blockType)` | Same as above but scoped to a specific block type's supports                                     |
-| `collectThemeTokenDiagnosticsFromSettings(settings)`         | Collects diagnostic data (coverage gaps, missing presets) from provided editor settings                                                              |
-| `collectThemeTokensFromSettings(settings)`                   | Token extraction from an explicit settings object (used when editor store is not available)                                                          |
-| `getGlobalStylesSupportedStylePathsFromTokens(tokens)`       | Returns the set of style paths (e.g. `color.text`, `typography.fontSize`) supported at the global scope                                             |
-| `getBlockStyleSupportedStylePathsFromTokens(tokens, type)`   | Same as above but scoped to a specific block type's style supports                                                                                  |
-| `buildGlobalStylesExecutionContractFromSettings(settings)`   | Builds the execution contract directly from settings without calling `collectThemeTokens()`                                                          |
-| `buildBlockStyleExecutionContractFromSettings(settings, type)` | Same as above but scoped to a specific block type                                                                                                  |
+| Export                                                         | Role                                                                                                    |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `collectThemeTokens()`                                         | Entry point: reads current editor settings and returns the full design-token manifest                   |
+| `summarizeTokens(tokens)`                                      | Compresses the manifest into a compact, prompt-friendly summary                                         |
+| `buildGlobalStylesExecutionContract(tokens)`                   | Combines supported style paths with sorted preset slug maps for the LLM to validate style writes        |
+| `buildBlockStyleExecutionContract(tokens, blockType)`          | Same as above but scoped to a specific block type's supports                                            |
+| `collectThemeTokenDiagnosticsFromSettings(settings)`           | Collects diagnostic data (coverage gaps, missing presets) from provided editor settings                 |
+| `collectThemeTokensFromSettings(settings)`                     | Token extraction from an explicit settings object (used when editor store is not available)             |
+| `getGlobalStylesSupportedStylePathsFromTokens(tokens)`         | Returns the set of style paths (e.g. `color.text`, `typography.fontSize`) supported at the global scope |
+| `getBlockStyleSupportedStylePathsFromTokens(tokens, type)`     | Same as above but scoped to a specific block type's style supports                                      |
+| `buildGlobalStylesExecutionContractFromSettings(settings)`     | Builds the execution contract directly from settings without calling `collectThemeTokens()`             |
+| `buildBlockStyleExecutionContractFromSettings(settings, type)` | Same as above but scoped to a specific block type                                                       |
 
 **Consumers:** `src/context/collector.js`, `src/utils/style-operations.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
 
@@ -257,14 +255,14 @@ Theme editor settings adapter. Resolves the active theme features key (stable `f
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `STABLE_THEME_FEATURES_KEY`         | Constant: `'features'` |
-| `EXPERIMENTAL_THEME_FEATURES_KEY`   | Constant: `'__experimentalFeatures'` |
-| `getThemeEditorSettings()`           | Reads the full editor settings object from `core/block-editor` |
-| `getThemeTokenSource()`              | Returns which features key is active (`'stable'`, `'experimental'`, or `null`) |
-| `getThemeTokenSourceDetails()`       | Returns detailed parity information between stable and experimental features |
-| `getThemeTokenFeatures()`            | Returns the resolved theme features object |
+| Export                            | Role                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `STABLE_THEME_FEATURES_KEY`       | Constant: `'features'`                                                         |
+| `EXPERIMENTAL_THEME_FEATURES_KEY` | Constant: `'__experimentalFeatures'`                                           |
+| `getThemeEditorSettings()`        | Reads the full editor settings object from `core/block-editor`                 |
+| `getThemeTokenSource()`           | Returns which features key is active (`'stable'`, `'experimental'`, or `null`) |
+| `getThemeTokenSourceDetails()`    | Returns detailed parity information between stable and experimental features   |
+| `getThemeTokenFeatures()`         | Returns the resolved theme features object                                     |
 
 **Consumers:** `src/context/theme-tokens.js`
 
@@ -293,8 +291,8 @@ Block structural role inference. Recursively annotates a block tree with semanti
 | `annotateStructuralIdentity(tree, options)`               | Recursive tree walker that attaches `structuralIdentity` objects to every node                       |
 | `buildStructuralContext(tree, selectedClientId, options)` | Orchestrates annotation + path finding to produce a complete structural context for a selected block |
 | `toStructuralSummary(node)`                               | Extracts a compact summary for LLM prompt use                                                        |
-| `findNodePath(tree, predicate)`                              | Finds the path (array of tree indices) to the first node matching a predicate                                                                        |
-| `findBranchRoot(tree, path)`                                 | Finds the nearest template-part root ancestor in a node path                                                                                         |
+| `findNodePath(tree, predicate)`                           | Finds the path (array of tree indices) to the first node matching a predicate                        |
+| `findBranchRoot(tree, path)`                              | Finds the nearest template-part root ancestor in a node path                                         |
 
 **Consumers:** `src/context/collector.js`
 
@@ -306,19 +304,19 @@ Canonical abstraction layer between WordPress's dual editor stores (`core/editor
 
 **Key exports:**
 
-| Export                                               | Role                                                                                                                    |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `getEditedPostTypeEntity(select, expectedPostType?)` | Resolves the currently edited entity from `core/editor` or `core/edit-site`                                             |
-| `getPostTypeFieldDefinitions(postType)`              | Returns frozen `{ id, label }` field descriptors appropriate for each post type                                         |
-| `usePostTypeEntityContract(postType)`                | React hook: composes entity fields, view/layout defaults, area options, and recommended category into a single contract |
-| `normalizeEditedEntityRef(ref)`                              | Normalizes an entity reference to a consistent string or integer form                                                                                |
-| `getPostTypeFieldMap(postType)`                              | Returns a frozen map of field descriptors keyed by field ID                                                                                          |
-| `normalizeViewConfigContract(view, fields)`                  | Normalizes a DataViews view configuration to a canonical form                                                                                        |
-| `getLockedViewFilterValue(view, fieldId)`                    | Extracts a locked filter value from a view configuration                                                                                             |
-| `getLockedViewOptions(views, fieldId)`                       | Returns the set of locked filter options across multiple views                                                                                        |
-| `buildOptionLabelMap(options)`                               | Builds a value-to-label lookup from an options array                                                                                                 |
-| `getRecommendedPatternCategorySlug(postType)`                | Returns the recommended pattern category slug for a given post type                                                                                  |
-| `buildPostTypeEntityContract(postType, entity, ...args)`     | Non-hook equivalent of `usePostTypeEntityContract` for imperative contexts                                                                           |
+| Export                                                   | Role                                                                                                                    |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `getEditedPostTypeEntity(select, expectedPostType?)`     | Resolves the currently edited entity from `core/editor` or `core/edit-site`                                             |
+| `getPostTypeFieldDefinitions(postType)`                  | Returns frozen `{ id, label }` field descriptors appropriate for each post type                                         |
+| `usePostTypeEntityContract(postType)`                    | React hook: composes entity fields, view/layout defaults, area options, and recommended category into a single contract |
+| `normalizeEditedEntityRef(ref)`                          | Normalizes an entity reference to a consistent string or integer form                                                   |
+| `getPostTypeFieldMap(postType)`                          | Returns a frozen map of field descriptors keyed by field ID                                                             |
+| `normalizeViewConfigContract(view, fields)`              | Normalizes a DataViews view configuration to a canonical form                                                           |
+| `getLockedViewFilterValue(view, fieldId)`                | Extracts a locked filter value from a view configuration                                                                |
+| `getLockedViewOptions(views, fieldId)`                   | Returns the set of locked filter options across multiple views                                                          |
+| `buildOptionLabelMap(options)`                           | Builds a value-to-label lookup from an options array                                                                    |
+| `getRecommendedPatternCategorySlug(postType)`            | Returns the recommended pattern category slug for a given post type                                                     |
+| `buildPostTypeEntityContract(postType, entity, ...args)` | Non-hook equivalent of `usePostTypeEntityContract` for imperative contexts                                              |
 
 **Consumers:** `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/patterns/PatternRecommender.js`
 
@@ -342,14 +340,14 @@ Shared helpers for Global Styles and Style Book apply/undo execution. Provides c
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `getComparableGlobalStylesConfig(config)`                     | Normalizes a global styles config object for stable comparison |
-| `buildGlobalStylesRecommendationContextSignature(config, ...)` | Builds a context signature for global styles recommendation freshness |
-| `getGlobalStylesUserConfig()`                                 | Reads the user's current global styles configuration from the editor store |
-| `applyGlobalStyleSuggestionOperations(operations, contract)`  | Applies style operations to the global styles entity |
-| `undoGlobalStyleSuggestionOperations(snapshot)`               | Reverts style operations using a stored pre-apply snapshot |
-| `getGlobalStylesActivityUndoState(entry, select)`             | Resolves live undo state for a style-surface activity entry |
+| Export                                                         | Role                                                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `getComparableGlobalStylesConfig(config)`                      | Normalizes a global styles config object for stable comparison             |
+| `buildGlobalStylesRecommendationContextSignature(config, ...)` | Builds a context signature for global styles recommendation freshness      |
+| `getGlobalStylesUserConfig()`                                  | Reads the user's current global styles configuration from the editor store |
+| `applyGlobalStyleSuggestionOperations(operations, contract)`   | Applies style operations to the global styles entity                       |
+| `undoGlobalStyleSuggestionOperations(snapshot)`                | Reverts style operations using a stored pre-apply snapshot                 |
+| `getGlobalStylesActivityUndoState(entry, select)`              | Resolves live undo state for a style-surface activity entry                |
 
 **Consumers:** `src/store/index.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
 
@@ -359,9 +357,9 @@ Builds semantic design metadata (intent labels, hierarchy annotations, accessibi
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `buildGlobalStyleDesignSemantics(tokens, config)` | Builds semantic metadata for global styles recommendations |
+| Export                                                     | Role                                                           |
+| ---------------------------------------------------------- | -------------------------------------------------------------- |
+| `buildGlobalStyleDesignSemantics(tokens, config)`          | Builds semantic metadata for global styles recommendations     |
 | `buildStyleBookDesignSemantics(tokens, config, blockName)` | Builds semantic metadata scoped to a specific Style Book block |
 
 **Consumers:** `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`
@@ -372,14 +370,14 @@ Style value validation and normalization helpers used by the style operation pip
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `sanitizeStyleKey(key)`                            | Sanitizes a style key to lowercase alphanumeric-dash-underscore |
-| `normalizePresetType(type)`                        | Normalizes a preset type string by removing dashes |
-| `displayPresetType(type)`                          | Returns a display-friendly name for a preset type |
-| `validateFreeformStyleValueByKind(value, kind)`    | Validates a freeform style value against its kind (color, length, etc.) |
-| `FREEFORM_STYLE_VALIDATORS`                        | Constant: map of validator types for freeform style values |
-| `CSS_LENGTH_UNITS`                                 | Constant: array of valid CSS length unit strings |
+| Export                                          | Role                                                                    |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `sanitizeStyleKey(key)`                         | Sanitizes a style key to lowercase alphanumeric-dash-underscore         |
+| `normalizePresetType(type)`                     | Normalizes a preset type string by removing dashes                      |
+| `displayPresetType(type)`                       | Returns a display-friendly name for a preset type                       |
+| `validateFreeformStyleValueByKind(value, kind)` | Validates a freeform style value against its kind (color, length, etc.) |
+| `FREEFORM_STYLE_VALIDATORS`                     | Constant: map of validator types for freeform style values              |
+| `CSS_LENGTH_UNITS`                              | Constant: array of valid CSS length unit strings                        |
 
 **Consumers:** `src/utils/style-operations.js`, `inc/LLM/StylePrompt.php` (contract parity)
 
@@ -389,8 +387,8 @@ Fundamental utility that produces stable, comparable signature strings from arbi
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
+| Export                        | Role                                                               |
+| ----------------------------- | ------------------------------------------------------------------ |
 | `buildContextSignature(data)` | Normalizes and hashes context data into a stable comparable string |
 
 **Consumers:** `src/utils/block-recommendation-context.js`, `src/utils/style-operations.js`, `src/utils/recommendation-request-signature.js`
@@ -401,12 +399,12 @@ Deep and shallow structural equality helpers used for comparing block attributes
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `normalizeComparableValue(value)`     | Recursively normalizes a value (strips `undefined`, sorts keys) for stable comparison |
-| `stableSerialize(value)`              | Serializes a value to JSON with deterministic key ordering |
-| `shallowStructuralEqual(a, b)`        | Shallow equality check for objects and arrays |
-| `deepStructuralEqual(a, b)`           | Deep recursive equality check for objects and arrays |
+| Export                            | Role                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| `normalizeComparableValue(value)` | Recursively normalizes a value (strips `undefined`, sorts keys) for stable comparison |
+| `stableSerialize(value)`          | Serializes a value to JSON with deterministic key ordering                            |
+| `shallowStructuralEqual(a, b)`    | Shallow equality check for objects and arrays                                         |
+| `deepStructuralEqual(a, b)`       | Deep recursive equality check for objects and arrays                                  |
 
 **Consumers:** `src/store/update-helpers.js`, `src/utils/style-operations.js`, `src/utils/context-signature.js`
 
@@ -470,15 +468,15 @@ Validates and normalizes LLM-proposed template and template-part operation seque
 
 **Key exports:**
 
-| Export | Role |
-| --- | --- |
-| `validateTemplateOperationSequence(operations)` | Validates and normalizes a template operation sequence |
-| `validateTemplatePartOperationSequence(operations)` | Same for template-part operations |
-| `TEMPLATE_OPERATION_ASSIGN`                     | Constant: `'assign_template_part'` |
-| `TEMPLATE_OPERATION_INSERT_PATTERN`              | Constant: `'insert_pattern'` |
-| `TEMPLATE_OPERATION_REMOVE_BLOCK`                | Constant: `'remove_block'` |
-| `TEMPLATE_OPERATION_REPLACE`                     | Constant: `'replace_template_part'` |
-| `TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN`  | Constant: `'replace_block_with_pattern'` |
+| Export                                              | Role                                                   |
+| --------------------------------------------------- | ------------------------------------------------------ |
+| `validateTemplateOperationSequence(operations)`     | Validates and normalizes a template operation sequence |
+| `validateTemplatePartOperationSequence(operations)` | Same for template-part operations                      |
+| `TEMPLATE_OPERATION_ASSIGN`                         | Constant: `'assign_template_part'`                     |
+| `TEMPLATE_OPERATION_INSERT_PATTERN`                 | Constant: `'insert_pattern'`                           |
+| `TEMPLATE_OPERATION_REMOVE_BLOCK`                   | Constant: `'remove_block'`                             |
+| `TEMPLATE_OPERATION_REPLACE`                        | Constant: `'replace_template_part'`                    |
+| `TEMPLATE_OPERATION_REPLACE_BLOCK_WITH_PATTERN`     | Constant: `'replace_block_with_pattern'`               |
 
 **Consumers:** `src/store/index.js`, `src/templates/template-recommender-helpers.js`, `src/template-parts/template-part-recommender-helpers.js`
 

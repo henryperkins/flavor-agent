@@ -16,7 +16,6 @@ final class StyleAbilities {
 
 	private const SURFACE_GLOBAL_STYLES     = 'global-styles';
 	private const SURFACE_STYLE_BOOK        = 'style-book';
-	private const REVIEW_DOCS_GUIDANCE_LIMIT = 3;
 	private const BLOCK_STYLE_SUPPORT_PATHS = [
 		[
 			'path'         => [ 'color', 'background' ],
@@ -109,11 +108,9 @@ final class StyleAbilities {
 			]
 		);
 
-		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
 		$review_context_signature = self::build_review_context_signature(
 			$scope_surface,
-			$context,
-			$docs_guidance
+			$context
 		);
 
 		if ( $resolve_signature_only ) {
@@ -123,6 +120,7 @@ final class StyleAbilities {
 			];
 		}
 
+		$docs_guidance = self::collect_wordpress_docs_guidance( $context, $prompt );
 		$system_prompt = StylePrompt::build_system();
 		$user_prompt   = StylePrompt::build_user(
 			$context,
@@ -319,13 +317,13 @@ final class StyleAbilities {
 		return $context;
 	}
 
-	private static function build_review_context_signature( string $surface, array $context, array $docs_guidance ): string {
+	private static function build_review_context_signature( string $surface, array $context ): string {
 		$style_context = self::normalize_map( $context['styleContext'] ?? [] );
-		$payload       = [
-			'themeTokens'  => self::normalize_review_theme_tokens(
+		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
+		$payload = [
+			'themeTokens' => self::normalize_review_theme_tokens(
 				self::normalize_map( $style_context['themeTokens'] ?? [] )
 			),
-			'docsGuidance' => self::normalize_review_docs_guidance( $docs_guidance ),
 		];
 
 		if ( self::SURFACE_STYLE_BOOK === $surface ) {
@@ -391,37 +389,6 @@ final class StyleAbilities {
 			if ( is_array( $value ) && [] !== $value ) {
 				$normalized[ $key ] = $value;
 			}
-		}
-
-		return $normalized;
-	}
-
-	/**
-	 * @param array<int, array<string, mixed>> $docs_guidance
-	 * @return array<int, array<string, string>>
-	 */
-	private static function normalize_review_docs_guidance( array $docs_guidance ): array {
-		$normalized = [];
-
-		foreach ( array_slice( $docs_guidance, 0, self::REVIEW_DOCS_GUIDANCE_LIMIT ) as $guidance ) {
-			if ( ! is_array( $guidance ) ) {
-				continue;
-			}
-
-			$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
-
-			if ( $excerpt === '' ) {
-				continue;
-			}
-
-			$normalized[] = [
-				'id'      => sanitize_text_field( (string) ( $guidance['id'] ?? '' ) ),
-				'title'   => sanitize_text_field(
-					(string) ( $guidance['title'] ?? $guidance['sourceKey'] ?? '' )
-				),
-				'url'     => sanitize_text_field( (string) ( $guidance['url'] ?? '' ) ),
-				'excerpt' => $excerpt,
-			];
 		}
 
 		return $normalized;
@@ -573,18 +540,18 @@ final class StyleAbilities {
 	 * @return array<string, mixed>
 	 */
 	private static function build_wordpress_docs_family_context( array $context ): array {
-		$scope              = self::normalize_map( $context['scope'] ?? [] );
-		$style_context      = self::normalize_map( $context['styleContext'] ?? [] );
-		$style_book_target  = self::normalize_map( $style_context['styleBookTarget'] ?? [] );
-		$surface            = self::normalize_style_surface( (string) ( $scope['surface'] ?? self::SURFACE_GLOBAL_STYLES ) );
-		$template_structure = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
+		$scope               = self::normalize_map( $context['scope'] ?? [] );
+		$style_context       = self::normalize_map( $context['styleContext'] ?? [] );
+		$style_book_target   = self::normalize_map( $style_context['styleBookTarget'] ?? [] );
+		$surface             = self::normalize_style_surface( (string) ( $scope['surface'] ?? self::SURFACE_GLOBAL_STYLES ) );
+		$template_structure  = is_array( $style_context['templateStructure'] ?? null ) ? $style_context['templateStructure'] : [];
 		$template_visibility = self::normalize_map( $style_context['templateVisibility'] ?? [] );
-		$design_semantics   = self::normalize_map( $style_context['designSemantics'] ?? [] );
-		$family_context     = [
+		$design_semantics    = self::normalize_map( $style_context['designSemantics'] ?? [] );
+		$family_context      = [
 			'surface'   => $surface !== '' ? $surface : self::SURFACE_GLOBAL_STYLES,
 			'entityKey' => self::build_wordpress_docs_entity_key( $context ),
 		];
-		$supported_families = array_values(
+		$supported_families  = array_values(
 			array_unique(
 				array_filter(
 					array_map(

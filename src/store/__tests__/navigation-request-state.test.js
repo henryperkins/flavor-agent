@@ -139,4 +139,56 @@ describe( 'navigation request state', () => {
 			} )
 		).toBe( false );
 	} );
+
+	test( 'navigation loading invalidates in-flight review freshness completions', () => {
+		let state = reducer(
+			undefined,
+			actions.setNavigationRecommendations(
+				'nav-1',
+				{
+					suggestions: [ { label: 'Group utility links' } ],
+					explanation: 'Keep utility items together.',
+				},
+				'Prompt',
+				1,
+				'navigation-signature',
+				'review-navigation'
+			)
+		);
+
+		expect(
+			selectors.getNavigationReviewFreshnessStatus( state, 'nav-1' )
+		).toBe( 'fresh' );
+
+		state = reducer(
+			state,
+			actions.setNavigationStatus( 'loading', null, 2, 'nav-1' )
+		);
+
+		expect(
+			selectors.getNavigationReviewFreshnessStatus( state, 'nav-1' )
+		).toBe( 'idle' );
+
+		const staleCompletion = reducer(
+			state,
+			actions.setNavigationReviewFreshnessState(
+				'stale',
+				1,
+				'server-review'
+			)
+		);
+
+		expect(
+			selectors.getNavigationReviewFreshnessStatus(
+				staleCompletion,
+				'nav-1'
+			)
+		).toBe( 'idle' );
+		expect(
+			selectors.getNavigationReviewStaleReason(
+				staleCompletion,
+				'nav-1'
+			)
+		).toBeNull();
+	} );
 } );
