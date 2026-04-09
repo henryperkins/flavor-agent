@@ -235,20 +235,29 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 			'currentPatternOverrides'  => [
 				'blockCount' => 2,
 			],
-			'currentViewportVisibility' => [
-				'blockCount' => 1,
-			],
-		];
+				'currentViewportVisibility' => [
+					'blockCount' => 1,
+				],
+				'visiblePatternNames'       => [],
+			];
 		$query   = $this->invoke_private_string_method(
 			TemplateAbilities::class,
 			'build_wordpress_docs_query',
 			[ $context, 'Keep the structure focused.' ]
+		);
+		$family  = $this->invoke_private_array_method(
+			TemplateAbilities::class,
+			'build_wordpress_docs_family_context',
+			[ $context ]
 		);
 
 		$this->assertStringContainsString( 'top-level blocks core/template-part, core/group', $query );
 		$this->assertStringContainsString( 'live structure 7 blocks, 2 top level, depth 3', $query );
 		$this->assertStringContainsString( 'override-ready blocks 2', $query );
 		$this->assertStringContainsString( 'viewport-constrained blocks 1', $query );
+		$this->assertTrue( (bool) ( $family['hasVisiblePatternScope'] ?? false ) );
+		$this->assertSame( 0, $family['visiblePatternCount'] ?? null );
+		$this->assertArrayNotHasKey( 'visiblePatterns', $family );
 	}
 
 	public function test_template_part_docs_query_includes_targets_anchors_and_constraints(): void {
@@ -270,23 +279,41 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 					'blockName' => 'core/navigation',
 				],
 			],
-			'structuralConstraints' => [
-				'hasContentOnly'   => true,
-				'contentOnlyPaths' => [ [ 0, 1 ] ],
-				'hasLockedBlocks'  => true,
-				'lockedPaths'      => [ [ 0 ] ],
-			],
-		];
-		$query   = $this->invoke_private_string_method(
-			TemplateAbilities::class,
-			'build_template_part_wordpress_docs_query',
-			[ $context, 'Keep the header compact.' ]
-		);
+				'structuralConstraints' => [
+					'hasContentOnly'   => true,
+					'contentOnlyPaths' => [ [ 0, 1 ] ],
+					'hasLockedBlocks'  => true,
+					'lockedPaths'      => [ [ 0 ] ],
+				],
+				'currentPatternOverrides' => [
+					'hasOverrides' => true,
+					'blockCount'   => 2,
+					'entries'      => [
+						[
+							'name' => 'theme/utility-links',
+						],
+					],
+				],
+			];
+			$query   = $this->invoke_private_string_method(
+				TemplateAbilities::class,
+				'build_template_part_wordpress_docs_query',
+				[ $context, 'Keep the header compact.' ]
+			);
+			$family  = $this->invoke_private_array_method(
+				TemplateAbilities::class,
+				'build_template_part_wordpress_docs_family_context',
+				[ $context ]
+			);
 
-		$this->assertStringContainsString( 'executable targets Navigation block [replace_block_with_pattern]', $query );
-		$this->assertStringContainsString( 'validated anchors After navigation', $query );
-		$this->assertStringContainsString( 'structural constraints content-only paths 1, locked paths 1', $query );
-	}
+			$this->assertStringContainsString( 'executable targets Navigation block [replace_block_with_pattern]', $query );
+			$this->assertStringContainsString( 'validated anchors After navigation', $query );
+			$this->assertStringContainsString( 'structural constraints content-only paths 1, locked paths 1', $query );
+			$this->assertStringContainsString( 'override-ready blocks 2', $query );
+			$this->assertTrue( (bool) ( $family['hasPatternOverrides'] ?? false ) );
+			$this->assertSame( 2, $family['patternOverrideCount'] ?? null );
+			$this->assertArrayNotHasKey( 'patternOverrides', $family );
+		}
 
 	public function test_style_book_docs_guidance_uses_query_cache_before_entity_cache(): void {
 		$query_guidance  = [

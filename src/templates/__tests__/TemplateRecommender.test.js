@@ -618,6 +618,25 @@ describe( 'TemplateRecommender', () => {
 		).toBe( 'status' );
 	} );
 
+	test( 'shows server-review stale copy when the server review signature drifts', async () => {
+		currentState = createState( {
+			store: {
+				templateReviewStaleReason: 'server-review',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Add hero intro' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
+		expect(
+			hasText(
+				'This template result no longer matches the current server review context. Refresh before reviewing or applying anything from the previous result.'
+			)
+		).toBe( true );
+		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
+	} );
+
 	test( 'renders the template explanation after the primary recommendation hero', async () => {
 		await renderPanel();
 

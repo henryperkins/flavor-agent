@@ -494,6 +494,25 @@ describe( 'TemplatePartRecommender', () => {
 		).toBe( 'status' );
 	} );
 
+	test( 'shows server-review stale copy when the template-part review signature drifts', async () => {
+		currentState = createState( {
+			store: {
+				templatePartReviewStaleReason: 'server-review',
+			},
+		} );
+
+		await renderPanel();
+
+		expect( hasText( 'Replace navigation block' ) ).toBe( true );
+		expect( hasText( 'Stale' ) ).toBe( true );
+		expect(
+			hasText(
+				'This template-part result no longer matches the current server review context. Refresh before reviewing or applying anything from the previous result.'
+			)
+		).toBe( true );
+		expect( getButton( 'Confirm Apply' )?.disabled ).toBe( true );
+	} );
+
 	test( 'does not show the current scope badge when the latest template-part request failed', async () => {
 		currentState = createState( {
 			store: {
