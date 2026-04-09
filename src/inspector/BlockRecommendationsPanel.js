@@ -2,13 +2,7 @@ import { PanelBody, Notice } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import {
-	useState,
-	useCallback,
-	useMemo,
-	useEffect,
-	useRef,
-} from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { starFilled as icon } from '@wordpress/icons';
 
 import { STORE_NAME } from '../store';
@@ -23,8 +17,10 @@ import {
 	collectBlockContext,
 	getLiveBlockContextSignature,
 } from '../context/collector';
-import { buildBlockRecommendationRequestSignature } from '../utils/recommendation-request-signature';
-import { buildBlockRecommendationRequestData } from './block-recommendation-request';
+import {
+	buildBlockRecommendationRequestData,
+	getBlockRecommendationFreshness,
+} from './block-recommendation-request';
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -44,6 +40,7 @@ import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const BLOCK_COMPOSER_HELPER_TEXT =
@@ -63,19 +60,23 @@ const CONTENT_ONLY_STARTER_PROMPTS = [
 	'Make the content more concise',
 ];
 
-export function findBlockPath(blocks, clientId, path = []) {
-	for (let index = 0; index < blocks.length; index++) {
-		const block = blocks[index];
-		const nextPath = [...path, index];
+export function findBlockPath( blocks, clientId, path = [] ) {
+	for ( let index = 0; index < blocks.length; index++ ) {
+		const block = blocks[ index ];
+		const nextPath = [ ...path, index ];
 
-		if (block?.clientId === clientId) {
+		if ( block?.clientId === clientId ) {
 			return nextPath;
 		}
 
-		if (Array.isArray(block?.innerBlocks) && block.innerBlocks.length) {
-			const nestedPath = findBlockPath(block.innerBlocks, clientId, nextPath);
+		if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
+			const nestedPath = findBlockPath(
+				block.innerBlocks,
+				clientId,
+				nextPath
+			);
 
-			if (nestedPath) {
+			if ( nestedPath ) {
 				return nestedPath;
 			}
 		}
@@ -84,27 +85,27 @@ export function findBlockPath(blocks, clientId, path = []) {
 	return null;
 }
 
-export function blockPathMatches(left, right) {
-	return JSON.stringify(left || []) === JSON.stringify(right || []);
+export function blockPathMatches( left, right ) {
+	return JSON.stringify( left || [] ) === JSON.stringify( right || [] );
 }
 
 function getCanRecommendBlocks() {
-	return getSurfaceCapability('block').available;
+	return getSurfaceCapability( 'block' ).available;
 }
 
-function useBlockRecommendationState(clientId) {
+function useBlockRecommendationState( clientId ) {
 	const canRecommendBlocks = getCanRecommendBlocks();
-	const blockEditorSelection = useSelect((select) => {
-		const blockEditor = select(blockEditorStore);
+	const blockEditorSelection = useSelect( ( select ) => {
+		const blockEditor = select( blockEditorStore );
 
 		return {
-			getBlock: (targetClientId) =>
-				blockEditor.getBlock?.(targetClientId) || null,
-			getBlockAttributes: (targetClientId) =>
-				blockEditor.getBlockAttributes?.(targetClientId) || null,
+			getBlock: ( targetClientId ) =>
+				blockEditor.getBlock?.( targetClientId ) || null,
+			getBlockAttributes: ( targetClientId ) =>
+				blockEditor.getBlockAttributes?.( targetClientId ) || null,
 			getBlocks: () => blockEditor.getBlocks?.() || [],
 		};
-	}, []);
+	}, [] );
 
 	const {
 		recommendations,
@@ -113,7 +114,6 @@ function useBlockRecommendationState(clientId) {
 		status,
 		storedContextSignature,
 		storedStaleReason,
-		storedRequestToken,
 		requestDiagnostics,
 		blockActivityLog,
 		blockApplyError,
@@ -124,72 +124,76 @@ function useBlockRecommendationState(clientId) {
 		isInsideContentOnly,
 		block,
 	} = useSelect(
-		(select) => {
-			const store = select(STORE_NAME);
-			const blockEditor = select(blockEditorStore);
+		( select ) => {
+			const store = select( STORE_NAME );
+			const blockEditor = select( blockEditorStore );
 			const blocks = blockEditor.getBlocks?.() || [];
-			const currentBlockPath = findBlockPath(blocks, clientId);
+			const currentBlockPath = findBlockPath( blocks, clientId );
 			const activityLog = store.getActivityLog() || [];
 			const blockEntries = activityLog.filter(
-				(entry) =>
+				( entry ) =>
 					entry?.surface === 'block' &&
-					(entry?.target?.clientId === clientId ||
-						blockPathMatches(entry?.target?.blockPath, currentBlockPath))
+					( entry?.target?.clientId === clientId ||
+						blockPathMatches(
+							entry?.target?.blockPath,
+							currentBlockPath
+						) )
 			);
-			const resolvedBlock = blockEditor.getBlock?.(clientId) || null;
-			const parentIds = blockEditor.getBlockParents?.(clientId) || [];
+			const resolvedBlock = blockEditor.getBlock?.( clientId ) || null;
+			const parentIds = blockEditor.getBlockParents?.( clientId ) || [];
 
 			return {
-				recommendations: store.getBlockRecommendations(clientId),
-				isLoading: store.isBlockLoading(clientId),
-				error: store.getBlockError(clientId),
-				status: store.getBlockStatus(clientId),
+				recommendations: store.getBlockRecommendations( clientId ),
+				isLoading: store.isBlockLoading( clientId ),
+				error: store.getBlockError( clientId ),
+				status: store.getBlockStatus( clientId ),
 				storedContextSignature:
-					store.getBlockRecommendationContextSignature(clientId),
-				storedStaleReason: store.getBlockStaleReason?.(clientId) || null,
-				storedRequestToken: store.getBlockRequestToken?.(clientId) || 0,
+					store.getBlockRecommendationContextSignature( clientId ),
+				storedStaleReason:
+					store.getBlockStaleReason?.( clientId ) || null,
 				requestDiagnostics:
-					store.getBlockRequestDiagnostics?.(clientId) || null,
+					store.getBlockRequestDiagnostics?.( clientId ) || null,
 				blockActivityLog: blockEntries,
-				blockApplyError: store.getBlockApplyError?.(clientId) || null,
+				blockApplyError: store.getBlockApplyError?.( clientId ) || null,
 				undoError: store.getUndoError(),
 				undoStatus: store.getUndoStatus(),
 				lastUndoneActivityId: store.getLastUndoneActivityId(),
-				editingMode: blockEditor.getBlockEditingMode?.(clientId),
+				editingMode: blockEditor.getBlockEditingMode?.( clientId ),
 				isInsideContentOnly: parentIds.some(
-					(parentId) =>
-						blockEditor.getBlockEditingMode?.(parentId) === 'contentOnly'
+					( parentId ) =>
+						blockEditor.getBlockEditingMode?.( parentId ) ===
+						'contentOnly'
 				),
 				block: resolvedBlock,
 			};
 		},
-		[clientId]
+		[ clientId ]
 	);
 	const resolvedBlockActivities = useMemo(
 		() =>
-			getResolvedActivityEntries(blockActivityLog, (entry) =>
-				getBlockActivityUndoState(entry, blockEditorSelection)
+			getResolvedActivityEntries( blockActivityLog, ( entry ) =>
+				getBlockActivityUndoState( entry, blockEditorSelection )
 			),
-		[blockActivityLog, blockEditorSelection]
+		[ blockActivityLog, blockEditorSelection ]
 	);
 	const blockActivityEntries = useMemo(
-		() => [...resolvedBlockActivities].reverse(),
-		[resolvedBlockActivities]
+		() => [ ...resolvedBlockActivities ].reverse(),
+		[ resolvedBlockActivities ]
 	);
 	const latestBlockActivity = useMemo(
-		() => getLatestAppliedActivity(resolvedBlockActivities),
-		[resolvedBlockActivities]
+		() => getLatestAppliedActivity( resolvedBlockActivities ),
+		[ resolvedBlockActivities ]
 	);
 	const latestUndoableActivityId = useMemo(
-		() => getLatestUndoableActivity(resolvedBlockActivities)?.id || null,
-		[resolvedBlockActivities]
+		() => getLatestUndoableActivity( resolvedBlockActivities )?.id || null,
+		[ resolvedBlockActivities ]
 	);
 	const lastUndoneBlockActivity = useMemo(
 		() =>
 			resolvedBlockActivities.find(
-				(entry) => entry?.id === lastUndoneActivityId
+				( entry ) => entry?.id === lastUndoneActivityId
 			) || null,
-		[resolvedBlockActivities, lastUndoneActivityId]
+		[ resolvedBlockActivities, lastUndoneActivityId ]
 	);
 
 	return {
@@ -200,7 +204,6 @@ function useBlockRecommendationState(clientId) {
 		status,
 		storedContextSignature,
 		storedStaleReason,
-		storedRequestToken,
 		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
@@ -210,7 +213,8 @@ function useBlockRecommendationState(clientId) {
 		undoError,
 		undoStatus,
 		isDisabled: editingMode === 'disabled',
-		isContentRestricted: editingMode === 'contentOnly' || isInsideContentOnly,
+		isContentRestricted:
+			editingMode === 'contentOnly' || isInsideContentOnly,
 		block,
 	};
 }
@@ -219,17 +223,17 @@ function getFeaturedSuggestion(
 	executableBlockSuggestions,
 	advisoryBlockSuggestions
 ) {
-	if (executableBlockSuggestions.length > 0) {
+	if ( executableBlockSuggestions.length > 0 ) {
 		return {
-			suggestion: executableBlockSuggestions[0],
+			suggestion: executableBlockSuggestions[ 0 ],
 			tone: APPLY_NOW_LABEL,
 			why: 'Flavor Agent can safely apply this directly on the current block.',
 		};
 	}
 
-	if (advisoryBlockSuggestions.length > 0) {
+	if ( advisoryBlockSuggestions.length > 0 ) {
 		return {
-			suggestion: advisoryBlockSuggestions[0],
+			suggestion: advisoryBlockSuggestions[ 0 ],
 			tone: MANUAL_IDEAS_LABEL,
 			why: 'This is the strongest next move, but it still needs manual follow-through.',
 		};
@@ -238,11 +242,13 @@ function getFeaturedSuggestion(
 	return null;
 }
 
-export function BlockRecommendationsContent({
+export function BlockRecommendationsContent( {
 	clientId,
 	eyebrow = 'Selected Block',
 	introCopy = 'Ask for a specific outcome or fetch recommendations based on the current block context.',
-}) {
+	prompt = undefined,
+	onPromptChange = undefined,
+} ) {
 	const {
 		canRecommendBlocks,
 		recommendations,
@@ -251,7 +257,6 @@ export function BlockRecommendationsContent({
 		status,
 		storedContextSignature,
 		storedStaleReason,
-		storedRequestToken,
 		requestDiagnostics,
 		blockActivityEntries,
 		latestBlockActivity,
@@ -263,26 +268,40 @@ export function BlockRecommendationsContent({
 		isDisabled,
 		isContentRestricted,
 		block,
-	} = useBlockRecommendationState(clientId);
+	} = useBlockRecommendationState( clientId );
 	const {
 		fetchBlockRecommendations,
 		clearBlockError,
 		clearUndoError,
 		undoActivity,
-	} = useDispatch(STORE_NAME);
-	const [prompt, setPrompt] = useState('');
-	const hydratedResultKeyRef = useRef(null);
+	} = useDispatch( STORE_NAME );
 	const liveContextSignature = useSelect(
-		(select) => getLiveBlockContextSignature(select, clientId),
-		[clientId]
+		( select ) => getLiveBlockContextSignature( select, clientId ),
+		[ clientId ]
 	);
-	const liveContext = useMemo(() => {
+	const liveContext = useMemo( () => {
 		void liveContextSignature;
 
-		return clientId ? collectBlockContext(clientId) : null;
-	}, [clientId, liveContextSignature]);
+		return clientId ? collectBlockContext( clientId ) : null;
+	}, [ clientId, liveContextSignature ] );
+	const isPromptControlled = typeof prompt === 'string';
+	const [ uncontrolledPrompt, setUncontrolledPrompt ] = useState(
+		() => recommendations?.prompt || ''
+	);
+	const currentPrompt = isPromptControlled ? prompt : uncontrolledPrompt;
+	const handlePromptChange = isPromptControlled
+		? onPromptChange
+		: setUncontrolledPrompt;
+
+	useEffect( () => {
+		if ( isPromptControlled ) {
+			return;
+		}
+
+		setUncontrolledPrompt( recommendations?.prompt || '' );
+	}, [ clientId, isPromptControlled, recommendations?.prompt ] );
 	const hasApplySuccess =
-		Boolean(latestBlockActivity) &&
+		Boolean( latestBlockActivity ) &&
 		latestBlockActivity?.id === latestUndoableActivityId;
 	const hasUndoSuccess =
 		undoStatus === 'success' &&
@@ -292,48 +311,49 @@ export function BlockRecommendationsContent({
 		requestInput: currentRequestInput,
 	} = useMemo(
 		() =>
-			buildBlockRecommendationRequestData({
+			buildBlockRecommendationRequestData( {
 				clientId,
 				liveContext,
 				liveContextSignature,
-				prompt,
-			}),
-		[clientId, liveContext, liveContextSignature, prompt]
+				prompt: currentPrompt,
+			} ),
+		[ clientId, currentPrompt, liveContext, liveContextSignature ]
 	);
-	const storedRequestSignature = useMemo(
+	const {
+		effectiveStaleReason,
+		hasFreshResult,
+		hasStoredResult: hasResult,
+		isStaleResult,
+	} = useMemo(
 		() =>
-			buildBlockRecommendationRequestSignature({
+			getBlockRecommendationFreshness( {
 				clientId,
-				prompt: recommendations?.prompt || '',
-				contextSignature: storedContextSignature || liveContextSignature,
-			}),
-		[clientId, liveContextSignature, recommendations?.prompt, storedContextSignature]
+				recommendations,
+				status,
+				storedContextSignature,
+				storedStaleReason,
+				liveContextSignature,
+				prompt: currentPrompt,
+			} ),
+		[
+			clientId,
+			currentPrompt,
+			liveContextSignature,
+			recommendations,
+			status,
+			storedContextSignature,
+			storedStaleReason,
+		]
 	);
-	const clientStaleReason =
-		status === 'ready' &&
-		Boolean(recommendations) &&
-		storedRequestSignature !== currentRequestSignature
-			? 'client'
-			: null;
-	const effectiveStaleReason =
-		clientStaleReason ||
-		(storedStaleReason === 'server' ? 'server' : null);
-	const hasFreshResult =
-		status === 'ready' &&
-		Boolean(recommendations) &&
-		effectiveStaleReason === null &&
-		storedRequestSignature === currentRequestSignature;
-	const hasResult = status === 'ready' && Boolean(recommendations);
-	const isStaleResult = hasResult && effectiveStaleReason !== null;
 	const blockSuggestions = hasResult
 		? recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS
 		: EMPTY_BLOCK_SUGGESTIONS;
 	const hasBlockSuggestions = blockSuggestions.length > 0;
-	const { statusNotice } = useSelect((select) => {
-		const store = select(STORE_NAME);
+	const { statusNotice } = useSelect( ( select ) => {
+		const store = select( STORE_NAME );
 
 		return {
-			statusNotice: store.getSurfaceStatusNotice('block', {
+			statusNotice: store.getSurfaceStatusNotice( 'block', {
 				requestError: error,
 				applyError: blockApplyError,
 				undoError,
@@ -343,37 +363,41 @@ export function BlockRecommendationsContent({
 				hasSuccess: hasApplySuccess,
 				hasUndoSuccess,
 				emptyMessage:
-					hasFreshResult && !hasBlockSuggestions
+					hasFreshResult && ! hasBlockSuggestions
 						? 'No block suggestions were returned for the current prompt.'
 						: '',
 				applySuccessMessage: hasApplySuccess
-					? `Applied ${latestBlockActivity?.suggestion || 'suggestion'}.`
+					? `Applied ${
+							latestBlockActivity?.suggestion || 'suggestion'
+					  }.`
 					: '',
 				undoSuccessMessage: hasUndoSuccess
-					? `Undid ${lastUndoneBlockActivity?.suggestion || 'suggestion'}.`
+					? `Undid ${
+							lastUndoneBlockActivity?.suggestion || 'suggestion'
+					  }.`
 					: '',
-				onDismissAction: Boolean(error),
-				onApplyDismissAction: Boolean(blockApplyError),
-				onUndoDismissAction: Boolean(undoError),
-			}),
+				onDismissAction: Boolean( error ),
+				onApplyDismissAction: Boolean( blockApplyError ),
+				onUndoDismissAction: Boolean( undoError ),
+			} ),
 		};
-	});
+	} );
 	const { executableBlockSuggestions, advisoryBlockSuggestions } =
-		useMemo(() => {
+		useMemo( () => {
 			const blockContext = recommendations?.blockContext || {};
 			const executable = [];
 			const advisory = [];
 
-			for (const suggestion of blockSuggestions) {
+			for ( const suggestion of blockSuggestions ) {
 				const execution = getBlockSuggestionExecutionInfo(
 					suggestion,
 					blockContext
 				);
 
-				if (execution.isExecutable) {
-					executable.push(suggestion);
+				if ( execution.isExecutable ) {
+					executable.push( suggestion );
 				} else {
-					advisory.push(suggestion);
+					advisory.push( suggestion );
 				}
 			}
 
@@ -381,7 +405,7 @@ export function BlockRecommendationsContent({
 				executableBlockSuggestions: executable,
 				advisoryBlockSuggestions: advisory,
 			};
-		}, [blockSuggestions, recommendations?.blockContext]);
+		}, [ blockSuggestions, recommendations?.blockContext ] );
 	const featuredSuggestion = useMemo(
 		() =>
 			isStaleResult
@@ -390,25 +414,26 @@ export function BlockRecommendationsContent({
 						executableBlockSuggestions,
 						advisoryBlockSuggestions
 				  ),
-		[advisoryBlockSuggestions, executableBlockSuggestions, isStaleResult]
+		[ advisoryBlockSuggestions, executableBlockSuggestions, isStaleResult ]
 	);
-	const diagnosticActivityEntry = useMemo(() => {
+	const diagnosticActivityEntry = useMemo( () => {
 		const isFailureDiagnostic = requestDiagnostics?.type === 'failure';
 		const isEmptyResultDiagnostic =
 			hasFreshResult && requestDiagnostics?.hasEmptyBlockResult;
 
-		if (!isFailureDiagnostic && !isEmptyResultDiagnostic) {
+		if ( ! isFailureDiagnostic && ! isEmptyResultDiagnostic ) {
 			return null;
 		}
 
 		return {
-			id: `block-request-diagnostic:${clientId || 'unknown'}:${
+			id: `block-request-diagnostic:${ clientId || 'unknown' }:${
 				requestDiagnostics.requestToken || 0
 			}`,
 			type: 'request_diagnostic',
 			surface: 'block',
 			suggestion:
-				requestDiagnostics.title || 'No block-lane suggestions returned',
+				requestDiagnostics.title ||
+				'No block-lane suggestions returned',
 			target: {
 				clientId,
 				blockName:
@@ -418,35 +443,38 @@ export function BlockRecommendationsContent({
 					'',
 			},
 			request: {
-				prompt: requestDiagnostics.prompt || recommendations?.prompt || '',
-				...(requestDiagnostics.requestMeta
+				prompt:
+					requestDiagnostics.prompt || recommendations?.prompt || '',
+				...( requestDiagnostics.requestMeta
 					? {
 							ai: requestDiagnostics.requestMeta,
 					  }
-					: {}),
-				...(requestDiagnostics.errorMessage
+					: {} ),
+				...( requestDiagnostics.errorMessage
 					? {
 							error: {
 								code: requestDiagnostics.errorCode || '',
 								message: requestDiagnostics.errorMessage,
 							},
 					  }
-					: {}),
+					: {} ),
 			},
 			diagnostic: {
-				detailLines: Array.isArray(requestDiagnostics.detailLines)
+				detailLines: Array.isArray( requestDiagnostics.detailLines )
 					? requestDiagnostics.detailLines
 					: [],
 				rawCounts: requestDiagnostics.rawCounts || null,
 				finalCounts: requestDiagnostics.finalCounts || null,
-				reasonCodes: Array.isArray(requestDiagnostics.reasonCodes)
+				reasonCodes: Array.isArray( requestDiagnostics.reasonCodes )
 					? requestDiagnostics.reasonCodes
 					: [],
 			},
 			undo: {
 				canUndo: false,
 				status: isFailureDiagnostic ? 'failed' : 'review',
-				error: isFailureDiagnostic ? requestDiagnostics.errorMessage || null : null,
+				error: isFailureDiagnostic
+					? requestDiagnostics.errorMessage || null
+					: null,
 			},
 			timestamp: requestDiagnostics.timestamp || new Date().toISOString(),
 			executionResult: 'review',
@@ -458,89 +486,60 @@ export function BlockRecommendationsContent({
 		recommendations?.blockName,
 		recommendations?.prompt,
 		requestDiagnostics,
-	]);
+	] );
 	const activitySectionEntries = useMemo(
 		() =>
 			diagnosticActivityEntry
-				? [diagnosticActivityEntry, ...blockActivityEntries]
+				? [ diagnosticActivityEntry, ...blockActivityEntries ]
 				: blockActivityEntries,
-		[blockActivityEntries, diagnosticActivityEntry]
+		[ blockActivityEntries, diagnosticActivityEntry ]
 	);
 	const activitySectionDescription = diagnosticActivityEntry
 		? 'Recent request diagnostics and applied actions for this block.'
 		: 'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.';
 
-	useEffect(() => {
-		hydratedResultKeyRef.current = null;
-		setPrompt('');
-	}, [clientId]);
-
-	useEffect(() => {
-		const hydrationKey =
-			status === 'ready' && clientId && recommendations
-				? `${clientId}:${storedRequestToken || storedRequestSignature}`
-				: '';
-
-		if (!hydrationKey || hydratedResultKeyRef.current === hydrationKey) {
+	const handleFetch = useCallback( () => {
+		if ( ! canRecommendBlocks ) {
 			return;
 		}
 
-		hydratedResultKeyRef.current = hydrationKey;
-		setPrompt(recommendations?.prompt || '');
-	}, [
-		clientId,
-		recommendations,
-		status,
-		storedRequestSignature,
-		storedRequestToken,
-	]);
-
-	const handleFetch = useCallback(() => {
-		if (!canRecommendBlocks) {
-			return;
-		}
-
-		if (liveContext) {
-			fetchBlockRecommendations(clientId, liveContext, prompt);
+		if ( liveContext ) {
+			fetchBlockRecommendations( clientId, liveContext, currentPrompt );
 		}
 	}, [
 		canRecommendBlocks,
 		clientId,
+		currentPrompt,
 		fetchBlockRecommendations,
 		liveContext,
-		prompt,
-	]);
+	] );
 	const handleUndo = useCallback(
-		(activityId) => {
-			undoActivity(activityId);
+		( activityId ) => {
+			undoActivity( activityId );
 		},
-		[undoActivity]
+		[ undoActivity ]
 	);
-	const handleRefresh = useCallback(() => {
-		if (!canRecommendBlocks || !liveContext) {
+	const handleRefresh = useCallback( () => {
+		if ( ! canRecommendBlocks || ! liveContext ) {
 			return;
 		}
 
-		fetchBlockRecommendations(clientId, liveContext, prompt);
+		fetchBlockRecommendations( clientId, liveContext, currentPrompt );
 	}, [
 		canRecommendBlocks,
 		clientId,
+		currentPrompt,
 		fetchBlockRecommendations,
 		liveContext,
-		prompt,
-	]);
+	] );
 	let dismissStatusNotice;
 
-	if (statusNotice?.source === 'request') {
-		dismissStatusNotice = () => clearBlockError(clientId);
-	} else if (statusNotice?.source === 'apply') {
-		dismissStatusNotice = () => clearBlockError(clientId);
-	} else if (statusNotice?.source === 'undo') {
+	if ( statusNotice?.source === 'request' ) {
+		dismissStatusNotice = () => clearBlockError( clientId );
+	} else if ( statusNotice?.source === 'apply' ) {
+		dismissStatusNotice = () => clearBlockError( clientId );
+	} else if ( statusNotice?.source === 'undo' ) {
 		dismissStatusNotice = clearUndoError;
-	}
-
-	if (!clientId || !block || isDisabled) {
-		return null;
 	}
 
 	const composerHelperText = isContentRestricted
@@ -556,98 +555,115 @@ export function BlockRecommendationsContent({
 		? 'Describe the content change you want for this block.'
 		: 'Describe the outcome you want for this block.';
 
+	if ( ! clientId || ! block || isDisabled ) {
+		return null;
+	}
+
+	const blockScopeLabel = describeEditorBlockLabel(
+		block?.name || '',
+		block?.attributes || {}
+	);
+	let staleScopeReason = '';
+
+	if ( isStaleResult ) {
+		staleScopeReason =
+			effectiveStaleReason === 'server'
+				? 'This result no longer matches the current server-resolved recommendation context. Refresh before applying anything from the previous result.'
+				: 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.';
+	}
+
 	return (
 		<div className="flavor-agent-panel">
-			<SurfacePanelIntro eyebrow={eyebrow} introCopy={introCopy} />
+			<SurfacePanelIntro eyebrow={ eyebrow } introCopy={ introCopy } />
 
 			<SurfaceScopeBar
-				scopeLabel={block?.name || ''}
-				isFresh={hasFreshResult}
-				hasResult={hasResult}
-				staleReason={
-					isStaleResult
-						? effectiveStaleReason === 'server'
-							? 'This result no longer matches the current server-resolved recommendation context. Refresh before applying anything from the previous result.'
-							: 'This result no longer matches the current block or prompt. Refresh before applying anything from the previous result.'
-						: ''
-				}
-				refreshLabel={REFRESH_ACTION_LABEL}
-				onRefresh={isStaleResult ? handleRefresh : undefined}
-				isRefreshing={isLoading}
+				scopeLabel={ blockScopeLabel }
+				isFresh={ hasFreshResult }
+				hasResult={ hasResult }
+				announceChanges
+				staleReason={ staleScopeReason }
+				refreshLabel={ REFRESH_ACTION_LABEL }
+				onRefresh={ isStaleResult ? handleRefresh : undefined }
+				isRefreshing={ isLoading }
 			/>
 
-			{!canRecommendBlocks && <CapabilityNotice surface="block" />}
+			{ ! canRecommendBlocks && <CapabilityNotice surface="block" /> }
 
-			{isContentRestricted && (
+			{ isContentRestricted && (
 				<Notice
 					status="info"
-					isDismissible={false}
+					isDismissible={ false }
 					className="flavor-agent-content-notice"
 				>
-					{CONTENT_ONLY_NOTICE_TEXT}
+					{ CONTENT_ONLY_NOTICE_TEXT }
 				</Notice>
-			)}
+			) }
 
 			<SurfaceComposer
 				title="Ask Flavor Agent"
-				prompt={prompt}
-				onPromptChange={setPrompt}
-				onFetch={handleFetch}
-				placeholder={composerPlaceholder}
-				label={composerLabel}
-				rows={3}
-				helperText={composerHelperText}
-				starterPrompts={composerStarterPrompts}
+				prompt={ currentPrompt }
+				onPromptChange={ handlePromptChange }
+				onFetch={ handleFetch }
+				placeholder={ composerPlaceholder }
+				label={ composerLabel }
+				rows={ 3 }
+				helperText={ composerHelperText }
+				starterPrompts={ composerStarterPrompts }
 				submitHint="Press Cmd/Ctrl+Enter to submit."
-				fetchIcon={icon}
-				isLoading={isLoading}
-				disabled={!canRecommendBlocks}
+				fetchIcon={ icon }
+				isLoading={ isLoading }
+				disabled={ ! canRecommendBlocks }
 			/>
 
 			<AIStatusNotice
-				notice={statusNotice}
+				notice={ statusNotice }
 				onAction={
 					statusNotice?.actionType === 'undo' && latestBlockActivity
-						? () => handleUndo(latestBlockActivity.id)
+						? () => handleUndo( latestBlockActivity.id )
 						: undefined
 				}
-				onDismiss={dismissStatusNotice}
+				onDismiss={ dismissStatusNotice }
 			/>
 
-			{hasResult && recommendations?.explanation && (
-				<p className="flavor-agent-explanation flavor-agent-panel__note">
-					{recommendations.explanation}
-				</p>
-			)}
-
-			{isStaleResult && (
+			{ isStaleResult && (
 				<RecommendationHero
 					title="Refresh recommendations for the current block"
 					description="Flavor Agent kept the previous result visible so you can compare it against the current block."
-					tone={STALE_STATUS_LABEL}
+					tone={ STALE_STATUS_LABEL }
 					why="Apply actions stay disabled until you refresh against the live block context and current prompt."
-					primaryActionLabel={REFRESH_ACTION_LABEL}
-					onPrimaryAction={handleRefresh}
-					primaryActionDisabled={isLoading}
+					primaryActionLabel={ REFRESH_ACTION_LABEL }
+					onPrimaryAction={ handleRefresh }
+					primaryActionDisabled={ isLoading }
 				/>
-			)}
+			) }
 
-			{featuredSuggestion && (
+			{ featuredSuggestion && (
 				<RecommendationHero
 					title={
-						featuredSuggestion?.suggestion?.label || 'Recommended next change'
+						featuredSuggestion?.suggestion?.label ||
+						'Recommended next change'
 					}
-					description={featuredSuggestion?.suggestion?.description || ''}
-					tone={featuredSuggestion.tone}
-					why={featuredSuggestion.why}
+					description={
+						featuredSuggestion?.suggestion?.description || ''
+					}
+					tone={ featuredSuggestion.tone }
+					why={ featuredSuggestion.why }
 				/>
-			)}
+			) }
 
-			{executableBlockSuggestions.length > 0 && (
+			{ hasResult && recommendations?.explanation && (
+				<p className="flavor-agent-explanation flavor-agent-panel__note">
+					{ recommendations.explanation }
+				</p>
+			) }
+
+			{ executableBlockSuggestions.length > 0 && (
 				<RecommendationLane
-					title={APPLY_NOW_LABEL}
-					tone={isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL}
-					count={executableBlockSuggestions.length}
+					title={ APPLY_NOW_LABEL }
+					tone={
+						isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL
+					}
+					count={ executableBlockSuggestions.length }
 					countNoun="suggestion"
 					description={
 						isStaleResult
@@ -656,20 +672,20 @@ export function BlockRecommendationsContent({
 					}
 				>
 					<SuggestionChips
-						clientId={clientId}
-						suggestions={executableBlockSuggestions}
+						clientId={ clientId }
+						suggestions={ executableBlockSuggestions }
 						label="AI block suggestions"
-						currentRequestSignature={currentRequestSignature}
-						currentRequestInput={currentRequestInput}
-						disabled={isStaleResult}
+						currentRequestSignature={ currentRequestSignature }
+						currentRequestInput={ currentRequestInput }
+						disabled={ isStaleResult }
 					/>
 				</RecommendationLane>
-			)}
+			) }
 
-			{advisoryBlockSuggestions.length > 0 && (
+			{ advisoryBlockSuggestions.length > 0 && (
 				<AIAdvisorySection
-					title={MANUAL_IDEAS_LABEL}
-					count={advisoryBlockSuggestions.length}
+					title={ MANUAL_IDEAS_LABEL }
+					count={ advisoryBlockSuggestions.length }
 					countNoun="suggestion"
 					initialOpen
 					description={
@@ -678,59 +694,61 @@ export function BlockRecommendationsContent({
 							: 'These ideas need manual follow-through or a broader review flow, so Flavor Agent keeps them advisory.'
 					}
 				>
-					{advisoryBlockSuggestions.map((suggestion) => (
+					{ advisoryBlockSuggestions.map( ( suggestion ) => (
 						<AdvisorySuggestionCard
-							key={getSuggestionKey(suggestion)}
-							suggestion={suggestion}
+							key={ getSuggestionKey( suggestion ) }
+							suggestion={ suggestion }
 						/>
-					))}
+					) ) }
 				</AIAdvisorySection>
-			)}
+			) }
 
-			<NavigationRecommendations clientId={clientId} embedded />
+			<NavigationRecommendations clientId={ clientId } embedded />
 
 			<AIActivitySection
-				description={activitySectionDescription}
-				entries={activitySectionEntries}
-				isUndoing={undoStatus === 'undoing'}
-				onUndo={handleUndo}
-				initialOpen={!hasResult}
-				resetKey={clientId || 'block'}
-				maxVisible={3}
+				description={ activitySectionDescription }
+				entries={ activitySectionEntries }
+				isUndoing={ undoStatus === 'undoing' }
+				onUndo={ handleUndo }
+				initialOpen={ ! hasResult }
+				resetKey={ clientId || 'block' }
+				maxVisible={ 3 }
 			/>
 		</div>
 	);
 }
 
-function AdvisorySuggestionCard({ suggestion }) {
-	const typeLabel = getAdvisorySuggestionTypeLabel(suggestion);
+function AdvisorySuggestionCard( { suggestion } ) {
+	const typeLabel = getAdvisorySuggestionTypeLabel( suggestion );
 
 	return (
 		<div className="flavor-agent-card">
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
 					<span className="flavor-agent-card__label">
-						{suggestion?.label || 'Suggestion'}
+						{ suggestion?.label || 'Suggestion' }
 					</span>
-					{typeLabel && (
+					{ typeLabel && (
 						<div className="flavor-agent-card__meta">
-							<span className="flavor-agent-pill">{typeLabel}</span>
+							<span className="flavor-agent-pill">
+								{ typeLabel }
+							</span>
 						</div>
-					)}
+					) }
 				</div>
 			</div>
 
-			{suggestion?.description && (
+			{ suggestion?.description && (
 				<p className="flavor-agent-card__description">
-					{suggestion.description}
+					{ suggestion.description }
 				</p>
-			)}
+			) }
 		</div>
 	);
 }
 
-function getAdvisorySuggestionTypeLabel(suggestion) {
-	switch (suggestion?.type) {
+function getAdvisorySuggestionTypeLabel( suggestion ) {
+	switch ( suggestion?.type ) {
 		case 'structural_recommendation':
 			return 'Structure';
 		case 'pattern_replacement':
@@ -742,43 +760,47 @@ function getAdvisorySuggestionTypeLabel(suggestion) {
 	}
 }
 
-export function BlockRecommendationsPanel(props) {
+export function BlockRecommendationsPanel( props ) {
 	return (
-		<PanelBody title="AI Recommendations" initialOpen={false} icon={icon}>
-			<BlockRecommendationsContent {...props} />
+		<PanelBody
+			title="AI Recommendations"
+			initialOpen={ false }
+			icon={ icon }
+		>
+			<BlockRecommendationsContent { ...props } />
 		</PanelBody>
 	);
 }
 
 export function BlockRecommendationsDocumentPanel() {
-	const [rememberedClientId, setRememberedClientId] = useState(null);
-	const { selectedBlockClientId, selectedBlock } = useSelect((select) => {
-		const blockEditor = select(blockEditorStore);
+	const [ rememberedClientId, setRememberedClientId ] = useState( null );
+	const { selectedBlockClientId, selectedBlock } = useSelect( ( select ) => {
+		const blockEditor = select( blockEditorStore );
 		const clientId = blockEditor.getSelectedBlockClientId?.() || null;
 
 		return {
 			selectedBlockClientId: clientId,
-			selectedBlock: clientId ? blockEditor.getBlock?.(clientId) : null,
+			selectedBlock: clientId ? blockEditor.getBlock?.( clientId ) : null,
 		};
-	}, []);
+	}, [] );
 	const rememberedBlock = useSelect(
-		(select) => {
-			const blockEditor = select(blockEditorStore);
+		( select ) => {
+			const blockEditor = select( blockEditorStore );
 
 			return rememberedClientId
-				? blockEditor.getBlock?.(rememberedClientId) || null
+				? blockEditor.getBlock?.( rememberedClientId ) || null
 				: null;
 		},
-		[rememberedClientId]
+		[ rememberedClientId ]
 	);
 
-	useEffect(() => {
-		if (selectedBlockClientId && selectedBlock) {
-			setRememberedClientId(selectedBlockClientId);
+	useEffect( () => {
+		if ( selectedBlockClientId && selectedBlock ) {
+			setRememberedClientId( selectedBlockClientId );
 		}
-	}, [selectedBlockClientId, selectedBlock]);
+	}, [ selectedBlockClientId, selectedBlock ] );
 
-	if (selectedBlockClientId || !rememberedClientId || !rememberedBlock) {
+	if ( selectedBlockClientId || ! rememberedClientId || ! rememberedBlock ) {
 		return null;
 	}
 
@@ -788,7 +810,7 @@ export function BlockRecommendationsDocumentPanel() {
 			title="AI Recommendations"
 		>
 			<BlockRecommendationsContent
-				clientId={rememberedClientId}
+				clientId={ rememberedClientId }
 				eyebrow="Last Selected Block"
 				introCopy="Saving cleared block selection. Flavor Agent stays scoped to the last block you selected until you choose another block."
 			/>

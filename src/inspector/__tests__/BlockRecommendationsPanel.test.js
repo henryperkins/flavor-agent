@@ -13,13 +13,14 @@ const mockGetBlockActivityUndoState = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
 const mockRenderNavigationRecommendations = jest.fn();
 let mockShouldRenderNavigationRecommendations = false;
+const DOCUMENT_POSITION_FOLLOWING = 4;
 
 jest.mock('@wordpress/block-editor', () => ({
 	store: 'core/block-editor',
 }));
 
 jest.mock('@wordpress/components', () =>
-	require('../../test-utils/wp-components').mockWpComponents()
+	require('../../test-utils/wp-components').mockWpComponents(),
 );
 
 jest.mock('@wordpress/data', () => ({
@@ -151,17 +152,18 @@ function selectStore(storeName) {
 	if (storeName === 'core/block-editor') {
 		return {
 			getBlock: jest.fn(
-				(clientId) => getState().blockEditor.blockLookup[clientId] || null
+				(clientId) => getState().blockEditor.blockLookup[clientId] || null,
 			),
 			getBlockEditingMode: jest.fn(
-				(clientId) => getState().blockEditor.editingModes[clientId] || 'default'
+				(clientId) =>
+					getState().blockEditor.editingModes[clientId] || 'default',
 			),
 			getBlockParents: jest.fn(
-				(clientId) => getState().blockEditor.blockParents[clientId] || []
+				(clientId) => getState().blockEditor.blockParents[clientId] || [],
 			),
 			getBlocks: jest.fn(() => getState().blockEditor.blocks),
 			getSelectedBlockClientId: jest.fn(
-				() => getState().blockEditor.selectedBlockClientId
+				() => getState().blockEditor.selectedBlockClientId,
 			),
 		};
 	}
@@ -170,27 +172,27 @@ function selectStore(storeName) {
 		return {
 			getActivityLog: jest.fn(() => getState().store.activityLog),
 			getBlockError: jest.fn(
-				(clientId) => getState().store.blockErrors[clientId] || null
+				(clientId) => getState().store.blockErrors[clientId] || null,
 			),
 			getBlockApplyError: jest.fn(
-				(clientId) => getState().store.blockApplyErrors[clientId] || null
+				(clientId) => getState().store.blockApplyErrors[clientId] || null,
 			),
 			getBlockInteractionState: jest.fn(() => 'idle'),
 			getBlockStatus: jest.fn(
-				(clientId) => getState().store.blockStatuses[clientId] || 'idle'
+				(clientId) => getState().store.blockStatuses[clientId] || 'idle',
 			),
 			getBlockRecommendationContextSignature: jest.fn(
-				(clientId) => getState().store.blockContextSignatures[clientId] || null
+				(clientId) => getState().store.blockContextSignatures[clientId] || null,
 			),
 			getBlockRequestDiagnostics: jest.fn(
 				(clientId) =>
-					getState().store.blockRequestDiagnostics?.[clientId] || null
+					getState().store.blockRequestDiagnostics?.[clientId] || null,
 			),
 			getBlockRecommendations: jest.fn(
-				(clientId) => getState().store.blockRecommendations[clientId] || null
+				(clientId) => getState().store.blockRecommendations[clientId] || null,
 			),
 			getLastUndoneActivityId: jest.fn(
-				() => getState().store.lastUndoneActivityId
+				() => getState().store.lastUndoneActivityId,
 			),
 			getSurfaceStatusNotice: jest.fn((surface, options = {}) => {
 				void surface;
@@ -245,7 +247,7 @@ function selectStore(storeName) {
 			getUndoError: jest.fn(() => getState().store.undoError),
 			getUndoStatus: jest.fn(() => getState().store.undoStatus),
 			isBlockLoading: jest.fn(
-				(clientId) => getState().store.blockStatuses[clientId] === 'loading'
+				(clientId) => getState().store.blockStatuses[clientId] === 'loading',
 			),
 		};
 	}
@@ -284,15 +286,15 @@ beforeEach(() => {
 	});
 	mockGetResolvedActivityEntries.mockImplementation((entries) => entries || []);
 	mockGetBlockActivityUndoState.mockImplementation(
-		(entry) => entry?.undo || {}
+		(entry) => entry?.undo || {},
 	);
 	mockGetLatestAppliedActivity.mockImplementation(
-		(entries) => entries?.[entries.length - 1] || null
+		(entries) => entries?.[entries.length - 1] || null,
 	);
 	mockGetLatestUndoableActivity.mockImplementation(
 		(entries) =>
 			[...(entries || [])].reverse().find((entry) => entry?.undo?.canUndo) ||
-			null
+			null,
 	);
 	mockUseDispatch.mockImplementation(() => ({
 		clearBlockError: mockClearBlockError,
@@ -323,14 +325,14 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Last Selected Block');
 		expect(getContainer().textContent).toContain(
-			'Saving cleared block selection. Flavor Agent stays scoped to the last block you selected until you choose another block.'
+			'Saving cleared block selection. Flavor Agent stays scoped to the last block you selected until you choose another block.',
 		);
 		expect(getContainer().textContent).toContain(
-			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.'
+			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.',
 		);
 		expect(getContainer().textContent).toContain('Get Suggestions');
 		expect(
-			getContainer().querySelector('[data-panel-title="AI Recommendations"]')
+			getContainer().querySelector('[data-panel-title="AI Recommendations"]'),
 		).not.toBeNull();
 	});
 
@@ -348,7 +350,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		const textarea = getTextarea();
 		const descriptor = Object.getOwnPropertyDescriptor(
 			window.HTMLTextAreaElement.prototype,
-			'value'
+			'value',
 		);
 
 		act(() => {
@@ -357,7 +359,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		});
 
 		const button = Array.from(getContainer().querySelectorAll('button')).find(
-			(element) => element.textContent === 'Get Suggestions'
+			(element) => element.textContent === 'Get Suggestions',
 		);
 
 		act(() => {
@@ -372,7 +374,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 					name: 'core/paragraph',
 				},
 			},
-			'Tighten the hero copy.'
+			'Tighten the hero copy.',
 		);
 	});
 
@@ -413,7 +415,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(getContainer().textContent).toContain('Settings > Flavor Agent');
 		expect(getContainer().textContent).toContain('Settings > Connectors');
 		expect(getContainer().textContent).toContain(
-			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
+			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent',
 		);
 	});
 
@@ -467,18 +469,18 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(
 			mockRenderAIActivitySection.mock.calls[
 				mockRenderAIActivitySection.mock.calls.length - 1
-			][0]
+			][0],
 		).toEqual(
 			expect.objectContaining({
 				description:
 					'Undo follows the same latest-valid-action rule used across every executable Flavor Agent surface.',
 				entries: expect.any(Array),
 				resetKey: 'block-1',
-			})
+			}),
 		);
 
 		const undoButton = Array.from(
-			getContainer().querySelectorAll('button')
+			getContainer().querySelectorAll('button'),
 		).find((element) => element.textContent === 'Undo');
 
 		expect(undoButton).toBeDefined();
@@ -553,34 +555,34 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(getContainer().textContent).toContain('Recommended Next Step');
 		expect(getContainer().textContent).toContain('Wrap this block in a Group');
 		expect(getContainer().textContent).toContain(
-			'Replace with a callout pattern'
+			'Replace with a callout pattern',
 		);
 		expect(getContainer().textContent).not.toContain(
-			'One-click apply stays available when Flavor Agent can safely change this block'
+			'One-click apply stays available when Flavor Agent can safely change this block',
 		);
 		expect(getContainer().textContent).not.toContain(
-			'These ideas need manual follow-through or a broader preview/apply flow'
+			'These ideas need manual follow-through or a broader preview/apply flow',
 		);
-			expect(mockSuggestionChips).toHaveBeenCalledTimes(1);
-			expect(mockSuggestionChips.mock.calls[0][0]).toEqual(
-				expect.objectContaining({
+		expect(mockSuggestionChips).toHaveBeenCalledTimes(1);
+		expect(mockSuggestionChips.mock.calls[0][0]).toEqual(
+			expect.objectContaining({
+				clientId: 'block-1',
+				currentRequestInput: expect.objectContaining({
 					clientId: 'block-1',
-					currentRequestInput: expect.objectContaining({
-						clientId: 'block-1',
-						editorContext: expect.objectContaining({
-							block: expect.objectContaining({
-								name: 'core/paragraph',
-							}),
+					editorContext: expect.objectContaining({
+						block: expect.objectContaining({
+							name: 'core/paragraph',
 						}),
 					}),
-					currentRequestSignature: expect.any(String),
-					label: 'AI block suggestions',
-					suggestions: [
-						expect.objectContaining({
+				}),
+				currentRequestSignature: expect.any(String),
+				label: 'AI block suggestions',
+				suggestions: [
+					expect.objectContaining({
 						label: 'Hide on mobile',
 					}),
 				],
-			})
+			}),
 		);
 	});
 
@@ -688,7 +690,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(getContainer().textContent).toContain('Advisory only');
 		expect(getContainer().textContent).toContain('Wrap this block in a Group');
 		expect(getContainer().textContent).toContain(
-			'Replace with a callout pattern'
+			'Replace with a callout pattern',
 		);
 		expect(mockSuggestionChips).not.toHaveBeenCalled();
 	});
@@ -721,10 +723,10 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect(getContainer().textContent).not.toContain(
-			'Undid Refresh hero copy.'
+			'Undid Refresh hero copy.',
 		);
 		expect(
-			getContainer().querySelector('[data-status-notice="true"]')
+			getContainer().querySelector('[data-status-notice="true"]'),
 		).toBeNull();
 	});
 
@@ -755,7 +757,8 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		renderPanel();
 
-		expect(getContainer().textContent).toContain('core/heading');
+		expect(getContainer().textContent).toContain('Heading');
+		expect(getContainer().textContent).not.toContain('core/heading');
 		expect(getContainer().textContent).toContain('Last Selected Block');
 		expect(getContainer().textContent).not.toContain('Current');
 		expect(getContainer().textContent).not.toContain('Stale');
@@ -766,11 +769,18 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Selected Block');
 		expect(getContainer().textContent).toContain(
-			'Ask for a specific outcome or fetch recommendations based on the current block context.'
+			'Ask for a specific outcome or fetch recommendations based on the current block context.',
 		);
 		expect(getContainer().textContent).toContain(
-			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.'
+			'Flavor Agent keeps one-click apply limited to safe local block attribute changes.',
 		);
+	});
+
+	test('humanizes the scope label instead of exposing the raw block slug', () => {
+		renderContent();
+
+		expect(getContainer().textContent).toContain('Paragraph');
+		expect(getContainer().textContent).not.toContain('core/paragraph');
 	});
 
 	test('clarifies that content-restricted blocks can still surface manual guidance', () => {
@@ -785,10 +795,10 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		renderContent();
 
 		expect(getContainer().textContent).toContain(
-			'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.'
+			'This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only.',
 		);
 		expect(getContainer().textContent).not.toContain(
-			'Only content edits are available.'
+			'Only content edits are available.',
 		);
 	});
 
@@ -860,13 +870,13 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(panelText.indexOf('Apply now')).toBeGreaterThan(-1);
 		expect(panelText.indexOf('Manual ideas')).toBeGreaterThan(-1);
 		expect(
-			panelText.indexOf('Embedded Navigation Recommendations')
+			panelText.indexOf('Embedded Navigation Recommendations'),
 		).toBeGreaterThan(panelText.indexOf('Manual ideas'));
 		expect(mockRenderNavigationRecommendations).toHaveBeenCalledWith(
 			expect.objectContaining({
 				clientId: 'block-1',
 				embedded: true,
-			})
+			}),
 		);
 	});
 
@@ -916,7 +926,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 			][0];
 
 		expect(latestActivityProps.description).toContain(
-			'Recent request diagnostics and applied actions'
+			'Recent request diagnostics and applied actions',
 		);
 		expect(latestActivityProps.entries[0]).toEqual(
 			expect.objectContaining({
@@ -928,7 +938,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 					],
 				}),
 				executionResult: 'review',
-			})
+			}),
 		);
 	});
 
@@ -993,7 +1003,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 				undo: expect.objectContaining({
 					status: 'failed',
 				}),
-			})
+			}),
 		);
 	});
 
@@ -1041,10 +1051,10 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Stale');
 		expect(getContainer().textContent).toContain(
-			'This result no longer matches the current block or prompt.'
+			'This result no longer matches the current block or prompt.',
 		);
 		expect(getContainer().textContent).toContain(
-			'Refresh recommendations for the current block'
+			'Refresh recommendations for the current block',
 		);
 		expect(mockSuggestionChips).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -1054,8 +1064,20 @@ describe('BlockRecommendationsDocumentPanel', () => {
 					}),
 				],
 				disabled: true,
-			})
+			}),
 		);
+		expect(
+			getContainer()
+				.querySelector('.flavor-agent-scope-bar')
+				?.getAttribute('role'),
+		).toBe('status');
+		expect(
+			getContainer()
+				.querySelector('.flavor-agent-recommendation-hero')
+				?.compareDocumentPosition(
+					getContainer().querySelector('.flavor-agent-explanation'),
+				),
+		).toBe(DOCUMENT_POSITION_FOLLOWING);
 	});
 
 	test('marks same-clientId block edits stale and refreshes against the updated live context', () => {
@@ -1117,13 +1139,13 @@ describe('BlockRecommendationsDocumentPanel', () => {
 
 		expect(getContainer().textContent).toContain('Stale');
 		expect(getContainer().textContent).toContain(
-			'This result no longer matches the current block or prompt.'
+			'This result no longer matches the current block or prompt.',
 		);
 
 		mockFetchBlockRecommendations.mockClear();
 
 		const refreshButton = Array.from(
-			getContainer().querySelectorAll('button')
+			getContainer().querySelectorAll('button'),
 		).find((element) => element.textContent === 'Refresh');
 
 		expect(refreshButton).toBeDefined();
@@ -1135,7 +1157,7 @@ describe('BlockRecommendationsDocumentPanel', () => {
 		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
 			'block-1',
 			updatedContext,
-			''
+			'',
 		);
 	});
 });

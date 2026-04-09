@@ -461,6 +461,11 @@ describe('TemplatePartRecommender', () => {
 				'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.'
 			)
 		).toBe(true);
+		expect(
+			getContainer()
+				.querySelector('.flavor-agent-scope-bar')
+				?.getAttribute('role')
+		).toBe('status');
 	});
 
 	test('does not show the current scope badge when the latest template-part request failed', async () => {
@@ -531,6 +536,13 @@ describe('TemplatePartRecommender', () => {
 		expect(hasText('Advisory only')).toBe(true);
 		expect(hasText('Introduce utility links')).toBe(true);
 		expect(hasText('Browse pattern')).toBe(true);
+		expect(
+			getContainer()
+				.querySelector('.flavor-agent-recommendation-hero')
+				?.compareDocumentPosition(
+					getContainer().querySelector('.flavor-agent-explanation'),
+				)
+		).toBe(DOCUMENT_POSITION_FOLLOWING);
 	});
 
 	test('submits live pattern override metadata with template-part requests', async () => {

@@ -100,7 +100,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | Surface                        | Activity history | Undo model                                                                                        | Stale-result handling                                                                                                               |
 | ------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Block inspector main panel     | Yes              | Shared latest-valid tail undo; block snapshot must still match                                    | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
-| Block inspector style subpanel | No               | No surface-level undo                                                                             | Keeps stale results visible inside the projection surface, shows a stale scope bar, disables direct apply, and swaps row CTA copy to refresh-only |
+| Block inspector style subpanel | No               | No surface-level undo                                                                             | Keeps stale results visible inside the projection surface, shows a stale scope bar, disables direct apply, and points refresh back to the main block `AI Recommendations` panel |
 | Pattern inserter               | No               | No Flavor Agent undo                                                                              | No stale UI                                                                                                                         |
 | Template                       | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
 | Template-part                  | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
@@ -113,8 +113,8 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 
 ### Consistency Gaps
 
-- Block, Template, Template-Part, Style Book, and Global Styles now share the same stale-result model: preserve the previous result, mark it stale, disable execution, and offer refresh.
-- Block styles now shares the same stale-result preservation model as the other executable surfaces, but it still omits its own composer and activity history because it is projection-only.
+- Block, Navigation, Template, Template-Part, Style Book, and Global Styles now preserve the previous result, mark it stale, disable execution as needed, and offer refresh from the surface that owns the request lifecycle.
+- Block settings and block styles preserve stale projected results, but they intentionally do not own refresh. They disable apply and send the user back to the main block `AI Recommendations` panel to refresh the source request.
 - Pattern still exposes no activity or undo affordance, which keeps it separate from the fuller recommendation surfaces even though its loading, empty, error, and success states are now explicit.
 
 ## Prompting And Composer Gaps
@@ -139,7 +139,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 
 - Block advisory suggestions now use `AIAdvisorySection`. The block panel remains a direct-apply exception only for executable local block updates.
 - Navigation keeps `Recommended Next Changes` as an embedded wrapper title, but the actual advisory taxonomy is the shared `Manual ideas` tone. Treat this as an intentional nested-surface exception, not drift.
-- The Styles tab remains projection-only. It mirrors safe style results from the main block request and intentionally does not own its own composer, idle state, capability notice, or activity history.
+- The Settings and Styles tabs remain projection-only. They mirror safe local results from the main block request and intentionally do not own their own composer, refresh, capability notice, or activity history.
 - Pattern recommendations remain ranking/browse-only and intentionally stay outside the lane/review/apply/undo contract.
 - Style Book and Global Styles remain portal-first Styles-sidebar surfaces with document-panel fallback; some mount-context divergence from inspector/document panels is expected and acceptable.
 
@@ -166,10 +166,11 @@ For full recommendation panels, keep this order:
 3. `SurfaceComposer`
 4. `AIStatusNotice`
 5. `RecommendationHero`
-6. executable lane
-7. advisory lane
-8. `AIReviewSection` when applicable
-9. `AIActivitySection`
+6. supporting explanation or rationale copy
+7. executable lane
+8. advisory lane
+9. `AIReviewSection` when applicable
+10. `AIActivitySection`
 
 Block now adopts `SurfacePanelIntro` so it matches the Site Editor surfaces more closely while still keeping its one-click apply contract and embedded navigation subsection.
 For the main block panel specifically, the embedded navigation section is a subordinate exception that renders after the block lanes and before activity/history.
@@ -188,8 +189,8 @@ Status: completed in the current template contract pass.
 
 ### 4. Standardize stale-result behavior
 
-Keep stale results visible with a stale badge and refresh CTA across all executable recommendation surfaces.
-For the lightweight block style subpanel, preserve the thinner UI but keep the same store-level freshness guard so stale direct-apply attempts fail safely.
+Keep stale results visible with a stale badge and refresh CTA on the surfaces that own their request lifecycle.
+For the lightweight block settings and style projection surfaces, preserve the thinner UI, keep the same store-level freshness guard so stale direct-apply attempts fail safely, and route refresh back to the main block `AI Recommendations` panel instead of creating a second request lifecycle.
 
 Status: completed in the current stale-state alignment pass.
 

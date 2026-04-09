@@ -11,8 +11,8 @@ describe( 'RecommendationLane', () => {
 		act( () => {
 			getRoot().render(
 				<RecommendationLane
-					title="Apply now"
-					tone="Apply now"
+					title="Review first"
+					tone="Review first"
 					count={ 2 }
 					countNoun="suggestion"
 					description="These changes can run safely in place."
@@ -23,12 +23,15 @@ describe( 'RecommendationLane', () => {
 			);
 		} );
 
-		expect( getContainer().textContent ).toContain( 'Apply now' );
+		expect( getContainer().textContent ).toContain( 'Review first' );
 		expect( getContainer().textContent ).toContain( '2 suggestions' );
 		expect( getContainer().textContent ).toContain(
 			'These changes can run safely in place.'
 		);
 		expect( getContainer().textContent ).toContain( 'First suggestion' );
 		expect( getContainer().textContent ).toContain( 'Second suggestion' );
+		expect(
+			getContainer().querySelector( '.flavor-agent-pill--review' )
+		).not.toBeNull();
 	} );
 } );

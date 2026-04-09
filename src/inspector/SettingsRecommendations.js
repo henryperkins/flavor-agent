@@ -5,7 +5,7 @@
  */
 import { PanelBody, Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useCallback, useMemo } from '@wordpress/element';
+import { useMemo } from '@wordpress/element';
 import { Icon, check, arrowRight } from '@wordpress/icons';
 
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -15,7 +15,6 @@ import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	APPLY_NOW_LABEL,
-	REFRESH_ACTION_LABEL,
 	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {
@@ -41,9 +40,10 @@ export default function SettingsRecommendations( {
 	clientId,
 	suggestions,
 	isStale = false,
+	currentRequestSignature = null,
+	currentRequestInput = null,
 } ) {
-	const { applySuggestion, clearBlockError, fetchBlockRecommendations } =
-		useDispatch( STORE_NAME );
+	const { applySuggestion, clearBlockError } = useDispatch( STORE_NAME );
 	const liveContextSignature = useSelect(
 		( select ) => getLiveBlockContextSignature( select, clientId ),
 		[ clientId ]
@@ -53,7 +53,7 @@ export default function SettingsRecommendations( {
 
 		return clientId ? collectBlockContext( clientId ) : null;
 	}, [ clientId, liveContextSignature ] );
-	const { applyNotice, isRefreshing, requestPrompt } = useSelect(
+	const { applyNotice, requestPrompt } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
 			const applyError = store.getBlockApplyError?.( clientId ) || null;
@@ -63,16 +63,15 @@ export default function SettingsRecommendations( {
 					applyError,
 					onApplyDismissAction: true,
 				} ),
-				isRefreshing: store.isBlockLoading?.( clientId ) || false,
 				requestPrompt:
 					store.getBlockRecommendations?.( clientId )?.prompt || '',
 			};
 		},
-			[ clientId ]
-		);
+		[ clientId ]
+	);
 	const {
-		requestSignature: currentRequestSignature,
-		requestInput: currentRequestInput,
+		requestSignature: fallbackRequestSignature,
+		requestInput: fallbackRequestInput,
 	} = useMemo(
 		() =>
 			buildBlockRecommendationRequestData( {
@@ -83,22 +82,17 @@ export default function SettingsRecommendations( {
 			} ),
 		[ clientId, liveContext, liveContextSignature, requestPrompt ]
 	);
-	const handleRefresh = useCallback( () => {
-		const liveContext = collectBlockContext( clientId );
-
-		if ( ! liveContext ) {
-			return;
-		}
-
-		fetchBlockRecommendations( clientId, liveContext, requestPrompt );
-	}, [ clientId, fetchBlockRecommendations, requestPrompt ] );
+	const resolvedRequestSignature =
+		currentRequestSignature || fallbackRequestSignature;
+	const resolvedRequestInput =
+		currentRequestInput || fallbackRequestInput;
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion: ( targetClientId, suggestion ) =>
 			applySuggestion(
 				targetClientId,
 				suggestion,
-				currentRequestSignature,
-				currentRequestInput
+				resolvedRequestSignature,
+				resolvedRequestInput
 			),
 		buildFeedback: buildSettingsFeedback,
 		clientId,
@@ -158,10 +152,8 @@ export default function SettingsRecommendations( {
 						scopeLabel="Block Settings"
 						isFresh={ false }
 						hasResult
-						staleReason="These settings suggestions were generated for an earlier block state. Refresh before applying anything from the Settings tab."
-						onRefresh={ handleRefresh }
-						refreshLabel={ REFRESH_ACTION_LABEL }
-						isRefreshing={ isRefreshing }
+						announceChanges
+						staleReason="These settings suggestions reflect the last block request. Refresh the main AI Recommendations panel before applying anything from Settings."
 					/>
 				) }
 
@@ -174,7 +166,7 @@ export default function SettingsRecommendations( {
 						countNoun="suggestion"
 						description={
 							isStale
-								? 'These suggestions are shown for reference from the last request. Refresh before applying them.'
+								? 'These suggestions are shown for reference from the last request. Refresh the main AI Recommendations panel before applying them.'
 								: 'These suggestions map directly to the native settings in this panel.'
 						}
 					>

@@ -1,4 +1,5 @@
 import { formatCount, joinClassNames } from '../utils/format-count';
+import { getTonePillClassName } from './surface-labels';
 
 export default function RecommendationLane( {
 	title = '',
@@ -31,7 +32,13 @@ export default function RecommendationLane( {
 				<div className="flavor-agent-panel__group-title">{ title }</div>
 				<div className="flavor-agent-card__meta">
 					{ tone && (
-						<span className="flavor-agent-pill flavor-agent-pill--lane">
+						<span
+							className={ joinClassNames(
+								'flavor-agent-pill',
+								getTonePillClassName( tone ) ||
+									'flavor-agent-pill--prominent'
+							) }
+						>
 							{ tone }
 						</span>
 					) }

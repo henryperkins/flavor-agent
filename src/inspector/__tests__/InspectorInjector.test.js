@@ -1,5 +1,9 @@
 const mockUseSelect = jest.fn();
 const mockCollectBlockContext = jest.fn();
+const mockRenderBlockRecommendationsPanel = jest.fn();
+const mockRenderSettingsRecommendations = jest.fn();
+const mockRenderStylesRecommendations = jest.fn();
+const mockRenderSuggestionChips = jest.fn();
 
 jest.mock( '@wordpress/hooks', () => ( {
 	addFilter: jest.fn(),
@@ -37,30 +41,70 @@ jest.mock( '../../store', () => ( {
 } ) );
 
 jest.mock( '../BlockRecommendationsPanel', () => ( {
-	BlockRecommendationsPanel: () => <div>Block Panel</div>,
+	BlockRecommendationsPanel: ( props ) => {
+		mockRenderBlockRecommendationsPanel( props );
+
+		return (
+			<div>
+				<div>Block Panel</div>
+				<button
+					type="button"
+					onClick={ () =>
+						props.onPromptChange?.(
+							'Make the block feel more editorial.'
+						)
+					}
+				>
+					Change block prompt
+				</button>
+			</div>
+		);
+	},
 } ) );
 
-jest.mock( '../SettingsRecommendations', () => ( props ) => (
-	<div>{ `Settings ${ props.suggestions.length }${
-		props.isStale ? ' stale' : ''
-	}` }</div>
-) );
+jest.mock( '../SettingsRecommendations', () => ( {
+	__esModule: true,
+	default: ( props ) => {
+		mockRenderSettingsRecommendations( props );
 
-jest.mock( '../StylesRecommendations', () => ( props ) => (
-	<div>{ `Styles ${ props.suggestions.length }${
-		props.isStale ? ' stale' : ''
-	}` }</div>
-) );
+		return (
+			<div>{ `Settings ${ props.suggestions.length }${
+				props.isStale ? ' stale' : ''
+			}` }</div>
+		);
+	},
+} ) );
 
-jest.mock( '../SuggestionChips', () => ( props ) => (
-	<div>{ `${ props.label }${ props.isStale ? ' stale' : '' }` }</div>
-) );
+jest.mock( '../StylesRecommendations', () => ( {
+	__esModule: true,
+	default: ( props ) => {
+		mockRenderStylesRecommendations( props );
+
+		return (
+			<div>{ `Styles ${ props.suggestions.length }${
+				props.isStale ? ' stale' : ''
+			}` }</div>
+		);
+	},
+} ) );
+
+jest.mock( '../SuggestionChips', () => ( {
+	__esModule: true,
+	default: ( props ) => {
+		mockRenderSuggestionChips( props );
+
+		return (
+			<div>{ `${ props.label }${ props.isStale ? ' stale' : '' }` }</div>
+		);
+	},
+} ) );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import withAIRecommendations from '../InspectorInjector';
+import { buildBlockRecommendationRequestSignature } from '../../utils/recommendation-request-signature';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -81,6 +125,18 @@ function renderComponent( props = {} ) {
 	} );
 }
 
+function getLatestProps( mockFn ) {
+	return mockFn.mock.calls[ mockFn.mock.calls.length - 1 ]?.[ 0 ] || null;
+}
+
+function getLatestChipProps( label ) {
+	const matchingCalls = mockRenderSuggestionChips.mock.calls
+		.map( ( [ props ] ) => props )
+		.filter( ( props ) => props.label === label );
+
+	return matchingCalls[ matchingCalls.length - 1 ] || null;
+}
+
 beforeEach( () => {
 	jest.clearAllMocks();
 	currentState = {
@@ -91,6 +147,7 @@ beforeEach( () => {
 		},
 		store: {
 			blockRecommendations: {
+				prompt: 'Keep the current direction.',
 				settings: [ { label: 'Use larger heading' } ],
 				styles: [ { label: 'Use accent color' } ],
 				block: [ { label: 'Hide on mobile' } ],
@@ -147,6 +204,7 @@ describe( 'InspectorInjector', () => {
 			store: {
 				...getState().store,
 				blockRecommendations: {
+					prompt: 'Keep the current direction.',
 					settings: [
 						{ label: 'Use larger heading' },
 						{ label: 'Pin block', panel: 'position' },
@@ -195,6 +253,100 @@ describe( 'InspectorInjector', () => {
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).toContain( 'Settings 1 stale' );
 		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
+	} );
+
+	test( 'marks projected settings, styles, and delegated chips stale when only the shared block prompt changes', () => {
+		currentState = {
+			...getState(),
+			store: {
+				...getState().store,
+				blockRecommendations: {
+					prompt: 'Keep the current direction.',
+					settings: [
+						{ label: 'Use larger heading' },
+						{ label: 'Pin block', panel: 'position' },
+					],
+					styles: [ { label: 'Use accent color', panel: 'color' } ],
+					block: [ { label: 'Hide on mobile' } ],
+				},
+			},
+		};
+
+		renderComponent();
+
+		expect( getContainer().textContent ).toContain( 'Settings 2' );
+		expect( getContainer().textContent ).toContain( 'Styles 1' );
+		expect( getContainer().textContent ).not.toContain( ' stale' );
+
+		act( () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find( ( button ) =>
+					button.textContent === 'Change block prompt'
+				)
+				?.click();
+		} );
+
+		const expectedRequestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: {
+					name: 'core/paragraph',
+				},
+			},
+			contextSignature: JSON.stringify( {
+				block: { name: 'core/paragraph' },
+			} ),
+			prompt: 'Make the block feel more editorial.',
+		};
+		const expectedRequestSignature =
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Make the block feel more editorial.',
+				contextSignature: JSON.stringify( {
+					block: { name: 'core/paragraph' },
+				} ),
+			} );
+		const settingsProps = getLatestProps(
+			mockRenderSettingsRecommendations
+		);
+		const stylesProps = getLatestProps( mockRenderStylesRecommendations );
+		const positionChipProps = getLatestChipProps(
+			'AI position suggestions'
+		);
+		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
+
+		expect( getContainer().textContent ).toContain( 'Settings 2 stale' );
+		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
+		expect( getContainer().textContent ).toContain(
+			'AI position suggestions stale'
+		);
+		expect( getContainer().textContent ).toContain(
+			'AI color suggestions stale'
+		);
+		expect( settingsProps?.currentRequestSignature ).toBe(
+			expectedRequestSignature
+		);
+		expect( settingsProps?.currentRequestInput ).toEqual(
+			expectedRequestInput
+		);
+		expect( stylesProps?.currentRequestSignature ).toBe(
+			expectedRequestSignature
+		);
+		expect( stylesProps?.currentRequestInput ).toEqual(
+			expectedRequestInput
+		);
+		expect( positionChipProps?.currentRequestSignature ).toBe(
+			expectedRequestSignature
+		);
+		expect( positionChipProps?.currentRequestInput ).toEqual(
+			expectedRequestInput
+		);
+		expect( colorChipProps?.currentRequestSignature ).toBe(
+			expectedRequestSignature
+		);
+		expect( colorChipProps?.currentRequestInput ).toEqual(
+			expectedRequestInput
+		);
 	} );
 
 	test( 'does not mount styles recommendations when the block is inside a contentOnly parent', () => {

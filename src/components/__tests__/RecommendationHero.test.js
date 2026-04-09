@@ -37,6 +37,9 @@ describe( 'RecommendationHero', () => {
 		expect( getContainer().textContent ).toContain(
 			'preserves existing content'
 		);
+		expect(
+			getContainer().querySelector( '.flavor-agent-pill--apply' )
+		).not.toBeNull();
 
 		const buttons = getContainer().querySelectorAll( 'button' );
 		buttons[ 0 ].click();

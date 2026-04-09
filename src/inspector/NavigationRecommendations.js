@@ -1,5 +1,6 @@
 import { serialize } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
+import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
 	useCallback,
@@ -20,6 +21,7 @@ import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import {
 	MANUAL_IDEAS_LABEL,
+	REFRESH_ACTION_LABEL,
 	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {
@@ -147,12 +149,13 @@ function buildNavigationContextSignature( {
 	block,
 	blockClientId,
 	editorContext,
+	prompt = '',
 } ) {
 	const input = buildNavigationFetchInput( {
 		block,
 		blockClientId,
 		editorContext,
-		prompt: '',
+		prompt,
 	} );
 
 	if ( ! input ) {
@@ -242,6 +245,49 @@ function NavigationSuggestionCard( { suggestion } ) {
 	);
 }
 
+function NavigationEmbeddedSection( {
+	title = '',
+	description = '',
+	count = null,
+	countNoun = 'idea',
+	meta = null,
+	children = null,
+} ) {
+	if ( ! title && ! children ) {
+		return null;
+	}
+
+	const countLabel = formatCount( count, countNoun );
+
+	return (
+		<div className="flavor-agent-navigation-embedded__section">
+			<div className="flavor-agent-navigation-embedded__section-header">
+				<div className="flavor-agent-panel__group-title">{ title }</div>
+				<div className="flavor-agent-card__meta">
+					{ meta }
+					{ countLabel && (
+						<span className="flavor-agent-pill">
+							{ countLabel }
+						</span>
+					) }
+				</div>
+			</div>
+
+			{ description && (
+				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+					{ description }
+				</p>
+			) }
+
+			{ children && (
+				<div className="flavor-agent-navigation-embedded__section-body">
+					{ children }
+				</div>
+			) }
+		</div>
+	);
+}
+
 export default function NavigationRecommendations( {
 	clientId,
 	embedded = false,
@@ -284,6 +330,7 @@ export default function NavigationRecommendations( {
 	} = useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
 	const previousClientId = useRef( clientId );
+	const hydratedResultKeyRef = useRef( '' );
 	const liveContextSignature = useSelect(
 		( select ) => getLiveBlockContextSignature( select, clientId ),
 		[ clientId ]
@@ -309,8 +356,9 @@ export default function NavigationRecommendations( {
 				block: navigationBlock,
 				blockClientId: clientId,
 				editorContext: liveNavigationContext,
+				prompt,
 			} ),
-		[ clientId, liveNavigationContext, navigationBlock ]
+		[ clientId, liveNavigationContext, navigationBlock, prompt ]
 	);
 	const hasStoredResult =
 		resultBlockClientId === clientId && status === 'ready';
@@ -377,10 +425,33 @@ export default function NavigationRecommendations( {
 		}
 
 		previousClientId.current = clientId;
+		hydratedResultKeyRef.current = '';
 
 		clearNavigationRecommendations();
 		setPrompt( '' );
 	}, [ clientId, clearNavigationRecommendations ] );
+
+	useEffect( () => {
+		const hydrationKey =
+			resultBlockClientId === clientId && status === 'ready'
+				? `${ clientId }:${ requestPrompt || '' }:${
+						currentResultContextSignature || ''
+				  }`
+				: '';
+
+		if ( ! hydrationKey || hydratedResultKeyRef.current === hydrationKey ) {
+			return;
+		}
+
+		hydratedResultKeyRef.current = hydrationKey;
+		setPrompt( requestPrompt || '' );
+	}, [
+		clientId,
+		currentResultContextSignature,
+		requestPrompt,
+		resultBlockClientId,
+		status,
+	] );
 
 	const handleFetch = useCallback( () => {
 		if ( canRecommend && requestInput ) {
@@ -396,17 +467,24 @@ export default function NavigationRecommendations( {
 		requestInput,
 	] );
 	const handleRefresh = useCallback( () => {
+		const refreshPrompt = prompt.trim() || requestPrompt || '';
 		const refreshInput = buildNavigationFetchInput( {
 			block: navigationBlock,
 			blockClientId: clientId,
 			editorContext: liveNavigationContext,
-			prompt: prompt.trim() || requestPrompt,
+			prompt: refreshPrompt,
+		} );
+		const refreshContextSignature = buildNavigationContextSignature( {
+			block: navigationBlock,
+			blockClientId: clientId,
+			editorContext: liveNavigationContext,
+			prompt: refreshPrompt,
 		} );
 
 		if ( canRecommend && refreshInput ) {
 			fetchNavigationRecommendations( {
 				...refreshInput,
-				contextSignature: recommendationContextSignature,
+				contextSignature: refreshContextSignature,
 			} );
 		}
 	}, [
@@ -416,7 +494,6 @@ export default function NavigationRecommendations( {
 		liveNavigationContext,
 		navigationBlock,
 		prompt,
-		recommendationContextSignature,
 		requestPrompt,
 	] );
 
@@ -428,16 +505,48 @@ export default function NavigationRecommendations( {
 	const laneTone = isStaleResult ? STALE_STATUS_LABEL : MANUAL_IDEAS_LABEL;
 	let laneDescription =
 		'Use this subsection to ask for navigation-specific next steps without creating a second top-level recommendation stack.';
+	let embeddedDescription =
+		'Ask for navigation-specific next steps without leaving the main block recommendation flow.';
 
 	if ( interactionState === 'advisory-ready' ) {
 		laneDescription =
 			'Navigation recommendations stay advisory here. Make accepted changes manually in the editor.';
+		embeddedDescription =
+			'Navigation suggestions stay advisory here and still need manual follow-through in the editor.';
 	}
 
 	if ( isStaleResult ) {
 		laneDescription =
 			'These ideas are shown for reference from the last request. Refresh before using them to change the current navigation block.';
 	}
+
+	const embeddedHeaderMeta = (
+		<>
+			<span
+				className={
+					isStaleResult
+						? 'flavor-agent-pill flavor-agent-pill--stale'
+						: 'flavor-agent-pill'
+				}
+			>
+				{ laneTone }
+			</span>
+			{ menuId > 0 && (
+				<span className="flavor-agent-pill">{ `Menu ID ${ menuId }` }</span>
+			) }
+			{ hasSuggestions && (
+				<span className="flavor-agent-pill">
+					{ formatCount( visibleRecommendations.length, 'idea' ) }
+				</span>
+			) }
+		</>
+	);
+	const featuredDescription = isStaleResult
+		? 'These ideas came from the previous navigation state. Refresh before using them as your next step.'
+		: 'Start with this change first, then work through the supporting ideas below.';
+	const groupedDescription = isStaleResult
+		? 'These accepted changes came from the previous request. Refresh before following them in the current navigation block.'
+		: 'Make these accepted changes manually in the navigation block.';
 
 	return (
 		<>
@@ -457,45 +566,28 @@ export default function NavigationRecommendations( {
 
 			{ ! canRecommend && <CapabilityNotice surface="navigation" /> }
 
-			{ canRecommend && (
-				<>
-					{ ( ! embedded || hasResult ) && (
-						<SurfaceScopeBar
-							scopeLabel="Navigation Block"
-							scopeDetails={
-								menuId > 0 ? [ `Menu ID ${ menuId }` ] : []
-							}
-							isFresh={ hasMatchingResult }
-							hasResult={ hasResult }
-							staleReason={
-								isStaleResult
-									? 'This navigation changed after the last request. Refresh before relying on the previous guidance.'
-									: ''
-							}
-							onRefresh={
-								isStaleResult ? handleRefresh : undefined
-							}
-							isRefreshing={ isLoading }
-						/>
-					) }
-
-					<RecommendationLane
-						title="Recommended Next Changes"
-						tone={ laneTone }
-						count={
-							hasSuggestions
-								? visibleRecommendations.length
-								: null
-						}
-						countNoun="idea"
-						description={ laneDescription }
+			{ canRecommend &&
+				( embedded ? (
+					<div
+						className="flavor-agent-navigation-embedded"
+						aria-label="Navigation recommendations"
 					>
+						<div className="flavor-agent-navigation-embedded__header">
+							<div className="flavor-agent-navigation-embedded__copy">
+								<p className="flavor-agent-section-label">
+									Navigation Ideas
+								</p>
+								<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+									{ embeddedDescription }
+								</p>
+							</div>
+							<div className="flavor-agent-card__meta">
+								{ embeddedHeaderMeta }
+							</div>
+						</div>
+
 						<SurfaceComposer
-							title={
-								embedded
-									? 'Ask About Navigation'
-									: 'Ask Flavor Agent'
-							}
+							title="Ask About Navigation"
 							prompt={ prompt }
 							onPromptChange={ setPrompt }
 							onFetch={ handleFetch }
@@ -512,7 +604,29 @@ export default function NavigationRecommendations( {
 							fetchVariant="secondary"
 							isLoading={ isLoading }
 							disabled={ ! requestInput }
+							className="flavor-agent-navigation-embedded__composer"
 						/>
+
+						{ isStaleResult && (
+							<div className="flavor-agent-navigation-embedded__stale">
+								<p className="flavor-agent-explanation flavor-agent-panel__note">
+									This navigation changed after the last
+									request. Refresh before relying on the
+									previous guidance.
+								</p>
+								<Button
+									size="small"
+									variant="secondary"
+									onClick={ handleRefresh }
+									disabled={ isLoading }
+									className="flavor-agent-navigation-embedded__refresh"
+								>
+									{ isLoading
+										? `${ REFRESH_ACTION_LABEL }\u2026`
+										: REFRESH_ACTION_LABEL }
+								</Button>
+							</div>
+						) }
 
 						<AIStatusNotice
 							notice={ statusNotice }
@@ -523,49 +637,32 @@ export default function NavigationRecommendations( {
 							}
 						/>
 
+						{ featuredSuggestion && (
+							<NavigationEmbeddedSection
+								title="Recommended next change"
+								description={ featuredDescription }
+							>
+								<NavigationSuggestionCard
+									suggestion={ featuredSuggestion }
+								/>
+							</NavigationEmbeddedSection>
+						) }
+
 						{ hasResult && explanation && (
 							<p className="flavor-agent-explanation flavor-agent-panel__note">
 								{ explanation }
 							</p>
 						) }
 
-						{ featuredSuggestion && (
-							<RecommendationHero
-								title={
-									featuredSuggestion?.label ||
-									'Recommended navigation change'
-								}
-								description={
-									featuredSuggestion?.description || ''
-								}
-								tone={ laneTone }
-								why={
-									isStaleResult
-										? 'These ideas came from the previous navigation state. Refresh before using them as your next step.'
-										: 'Start with this change first, then work through the supporting ideas below.'
-								}
-							>
-								<NavigationSuggestionCard
-									suggestion={ featuredSuggestion }
-								/>
-							</RecommendationHero>
-						) }
-
 						{ Object.entries( groupedSuggestions ).map(
 							( [ category, items ] ) => (
-								<RecommendationLane
+								<NavigationEmbeddedSection
 									key={ category }
 									title={ `${ formatCategoryLabel(
 										category
 									) } Changes` }
-									tone={ laneTone }
+									description={ groupedDescription }
 									count={ items.length }
-									countNoun="idea"
-									description={
-										isStaleResult
-											? 'These accepted changes came from the previous request. Refresh before following them in the current navigation block.'
-											: 'Make these accepted changes manually in the navigation block.'
-									}
 								>
 									{ items.map( ( suggestion, index ) => (
 										<NavigationSuggestionCard
@@ -576,12 +673,122 @@ export default function NavigationRecommendations( {
 											suggestion={ suggestion }
 										/>
 									) ) }
-								</RecommendationLane>
+								</NavigationEmbeddedSection>
 							)
 						) }
-					</RecommendationLane>
-				</>
-			) }
+					</div>
+				) : (
+					<>
+						<SurfaceScopeBar
+							scopeLabel="Navigation Block"
+							scopeDetails={
+								menuId > 0 ? [ `Menu ID ${ menuId }` ] : []
+							}
+							isFresh={ hasMatchingResult }
+							hasResult={ hasResult }
+							announceChanges
+							staleReason={
+								isStaleResult
+									? 'This navigation changed after the last request. Refresh before relying on the previous guidance.'
+									: ''
+							}
+							onRefresh={
+								isStaleResult ? handleRefresh : undefined
+							}
+							isRefreshing={ isLoading }
+						/>
+
+						<RecommendationLane
+							title="Recommended Next Changes"
+							tone={ laneTone }
+							count={
+								hasSuggestions
+									? visibleRecommendations.length
+									: null
+							}
+							countNoun="idea"
+							description={ laneDescription }
+						>
+							<SurfaceComposer
+								title="Ask Flavor Agent"
+								prompt={ prompt }
+								onPromptChange={ setPrompt }
+								onFetch={ handleFetch }
+								placeholder="Describe the structure or behavior you want."
+								label="What do you want to improve about this navigation?"
+								helperText="Flavor Agent will suggest the next navigation changes to make manually."
+								starterPrompts={ [
+									'Improve menu hierarchy',
+									'Reduce overlay friction',
+									'Improve keyboard support',
+								] }
+								fetchLabel="Get Navigation Suggestions"
+								loadingLabel="Getting navigation suggestions\u2026"
+								fetchVariant="secondary"
+								isLoading={ isLoading }
+								disabled={ ! requestInput }
+							/>
+
+							<AIStatusNotice
+								notice={ statusNotice }
+								onDismiss={
+									statusNotice?.source === 'request'
+										? clearNavigationError
+										: undefined
+								}
+							/>
+
+							{ featuredSuggestion && (
+								<RecommendationHero
+									title={
+										featuredSuggestion?.label ||
+										'Recommended navigation change'
+									}
+									description={
+										featuredSuggestion?.description || ''
+									}
+									tone={ laneTone }
+									why={ featuredDescription }
+								>
+									<NavigationSuggestionCard
+										suggestion={ featuredSuggestion }
+									/>
+								</RecommendationHero>
+							) }
+
+							{ hasResult && explanation && (
+								<p className="flavor-agent-explanation flavor-agent-panel__note">
+									{ explanation }
+								</p>
+							) }
+
+							{ Object.entries( groupedSuggestions ).map(
+								( [ category, items ] ) => (
+									<RecommendationLane
+										key={ category }
+										title={ `${ formatCategoryLabel(
+											category
+										) } Changes` }
+										tone={ laneTone }
+										count={ items.length }
+										countNoun="idea"
+										description={ groupedDescription }
+									>
+										{ items.map( ( suggestion, index ) => (
+											<NavigationSuggestionCard
+												key={ `${
+													suggestion?.label ||
+													'navigation'
+												}-${ index }` }
+												suggestion={ suggestion }
+											/>
+										) ) }
+									</RecommendationLane>
+								)
+							) }
+						</RecommendationLane>
+					</>
+				) ) }
 		</>
 	);
 }

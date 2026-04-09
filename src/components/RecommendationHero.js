@@ -1,6 +1,7 @@
 import { Button } from '@wordpress/components';
 
 import { joinClassNames } from '../utils/format-count';
+import { getTonePillClassName } from './surface-labels';
 
 export default function RecommendationHero( {
 	eyebrow = 'Recommended Next Step',
@@ -43,7 +44,13 @@ export default function RecommendationHero( {
 				</div>
 				<div className="flavor-agent-card__meta">
 					{ tone && (
-						<span className="flavor-agent-pill flavor-agent-pill--hero">
+						<span
+							className={ joinClassNames(
+								'flavor-agent-pill',
+								getTonePillClassName( tone ) ||
+									'flavor-agent-pill--prominent'
+							) }
+						>
 							{ tone }
 						</span>
 					) }

@@ -1,5 +1,4 @@
 const mockApplySuggestion = jest.fn();
-const mockFetchBlockRecommendations = jest.fn();
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockCollectBlockContext = jest.fn();
@@ -48,7 +47,6 @@ beforeEach(() => {
 	});
 	mockUseDispatch.mockReturnValue({
 		applySuggestion: mockApplySuggestion,
-		fetchBlockRecommendations: mockFetchBlockRecommendations,
 		clearBlockError: jest.fn(),
 	});
 	mockUseSelect.mockImplementation((callback) =>
@@ -56,7 +54,6 @@ beforeEach(() => {
 			getBlockApplyError: jest.fn(() => null),
 			getSurfaceStatusNotice: jest.fn(() => null),
 			getBlockRecommendations: jest.fn(() => ({ prompt: 'Warm up the palette' })),
-			isBlockLoading: jest.fn(() => false),
 		}))
 	);
 });
@@ -208,6 +205,39 @@ describe('StylesRecommendations', () => {
 		).toBe('AppliedUse softer shadow.');
 	});
 
+	test('prefers the live block request metadata passed from the main panel when applying', async () => {
+		const suggestion = makeSuggestion('shadow', 'Use softer shadow');
+		const currentRequestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: { name: 'core/heading' },
+			},
+			contextSignature: 'live-context:block-1:prompt-drift',
+			prompt: 'Make the block feel more editorial.',
+		};
+
+		renderComponent([suggestion], {
+			currentRequestSignature: 'live-signature:block-1',
+			currentRequestInput,
+		});
+
+		const applyButton = Array.from(
+			getContainer().querySelectorAll('button')
+		).find((button) => button.textContent === 'Apply');
+
+		await act(async () => {
+			applyButton.click();
+			await Promise.resolve();
+		});
+
+		expect(mockApplySuggestion).toHaveBeenCalledWith(
+			'block-1',
+			suggestion,
+			'live-signature:block-1',
+			currentRequestInput
+		);
+	});
+
 	test('renders block apply errors from the shared store notice path', () => {
 		mockUseSelect.mockImplementation((callback) =>
 			callback(() => ({
@@ -237,28 +267,27 @@ describe('StylesRecommendations', () => {
 		);
 	});
 
-	test('shows a stale banner and refreshes against the latest block context', () => {
+	test('shows stale projection guidance that points back to the main AI Recommendations panel', () => {
 		renderComponent([makeSuggestion('shadow', 'Use softer shadow')], {
 			isStale: true,
 		});
 
 		expect(getContainer().textContent).toContain(
-			'earlier block state'
+			'These style suggestions reflect the last block request.'
 		);
-
-		const refreshButton = Array.from(
-			getContainer().querySelectorAll('button')
-		).find((button) => button.textContent === 'Refresh');
-
-		act(() => {
-			refreshButton.click();
-		});
-
-		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
-			'block-1',
-			{ block: { name: 'core/paragraph' } },
-			'Warm up the palette'
+		expect(getContainer().textContent).toContain(
+			'Refresh the main AI Recommendations panel before applying anything from Styles.'
 		);
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-scope-bar[role="status"][aria-live="polite"]'
+			)
+		).not.toBeNull();
+		expect(
+			Array.from(getContainer().querySelectorAll('button')).find(
+				(button) => button.textContent === 'Refresh'
+			)
+		).toBeUndefined();
 	});
 
 	test('disables inline apply controls when stale suggestions are shown', () => {
@@ -285,7 +314,9 @@ describe('StylesRecommendations', () => {
 		expect(outlineButton?.disabled).toBe(true);
 		expect(applyButton).toBeUndefined();
 		expect(getContainer().textContent).not.toContain('Apply now');
-		expect(getContainer().textContent).toContain('Refresh first');
+		expect(getContainer().textContent).toContain(
+			'Refresh in AI Recommendations'
+		);
 		expect(getContainer().textContent).toContain('Stale');
 		expect(mockApplySuggestion).not.toHaveBeenCalled();
 	});

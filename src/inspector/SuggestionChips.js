@@ -4,11 +4,11 @@
  */
 import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useCallback, useMemo } from '@wordpress/element';
+import { useMemo } from '@wordpress/element';
 import { check } from '@wordpress/icons';
 
 import {
-	REFRESH_ACTION_LABEL,
+	getTonePillClassName,
 	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import InlineActionFeedback from '../components/InlineActionFeedback';
@@ -39,8 +39,7 @@ export default function SuggestionChips( {
 	title = '',
 	tone = '',
 } ) {
-	const { applySuggestion, fetchBlockRecommendations } =
-		useDispatch( STORE_NAME );
+	const { applySuggestion } = useDispatch( STORE_NAME );
 	const liveContextSignature = useSelect(
 		( select ) => getLiveBlockContextSignature( select, clientId ),
 		[ clientId ]
@@ -50,15 +49,11 @@ export default function SuggestionChips( {
 
 		return clientId ? collectBlockContext( clientId ) : null;
 	}, [ clientId, liveContextSignature ] );
-	const { isRefreshing, requestPrompt } = useSelect(
+	const requestPrompt = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
 
-			return {
-				isRefreshing: store.isBlockLoading?.( clientId ) || false,
-				requestPrompt:
-					store.getBlockRecommendations?.( clientId )?.prompt || '',
-			};
+			return store.getBlockRecommendations?.( clientId )?.prompt || '';
 		},
 		[ clientId ]
 	);
@@ -75,30 +70,26 @@ export default function SuggestionChips( {
 			} ),
 		[ clientId, liveContext, liveContextSignature, requestPrompt ]
 	);
-	const handleRefresh = useCallback( () => {
-		const liveContext = collectBlockContext( clientId );
-
-		if ( ! liveContext ) {
-			return;
-		}
-
-		fetchBlockRecommendations( clientId, liveContext, requestPrompt );
-	}, [ clientId, fetchBlockRecommendations, requestPrompt ] );
+	const resolvedRequestSignature =
+		currentRequestSignature || fallbackRequestSignature;
+	const resolvedRequestInput =
+		currentRequestInput || fallbackRequestInput;
 	const { appliedKey, feedback, handleApply } = useSuggestionApplyFeedback( {
 		applySuggestion: ( targetClientId, suggestion ) =>
 			applySuggestion(
 				targetClientId,
 				suggestion,
-				currentRequestSignature || fallbackRequestSignature,
-				currentRequestInput || fallbackRequestInput
+				resolvedRequestSignature,
+				resolvedRequestInput
 			),
 		buildFeedback: buildChipFeedback,
 		clientId,
-		currentRequestSignature,
-		fallbackRequestSignature,
 		getKey: getSuggestionKey,
 		suggestions,
 	} );
+	const tonePillClassName = isStale
+		? 'flavor-agent-pill--stale'
+		: getTonePillClassName( tone );
 
 	return (
 		<div className="flavor-agent-chip-surface">
@@ -110,7 +101,13 @@ export default function SuggestionChips( {
 						</div>
 					) }
 					{ ( tone || isStale ) && (
-						<span className="flavor-agent-pill">
+						<span
+							className={ `flavor-agent-pill${
+								tonePillClassName
+									? ` ${ tonePillClassName }`
+									: ''
+							}` }
+						>
 							{ isStale ? STALE_STATUS_LABEL : tone }
 						</span>
 					) }
@@ -118,22 +115,16 @@ export default function SuggestionChips( {
 			) }
 
 			{ isStale && (
-				<div className="flavor-agent-chip-surface__stale">
+				<div
+					className="flavor-agent-chip-surface__stale"
+					role="status"
+					aria-live="polite"
+				>
 					<p className="flavor-agent-panel__intro-copy">
-						These suggestions are shown for reference from the last
-						request. Refresh before applying them.
+						These suggestions reflect the last AI Recommendations
+						request. Refresh that main panel to update them for the
+						current block.
 					</p>
-					<Button
-						variant="secondary"
-						size="small"
-						onClick={ handleRefresh }
-						disabled={ isRefreshing }
-						className="flavor-agent-chip-surface__refresh"
-					>
-						{ isRefreshing
-							? `${ REFRESH_ACTION_LABEL }…`
-							: REFRESH_ACTION_LABEL }
-					</Button>
 				</div>
 			) }
 

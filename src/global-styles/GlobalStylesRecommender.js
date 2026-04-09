@@ -345,6 +345,7 @@ function GlobalStylesPanel( {
 				scopeLabel="Global Styles"
 				isFresh={ hasMatchingResult }
 				hasResult={ hasResult }
+				announceChanges
 				staleReason={
 					isStale
 						? staleReasonType === 'server'
@@ -395,12 +396,6 @@ function GlobalStylesPanel( {
 				/>
 			) }
 
-			{ explanation && suggestions.length > 0 && (
-				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-					{ explanation }
-				</p>
-			) }
-
 			{ isStale && (
 				<RecommendationHero
 					title="Refresh recommendations for Global Styles"
@@ -427,6 +422,12 @@ function GlobalStylesPanel( {
 							: 'Start here first, then use the remaining ideas as manual follow-through guidance.'
 					}
 				/>
+			) }
+
+			{ explanation && suggestions.length > 0 && (
+				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+					{ explanation }
+				</p>
 			) }
 
 			{ executableSuggestions.length > 0 && (

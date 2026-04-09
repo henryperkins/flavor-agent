@@ -11,11 +11,24 @@ import {
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
-import { useMemo } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 
-import { getLiveBlockContextSignature } from '../context/collector';
+import {
+	collectBlockContext,
+	getLiveBlockContextSignature,
+} from '../context/collector';
 import { STORE_NAME } from '../store';
 import { BlockRecommendationsPanel } from './BlockRecommendationsPanel';
+import {
+	buildBlockRecommendationRequestData,
+	getBlockRecommendationFreshness,
+} from './block-recommendation-request';
 import SettingsRecommendations from './SettingsRecommendations';
 import StylesRecommendations from './StylesRecommendations';
 import SuggestionChips from './SuggestionChips';
@@ -27,12 +40,19 @@ import {
 const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
 		const { clientId, isSelected } = props;
+		const [ promptState, setPromptState ] = useState( {
+			clientId: null,
+			value: '',
+		} );
+		const hydratedResultKeyRef = useRef( null );
 		const {
 			recommendations,
 			editingMode,
 			isInsideContentOnly,
 			status,
 			storedContextSignature,
+			storedRequestToken,
+			storedStaleReason,
 		} = useSelect(
 			( sel ) => {
 				const editor = sel( blockEditorStore );
@@ -46,6 +66,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						store.getBlockRecommendationContextSignature(
 							clientId
 						),
+					storedRequestToken:
+						store.getBlockRequestToken?.( clientId ) || 0,
+					storedStaleReason:
+						store.getBlockStaleReason?.( clientId ) || null,
 					editingMode: editor.getBlockEditingMode( clientId ),
 					isInsideContentOnly: parentIds.some(
 						( parentId ) =>
@@ -60,17 +84,65 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			( select ) => getLiveBlockContextSignature( select, clientId ),
 			[ clientId ]
 		);
+		const liveContext = useMemo( () => {
+			void liveContextSignature;
+
+			return clientId ? collectBlockContext( clientId ) : null;
+		}, [ clientId, liveContextSignature ] );
+		const prompt =
+			promptState.clientId === clientId
+				? promptState.value
+				: recommendations?.prompt || '';
+		const handlePromptChange = useCallback(
+			( nextPrompt ) => {
+				setPromptState( {
+					clientId,
+					value: nextPrompt,
+				} );
+			},
+			[ clientId ]
+		);
+		const {
+			hasFreshResult,
+			hasStoredResult,
+			isStaleResult,
+			storedRequestSignature,
+		} = useMemo(
+			() =>
+				getBlockRecommendationFreshness( {
+					clientId,
+					recommendations,
+					status,
+					storedContextSignature,
+					storedStaleReason,
+					liveContextSignature,
+					prompt,
+				} ),
+			[
+				clientId,
+				liveContextSignature,
+				prompt,
+				recommendations,
+				status,
+				storedContextSignature,
+				storedStaleReason,
+				]
+			);
+		const {
+			requestSignature: currentRequestSignature,
+			requestInput: currentRequestInput,
+		} = useMemo(
+			() =>
+				buildBlockRecommendationRequestData( {
+					clientId,
+					liveContext,
+					liveContextSignature,
+					prompt,
+				} ),
+			[ clientId, liveContext, liveContextSignature, prompt ]
+		);
 		const isDisabled = editingMode === 'disabled';
-		const hasStoredResult =
-			status === 'ready' && Boolean( recommendations );
-		const hasMatchingResult =
-			hasStoredResult &&
-			( ! storedContextSignature ||
-				storedContextSignature === liveContextSignature );
-		const isStaleResult =
-			hasStoredResult &&
-			Boolean( storedContextSignature ) &&
-			storedContextSignature !== liveContextSignature;
+		const hasMatchingResult = hasStoredResult && hasFreshResult;
 		const isContentRestricted =
 			editingMode === 'contentOnly' || isInsideContentOnly;
 		const hasVisibleResult = hasMatchingResult || isStaleResult;
@@ -89,6 +161,42 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				? recommendations?.styles || []
 				: [];
 
+		useEffect( () => {
+			hydratedResultKeyRef.current = null;
+			setPromptState( {
+				clientId: null,
+				value: '',
+			} );
+		}, [ clientId ] );
+
+		useEffect( () => {
+			const hydrationKey =
+				status === 'ready' && clientId && recommendations
+					? `${ clientId }:${
+							storedRequestToken || storedRequestSignature
+					  }`
+					: '';
+
+			if (
+				! hydrationKey ||
+				hydratedResultKeyRef.current === hydrationKey
+			) {
+				return;
+			}
+
+			hydratedResultKeyRef.current = hydrationKey;
+			setPromptState( {
+				clientId,
+				value: recommendations?.prompt || '',
+			} );
+		}, [
+			clientId,
+			recommendations,
+			status,
+			storedRequestSignature,
+			storedRequestToken,
+		] );
+
 		if ( ! isSelected || isDisabled ) {
 			return <BlockEdit { ...props } />;
 		}
@@ -105,7 +213,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 				<BlockEdit { ...props } />
 
 				<InspectorControls>
-					<BlockRecommendationsPanel clientId={ clientId } />
+					<BlockRecommendationsPanel
+						clientId={ clientId }
+						prompt={ prompt }
+						onPromptChange={ handlePromptChange }
+					/>
 
 					{ hasInlineRecs &&
 						visibleSettingsRecommendations.length > 0 && (
@@ -113,6 +225,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								clientId={ clientId }
 								suggestions={ visibleSettingsRecommendations }
 								isStale={ isStaleResult }
+								currentRequestSignature={
+									currentRequestSignature
+								}
+								currentRequestInput={ currentRequestInput }
 							/>
 						) }
 				</InspectorControls>
@@ -125,6 +241,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 							clientId={ clientId }
 							suggestions={ visibleStyleRecommendations }
 							isStale={ isStaleResult }
+							currentRequestSignature={
+								currentRequestSignature
+							}
+							currentRequestInput={ currentRequestInput }
 						/>
 					</InspectorControls>
 				) }
@@ -138,6 +258,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 								clientId={ clientId }
 								suggestions={ visibleSettingsRecommendations }
 								isStale={ isStaleResult }
+								currentRequestSignature={
+									currentRequestSignature
+								}
+								currentRequestInput={ currentRequestInput }
 							/>
 						) ) }
 						{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
@@ -149,6 +273,10 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 									visibleDelegatedStyleRecommendations
 								}
 								isStale={ isStaleResult }
+								currentRequestSignature={
+									currentRequestSignature
+								}
+								currentRequestInput={ currentRequestInput }
 							/>
 						) ) }
 					</>
@@ -166,6 +294,8 @@ function SubPanelSuggestions( {
 	suggestions,
 	label,
 	title,
+	currentRequestSignature = null,
+	currentRequestInput = null,
 } ) {
 	const filtered = useMemo(
 		() => ( suggestions || [] ).filter( ( s ) => s.panel === panel ),
@@ -183,6 +313,8 @@ function SubPanelSuggestions( {
 				label={ label }
 				title={ title }
 				tone="Apply now"
+				currentRequestSignature={ currentRequestSignature }
+				currentRequestInput={ currentRequestInput }
 			/>
 		</InspectorControls>
 	);

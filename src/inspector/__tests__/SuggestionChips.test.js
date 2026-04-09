@@ -2,7 +2,6 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockApplySuggestion = jest.fn();
 const mockCollectBlockContext = jest.fn();
-const mockFetchBlockRecommendations = jest.fn();
 
 jest.mock('@wordpress/components', () =>
 	require('../../test-utils/wp-components').mockWpComponents()
@@ -40,11 +39,9 @@ beforeEach(() => {
 	mockCollectBlockContext.mockReturnValue({
 		block: { name: 'core/paragraph' },
 	});
-	mockFetchBlockRecommendations.mockReset();
 	mockUseSelect.mockReset();
 	mockUseDispatch.mockImplementation(() => ({
 		applySuggestion: mockApplySuggestion,
-		fetchBlockRecommendations: mockFetchBlockRecommendations,
 	}));
 	mockUseSelect.mockImplementation((callback) =>
 		callback((storeName) => {
@@ -53,7 +50,6 @@ beforeEach(() => {
 					getBlockRecommendations: () => ({
 						prompt: 'Keep the current direction.',
 					}),
-					isBlockLoading: () => false,
 				};
 			}
 
@@ -132,7 +128,50 @@ describe('SuggestionChips', () => {
 		).toBe('AppliedUse accent color');
 	});
 
-	test('shows stale guidance and refreshes against the latest block context', () => {
+	test('prefers the live block request metadata passed from the main panel when applying', async () => {
+		const currentRequestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: { name: 'core/heading' },
+			},
+			contextSignature: 'live-context:block-1:prompt-drift',
+			prompt: 'Make the block feel more editorial.',
+		};
+
+		act(() => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					currentRequestSignature="live-signature:block-1"
+					currentRequestInput={currentRequestInput}
+					suggestions={[
+						{
+							label: 'Use accent color',
+							panel: 'color',
+						},
+					]}
+				/>
+			);
+		});
+
+		await act(async () => {
+			getContainer().querySelector('button').click();
+			await Promise.resolve();
+		});
+
+		expect(mockApplySuggestion).toHaveBeenCalledWith(
+			'block-1',
+			{
+				label: 'Use accent color',
+				panel: 'color',
+			},
+			'live-signature:block-1',
+			currentRequestInput
+		);
+	});
+
+	test('shows stale guidance that points back to the main AI Recommendations panel', () => {
 		act(() => {
 			getRoot().render(
 				<SuggestionChips
@@ -149,26 +188,22 @@ describe('SuggestionChips', () => {
 			);
 		});
 
-		const refreshButton = Array.from(
-			getContainer().querySelectorAll('button')
-		).find((element) => element.textContent === 'Refresh');
-
 		expect(getContainer().textContent).toContain(
-			'These suggestions are shown for reference from the last request.'
+			'These suggestions reflect the last AI Recommendations request.'
 		);
-		expect(refreshButton).not.toBeNull();
-
-		act(() => {
-			refreshButton.click();
-		});
-
-		expect(mockFetchBlockRecommendations).toHaveBeenCalledWith(
-			'block-1',
-			{
-				block: { name: 'core/paragraph' },
-			},
-			'Keep the current direction.'
+		expect(getContainer().textContent).toContain(
+			'Refresh that main panel to update them for the current block.'
 		);
+		const staleNotice = getContainer().querySelector(
+			'.flavor-agent-chip-surface__stale[role="status"][aria-live="polite"]'
+		);
+
+		expect(staleNotice).not.toBeNull();
+		expect(
+			Array.from(getContainer().querySelectorAll('button')).find(
+				(element) => element.textContent === 'Refresh'
+			)
+		).toBeUndefined();
 	});
 
 	test('disables an applied chip while inline feedback is visible', async () => {

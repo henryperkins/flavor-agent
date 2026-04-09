@@ -228,7 +228,7 @@ export default function ContentRecommender() {
 					introCopy="Draft from a brief, tighten the current copy, or run a critique without leaving the editor."
 					meta={
 						documentStatusLabel ? (
-							<span className="flavor-agent-pill flavor-agent-pill--hero">
+							<span className="flavor-agent-pill flavor-agent-pill--prominent">
 								{ documentStatusLabel }
 							</span>
 						) : null

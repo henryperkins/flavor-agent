@@ -41,7 +41,25 @@ describe( 'AIReviewSection', () => {
 			'Only the operations shown here will run.'
 		);
 
+		const actionBar = getContainer().querySelector(
+			'.flavor-agent-template-preview__actions'
+		);
 		const buttons = getContainer().querySelectorAll( 'button' );
+
+		expect( actionBar ).toBeTruthy();
+		expect( buttons[ 0 ].className ).toContain(
+			'flavor-agent-template-preview__action'
+		);
+		expect( buttons[ 0 ].className ).toContain(
+			'flavor-agent-template-preview__action--secondary'
+		);
+		expect( buttons[ 1 ].className ).toContain(
+			'flavor-agent-template-preview__action'
+		);
+		expect( buttons[ 1 ].className ).toContain(
+			'flavor-agent-template-preview__action--primary'
+		);
+
 		buttons[ 0 ].click();
 		buttons[ 1 ].click();
 

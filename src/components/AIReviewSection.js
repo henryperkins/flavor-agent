@@ -70,7 +70,7 @@ export default function AIReviewSection( {
 					<Button
 						variant="secondary"
 						onClick={ onCancel }
-						className="flavor-agent-card__apply"
+						className="flavor-agent-card__apply flavor-agent-template-preview__action flavor-agent-template-preview__action--secondary"
 					>
 						{ cancelLabel }
 					</Button>
@@ -80,7 +80,7 @@ export default function AIReviewSection( {
 					variant="primary"
 					onClick={ canConfirm ? onConfirm : undefined }
 					disabled={ confirmDisabled || ! canConfirm }
-					className="flavor-agent-card__apply"
+					className="flavor-agent-card__apply flavor-agent-template-preview__action flavor-agent-template-preview__action--primary"
 				>
 					{ confirmLabel }
 				</Button>

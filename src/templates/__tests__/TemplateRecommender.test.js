@@ -594,6 +594,23 @@ describe( 'TemplateRecommender', () => {
 				'This template result no longer matches the current live template or prompt. Refresh before reviewing or applying anything from the previous result.'
 			)
 		).toBe( true );
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBe( 'status' );
+	} );
+
+	test( 'renders the template explanation after the primary recommendation hero', async () => {
+		await renderPanel();
+
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-recommendation-hero' )
+				?.compareDocumentPosition(
+					getContainer().querySelector( '.flavor-agent-explanation' )
+				)
+		).toBe( DOCUMENT_POSITION_FOLLOWING );
 	} );
 
 	test( 'does not show the current scope badge when the latest template request failed', async () => {

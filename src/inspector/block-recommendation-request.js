@@ -33,3 +33,41 @@ export function buildBlockRecommendationRequestData( {
 		requestSignature,
 	};
 }
+
+export function getBlockRecommendationFreshness( {
+	clientId,
+	recommendations = null,
+	status = 'idle',
+	storedContextSignature = '',
+	storedStaleReason = null,
+	liveContextSignature = '',
+	prompt = '',
+} = {} ) {
+	const hasStoredResult = status === 'ready' && Boolean( recommendations );
+	const currentRequestSignature = buildBlockRecommendationRequestSignature( {
+		clientId,
+		prompt,
+		contextSignature: liveContextSignature || '',
+	} );
+	const storedRequestSignature = buildBlockRecommendationRequestSignature( {
+		clientId,
+		prompt: recommendations?.prompt || '',
+		contextSignature: storedContextSignature || liveContextSignature,
+	} );
+	const clientStaleReason =
+		hasStoredResult && storedRequestSignature !== currentRequestSignature
+			? 'client'
+			: null;
+	const effectiveStaleReason =
+		clientStaleReason || ( storedStaleReason === 'server' ? 'server' : null );
+
+	return {
+		clientStaleReason,
+		currentRequestSignature,
+		effectiveStaleReason,
+		hasFreshResult: hasStoredResult && effectiveStaleReason === null,
+		hasStoredResult,
+		isStaleResult: hasStoredResult && effectiveStaleReason !== null,
+		storedRequestSignature,
+	};
+}

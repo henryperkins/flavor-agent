@@ -366,6 +366,7 @@ function StyleBookPanel( {
 				scopeDetails={ blockTitle ? [ blockTitle ] : [] }
 				isFresh={ hasMatchingResult }
 				hasResult={ hasResult }
+				announceChanges
 				staleReason={
 					isStale
 						? staleReasonType === 'server'
@@ -412,12 +413,6 @@ function StyleBookPanel( {
 				/>
 			) }
 
-			{ explanation && suggestions.length > 0 && (
-				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
-					{ explanation }
-				</p>
-			) }
-
 			{ isStale && (
 				<RecommendationHero
 					title="Refresh recommendations for this Style Book example"
@@ -444,6 +439,12 @@ function StyleBookPanel( {
 							: 'Start here first, then use the remaining ideas as manual follow-through guidance.'
 					}
 				/>
+			) }
+
+			{ explanation && suggestions.length > 0 && (
+				<p className="flavor-agent-panel__intro-copy flavor-agent-panel__note">
+					{ explanation }
+				</p>
 			) }
 
 			{ executableSuggestions.length > 0 && (

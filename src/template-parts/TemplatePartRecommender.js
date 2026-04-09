@@ -819,6 +819,7 @@ export default function TemplatePartRecommender() {
 					].filter(Boolean)}
 					isFresh={hasMatchingResult}
 					hasResult={hasResult}
+					announceChanges
 					staleReason={
 						isStaleResult
 							? effectiveStaleReason === 'server'
@@ -870,16 +871,6 @@ export default function TemplatePartRecommender() {
 					onDismiss={dismissStatusNotice}
 				/>
 
-				{canRecommend && hasResult && explanation && (
-					<p className="flavor-agent-explanation flavor-agent-panel__note">
-						<LinkedEntityText
-							text={explanation}
-							entities={entityMap}
-							onEntityClick={handleEntityAction}
-						/>
-					</p>
-				)}
-
 				{canRecommend && isStaleResult && (
 					<RecommendationHero
 						title="Refresh recommendations for this template part"
@@ -909,6 +900,16 @@ export default function TemplatePartRecommender() {
 								: 'This is the strongest next idea, but it still needs manual follow-through.'
 						}
 					/>
+				)}
+
+				{canRecommend && hasResult && explanation && (
+					<p className="flavor-agent-explanation flavor-agent-panel__note">
+						<LinkedEntityText
+							text={explanation}
+							entities={entityMap}
+							onEntityClick={handleEntityAction}
+						/>
+					</p>
 				)}
 
 				{canRecommend && executableSuggestionCards.length > 0 && (

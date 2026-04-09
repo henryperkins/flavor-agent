@@ -61,10 +61,10 @@ Introduce a shared recommendation presentation layer in `src/components` that st
 5. Inline action feedback that sits inside the card, chip cluster, or review shell that produced it.
 6. A lower-priority, optionally collapsed activity section.
 
-Freshness handling remains surface-specific in this phase:
+Freshness handling now follows the request owner:
 
-1. Block recommendations can retain the last fetched result client-side and expose an explicit refresh affordance when the selected block context changes.
-2. Navigation, template, template-part, Global Styles, and Style Book keep their current clear-on-context-change behavior until their request state is intentionally redesigned.
+1. Block, navigation, template, template-part, Global Styles, and Style Book retain the last fetched result client-side, mark it stale, and expose refresh from the same surface that owns the request.
+2. Projected block Settings and Styles surfaces preserve stale results but do not own refresh; they point back to the main block `AI Recommendations` panel instead of creating a second request lifecycle.
 
 ### Target Surface Behavior
 
@@ -87,6 +87,7 @@ Freshness handling remains surface-specific in this phase:
 1. Keep grouped placement beside native controls.
 2. Replace transient button-only confirmation with inline feedback near the clicked row or chip group.
 3. Show concise tone labels such as `Apply now` or `Suggested`, not only counts and confidence.
+4. Preserve stale projected settings and styles, but keep refresh ownership in the main block `AI Recommendations` panel.
 
 #### Navigation
 
@@ -298,7 +299,7 @@ Freshness handling remains surface-specific in this phase:
 2. Keep executable preview cards below the hero and above advisory cards.
 3. Move activity below active review and advisory sections.
 4. Keep entity links, pattern browse actions, and review-before-apply behavior unchanged.
-5. Keep the existing clear-on-context-change behavior for stale template and template-part results in this phase; do not add refresh affordances yet.
+5. Preserve stale template and template-part results and expose refresh from the same surface because that panel owns the request lifecycle.
 
 ## Workstream 7: Global Styles And Style Book Harmonization
 
@@ -324,7 +325,7 @@ Freshness handling remains surface-specific in this phase:
 
 5. Keep activity below current review/results.
 6. Preserve all current executor, undo, and scope-signature logic.
-7. Keep the existing clear-on-context-change behavior for stale results in this phase; do not add refresh affordances yet.
+7. Preserve stale Global Styles and Style Book results and expose refresh from the same surface because those panels own the request lifecycle.
 
 ## Workstream 8: Accessibility, Interaction, And Copy Polish
 
@@ -359,7 +360,7 @@ Freshness handling remains surface-specific in this phase:
 
 1. Update each feature doc only after the UI contract is settled.
 2. Document the new shared recommendation flow vocabulary.
-3. Call out that block recommendations now support explicit refresh when stale, while other surfaces still clear invalidated results.
+3. Call out that request-owning recommendation surfaces now support explicit refresh when stale, while projected Settings and Styles surfaces route refresh back to the main block panel.
 4. Keep behavior descriptions aligned with real capabilities; do not imply new execution paths.
 
 ## Test Plan
@@ -465,7 +466,7 @@ vendor/bin/phpunit
 2. Fresh results place the strongest next action before history and secondary suggestions.
 3. Inline apply/review/manual distinctions are visually obvious without repeated prose.
 4. Success feedback and review-surface notices appear near the active interaction without changing existing inspector error/undo contracts.
-5. Block recommendations provide an explicit stale refresh path, while other surfaces continue clearing invalidated results.
+5. Request-owning recommendation surfaces provide an explicit stale refresh path, while projected Settings and Styles surfaces keep stale state but delegate refresh back to the main block panel.
 6. Shared tests cover the new layout and interaction contracts.
 7. No backend execution scope or undo semantics are loosened during the redesign.
 

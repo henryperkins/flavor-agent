@@ -46,6 +46,10 @@ import {
 } from './activity-history';
 import { resolveActivityBlock } from './block-targeting';
 import {
+	createExecutableSurfaceApplyAction,
+	createExecutableSurfaceFetchAction,
+} from './executable-surface-runtime';
+import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
 	buildUndoAttributeUpdates,
@@ -1280,6 +1284,31 @@ async function recordActivityEntry(localDispatch, select, entry) {
 	persistActivitySession(select);
 
 	return nextEntry;
+}
+
+function buildExecutableSurfaceFetchThunk(config, input) {
+	return createExecutableSurfaceFetchAction({
+		...config,
+		attachRequestMetaToRecommendationPayload,
+		getResolvedContextSignatureFromResponse,
+		runAbortableRecommendationRequest,
+	})(input);
+}
+
+function buildExecutableSurfaceApplyThunk(
+	config,
+	suggestion,
+	currentRequestSignature = null,
+	liveRequestInput = null
+) {
+	return createExecutableSurfaceApplyAction({
+		...config,
+		getCurrentActivityScope,
+		guardSurfaceApplyFreshness,
+		guardSurfaceApplyResolvedFreshness,
+		recordActivityEntry,
+		syncActivitySession,
+	})(suggestion, currentRequestSignature, liveRequestInput);
 }
 
 function getEntityActivityEntries(activityLog, activity) {
@@ -3080,109 +3109,53 @@ const actions = {
 		currentRequestSignature = null,
 		liveRequestInput = null
 	) {
-		return async ({ dispatch: localDispatch, registry, select }) => {
-			const scope = getCurrentActivityScope(registry);
-
-			syncActivitySession(localDispatch, select, scope);
-
-			const staleApplyResult = guardSurfaceApplyFreshness({
+		return buildExecutableSurfaceApplyThunk(
+			{
 				surface: 'template',
-				currentRequestSignature,
-				getStoredRequestSignature: () =>
+				endpoint: '/flavor-agent/v1/recommend-template',
+				setApplyState: (
+					status,
+					{
+						error = null,
+						suggestionKey = null,
+						operations = [],
+						staleReason = null,
+					} = {}
+				) =>
+					actions.setTemplateApplyState(
+						status,
+						error,
+						suggestionKey,
+						operations,
+						staleReason
+					),
+				getStoredRequestSignature: (select) =>
 					buildTemplateRecommendationRequestSignature({
 						templateRef: select.getTemplateResultRef?.() || '',
 						prompt: select.getTemplateRequestPrompt?.() || '',
 						contextSignature: select.getTemplateContextSignature?.() || null,
 					}),
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setTemplateApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (staleApplyResult) {
-				return staleApplyResult;
-			}
-
-			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
-				surface: 'template',
-				endpoint: '/flavor-agent/v1/recommend-template',
-				liveRequestInput,
-				storedResolvedContextSignature:
+				getStoredResolvedContextSignature: (select) =>
 					select.getTemplateResolvedContextSignature?.() || null,
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setTemplateApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (!resolvedFreshness.ok) {
-				return resolvedFreshness;
-			}
-
-			localDispatch(actions.setTemplateApplyState('applying'));
-
-			let result;
-
-			try {
-				result = applyTemplateSuggestionOperations(suggestion);
-			} catch (err) {
-				const message = err?.message || 'Template apply failed unexpectedly.';
-
-				localDispatch(actions.setTemplateApplyState('error', message));
-
-				return {
-					ok: false,
-					error: message,
-				};
-			}
-
-			if (!result.ok) {
-				localDispatch(
-					actions.setTemplateApplyState(
-						'error',
-						result.error || 'Template apply failed.'
-					)
-				);
-
-				return result;
-			}
-
-			const templateRef = select.getTemplateResultRef();
-
-			await recordActivityEntry(
-				localDispatch,
-				select,
-				buildTemplateActivityEntry({
-					operations: result.operations,
-					requestPrompt: select.getTemplateRequestPrompt?.() || '',
-					requestMeta: suggestion?.requestMeta || null,
-					requestToken: select.getTemplateResultToken?.() || 0,
-					scope,
-					suggestion,
-					templateRef,
-				})
-			);
-			localDispatch(
-				actions.setTemplateApplyState(
-					'success',
-					null,
-					suggestion?.suggestionKey || null,
-					result.operations
-				)
-			);
-			return result;
-		};
+				executeSuggestion: ({ suggestion }) =>
+					applyTemplateSuggestionOperations(suggestion),
+				unexpectedErrorMessage: 'Template apply failed unexpectedly.',
+				applyFailureMessage: 'Template apply failed.',
+				buildActivityEntry: ({ result, scope, select, suggestion }) =>
+					buildTemplateActivityEntry({
+						operations: result.operations,
+						requestPrompt: select.getTemplateRequestPrompt?.() || '',
+						requestMeta: suggestion?.requestMeta || null,
+						requestToken: select.getTemplateResultToken?.() || 0,
+						scope,
+						suggestion,
+						templateRef: select.getTemplateResultRef(),
+					}),
+			},
+			suggestion,
+			currentRequestSignature,
+			liveRequestInput
+		);
 	},
 
 	applyTemplatePartSuggestion(
@@ -3190,111 +3163,55 @@ const actions = {
 		currentRequestSignature = null,
 		liveRequestInput = null
 	) {
-		return async ({ dispatch: localDispatch, registry, select }) => {
-			const scope = getCurrentActivityScope(registry);
-
-			syncActivitySession(localDispatch, select, scope);
-
-			const staleApplyResult = guardSurfaceApplyFreshness({
+		return buildExecutableSurfaceApplyThunk(
+			{
 				surface: 'template-part',
-				currentRequestSignature,
-				getStoredRequestSignature: () =>
+				endpoint: '/flavor-agent/v1/recommend-template-part',
+				setApplyState: (
+					status,
+					{
+						error = null,
+						suggestionKey = null,
+						operations = [],
+						staleReason = null,
+					} = {}
+				) =>
+					actions.setTemplatePartApplyState(
+						status,
+						error,
+						suggestionKey,
+						operations,
+						staleReason
+					),
+				getStoredRequestSignature: (select) =>
 					buildTemplatePartRecommendationRequestSignature({
 						templatePartRef: select.getTemplatePartResultRef?.() || '',
 						prompt: select.getTemplatePartRequestPrompt?.() || '',
 						contextSignature:
 							select.getTemplatePartContextSignature?.() || null,
 					}),
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setTemplatePartApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (staleApplyResult) {
-				return staleApplyResult;
-			}
-
-			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
-				surface: 'template-part',
-				endpoint: '/flavor-agent/v1/recommend-template-part',
-				liveRequestInput,
-				storedResolvedContextSignature:
+				getStoredResolvedContextSignature: (select) =>
 					select.getTemplatePartResolvedContextSignature?.() || null,
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setTemplatePartApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (!resolvedFreshness.ok) {
-				return resolvedFreshness;
-			}
-
-			localDispatch(actions.setTemplatePartApplyState('applying'));
-
-			let result;
-
-			try {
-				result = applyTemplatePartSuggestionOperations(suggestion);
-			} catch (err) {
-				const message =
-					err?.message || 'Template-part apply failed unexpectedly.';
-
-				localDispatch(actions.setTemplatePartApplyState('error', message));
-
-				return {
-					ok: false,
-					error: message,
-				};
-			}
-
-			if (!result.ok) {
-				localDispatch(
-					actions.setTemplatePartApplyState(
-						'error',
-						result.error || 'Template-part apply failed.'
-					)
-				);
-
-				return result;
-			}
-
-			const templatePartRef = select.getTemplatePartResultRef();
-
-			await recordActivityEntry(
-				localDispatch,
-				select,
-				buildTemplatePartActivityEntry({
-					operations: result.operations,
-					requestPrompt: select.getTemplatePartRequestPrompt?.() || '',
-					requestMeta: suggestion?.requestMeta || null,
-					requestToken: select.getTemplatePartResultToken?.() || 0,
-					scope,
-					suggestion,
-					templatePartRef,
-				})
-			);
-			localDispatch(
-				actions.setTemplatePartApplyState(
-					'success',
-					null,
-					suggestion?.suggestionKey || null,
-					result.operations
-				)
-			);
-			return result;
-		};
+				executeSuggestion: ({ suggestion }) =>
+					applyTemplatePartSuggestionOperations(suggestion),
+				unexpectedErrorMessage:
+					'Template-part apply failed unexpectedly.',
+				applyFailureMessage: 'Template-part apply failed.',
+				buildActivityEntry: ({ result, scope, select, suggestion }) =>
+					buildTemplatePartActivityEntry({
+						operations: result.operations,
+						requestPrompt: select.getTemplatePartRequestPrompt?.() || '',
+						requestMeta: suggestion?.requestMeta || null,
+						requestToken: select.getTemplatePartResultToken?.() || 0,
+						scope,
+						suggestion,
+						templatePartRef: select.getTemplatePartResultRef(),
+					}),
+			},
+			suggestion,
+			currentRequestSignature,
+			liveRequestInput
+		);
 	},
 
 	applyGlobalStylesSuggestion(
@@ -3302,15 +3219,27 @@ const actions = {
 		currentRequestSignature = null,
 		liveRequestInput = null
 	) {
-		return async ({ dispatch: localDispatch, registry, select }) => {
-			const scope = getCurrentActivityScope(registry);
-
-			syncActivitySession(localDispatch, select, scope);
-
-			const staleApplyResult = guardSurfaceApplyFreshness({
+		return buildExecutableSurfaceApplyThunk(
+			{
 				surface: 'global-styles',
-				currentRequestSignature,
-				getStoredRequestSignature: () =>
+				endpoint: '/flavor-agent/v1/recommend-style',
+				setApplyState: (
+					status,
+					{
+						error = null,
+						suggestionKey = null,
+						operations = [],
+						staleReason = null,
+					} = {}
+				) =>
+					actions.setGlobalStylesApplyState(
+						status,
+						error,
+						suggestionKey,
+						operations,
+						staleReason
+					),
+				getStoredRequestSignature: (select) =>
 					buildGlobalStylesRecommendationRequestSignature({
 						scope: {
 							scopeKey: select.getGlobalStylesScopeKey?.() || '',
@@ -3321,99 +3250,32 @@ const actions = {
 						contextSignature:
 							select.getGlobalStylesContextSignature?.() || null,
 					}),
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setGlobalStylesApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (staleApplyResult) {
-				return staleApplyResult;
-			}
-
-			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
-				surface: 'global-styles',
-				endpoint: '/flavor-agent/v1/recommend-style',
-				liveRequestInput,
-				storedResolvedContextSignature:
+				getStoredResolvedContextSignature: (select) =>
 					select.getGlobalStylesResolvedContextSignature?.() || null,
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setGlobalStylesApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (!resolvedFreshness.ok) {
-				return resolvedFreshness;
-			}
-
-			localDispatch(actions.setGlobalStylesApplyState('applying'));
-
-			let result;
-
-			try {
-				result = applyGlobalStyleSuggestionOperations(suggestion, registry, {
-					surface: 'global-styles',
-				});
-			} catch (err) {
-				const message =
-					err?.message || 'Global Styles apply failed unexpectedly.';
-
-				localDispatch(actions.setGlobalStylesApplyState('error', message));
-
-				return {
-					ok: false,
-					error: message,
-				};
-			}
-
-			if (!result.ok) {
-				localDispatch(
-					actions.setGlobalStylesApplyState(
-						'error',
-						result.error || 'Global Styles apply failed.'
-					)
-				);
-
-				return result;
-			}
-
-			await recordActivityEntry(
-				localDispatch,
-				select,
-				buildGlobalStylesActivityEntry({
-					operations: result.operations,
-					beforeConfig: result.beforeConfig,
-					afterConfig: result.afterConfig,
-					requestPrompt: select.getGlobalStylesRequestPrompt?.() || '',
-					requestMeta: suggestion?.requestMeta || null,
-					requestToken: select.getGlobalStylesResultToken?.() || 0,
-					scope,
-					suggestion,
-					globalStylesId: result.globalStylesId,
-				})
-			);
-			localDispatch(
-				actions.setGlobalStylesApplyState(
-					'success',
-					null,
-					suggestion?.suggestionKey || null,
-					result.operations
-				)
-			);
-
-			return result;
-		};
+				executeSuggestion: ({ registry, suggestion }) =>
+					applyGlobalStyleSuggestionOperations(suggestion, registry, {
+						surface: 'global-styles',
+					}),
+				unexpectedErrorMessage:
+					'Global Styles apply failed unexpectedly.',
+				applyFailureMessage: 'Global Styles apply failed.',
+				buildActivityEntry: ({ result, scope, select, suggestion }) =>
+					buildGlobalStylesActivityEntry({
+						operations: result.operations,
+						beforeConfig: result.beforeConfig,
+						afterConfig: result.afterConfig,
+						requestPrompt: select.getGlobalStylesRequestPrompt?.() || '',
+						requestMeta: suggestion?.requestMeta || null,
+						requestToken: select.getGlobalStylesResultToken?.() || 0,
+						scope,
+						suggestion,
+						globalStylesId: result.globalStylesId,
+					}),
+			},
+			suggestion,
+			currentRequestSignature,
+			liveRequestInput
+		);
 	},
 
 	applyStyleBookSuggestion(
@@ -3421,15 +3283,27 @@ const actions = {
 		currentRequestSignature = null,
 		liveRequestInput = null
 	) {
-		return async ({ dispatch: localDispatch, registry, select }) => {
-			const scope = getCurrentActivityScope(registry);
-
-			syncActivitySession(localDispatch, select, scope);
-
-			const staleApplyResult = guardSurfaceApplyFreshness({
+		return buildExecutableSurfaceApplyThunk(
+			{
 				surface: 'style-book',
-				currentRequestSignature,
-				getStoredRequestSignature: () =>
+				endpoint: '/flavor-agent/v1/recommend-style',
+				setApplyState: (
+					status,
+					{
+						error = null,
+						suggestionKey = null,
+						operations = [],
+						staleReason = null,
+					} = {}
+				) =>
+					actions.setStyleBookApplyState(
+						status,
+						error,
+						suggestionKey,
+						operations,
+						staleReason
+					),
+				getStoredRequestSignature: (select) =>
 					buildStyleBookRecommendationRequestSignature({
 						scope: {
 							scopeKey: select.getStyleBookScopeKey?.() || '',
@@ -3438,147 +3312,59 @@ const actions = {
 							blockName: select.getStyleBookBlockName?.() || '',
 						},
 						prompt: select.getStyleBookRequestPrompt?.() || '',
-						contextSignature: select.getStyleBookContextSignature?.() || null,
+						contextSignature:
+							select.getStyleBookContextSignature?.() || null,
 					}),
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setStyleBookApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (staleApplyResult) {
-				return staleApplyResult;
-			}
-
-			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness({
-				surface: 'style-book',
-				endpoint: '/flavor-agent/v1/recommend-style',
-				liveRequestInput,
-				storedResolvedContextSignature:
+				getStoredResolvedContextSignature: (select) =>
 					select.getStyleBookResolvedContextSignature?.() || null,
-				localDispatch,
-				setApplyState: (status, error, staleReason = null) =>
-					actions.setStyleBookApplyState(
-						status,
-						error,
-						null,
-						[],
-						staleReason
-					),
-			});
-
-			if (!resolvedFreshness.ok) {
-				return resolvedFreshness;
-			}
-
-			localDispatch(actions.setStyleBookApplyState('applying'));
-
-			let result;
-
-			try {
-				result = applyGlobalStyleSuggestionOperations(suggestion, registry, {
-					surface: 'style-book',
-				});
-			} catch (err) {
-				const message = err?.message || 'Style Book apply failed unexpectedly.';
-
-				localDispatch(actions.setStyleBookApplyState('error', message));
-
-				return {
-					ok: false,
-					error: message,
-				};
-			}
-
-			if (!result.ok) {
-				localDispatch(
-					actions.setStyleBookApplyState(
-						'error',
-						result.error || 'Style Book apply failed.'
-					)
-				);
-
-				return result;
-			}
-
-			await recordActivityEntry(
-				localDispatch,
-				select,
-				buildStyleBookActivityEntry({
-					operations: result.operations,
-					beforeConfig: result.beforeConfig,
-					afterConfig: result.afterConfig,
-					requestPrompt: select.getStyleBookRequestPrompt?.() || '',
-					requestMeta: suggestion?.requestMeta || null,
-					requestToken: select.getStyleBookResultToken?.() || 0,
-					scope,
-					suggestion,
-					globalStylesId: result.globalStylesId,
-					blockName: scope?.blockName || '',
-					blockTitle: scope?.blockTitle || '',
-				})
-			);
-			localDispatch(
-				actions.setStyleBookApplyState(
-					'success',
-					null,
-					suggestion?.suggestionKey || null,
-					result.operations
-				)
-			);
-
-			return result;
-		};
+				executeSuggestion: ({ registry, suggestion }) =>
+					applyGlobalStyleSuggestionOperations(suggestion, registry, {
+						surface: 'style-book',
+					}),
+				unexpectedErrorMessage: 'Style Book apply failed unexpectedly.',
+				applyFailureMessage: 'Style Book apply failed.',
+				buildActivityEntry: ({ result, scope, select, suggestion }) =>
+					buildStyleBookActivityEntry({
+						operations: result.operations,
+						beforeConfig: result.beforeConfig,
+						afterConfig: result.afterConfig,
+						requestPrompt: select.getStyleBookRequestPrompt?.() || '',
+						requestMeta: suggestion?.requestMeta || null,
+						requestToken: select.getStyleBookResultToken?.() || 0,
+						scope,
+						suggestion,
+						globalStylesId: result.globalStylesId,
+						blockName: scope?.blockName || '',
+						blockTitle: scope?.blockTitle || '',
+					}),
+			},
+			suggestion,
+			currentRequestSignature,
+			liveRequestInput
+		);
 	},
 
 	fetchTemplateRecommendations(input) {
-		return ({ dispatch, select }) =>
-			runAbortableRecommendationRequest({
+		return buildExecutableSurfaceFetchThunk(
+			{
 				abortKey: '_templateAbort',
-				buildRequest: ({ input: requestInput, select: registrySelect }) => {
-					const { contextSignature = null, ...requestData } =
-						requestInput || {};
-
-					return {
-						contextSignature,
-						requestData,
-						requestToken: (registrySelect.getTemplateRequestToken?.() || 0) + 1,
-					};
-				},
-				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-template',
-				input,
-				onError: ({ dispatch: localDispatch, err, requestToken }) => {
-					localDispatch(
-						actions.setTemplateStatus(
-							'error',
-							err?.message || 'Template recommendation request failed.',
-							requestToken
-						)
-					);
-				},
-				onLoading: ({ dispatch: localDispatch, requestToken }) => {
-					localDispatch(
-						actions.setTemplateStatus('loading', null, requestToken)
-					);
-				},
-				onSuccess: ({
+				getRequestToken: (select) =>
+					(select.getTemplateRequestToken?.() || 0) + 1,
+				requestErrorMessage: 'Template recommendation request failed.',
+				setErrorState: (message, requestToken) =>
+					actions.setTemplateStatus('error', message, requestToken),
+				setLoadingState: (requestToken) =>
+					actions.setTemplateStatus('loading', null, requestToken),
+				dispatchRecommendations: ({
 					contextSignature,
-					dispatch: localDispatch,
+					dispatch,
 					input: requestInput,
+					payload,
 					requestToken,
-					result,
-				}) => {
-					const resolvedContextSignature =
-						getResolvedContextSignatureFromResponse(result);
-					const payload = attachRequestMetaToRecommendationPayload(result);
-
-					localDispatch(
+					resolvedContextSignature,
+				}) =>
+					dispatch(
 						actions.setTemplateRecommendations(
 							requestInput.templateRef,
 							payload,
@@ -3587,56 +3373,34 @@ const actions = {
 							contextSignature,
 							resolvedContextSignature
 						)
-					);
-				},
-				select,
-			});
+					),
+			},
+			input
+		);
 	},
 
 	fetchTemplatePartRecommendations(input) {
-		return ({ dispatch, select }) =>
-			runAbortableRecommendationRequest({
+		return buildExecutableSurfaceFetchThunk(
+			{
 				abortKey: '_templatePartAbort',
-				buildRequest: ({ input: requestInput, select: registrySelect }) => {
-					const { contextSignature = null, ...requestData } =
-						requestInput || {};
-
-					return {
-						contextSignature,
-						requestData,
-						requestToken:
-							(registrySelect.getTemplatePartRequestToken?.() || 0) + 1,
-					};
-				},
-				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-template-part',
-				input,
-				onError: ({ dispatch: localDispatch, err, requestToken }) => {
-					localDispatch(
-						actions.setTemplatePartStatus(
-							'error',
-							err?.message || 'Template-part recommendation request failed.',
-							requestToken
-						)
-					);
-				},
-				onLoading: ({ dispatch: localDispatch, requestToken }) => {
-					localDispatch(
-						actions.setTemplatePartStatus('loading', null, requestToken)
-					);
-				},
-				onSuccess: ({
+				getRequestToken: (select) =>
+					(select.getTemplatePartRequestToken?.() || 0) + 1,
+				requestErrorMessage:
+					'Template-part recommendation request failed.',
+				setErrorState: (message, requestToken) =>
+					actions.setTemplatePartStatus('error', message, requestToken),
+				setLoadingState: (requestToken) =>
+					actions.setTemplatePartStatus('loading', null, requestToken),
+				dispatchRecommendations: ({
 					contextSignature,
-					dispatch: localDispatch,
+					dispatch,
 					input: requestInput,
+					payload,
 					requestToken,
-					result,
-				}) => {
-					const resolvedContextSignature =
-						getResolvedContextSignatureFromResponse(result);
-					const payload = attachRequestMetaToRecommendationPayload(result);
-
-					localDispatch(
+					resolvedContextSignature,
+				}) =>
+					dispatch(
 						actions.setTemplatePartRecommendations(
 							requestInput.templatePartRef,
 							payload,
@@ -3645,55 +3409,34 @@ const actions = {
 							contextSignature,
 							resolvedContextSignature
 						)
-					);
-				},
-				select,
-			});
+					),
+			},
+			input
+		);
 	},
 
 	fetchGlobalStylesRecommendations(input) {
-		return ({ dispatch, select }) =>
-			runAbortableRecommendationRequest({
+		return buildExecutableSurfaceFetchThunk(
+			{
 				abortKey: '_globalStylesAbort',
-				buildRequest: ({ input: requestInput, select: registrySelect }) => {
-					const { contextSignature = null, ...requestData } = requestInput;
-
-					return {
-						contextSignature,
-						requestData,
-						requestToken:
-							(registrySelect.getGlobalStylesRequestToken?.() || 0) + 1,
-					};
-				},
-				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-style',
-				input,
-				onError: ({ dispatch: localDispatch, err, requestToken }) => {
-					localDispatch(
-						actions.setGlobalStylesStatus(
-							'error',
-							err?.message || 'Global Styles recommendation request failed.',
-							requestToken
-						)
-					);
-				},
-				onLoading: ({ dispatch: localDispatch, requestToken }) => {
-					localDispatch(
-						actions.setGlobalStylesStatus('loading', null, requestToken)
-					);
-				},
-				onSuccess: ({
+				getRequestToken: (select) =>
+					(select.getGlobalStylesRequestToken?.() || 0) + 1,
+				requestErrorMessage:
+					'Global Styles recommendation request failed.',
+				setErrorState: (message, requestToken) =>
+					actions.setGlobalStylesStatus('error', message, requestToken),
+				setLoadingState: (requestToken) =>
+					actions.setGlobalStylesStatus('loading', null, requestToken),
+				dispatchRecommendations: ({
 					contextSignature,
-					dispatch: localDispatch,
+					dispatch,
 					input: requestInput,
+					payload,
 					requestToken,
-					result,
-				}) => {
-					const resolvedContextSignature =
-						getResolvedContextSignatureFromResponse(result);
-					const payload = attachRequestMetaToRecommendationPayload(result);
-
-					localDispatch(
+					resolvedContextSignature,
+				}) =>
+					dispatch(
 						actions.setGlobalStylesRecommendations(
 							requestInput.scope,
 							payload,
@@ -3702,55 +3445,33 @@ const actions = {
 							contextSignature,
 							resolvedContextSignature
 						)
-					);
-				},
-				select,
-			});
+					),
+			},
+			input
+		);
 	},
 
 	fetchStyleBookRecommendations(input) {
-		return ({ dispatch, select }) =>
-			runAbortableRecommendationRequest({
+		return buildExecutableSurfaceFetchThunk(
+			{
 				abortKey: '_styleBookAbort',
-				buildRequest: ({ input: requestInput, select: registrySelect }) => {
-					const { contextSignature = null, ...requestData } = requestInput;
-
-					return {
-						contextSignature,
-						requestData,
-						requestToken:
-							(registrySelect.getStyleBookRequestToken?.() || 0) + 1,
-					};
-				},
-				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-style',
-				input,
-				onError: ({ dispatch: localDispatch, err, requestToken }) => {
-					localDispatch(
-						actions.setStyleBookStatus(
-							'error',
-							err?.message || 'Style Book recommendation request failed.',
-							requestToken
-						)
-					);
-				},
-				onLoading: ({ dispatch: localDispatch, requestToken }) => {
-					localDispatch(
-						actions.setStyleBookStatus('loading', null, requestToken)
-					);
-				},
-				onSuccess: ({
+				getRequestToken: (select) =>
+					(select.getStyleBookRequestToken?.() || 0) + 1,
+				requestErrorMessage: 'Style Book recommendation request failed.',
+				setErrorState: (message, requestToken) =>
+					actions.setStyleBookStatus('error', message, requestToken),
+				setLoadingState: (requestToken) =>
+					actions.setStyleBookStatus('loading', null, requestToken),
+				dispatchRecommendations: ({
 					contextSignature,
-					dispatch: localDispatch,
+					dispatch,
 					input: requestInput,
+					payload,
 					requestToken,
-					result,
-				}) => {
-					const resolvedContextSignature =
-						getResolvedContextSignatureFromResponse(result);
-					const payload = attachRequestMetaToRecommendationPayload(result);
-
-					localDispatch(
+					resolvedContextSignature,
+				}) =>
+					dispatch(
 						actions.setStyleBookRecommendations(
 							requestInput.scope,
 							payload,
@@ -3759,10 +3480,10 @@ const actions = {
 							contextSignature,
 							resolvedContextSignature
 						)
-					);
-				},
-				select,
-			});
+					),
+			},
+			input
+		);
 	},
 };
 

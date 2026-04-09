@@ -2,7 +2,6 @@ const mockApplySuggestion = jest.fn();
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockCollectBlockContext = jest.fn();
-const mockFetchBlockRecommendations = jest.fn();
 
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
@@ -49,7 +48,6 @@ beforeEach( () => {
 	mockUseDispatch.mockReturnValue( {
 		applySuggestion: mockApplySuggestion,
 		clearBlockError: jest.fn(),
-		fetchBlockRecommendations: mockFetchBlockRecommendations,
 	} );
 	mockUseSelect.mockImplementation( ( callback ) =>
 		callback( ( storeName ) => {
@@ -60,7 +58,6 @@ beforeEach( () => {
 						prompt: 'Keep the current direction.',
 					} ),
 					getSurfaceStatusNotice: () => null,
-					isBlockLoading: () => false,
 				};
 			}
 
@@ -69,12 +66,13 @@ beforeEach( () => {
 	);
 } );
 
-function renderComponent( suggestions ) {
+function renderComponent( suggestions, extraProps = {} ) {
 	act( () => {
 		getRoot().render(
 			createElement( SettingsRecommendations, {
 				clientId: 'block-1',
 				suggestions,
+				...extraProps,
 			} )
 		);
 	} );
@@ -187,5 +185,60 @@ describe( 'SettingsRecommendations', () => {
 			}
 		);
 		expect( applyButton.disabled ).toBe( true );
+	} );
+
+	test( 'prefers the live block request metadata passed from the main panel when applying', async () => {
+		const suggestion = makeSuggestion( 'general', 'Enable sticky header' );
+		const currentRequestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: { name: 'core/heading' },
+			},
+			contextSignature: 'live-context:block-1:prompt-drift',
+			prompt: 'Make the block feel more editorial.',
+		};
+
+		renderComponent( [ suggestion ], {
+			currentRequestSignature: 'live-signature:block-1',
+			currentRequestInput,
+		} );
+
+		const applyButton = getContainer().querySelector( 'button' );
+
+		await act( async () => {
+			applyButton.click();
+			await Promise.resolve();
+		} );
+
+		expect( mockApplySuggestion ).toHaveBeenCalledWith(
+			'block-1',
+			suggestion,
+			'live-signature:block-1',
+			currentRequestInput
+		);
+	} );
+
+	test( 'shows stale projection guidance that points back to the main AI Recommendations panel', () => {
+		renderComponent(
+			[ makeSuggestion( 'general', 'Enable sticky header' ) ],
+			{ isStale: true }
+		);
+
+		expect( getContainer().textContent ).toContain(
+			'These settings suggestions reflect the last block request.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Refresh the main AI Recommendations panel before applying anything from Settings.'
+		);
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-scope-bar[role="status"][aria-live="polite"]'
+			)
+		).not.toBeNull();
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Refresh'
+			)
+		).toBeUndefined();
 	} );
 } );

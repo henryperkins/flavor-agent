@@ -20,6 +20,7 @@ export default function SurfaceScopeBar( {
 	scopeDetails = [],
 	isFresh = false,
 	hasResult = false,
+	announceChanges = false,
 	staleMessage = 'Context has changed since the last request.',
 	staleReason = '',
 	refreshLabel = REFRESH_ACTION_LABEL,
@@ -33,6 +34,12 @@ export default function SurfaceScopeBar( {
 
 	const showFreshness = hasResult;
 	const resolvedStaleMessage = staleReason || staleMessage;
+	const liveRegionProps = announceChanges
+		? {
+				role: 'status',
+				'aria-live': 'polite',
+		  }
+		: {};
 
 	return (
 		<div
@@ -41,8 +48,7 @@ export default function SurfaceScopeBar( {
 				! isFresh && hasResult ? 'flavor-agent-scope-bar--stale' : '',
 				className
 			) }
-			role="status"
-			aria-live="polite"
+			{ ...liveRegionProps }
 		>
 			<div className="flavor-agent-scope-bar__scope">
 				{ scopeLabel && (

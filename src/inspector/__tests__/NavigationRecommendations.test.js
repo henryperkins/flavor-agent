@@ -37,6 +37,7 @@ jest.mock( '../../context/collector', () => ( {
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
+const DOCUMENT_POSITION_FOLLOWING = 4;
 
 import NavigationRecommendations, {
 	buildNavigationFetchInput,
@@ -100,12 +101,23 @@ function getCollectedNavigationContext() {
 	};
 }
 
-function buildStoredNavigationSignature( navigationMarkup, menuId = 42 ) {
-	return JSON.stringify( {
+function buildStoredNavigationSignature(
+	navigationMarkup,
+	menuId = 42,
+	prompt = ''
+) {
+	const signature = {
 		menuId,
 		navigationMarkup,
-		editorContext: getRequestNavigationEditorContext(),
-	} );
+	};
+
+	if ( prompt ) {
+		signature.prompt = prompt;
+	}
+
+	signature.editorContext = getRequestNavigationEditorContext();
+
+	return JSON.stringify( signature );
 }
 
 function createSelectors() {
@@ -195,6 +207,15 @@ function renderEmbeddedComponent( clientId = 'nav-1' ) {
 		getRoot().render(
 			<NavigationRecommendations clientId={ clientId } embedded />
 		);
+	} );
+}
+
+function updatePrompt( value ) {
+	const textarea = getContainer().querySelector( 'textarea' );
+
+	act( () => {
+		textarea.value = value;
+		textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
 	} );
 }
 
@@ -462,6 +483,151 @@ describe( 'NavigationRecommendations', () => {
 		);
 	} );
 
+	test( 'refreshes cleared prompts with the stored prompt signature so the next result stays fresh', () => {
+		const navigationMarkup = '<!-- wp:navigation {"ref":42} /-->';
+
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the footer navigation.',
+			navigationContextSignature: 'stale-signature',
+		};
+		mockSerialize.mockReturnValue( navigationMarkup );
+
+		renderComponent();
+		updatePrompt( '   ' );
+
+		const refreshButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Refresh' );
+
+		act( () => {
+			refreshButton.click();
+		} );
+
+		expect( mockFetchNavigationRecommendations ).toHaveBeenCalledWith( {
+			blockClientId: 'nav-1',
+			editorContext: getRequestNavigationEditorContext(),
+			menuId: 42,
+			navigationMarkup,
+			prompt: 'Simplify the footer navigation.',
+			contextSignature: buildStoredNavigationSignature(
+				navigationMarkup,
+				42,
+				'Simplify the footer navigation.'
+			),
+		} );
+
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the footer navigation.',
+			navigationContextSignature: buildStoredNavigationSignature(
+				navigationMarkup,
+				42,
+				'Simplify the footer navigation.'
+			),
+		};
+
+		renderComponent();
+		renderComponent();
+
+		expect( getContainer().textContent ).not.toContain(
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Stale' );
+	} );
+
+	test( 'marks navigation results stale when only the prompt changes', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the header navigation.',
+			navigationContextSignature: buildStoredNavigationSignature(
+				'<!-- wp:navigation {"ref":42} /-->',
+				42,
+				'Simplify the header navigation.'
+			),
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderComponent();
+
+		updatePrompt( 'Group utility links by audience.' );
+
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
+		);
+	} );
+
+	test( 'keeps navigation results fresh when prompt edits only change surrounding whitespace', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [ { label: 'Group utility links' } ],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationRequestPrompt: 'Simplify the header navigation.',
+			navigationContextSignature: buildStoredNavigationSignature(
+				'<!-- wp:navigation {"ref":42} /-->',
+				42,
+				'Simplify the header navigation.'
+			),
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderComponent();
+
+		updatePrompt( '  Simplify the header navigation.  ' );
+
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
+		expect( getContainer().textContent ).not.toContain(
+			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Stale' );
+	} );
+
 	test( 'shows a stale scope badge when the stored navigation result context mismatches', () => {
 		currentState.blockEditor.blocks = {
 			'nav-1': {
@@ -491,9 +657,14 @@ describe( 'NavigationRecommendations', () => {
 		expect( getContainer().textContent ).toContain(
 			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
 		);
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBe( 'status' );
 	} );
 
-	test( 'shows the stale scope badge in embedded mode when the stored navigation result context mismatches', () => {
+	test( 'shows a lighter stale subsection in embedded mode when the stored navigation result context mismatches', () => {
 		currentState.blockEditor.blocks = {
 			'nav-1': {
 				clientId: 'nav-1',
@@ -516,7 +687,7 @@ describe( 'NavigationRecommendations', () => {
 
 		renderEmbeddedComponent();
 
-		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Navigation Ideas' );
 		expect( getContainer().textContent ).toContain( 'Menu ID 42' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
@@ -525,6 +696,12 @@ describe( 'NavigationRecommendations', () => {
 		expect( getContainer().textContent ).toContain( 'Group utility links' );
 		expect( getContainer().textContent ).not.toContain(
 			'Navigation Recommendations'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Navigation Block'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Recommended Next Step'
 		);
 		expect( getContainer().textContent ).toContain( 'Refresh' );
 	} );
@@ -589,6 +766,65 @@ describe( 'NavigationRecommendations', () => {
 		expect( getContainer().textContent ).toContain(
 			'Move utility links into a smaller secondary row.'
 		);
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-recommendation-hero' )
+				?.compareDocumentPosition(
+					getContainer().querySelector( '.flavor-agent-explanation' )
+				)
+		).toBe( DOCUMENT_POSITION_FOLLOWING );
+	} );
+
+	test( 'keeps embedded navigation results in a subsection instead of the standalone scope and hero shells', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: {
+					ref: 42,
+				},
+				innerBlocks: [],
+			},
+		};
+		currentState.store = {
+			navigationBlockClientId: 'nav-1',
+			navigationRecommendations: [
+				{
+					label: 'Group utility links',
+					description:
+						'Move utility links into a smaller secondary row.',
+					category: 'structure',
+					changes: [],
+				},
+			],
+			navigationExplanation: 'Existing guidance.',
+			navigationError: null,
+			navigationStatus: 'ready',
+			navigationContextSignature: null,
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+
+		renderEmbeddedComponent();
+
+		expect( getContainer().textContent ).toContain( 'Navigation Ideas' );
+		expect( getContainer().textContent ).toContain(
+			'Recommended next change'
+		);
+		expect( getContainer().textContent ).toContain( 'Group utility links' );
+		expect( getContainer().textContent ).not.toContain(
+			'Navigation Block'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Current' );
+		expect( getContainer().textContent ).not.toContain(
+			'Recommended Next Step'
+		);
+		expect(
+			getContainer()
+				.querySelector( '.flavor-agent-navigation-embedded__section' )
+				?.compareDocumentPosition(
+					getContainer().querySelector( '.flavor-agent-explanation' )
+				)
+		).toBe( DOCUMENT_POSITION_FOLLOWING );
 	} );
 
 	test( 'keeps previous navigation results visible as stale when the selected block changes in place', () => {
@@ -668,7 +904,7 @@ describe( 'NavigationRecommendations', () => {
 		renderEmbeddedComponent();
 
 		expect( mockClearNavigationRecommendations ).not.toHaveBeenCalled();
-		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Navigation Ideas' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
 		expect( getContainer().textContent ).toContain(
 			'This navigation changed after the last request. Refresh before relying on the previous guidance.'
@@ -764,7 +1000,7 @@ describe( 'NavigationRecommendations', () => {
 		renderEmbeddedComponent();
 
 		expect( mockClearNavigationRecommendations ).not.toHaveBeenCalled();
-		expect( getContainer().textContent ).toContain( 'Navigation Block' );
+		expect( getContainer().textContent ).toContain( 'Navigation Ideas' );
 		expect( getContainer().textContent ).toContain( 'Stale' );
 	} );
 

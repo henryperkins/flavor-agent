@@ -158,6 +158,7 @@ jest.mock( '../../store', () => ( {
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
+const DOCUMENT_POSITION_FOLLOWING = 4;
 const {
 	buildGlobalStylesRecommendationContextSignature,
 } = require( '../../utils/style-operations' );
@@ -837,6 +838,45 @@ describe( 'StyleBookRecommender', () => {
 				( button ) => button.textContent === 'Review'
 			)?.disabled
 		).toBe( true );
+		expect(
+			sidebar
+				.querySelector( '.flavor-agent-scope-bar' )
+				?.getAttribute( 'role' )
+		).toBe( 'status' );
+	} );
+
+	test( 'renders the Style Book explanation after the primary recommendation hero', () => {
+		currentStoreState = {
+			...currentStoreState,
+			recommendations: [
+				{
+					suggestionKey: 'style-book-1',
+					label: 'Refine paragraph rhythm',
+					description:
+						'Increase the block gap to give the example more breathing room.',
+					category: 'spacing',
+					tone: 'executable',
+					operations: [],
+				},
+			],
+			explanation: 'Push spacing slightly further for the example block.',
+			status: 'ready',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+			selectedSuggestionKey: null,
+		};
+
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+
+		expect(
+			sidebar
+				.querySelector( '.flavor-agent-recommendation-hero' )
+				?.compareDocumentPosition(
+					sidebar.querySelector( '.flavor-agent-panel__note' )
+				)
+		).toBe( DOCUMENT_POSITION_FOLLOWING );
 	} );
 
 	test( 'does not show the current scope badge when the latest Style Book request failed', () => {
