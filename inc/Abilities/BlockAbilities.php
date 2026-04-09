@@ -461,6 +461,9 @@ final class BlockAbilities {
 		$max_depth   = 2;
 
 		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
 			$block = is_string( $item['block'] ?? null ) ? sanitize_text_field( $item['block'] ) : '';
 
 			if ( '' === $block ) {
