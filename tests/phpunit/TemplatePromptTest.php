@@ -93,6 +93,58 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertStringContainsString( 'explicitly visible on `desktop`', $prompt );
 	}
 
+	public function test_build_user_includes_enriched_theme_tokens(): void {
+		$prompt = TemplatePrompt::build_user(
+			[
+				'templateType'  => 'single',
+				'title'         => 'Single Post',
+				'assignedParts' => [],
+				'emptyAreas'    => [],
+				'availableParts' => [],
+				'patterns'      => [],
+				'themeTokens'   => [
+					'colors'         => [ 'primary: #0073aa' ],
+					'gradients'      => [ 'vivid: linear-gradient(135deg, #00f, #f0f)' ],
+					'fontSizes'      => [ 'small: 0.875rem' ],
+					'fontFamilies'   => [ 'inter: Inter, sans-serif' ],
+					'spacing'        => [ '20: 0.5rem' ],
+					'shadows'        => [ 'natural: 6px 6px 9px rgba(0,0,0,0.2)' ],
+					'colorPresets'   => [
+						[
+							'slug'   => 'primary',
+							'cssVar' => 'var(--wp--preset--color--primary)',
+						],
+					],
+					'layout'         => [
+						'content'                       => '650px',
+						'wide'                          => '1200px',
+						'allowEditing'                  => true,
+						'allowCustomContentAndWideSize' => true,
+					],
+					'enabledFeatures' => [
+						'backgroundColor' => true,
+						'textColor'       => true,
+					],
+				],
+			]
+		);
+
+		$this->assertStringContainsString( '## Theme Tokens', $prompt );
+		$this->assertStringContainsString( 'Colors: primary: #0073aa', $prompt );
+		$this->assertStringContainsString( 'Gradients: vivid: linear-gradient', $prompt );
+		$this->assertStringContainsString( 'Shadows: natural: 6px 6px 9px rgba(0,0,0,0.2)', $prompt );
+		$this->assertStringContainsString( 'Color preset refs: primary (var(--wp--preset--color--primary))', $prompt );
+		$this->assertStringContainsString( 'Layout: {"content":"650px","wide":"1200px","allowEditing":true,"allowCustomContentAndWideSize":true}', $prompt );
+		$this->assertStringContainsString( 'Enabled features: {"backgroundColor":true,"textColor":true}', $prompt );
+	}
+
+	public function test_build_system_includes_theme_capability_constraints(): void {
+		$system = TemplatePrompt::build_system();
+
+		$this->assertStringContainsString( 'Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.', $system );
+		$this->assertStringContainsString( 'do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.', $system );
+	}
+
 	public function test_parse_response_keeps_only_valid_structured_template_operations(): void {
 		$context = [
 			'assignedParts'            => [

@@ -88,6 +88,8 @@ Rules:
 - When WordPress Developer Guidance is provided, prefer suggestions that match documented block-theme and template-part practices.
 - Prioritize explicitly empty template-part placeholders before replacing existing assignments.
 - Respect the theme's design tokens when suggesting patterns.
+- Treat enabledFeatures and layout in Theme Tokens as hard capability constraints.
+- When a recommendation depends on color, spacing, typography, border, background, or layout controls, do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.
 - When Current Pattern Override Blocks are listed, treat them as intentionally overridable content zones. Prefer recommendations that preserve or complement those boundaries, and mention the tradeoff if you suggest replacing around them.
 - When Current Viewport Visibility Constraints are listed, do not describe hidden-on-mobile or hidden-on-desktop blocks as primary placement for those viewports. Mention visibility constraints when they materially affect the recommendation.
 - If no candidate patterns are available, focus on template part composition and leave patternSuggestions as an empty array.
@@ -250,24 +252,12 @@ SYSTEM;
 		$sections[]                  = "## Current Viewport Visibility Constraints\n"
 			. self::format_current_viewport_visibility( $current_viewport_visibility );
 
-		$tokens = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
-		if ( ! empty( $tokens ) ) {
-			$token_lines = [];
-			if ( ! empty( $tokens['colors'] ) ) {
-				$token_lines[] = 'Colors: ' . implode( ', ', array_slice( (array) $tokens['colors'], 0, 12 ) );
-			}
-			if ( ! empty( $tokens['fontFamilies'] ) ) {
-				$token_lines[] = 'Fonts: ' . implode( ', ', (array) $tokens['fontFamilies'] );
-			}
-			if ( ! empty( $tokens['fontSizes'] ) ) {
-				$token_lines[] = 'Font sizes: ' . implode( ', ', (array) $tokens['fontSizes'] );
-			}
-			if ( ! empty( $tokens['spacing'] ) ) {
-				$token_lines[] = 'Spacing scale: ' . implode( ', ', array_slice( (array) $tokens['spacing'], 0, 7 ) );
-			}
-			if ( count( $token_lines ) > 0 ) {
-				$sections[] = "## Theme Tokens\n" . implode( "\n", $token_lines );
-			}
+		$formatted_tokens = ThemeTokenFormatter::format(
+			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
+		);
+
+		if ( $formatted_tokens !== '' ) {
+			$sections[] = "## Theme Tokens\n{$formatted_tokens}";
 		}
 
 		if ( ! empty( $docs_guidance ) ) {

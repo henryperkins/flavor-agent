@@ -203,7 +203,22 @@ final class NavigationAbilitiesTest extends TestCase {
 				],
 			],
 			'themeTokens'          => [
-				'colors' => [ 'primary: #0073aa' ],
+				'colors'          => [ 'primary: #0073aa' ],
+				'fontSizes'       => [ 'small: 0.875rem' ],
+				'fontFamilies'    => [ 'inter: Inter, sans-serif' ],
+				'spacing'         => [ '20: 0.5rem' ],
+				'gradients'       => [ 'hero: linear-gradient(180deg, #fff, #ddd)' ],
+				'shadows'         => [ 'natural: 6px 6px 9px rgba(0,0,0,0.2)' ],
+				'layout'          => [
+					'content'                       => '650px',
+					'wide'                          => '1200px',
+					'allowEditing'                  => true,
+					'allowCustomContentAndWideSize' => true,
+				],
+				'enabledFeatures' => [
+					'backgroundColor' => true,
+					'textColor'       => true,
+				],
 			],
 		];
 
@@ -234,8 +249,20 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( '## Overlay Context', $prompt );
 		$this->assertStringContainsString( '`hasDedicatedOverlayParts`: true', $prompt );
 		$this->assertStringContainsString( '`siteOverlayTemplatePartCount`: 2', $prompt );
+		$this->assertStringContainsString( '## Theme Design Tokens', $prompt );
+		$this->assertStringContainsString( 'Gradients: hero: linear-gradient', $prompt );
+		$this->assertStringContainsString( 'Shadows: natural: 6px 6px 9px rgba(0,0,0,0.2)', $prompt );
+		$this->assertStringContainsString( 'Layout: {"content":"650px","wide":"1200px","allowEditing":true,"allowCustomContentAndWideSize":true}', $prompt );
+		$this->assertStringContainsString( 'Enabled features: {"backgroundColor":true,"textColor":true}', $prompt );
 		$this->assertStringContainsString( '## User Instruction', $prompt );
 		$this->assertStringContainsString( 'Simplify the header nav.', $prompt );
+	}
+
+	public function test_navigation_prompt_build_system_includes_theme_capability_constraints(): void {
+		$system = NavigationPrompt::build_system();
+
+		$this->assertStringContainsString( 'Treat enabledFeatures and layout in Theme Design Tokens as hard capability constraints.', $system );
+		$this->assertStringContainsString( 'do not recommend changes that rely on disabled features or unsupported layout capabilities.', $system );
 	}
 
 	public function test_prompt_build_user_handles_empty_menu(): void {
