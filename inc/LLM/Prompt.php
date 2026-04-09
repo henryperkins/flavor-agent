@@ -520,17 +520,14 @@ SYSTEM;
 
 			$has_executable_updates = ! empty( $normalized['attributeUpdates'] );
 			$ranking_input          = is_array( $s['ranking'] ?? null ) ? $s['ranking'] : [];
-			$score_input            = [
-				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
-					? $ranking_input['score']
-					: ( $s['score'] ?? null ),
-				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
-					? $ranking_input['confidence']
-					: ( $s['confidence'] ?? null ),
-			];
-			$computed_score         = null !== $score_input['score'] || null !== $score_input['confidence']
-				? RankingContract::normalize( $score_input )['score']
-				: RankingContract::derive_score(
+			$computed_score         = RankingContract::resolve_score_candidate(
+				$ranking_input['score'] ?? null,
+				$s['score'] ?? null,
+				$ranking_input['confidence'] ?? null,
+				$s['confidence'] ?? null
+			);
+			if ( null === $computed_score ) {
+				$computed_score = RankingContract::derive_score(
 					0.45,
 					[
 						'has_executable_updates' => $has_executable_updates ? 0.25 : 0.0,
@@ -539,7 +536,8 @@ SYSTEM;
 						'has_preview'            => null !== $normalized['preview'] && '' !== $normalized['preview'] ? 0.05 : 0.0,
 					]
 				);
-			$source_signals         = [ 'llm_response', $group . '_surface' ];
+			}
+			$source_signals = [ 'llm_response', $group . '_surface' ];
 
 			if ( $has_executable_updates ) {
 				$source_signals[] = 'has_executable_updates';

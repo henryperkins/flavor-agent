@@ -550,6 +550,36 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( 0.91, $result['block'][0]['ranking']['score'] );
 	}
 
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Fallback confidence wins',
+							'description' => 'A malformed nested score should not zero this out.',
+							'type'        => 'structural_recommendation',
+							'ranking'     => [
+								'score' => [],
+							],
+							'confidence'  => 0.88,
+						],
+						[
+							'label'       => 'Lower confidence',
+							'description' => 'Still valid, but should sort second.',
+							'type'        => 'structural_recommendation',
+							'confidence'  => 0.82,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence wins', $result['block'][0]['label'] );
+		$this->assertSame( 0.88, $result['block'][0]['ranking']['score'] );
+	}
+
 	public function test_parse_response_ranks_block_suggestions_by_computed_quality_signals(): void {
 		$result = Prompt::parse_response(
 			wp_json_encode(

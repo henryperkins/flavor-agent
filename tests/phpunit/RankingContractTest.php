@@ -49,7 +49,19 @@ final class RankingContractTest extends TestCase {
 		$this->assertSame( 'Matches slot constraints.', $result['rankingHint']['summary'] );
 	}
 
-	public function test_normalize_coerces_malformed_scores_without_warnings(): void {
+	public function test_normalize_uses_confidence_when_score_is_malformed(): void {
+		$result = RankingContract::normalize(
+			[
+				'score'      => [ 'bad-input' ],
+				'confidence' => 0.8,
+			],
+			[]
+		);
+
+		$this->assertSame( 0.8, $result['score'] );
+	}
+
+	public function test_normalize_returns_zero_when_no_numeric_score_candidates_exist(): void {
 		$result = RankingContract::normalize(
 			[
 				'score' => [ 'bad-input' ],

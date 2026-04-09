@@ -387,17 +387,14 @@ SYSTEM;
 			];
 
 			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
-			$score_input    = [
-				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
-					? $ranking_input['score']
-					: ( $suggestion['score'] ?? null ),
-				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
-					? $ranking_input['confidence']
-					: ( $suggestion['confidence'] ?? null ),
-			];
-			$computed_score = null !== $score_input['score'] || null !== $score_input['confidence']
-				? RankingContract::normalize( $score_input )['score']
-				: RankingContract::derive_score(
+			$computed_score = RankingContract::resolve_score_candidate(
+				$ranking_input['score'] ?? null,
+				$suggestion['score'] ?? null,
+				$ranking_input['confidence'] ?? null,
+				$suggestion['confidence'] ?? null
+			);
+			if ( null === $computed_score ) {
+				$computed_score = RankingContract::derive_score(
 					0.45,
 					[
 						'change_count' => min( 0.25, count( $changes ) * 0.08 ),
@@ -406,6 +403,7 @@ SYSTEM;
 						'has_detail'   => '' !== $description ? 0.07 : 0.0,
 					]
 				);
+			}
 			$source_signals = [ 'llm_response', 'navigation_surface', 'category_' . $category ];
 
 			if ( count( $changes ) > 0 ) {

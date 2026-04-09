@@ -183,12 +183,12 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->save_index_state(
 			[
-				'status'               => 'error',
-				'last_synced_at'       => null,
-				'last_error'           => 'Rate limited.',
-				'last_error_code'      => 'rate_limited',
-				'last_error_status'    => 429,
-				'last_error_retryable' => true,
+				'status'                 => 'error',
+				'last_synced_at'         => null,
+				'last_error'             => 'Rate limited.',
+				'last_error_code'        => 'rate_limited',
+				'last_error_status'      => 429,
+				'last_error_retryable'   => true,
 				'last_error_retry_after' => 7,
 			]
 		);
@@ -357,6 +357,10 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'Excellent fit', 'Matches the header context.' ],
 			array_column( $result['recommendations'], 'reason' )
 		);
+		$this->assertSame(
+			[ 'qdrant_semantic', 'llm_ranker', 'qdrant_structural' ],
+			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
+		);
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
 
 		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
@@ -462,7 +466,7 @@ final class PatternAbilitiesTest extends TestCase {
 		WordPressTestState::$remote_post_responses = [
 			$this->embedding_response( [ 0.12, 0.34 ] ),
 		];
-		WordPressTestState::$remote_get_response = [
+		WordPressTestState::$remote_get_response   = [
 			'response' => [ 'code' => 404 ],
 			'body'     => wp_json_encode(
 				[
@@ -497,7 +501,7 @@ final class PatternAbilitiesTest extends TestCase {
 		WordPressTestState::$remote_post_responses = [
 			$this->embedding_response( [ 0.12, 0.34 ] ),
 		];
-		WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 3 );
+		WordPressTestState::$remote_get_response   = $this->qdrant_collection_response( 3 );
 
 		$result = PatternAbilities::recommend_patterns(
 			[
@@ -1052,33 +1056,41 @@ final class PatternAbilitiesTest extends TestCase {
 			$this->embedding_response( [ 0.12, 0.34 ] ),
 			$this->qdrant_points_response(
 				[
-					$this->pattern_point( 'theme/custom-block-generic', 0.78, [
-						'patternOverrides' => [
-							'hasOverrides'          => true,
-							'blockCount'            => 1,
-							'blockNames'            => [ 'plugin/card' ],
-							'bindableAttributes'    => [ 'plugin/card' => [ 'title' ] ],
-							'overrideAttributes'    => [ 'plugin/card' => [ 'title' ] ],
-							'usesDefaultBinding'    => false,
-							'unsupportedAttributes' => [],
-						],
-					] ),
+					$this->pattern_point(
+						'theme/custom-block-generic',
+						0.78,
+						[
+							'patternOverrides' => [
+								'hasOverrides'          => true,
+								'blockCount'            => 1,
+								'blockNames'            => [ 'plugin/card' ],
+								'bindableAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+								'overrideAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+								'usesDefaultBinding'    => false,
+								'unsupportedAttributes' => [],
+							],
+						]
+					),
 					$this->pattern_point( 'theme/plain-pattern', 0.79 ),
 				]
 			),
 			$this->qdrant_points_response(
 				[
-					$this->pattern_point( 'theme/custom-block-generic', 0.81, [
-						'patternOverrides' => [
-							'hasOverrides'          => true,
-							'blockCount'            => 1,
-							'blockNames'            => [ 'plugin/card' ],
-							'bindableAttributes'    => [ 'plugin/card' => [ 'title' ] ],
-							'overrideAttributes'    => [ 'plugin/card' => [ 'title' ] ],
-							'usesDefaultBinding'    => true,
-							'unsupportedAttributes' => [],
-						],
-					] ),
+					$this->pattern_point(
+						'theme/custom-block-generic',
+						0.81,
+						[
+							'patternOverrides' => [
+								'hasOverrides'          => true,
+								'blockCount'            => 1,
+								'blockNames'            => [ 'plugin/card' ],
+								'bindableAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+								'overrideAttributes'    => [ 'plugin/card' => [ 'title' ] ],
+								'usesDefaultBinding'    => true,
+								'unsupportedAttributes' => [],
+							],
+						]
+					),
 				]
 			),
 			$this->ranking_response(
@@ -1180,7 +1192,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'Matches the current context.', $result['recommendations'][0]['ranking']['reason'] ?? null );
 		$this->assertSame( 'validated', $result['recommendations'][0]['ranking']['safetyMode'] ?? null );
 		$this->assertSame(
-			[ 'qdrant_semantic', 'qdrant_structural', 'llm_ranker' ],
+			[ 'qdrant_semantic', 'llm_ranker' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
@@ -1380,26 +1392,26 @@ final class PatternAbilitiesTest extends TestCase {
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'               => 'ready',
-					'fingerprint'          => 'fingerprint-123',
-					'qdrant_url'           => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'    => QdrantClient::get_collection_name( $embedding_signature ),
-					'openai_provider'      => $embedding_config['provider'],
-					'openai_endpoint'      => $embedding_config['endpoint'],
-					'embedding_model'      => $embedding_config['model'],
-					'embedding_dimension'  => 2,
-					'embedding_signature'  => $embedding_signature['signature_hash'],
-					'last_synced_at'       => '2026-03-24T00:00:00+00:00',
-					'last_attempt_at'      => '2000-01-01T00:00:00+00:00',
-					'indexed_count'        => 3,
-					'last_error'           => null,
-					'last_error_code'      => '',
-					'last_error_status'    => 0,
-					'last_error_retryable' => false,
+					'status'                 => 'ready',
+					'fingerprint'            => 'fingerprint-123',
+					'qdrant_url'             => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection'      => QdrantClient::get_collection_name( $embedding_signature ),
+					'openai_provider'        => $embedding_config['provider'],
+					'openai_endpoint'        => $embedding_config['endpoint'],
+					'embedding_model'        => $embedding_config['model'],
+					'embedding_dimension'    => 2,
+					'embedding_signature'    => $embedding_signature['signature_hash'],
+					'last_synced_at'         => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'        => '2000-01-01T00:00:00+00:00',
+					'indexed_count'          => 3,
+					'last_error'             => null,
+					'last_error_code'        => '',
+					'last_error_status'      => 0,
+					'last_error_retryable'   => false,
 					'last_error_retry_after' => null,
-					'stale_reason'         => '',
-					'stale_reasons'        => [],
-					'pattern_fingerprints' => [],
+					'stale_reason'           => '',
+					'stale_reasons'          => [],
+					'pattern_fingerprints'   => [],
 				],
 				$overrides
 			)
@@ -1498,12 +1510,12 @@ final class PatternAbilitiesTest extends TestCase {
 	 */
 	private function pattern_point( string $name, float $score, array $overrides = [] ): array {
 		$payload = [
-			'name'          => $name,
-			'title'         => ucwords( str_replace( [ 'theme/', '-' ], [ '', ' ' ], $name ) ),
-			'description'   => "Description for {$name}",
-			'categories'    => [ 'marketing' ],
-			'blockTypes'    => [ 'core/template-part/header' ],
-			'templateTypes' => [ 'home' ],
+			'name'             => $name,
+			'title'            => ucwords( str_replace( [ 'theme/', '-' ], [ '', ' ' ], $name ) ),
+			'description'      => "Description for {$name}",
+			'categories'       => [ 'marketing' ],
+			'blockTypes'       => [ 'core/template-part/header' ],
+			'templateTypes'    => [ 'home' ],
 			'patternOverrides' => [
 				'hasOverrides'          => $name === 'theme/footer-callout',
 				'blockCount'            => $name === 'theme/footer-callout' ? 1 : 0,
@@ -1513,7 +1525,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'usesDefaultBinding'    => false,
 				'unsupportedAttributes' => [],
 			],
-			'content'       => "<!-- wp:paragraph --><p>{$name}</p><!-- /wp:paragraph -->",
+			'content'          => "<!-- wp:paragraph --><p>{$name}</p><!-- /wp:paragraph -->",
 		];
 
 		return [

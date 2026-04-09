@@ -12,13 +12,12 @@ final class RankingContract {
 	 * @return array<string, mixed>
 	 */
 	public static function normalize( array $input, array $defaults = [] ): array {
-		$score = self::coerce_score(
-			$input['score']
-				?? $input['confidence']
-				?? $defaults['score']
-				?? $defaults['confidence']
-				?? 0.0
-		);
+		$score = self::resolve_score_candidate(
+			$input['score'] ?? null,
+			$input['confidence'] ?? null,
+			$defaults['score'] ?? null,
+			$defaults['confidence'] ?? null
+		) ?? 0.0;
 
 		$reason = sanitize_text_field(
 			(string) ( $input['reason'] ?? $defaults['reason'] ?? '' )
@@ -66,6 +65,16 @@ final class RankingContract {
 		}
 
 		return $contract;
+	}
+
+	public static function resolve_score_candidate( mixed ...$candidates ): ?float {
+		foreach ( $candidates as $candidate ) {
+			if ( is_scalar( $candidate ) && is_numeric( $candidate ) ) {
+				return self::coerce_score( $candidate );
+			}
+		}
+
+		return null;
 	}
 
 	/**

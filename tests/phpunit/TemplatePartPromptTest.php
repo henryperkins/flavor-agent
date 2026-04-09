@@ -755,4 +755,45 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertSame( 'Explicit score template part idea', $result['suggestions'][0]['label'] );
 		$this->assertSame( 0.94, $result['suggestions'][0]['ranking']['score'] );
 	}
+
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$context = [
+			'blockTree'        => [],
+			'patterns'         => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'insertionAnchors' => [],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Fallback confidence template part idea',
+						'description'        => 'A malformed nested score should not zero this out.',
+						'patternSuggestions' => [ 'theme/header-utility' ],
+						'ranking'            => [
+							'score' => [],
+						],
+						'confidence'         => 0.85,
+					],
+					[
+						'label'              => 'Lower confidence template part idea',
+						'description'        => 'This should sort second.',
+						'patternSuggestions' => [ 'theme/header-utility' ],
+						'confidence'         => 0.83,
+					],
+				],
+				'explanation' => 'Malformed nested scores should not suppress valid fallback confidence.',
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence template part idea', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.85, $result['suggestions'][0]['ranking']['score'] );
+	}
 }

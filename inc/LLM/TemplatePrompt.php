@@ -623,17 +623,14 @@ SYSTEM;
 			}
 
 			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
-			$score_input    = [
-				'score'      => array_key_exists( 'score', $ranking_input ) && null !== $ranking_input['score']
-					? $ranking_input['score']
-					: ( $suggestion['score'] ?? null ),
-				'confidence' => array_key_exists( 'confidence', $ranking_input ) && null !== $ranking_input['confidence']
-					? $ranking_input['confidence']
-					: ( $suggestion['confidence'] ?? null ),
-			];
-			$computed_score = null !== $score_input['score'] || null !== $score_input['confidence']
-				? RankingContract::normalize( $score_input )['score']
-				: RankingContract::derive_score(
+			$computed_score = RankingContract::resolve_score_candidate(
+				$ranking_input['score'] ?? null,
+				$suggestion['score'] ?? null,
+				$ranking_input['confidence'] ?? null,
+				$suggestion['confidence'] ?? null
+			);
+			if ( null === $computed_score ) {
+				$computed_score = RankingContract::derive_score(
 					0.45,
 					[
 						'has_operations'    => [] !== $entry['operations'] ? 0.25 : 0.0,
@@ -642,6 +639,7 @@ SYSTEM;
 						'has_description'   => '' !== $entry['description'] ? 0.05 : 0.0,
 					]
 				);
+			}
 			$source_signals = [ 'llm_response', 'template_surface' ];
 
 			if ( [] !== $entry['operations'] ) {

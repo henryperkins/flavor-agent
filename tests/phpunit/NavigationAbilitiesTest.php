@@ -648,4 +648,69 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertSame( 'Explicit score navigation idea', $result['suggestions'][0]['label'] );
 		$this->assertSame( 0.9, $result['suggestions'][0]['ranking']['score'] );
 	}
+
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Fallback confidence navigation idea',
+						'description' => 'A malformed nested score should not zero this out.',
+						'category'    => 'structure',
+						'ranking'     => [
+							'score' => [],
+						],
+						'confidence'  => 0.86,
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 1 ],
+								'target'     => 'About link',
+								'detail'     => 'Move About later.',
+							],
+						],
+					],
+					[
+						'label'       => 'Lower confidence navigation idea',
+						'description' => 'This should sort second.',
+						'category'    => 'structure',
+						'confidence'  => 0.82,
+						'changes'     => [
+							[
+								'type'       => 'reorder',
+								'targetPath' => [ 0 ],
+								'target'     => 'Home link',
+								'detail'     => 'Move Home later.',
+							],
+						],
+					],
+				],
+				'explanation' => 'Malformed nested scores should not suppress valid fallback confidence.',
+			]
+		);
+
+		$result = NavigationPrompt::parse_response(
+			$raw,
+			[
+				'targetInventory' => [
+					[
+						'path'  => [ 0 ],
+						'label' => 'Home',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+					[
+						'path'  => [ 1 ],
+						'label' => 'About',
+						'type'  => 'navigation-link',
+						'depth' => 0,
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence navigation idea', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.86, $result['suggestions'][0]['ranking']['score'] );
+	}
 }

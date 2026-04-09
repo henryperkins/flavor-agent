@@ -829,4 +829,36 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame( 'Explicit score suggestion', $result['suggestions'][0]['label'] );
 		$this->assertSame( 0.93, $result['suggestions'][0]['ranking']['score'] );
 	}
+
+	public function test_parse_response_falls_back_when_nested_ranking_score_is_malformed(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Fallback confidence suggestion',
+							'description' => 'A malformed nested score should not zero this out.',
+							'category'    => 'color',
+							'ranking'     => [
+								'score' => [],
+							],
+							'confidence'  => 0.87,
+						],
+						[
+							'label'       => 'Lower confidence suggestion',
+							'description' => 'This should sort second.',
+							'category'    => 'color',
+							'confidence'  => 0.81,
+						],
+					],
+					'explanation' => 'Malformed nested scores should not suppress valid fallback confidence.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Fallback confidence suggestion', $result['suggestions'][0]['label'] );
+		$this->assertSame( 0.87, $result['suggestions'][0]['ranking']['score'] );
+	}
 }
