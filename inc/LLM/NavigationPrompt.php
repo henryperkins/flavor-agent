@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RankingContract;
 
 final class NavigationPrompt {
 
@@ -294,6 +295,7 @@ SYSTEM;
 			'showSubmenuIcon'     => true,
 		];
 		$valid              = [];
+		$order              = 0;
 
 		foreach ( $suggestions as $suggestion ) {
 			if ( ! is_array( $suggestion ) ) {
@@ -377,15 +379,70 @@ SYSTEM;
 				continue;
 			}
 
-			$valid[] = [
+			$entry = [
 				'label'       => $label,
 				'description' => $description,
 				'category'    => $category,
 				'changes'     => $changes,
 			];
+
+			$computed_score   = isset( $suggestion['confidence'] )
+				? max( 0.0, min( 1.0, (float) $suggestion['confidence'] ) )
+				: RankingContract::derive_score(
+					0.45,
+					[
+						'change_count'   => min( 0.25, count( $changes ) * 0.08 ),
+						'is_structure'   => 'structure' === $category ? 0.1 : 0.0,
+						'is_overlay'     => 'overlay' === $category ? 0.08 : 0.0,
+						'has_detail'     => '' !== $description ? 0.07 : 0.0,
+					]
+				);
+			$source_signals   = [ 'llm_response', 'navigation_surface', 'category_' . $category ];
+
+			if ( count( $changes ) > 0 ) {
+				$source_signals[] = 'has_changes';
+			}
+
+			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) || isset( $suggestion['advisoryType'] ) ) {
+				$entry['ranking'] = RankingContract::normalize(
+					is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [],
+					[
+						'score'         => $computed_score,
+						'reason'        => $description,
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [ 'source' => 'llm', 'surface' => 'navigation' ],
+						'advisoryType'  => (string) ( $suggestion['advisoryType'] ?? $category ),
+					]
+				);
+			}
+
+			$entry['_rankScore'] = $computed_score;
+			$entry['_rankOrder'] = $order++;
+			$valid[] = $entry;
 		}
 
-		return $valid;
+		usort(
+			$valid,
+			static function ( array $left, array $right ): int {
+				$score_compare = (float) ( $right['_rankScore'] ?? 0.0 ) <=> (float) ( $left['_rankScore'] ?? 0.0 );
+
+				if ( 0 !== $score_compare ) {
+					return $score_compare;
+				}
+
+				return (int) ( $left['_rankOrder'] ?? 0 ) <=> (int) ( $right['_rankOrder'] ?? 0 );
+			}
+		);
+
+		return array_map(
+			static function ( array $suggestion ): array {
+				unset( $suggestion['_rankOrder'] );
+				unset( $suggestion['_rankScore'] );
+				return $suggestion;
+			},
+			$valid
+		);
 	}
 
 	/**

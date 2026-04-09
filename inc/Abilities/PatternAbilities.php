@@ -14,6 +14,7 @@ use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
+use FlavorAgent\Support\RankingContract;
 use FlavorAgent\Support\StringArray;
 
 final class PatternAbilities {
@@ -435,6 +436,21 @@ final class PatternAbilities {
 				'overrideCapabilities' => self::build_override_capabilities(
 					$overrides,
 					$ranking_hint
+				),
+				'ranking'    => RankingContract::normalize(
+					is_array( $rec['ranking'] ?? null ) ? $rec['ranking'] : [],
+					[
+						'score'         => $score,
+						'reason'        => $reason,
+						'sourceSignals' => [ 'qdrant_semantic', 'qdrant_structural', 'llm_ranker' ],
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [
+							'indexStatus'           => (string) ( $state['status'] ?? '' ),
+							'embeddingSignature'    => (string) ( $state['embedding_signature'] ?? '' ),
+							'qdrantCollection'      => (string) ( $state['qdrant_collection'] ?? '' ),
+						],
+						'rankingHint'   => $ranking_hint,
+					]
 				),
 				'content'    => $payload['content'] ?? '',
 			];

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RankingContract;
 
 final class TemplatePrompt {
 
@@ -543,6 +544,7 @@ SYSTEM;
 		array $insertion_anchor_lookup
 	): array {
 		$valid = [];
+		$order = 0;
 
 		foreach ( $suggestions as $suggestion ) {
 			if ( ! is_array( $suggestion ) || empty( $suggestion['label'] ) ) {
@@ -620,10 +622,73 @@ SYSTEM;
 				continue;
 			}
 
-			$valid[] = $entry;
+			$computed_score   = isset( $suggestion['confidence'] )
+				? max( 0.0, min( 1.0, (float) $suggestion['confidence'] ) )
+				: RankingContract::derive_score(
+					0.45,
+					[
+						'has_operations'    => [] !== $entry['operations'] ? 0.25 : 0.0,
+						'has_templateparts' => [] !== $entry['templateParts'] ? 0.15 : 0.0,
+						'has_patterns'      => [] !== $entry['patternSuggestions'] ? 0.1 : 0.0,
+						'has_description'   => '' !== $entry['description'] ? 0.05 : 0.0,
+					]
+				);
+			$source_signals   = [ 'llm_response', 'template_surface' ];
+
+			if ( [] !== $entry['operations'] ) {
+				$source_signals[] = 'has_operations';
+			}
+			if ( [] !== $entry['templateParts'] ) {
+				$source_signals[] = 'has_template_parts';
+			}
+			if ( [] !== $entry['patternSuggestions'] ) {
+				$source_signals[] = 'has_pattern_suggestions';
+			}
+
+			if ( array_key_exists( 'ranking', $suggestion ) || isset( $suggestion['confidence'] ) || isset( $suggestion['score'] ) ) {
+				$entry['ranking'] = RankingContract::normalize(
+					is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [],
+					[
+						'score'         => $computed_score,
+						'reason'        => (string) ( $suggestion['description'] ?? '' ),
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [ 'source' => 'llm', 'surface' => 'template' ],
+						'operations'    => $entry['operations'],
+					]
+				);
+			}
+
+			$entry['_rankScore'] = $computed_score;
+			$entry['_rankOrder'] = $order++;
+			$valid[]             = $entry;
 		}
 
-		return array_slice( $valid, 0, 3 );
+		usort(
+			$valid,
+			static function ( array $left, array $right ): int {
+				$score_compare = (float) ( $right['_rankScore'] ?? 0.0 ) <=> (float) ( $left['_rankScore'] ?? 0.0 );
+
+				if ( 0 !== $score_compare ) {
+					return $score_compare;
+				}
+
+				return (int) ( $left['_rankOrder'] ?? 0 ) <=> (int) ( $right['_rankOrder'] ?? 0 );
+			}
+		);
+
+		return array_slice(
+			array_map(
+				static function ( array $suggestion ): array {
+					unset( $suggestion['_rankOrder'] );
+					unset( $suggestion['_rankScore'] );
+					return $suggestion;
+				},
+				$valid
+			),
+			0,
+			3
+		);
 	}
 
 	/**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\Support\FormatsDocsGuidance;
+use FlavorAgent\Support\RankingContract;
 
 final class Prompt {
 
@@ -473,6 +474,7 @@ SYSTEM;
 
 	private static function validate_suggestions( array $suggestions, string $group ): array {
 		$valid = [];
+		$order = 0;
 		foreach ( $suggestions as $s ) {
 			if ( ! is_array( $s ) || empty( $s['label'] ) ) {
 				continue;
@@ -516,9 +518,68 @@ SYSTEM;
 				'cssVar'           => isset( $s['cssVar'] ) ? sanitize_text_field( $s['cssVar'] ) : null,
 			];
 
-			$valid[] = $normalized;
+			$has_executable_updates = ! empty( $normalized['attributeUpdates'] );
+			$computed_score         = isset( $s['confidence'] )
+				? max( 0.0, min( 1.0, (float) $s['confidence'] ) )
+				: RankingContract::derive_score(
+					0.45,
+					[
+						'has_executable_updates' => $has_executable_updates ? 0.25 : 0.0,
+						'has_description'        => '' !== $normalized['description'] ? 0.15 : 0.0,
+						'has_type'               => null !== $type && '' !== $type ? 0.05 : 0.0,
+						'has_preview'            => null !== $normalized['preview'] && '' !== $normalized['preview'] ? 0.05 : 0.0,
+					]
+				);
+			$source_signals         = [ 'llm_response', $group . '_surface' ];
+
+			if ( $has_executable_updates ) {
+				$source_signals[] = 'has_executable_updates';
+			}
+
+			if ( '' !== $normalized['description'] ) {
+				$source_signals[] = 'has_description';
+			}
+
+			if ( array_key_exists( 'ranking', $s ) || isset( $s['confidence'] ) || isset( $s['score'] ) ) {
+				$normalized['ranking'] = RankingContract::normalize(
+					is_array( $s['ranking'] ?? null ) ? $s['ranking'] : [],
+					[
+						'score'         => $computed_score,
+						'reason'        => (string) ( $s['description'] ?? '' ),
+						'sourceSignals' => $source_signals,
+						'safetyMode'    => 'validated',
+						'freshnessMeta' => [ 'source' => 'llm', 'group' => $group ],
+						'advisoryType'  => 'block' === $group ? (string) ( $s['type'] ?? '' ) : '',
+					]
+				);
+			}
+
+			$normalized['_rankScore'] = $computed_score;
+			$normalized['_rankOrder'] = $order++;
+			$valid[]                  = $normalized;
 		}
-		return $valid;
+
+		usort(
+			$valid,
+			static function ( array $left, array $right ): int {
+				$score_compare = (float) ( $right['_rankScore'] ?? 0.0 ) <=> (float) ( $left['_rankScore'] ?? 0.0 );
+
+				if ( 0 !== $score_compare ) {
+					return $score_compare;
+				}
+
+				return (int) ( $left['_rankOrder'] ?? 0 ) <=> (int) ( $right['_rankOrder'] ?? 0 );
+			}
+		);
+
+		return array_map(
+			static function ( array $suggestion ): array {
+				unset( $suggestion['_rankOrder'] );
+				unset( $suggestion['_rankScore'] );
+				return $suggestion;
+			},
+			$valid
+		);
 	}
 
 	private static function filter_suggestion_for_content_only( array $suggestion, array $content_attribute_keys ): ?array {

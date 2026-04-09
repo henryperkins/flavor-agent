@@ -1176,6 +1176,13 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame( 0.82, $result['recommendations'][0]['ranking']['score'] ?? null );
+		$this->assertSame( 'Matches the current context.', $result['recommendations'][0]['ranking']['reason'] ?? null );
+		$this->assertSame( 'validated', $result['recommendations'][0]['ranking']['safetyMode'] ?? null );
+		$this->assertSame(
+			[ 'qdrant_semantic', 'qdrant_structural', 'llm_ranker' ],
+			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
+		);
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 	}

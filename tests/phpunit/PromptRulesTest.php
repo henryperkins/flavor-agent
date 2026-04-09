@@ -498,4 +498,54 @@ final class PromptRulesTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( [], $result['styles'] );
 	}
+
+	public function test_parse_response_normalizes_ranking_contract_when_confidence_present(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Refine heading hierarchy',
+							'description' => 'Use a more structured heading level.',
+							'type'        => 'structural_recommendation',
+							'confidence'  => 0.71,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 0.71, $result['block'][0]['ranking']['score'] );
+		$this->assertSame( 'validated', $result['block'][0]['ranking']['safetyMode'] );
+		$this->assertSame( 'structural_recommendation', $result['block'][0]['ranking']['advisoryType'] );
+		$this->assertSame( [ 'llm_response', 'block_surface' ], $result['block'][0]['ranking']['sourceSignals'] );
+	}
+
+	public function test_parse_response_ranks_block_suggestions_by_computed_quality_signals(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Advisory only',
+							'description' => 'General suggestion.',
+							'type'        => 'structural_recommendation',
+						],
+						[
+							'label'            => 'Executable update',
+							'description'      => 'Apply a concrete attribute update.',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => [
+								'level' => 2,
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Executable update', $result['block'][0]['label'] );
+	}
 }
