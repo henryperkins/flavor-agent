@@ -451,7 +451,7 @@ SYSTEM;
 			$label .= ' (' . (int) $node['childCount'] . ' children)';
 		}
 
-		if ( ! empty( $node['isSelected'] ) || ( $selected_block_name && $node['block'] === $selected_block_name ) ) {
+		if ( ! empty( $node['isSelected'] ) ) {
 			$label .= ' <- selected';
 		}
 
