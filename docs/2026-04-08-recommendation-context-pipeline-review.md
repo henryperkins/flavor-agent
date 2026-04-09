@@ -287,21 +287,27 @@ This checklist now focuses on the remaining freshness findings above and the nar
 
 ### A. Define the freshness contract
 
-- [ ] Decide per surface whether freshness must include server-only drift:
+- [x] Decide per surface whether freshness must include server-only drift:
   - `template` and `template-part`: yes
   - `global-styles` and `style-book`: yes for prompt-only server inputs that are not already mirrored by the client `executionContract`
-  - `block`: either yes, or explicitly document that freshness remains client-only and excludes docs-guidance drift
-- [ ] Document the two signatures separately in code and docs:
-  - `clientContextSignature`: client-computed snapshot of live editor state
-  - `resolvedContextSignature`: server-computed digest of the merged backend input actually used for prompt/model assembly
-- [ ] Write down the exact fields each surface includes in `resolvedContextSignature` so future changes do not silently widen or narrow freshness.
+  - `block`: client-review-only with server apply-time revalidation (`resolvedContextSignature`)
+- [x] Document the signature split used by the runtime:
+  - `contextSignature`: client-computed snapshot of live editor state
+  - `reviewContextSignature`: server-computed digest of bounded prompt-shaper review inputs (template, template-part, global-styles, style-book)
+  - `resolvedContextSignature`: server-computed digest of apply-time context + prompt used for mutation safety checks
+- [x] Keep per-surface field ownership explicit in ability/store code:
+  - template/template-part review signature inputs: prompt-visible candidate patterns, bounded theme tokens, bounded docs-guidance digest
+  - global-styles review signature inputs: bounded theme tokens, bounded docs-guidance digest
+  - style-book review signature inputs: bounded theme tokens, review-manifest `supports` + `inspectorPanels`, bounded docs-guidance digest
+  - block remains apply-signature-only in this pass
 
 ### B. Add server-side resolved-input fingerprinting
 
 - [x] Add a deterministic PHP helper that computes `resolvedContextSignature` after server collection, live overlay, and prompt-shaping context resolution such as patterns, theme tokens, supported style paths, and style-book block-manifest data.
 - [x] Compute and return `resolvedContextSignature` for `template`, `template-part`, `global-styles`, `style-book`, and `block`, and persist it separately from the existing client signature.
-- [ ] Expand the resolved signature to include docs-guidance preparation, or a stable digest of the final assembled prompt input, so server-only docs drift invalidates review results before apply.
-- [ ] For `block`, either compute the same fully prompt-sensitive server signature or explicitly document that its hybrid freshness contract still excludes docs-guidance drift.
+- [x] Add a dedicated review signature for server-review freshness instead of redefining apply freshness.
+- [x] Keep `resolvedContextSignature` scoped to apply-time safety.
+- [x] Keep `block` on client-review freshness + server-apply safety in this pass.
 
 ### C. Wire client/store freshness correctly
 
@@ -309,7 +315,7 @@ This checklist now focuses on the remaining freshness findings above and the nar
 - [x] Add a pre-apply freshness revalidation path through `resolveSignatureOnly` on the executable recommendation endpoints.
 - [x] On apply for `template`, `template-part`, `global-styles`, and `style-book`, compare live and stored client signatures first, then compare the stored and revalidated server `resolvedContextSignature`.
 - [x] Distinguish local client drift from server-side drift in apply-time stale handling.
-- [ ] If review freshness itself must reflect server-only prompt shapers before apply, add a server-issued review signature or smaller prompt-shaper fingerprints to recommendation responses and fold them into the UI freshness model.
+- [x] Add server-issued `reviewContextSignature` for template/template-part/style responses and fold it into review freshness UI/store model.
 
 ### D. Tighten docs grounding inputs without fragmenting cache keys
 
@@ -320,7 +326,7 @@ This checklist now focuses on the remaining freshness findings above and the nar
   - first N names only when needed
   - booleans or normalized markers for scope families
 - [x] Keep `build_wordpress_docs_family_context()` and `build_template_part_wordpress_docs_family_context()` coarse and stable. Prefer counts, booleans, and normalized markers over raw name lists so family-cache reuse remains effective.
-- [ ] Add focused regression assertions that lock the bounded visible-pattern and override-aware docs-grounding markers in place.
+- [x] Add focused regression assertions that lock the bounded visible-pattern and override-aware docs-grounding markers in place.
 
 ### E. Add regression coverage at the right boundary
 
@@ -330,7 +336,7 @@ This checklist now focuses on the remaining freshness findings above and the nar
 - [ ] Add PHP docs-grounding tests for template visible-pattern query shaping.
 - [ ] Add PHP docs-grounding tests for template-part override-aware query shaping.
 - [ ] Add PHP cache tests proving new family-context fields stay coarse enough to reuse family fallback caches.
-- [ ] Add JS store or integration tests covering the new pre-apply revalidation flow and stale handling for server drift.
+- [x] Add JS store coverage for server-review and server-apply revalidation flow, including stale async completion protection.
 - [ ] Add end-to-end or editor integration coverage that a review becomes stale when:
   - template candidate patterns change server-side
   - template or style docs guidance changes server-side
