@@ -8,7 +8,7 @@
     "wpds": {
       "command": "node",
       "args": [
-        "/home/azureuser/.local/share/codex-mcp/wpds-mcp/server.ts",
+        "C:\\Users\\htper\\AppData\\Local\\codex-mcp\\wpds-mcp\\server.ts",
         "--stdio"
       ],
       "type": "stdio"
