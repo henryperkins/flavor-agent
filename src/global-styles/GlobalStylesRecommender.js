@@ -41,6 +41,7 @@ import {
 	getStyleBookUiState,
 	subscribeToStyleBookUi,
 } from '../style-book/dom';
+import { buildStyleRecommendationRequestInput } from '../style-surfaces/request-input';
 import {
 	getStyleSuggestionToneLabel,
 	isInlineStyleNotice,
@@ -61,60 +62,7 @@ import {
 	getGlobalStylesUserConfig,
 } from '../utils/style-operations';
 import { normalizeTemplateType } from '../utils/template-types';
-
-function getSuggestionKey( suggestion, index ) {
-	if (
-		typeof suggestion?.suggestionKey === 'string' &&
-		suggestion.suggestionKey
-	) {
-		return suggestion.suggestionKey;
-	}
-
-	return `global-styles-${ index }-${
-		suggestion?.label || 'suggestion'
-	}-${ JSON.stringify( suggestion?.operations || [] ) }`;
-}
-
-function buildRequestInput( {
-	scope,
-	prompt,
-	currentConfig,
-	mergedConfig,
-	availableVariations,
-	templateStructure,
-	templateVisibility,
-	designSemantics,
-	contextSignature,
-	themeTokenDiagnostics,
-} ) {
-	const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
-
-	return {
-		scope: {
-			surface: 'global-styles',
-			scopeKey: scope?.scopeKey || '',
-			globalStylesId: scope?.globalStylesId || '',
-			postType: scope?.postType || 'global_styles',
-			entityId: scope?.entityId || scope?.globalStylesId || '',
-			entityKind: scope?.entityKind || 'root',
-			entityName: scope?.entityName || 'globalStyles',
-			stylesheet: scope?.stylesheet || '',
-			templateSlug: scope?.templateSlug || '',
-			templateType: scope?.templateType || '',
-		},
-		styleContext: {
-			currentConfig,
-			mergedConfig,
-			availableVariations,
-			templateStructure,
-			templateVisibility,
-			designSemantics,
-			themeTokenDiagnostics,
-		},
-		contextSignature,
-		...( normalizedPrompt ? { prompt: normalizedPrompt } : {} ),
-	};
-}
+import { getSuggestionKey } from '../inspector/suggestion-keys';
 
 function GlobalStylesPanel( {
 	prompt,
@@ -567,7 +515,8 @@ export default function GlobalStylesRecommender() {
 	const currentRequestInput = useMemo(
 		() =>
 			scope
-				? buildRequestInput( {
+				? buildStyleRecommendationRequestInput( {
+						surface: 'global-styles',
 						scope,
 						prompt,
 						currentConfig,

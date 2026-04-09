@@ -29,6 +29,7 @@ import {
 	getLiveBlockContextSignature,
 } from '../context/collector';
 import { getSurfaceCapability } from '../utils/capability-flags';
+import { buildContextSignature } from '../utils/context-signature';
 
 function formatChangeType( type ) {
 	return humanizeString( type || 'change' );
@@ -168,7 +169,7 @@ function buildNavigationContextSignature( {
 
 	delete requestContext.blockClientId;
 
-	return JSON.stringify( requestContext );
+	return buildContextSignature( requestContext );
 }
 
 function groupNavigationSuggestions( suggestions = [] ) {

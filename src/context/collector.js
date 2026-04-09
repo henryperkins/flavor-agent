@@ -21,6 +21,7 @@ import {
 } from '../utils/structural-identity';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
+import { buildContextSignature } from '../utils/context-signature';
 export { buildBlockRecommendationContextSignature };
 
 // ── Annotated tree cache ─────────────────────────────────────────────────────
@@ -30,34 +31,6 @@ export { buildBlockRecommendationContextSignature };
 // single shared annotated tree is built once per selection change and reused
 // for both the structural context pass and the structuralBranch summarizeTree
 // pass.
-
-/**
- * Sort object keys recursively so structurally-identical values stringify
- * consistently regardless of key insertion order.
- *
- * @param {unknown} value Comparable value.
- * @return {unknown} Normalized comparable value.
- */
-function normalizeComparableValue( value ) {
-	if ( Array.isArray( value ) ) {
-		return value.map( ( item ) => normalizeComparableValue( item ) );
-	}
-
-	if ( value && typeof value === 'object' ) {
-		return Object.fromEntries(
-			Object.entries( value )
-				.sort( ( [ leftKey ], [ rightKey ] ) =>
-					leftKey.localeCompare( rightKey )
-				)
-				.map( ( [ key, entryValue ] ) => [
-					key,
-					normalizeComparableValue( entryValue ),
-				] )
-		);
-	}
-
-	return value;
-}
 
 /**
  * Build a stable fingerprint for the subset of tree data that affects
@@ -72,14 +45,14 @@ function fingerprintTree( tree ) {
 		return ( Array.isArray( nodes ) ? nodes : [] ).map( ( node ) => ( {
 			clientId: node?.clientId || '',
 			name: node?.name || '',
-			currentAttributes: normalizeComparableValue(
-				node?.currentAttributes || {}
-			),
+			// buildContextSignature() normalizes nested key order for the full
+			// fingerprint, so the raw attribute object can stay intact here.
+			currentAttributes: node?.currentAttributes || {},
 			innerBlocks: toIdentityInputs( node?.innerBlocks || [] ),
 		} ) );
 	}
 
-	return JSON.stringify( toIdentityInputs( tree ) );
+	return buildContextSignature( toIdentityInputs( tree ) );
 }
 
 /**

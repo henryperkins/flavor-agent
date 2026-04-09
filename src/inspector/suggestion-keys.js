@@ -1,3 +1,5 @@
+import { stableSerialize } from '../utils/structural-equality';
+
 /**
  * @param {Object} suggestion Suggestion object.
  * @return {string} Normalized panel bucket for the suggestion.
@@ -44,7 +46,7 @@ export function getSuggestionKey( suggestion ) {
 	const label = normalizeKeyFragment(
 		suggestion?.label || suggestion?.cssVar || suggestion?.type
 	);
-	const fingerprint = JSON.stringify( {
+	const fingerprint = stableSerialize( {
 		panel,
 		type: suggestion?.type || '',
 		label: suggestion?.label || '',

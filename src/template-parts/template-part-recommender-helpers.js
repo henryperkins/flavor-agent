@@ -8,6 +8,7 @@ import {
 	normalizeVisiblePatternNames,
 	summarizeBlockAttributes,
 } from '../utils/live-structure-snapshots';
+import { buildContextSignature } from '../utils/context-signature';
 
 const TEMPLATE_PART_ATTRIBUTE_FIELDS = [
 	'tagName',
@@ -420,7 +421,7 @@ export function buildTemplatePartRecommendationContextSignature( {
 	const normalizedVisiblePatternNames =
 		normalizeVisiblePatternNames( visiblePatternNames );
 
-	return JSON.stringify( {
+	return buildContextSignature( {
 		blockTree: Array.isArray( editorStructure?.blockTree )
 			? editorStructure.blockTree
 			: null,

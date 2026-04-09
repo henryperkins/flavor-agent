@@ -589,11 +589,16 @@ async function ensurePanelOpen( page, title, content ) {
 		return;
 	}
 
-	const toggle = page
-		.locator(
-			`button:has-text("${ title }"), [role="button"]:has-text("${ title }")`
-		)
+	const buttonToggle = page
+		.getByRole( 'button', { name: title, exact: true } )
 		.first();
+	const genericToggle = page
+		.locator( `button:has-text("${ title }"), [role="button"]:has-text("${ title }")` )
+		.first();
+	const toggle =
+		( await buttonToggle.isVisible().catch( () => false ) )
+			? buttonToggle
+			: genericToggle;
 
 	await expect( toggle ).toBeVisible();
 
@@ -604,10 +609,14 @@ async function ensurePanelOpen( page, title, content ) {
 	await expect( content ).toBeVisible();
 }
 
-function getVisibleSearchInput( page ) {
-	return page
-		.locator( '[role="searchbox"]:visible, input[type="search"]:visible' )
-		.first();
+async function getVisibleSearchInput( page ) {
+	const roleSearch = page.getByRole( 'searchbox' ).first();
+
+	if ( await roleSearch.isVisible().catch( () => false ) ) {
+		return roleSearch;
+	}
+
+	return page.locator( 'input[type="search"]:visible' ).first();
 }
 
 async function getTemplateTarget( page ) {
@@ -1697,7 +1706,7 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		} )
 		.click();
 
-	const searchInput = getVisibleSearchInput( page );
+	const searchInput = await getVisibleSearchInput( page );
 
 	await expect( searchInput ).toBeVisible();
 	await searchInput.fill( searchPrompt );

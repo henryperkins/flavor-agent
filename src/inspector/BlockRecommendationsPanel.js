@@ -41,6 +41,7 @@ import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
+import { shallowStructuralEqual } from '../utils/structural-equality';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const BLOCK_COMPOSER_HELPER_TEXT =
@@ -86,7 +87,7 @@ export function findBlockPath( blocks, clientId, path = [] ) {
 }
 
 export function blockPathMatches( left, right ) {
-	return JSON.stringify( left || [] ) === JSON.stringify( right || [] );
+	return shallowStructuralEqual( left || [], right || [] );
 }
 
 function getCanRecommendBlocks() {

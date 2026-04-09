@@ -15,6 +15,7 @@ import {
 	TEMPLATE_OPERATION_REPLACE,
 	TEMPLATE_PART_REVIEW_ACTION,
 } from '../template-recommender-helpers';
+import { buildContextSignature } from '../../utils/context-signature';
 
 describe( 'template recommender helpers', () => {
 	test( 'buildTemplateFetchInput trims prompt and keeps template requests template-global', () => {
@@ -102,7 +103,7 @@ describe( 'template recommender helpers', () => {
 				],
 			} )
 		).toBe(
-			JSON.stringify( {
+			buildContextSignature( {
 				assignedParts: [ { slug: 'site-header', area: 'header' } ],
 				emptyAreas: [ 'footer' ],
 				topLevelBlockTree: null,
@@ -169,7 +170,7 @@ describe( 'template recommender helpers', () => {
 				},
 			} )
 		).toBe(
-			JSON.stringify( {
+			buildContextSignature( {
 				assignedParts: [],
 				emptyAreas: [],
 				topLevelBlockTree: [
