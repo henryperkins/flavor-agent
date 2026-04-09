@@ -166,4 +166,71 @@ final class PromptFormattingTest extends TestCase {
 
 		$this->assertStringNotContainsString( '## Parent container', $prompt );
 	}
+
+	public function test_build_user_preserves_existing_sections_alongside_new_context(): void {
+		$context = [
+			'block'                  => [
+				'name'               => 'core/paragraph',
+				'title'              => 'Paragraph',
+				'currentAttributes'  => [ 'content' => 'Hello' ],
+				'inspectorPanels'    => [ 'color' => true ],
+				'structuralIdentity' => [
+					'role'     => 'body-text',
+					'position' => [ 'depth' => 2 ],
+				],
+			],
+			'siblingsBefore'         => [ 'core/heading' ],
+			'siblingsAfter'          => [ 'core/image' ],
+			'siblingSummariesBefore' => [
+				[
+					'block'       => 'core/heading',
+					'role'        => 'section-heading',
+					'visualHints' => [ 'textAlign' => 'center' ],
+				],
+			],
+			'siblingSummariesAfter'  => [
+				[
+					'block'       => 'core/image',
+					'visualHints' => [ 'align' => 'wide' ],
+				],
+			],
+			'parentContext'           => [
+				'block'       => 'core/group',
+				'role'        => 'content-area',
+				'childCount'  => 3,
+				'visualHints' => [ 'backgroundColor' => 'base' ],
+			],
+			'structuralAncestors'    => [
+				[ 'block' => 'core/group', 'role' => 'content-area' ],
+			],
+			'structuralBranch'       => [
+				[
+					'block'    => 'core/group',
+					'children' => [
+						[ 'block' => 'core/paragraph', 'isSelected' => true ],
+					],
+				],
+			],
+			'themeTokens'            => [
+				'colors' => [ 'base' => '#fff', 'contrast' => '#000' ],
+			],
+		];
+
+		$prompt = Prompt::build_user( $context );
+
+		$this->assertStringContainsString( '## Block', $prompt );
+		$this->assertStringContainsString( '## Surrounding blocks', $prompt );
+		$this->assertStringContainsString( '## Parent container', $prompt );
+		$this->assertStringContainsString( '## Structural ancestors', $prompt );
+		$this->assertStringContainsString( '## Structural branch', $prompt );
+		$this->assertStringContainsString( '## Theme Tokens', $prompt );
+
+		$this->assertStringContainsString( 'Before:', $prompt );
+		$this->assertStringContainsString( 'After:', $prompt );
+		$this->assertStringContainsString( 'core/heading (section-heading', $prompt );
+		$this->assertStringContainsString( 'core/image (align:wide)', $prompt );
+		$this->assertStringContainsString( 'core/group (content-area)', $prompt );
+		$this->assertStringContainsString( 'bg:base', $prompt );
+		$this->assertStringContainsString( 'paragraph <- selected', $prompt );
+	}
 }

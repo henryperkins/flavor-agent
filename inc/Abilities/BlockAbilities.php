@@ -213,10 +213,10 @@ final class BlockAbilities {
 			$normalized['block']['configAttributes'] = $config_attributes;
 		}
 
-			$normalized['siblingsBefore'] = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
-			$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
+		$normalized['siblingsBefore'] = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
+		$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
 
-			$parent_context = self::normalize_parent_context( $context['parentContext'] ?? [] );
+		$parent_context = self::normalize_parent_context( $context['parentContext'] ?? [] );
 		if ( ! empty( $parent_context ) ) {
 			$normalized['parentContext'] = $parent_context;
 		}
@@ -231,17 +231,17 @@ final class BlockAbilities {
 			$normalized['siblingSummariesAfter'] = $sibling_summaries_after;
 		}
 
-			$structural_ancestors = self::normalize_structural_summary_items( $context['structuralAncestors'] ?? [] );
+		$structural_ancestors = self::normalize_structural_summary_items( $context['structuralAncestors'] ?? [] );
 		if ( ! empty( $structural_ancestors ) ) {
 			$normalized['structuralAncestors'] = $structural_ancestors;
 		}
 
-			$structural_branch = self::normalize_structural_summary_items( $context['structuralBranch'] ?? [], true );
+		$structural_branch = self::normalize_structural_summary_items( $context['structuralBranch'] ?? [], true );
 		if ( ! empty( $structural_branch ) ) {
 			$normalized['structuralBranch'] = $structural_branch;
 		}
 
-			$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+		$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 		if ( ! empty( $theme_tokens ) ) {
 			$normalized['themeTokens'] = $theme_tokens;
 		}
@@ -263,33 +263,15 @@ final class BlockAbilities {
 			return new \WP_Error( 'missing_block_name', 'selectedBlock.blockName is required.', [ 'status' => 400 ] );
 		}
 
-			$context_from_server = ServerCollector::for_block(
-				$block_name,
-				$attributes,
-				$inner_blocks,
-				$is_inside_content_only,
-				$parent_context,
-				$sibling_summaries_before,
-				$sibling_summaries_after
-			);
-
-		$context = $context_from_server;
-		$context['block']          = $context_from_server['block'] ?? $context['block'];
-		$context['themeTokens']    = $context_from_server['themeTokens'] ?? $context['themeTokens'];
-		$context['siblingsBefore'] = $context_from_server['siblingsBefore'] ?? $context['siblingsBefore'];
-		$context['siblingsAfter']  = $context_from_server['siblingsAfter'] ?? $context['siblingsAfter'];
-
-		if ( ! empty( $context_from_server['parentContext'] ) ) {
-			$context['parentContext'] = $context_from_server['parentContext'];
-		}
-
-		if ( ! empty( $context_from_server['siblingSummariesBefore'] ) ) {
-			$context['siblingSummariesBefore'] = $context_from_server['siblingSummariesBefore'];
-		}
-
-		if ( ! empty( $context_from_server['siblingSummariesAfter'] ) ) {
-			$context['siblingSummariesAfter'] = $context_from_server['siblingSummariesAfter'];
-		}
+		$context = ServerCollector::for_block(
+			$block_name,
+			$attributes,
+			$inner_blocks,
+			$is_inside_content_only,
+			$parent_context,
+			$sibling_summaries_before,
+			$sibling_summaries_after
+		);
 
 		$context['block']['editingMode']         = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
 		$context['block']['supportsContentRole'] = ! empty( $selected['supportsContentRole'] ) || ! empty( $context['block']['supportsContentRole'] );
