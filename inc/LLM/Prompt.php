@@ -81,6 +81,10 @@ Rules:
 - Only suggest preset values that exist in the provided themeTokens.
 - When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented Gutenberg capabilities or theme.json standards.
 - When structural identity is provided, treat it as the block's job on this page. Distinguish role and location from raw block name alone (for example, header navigation vs footer navigation, main query vs sidebar query).
+- When parent container context shows a dark or high-overlay container (for example, high dimRatio or a dark/contrast background preset), prefer light/contrast text colors and ensure sufficient contrast.
+- When the parent container uses a constrained layout, respect its width constraints in dimension suggestions.
+- Use sibling context to maintain visual consistency - if surrounding blocks use a particular alignment or color scheme, prefer suggestions that harmonize rather than clash.
+- Use structural ancestors and the structural branch to infer section role and composition (header, footer, hero, article body, sidebar) when deciding whether a suggestion fits the selected block's neighborhood.
 - If the block already has good values, return fewer or no suggestions.
 - Return 2-6 suggestions total. Prioritize high-impact visual improvements.
 - If the block is inside a contentOnly container, only suggest changes to content attributes (role=content). Do not suggest style or settings changes — those panels are locked.
@@ -304,27 +308,60 @@ SYSTEM;
 			$parts[] = 'Block pseudo-class styles (hover/focus/active): ' . wp_json_encode( $tokens['blockPseudoStyles'] );
 		}
 
-		if ( ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
+		$has_sibling_summaries = ! empty( $context['siblingSummariesBefore'] ) || ! empty( $context['siblingSummariesAfter'] );
+		if ( $has_sibling_summaries || ! empty( $context['siblingsBefore'] ) || ! empty( $context['siblingsAfter'] ) ) {
 			$parts[] = '';
 			$parts[] = '## Surrounding blocks';
-			if ( ! empty( $context['siblingsBefore'] ) ) {
+
+			$before_summaries = self::format_sibling_summaries(
+				is_array( $context['siblingSummariesBefore'] ?? null ) ? $context['siblingSummariesBefore'] : [],
+				'before'
+			);
+			$after_summaries  = self::format_sibling_summaries(
+				is_array( $context['siblingSummariesAfter'] ?? null ) ? $context['siblingSummariesAfter'] : [],
+				'after'
+			);
+
+			if ( '' !== $before_summaries ) {
+				$parts[] = $before_summaries;
+			} elseif ( ! empty( $context['siblingsBefore'] ) ) {
 				$parts[] = 'Before: ' . implode( ', ', (array) $context['siblingsBefore'] );
 			}
-			if ( ! empty( $context['siblingsAfter'] ) ) {
+
+			if ( '' !== $after_summaries ) {
+				$parts[] = $after_summaries;
+			} elseif ( ! empty( $context['siblingsAfter'] ) ) {
 				$parts[] = 'After: ' . implode( ', ', (array) $context['siblingsAfter'] );
 			}
 		}
 
-		if ( ! empty( $context['structuralAncestors'] ) ) {
+		$parent_context = self::format_parent_context(
+			is_array( $context['parentContext'] ?? null ) ? $context['parentContext'] : null
+		);
+		if ( '' !== $parent_context ) {
 			$parts[] = '';
-			$parts[] = '## Structural ancestors';
-			$parts[] = wp_json_encode( $context['structuralAncestors'] );
+			$parts[] = '## Parent container';
+			$parts[] = $parent_context;
 		}
 
-		if ( ! empty( $context['structuralBranch'] ) ) {
+		$structural_ancestors = self::format_structural_ancestors(
+			is_array( $context['structuralAncestors'] ?? null ) ? $context['structuralAncestors'] : [],
+			is_array( $block['structuralIdentity'] ?? null ) ? $block['structuralIdentity'] : []
+		);
+		if ( '' !== $structural_ancestors ) {
+			$parts[] = '';
+			$parts[] = '## Structural ancestors';
+			$parts[] = $structural_ancestors;
+		}
+
+		$structural_branch = self::format_structural_branch(
+			is_array( $context['structuralBranch'] ?? null ) ? $context['structuralBranch'] : [],
+			is_string( $block['name'] ?? null ) ? $block['name'] : ''
+		);
+		if ( '' !== $structural_branch ) {
 			$parts[] = '';
 			$parts[] = '## Structural branch';
-			$parts[] = wp_json_encode( $context['structuralBranch'] );
+			$parts[] = $structural_branch;
 		}
 
 		if ( ! empty( $docs_guidance ) ) {
@@ -351,6 +388,224 @@ SYSTEM;
 		}
 
 		return implode( "\n", $parts );
+	}
+
+	private static function format_structural_ancestors( array $ancestors, array $selected_identity = [] ): string {
+		if ( empty( $ancestors ) ) {
+			return '';
+		}
+
+		$chain = array_values(
+			array_filter(
+				array_map(
+					static fn( array $ancestor ): string => self::format_structural_label( $ancestor ),
+					$ancestors
+				),
+				static fn( string $label ): bool => $label !== ''
+			)
+		);
+
+		if ( empty( $chain ) ) {
+			return '';
+		}
+
+		$parts = [ implode( ' > ', $chain ) ];
+
+		if ( isset( $selected_identity['position']['depth'] ) ) {
+			$depth_sentence = 'Selected block is ' . (int) $selected_identity['position']['depth'] . ' levels deep';
+
+			if ( ! empty( $selected_identity['templateArea'] ) ) {
+				$depth_sentence .= ' in the ' . sanitize_text_field( (string) $selected_identity['templateArea'] ) . ' template area';
+			} elseif ( ! empty( $selected_identity['location'] ) ) {
+				$depth_sentence .= ' in the ' . sanitize_text_field( (string) $selected_identity['location'] ) . ' area';
+			}
+
+			$parts[] = rtrim( $depth_sentence, '.' ) . '.';
+		}
+
+		return implode( "\n\n", array_filter( $parts ) );
+	}
+
+	private static function format_structural_branch( array $branch, string $selected_block_name ): string {
+		if ( empty( $branch ) ) {
+			return '';
+		}
+
+		$lines = [];
+		foreach ( $branch as $node ) {
+			self::render_structural_branch_node( $node, 0, $lines, $selected_block_name );
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	private static function render_structural_branch_node( array $node, int $depth, array &$lines, string $selected_block_name ): void {
+		$indent = str_repeat( '  ', $depth );
+		$label  = self::format_structural_label( $node );
+
+		if ( $label === '' ) {
+			$label = '(unknown block)';
+		}
+
+		if ( ! empty( $node['childCount'] ) && empty( $node['children'] ) ) {
+			$label .= ' (' . (int) $node['childCount'] . ' children)';
+		}
+
+		if ( ! empty( $node['isSelected'] ) || ( $selected_block_name && $node['block'] === $selected_block_name ) ) {
+			$label .= ' <- selected';
+		}
+
+		$lines[] = $indent . $label;
+
+		if ( ! empty( $node['children'] ) && is_array( $node['children'] ) ) {
+			foreach ( $node['children'] as $child ) {
+				self::render_structural_branch_node( $child, $depth + 1, $lines, $selected_block_name );
+			}
+		}
+
+		if ( ! empty( $node['moreChildren'] ) ) {
+			$lines[] = $indent . '  ... +' . (int) $node['moreChildren'] . ' more children not shown';
+		}
+	}
+
+	private static function format_parent_context( ?array $parent_context ): string {
+		if ( empty( $parent_context ) ) {
+			return '';
+		}
+
+		$label = self::format_structural_label( $parent_context );
+		if ( '' === $label ) {
+			return '';
+		}
+
+		$parts = [ $label ];
+
+		$visual = self::format_visual_hints( $parent_context['visualHints'] ?? [], true );
+		if ( $visual !== '' ) {
+			$parts[] = '[' . $visual . ']';
+		}
+
+		if ( ! empty( $parent_context['childCount'] ) ) {
+			$parts[] = '(' . (int) $parent_context['childCount'] . ' children)';
+		}
+
+		return implode( ' ', array_filter( $parts ) );
+	}
+
+	private static function format_visual_hints( array $visual_hints, bool $include_parent_extensions = false ): string {
+		if ( empty( $visual_hints ) ) {
+			return '';
+		}
+
+		$parts = [];
+
+		$bg = $visual_hints['style']['color']['background'] ?? $visual_hints['backgroundColor'] ?? null;
+		if ( $bg ) {
+			$parts[] = 'bg:' . sanitize_text_field( (string) $bg );
+		}
+
+		$text = $visual_hints['style']['color']['text'] ?? $visual_hints['textColor'] ?? null;
+		if ( $text ) {
+			$parts[] = 'text:' . sanitize_text_field( (string) $text );
+		}
+
+		if ( ! empty( $visual_hints['gradient'] ) ) {
+			$parts[] = 'gradient:' . sanitize_text_field( (string) $visual_hints['gradient'] );
+		}
+
+		if ( ! empty( $visual_hints['align'] ) ) {
+			$parts[] = 'align:' . sanitize_text_field( (string) $visual_hints['align'] );
+		}
+
+		if ( ! empty( $visual_hints['textAlign'] ) ) {
+			$parts[] = 'textAlign:' . sanitize_text_field( (string) $visual_hints['textAlign'] );
+		}
+
+		$layout = $visual_hints['layout'] ?? [];
+		if ( ! empty( $layout['type'] ) ) {
+			$parts[] = 'layout:' . sanitize_text_field( (string) $layout['type'] );
+		}
+
+		if ( ! empty( $layout['justifyContent'] ) ) {
+			$parts[] = 'justify:' . sanitize_text_field( (string) $layout['justifyContent'] );
+		}
+
+		if ( $include_parent_extensions ) {
+			if ( isset( $visual_hints['dimRatio'] ) ) {
+				$dim     = $visual_hints['dimRatio'];
+				$parts[] = 'overlay:' . ( is_numeric( $dim ) ? ( (float) $dim ) . '%' : sanitize_text_field( (string) $dim ) );
+			}
+
+			if ( isset( $visual_hints['minHeight'] ) ) {
+				$height  = (string) $visual_hints['minHeight'];
+				$unit    = isset( $visual_hints['minHeightUnit'] ) ? (string) $visual_hints['minHeightUnit'] : '';
+				$parts[] = 'minHeight:' . sanitize_text_field( $height . $unit );
+			}
+
+			if ( ! empty( $visual_hints['tagName'] ) ) {
+				$parts[] = 'tag:' . sanitize_text_field( (string) $visual_hints['tagName'] );
+			}
+		}
+
+		return implode( ', ', array_filter( $parts ) );
+	}
+
+	private static function format_sibling_summaries( array $summaries, string $direction ): string {
+		if ( empty( $summaries ) ) {
+			return '';
+		}
+
+		$lines = [ ucfirst( $direction ) . ':' ];
+
+		foreach ( $summaries as $summary ) {
+			if ( empty( $summary['block'] ) ) {
+				continue;
+			}
+
+			$label = sanitize_text_field( (string) $summary['block'] );
+			$meta  = [];
+
+			if ( ! empty( $summary['role'] ) ) {
+				$meta[] = sanitize_text_field( (string) $summary['role'] );
+			}
+
+			$visual = self::format_visual_hints( $summary['visualHints'] ?? [] );
+			if ( $visual !== '' ) {
+				$meta[] = $visual;
+			}
+
+			if ( ! empty( $meta ) ) {
+				$label .= ' (' . implode( '; ', $meta ) . ')';
+			}
+
+			$lines[] = '  - ' . $label;
+		}
+
+		return implode( "\n", array_filter( $lines ) );
+	}
+
+	private static function format_structural_label( array $node ): string {
+		if ( empty( $node['block'] ) ) {
+			return '';
+		}
+
+		$label = sanitize_text_field( (string) $node['block'] );
+
+		if ( ! empty( $node['templateArea'] ) ) {
+			$label .= '(' . sanitize_text_field( (string) $node['templateArea'] ) . ')';
+		} elseif ( ! empty( $node['templatePartSlug'] ) ) {
+			$label .= '(' . sanitize_text_field( (string) $node['templatePartSlug'] ) . ')';
+		}
+
+		if ( ! empty( $node['role'] ) ) {
+			$label .= ' (' . sanitize_text_field( (string) $node['role'] ) . ')';
+		}
+
+		if ( ! empty( $node['job'] ) ) {
+			$label .= ' "' . sanitize_text_field( (string) $node['job'] ) . '"';
+		}
+
+		return $label;
 	}
 
 	/**

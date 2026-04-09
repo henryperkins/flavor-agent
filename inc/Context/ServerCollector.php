@@ -52,13 +52,19 @@ final class ServerCollector {
 		string $block_name,
 		array $attributes = [],
 		array $inner_blocks = [],
-		bool $is_inside_content_only = false
+		bool $is_inside_content_only = false,
+		array $parent_context = [],
+		array $sibling_summaries_before = [],
+		array $sibling_summaries_after = []
 	): array {
 		return self::block_context_collector()->for_block(
 			$block_name,
 			$attributes,
 			$inner_blocks,
-			$is_inside_content_only
+			$is_inside_content_only,
+			$parent_context,
+			$sibling_summaries_before,
+			$sibling_summaries_after
 		);
 	}
 

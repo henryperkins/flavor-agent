@@ -68,6 +68,30 @@ final class ServerCollectorTest extends TestCase {
 		);
 	}
 
+	public function test_for_block_preserves_parent_and_sibling_context(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/simple',
+			[
+				'title' => 'Simple',
+			]
+		);
+
+		$result = ServerCollector::for_block(
+			'plugin/simple',
+			[],
+			[],
+			false,
+			[ 'block' => 'core/group' ],
+			[ [ 'block' => 'core/heading' ] ],
+			[ [ 'block' => 'core/image' ] ]
+		);
+
+		$this->assertSame( 'plugin/simple', $result['block']['name'] );
+		$this->assertSame( [ [ 'block' => 'core/heading' ] ], $result['siblingSummariesBefore'] );
+		$this->assertSame( [ [ 'block' => 'core/image' ] ], $result['siblingSummariesAfter'] );
+		$this->assertSame( [ 'block' => 'core/group' ], $result['parentContext'] );
+	}
+
 	public function test_for_template_part_areas_returns_slug_to_area_lookup(): void {
 		$this->assertSame(
 			[

@@ -203,6 +203,180 @@ describe( 'collectBlockContext', () => {
 		expect( result.structuralBranch ).toEqual( [] );
 		expect( mockFindBranchRoot ).not.toHaveBeenCalled();
 	} );
+
+	test( 'includes parent context and sibling summaries with visual hints', () => {
+		const selectedNode = {
+			clientId: 'client-1',
+			name: 'core/button',
+			innerBlocks: [],
+			structuralIdentity: { role: 'cta-button' },
+		};
+		const parentNode = {
+			clientId: 'parent-1',
+			name: 'core/group',
+			innerBlocks: [ selectedNode ],
+			structuralIdentity: {
+				role: 'header-cover',
+				job: 'Header container',
+			},
+			childCount: 2,
+		};
+		const beforeNode = {
+			clientId: 'sibling-before',
+			name: 'core/paragraph',
+			innerBlocks: [],
+			structuralIdentity: { role: 'lede' },
+		};
+		const afterNode = {
+			clientId: 'sibling-after',
+			name: 'core/image',
+			innerBlocks: [],
+			structuralIdentity: { role: 'content-image' },
+		};
+
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/button',
+			title: 'Button',
+			currentAttributes: {},
+			inspectorPanels: {},
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: null,
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: null,
+			childCount: 0,
+		} );
+
+		mockIntrospectBlockTree.mockReturnValue( [
+			{
+				clientId: 'parent-1',
+				innerBlocks: [
+					{ clientId: 'sibling-before', innerBlocks: [] },
+					{ clientId: 'client-1', innerBlocks: [] },
+					{ clientId: 'sibling-after', innerBlocks: [] },
+				],
+			},
+		] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [
+			{
+				...parentNode,
+				innerBlocks: [ beforeNode, selectedNode, afterNode ],
+			},
+		] );
+		mockFindNodePath.mockImplementation( ( tree, predicate ) => {
+			const ordered = [ parentNode, beforeNode, selectedNode, afterNode ];
+			const target = ordered.find( predicate );
+
+			if ( ! target ) {
+				return null;
+			}
+
+			if ( target.clientId === 'client-1' ) {
+				return [ parentNode, selectedNode ];
+			}
+
+			if ( target.clientId === 'sibling-before' ) {
+				return [ parentNode, beforeNode ];
+			}
+
+			if ( target.clientId === 'sibling-after' ) {
+				return [ parentNode, afterNode ];
+			}
+
+			return [ target ];
+		} );
+		mockFindBranchRoot.mockReturnValue( parentNode );
+		mockSummarizeTree.mockReturnValue( [
+			{
+				block: 'core/group',
+				children: [ { block: 'core/button', isSelected: true } ],
+			},
+		] );
+		mockCollectThemeTokens.mockReturnValue( {} );
+		mockSummarizeTokens.mockReturnValue( {} );
+		mockSelect.mockReturnValue( {
+			getBlockRootClientId: jest.fn().mockReturnValue( 'parent-1' ),
+			getBlockOrder: jest
+				.fn()
+				.mockReturnValue( [
+					'sibling-before',
+					'client-1',
+					'sibling-after',
+				] ),
+			getBlockName: jest.fn().mockImplementation( ( id ) => {
+				const map = {
+					'parent-1': 'core/cover',
+					'sibling-before': 'core/paragraph',
+					'sibling-after': 'core/image',
+				};
+				return map[ id ];
+			} ),
+			getBlockAttributes: jest.fn().mockImplementation( ( id ) => {
+				if ( id === 'parent-1' ) {
+					return {
+						backgroundColor: 'contrast',
+						dimRatio: 80,
+						layout: { type: 'constrained' },
+					};
+				}
+				if ( id === 'sibling-before' ) {
+					return { textAlign: 'center' };
+				}
+				if ( id === 'sibling-after' ) {
+					return {
+						align: 'wide',
+						style: {
+							color: {
+								text: 'var(--wp--preset--color--contrast)',
+							},
+						},
+					};
+				}
+				return {};
+			} ),
+			getBlockCount: jest.fn().mockReturnValue( 3 ),
+		} );
+
+		const result = collectBlockContext( 'client-1' );
+
+		expect( result.parentContext ).toEqual(
+			expect.objectContaining( {
+				block: 'core/cover',
+				role: 'header-cover',
+				job: 'Header container',
+				childCount: 3,
+			} )
+		);
+		expect( result.parentContext.visualHints ).toMatchObject( {
+			backgroundColor: 'contrast',
+			dimRatio: 80,
+			layout: { type: 'constrained' },
+		} );
+		expect( result.siblingSummariesBefore ).toEqual( [
+			{
+				block: 'core/paragraph',
+				role: 'lede',
+				visualHints: { textAlign: 'center' },
+			},
+		] );
+		expect( result.siblingSummariesAfter ).toEqual( [
+			{
+				block: 'core/image',
+				role: 'content-image',
+				visualHints: {
+					align: 'wide',
+					style: {
+						color: { text: 'var(--wp--preset--color--contrast)' },
+					},
+				},
+			},
+		] );
+	} );
 } );
 
 describe( 'getAnnotatedBlockTree', () => {

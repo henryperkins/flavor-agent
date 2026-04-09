@@ -33,7 +33,7 @@ final class RegistrationTest extends TestCase {
 		$this->assertIsArray( $selected_block );
 		$this->assertFalse( (bool) ( $selected_block['additionalProperties'] ?? true ) );
 
-		foreach ( [ 'editingMode', 'childCount', 'supportsContentRole', 'structuralIdentity', 'structuralAncestors', 'structuralBranch' ] as $field ) {
+		foreach ( [ 'editingMode', 'childCount', 'supportsContentRole', 'structuralIdentity', 'structuralAncestors', 'structuralBranch', 'parentContext', 'siblingSummariesBefore', 'siblingSummariesAfter' ] as $field ) {
 			$this->assertArrayHasKey( $field, $selected_block['properties'] );
 		}
 
@@ -51,24 +51,26 @@ final class RegistrationTest extends TestCase {
 				?? false
 			)
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			(bool) (
 				$selected_block['properties']['structuralAncestors']['items']['additionalProperties']
 				?? false
 			)
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			(bool) (
 				$selected_block['properties']['structuralBranch']['items']['additionalProperties']
 				?? false
 			)
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			(bool) (
 				$selected_block['properties']['structuralBranch']['items']['properties']['children']['items']['additionalProperties']
 				?? false
 			)
 		);
+		$this->assertSame( 3, $selected_block['properties']['siblingSummariesBefore']['maxItems'] ?? null );
+		$this->assertSame( 3, $selected_block['properties']['siblingSummariesAfter']['maxItems'] ?? null );
 	}
 
 	public function test_register_abilities_marks_ai_recommendations_public_for_mcp(): void {
@@ -97,6 +99,21 @@ final class RegistrationTest extends TestCase {
 		$this->assertFalse(
 			(bool) ( WordPressTestState::$registered_abilities['flavor-agent/check-status']['meta']['mcp']['public'] ?? false )
 		);
+	}
+
+	public function test_selected_block_schema_bounds_parent_and_sibling_summaries(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability        = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? [];
+		$selected_block = $ability['input_schema']['properties']['selectedBlock'] ?? [];
+		$parent_schema  = $selected_block['properties']['parentContext'] ?? [];
+		$sibling_schema = $selected_block['properties']['siblingSummariesBefore']['items'] ?? [];
+
+		$this->assertFalse( (bool) ( $parent_schema['additionalProperties'] ?? true ) );
+		$this->assertFalse( (bool) ( $parent_schema['properties']['visualHints']['additionalProperties'] ?? true ) );
+		$this->assertFalse( (bool) ( $sibling_schema['additionalProperties'] ?? true ) );
+		$this->assertFalse( (bool) ( $sibling_schema['properties']['visualHints']['additionalProperties'] ?? true ) );
 	}
 
 	public function test_register_abilities_exposes_content_recommendation_schema(): void {

@@ -12,5 +12,8 @@ export function buildBlockRecommendationContextSignature( context = null ) {
 		structuralAncestors: context?.structuralAncestors || [],
 		structuralBranch: context?.structuralBranch || [],
 		themeTokens: context?.themeTokens || {},
+		parentContext: context?.parentContext || null,
+		siblingSummariesBefore: context?.siblingSummariesBefore || [],
+		siblingSummariesAfter: context?.siblingSummariesAfter || [],
 	} );
 }

@@ -24,6 +24,192 @@ import { buildBlockRecommendationContextSignature } from '../utils/block-recomme
 import { buildContextSignature } from '../utils/context-signature';
 export { buildBlockRecommendationContextSignature };
 
+const BASE_VISUAL_HINT_PATHS = [
+	'backgroundColor',
+	'textColor',
+	'gradient',
+	'align',
+	'textAlign',
+	'style.color.background',
+	'style.color.text',
+	'layout.type',
+	'layout.justifyContent',
+];
+
+const PARENT_VISUAL_HINT_PATHS = [
+	...BASE_VISUAL_HINT_PATHS,
+	'dimRatio',
+	'minHeight',
+	'minHeightUnit',
+	'tagName',
+];
+
+function getValueAtPath( source, pathSegments ) {
+	if ( ! source || 'object' !== typeof source ) {
+		return undefined;
+	}
+
+	return pathSegments.reduce(
+		( value, segment ) =>
+			value && 'object' === typeof value && segment in value
+				? value[ segment ]
+				: undefined,
+		source
+	);
+}
+
+function setNestedHint( target, pathSegments, value ) {
+	let cursor = target;
+
+	pathSegments.forEach( ( segment, index ) => {
+		if ( index === pathSegments.length - 1 ) {
+			cursor[ segment ] = value;
+			return;
+		}
+
+		if ( ! cursor[ segment ] || 'object' !== typeof cursor[ segment ] ) {
+			cursor[ segment ] = {};
+		}
+		cursor = cursor[ segment ];
+	} );
+}
+
+function extractVisualHints( attributes, allowlist ) {
+	const hints = {};
+
+	if ( ! attributes || 'object' !== typeof attributes ) {
+		return hints;
+	}
+
+	allowlist.forEach( ( path ) => {
+		const segments = path.split( '.' );
+		const value = getValueAtPath( attributes, segments );
+
+		if (
+			value === undefined ||
+			value === null ||
+			value === '' ||
+			( typeof value === 'object' &&
+				! Array.isArray( value ) &&
+				Object.keys( value ).length === 0 )
+		) {
+			return;
+		}
+
+		setNestedHint( hints, segments, value );
+	} );
+
+	return hints;
+}
+
+function findStructuralIdentity( annotatedTree, clientId ) {
+	if ( ! clientId || ! Array.isArray( annotatedTree ) ) {
+		return {};
+	}
+
+	const path = findNodePath(
+		annotatedTree,
+		( node ) => node?.clientId === clientId
+	);
+
+	return path?.[ path.length - 1 ]?.structuralIdentity || {};
+}
+
+function getSiblingSummaries( clientId, direction, count, annotatedTree ) {
+	const editor = select( blockEditorStore );
+	const rootId = editor.getBlockRootClientId( clientId );
+	const order = editor.getBlockOrder( rootId || '' );
+	const index = order.indexOf( clientId );
+	if ( index === -1 ) {
+		return [];
+	}
+
+	const slice =
+		direction === 'before'
+			? order.slice( Math.max( 0, index - count ), index )
+			: order.slice( index + 1, index + 1 + count );
+
+	return slice
+		.map( ( id ) => {
+			const blockName = editor.getBlockName( id );
+
+			if ( ! blockName ) {
+				return null;
+			}
+
+			const attributes = editor.getBlockAttributes?.( id ) || {};
+			const visualHints = extractVisualHints(
+				attributes,
+				BASE_VISUAL_HINT_PATHS
+			);
+			const identity = findStructuralIdentity( annotatedTree, id );
+			const summary = {
+				block: blockName,
+			};
+
+			if ( identity.role ) {
+				summary.role = identity.role;
+			}
+
+			if ( Object.keys( visualHints ).length ) {
+				summary.visualHints = visualHints;
+			}
+
+			return summary;
+		} )
+		.filter( Boolean );
+}
+
+function getParentContext( clientId, annotatedTree ) {
+	const editor = select( blockEditorStore );
+	const parentId = editor.getBlockRootClientId( clientId );
+
+	if ( ! parentId ) {
+		return null;
+	}
+
+	const parentBlockName = editor.getBlockName( parentId );
+	if ( ! parentBlockName ) {
+		return null;
+	}
+
+	const blocks = select( blocksStore );
+	const attributes = editor.getBlockAttributes?.( parentId ) || {};
+	const visualHints = extractVisualHints(
+		attributes,
+		PARENT_VISUAL_HINT_PATHS
+	);
+	const parentType = blocks.getBlockType?.( parentBlockName );
+	const identity = findStructuralIdentity( annotatedTree, parentId );
+	const parentContext = {
+		block: parentBlockName,
+		title: parentType?.title || '',
+		childCount: editor.getBlockCount?.( parentId ) || 0,
+	};
+
+	if ( identity.role ) {
+		parentContext.role = identity.role;
+	}
+
+	if ( identity.job ) {
+		parentContext.job = identity.job;
+	}
+
+	if ( Object.keys( visualHints ).length ) {
+		parentContext.visualHints = visualHints;
+	}
+
+	if ( ! parentContext.title ) {
+		delete parentContext.title;
+	}
+
+	if ( ! parentContext.childCount ) {
+		delete parentContext.childCount;
+	}
+
+	return Object.keys( parentContext ).length ? parentContext : null;
+}
+
 // ── Annotated tree cache ─────────────────────────────────────────────────────
 //
 // introspectBlockTree() + annotateStructuralIdentity() together are O(n) in the
@@ -130,18 +316,32 @@ export function collectBlockContext( clientId ) {
 		branchRoot = findBranchRoot( path );
 	}
 
+	const maxBranchDepth = 3;
+	if ( branchRoot && path ) {
+		const rootIndex = path.findIndex(
+			( node ) => node?.clientId === branchRoot.clientId
+		);
+		const depthFromRoot =
+			rootIndex === -1 ? path.length : path.length - rootIndex;
+
+		if ( depthFromRoot > maxBranchDepth ) {
+			branchRoot = path[ path.length - maxBranchDepth ];
+		}
+	}
+
 	const structuralBranch = branchRoot
 		? summarizeTree( [ branchRoot ], {
 				focusClientId: clientId,
 				includeBlockCapabilities: false,
 				includeStructuralIdentity: true,
 				maxChildren: 6,
-				maxDepth: 3,
+				maxDepth: maxBranchDepth,
 		  } )
 		: [];
 
 	const themeTokens = collectThemeTokens();
 	const tokenSummary = summarizeTokens( themeTokens );
+	const parentContext = getParentContext( clientId, annotatedTree );
 
 	return {
 		block: {
@@ -164,6 +364,19 @@ export function collectBlockContext( clientId ) {
 		},
 		siblingsBefore: getSiblingNames( clientId, 'before', 3 ),
 		siblingsAfter: getSiblingNames( clientId, 'after', 3 ),
+		siblingSummariesBefore: getSiblingSummaries(
+			clientId,
+			'before',
+			3,
+			annotatedTree
+		),
+		siblingSummariesAfter: getSiblingSummaries(
+			clientId,
+			'after',
+			3,
+			annotatedTree
+		),
+		...( parentContext ? { parentContext } : {} ),
 		structuralAncestors,
 		structuralBranch,
 		themeTokens: tokenSummary,
@@ -200,6 +413,28 @@ function subscribeToBlockContextSources( registrySelect, clientId ) {
 	editor.getBlockOrder?.( rootId );
 	editor.getBlocks?.();
 	editor.getSettings?.();
+
+	if ( rootId ) {
+		editor.getBlockAttributes?.( rootId );
+		editor.getBlockName?.( rootId );
+		editor.getBlockCount?.( rootId );
+	}
+
+	if ( Array.isArray( editor.getBlockOrder?.( rootId ) ) ) {
+		const order = editor.getBlockOrder( rootId );
+		const index = order.indexOf( clientId );
+		const siblingIds =
+			index === -1
+				? []
+				: order
+						.slice( Math.max( 0, index - 3 ), index )
+						.concat( order.slice( index + 1, index + 4 ) );
+
+		siblingIds.forEach( ( id ) => {
+			editor.getBlockAttributes?.( id );
+			editor.getBlockName?.( id );
+		} );
+	}
 
 	if ( blockName ) {
 		const blocks = registrySelect( blocksStore );
