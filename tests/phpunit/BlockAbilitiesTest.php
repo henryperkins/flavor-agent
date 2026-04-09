@@ -499,7 +499,7 @@ final class BlockAbilitiesTest extends TestCase {
 				'score'     => 0.91,
 			],
 		];
-		WordPressTestState::$last_remote_post                                  = [];
+		WordPressTestState::$last_remote_post = [];
 
 		$with_docs = BlockAbilities::recommend_block(
 			array_merge(
