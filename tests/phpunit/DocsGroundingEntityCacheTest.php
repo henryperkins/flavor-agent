@@ -430,6 +430,10 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 			],
 		];
 
+		WordPressTestState::$remote_post_response = new \WP_Error(
+			'http_request_failed',
+			'Cloudflare timed out.'
+		);
 		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:style-book' ) ] = $generic_guidance;
 
 		$context = [
@@ -463,7 +467,11 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 				[ $context, 'Tune the intro typography.' ]
 			)
 		);
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertSame( 5, WordPressTestState::$last_remote_post['args']['timeout'] );
+		$this->assertArrayHasKey(
+			AISearchClient::CONTEXT_WARM_CRON_HOOK,
+			WordPressTestState::$scheduled_events
+		);
 	}
 
 	public function test_template_part_docs_guidance_uses_query_cache_before_entity_cache(): void {

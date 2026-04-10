@@ -619,11 +619,14 @@ describe( 'TemplateRecommender', () => {
 	} );
 
 	test( 'shows server-review stale copy when the server review signature drifts', async () => {
-		currentState = createState( {
+		const nextState = createState( {
 			store: {
 				templateReviewStaleReason: 'server-review',
 			},
 		} );
+		nextState.store.templateContextSignature =
+			buildTemplateContextSignature( nextState );
+		currentState = nextState;
 
 		await renderPanel();
 

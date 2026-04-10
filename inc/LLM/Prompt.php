@@ -355,8 +355,7 @@ SYSTEM;
 		}
 
 		$structural_branch = self::format_structural_branch(
-			is_array( $context['structuralBranch'] ?? null ) ? $context['structuralBranch'] : [],
-			is_string( $block['name'] ?? null ) ? $block['name'] : ''
+			is_array( $context['structuralBranch'] ?? null ) ? $context['structuralBranch'] : []
 		);
 		if ( '' !== $structural_branch ) {
 			$parts[] = '';
@@ -426,20 +425,20 @@ SYSTEM;
 		return implode( "\n\n", array_filter( $parts ) );
 	}
 
-	private static function format_structural_branch( array $branch, string $selected_block_name ): string {
+	private static function format_structural_branch( array $branch ): string {
 		if ( empty( $branch ) ) {
 			return '';
 		}
 
 		$lines = [];
 		foreach ( $branch as $node ) {
-			self::render_structural_branch_node( $node, 0, $lines, $selected_block_name );
+			self::render_structural_branch_node( $node, 0, $lines );
 		}
 
 		return implode( "\n", $lines );
 	}
 
-	private static function render_structural_branch_node( array $node, int $depth, array &$lines, string $selected_block_name ): void {
+	private static function render_structural_branch_node( array $node, int $depth, array &$lines ): void {
 		$indent = str_repeat( '  ', $depth );
 		$label  = self::format_structural_label( $node );
 
@@ -459,7 +458,7 @@ SYSTEM;
 
 		if ( ! empty( $node['children'] ) && is_array( $node['children'] ) ) {
 			foreach ( $node['children'] as $child ) {
-				self::render_structural_branch_node( $child, $depth + 1, $lines, $selected_block_name );
+				self::render_structural_branch_node( $child, $depth + 1, $lines );
 			}
 		}
 

@@ -21,7 +21,7 @@ final class BlockAbilities {
 	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
 
 	public static function recommend_block( mixed $input ): array|\WP_Error {
-		$input = self::normalize_map( $input );
+		$input                  = self::normalize_map( $input );
 		$resolve_signature_only = filter_var(
 			$input['resolveSignatureOnly'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
@@ -256,12 +256,12 @@ final class BlockAbilities {
 	}
 
 	private static function build_context_from_selected_block( mixed $raw_selected ): array|\WP_Error {
-		$selected               = self::normalize_selected_block( self::normalize_map( $raw_selected ) );
-		$block_name             = is_string( $selected['blockName'] ?? null ) ? sanitize_text_field( $selected['blockName'] ) : '';
-		$attributes             = self::normalize_map( $selected['attributes'] ?? [] );
-		$inner_blocks           = self::normalize_list( $selected['innerBlocks'] ?? [] );
-		$is_inside_content_only = ! empty( $selected['isInsideContentOnly'] );
-		$parent_context         = self::normalize_parent_context( $selected['parentContext'] ?? [] );
+		$selected                 = self::normalize_selected_block( self::normalize_map( $raw_selected ) );
+		$block_name               = is_string( $selected['blockName'] ?? null ) ? sanitize_text_field( $selected['blockName'] ) : '';
+		$attributes               = self::normalize_map( $selected['attributes'] ?? [] );
+		$inner_blocks             = self::normalize_list( $selected['innerBlocks'] ?? [] );
+		$is_inside_content_only   = ! empty( $selected['isInsideContentOnly'] );
+		$parent_context           = self::normalize_parent_context( $selected['parentContext'] ?? [] );
 		$sibling_summaries_before = self::normalize_sibling_summaries( $selected['siblingSummariesBefore'] ?? [] );
 		$sibling_summaries_after  = self::normalize_sibling_summaries( $selected['siblingSummariesAfter'] ?? [] );
 
@@ -367,8 +367,8 @@ final class BlockAbilities {
 	}
 
 	private static function normalize_sibling_summaries( mixed $raw_summaries ): array {
-		$summaries   = array_slice( self::normalize_list( $raw_summaries ), 0, 3 );
-		$normalized  = [];
+		$summaries  = array_slice( self::normalize_list( $raw_summaries ), 0, 3 );
+		$normalized = [];
 
 		foreach ( $summaries as $summary ) {
 			if ( ! is_array( $summary ) ) {
@@ -444,8 +444,8 @@ final class BlockAbilities {
 	}
 
 	private static function normalize_structural_summary_items( mixed $raw_items, bool $include_children = false, int $depth = 0 ): array {
-		$items       = array_slice( self::normalize_list( $raw_items ), 0, self::STRUCTURAL_SUMMARY_MAX_ITEMS );
-		$normalized  = [];
+		$items      = array_slice( self::normalize_list( $raw_items ), 0, self::STRUCTURAL_SUMMARY_MAX_ITEMS );
+		$normalized = [];
 
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
@@ -498,14 +498,14 @@ final class BlockAbilities {
 			}
 
 			if ( $include_children ) {
-				$raw_children        = self::normalize_list( $item['children'] ?? [] );
-				$hidden_child_count  = max( 0, (int) ( $summary['moreChildren'] ?? 0 ) );
-				$displayed_children  = [];
+				$raw_children       = self::normalize_list( $item['children'] ?? [] );
+				$hidden_child_count = max( 0, (int) ( $summary['moreChildren'] ?? 0 ) );
+				$displayed_children = [];
 
 				if ( $depth < self::STRUCTURAL_SUMMARY_MAX_DEPTH ) {
-					$visible_children = array_slice( $raw_children, 0, self::STRUCTURAL_SUMMARY_MAX_CHILDREN );
+					$visible_children    = array_slice( $raw_children, 0, self::STRUCTURAL_SUMMARY_MAX_CHILDREN );
 					$hidden_child_count += max( 0, count( $raw_children ) - count( $visible_children ) );
-					$displayed_children = self::normalize_structural_summary_items( $visible_children, true, $depth + 1 );
+					$displayed_children  = self::normalize_structural_summary_items( $visible_children, true, $depth + 1 );
 				} else {
 					$hidden_child_count += count( $raw_children );
 				}

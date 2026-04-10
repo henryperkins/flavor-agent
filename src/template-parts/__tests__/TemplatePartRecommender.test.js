@@ -495,11 +495,33 @@ describe( 'TemplatePartRecommender', () => {
 	} );
 
 	test( 'shows server-review stale copy when the template-part review signature drifts', async () => {
-		currentState = createState( {
+		const nextState = createState( {
 			store: {
+				templatePartRecommendations: [
+					{
+						label: 'Replace navigation block',
+						description:
+							'Swap the existing navigation block for a utility-links pattern.',
+						operations: [
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/utility-links',
+								expectedBlockName: 'core/navigation',
+								targetPath: [ 0 ],
+							},
+						],
+					},
+				],
+				templatePartResultRef: 'theme//header',
+				templatePartSelectedSuggestionKey:
+					'Replace navigation block-0',
+				templatePartStatus: 'ready',
 				templatePartReviewStaleReason: 'server-review',
 			},
 		} );
+		nextState.store.templatePartContextSignature =
+			buildTemplatePartContextSignature( nextState );
+		currentState = nextState;
 
 		await renderPanel();
 
