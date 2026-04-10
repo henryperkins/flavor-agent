@@ -19,10 +19,11 @@ final class BlockRecommendationExecutionContract {
 	];
 
 	public static function from_context( array $context ): array {
-		$block            = self::normalize_map( $context['block'] ?? [] );
-		$theme_tokens     = self::normalize_map( $context['themeTokens'] ?? [] );
-		$inspector_panels = self::normalize_inspector_panels( $block['inspectorPanels'] ?? [] );
-		$content_keys     = array_values(
+		$block                  = self::normalize_map( $context['block'] ?? [] );
+		$theme_tokens           = self::normalize_map( $context['themeTokens'] ?? [] );
+		$inspector_panels       = self::normalize_inspector_panels( $block['inspectorPanels'] ?? [] );
+		$panel_mapping_explicit = ! empty( $block['inspectorPanelsExplicit'] );
+		$content_keys           = array_values(
 			array_filter(
 				array_keys( self::normalize_map( $block['contentAttributes'] ?? [] ) ),
 				'is_string'
@@ -32,7 +33,8 @@ final class BlockRecommendationExecutionContract {
 		return [
 			'inspectorPanels'         => $inspector_panels,
 			'allowedPanels'           => array_values( array_keys( $inspector_panels ) ),
-			'hasExplicitlyEmptyPanels' => array_key_exists( 'inspectorPanels', $block ) && [] === $inspector_panels,
+			'panelMappingKnown'       => [] !== $inspector_panels || $panel_mapping_explicit,
+			'hasExplicitlyEmptyPanels' => $panel_mapping_explicit && [] === $inspector_panels,
 			'styleSupportPaths'       => self::collect_style_support_paths( $inspector_panels ),
 			'bindableAttributes'      => StringArray::sanitize( $block['bindableAttributes'] ?? [] ),
 			'contentAttributeKeys'    => $content_keys,

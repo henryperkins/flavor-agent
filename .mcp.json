@@ -1,8 +1,8 @@
 {
 	"mcpServers": {
 		"playwright": {
-			"command": "npx",
-			"args": [ "-y", "@playwright/mcp" ],
+			"command": "cmd",
+			"args": [ "/c", "npx", "-y", "@playwright/mcp" ],
 			"type": "stdio"
 		},
 		"wpds": {

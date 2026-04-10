@@ -206,14 +206,22 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	public function test_introspect_block_type_maps_new_typography_supports_to_typography_panel(): void {
+
 		\WP_Block_Type_Registry::get_instance()->register(
 			'plugin/typography-block',
 			[
 				'title'    => 'Typography Block',
 				'supports' => [
 					'typography' => [
-						'fitText'    => true,
-						'textIndent' => true,
+						'fontFamily'               => true,
+						'__experimentalFontFamily' => true,
+						'fitText'                  => true,
+						'fontStyle'                => true,
+						'fontWeight'               => true,
+						'letterSpacing'            => true,
+						'textIndent'               => true,
+						'textDecoration'           => true,
+						'textTransform'            => true,
 					],
 				],
 			]
@@ -222,11 +230,20 @@ final class ServerCollectorTest extends TestCase {
 		$manifest = ServerCollector::introspect_block_type( 'plugin/typography-block' );
 
 		$this->assertSame(
-			[ 'typography.fitText', 'typography.textIndent' ],
+			[
+				'typography.fontFamily',
+				'typography.__experimentalFontFamily',
+				'typography.fitText',
+				'typography.fontStyle',
+				'typography.fontWeight',
+				'typography.letterSpacing',
+				'typography.textIndent',
+				'typography.textDecoration',
+				'typography.textTransform',
+			],
 			$manifest['inspectorPanels']['typography']
 		);
 	}
-
 	public function test_introspect_block_type_adds_general_panel_for_meaningful_config_attributes(): void {
 		\WP_Block_Type_Registry::get_instance()->register(
 			'plugin/configurable-block',
@@ -933,12 +950,12 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	public function test_for_navigation_location_inference_matches_menu_refs_exactly(): void {
-		WordPressTestState::$posts[12]                                        = (object) [
+		WordPressTestState::$posts[12]                           = (object) [
 			'ID'           => 12,
 			'post_type'    => 'wp_navigation',
 			'post_content' => '<!-- wp:navigation-link {"label":"Home","url":"/"} /-->',
 		];
-		WordPressTestState::$block_templates['wp_template_part']              = [
+		WordPressTestState::$block_templates['wp_template_part'] = [
 			(object) [
 				'slug'    => 'header',
 				'title'   => 'Header',

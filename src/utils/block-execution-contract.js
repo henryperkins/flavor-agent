@@ -71,6 +71,8 @@ export function buildBlockRecommendationExecutionContract(
 	blockContext = {},
 	themeTokens = {}
 ) {
+	const hasExplicitInspectorPanels =
+		blockContext?.inspectorPanelsExplicit === true;
 	const inspectorPanels = normalizeInspectorPanels(
 		blockContext?.inspectorPanels || {}
 	);
@@ -93,11 +95,12 @@ export function buildBlockRecommendationExecutionContract(
 	return {
 		inspectorPanels,
 		allowedPanels: Object.keys( inspectorPanels ),
+		panelMappingKnown:
+			Object.keys( inspectorPanels ).length > 0 ||
+			hasExplicitInspectorPanels,
 		hasExplicitlyEmptyPanels:
-			Object.prototype.hasOwnProperty.call(
-				blockContext || {},
-				'inspectorPanels'
-			) && Object.keys( inspectorPanels ).length === 0,
+			hasExplicitInspectorPanels &&
+			Object.keys( inspectorPanels ).length === 0,
 		styleSupportPaths: sanitizeStringList( styleSupportPaths ),
 		bindableAttributes,
 		contentAttributeKeys,

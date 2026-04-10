@@ -572,10 +572,10 @@ final class PromptRulesTest extends TestCase {
 			],
 			[],
 			[
-				'allowedPanels'           => [],
+				'allowedPanels'            => [],
 				'hasExplicitlyEmptyPanels' => true,
-				'registeredStyles'        => [ 'outline' ],
-				'presetSlugs'             => [
+				'registeredStyles'         => [ 'outline' ],
+				'presetSlugs'              => [
 					'color'   => [ 'accent' ],
 					'spacing' => [ '40' ],
 				],
@@ -627,6 +627,67 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( [], $result['settings'] );
 	}
 
+	public function test_enforce_block_context_rules_preserves_best_effort_settings_and_styles_when_panel_mapping_is_unknown(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Turn on drop cap',
+						'panel'            => 'general',
+						'attributeUpdates' => [
+							'dropCap' => true,
+						],
+					],
+				],
+				'styles'      => [
+					[
+						'label'            => 'Use accent background',
+						'panel'            => 'color',
+						'attributeUpdates' => [
+							'backgroundColor' => 'accent',
+						],
+					],
+				],
+				'block'       => [],
+				'explanation' => 'Unknown panel mappings should stay best-effort.',
+			],
+			[],
+			[
+				'panelMappingKnown' => false,
+				'allowedPanels'     => [],
+				'styleSupportPaths' => [],
+				'presetSlugs'       => [
+					'color' => [ 'accent' ],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Turn on drop cap',
+					'panel'            => 'general',
+					'attributeUpdates' => [
+						'dropCap' => true,
+					],
+				],
+			],
+			$result['settings']
+		);
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Use accent background',
+					'panel'            => 'color',
+					'attributeUpdates' => [
+						'backgroundColor' => 'accent',
+					],
+				],
+			],
+			$result['styles']
+		);
+	}
+
 	public function test_enforce_block_context_rules_drops_unsupported_presets_and_unregistered_style_variations(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[
@@ -664,6 +725,162 @@ final class PromptRulesTest extends TestCase {
 
 		$this->assertSame( [], $result['styles'] );
 		$this->assertSame( [], $result['block'] );
+	}
+
+	public function test_enforce_block_context_rules_preserves_safe_custom_property_style_values_under_an_authoritative_contract(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [
+					[
+						'label'            => 'Use the custom brand accent',
+						'panel'            => 'color',
+						'attributeUpdates' => [
+							'style' => [
+								'color' => [
+									'text' => 'var(--wp--custom--brand-accent)',
+								],
+							],
+						],
+					],
+				],
+				'block'       => [],
+				'explanation' => 'Custom theme variables should survive contract enforcement.',
+			],
+			[],
+			[
+				'allowedPanels'     => [ 'color' ],
+				'styleSupportPaths' => [ 'color.text' ],
+				'presetSlugs'       => [
+					'color' => [ 'base' ],
+				],
+				'enabledFeatures'   => [
+					'textColor' => true,
+				],
+			]
+		);
+
+		$this->assertSame(
+			'var(--wp--custom--brand-accent)',
+			$result['styles'][0]['attributeUpdates']['style']['color']['text']
+		);
+	}
+
+	public function test_enforce_block_context_rules_allows_raw_fallback_values_when_relevant_preset_families_are_empty(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [
+					[
+						'label'            => 'Use raw values when no presets exist',
+						'panel'            => 'typography',
+						'attributeUpdates' => [
+							'style' => [
+								'color'      => [
+									'background' => '#222',
+								],
+								'typography' => [
+									'fontSize'   => '18px',
+									'fontFamily' => '"Literata", serif',
+								],
+								'shadow'     => '0 12px 32px rgba(0, 0, 0, 0.18)',
+							],
+						],
+					],
+				],
+				'block'       => [],
+				'explanation' => 'Empty preset families should allow safe raw fallbacks.',
+			],
+			[],
+			[
+				'allowedPanels'     => [ 'color', 'shadow', 'typography' ],
+				'styleSupportPaths' => [
+					'color.background',
+					'typography.fontSize',
+					'typography.__experimentalFontFamily',
+					'shadow',
+				],
+				'presetSlugs'       => [
+					'color'      => [],
+					'fontsize'   => [],
+					'fontfamily' => [],
+					'shadow'     => [],
+				],
+				'enabledFeatures'   => [
+					'backgroundColor' => true,
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'color'      => [
+					'background' => '#222',
+				],
+				'typography' => [
+					'fontSize'   => '18px',
+					'fontFamily' => '"Literata", serif',
+				],
+				'shadow'     => '0 12px 32px rgba(0, 0, 0, 0.18)',
+			],
+			$result['styles'][0]['attributeUpdates']['style']
+		);
+	}
+
+	public function test_enforce_block_context_rules_preserves_supported_typography_controls_under_an_authoritative_contract(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [
+					[
+						'label'            => 'Strengthen the heading treatment',
+						'panel'            => 'typography',
+						'attributeUpdates' => [
+							'style' => [
+								'typography' => [
+									'fontWeight'     => '700',
+									'fontStyle'      => 'italic',
+									'letterSpacing'  => '-0.02em',
+									'textDecoration' => 'underline',
+									'textTransform'  => 'uppercase',
+								],
+							],
+						],
+					],
+				],
+				'block'       => [],
+				'explanation' => 'Supported typography controls should remain executable.',
+			],
+			[],
+			[
+				'allowedPanels'     => [ 'typography' ],
+				'styleSupportPaths' => [
+					'typography.fontWeight',
+					'typography.fontStyle',
+					'typography.letterSpacing',
+					'typography.textDecoration',
+					'typography.textTransform',
+				],
+				'enabledFeatures'   => [
+					'fontWeight'     => true,
+					'fontStyle'      => true,
+					'letterSpacing'  => true,
+					'textDecoration' => true,
+					'textTransform'  => true,
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'fontWeight'     => '700',
+				'fontStyle'      => 'italic',
+				'letterSpacing'  => '-0.02em',
+				'textDecoration' => 'underline',
+				'textTransform'  => 'uppercase',
+			],
+			$result['styles'][0]['attributeUpdates']['style']['typography']
+		);
 	}
 
 	public function test_parse_response_normalizes_ranking_contract_when_confidence_present(): void {

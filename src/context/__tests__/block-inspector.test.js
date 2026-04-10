@@ -52,14 +52,31 @@ describe( 'resolveInspectorPanels', () => {
 				customCSS: true,
 				listView: true,
 				typography: {
+					fontFamily: true,
+					__experimentalFontFamily: true,
 					fitText: true,
+					fontStyle: true,
+					fontWeight: true,
+					letterSpacing: true,
 					textIndent: true,
+					textDecoration: true,
+					textTransform: true,
 				},
 			} )
 		).toEqual( {
 			advanced: [ 'customCSS' ],
 			list: [ 'listView' ],
-			typography: [ 'typography.fitText', 'typography.textIndent' ],
+			typography: [
+				'typography.fontFamily',
+				'typography.__experimentalFontFamily',
+				'typography.fitText',
+				'typography.fontStyle',
+				'typography.fontWeight',
+				'typography.letterSpacing',
+				'typography.textIndent',
+				'typography.textDecoration',
+				'typography.textTransform',
+			],
 		} );
 	} );
 

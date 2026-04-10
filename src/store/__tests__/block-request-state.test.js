@@ -139,8 +139,48 @@ describe( 'block request state', () => {
 		).toBeNull();
 		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'idle' );
 		expect( selectors.getBlockError( state, 'block-a' ) ).toBeNull();
-		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 0 );
+		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 4 );
 		expect( abort ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'clearing block recommendations invalidates in-flight completions', () => {
+		let state = reducer(
+			undefined,
+			actions.setBlockRequestState( 'block-a', 'loading', null, 3 )
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-a',
+				{
+					block: [ { label: 'Current result' } ],
+				},
+				3
+			)
+		);
+		const dispatch = jest.fn();
+
+		actions.clearBlockRecommendations( 'block-a' )( { dispatch } );
+		state = reducer( state, dispatch.mock.calls[ 0 ][ 0 ] );
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-a',
+				{
+					block: [ { label: 'Late result' } ],
+				},
+				3
+			)
+		);
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-a', 'ready', null, 3 )
+		);
+
+		expect( selectors.getBlockRecommendations( state, 'block-a' ) ).toBeNull();
+		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'idle' );
+		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 4 );
 	} );
 
 	test( 'stores block request diagnostics with the latest successful result and clears them on reload', () => {

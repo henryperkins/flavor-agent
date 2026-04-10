@@ -88,7 +88,12 @@ const COMPLETE_FEATURES = {
 			],
 		},
 		customFontSize: true,
+		fontStyle: true,
+		fontWeight: true,
+		letterSpacing: true,
 		lineHeight: true,
+		textDecoration: true,
+		textTransform: true,
 		dropCap: false,
 		fluid: true,
 	},
@@ -211,8 +216,13 @@ describe( 'summarizeTokens', () => {
 						cssVar: 'var(--wp--preset--font-family--display)',
 					},
 				],
+				fontStyle: true,
+				fontWeight: true,
+				letterSpacing: true,
 				lineHeight: false,
 				dropCap: true,
+				textDecoration: true,
+				textTransform: true,
 				fluidTypography: false,
 			},
 			spacing: {
@@ -333,6 +343,11 @@ describe( 'summarizeTokens', () => {
 				backgroundImage: true,
 				backgroundSize: false,
 				borderStyle: true,
+				fontStyle: true,
+				fontWeight: true,
+				letterSpacing: true,
+				textDecoration: true,
+				textTransform: true,
 			} )
 		);
 		expect( summary.elementStyles ).toEqual( {

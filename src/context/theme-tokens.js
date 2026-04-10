@@ -724,6 +724,11 @@ export function summarizeTokens( tokens ) {
 		enabledFeatures: {
 			lineHeight: tokens.typography.lineHeight,
 			dropCap: tokens.typography.dropCap,
+			fontStyle: tokens.typography.fontStyle,
+			fontWeight: tokens.typography.fontWeight,
+			letterSpacing: tokens.typography.letterSpacing,
+			textDecoration: tokens.typography.textDecoration,
+			textTransform: tokens.typography.textTransform,
 			customColors: tokens.color.customColors,
 			backgroundColor: tokens.color.backgroundEnabled,
 			textColor: tokens.color.textEnabled,

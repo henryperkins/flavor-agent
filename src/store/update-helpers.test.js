@@ -740,6 +740,69 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'sanitizeRecommendationsForContext preserves best-effort settings and styles when panel mapping is unknown', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Turn on drop cap',
+					panel: 'general',
+					attributeUpdates: {
+						dropCap: true,
+					},
+				},
+			],
+			styles: [
+				{
+					label: 'Use accent background',
+					panel: 'color',
+					attributeUpdates: {
+						backgroundColor: 'accent',
+					},
+				},
+			],
+			block: [],
+			explanation: 'Unknown panel mappings should stay best-effort.',
+		};
+		const executionContract = {
+			panelMappingKnown: false,
+			allowedPanels: [],
+			styleSupportPaths: [],
+			presetSlugs: {
+				color: [ 'accent' ],
+			},
+		};
+
+		expect(
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{},
+				executionContract
+			)
+		).toEqual( recommendations );
+	} );
+
+	test( 'getSuggestionAttributeUpdates preserves style updates when panel mapping is unknown', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						backgroundColor: 'accent',
+					},
+				},
+				{},
+				{
+					panelMappingKnown: false,
+					styleSupportPaths: [],
+					presetSlugs: {
+						color: [ 'accent' ],
+					},
+				}
+			)
+		).toEqual( {
+			backgroundColor: 'accent',
+		} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext strips unsupported metadata.bindings updates for unlocked blocks', () => {
 		const recommendations = {
 			settings: [
@@ -1015,6 +1078,138 @@ describe( 'update helpers', () => {
 				}
 			)
 		).toEqual( {} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates preserves safe custom property style values under an authoritative execution contract', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						style: {
+							color: {
+								text: 'var(--wp--custom--brand-accent)',
+							},
+						},
+					},
+				},
+				{},
+				{
+					allowedPanels: [ 'color' ],
+					styleSupportPaths: [ 'color.text' ],
+					presetSlugs: {
+						color: [ 'base' ],
+					},
+					enabledFeatures: {
+						textColor: true,
+					},
+				}
+			)
+		).toEqual( {
+			style: {
+				color: {
+					text: 'var(--wp--custom--brand-accent)',
+				},
+			},
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates allows raw fallback values when the relevant preset families are explicitly empty', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						style: {
+							color: {
+								background: '#222',
+							},
+							typography: {
+								fontSize: '18px',
+								fontFamily: '"Literata", serif',
+							},
+							shadow: '0 12px 32px rgba(0, 0, 0, 0.18)',
+						},
+					},
+				},
+				{},
+				{
+					allowedPanels: [ 'color', 'shadow', 'typography' ],
+					styleSupportPaths: [
+						'color.background',
+						'typography.fontSize',
+						'typography.__experimentalFontFamily',
+						'shadow',
+					],
+					presetSlugs: {
+						color: [],
+						fontsize: [],
+						fontfamily: [],
+						shadow: [],
+					},
+					enabledFeatures: {
+						backgroundColor: true,
+					},
+				}
+			)
+		).toEqual( {
+			style: {
+				color: {
+					background: '#222',
+				},
+				typography: {
+					fontSize: '18px',
+					fontFamily: '"Literata", serif',
+				},
+				shadow: '0 12px 32px rgba(0, 0, 0, 0.18)',
+			},
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates preserves supported typography controls under an authoritative execution contract', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						style: {
+							typography: {
+								fontWeight: '700',
+								fontStyle: 'italic',
+								letterSpacing: '-0.02em',
+								textDecoration: 'underline',
+								textTransform: 'uppercase',
+							},
+						},
+					},
+				},
+				{},
+				{
+					allowedPanels: [ 'typography' ],
+					styleSupportPaths: [
+						'typography.fontWeight',
+						'typography.fontStyle',
+						'typography.letterSpacing',
+						'typography.textDecoration',
+						'typography.textTransform',
+					],
+					enabledFeatures: {
+						fontWeight: true,
+						fontStyle: true,
+						letterSpacing: true,
+						textDecoration: true,
+						textTransform: true,
+					},
+				}
+			)
+		).toEqual( {
+			style: {
+				typography: {
+					fontWeight: '700',
+					fontStyle: 'italic',
+					letterSpacing: '-0.02em',
+					textDecoration: 'underline',
+					textTransform: 'uppercase',
+				},
+			},
+		} );
 	} );
 
 	test( 'getBlockSuggestionExecutionInfo treats unregistered style variations as non-executable under an authoritative execution contract', () => {

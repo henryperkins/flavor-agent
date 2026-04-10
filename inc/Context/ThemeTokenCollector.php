@@ -178,10 +178,15 @@ final class ThemeTokenCollector {
 			'enabledFeatures'   => [
 				'lineHeight'      => $settings['typography']['lineHeight'] ?? false,
 				'dropCap'         => $settings['typography']['dropCap'] ?? true,
+				'fontStyle'       => $settings['typography']['fontStyle'] ?? false,
+				'fontWeight'      => $settings['typography']['fontWeight'] ?? false,
+				'letterSpacing'   => $settings['typography']['letterSpacing'] ?? false,
+				'textDecoration'  => $settings['typography']['textDecoration'] ?? false,
+				'textTransform'   => $settings['typography']['textTransform'] ?? false,
 				'customColors'    => $settings['color']['custom'] ?? true,
 				'backgroundColor' => array_key_exists( 'background', $settings['color'] ?? [] )
-					? (bool) $settings['color']['background']
-					: true,
+						? (bool) $settings['color']['background']
+						: true,
 				'textColor'       => array_key_exists( 'text', $settings['color'] ?? [] )
 					? (bool) $settings['color']['text']
 					: true,

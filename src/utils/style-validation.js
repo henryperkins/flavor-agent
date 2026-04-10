@@ -33,9 +33,17 @@ const PRESET_TYPE_DISPLAY_MAP = Object.freeze( {
 
 export const FREEFORM_STYLE_VALIDATORS = Object.freeze( {
 	BORDER_STYLE: 'border-style',
+	COLOR: 'color',
+	FONT_FAMILY: 'font-family',
+	FONT_STYLE: 'font-style',
+	FONT_WEIGHT: 'font-weight',
 	LENGTH: 'length',
 	LENGTH_OR_PERCENTAGE: 'length-or-percentage',
+	LETTER_SPACING: 'letter-spacing',
 	LINE_HEIGHT: 'line-height',
+	SHADOW: 'shadow',
+	TEXT_DECORATION: 'text-decoration',
+	TEXT_TRANSFORM: 'text-transform',
 } );
 
 export function sanitizeStyleKey( value ) {
@@ -87,6 +95,65 @@ function isZeroCssLength( value, { allowPercentage = false } = {} ) {
 		allowPercentage,
 		allowUnitlessZero: true,
 	} ).test( value );
+}
+
+function looksLikeCssPayloadValue( value ) {
+	const normalizedValue = value.trim();
+
+	if ( ! normalizedValue ) {
+		return false;
+	}
+
+	if ( /[{};]/.test( normalizedValue ) ) {
+		return true;
+	}
+
+	if ( /!\s*important\b/i.test( normalizedValue ) ) {
+		return true;
+	}
+
+	if (
+		/^@(container|font-face|import|keyframes|layer|media|supports)\b/i.test(
+			normalizedValue
+		)
+	) {
+		return true;
+	}
+
+	return (
+		/^[a-z-]+\s*:\s*.+$/i.test( normalizedValue ) &&
+		! /^var:preset\|/i.test( normalizedValue ) &&
+		! /^var\(--/i.test( normalizedValue )
+	);
+}
+
+export function validateCssCustomPropertyReference( value ) {
+	if ( typeof value !== 'string' ) {
+		return { valid: false, value: null };
+	}
+
+	const normalizedValue = value.trim();
+
+	return /^var\(\s*--[a-z0-9_-]+\s*\)$/i.test( normalizedValue )
+		? { valid: true, value: normalizedValue }
+		: { valid: false, value: null };
+}
+
+function validateSafeScalarStringValue( value ) {
+	if ( typeof value !== 'string' ) {
+		return { valid: false, value: null };
+	}
+
+	const normalizedValue = value.trim();
+
+	if ( ! normalizedValue || looksLikeCssPayloadValue( normalizedValue ) ) {
+		return { valid: false, value: null };
+	}
+
+	return {
+		valid: true,
+		value: normalizedValue,
+	};
 }
 
 function validateLineHeightValue( value ) {
@@ -155,6 +222,203 @@ function validateLengthValue( value, { allowPercentage = false } = {} ) {
 	return { valid: false, value: null };
 }
 
+function validateColorValue( value ) {
+	const safeString = validateSafeScalarStringValue( value );
+
+	if ( ! safeString.valid ) {
+		return safeString;
+	}
+
+	if (
+		/^#[0-9a-f]{3,4}$/i.test( safeString.value ) ||
+		/^#[0-9a-f]{6}$/i.test( safeString.value ) ||
+		/^#[0-9a-f]{8}$/i.test( safeString.value ) ||
+		/^(?:rgba?|hsla?)\(\s*[-\d.%\s,\/]+\)$/i.test( safeString.value ) ||
+		/^[a-z-]+$/i.test( safeString.value )
+	) {
+		return safeString;
+	}
+
+	return { valid: false, value: null };
+}
+
+function validateFontFamilyValue( value ) {
+	return validateSafeScalarStringValue( value );
+}
+
+function validateFontStyleValue( value ) {
+	const safeString = validateSafeScalarStringValue( value );
+
+	if ( ! safeString.valid ) {
+		return safeString;
+	}
+
+	const normalizedValue = safeString.value.toLowerCase();
+
+	return new Set( [ 'normal', 'italic', 'oblique' ] ).has( normalizedValue )
+		? { valid: true, value: normalizedValue }
+		: { valid: false, value: null };
+}
+
+function validateFontWeightValue( value ) {
+	if (
+		typeof value === 'number' &&
+		Number.isInteger( value ) &&
+		value >= 1 &&
+		value <= 1000
+	) {
+		return {
+			valid: true,
+			value,
+		};
+	}
+
+	if ( typeof value !== 'string' ) {
+		return { valid: false, value: null };
+	}
+
+	const normalizedValue = value.trim().toLowerCase();
+
+	if ( ! normalizedValue ) {
+		return { valid: false, value: null };
+	}
+
+	if (
+		new Set( [ 'normal', 'bold', 'bolder', 'lighter' ] ).has(
+			normalizedValue
+		)
+	) {
+		return {
+			valid: true,
+			value: normalizedValue,
+		};
+	}
+
+	if (
+		/^\d{1,4}$/.test( normalizedValue ) &&
+		Number( normalizedValue ) >= 1 &&
+		Number( normalizedValue ) <= 1000
+	) {
+		return {
+			valid: true,
+			value: value.trim(),
+		};
+	}
+
+	return { valid: false, value: null };
+}
+
+function validateSignedLengthValue( value ) {
+	if ( typeof value === 'number' ) {
+		return value === 0
+			? { valid: true, value }
+			: { valid: false, value: null };
+	}
+
+	if ( typeof value !== 'string' ) {
+		return { valid: false, value: null };
+	}
+
+	const normalizedValue = value.trim();
+
+	if ( ! normalizedValue ) {
+		return { valid: false, value: null };
+	}
+
+	const suffix = CSS_LENGTH_UNITS.join( '|' );
+	const zeroPattern = new RegExp( `^-?0(?:\\.0+)?(?:${ suffix })?$`, 'i' );
+	const nonZeroPattern = new RegExp(
+		`^-?(?:\\d+|\\d*\\.\\d+)(?:${ suffix })$`,
+		'i'
+	);
+
+	if (
+		zeroPattern.test( normalizedValue ) ||
+		( nonZeroPattern.test( normalizedValue ) &&
+			Number.parseFloat( normalizedValue ) !== 0 )
+	) {
+		return {
+			valid: true,
+			value: normalizedValue,
+		};
+	}
+
+	return { valid: false, value: null };
+}
+
+function validateLetterSpacingValue( value ) {
+	if (
+		typeof value === 'string' &&
+		value.trim().toLowerCase() === 'normal'
+	) {
+		return {
+			valid: true,
+			value: 'normal',
+		};
+	}
+
+	return validateSignedLengthValue( value );
+}
+
+function validateShadowValue( value ) {
+	return validateSafeScalarStringValue( value );
+}
+
+function validateTextDecorationValue( value ) {
+	const safeString = validateSafeScalarStringValue( value );
+
+	if ( ! safeString.valid ) {
+		return safeString;
+	}
+
+	const normalizedValue = safeString.value.toLowerCase();
+
+	if ( normalizedValue === 'none' ) {
+		return {
+			valid: true,
+			value: normalizedValue,
+		};
+	}
+
+	const tokens = normalizedValue.split( /\s+/ ).filter( Boolean );
+	const allowedValues = new Set( [
+		'underline',
+		'overline',
+		'line-through',
+	] );
+
+	return tokens.length > 0 &&
+		tokens.every( ( token ) => allowedValues.has( token ) ) &&
+		new Set( tokens ).size === tokens.length
+		? {
+				valid: true,
+				value: tokens.join( ' ' ),
+		  }
+		: { valid: false, value: null };
+}
+
+function validateTextTransformValue( value ) {
+	const safeString = validateSafeScalarStringValue( value );
+
+	if ( ! safeString.valid ) {
+		return safeString;
+	}
+
+	const normalizedValue = safeString.value.toLowerCase();
+	const allowedValues = new Set( [
+		'none',
+		'capitalize',
+		'uppercase',
+		'lowercase',
+		'full-width',
+		'full-size-kana',
+	] );
+
+	return allowedValues.has( normalizedValue )
+		? { valid: true, value: normalizedValue }
+		: { valid: false, value: null };
+}
+
 function validateBorderStyleValue( value ) {
 	if ( typeof value !== 'string' ) {
 		return { valid: false, value: null };
@@ -185,7 +449,21 @@ function validateBorderStyleValue( value ) {
 }
 
 export function validateFreeformStyleValueByKind( kind, value ) {
+	const customPropertyReference = validateCssCustomPropertyReference( value );
+
+	if ( customPropertyReference.valid ) {
+		return customPropertyReference;
+	}
+
 	switch ( kind ) {
+		case FREEFORM_STYLE_VALIDATORS.COLOR:
+			return validateColorValue( value );
+		case FREEFORM_STYLE_VALIDATORS.FONT_FAMILY:
+			return validateFontFamilyValue( value );
+		case FREEFORM_STYLE_VALIDATORS.FONT_STYLE:
+			return validateFontStyleValue( value );
+		case FREEFORM_STYLE_VALIDATORS.FONT_WEIGHT:
+			return validateFontWeightValue( value );
 		case FREEFORM_STYLE_VALIDATORS.LINE_HEIGHT:
 			return validateLineHeightValue( value );
 		case FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE:
@@ -194,8 +472,16 @@ export function validateFreeformStyleValueByKind( kind, value ) {
 			} );
 		case FREEFORM_STYLE_VALIDATORS.LENGTH:
 			return validateLengthValue( value );
+		case FREEFORM_STYLE_VALIDATORS.LETTER_SPACING:
+			return validateLetterSpacingValue( value );
 		case FREEFORM_STYLE_VALIDATORS.BORDER_STYLE:
 			return validateBorderStyleValue( value );
+		case FREEFORM_STYLE_VALIDATORS.SHADOW:
+			return validateShadowValue( value );
+		case FREEFORM_STYLE_VALIDATORS.TEXT_DECORATION:
+			return validateTextDecorationValue( value );
+		case FREEFORM_STYLE_VALIDATORS.TEXT_TRANSFORM:
+			return validateTextTransformValue( value );
 		default:
 			return {
 				valid: false,

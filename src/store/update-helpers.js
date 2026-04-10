@@ -1,7 +1,9 @@
 import { isPlainObject } from '../utils/type-guards';
 import { buildBlockRecommendationExecutionContract } from '../utils/block-execution-contract';
 import {
+	FREEFORM_STYLE_VALIDATORS,
 	normalizePresetType,
+	validateCssCustomPropertyReference,
 	validateFreeformStyleValueByKind,
 } from '../utils/style-validation';
 
@@ -392,6 +394,10 @@ function isAuthoritativeExecutionContract( executionContract = {} ) {
 	return executionContract?.isAuthoritative !== false;
 }
 
+function executionContractKnowsPanelMapping( executionContract = {} ) {
+	return executionContract?.panelMappingKnown === true;
+}
+
 function normalizePanelKey( value ) {
 	return typeof value === 'string'
 		? value
@@ -428,7 +434,7 @@ function executionContractSupportsPath(
 
 	if (
 		supportedPaths.length === 0 &&
-		! isAuthoritativeExecutionContract( executionContract )
+		! executionContractKnowsPanelMapping( executionContract )
 	) {
 		return true;
 	}
@@ -466,6 +472,31 @@ function getAllowedPresetSlugs( executionContract = {}, presetType = '' ) {
 			isAuthoritativeExecutionContract( executionContract ),
 		slugs: new Set( presetSlugs ),
 	};
+}
+
+function presetTypeAllowsFreeformFallback(
+	executionContract = {},
+	presetType = ''
+) {
+	const normalizedType = normalizePresetType( presetType );
+
+	if (
+		! normalizedType ||
+		! isAuthoritativeExecutionContract( executionContract )
+	) {
+		return false;
+	}
+
+	const presetSlugs =
+		executionContract && typeof executionContract.presetSlugs === 'object'
+			? executionContract.presetSlugs
+			: {};
+
+	return (
+		Object.prototype.hasOwnProperty.call( presetSlugs, normalizedType ) &&
+		Array.isArray( presetSlugs[ normalizedType ] ) &&
+		presetSlugs[ normalizedType ].length === 0
+	);
 }
 
 function parsePresetReference( value ) {
@@ -542,6 +573,42 @@ function validatePresetReferenceValue( value, presetType, executionContract ) {
 	}
 
 	return allowedPresetSlugs.slugs.has( parsed.slug ) ? trimmed : null;
+}
+
+function validatePresetBackedStyleValue(
+	value,
+	{ presetType, allowCustomProperty = false, fallbackValidator = '' },
+	executionContract
+) {
+	const presetReference = validatePresetReferenceValue(
+		value,
+		presetType,
+		executionContract
+	);
+
+	if ( presetReference ) {
+		return presetReference;
+	}
+
+	if ( allowCustomProperty ) {
+		const customProperty = validateCssCustomPropertyReference( value );
+
+		if ( customProperty.valid ) {
+			return customProperty.value;
+		}
+	}
+
+	if (
+		fallbackValidator &&
+		presetTypeAllowsFreeformFallback( executionContract, presetType )
+	) {
+		return (
+			validateFreeformStyleValueByKind( fallbackValidator, value )
+				?.value || null
+		);
+	}
+
+	return null;
 }
 
 function sanitizeScalarValue( value ) {
@@ -633,15 +700,20 @@ function validateStyleLeafValue( dotPath, value, executionContract ) {
 			supportPath: 'color.background',
 			featureKey: 'backgroundColor',
 			presetType: 'color',
+			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.COLOR,
 		},
 		'color.text': {
 			supportPath: 'color.text',
 			featureKey: 'textColor',
 			presetType: 'color',
+			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.COLOR,
 		},
 		'color.gradient': {
 			supportPath: 'color.gradients',
 			presetType: 'gradient',
+			allowCustomProperty: true,
 		},
 		'color.duotone': {
 			supportPath: 'filter.duotone',
@@ -650,44 +722,81 @@ function validateStyleLeafValue( dotPath, value, executionContract ) {
 		'typography.fontSize': {
 			supportPath: 'typography.fontSize',
 			presetType: 'fontsize',
+			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE,
 		},
 		'typography.fontFamily': {
-			supportPath: 'typography.fontFamily',
+			supportPath: [
+				'typography.fontFamily',
+				'typography.__experimentalFontFamily',
+			],
 			presetType: 'fontfamily',
+			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.FONT_FAMILY,
 		},
 		'typography.lineHeight': {
 			supportPath: 'typography.lineHeight',
 			featureKey: 'lineHeight',
-			validator: 'line-height',
+			validator: FREEFORM_STYLE_VALIDATORS.LINE_HEIGHT,
+		},
+		'typography.fontStyle': {
+			supportPath: 'typography.fontStyle',
+			featureKey: 'fontStyle',
+			validator: FREEFORM_STYLE_VALIDATORS.FONT_STYLE,
+		},
+		'typography.fontWeight': {
+			supportPath: 'typography.fontWeight',
+			featureKey: 'fontWeight',
+			validator: FREEFORM_STYLE_VALIDATORS.FONT_WEIGHT,
+		},
+		'typography.letterSpacing': {
+			supportPath: 'typography.letterSpacing',
+			featureKey: 'letterSpacing',
+			validator: FREEFORM_STYLE_VALIDATORS.LETTER_SPACING,
+		},
+		'typography.textDecoration': {
+			supportPath: 'typography.textDecoration',
+			featureKey: 'textDecoration',
+			validator: FREEFORM_STYLE_VALIDATORS.TEXT_DECORATION,
+		},
+		'typography.textTransform': {
+			supportPath: 'typography.textTransform',
+			featureKey: 'textTransform',
+			validator: FREEFORM_STYLE_VALIDATORS.TEXT_TRANSFORM,
 		},
 		'spacing.blockGap': {
 			supportPath: 'spacing.blockGap',
 			featureKey: 'blockGap',
 			presetType: 'spacing',
+			allowCustomProperty: true,
 		},
 		'border.color': {
 			supportPath: 'border.color',
 			featureKey: 'borderColor',
 			presetType: 'color',
+			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.COLOR,
 		},
 		'border.radius': {
 			supportPath: 'border.radius',
 			featureKey: 'borderRadius',
-			validator: 'length-or-percentage',
+			validator: FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE,
 		},
 		'border.style': {
 			supportPath: 'border.style',
 			featureKey: 'borderStyle',
-			validator: 'border-style',
+			validator: FREEFORM_STYLE_VALIDATORS.BORDER_STYLE,
 		},
 		'border.width': {
 			supportPath: 'border.width',
 			featureKey: 'borderWidth',
-			validator: 'length',
+			validator: FREEFORM_STYLE_VALIDATORS.LENGTH,
 		},
 		shadow: {
 			supportPath: 'shadow',
 			presetType: 'shadow',
+			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.SHADOW,
 		},
 		'background.backgroundImage': {
 			supportPath: 'background.backgroundImage',
@@ -704,8 +813,14 @@ function validateStyleLeafValue( dotPath, value, executionContract ) {
 		return null;
 	}
 
+	const supportPaths = Array.isArray( rule.supportPath )
+		? rule.supportPath
+		: [ rule.supportPath ];
+
 	if (
-		! executionContractSupportsPath( executionContract, rule.supportPath )
+		! supportPaths.some( ( supportPath ) =>
+			executionContractSupportsPath( executionContract, supportPath )
+		)
 	) {
 		return null;
 	}
@@ -718,11 +833,7 @@ function validateStyleLeafValue( dotPath, value, executionContract ) {
 	}
 
 	if ( rule.presetType ) {
-		return validatePresetReferenceValue(
-			value,
-			rule.presetType,
-			executionContract
-		);
+		return validatePresetBackedStyleValue( value, rule, executionContract );
 	}
 
 	if ( rule.validator ) {
@@ -968,7 +1079,7 @@ function sanitizeSuggestionForExecutionContract(
 	const shouldEnforcePanels =
 		hasExplicitlyEmptyPanels ||
 		Object.keys( allowedPanels ).length > 0 ||
-		isAuthoritativeExecutionContract( executionContract );
+		executionContractKnowsPanelMapping( executionContract );
 
 	if ( group === 'settings' || group === 'styles' ) {
 		if ( shouldEnforcePanels && ( ! panel || ! allowedPanels[ panel ] ) ) {

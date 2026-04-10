@@ -107,6 +107,8 @@ Rules:
 - Use "list" for List View tab suggestions.
 - When bindableAttributes are provided, only suggest metadata.bindings changes for those attribute names.
 - Only suggest preset values that exist in the provided themeTokens.
+- CSS custom property references like var(--wp--custom--brand-accent) are allowed when they match the theme's live variables.
+- When the relevant preset family is empty in themeTokens, you may fall back to safe raw values for that property (for example hex colors, font sizes, font families, or shadow strings).
 - When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented Gutenberg capabilities or theme.json standards.
 - When structural identity is provided, treat it as the block's job on this page. Distinguish role and location from raw block name alone (for example, header navigation vs footer navigation, main query vs sidebar query).
 - When parent container context shows a dark or high-overlay container (for example, high dimRatio or a dark/contrast background preset), prefer light/contrast text colors and ensure sufficient contrast.
@@ -832,19 +834,22 @@ SYSTEM;
 	}
 
 	private static function filter_suggestion_for_execution_contract( array $suggestion, string $group, array $execution_contract ): ?array {
-		$is_advisory_only = 'block' === $group && self::is_advisory_only_block_type( $suggestion['type'] ?? null );
-		$allowed_panels   = self::get_allowed_panel_lookup( $execution_contract );
-		$has_empty_panels = ! empty( $execution_contract['hasExplicitlyEmptyPanels'] );
-		$panel            = array_key_exists( 'panel', $suggestion )
+		$is_advisory_only      = 'block' === $group && self::is_advisory_only_block_type( $suggestion['type'] ?? null );
+		$allowed_panels        = self::get_allowed_panel_lookup( $execution_contract );
+		$has_empty_panels      = ! empty( $execution_contract['hasExplicitlyEmptyPanels'] );
+		$should_enforce_panels = $has_empty_panels
+			|| [] !== $allowed_panels
+			|| self::execution_contract_knows_panel_mapping( $execution_contract );
+		$panel                 = array_key_exists( 'panel', $suggestion )
 			? self::normalize_panel_key( $suggestion['panel'] ?? 'general' )
 			: '';
-		$is_style_variation = ( $suggestion['type'] ?? null ) === 'style_variation';
+		$is_style_variation    = ( $suggestion['type'] ?? null ) === 'style_variation';
 
 		if ( 'settings' === $group || 'styles' === $group ) {
-			if ( [] === $allowed_panels || '' === $panel || ! isset( $allowed_panels[ $panel ] ) ) {
+			if ( $should_enforce_panels && ( '' === $panel || ! isset( $allowed_panels[ $panel ] ) ) ) {
 				return null;
 			}
-		} elseif ( 'block' === $group && ! $is_advisory_only && '' !== $panel && ! isset( $allowed_panels[ $panel ] ) ) {
+		} elseif ( 'block' === $group && ! $is_advisory_only && $should_enforce_panels && '' !== $panel && ! isset( $allowed_panels[ $panel ] ) ) {
 			return null;
 		}
 
@@ -1035,82 +1040,133 @@ SYSTEM;
 
 	private static function validate_style_leaf_value( string $dot_path, mixed $value, array $execution_contract ): mixed {
 		$rules = [
-			'color.background'            => [
-				'supportPath' => 'color.background',
-				'featureKey'  => 'backgroundColor',
-				'presetType'  => 'color',
+			'color.background'           => [
+				'supportPath'         => 'color.background',
+				'featureKey'          => 'backgroundColor',
+				'presetType'          => 'color',
+				'allowCustomProperty' => true,
+				'fallbackValidator'   => 'color',
 			],
-			'color.text'                  => [
-				'supportPath' => 'color.text',
-				'featureKey'  => 'textColor',
-				'presetType'  => 'color',
+			'color.text'                 => [
+				'supportPath'         => 'color.text',
+				'featureKey'          => 'textColor',
+				'presetType'          => 'color',
+				'allowCustomProperty' => true,
+				'fallbackValidator'   => 'color',
 			],
-			'color.gradient'              => [
-				'supportPath' => 'color.gradients',
-				'presetType'  => 'gradient',
+			'color.gradient'             => [
+				'supportPath'         => 'color.gradients',
+				'presetType'          => 'gradient',
+				'allowCustomProperty' => true,
 			],
 			'color.duotone'              => [
 				'supportPath' => 'filter.duotone',
 				'presetType'  => 'duotone',
 			],
-			'typography.fontSize'         => [
-				'supportPath' => 'typography.fontSize',
-				'presetType'  => 'fontsize',
+			'typography.fontSize'        => [
+				'supportPath'         => 'typography.fontSize',
+				'presetType'          => 'fontsize',
+				'allowCustomProperty' => true,
+				'fallbackValidator'   => 'length-or-percentage',
 			],
-			'typography.fontFamily'       => [
-				'supportPath' => 'typography.fontFamily',
-				'presetType'  => 'fontfamily',
+			'typography.fontFamily'      => [
+				'supportPath'         => [ 'typography.fontFamily', 'typography.__experimentalFontFamily' ],
+				'presetType'          => 'fontfamily',
+				'allowCustomProperty' => true,
+				'fallbackValidator'   => 'font-family',
 			],
-			'typography.lineHeight'       => [
+			'typography.lineHeight'      => [
 				'supportPath' => 'typography.lineHeight',
 				'featureKey'  => 'lineHeight',
 				'validator'   => 'line-height',
 			],
-			'spacing.blockGap'            => [
-				'supportPath' => 'spacing.blockGap',
-				'featureKey'  => 'blockGap',
-				'presetType'  => 'spacing',
+			'typography.fontStyle'       => [
+				'supportPath' => 'typography.fontStyle',
+				'featureKey'  => 'fontStyle',
+				'validator'   => 'font-style',
 			],
-			'border.color'                => [
-				'supportPath' => 'border.color',
-				'featureKey'  => 'borderColor',
-				'presetType'  => 'color',
+			'typography.fontWeight'      => [
+				'supportPath' => 'typography.fontWeight',
+				'featureKey'  => 'fontWeight',
+				'validator'   => 'font-weight',
 			],
-			'border.radius'               => [
+			'typography.letterSpacing'   => [
+				'supportPath' => 'typography.letterSpacing',
+				'featureKey'  => 'letterSpacing',
+				'validator'   => 'letter-spacing',
+			],
+			'typography.textDecoration'  => [
+				'supportPath' => 'typography.textDecoration',
+				'featureKey'  => 'textDecoration',
+				'validator'   => 'text-decoration',
+			],
+			'typography.textTransform'   => [
+				'supportPath' => 'typography.textTransform',
+				'featureKey'  => 'textTransform',
+				'validator'   => 'text-transform',
+			],
+			'spacing.blockGap'           => [
+				'supportPath'         => 'spacing.blockGap',
+				'featureKey'          => 'blockGap',
+				'presetType'          => 'spacing',
+				'allowCustomProperty' => true,
+			],
+			'border.color'               => [
+				'supportPath'         => 'border.color',
+				'featureKey'          => 'borderColor',
+				'presetType'          => 'color',
+				'allowCustomProperty' => true,
+				'fallbackValidator'   => 'color',
+			],
+			'border.radius'              => [
 				'supportPath' => 'border.radius',
 				'featureKey'  => 'borderRadius',
 				'validator'   => 'length-or-percentage',
 			],
-			'border.style'                => [
+			'border.style'               => [
 				'supportPath' => 'border.style',
 				'featureKey'  => 'borderStyle',
 				'validator'   => 'border-style',
 			],
-			'border.width'                => [
+			'border.width'               => [
 				'supportPath' => 'border.width',
 				'featureKey'  => 'borderWidth',
 				'validator'   => 'length',
 			],
-			'shadow'                      => [
-				'supportPath' => 'shadow',
-				'presetType'  => 'shadow',
+			'shadow'                     => [
+				'supportPath'         => 'shadow',
+				'presetType'          => 'shadow',
+				'allowCustomProperty' => true,
+				'fallbackValidator'   => 'shadow',
 			],
-			'background.backgroundImage'  => [
+			'background.backgroundImage' => [
 				'supportPath' => 'background.backgroundImage',
 				'featureKey'  => 'backgroundImage',
 			],
-			'background.backgroundSize'   => [
+			'background.backgroundSize'  => [
 				'supportPath' => 'background.backgroundSize',
 				'featureKey'  => 'backgroundSize',
 			],
 		];
-		$rule = $rules[ $dot_path ] ?? null;
+		$rule  = $rules[ $dot_path ] ?? null;
 
 		if ( ! is_array( $rule ) ) {
 			return null;
 		}
 
-		if ( ! self::execution_contract_supports_path( $execution_contract, $rule['supportPath'] ?? '' ) ) {
+		$support_paths = isset( $rule['supportPath'] ) && is_array( $rule['supportPath'] )
+			? $rule['supportPath']
+			: [ $rule['supportPath'] ?? '' ];
+		$supports_path = false;
+
+		foreach ( $support_paths as $support_path ) {
+			if ( is_string( $support_path ) && self::execution_contract_supports_path( $execution_contract, $support_path ) ) {
+				$supports_path = true;
+				break;
+			}
+		}
+
+		if ( ! $supports_path ) {
 			return null;
 		}
 
@@ -1119,9 +1175,9 @@ SYSTEM;
 		}
 
 		if ( isset( $rule['presetType'] ) ) {
-			return self::validate_preset_reference_value(
+			return self::validate_preset_backed_style_value(
 				$value,
-				(string) $rule['presetType'],
+				$rule,
 				$execution_contract
 			);
 		}
@@ -1134,6 +1190,47 @@ SYSTEM;
 		}
 
 		return self::sanitize_scalar_value( $value );
+	}
+
+	private static function validate_preset_backed_style_value( mixed $value, array $rule, array $execution_contract ): mixed {
+		$preset_type = isset( $rule['presetType'] ) && is_string( $rule['presetType'] )
+			? $rule['presetType']
+			: '';
+
+		if ( '' === $preset_type ) {
+			return null;
+		}
+
+		$preset_reference = self::validate_preset_reference_value(
+			$value,
+			$preset_type,
+			$execution_contract
+		);
+
+		if ( null !== $preset_reference ) {
+			return $preset_reference;
+		}
+
+		if ( ! empty( $rule['allowCustomProperty'] ) ) {
+			$custom_property = self::validate_css_custom_property_reference( $value );
+
+			if ( null !== $custom_property ) {
+				return $custom_property;
+			}
+		}
+
+		if (
+			isset( $rule['fallbackValidator'] ) &&
+			is_string( $rule['fallbackValidator'] ) &&
+			self::preset_type_allows_freeform_fallback( $execution_contract, $preset_type )
+		) {
+			return self::validate_freeform_style_value(
+				$rule['fallbackValidator'],
+				$value
+			);
+		}
+
+		return null;
 	}
 
 	private static function validate_spacing_box_value( mixed $value, string $dot_path, array $execution_contract ): mixed {
@@ -1261,6 +1358,38 @@ SYSTEM;
 		return isset( $allowed[ $slug ] ) ? $slug : null;
 	}
 
+	private static function preset_type_allows_freeform_fallback( array $execution_contract, string $preset_type ): bool {
+		$preset_type = self::normalize_preset_type( $preset_type );
+
+		if ( '' === $preset_type ) {
+			return false;
+		}
+
+		if ( ! array_key_exists( 'presetSlugs', $execution_contract ) || ! is_array( $execution_contract['presetSlugs'] ) ) {
+			return false;
+		}
+
+		return array_key_exists( $preset_type, $execution_contract['presetSlugs'] )
+			&& is_array( $execution_contract['presetSlugs'][ $preset_type ] )
+			&& [] === $execution_contract['presetSlugs'][ $preset_type ];
+	}
+
+	private static function validate_css_custom_property_reference( mixed $value ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed ) {
+			return null;
+		}
+
+		return 1 === preg_match( '/^var\(\s*--[a-z0-9_-]+\s*\)$/i', $trimmed )
+			? sanitize_text_field( $trimmed )
+			: null;
+	}
+
 	private static function parse_preset_reference( string $value ): ?array {
 		if ( preg_match( '/^var:preset\|([a-z-]+)\|([a-z0-9_-]+)$/i', $value, $matches ) ) {
 			return [
@@ -1297,6 +1426,10 @@ SYSTEM;
 		return $allowed;
 	}
 
+	private static function execution_contract_knows_panel_mapping( array $execution_contract ): bool {
+		return ! empty( $execution_contract['panelMappingKnown'] );
+	}
+
 	private static function execution_contract_supports_path( array $execution_contract, string $support_path ): bool {
 		if ( '' === $support_path ) {
 			return false;
@@ -1309,6 +1442,10 @@ SYSTEM;
 			),
 			true
 		);
+
+		if ( [] === $support_lookup && ! self::execution_contract_knows_panel_mapping( $execution_contract ) ) {
+			return true;
+		}
 
 		return isset( $support_lookup[ $support_path ] );
 	}
@@ -1398,11 +1535,25 @@ SYSTEM;
 	}
 
 	private static function validate_freeform_style_value( string $validator, mixed $value ): mixed {
+		$custom_property = self::validate_css_custom_property_reference( $value );
+
+		if ( null !== $custom_property ) {
+			return $custom_property;
+		}
+
 		return match ( $validator ) {
+			'color' => self::validate_color_value( $value ),
+			'font-family' => self::validate_safe_scalar_string_value( $value ),
+			'font-style' => self::validate_font_style_value( $value ),
+			'font-weight' => self::validate_font_weight_value( $value ),
 			'line-height' => self::validate_line_height_value( $value ),
 			'length-or-percentage' => self::validate_length_value( $value, true ),
 			'length' => self::validate_length_value( $value, false ),
+			'letter-spacing' => self::validate_letter_spacing_value( $value ),
 			'border-style' => self::validate_border_style_value( $value ),
+			'shadow' => self::validate_safe_scalar_string_value( $value ),
+			'text-decoration' => self::validate_text_decoration_value( $value ),
+			'text-transform' => self::validate_text_transform_value( $value ),
 			default => null,
 		};
 	}
@@ -1448,6 +1599,82 @@ SYSTEM;
 			: null;
 	}
 
+	private static function validate_color_value( mixed $value ): ?string {
+		$safe_string = self::validate_safe_scalar_string_value( $value );
+
+		if ( null === $safe_string ) {
+			return null;
+		}
+
+		if (
+			preg_match( '/^#[0-9a-f]{3,4}$/i', $safe_string ) ||
+			preg_match( '/^#[0-9a-f]{6}$/i', $safe_string ) ||
+			preg_match( '/^#[0-9a-f]{8}$/i', $safe_string ) ||
+			preg_match( '/^(?:rgba?|hsla?)\(\s*[-\d.%\s,\/]+\)$/i', $safe_string ) ||
+			preg_match( '/^[a-z-]+$/i', $safe_string )
+		) {
+			return $safe_string;
+		}
+
+		return null;
+	}
+
+	private static function validate_font_style_value( mixed $value ): ?string {
+		$safe_string = self::validate_safe_scalar_string_value( $value );
+
+		if ( null === $safe_string ) {
+			return null;
+		}
+
+		$normalized = strtolower( $safe_string );
+		$allowed    = [
+			'normal',
+			'italic',
+			'oblique',
+		];
+
+		return in_array( $normalized, $allowed, true ) ? $normalized : null;
+	}
+
+	private static function validate_font_weight_value( mixed $value ): mixed {
+		if ( is_int( $value ) ) {
+			return $value >= 1 && $value <= 1000 ? $value : null;
+		}
+
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed    = trim( $value );
+		$normalized = strtolower( $trimmed );
+		$allowed    = [
+			'normal',
+			'bold',
+			'bolder',
+			'lighter',
+		];
+
+		if ( in_array( $normalized, $allowed, true ) ) {
+			return $normalized;
+		}
+
+		if ( preg_match( '/^\d{1,4}$/', $trimmed ) ) {
+			$weight = (int) $trimmed;
+
+			return $weight >= 1 && $weight <= 1000 ? $trimmed : null;
+		}
+
+		return null;
+	}
+
+	private static function validate_letter_spacing_value( mixed $value ): mixed {
+		if ( is_string( $value ) && 'normal' === strtolower( trim( $value ) ) ) {
+			return 'normal';
+		}
+
+		return self::validate_signed_length_value( $value );
+	}
+
 	private static function validate_border_style_value( mixed $value ): ?string {
 		if ( ! is_string( $value ) ) {
 			return null;
@@ -1470,6 +1697,83 @@ SYSTEM;
 		return in_array( $normalized, $allowed, true ) ? $normalized : null;
 	}
 
+	private static function validate_text_decoration_value( mixed $value ): ?string {
+		$safe_string = self::validate_safe_scalar_string_value( $value );
+
+		if ( null === $safe_string ) {
+			return null;
+		}
+
+		$normalized = strtolower( $safe_string );
+
+		if ( 'none' === $normalized ) {
+			return 'none';
+		}
+
+		$tokens  = preg_split( '/\s+/', $normalized );
+		$tokens  = is_array( $tokens ) ? $tokens : [];
+		$allowed = [
+			'underline'    => true,
+			'overline'     => true,
+			'line-through' => true,
+		];
+
+		foreach ( $tokens as $token ) {
+			if ( '' === $token || ! isset( $allowed[ $token ] ) ) {
+				return null;
+			}
+		}
+
+		if ( count( $tokens ) !== count( array_unique( $tokens ) ) ) {
+			return null;
+		}
+
+		return implode( ' ', $tokens );
+	}
+
+	private static function validate_text_transform_value( mixed $value ): ?string {
+		$safe_string = self::validate_safe_scalar_string_value( $value );
+
+		if ( null === $safe_string ) {
+			return null;
+		}
+
+		$normalized = strtolower( $safe_string );
+		$allowed    = [
+			'none',
+			'capitalize',
+			'uppercase',
+			'lowercase',
+			'full-width',
+			'full-size-kana',
+		];
+
+		return in_array( $normalized, $allowed, true ) ? $normalized : null;
+	}
+
+	private static function validate_signed_length_value( mixed $value ): mixed {
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return 0 === $value || 0.0 === $value ? $value : null;
+		}
+
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed ) {
+			return null;
+		}
+
+		$suffix  = implode( '|', self::CSS_LENGTH_UNITS );
+		$pattern = '/^-?0(?:\.0+)?(?:(' . $suffix . '))?$|^-?(?:\d+|\d*\.\d+)(?:(' . $suffix . '))$/i';
+
+		return 1 === preg_match( $pattern, $trimmed ) && 0.0 !== (float) $trimmed
+			? $trimmed
+			: ( 0 === (float) $trimmed && 1 === preg_match( $pattern, $trimmed ) ? $trimmed : null );
+	}
+
 	private static function is_valid_css_length( string $value, bool $allow_percentage, bool $allow_zero ): bool {
 		$suffix = implode( '|', self::CSS_LENGTH_UNITS );
 
@@ -1482,6 +1786,22 @@ SYSTEM;
 			: '/^(?:\d+|\d*\.\d+)(?:(' . $suffix . '))$/i';
 
 		return 1 === preg_match( $pattern, $value );
+	}
+
+	private static function validate_safe_scalar_string_value( mixed $value ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed || self::looks_like_css_payload( $trimmed ) ) {
+			return null;
+		}
+
+		$sanitized = sanitize_text_field( $trimmed );
+
+		return '' !== $sanitized ? $sanitized : null;
 	}
 
 	private static function sanitize_scalar_value( mixed $value ): mixed {

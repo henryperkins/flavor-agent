@@ -176,7 +176,8 @@ final class BlockAbilities {
 
 		if ( array_key_exists( 'inspectorPanels', $block ) ) {
 			$inspector_panels = self::normalize_map( $block['inspectorPanels'] ?? [] );
-			$normalized['block']['inspectorPanels'] = $inspector_panels;
+			$normalized['block']['inspectorPanels']         = $inspector_panels;
+			$normalized['block']['inspectorPanelsExplicit'] = true;
 		}
 
 		if ( array_key_exists( 'bindableAttributes', $block ) ) {
