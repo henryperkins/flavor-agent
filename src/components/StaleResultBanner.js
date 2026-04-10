@@ -47,9 +47,7 @@ export default function StaleResultBanner( {
 					disabled={ isRefreshing }
 					className="flavor-agent-stale-banner__refresh"
 				>
-					{ isRefreshing
-						? `${ refreshLabel }\u2026`
-						: refreshLabel }
+					{ isRefreshing ? `${ refreshLabel }\u2026` : refreshLabel }
 				</Button>
 			) }
 		</div>

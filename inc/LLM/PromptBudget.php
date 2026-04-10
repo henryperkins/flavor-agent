@@ -163,10 +163,10 @@ final class PromptBudget {
 		}
 
 		return [
-			'max_tokens'    => $this->max_tokens,
+			'max_tokens'     => $this->max_tokens,
 			'current_tokens' => $this->get_current_tokens(),
-			'within_budget' => $this->is_within_budget(),
-			'sections'      => $section_diagnostics,
+			'within_budget'  => $this->is_within_budget(),
+			'sections'       => $section_diagnostics,
 		];
 	}
 

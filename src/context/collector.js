@@ -201,6 +201,75 @@ function getSiblingSummaries( clientId, direction, count, annotatedTree, identit
 		.filter( Boolean );
 }
 
+/**
+ * Extract layout constraints from a parent block.
+ *
+ * Tells the LLM what layout container the selected block lives inside
+ * (e.g. flex row, constrained, grid) and what width/alignment constraints
+ * apply, so suggestions respect the parent's spatial rules.
+ *
+ * @param {string} parentId   Parent block clientId.
+ * @param {Object} attributes Parent block attributes.
+ * @param {string} blockName  Parent block name.
+ * @return {Object|null} Layout constraint summary, or null when none.
+ */
+function getParentLayoutConstraints( parentId, attributes, blockName ) {
+	const layout = attributes?.layout;
+
+	if ( ! layout || typeof layout !== 'object' ) {
+		return null;
+	}
+
+	const constraints = {};
+
+	// Layout type (flow, constrained, flex, grid).
+	if ( layout.type ) {
+		constraints.type = String( layout.type );
+	}
+
+	// Constrained content/wide sizes.
+	if ( layout.contentSize ) {
+		constraints.contentSize = String( layout.contentSize );
+	}
+
+	if ( layout.wideSize ) {
+		constraints.wideSize = String( layout.wideSize );
+	}
+
+	// Flex direction and wrapping.
+	if ( layout.orientation ) {
+		constraints.orientation = String( layout.orientation );
+	}
+
+	if ( layout.flexWrap ) {
+		constraints.flexWrap = String( layout.flexWrap );
+	}
+
+	if ( layout.justifyContent ) {
+		constraints.justifyContent = String( layout.justifyContent );
+	}
+
+	if ( layout.verticalAlignment ) {
+		constraints.verticalAlignment = String( layout.verticalAlignment );
+	}
+
+	// Grid-specific.
+	if ( layout.columnCount ) {
+		constraints.columnCount = layout.columnCount;
+	}
+
+	if ( layout.minimumColumnWidth ) {
+		constraints.minimumColumnWidth = String( layout.minimumColumnWidth );
+	}
+
+	// Column-specific width (for core/column children).
+	if ( blockName === 'core/column' && attributes?.width ) {
+		constraints.columnWidth = String( attributes.width );
+	}
+
+	return Object.keys( constraints ).length > 0 ? constraints : null;
+}
+
 function getParentContext( clientId, annotatedTree, identityIndex ) {
 	const editor = select( blockEditorStore );
 	const parentId = editor.getBlockRootClientId( clientId );
@@ -240,6 +309,19 @@ function getParentContext( clientId, annotatedTree, identityIndex ) {
 		parentContext.visualHints = visualHints;
 	}
 
+	// ── Layout constraints from the parent chain ──
+	// Include the parent's resolved layout so children know their
+	// container type, content/wide sizes, and flow direction.
+	const layoutConstraints = getParentLayoutConstraints(
+		parentId,
+		attributes,
+		parentBlockName
+	);
+
+	if ( layoutConstraints ) {
+		parentContext.layoutConstraints = layoutConstraints;
+	}
+
 	if ( ! parentContext.title ) {
 		delete parentContext.title;
 	}
@@ -249,6 +331,46 @@ function getParentContext( clientId, annotatedTree, identityIndex ) {
 	}
 
 	return Object.keys( parentContext ).length ? parentContext : null;
+}
+
+// ── Theme token cache ────────────────────────────────────────────────────────
+//
+// collectThemeTokens() re-reads global styles editor settings on every call.
+// A module-level cache keyed by a lightweight fingerprint (the full token
+// output stringified) avoids redundant summarizeTokens() recomputation when
+// the same block is re-selected without theme changes.
+
+/** @type {{ raw: object|null, summary: object|null, fingerprint: string }|null} */
+let cachedThemeTokenResult = null;
+
+/**
+ * Invalidate the theme-token cache.  Call after Global Styles edits.
+ */
+export function invalidateThemeTokenCache() {
+	cachedThemeTokenResult = null;
+}
+
+/**
+ * Return a cached token summary, rebuilding only when the underlying
+ * raw tokens change.
+ *
+ * @return {{ raw: object, summary: object }} Raw tokens and summary.
+ */
+function getCachedThemeTokens() {
+	const raw = collectThemeTokens();
+	const fp = buildContextSignature( raw );
+
+	if ( cachedThemeTokenResult?.fingerprint === fp ) {
+		return {
+			raw: cachedThemeTokenResult.raw,
+			summary: cachedThemeTokenResult.summary,
+		};
+	}
+
+	const summary = summarizeTokens( raw );
+	cachedThemeTokenResult = { raw, summary, fingerprint: fp };
+
+	return { raw, summary };
 }
 
 // ── Annotated tree cache ─────────────────────────────────────────────────────
@@ -388,8 +510,7 @@ export function collectBlockContext( clientId ) {
 		  )
 		: [];
 
-	const themeTokens = collectThemeTokens();
-	const tokenSummary = summarizeTokens( themeTokens );
+	const { summary: tokenSummary } = getCachedThemeTokens();
 	const parentContext = getParentContext( clientId, annotatedTree, identityIndex );
 
 	return {
