@@ -102,8 +102,41 @@ function extractVisualHints( attributes, allowlist ) {
 	return hints;
 }
 
-function findStructuralIdentity( annotatedTree, clientId ) {
-	if ( ! clientId || ! Array.isArray( annotatedTree ) ) {
+/**
+ * Build a clientId → structuralIdentity lookup index from an annotated tree.
+ * Single O(n) traversal; pass the result to helpers that would otherwise each
+ * call findNodePath() (an O(n) tree walk) for every sibling and parent.
+ *
+ * @param {object[]} annotatedTree Annotated block tree.
+ * @return {Object} Plain object keyed by clientId.
+ */
+function buildIdentityIndex( annotatedTree ) {
+	const index = {};
+	function visit( nodes ) {
+		if ( ! Array.isArray( nodes ) ) {
+			return;
+		}
+		for ( const node of nodes ) {
+			if ( node?.clientId ) {
+				index[ node.clientId ] = node.structuralIdentity || {};
+			}
+			visit( node?.innerBlocks );
+		}
+	}
+	visit( annotatedTree );
+	return index;
+}
+
+function findStructuralIdentity( annotatedTree, clientId, identityIndex ) {
+	if ( ! clientId ) {
+		return {};
+	}
+
+	if ( identityIndex ) {
+		return identityIndex[ clientId ] || {};
+	}
+
+	if ( ! Array.isArray( annotatedTree ) ) {
 		return {};
 	}
 
@@ -115,7 +148,7 @@ function findStructuralIdentity( annotatedTree, clientId ) {
 	return path?.[ path.length - 1 ]?.structuralIdentity || {};
 }
 
-function getSiblingSummaries( clientId, direction, count, annotatedTree ) {
+function getSiblingSummaries( clientId, direction, count, annotatedTree, identityIndex ) {
 	const editor = select( blockEditorStore );
 	const rootId = editor.getBlockRootClientId( clientId );
 	const order = editor.getBlockOrder( rootId || '' );
@@ -142,7 +175,7 @@ function getSiblingSummaries( clientId, direction, count, annotatedTree ) {
 				attributes,
 				BASE_VISUAL_HINT_PATHS
 			);
-			const identity = findStructuralIdentity( annotatedTree, id );
+			const identity = findStructuralIdentity( annotatedTree, id, identityIndex );
 			const summary = {
 				block: blockName,
 			};
@@ -160,7 +193,7 @@ function getSiblingSummaries( clientId, direction, count, annotatedTree ) {
 		.filter( Boolean );
 }
 
-function getParentContext( clientId, annotatedTree ) {
+function getParentContext( clientId, annotatedTree, identityIndex ) {
 	const editor = select( blockEditorStore );
 	const parentId = editor.getBlockRootClientId( clientId );
 
@@ -180,7 +213,7 @@ function getParentContext( clientId, annotatedTree ) {
 		PARENT_VISUAL_HINT_PATHS
 	);
 	const parentType = blocks.getBlockType?.( parentBlockName );
-	const identity = findStructuralIdentity( annotatedTree, parentId );
+	const identity = findStructuralIdentity( annotatedTree, parentId, identityIndex );
 	const parentContext = {
 		block: parentBlockName,
 		title: parentType?.title || '',
@@ -298,6 +331,12 @@ export function collectBlockContext( clientId ) {
 	// Single annotated tree shared by both the structural context pass and
 	// the structuralBranch summarizeTree pass — no double annotation.
 	const annotatedTree = getAnnotatedBlockTree();
+
+	// Build a clientId → structuralIdentity index once so that getParentContext()
+	// and getSiblingSummaries() can do O(1) lookups instead of an O(n) tree walk
+	// per call.
+	const identityIndex = buildIdentityIndex( annotatedTree );
+
 	const path = findNodePath(
 		annotatedTree,
 		( n ) => n?.clientId === clientId
@@ -341,7 +380,7 @@ export function collectBlockContext( clientId ) {
 
 	const themeTokens = collectThemeTokens();
 	const tokenSummary = summarizeTokens( themeTokens );
-	const parentContext = getParentContext( clientId, annotatedTree );
+	const parentContext = getParentContext( clientId, annotatedTree, identityIndex );
 
 	return {
 		block: {
@@ -368,13 +407,15 @@ export function collectBlockContext( clientId ) {
 			clientId,
 			'before',
 			3,
-			annotatedTree
+			annotatedTree,
+			identityIndex
 		),
 		siblingSummariesAfter: getSiblingSummaries(
 			clientId,
 			'after',
 			3,
-			annotatedTree
+			annotatedTree,
+			identityIndex
 		),
 		...( parentContext ? { parentContext } : {} ),
 		structuralAncestors,

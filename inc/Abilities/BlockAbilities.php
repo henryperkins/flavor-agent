@@ -438,7 +438,8 @@ final class BlockAbilities {
 	}
 
 	private static function normalize_structural_summary_items( mixed $raw_items, bool $include_children = false, int $depth = 0 ): array {
-		$items       = self::normalize_list( $raw_items );
+		$max_items  = 6;
+		$items       = array_slice( self::normalize_list( $raw_items ), 0, $max_items );
 		$normalized  = [];
 		$max_depth   = 2;
 
