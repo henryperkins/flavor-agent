@@ -1,4 +1,5 @@
 const mockUseSelect = jest.fn();
+const mockUseDispatch = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockRenderBlockRecommendationsPanel = jest.fn();
 const mockRenderSettingsRecommendations = jest.fn();
@@ -20,6 +21,7 @@ jest.mock( '@wordpress/compose', () => ( {
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
+	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
 } ) );
 
 jest.mock( '../../context/collector', () => ( {
@@ -139,6 +141,9 @@ function getLatestChipProps( label ) {
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	mockUseDispatch.mockReturnValue( {
+		revalidateBlockReviewFreshness: jest.fn(),
+	} );
 	currentState = {
 		blockEditor: {
 			editingMode: 'default',

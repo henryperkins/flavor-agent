@@ -1747,6 +1747,53 @@ const actions = {
 		} )( activityId );
 	},
 
+	revalidateBlockReviewFreshness( clientId, requestInput = null ) {
+		return async ( { dispatch, select } ) => {
+			if ( ! clientId || ! requestInput ) {
+				return;
+			}
+
+			const storedResolvedSig =
+				select.getBlockResolvedContextSignature?.( clientId ) || '';
+
+			if ( ! storedResolvedSig ) {
+				return;
+			}
+
+			try {
+				const response = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-block',
+					method: 'POST',
+					data: {
+						...requestInput,
+						resolveSignatureOnly: true,
+					},
+				} );
+
+				const serverSig =
+					response?.resolvedContextSignature || '';
+
+				if (
+					serverSig &&
+					storedResolvedSig &&
+					serverSig !== storedResolvedSig
+				) {
+					dispatch(
+						actions.setBlockApplyState(
+							clientId,
+							'idle',
+							null,
+							null,
+							'server'
+						)
+					);
+				}
+			} catch {
+				// Background revalidation failures are silent.
+			}
+		};
+	},
+
 	revalidateNavigationReviewFreshness(
 		currentRequestSignature = null,
 		liveRequestInput = null
