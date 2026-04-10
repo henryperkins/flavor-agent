@@ -31,7 +31,7 @@ final class PromptBudgetTest extends TestCase {
 	}
 
 	public function test_low_priority_sections_trimmed_when_over_budget(): void {
-		// Very small budget: 50 tokens = ~200 chars.
+		// Budget under test: 2000 tokens.
 		$budget = new PromptBudget( 2000 );
 		$budget->add_section( 'critical', 'Critical context', 100 );
 		$budget->add_section( 'docs', str_repeat( 'x', 10000 ), 10 );
@@ -49,6 +49,24 @@ final class PromptBudgetTest extends TestCase {
 
 		$result = $budget->assemble();
 		$this->assertStringContainsString( 'Must keep this', $result );
+	}
+
+	public function test_assemble_preserves_insertion_order(): void {
+		$budget = new PromptBudget();
+		$budget->add_section( 'context', 'Context first', 10 );
+		$budget->add_section( 'instruction', 'Instruction second', 100 );
+
+		$this->assertSame(
+			"Context first\n\nInstruction second",
+			$budget->assemble()
+		);
+	}
+
+	public function test_assemble_keeps_last_remaining_section_even_when_it_exceeds_budget(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'critical', str_repeat( 'x', 10000 ), 100 );
+
+		$this->assertSame( str_repeat( 'x', 10000 ), $budget->assemble() );
 	}
 
 	public function test_estimate_tokens_returns_positive_for_content(): void {

@@ -208,12 +208,12 @@ function getSiblingSummaries( clientId, direction, count, annotatedTree, identit
  * (e.g. flex row, constrained, grid) and what width/alignment constraints
  * apply, so suggestions respect the parent's spatial rules.
  *
- * @param {string} parentId   Parent block clientId.
+ * @param {string} _parentId  Parent block clientId.
  * @param {Object} attributes Parent block attributes.
  * @param {string} blockName  Parent block name.
  * @return {Object|null} Layout constraint summary, or null when none.
  */
-function getParentLayoutConstraints( parentId, attributes, blockName ) {
+function getParentLayoutConstraints( _parentId, attributes, blockName ) {
 	const layout = attributes?.layout;
 
 	if ( ! layout || typeof layout !== 'object' ) {

@@ -7,11 +7,11 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Validates that the shared/support-to-panel.json fixture stays in sync
- * with the PHP SUPPORT_TO_PANEL constant.
+ * with BlockTypeIntrospector::get_support_to_panel().
  */
 final class SupportToPanelSyncTest extends TestCase {
 
-	public function test_shared_json_matches_php_constant(): void {
+	public function test_shared_json_matches_php_accessor(): void {
 		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
 		$this->assertFileExists( $json_path, 'shared/support-to-panel.json must exist' );
 
@@ -32,6 +32,7 @@ final class SupportToPanelSyncTest extends TestCase {
 	public function test_shared_json_has_minimum_entries(): void {
 		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
 		$decoded   = json_decode( (string) file_get_contents( $json_path ), true );
+		$this->assertIsArray( $decoded, 'shared/support-to-panel.json must decode to an array' );
 
 		// Guard against accidental truncation — there should be at least
 		// 30 entries. The exact count may grow as WordPress adds supports.
@@ -59,6 +60,7 @@ final class SupportToPanelSyncTest extends TestCase {
 
 		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
 		$decoded   = json_decode( (string) file_get_contents( $json_path ), true );
+		$this->assertIsArray( $decoded, 'shared/support-to-panel.json must decode to an array' );
 
 		foreach ( $decoded as $key => $panel ) {
 			$this->assertContains(

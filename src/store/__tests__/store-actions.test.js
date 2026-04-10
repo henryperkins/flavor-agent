@@ -46,7 +46,7 @@ import {
 	createActivityEntry,
 	readPersistedActivityLog,
 } from '../activity-history';
-import { actions } from '../index';
+import { actions, reducer } from '../index';
 
 describe( 'store action thunks', () => {
 	beforeEach( () => {
@@ -2439,6 +2439,55 @@ describe( 'store action thunks', () => {
 			)
 		);
 		expect( result ).toBe( false );
+	} );
+
+	test( 'setBlockApplyState preserves idle stale reasons for background freshness revalidation and clears them on new results', () => {
+		let state = reducer( undefined, { type: '@@INIT' } );
+
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					settings: [ { label: 'Use larger heading' } ],
+				},
+				4,
+				'context-signature',
+				null,
+				'resolved-block'
+			)
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockApplyState(
+				'block-1',
+				'idle',
+				null,
+				null,
+				'server'
+			)
+		);
+
+		expect( state.blockRequestState[ 'block-1' ].staleReason ).toBe(
+			'server'
+		);
+
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					settings: [ { label: 'Use tighter spacing' } ],
+				},
+				5,
+				'context-signature-next',
+				null,
+				'resolved-block-next'
+			)
+		);
+
+		expect( state.blockRequestState[ 'block-1' ].staleReason ).toBeNull();
 	} );
 
 	test( 'applySuggestion blocks prompt-stale block results before mutating attributes', async () => {

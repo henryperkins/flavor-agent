@@ -1770,8 +1770,7 @@ const actions = {
 					},
 				} );
 
-				const serverSig =
-					response?.resolvedContextSignature || '';
+				const serverSig = response?.resolvedContextSignature || '';
 
 				if (
 					serverSig &&
@@ -1939,7 +1938,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 								? action.suggestionKey ?? null
 								: currentEntry.lastAppliedSuggestionKey,
 						staleReason:
-							action.status === 'error'
+							action.status === 'error' ||
+							( action.status === 'idle' &&
+								null !== action.staleReason )
 								? action.staleReason ?? null
 								: null,
 					},
@@ -1949,7 +1950,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 		case 'CLEAR_BLOCK_RECS': {
 			const hasExistingState = Boolean(
 				state.blockRecommendations[ action.clientId ] ||
-				state.blockRequestState[ action.clientId ]
+					state.blockRequestState[ action.clientId ]
 			);
 
 			if ( ! hasExistingState ) {

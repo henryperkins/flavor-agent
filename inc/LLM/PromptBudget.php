@@ -87,7 +87,11 @@ final class PromptBudget {
 			return 0;
 		}
 
-		return (int) ceil( mb_strlen( $text, 'UTF-8' ) / self::CHARS_PER_TOKEN );
+		$length = function_exists( 'mb_strlen' )
+			? mb_strlen( $text, 'UTF-8' )
+			: strlen( $text );
+
+		return (int) ceil( $length / self::CHARS_PER_TOKEN );
 	}
 
 	/**
@@ -117,21 +121,14 @@ final class PromptBudget {
 	}
 
 	/**
-	 * Assemble the final prompt, trimming lowest-priority sections
-	 * until the result fits within the token budget.
+	 * Assemble the final prompt, trimming lowest-priority removable
+	 * sections until the result fits within budget or only one section
+	 * remains. Preserves the original insertion order of kept sections.
 	 *
 	 * @return string Assembled prompt with sections joined by double newlines.
 	 */
 	public function assemble(): string {
-		// Sort by priority descending so we keep high-priority sections.
-		$sections = $this->sections;
-		usort(
-			$sections,
-			static fn( array $a, array $b ): int => $b['priority'] <=> $a['priority']
-		);
-
-		// Start with all sections and trim lowest-priority ones.
-		$included = $sections;
+		$included = $this->sections;
 
 		while ( count( $included ) > 1 ) {
 			$assembled = self::join_sections( $included );
@@ -139,11 +136,11 @@ final class PromptBudget {
 				return $assembled;
 			}
 
-			// Remove the last section (lowest priority).
-			array_pop( $included );
+			$lowest_index = self::get_lowest_priority_index( $included );
+			array_splice( $included, $lowest_index, 1 );
 		}
 
-		// Single section or empty — return as-is.
+		// Single section or empty — return as-is, even if still over budget.
 		return self::join_sections( $included );
 	}
 
@@ -180,5 +177,23 @@ final class PromptBudget {
 		}
 
 		return implode( "\n\n", $parts );
+	}
+
+	/**
+	 * @param array<int, array{key: string, content: string, priority: int}> $sections
+	 */
+	private static function get_lowest_priority_index( array $sections ): int {
+		$lowest_index    = count( $sections ) - 1;
+		$lowest_priority = $sections[ $lowest_index ]['priority'] ?? 0;
+
+		for ( $index = count( $sections ) - 2; $index >= 0; --$index ) {
+			$priority = $sections[ $index ]['priority'] ?? 0;
+			if ( $priority < $lowest_priority ) {
+				$lowest_index    = $index;
+				$lowest_priority = $priority;
+			}
+		}
+
+		return $lowest_index;
 	}
 }
