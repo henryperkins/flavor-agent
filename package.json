@@ -10,6 +10,7 @@
 	"scripts": {
 		"build": "wp-scripts build",
 		"dist": "bash scripts/build-dist.sh",
+		"ensure:local-env": "node scripts/ensure-local-env.js",
 		"start": "wp-scripts start",
 		"lint:js": "wp-scripts lint-js src/",
 		"lint:plugin": "bash scripts/plugin-check.sh",
@@ -18,9 +19,9 @@
 		"test:e2e": "npm run test:e2e:playground && npm run test:e2e:wp70",
 		"test:e2e:playground": "playwright test",
 		"test:e2e:wp70": "playwright test -c playwright.wp70.config.js",
-		"wp:start": "docker compose up -d --build",
-		"wp:stop": "docker compose down",
-		"wp:reset": "docker compose down -v",
+		"wp:start": "node scripts/ensure-local-env.js && docker compose up -d --build",
+		"wp:stop": "node scripts/ensure-local-env.js && docker compose down",
+		"wp:reset": "node scripts/ensure-local-env.js && docker compose down -v",
 		"wp:e2e:wp70:bootstrap": "node scripts/wp70-e2e.js bootstrap",
 		"wp:e2e:wp70:teardown": "node scripts/wp70-e2e.js teardown"
 	},

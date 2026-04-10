@@ -672,6 +672,74 @@ describe( 'update helpers', () => {
 		).toEqual( recommendations );
 	} );
 
+	test( 'sanitizeRecommendationsForContext drops settings and styles when the execution contract declares explicit empty panels', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Use accent background',
+					panel: 'color',
+					attributeUpdates: {
+						backgroundColor: 'accent',
+					},
+				},
+			],
+			styles: [
+				{
+					label: 'Outline spacing',
+					panel: 'dimensions',
+					attributeUpdates: {
+						style: {
+							spacing: {
+								padding: 'var:preset|spacing|40',
+							},
+						},
+					},
+				},
+			],
+			block: [
+				{
+					label: 'Use outline style',
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+			],
+			explanation: 'Only the registered style variation is executable.',
+		};
+		const executionContract = {
+			hasExplicitlyEmptyPanels: true,
+			allowedPanels: [],
+			styleSupportPaths: [],
+			registeredStyles: [ 'outline' ],
+			presetSlugs: {
+				color: [ 'accent' ],
+				spacing: [ '40' ],
+			},
+		};
+
+		expect(
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{},
+				executionContract
+			)
+		).toEqual( {
+			settings: [],
+			styles: [],
+			block: [
+				{
+					label: 'Use outline style',
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-outline',
+					},
+				},
+			],
+			explanation: 'Only the registered style variation is executable.',
+		} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext strips unsupported metadata.bindings updates for unlocked blocks', () => {
 		const recommendations = {
 			settings: [
@@ -926,6 +994,48 @@ describe( 'update helpers', () => {
 				},
 			],
 			explanation: 'Only advisory structure guidance should survive.',
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates rejects unsupported preset slugs under an authoritative execution contract', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						backgroundColor: 'accent',
+					},
+				},
+				{},
+				{
+					allowedPanels: [ 'color' ],
+					styleSupportPaths: [ 'color.background' ],
+					presetSlugs: {
+						color: [ 'base' ],
+					},
+				}
+			)
+		).toEqual( {} );
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo treats unregistered style variations as non-executable under an authoritative execution contract', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'style_variation',
+					attributeUpdates: {
+						className: 'is-style-fancy',
+					},
+				},
+				{},
+				{
+					registeredStyles: [ 'outline' ],
+				}
+			)
+		).toEqual( {
+			allowedUpdates: {},
+			isAdvisory: true,
+			isAdvisoryOnly: false,
+			isExecutable: false,
 		} );
 	} );
 

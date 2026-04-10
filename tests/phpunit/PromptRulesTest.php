@@ -499,6 +499,173 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( [], $result['styles'] );
 	}
 
+	public function test_parse_response_drops_non_block_suggestions_without_attribute_updates(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [
+						[
+							'label' => 'No-op setting',
+							'panel' => 'general',
+						],
+					],
+					'styles'      => [
+						[
+							'label' => 'No-op style',
+							'panel' => 'color',
+						],
+					],
+					'block'       => [
+						[
+							'label'       => 'Wrap this block in a Group',
+							'type'        => 'structural_recommendation',
+							'description' => 'Manual follow-through only.',
+						],
+					],
+					'explanation' => 'Only advisory block items should survive.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['settings'] );
+		$this->assertSame( [], $result['styles'] );
+		$this->assertCount( 1, $result['block'] );
+		$this->assertSame( 'structural_recommendation', $result['block'][0]['type'] );
+	}
+
+	public function test_enforce_block_context_rules_drops_settings_and_styles_when_execution_contract_declares_explicitly_empty_panels(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Use accent background',
+						'panel'            => 'color',
+						'attributeUpdates' => [
+							'backgroundColor' => 'accent',
+						],
+					],
+				],
+				'styles'      => [
+					[
+						'label'            => 'Add padding',
+						'panel'            => 'dimensions',
+						'attributeUpdates' => [
+							'style' => [
+								'spacing' => [
+									'padding' => 'var:preset|spacing|40',
+								],
+							],
+						],
+					],
+				],
+				'block'       => [
+					[
+						'label'            => 'Use outline style',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-outline',
+						],
+					],
+				],
+				'explanation' => 'Only the registered style variation should survive.',
+			],
+			[],
+			[
+				'allowedPanels'           => [],
+				'hasExplicitlyEmptyPanels' => true,
+				'registeredStyles'        => [ 'outline' ],
+				'presetSlugs'             => [
+					'color'   => [ 'accent' ],
+					'spacing' => [ '40' ],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['settings'] );
+		$this->assertSame( [], $result['styles'] );
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Use outline style',
+					'type'             => 'style_variation',
+					'attributeUpdates' => [
+						'className' => 'is-style-outline',
+					],
+				],
+			],
+			$result['block']
+		);
+	}
+
+	public function test_enforce_block_context_rules_drops_suggestions_that_target_unsupported_panels(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Use accent background',
+						'panel'            => 'color',
+						'attributeUpdates' => [
+							'backgroundColor' => 'accent',
+						],
+					],
+				],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Unsupported panel suggestions should be removed.',
+			],
+			[],
+			[
+				'allowedPanels'     => [ 'general' ],
+				'styleSupportPaths' => [ 'color.background' ],
+				'presetSlugs'       => [
+					'color' => [ 'accent' ],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['settings'] );
+	}
+
+	public function test_enforce_block_context_rules_drops_unsupported_presets_and_unregistered_style_variations(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [
+					[
+						'label'            => 'Use accent background',
+						'panel'            => 'color',
+						'attributeUpdates' => [
+							'backgroundColor' => 'accent',
+						],
+					],
+				],
+				'block'       => [
+					[
+						'label'            => 'Use fancy style',
+						'type'             => 'style_variation',
+						'attributeUpdates' => [
+							'className' => 'is-style-fancy',
+						],
+					],
+				],
+				'explanation' => 'Unsupported presets and styles should not survive.',
+			],
+			[],
+			[
+				'allowedPanels'     => [ 'color' ],
+				'styleSupportPaths' => [ 'color.background' ],
+				'registeredStyles'  => [ 'outline' ],
+				'presetSlugs'       => [
+					'color' => [ 'base' ],
+				],
+			]
+		);
+
+		$this->assertSame( [], $result['styles'] );
+		$this->assertSame( [], $result['block'] );
+	}
+
 	public function test_parse_response_normalizes_ranking_contract_when_confidence_present(): void {
 		$result = Prompt::parse_response(
 			wp_json_encode(

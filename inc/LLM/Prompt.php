@@ -11,6 +11,34 @@ final class Prompt {
 
 	use FormatsDocsGuidance;
 
+	private const CSS_LENGTH_UNITS = [
+		'px',
+		'em',
+		'rem',
+		'vh',
+		'vw',
+		'vmin',
+		'vmax',
+		'svh',
+		'lvh',
+		'dvh',
+		'svw',
+		'lvw',
+		'dvw',
+		'ch',
+		'ex',
+		'cap',
+		'ic',
+		'lh',
+		'rlh',
+		'cm',
+		'mm',
+		'q',
+		'in',
+		'pt',
+		'pc',
+	];
+
 	/**
 	 * Build the system prompt that instructs the LLM how to respond.
 	 */
@@ -105,7 +133,12 @@ SYSTEM;
 	/**
 	 * Build the user prompt from editor context.
 	 */
-	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
+	public static function build_user(
+		array $context,
+		string $prompt = '',
+		array $docs_guidance = [],
+		array $execution_contract = []
+	): string {
 		$block  = $context['block'] ?? [];
 		$tokens = $context['themeTokens'] ?? [];
 
@@ -163,6 +196,20 @@ SYSTEM;
 
 		if ( ! empty( $block['configAttributes'] ) ) {
 			$parts[] = 'Config attribute schema: ' . wp_json_encode( $block['configAttributes'] );
+		}
+
+		if ( ! empty( $execution_contract ) ) {
+			$parts[] = 'Execution contract: ' . wp_json_encode(
+				array_filter(
+					[
+						'allowedPanels'            => $execution_contract['allowedPanels'] ?? [],
+						'styleSupportPaths'        => $execution_contract['styleSupportPaths'] ?? [],
+						'registeredStyles'         => $execution_contract['registeredStyles'] ?? [],
+						'hasExplicitlyEmptyPanels' => ! empty( $execution_contract['hasExplicitlyEmptyPanels'] ),
+					],
+					static fn( mixed $value ): bool => [] !== $value && null !== $value && false !== $value
+				)
+			);
 		}
 
 		if ( ! empty( $block['childCount'] ) ) {
@@ -651,7 +698,7 @@ SYSTEM;
 		];
 	}
 
-	public static function enforce_block_context_rules( array $payload, array $block ): array {
+	public static function enforce_block_context_rules( array $payload, array $block, array $execution_contract = [] ): array {
 		$restrictions = self::get_block_restrictions( $block );
 
 		if ( $restrictions['disabled'] ) {
@@ -664,6 +711,7 @@ SYSTEM;
 		}
 
 		$payload = self::normalize_block_payload_for_execution( $payload );
+		$payload = self::filter_payload_for_execution_contract( $payload, $execution_contract );
 		$payload = self::filter_payload_for_bindable_attributes( $payload, $block );
 
 		if ( ! $restrictions['contentOnly'] ) {
@@ -743,6 +791,713 @@ SYSTEM;
 		);
 	}
 
+	private static function filter_payload_for_execution_contract( array $payload, array $execution_contract ): array {
+		if ( [] === $execution_contract ) {
+			return $payload;
+		}
+
+		return [
+			'settings'    => self::filter_suggestion_group_for_execution_contract(
+				$payload['settings'] ?? [],
+				'settings',
+				$execution_contract
+			),
+			'styles'      => self::filter_suggestion_group_for_execution_contract(
+				$payload['styles'] ?? [],
+				'styles',
+				$execution_contract
+			),
+			'block'       => self::filter_suggestion_group_for_execution_contract(
+				$payload['block'] ?? [],
+				'block',
+				$execution_contract
+			),
+			'explanation' => $payload['explanation'] ?? '',
+		];
+	}
+
+	private static function filter_suggestion_group_for_execution_contract( array $suggestions, string $group, array $execution_contract ): array {
+		return array_values(
+			array_filter(
+				array_map(
+					fn( array $suggestion ): ?array => self::filter_suggestion_for_execution_contract(
+						$suggestion,
+						$group,
+						$execution_contract
+					),
+					array_filter( $suggestions, 'is_array' )
+				)
+			)
+		);
+	}
+
+	private static function filter_suggestion_for_execution_contract( array $suggestion, string $group, array $execution_contract ): ?array {
+		$is_advisory_only = 'block' === $group && self::is_advisory_only_block_type( $suggestion['type'] ?? null );
+		$allowed_panels   = self::get_allowed_panel_lookup( $execution_contract );
+		$has_empty_panels = ! empty( $execution_contract['hasExplicitlyEmptyPanels'] );
+		$panel            = array_key_exists( 'panel', $suggestion )
+			? self::normalize_panel_key( $suggestion['panel'] ?? 'general' )
+			: '';
+		$is_style_variation = ( $suggestion['type'] ?? null ) === 'style_variation';
+
+		if ( 'settings' === $group || 'styles' === $group ) {
+			if ( [] === $allowed_panels || '' === $panel || ! isset( $allowed_panels[ $panel ] ) ) {
+				return null;
+			}
+		} elseif ( 'block' === $group && ! $is_advisory_only && '' !== $panel && ! isset( $allowed_panels[ $panel ] ) ) {
+			return null;
+		}
+
+		if ( 'block' === $group && ! $is_advisory_only && $has_empty_panels && ! $is_style_variation ) {
+			return null;
+		}
+
+		if ( $is_style_variation && ! self::is_valid_style_variation_suggestion( $suggestion, $execution_contract ) ) {
+			return null;
+		}
+
+		if ( ! is_array( $suggestion['attributeUpdates'] ?? null ) || [] === $suggestion['attributeUpdates'] ) {
+			return $is_advisory_only || 'block' === $group ? $suggestion : null;
+		}
+
+		$filtered_updates = self::filter_attribute_updates_for_execution_contract(
+			$suggestion['attributeUpdates'],
+			$execution_contract
+		);
+
+		if ( [] === $filtered_updates ) {
+			return $is_advisory_only ? $suggestion : null;
+		}
+
+		$suggestion['attributeUpdates'] = $filtered_updates;
+
+		return $suggestion;
+	}
+
+	private static function filter_attribute_updates_for_execution_contract( array $attribute_updates, array $execution_contract ): array {
+		$filtered_updates = [];
+
+		foreach ( $attribute_updates as $key => $value ) {
+			switch ( $key ) {
+				case 'backgroundColor':
+					$validated = self::validate_top_level_preset_attribute(
+						$value,
+						'color.background',
+						'color',
+						'backgroundColor',
+						$execution_contract
+					);
+					break;
+				case 'textColor':
+					$validated = self::validate_top_level_preset_attribute(
+						$value,
+						'color.text',
+						'color',
+						'textColor',
+						$execution_contract
+					);
+					break;
+				case 'gradient':
+					$validated = self::validate_top_level_preset_attribute(
+						$value,
+						'color.gradients',
+						'gradient',
+						null,
+						$execution_contract
+					);
+					break;
+				case 'fontSize':
+					$validated = self::validate_top_level_preset_attribute(
+						$value,
+						'typography.fontSize',
+						'fontsize',
+						null,
+						$execution_contract
+					);
+					break;
+				case 'textAlign':
+					$validated = self::validate_supported_scalar_attribute(
+						$value,
+						'typography.textAlign',
+						$execution_contract
+					);
+					break;
+				case 'minHeight':
+					$validated = self::validate_supported_scalar_attribute(
+						$value,
+						'dimensions.minHeight',
+						$execution_contract
+					);
+					break;
+				case 'minHeightUnit':
+					$validated = self::validate_supported_scalar_attribute(
+						$value,
+						'dimensions.minHeight',
+						$execution_contract
+					);
+					break;
+				case 'height':
+					$validated = self::validate_supported_scalar_attribute(
+						$value,
+						'dimensions.height',
+						$execution_contract
+					);
+					break;
+				case 'width':
+					$validated = self::validate_supported_scalar_attribute(
+						$value,
+						'dimensions.width',
+						$execution_contract
+					);
+					break;
+				case 'aspectRatio':
+					$validated = self::validate_supported_scalar_attribute(
+						$value,
+						'dimensions.aspectRatio',
+						$execution_contract
+					);
+					break;
+				case 'style':
+					$validated = is_array( $value )
+						? self::filter_style_attribute_updates_for_execution_contract(
+							$value,
+							$execution_contract
+						)
+						: [];
+					break;
+				default:
+					$validated = $value;
+					break;
+			}
+
+			if ( null === $validated || [] === $validated ) {
+				continue;
+			}
+
+			$filtered_updates[ $key ] = $validated;
+		}
+
+		return $filtered_updates;
+	}
+
+	private static function filter_style_attribute_updates_for_execution_contract(
+		array $style_updates,
+		array $execution_contract,
+		array $path = []
+	): array {
+		$filtered = [];
+
+		foreach ( $style_updates as $key => $value ) {
+			if ( ! is_string( $key ) ) {
+				continue;
+			}
+
+			$next_path = array_merge( $path, [ $key ] );
+			$dot_path  = implode( '.', $next_path );
+
+			if ( in_array( $dot_path, [ 'spacing.padding', 'spacing.margin' ], true ) ) {
+				$validated = self::validate_spacing_box_value( $value, $dot_path, $execution_contract );
+
+				if ( null !== $validated && [] !== $validated ) {
+					$filtered[ $key ] = $validated;
+				}
+
+				continue;
+			}
+
+			if ( is_array( $value ) ) {
+				$nested = self::filter_style_attribute_updates_for_execution_contract(
+					$value,
+					$execution_contract,
+					$next_path
+				);
+
+				if ( [] !== $nested ) {
+					$filtered[ $key ] = $nested;
+				}
+
+				continue;
+			}
+
+			$validated = self::validate_style_leaf_value(
+				$dot_path,
+				$value,
+				$execution_contract
+			);
+
+			if ( null !== $validated ) {
+				$filtered[ $key ] = $validated;
+			}
+		}
+
+		return $filtered;
+	}
+
+	private static function validate_style_leaf_value( string $dot_path, mixed $value, array $execution_contract ): mixed {
+		$rules = [
+			'color.background'            => [
+				'supportPath' => 'color.background',
+				'featureKey'  => 'backgroundColor',
+				'presetType'  => 'color',
+			],
+			'color.text'                  => [
+				'supportPath' => 'color.text',
+				'featureKey'  => 'textColor',
+				'presetType'  => 'color',
+			],
+			'color.gradient'              => [
+				'supportPath' => 'color.gradients',
+				'presetType'  => 'gradient',
+			],
+			'color.duotone'              => [
+				'supportPath' => 'filter.duotone',
+				'presetType'  => 'duotone',
+			],
+			'typography.fontSize'         => [
+				'supportPath' => 'typography.fontSize',
+				'presetType'  => 'fontsize',
+			],
+			'typography.fontFamily'       => [
+				'supportPath' => 'typography.fontFamily',
+				'presetType'  => 'fontfamily',
+			],
+			'typography.lineHeight'       => [
+				'supportPath' => 'typography.lineHeight',
+				'featureKey'  => 'lineHeight',
+				'validator'   => 'line-height',
+			],
+			'spacing.blockGap'            => [
+				'supportPath' => 'spacing.blockGap',
+				'featureKey'  => 'blockGap',
+				'presetType'  => 'spacing',
+			],
+			'border.color'                => [
+				'supportPath' => 'border.color',
+				'featureKey'  => 'borderColor',
+				'presetType'  => 'color',
+			],
+			'border.radius'               => [
+				'supportPath' => 'border.radius',
+				'featureKey'  => 'borderRadius',
+				'validator'   => 'length-or-percentage',
+			],
+			'border.style'                => [
+				'supportPath' => 'border.style',
+				'featureKey'  => 'borderStyle',
+				'validator'   => 'border-style',
+			],
+			'border.width'                => [
+				'supportPath' => 'border.width',
+				'featureKey'  => 'borderWidth',
+				'validator'   => 'length',
+			],
+			'shadow'                      => [
+				'supportPath' => 'shadow',
+				'presetType'  => 'shadow',
+			],
+			'background.backgroundImage'  => [
+				'supportPath' => 'background.backgroundImage',
+				'featureKey'  => 'backgroundImage',
+			],
+			'background.backgroundSize'   => [
+				'supportPath' => 'background.backgroundSize',
+				'featureKey'  => 'backgroundSize',
+			],
+		];
+		$rule = $rules[ $dot_path ] ?? null;
+
+		if ( ! is_array( $rule ) ) {
+			return null;
+		}
+
+		if ( ! self::execution_contract_supports_path( $execution_contract, $rule['supportPath'] ?? '' ) ) {
+			return null;
+		}
+
+		if ( isset( $rule['featureKey'] ) && ! self::execution_contract_feature_enabled( $execution_contract, (string) $rule['featureKey'] ) ) {
+			return null;
+		}
+
+		if ( isset( $rule['presetType'] ) ) {
+			return self::validate_preset_reference_value(
+				$value,
+				(string) $rule['presetType'],
+				$execution_contract
+			);
+		}
+
+		if ( isset( $rule['validator'] ) ) {
+			return self::validate_freeform_style_value(
+				(string) $rule['validator'],
+				$value
+			);
+		}
+
+		return self::sanitize_scalar_value( $value );
+	}
+
+	private static function validate_spacing_box_value( mixed $value, string $dot_path, array $execution_contract ): mixed {
+		$support_path = 'spacing.padding' === $dot_path ? 'spacing.padding' : 'spacing.margin';
+		$feature_key  = 'spacing.padding' === $dot_path ? 'padding' : 'margin';
+
+		if ( ! self::execution_contract_supports_path( $execution_contract, $support_path ) ) {
+			return null;
+		}
+
+		if ( ! self::execution_contract_feature_enabled( $execution_contract, $feature_key ) ) {
+			return null;
+		}
+
+		if ( is_array( $value ) ) {
+			$filtered = [];
+
+			foreach ( $value as $side => $side_value ) {
+				if ( ! is_string( $side ) ) {
+					continue;
+				}
+
+				$validated = self::validate_spacing_scalar_value( $side_value, $execution_contract );
+
+				if ( null !== $validated ) {
+					$filtered[ $side ] = $validated;
+				}
+			}
+
+			return [] !== $filtered ? $filtered : null;
+		}
+
+		return self::validate_spacing_scalar_value( $value, $execution_contract );
+	}
+
+	private static function validate_spacing_scalar_value( mixed $value, array $execution_contract ): mixed {
+		$preset_reference = self::validate_preset_reference_value(
+			$value,
+			'spacing',
+			$execution_contract
+		);
+
+		if ( null !== $preset_reference ) {
+			return $preset_reference;
+		}
+
+		return self::validate_freeform_style_value( 'length-or-percentage', $value );
+	}
+
+	private static function validate_top_level_preset_attribute(
+		mixed $value,
+		string $support_path,
+		string $preset_type,
+		?string $feature_key,
+		array $execution_contract
+	): ?string {
+		if ( ! self::execution_contract_supports_path( $execution_contract, $support_path ) ) {
+			return null;
+		}
+
+		if ( null !== $feature_key && ! self::execution_contract_feature_enabled( $execution_contract, $feature_key ) ) {
+			return null;
+		}
+
+		$validated = self::validate_raw_preset_slug(
+			$value,
+			$preset_type,
+			$execution_contract
+		);
+
+		return is_string( $validated ) ? $validated : null;
+	}
+
+	private static function validate_supported_scalar_attribute( mixed $value, string $support_path, array $execution_contract ): mixed {
+		if ( ! self::execution_contract_supports_path( $execution_contract, $support_path ) ) {
+			return null;
+		}
+
+		return self::sanitize_scalar_value( $value );
+	}
+
+	private static function validate_preset_reference_value( mixed $value, string $preset_type, array $execution_contract ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed ) {
+			return null;
+		}
+
+		$parsed = self::parse_preset_reference( $trimmed );
+
+		if ( null === $parsed ) {
+			return null;
+		}
+
+		if ( self::normalize_preset_type( $parsed['type'] ) !== self::normalize_preset_type( $preset_type ) ) {
+			return null;
+		}
+
+		$allowed = self::get_allowed_preset_lookup( $execution_contract, $preset_type );
+
+		if ( [] === $allowed || ! isset( $allowed[ sanitize_key( $parsed['slug'] ) ] ) ) {
+			return null;
+		}
+
+		return sanitize_text_field( $trimmed );
+	}
+
+	private static function validate_raw_preset_slug( mixed $value, string $preset_type, array $execution_contract ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$slug = sanitize_key( $value );
+
+		if ( '' === $slug ) {
+			return null;
+		}
+
+		$allowed = self::get_allowed_preset_lookup( $execution_contract, $preset_type );
+
+		return isset( $allowed[ $slug ] ) ? $slug : null;
+	}
+
+	private static function parse_preset_reference( string $value ): ?array {
+		if ( preg_match( '/^var:preset\|([a-z-]+)\|([a-z0-9_-]+)$/i', $value, $matches ) ) {
+			return [
+				'type' => sanitize_key( $matches[1] ),
+				'slug' => sanitize_key( $matches[2] ),
+			];
+		}
+
+		if ( preg_match( '/^var\(--wp--preset--([a-z-]+)--([a-z0-9_-]+)\)$/i', $value, $matches ) ) {
+			return [
+				'type' => sanitize_key( $matches[1] ),
+				'slug' => sanitize_key( $matches[2] ),
+			];
+		}
+
+		return null;
+	}
+
+	private static function get_allowed_panel_lookup( array $execution_contract ): array {
+		$allowed = [];
+
+		foreach ( (array) ( $execution_contract['allowedPanels'] ?? [] ) as $panel ) {
+			if ( ! is_string( $panel ) ) {
+				continue;
+			}
+
+			$panel_key = self::normalize_panel_key( $panel );
+
+			if ( '' !== $panel_key ) {
+				$allowed[ $panel_key ] = true;
+			}
+		}
+
+		return $allowed;
+	}
+
+	private static function execution_contract_supports_path( array $execution_contract, string $support_path ): bool {
+		if ( '' === $support_path ) {
+			return false;
+		}
+
+		$support_lookup = array_fill_keys(
+			array_map(
+				static fn( mixed $path ): string => is_string( $path ) ? trim( $path ) : '',
+				(array) ( $execution_contract['styleSupportPaths'] ?? [] )
+			),
+			true
+		);
+
+		return isset( $support_lookup[ $support_path ] );
+	}
+
+	private static function execution_contract_feature_enabled( array $execution_contract, string $feature_key ): bool {
+		$enabled_features = is_array( $execution_contract['enabledFeatures'] ?? null )
+			? $execution_contract['enabledFeatures']
+			: [];
+
+		return ! array_key_exists( $feature_key, $enabled_features ) || false !== $enabled_features[ $feature_key ];
+	}
+
+	private static function get_allowed_preset_lookup( array $execution_contract, string $preset_type ): array {
+		$preset_type = self::normalize_preset_type( $preset_type );
+		$lookup      = [];
+
+		foreach ( (array) ( $execution_contract['presetSlugs'][ $preset_type ] ?? [] ) as $slug ) {
+			if ( ! is_string( $slug ) ) {
+				continue;
+			}
+
+			$normalized_slug = sanitize_key( $slug );
+
+			if ( '' !== $normalized_slug ) {
+				$lookup[ $normalized_slug ] = true;
+			}
+		}
+
+		return $lookup;
+	}
+
+	private static function normalize_preset_type( string $preset_type ): string {
+		return str_replace( '-', '', sanitize_key( $preset_type ) );
+	}
+
+	private static function is_valid_style_variation_suggestion( array $suggestion, array $execution_contract ): bool {
+		$registered_styles = array_fill_keys(
+			array_map(
+				'sanitize_key',
+				array_filter(
+					(array) ( $execution_contract['registeredStyles'] ?? [] ),
+					'is_string'
+				)
+			),
+			true
+		);
+
+		if ( [] === $registered_styles ) {
+			return false;
+		}
+
+		$class_name = is_string( $suggestion['attributeUpdates']['className'] ?? null )
+			? (string) $suggestion['attributeUpdates']['className']
+			: '';
+
+		if ( '' === $class_name ) {
+			return false;
+		}
+
+		foreach ( self::extract_style_variation_names( $class_name ) as $style_name ) {
+			if ( isset( $registered_styles[ $style_name ] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * @return string[]
+	 */
+	private static function extract_style_variation_names( string $class_name ): array {
+		if ( '' === $class_name ) {
+			return [];
+		}
+
+		preg_match_all( '/\bis-style-([a-z0-9_-]+)\b/i', $class_name, $matches );
+
+		return array_values(
+			array_unique(
+				array_map(
+					'sanitize_key',
+					$matches[1] ?? []
+				)
+			)
+		);
+	}
+
+	private static function validate_freeform_style_value( string $validator, mixed $value ): mixed {
+		return match ( $validator ) {
+			'line-height' => self::validate_line_height_value( $value ),
+			'length-or-percentage' => self::validate_length_value( $value, true ),
+			'length' => self::validate_length_value( $value, false ),
+			'border-style' => self::validate_border_style_value( $value ),
+			default => null,
+		};
+	}
+
+	private static function validate_line_height_value( mixed $value ): mixed {
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return $value > 0 ? $value : null;
+		}
+
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if (
+			preg_match( '/^(?:\d+|\d*\.\d+)$/', $trimmed ) ||
+			self::is_valid_css_length( $trimmed, true, false )
+		) {
+			return $trimmed;
+		}
+
+		return null;
+	}
+
+	private static function validate_length_value( mixed $value, bool $allow_percentage ): mixed {
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return 0 === $value || 0.0 === $value ? $value : null;
+		}
+
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed ) {
+			return null;
+		}
+
+		return self::is_valid_css_length( $trimmed, $allow_percentage, true )
+			? $trimmed
+			: null;
+	}
+
+	private static function validate_border_style_value( mixed $value ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$normalized = strtolower( trim( $value ) );
+		$allowed    = [
+			'none',
+			'solid',
+			'dashed',
+			'dotted',
+			'double',
+			'groove',
+			'ridge',
+			'inset',
+			'outset',
+			'hidden',
+		];
+
+		return in_array( $normalized, $allowed, true ) ? $normalized : null;
+	}
+
+	private static function is_valid_css_length( string $value, bool $allow_percentage, bool $allow_zero ): bool {
+		$suffix = implode( '|', self::CSS_LENGTH_UNITS );
+
+		if ( $allow_percentage ) {
+			$suffix .= '|%';
+		}
+
+		$pattern = $allow_zero
+			? '/^0(?:\.0+)?(?:(' . $suffix . '))?$|^(?:\d+|\d*\.\d+)(?:(' . $suffix . '))$/i'
+			: '/^(?:\d+|\d*\.\d+)(?:(' . $suffix . '))$/i';
+
+		return 1 === preg_match( $pattern, $value );
+	}
+
+	private static function sanitize_scalar_value( mixed $value ): mixed {
+		if ( is_string( $value ) ) {
+			$trimmed = sanitize_text_field( $value );
+
+			return '' !== $trimmed ? $trimmed : null;
+		}
+
+		if ( is_int( $value ) || is_float( $value ) || is_bool( $value ) ) {
+			return $value;
+		}
+
+		return null;
+	}
+
 	private static function validate_suggestions( array $suggestions, string $group ): array {
 		$valid = [];
 		$order = 0;
@@ -764,6 +1519,10 @@ SYSTEM;
 			}
 
 			if ( $has_executable_updates && ( ! is_array( $attribute_updates ) || [] === $attribute_updates ) ) {
+				continue;
+			}
+
+			if ( 'block' !== $group && ( ! is_array( $attribute_updates ) || [] === $attribute_updates ) ) {
 				continue;
 			}
 

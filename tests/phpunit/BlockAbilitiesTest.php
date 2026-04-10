@@ -481,6 +481,25 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( 'core/branch-6', $prepared['context']['structuralBranch'][5]['block'] );
 	}
 
+	public function test_prepare_recommend_block_input_preserves_explicit_empty_inspector_panels(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [
+							'content' => 'Hello world',
+						],
+						'inspectorPanels'   => [],
+					],
+				],
+			]
+		);
+
+		$this->assertArrayHasKey( 'inspectorPanels', $prepared['context']['block'] );
+		$this->assertSame( [], $prepared['context']['block']['inspectorPanels'] );
+	}
+
 	public function test_recommend_block_short_circuits_disabled_blocks_before_api_key_validation(): void {
 		$result = BlockAbilities::recommend_block(
 			[
@@ -499,6 +518,8 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( [], $result['styles'] ?? null );
 		$this->assertSame( [], $result['block'] ?? null );
 		$this->assertSame( '', $result['explanation'] ?? null );
+		$this->assertIsArray( $result['executionContract'] ?? null );
+		$this->assertSame( 'disabled', $result['executionContract']['editingMode'] ?? null );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['resolvedContextSignature'] ?? '' )

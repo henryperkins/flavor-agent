@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Context\BlockRecommendationExecutionContract;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
@@ -37,6 +38,7 @@ final class BlockAbilities {
 
 		$context = $prepared['context'];
 		$prompt  = $prepared['prompt'];
+		$execution_contract = BlockRecommendationExecutionContract::from_context( $context );
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
 			'block',
@@ -54,6 +56,7 @@ final class BlockAbilities {
 
 		if ( self::normalize_editing_mode( $context['block']['editingMode'] ?? 'default' ) === 'disabled' ) {
 			$payload                             = self::get_empty_recommendation_payload();
+			$payload['executionContract']        = $execution_contract;
 			$payload['resolvedContextSignature'] = $resolved_context_signature;
 
 			return $payload;
@@ -64,7 +67,8 @@ final class BlockAbilities {
 		$user_prompt   = Prompt::build_user(
 			$context,
 			$prompt,
-			$docs_guidance
+			$docs_guidance,
+			$execution_contract
 		);
 
 		$result = ChatClient::chat( $system_prompt, $user_prompt );
@@ -79,12 +83,17 @@ final class BlockAbilities {
 			return $payload;
 		}
 
-		$payload = Prompt::enforce_block_context_rules( $payload, $context['block'] ?? [] );
+		$payload = Prompt::enforce_block_context_rules(
+			$payload,
+			$context['block'] ?? [],
+			$execution_contract
+		);
 
 		if ( is_wp_error( $payload ) ) {
 			return $payload;
 		}
 
+		$payload['executionContract']        = $execution_contract;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 
 		return $payload;
@@ -165,8 +174,8 @@ final class BlockAbilities {
 			$normalized['block']['title'] = $title;
 		}
 
-		$inspector_panels = self::normalize_map( $block['inspectorPanels'] ?? [] );
-		if ( ! empty( $inspector_panels ) ) {
+		if ( array_key_exists( 'inspectorPanels', $block ) ) {
+			$inspector_panels = self::normalize_map( $block['inspectorPanels'] ?? [] );
 			$normalized['block']['inspectorPanels'] = $inspector_panels;
 		}
 

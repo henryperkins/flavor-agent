@@ -125,6 +125,11 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( [], $response_data['payload']['styles'] ?? null );
 		$this->assertSame( [], $response_data['payload']['block'] ?? null );
 		$this->assertSame( 'Use the accent color.', $response_data['payload']['explanation'] ?? null );
+		$this->assertIsArray( $response_data['payload']['executionContract'] ?? null );
+		$this->assertSame(
+			[ 'outline' ],
+			$response_data['payload']['executionContract']['registeredStyles'] ?? null
+		);
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $response_data['payload']['resolvedContextSignature'] ?? '' )

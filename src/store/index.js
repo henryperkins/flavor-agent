@@ -2603,14 +2603,17 @@ const actions = {
 						result.payload || {}
 					);
 					const blockContext = requestData.editorContext?.block || {};
+					const executionContract = payload.executionContract || null;
 					const sanitizedPayload = sanitizeRecommendationsForContext(
 						payload,
-						blockContext
+						blockContext,
+						executionContract
 					);
 					const diagnosticsBase = buildBlockRecommendationDiagnostics(
 						payload,
 						sanitizedPayload,
-						blockContext
+						blockContext,
+						executionContract
 					);
 					const requestMeta = normalizeRequestMeta(
 						payload.requestMeta
@@ -2637,6 +2640,7 @@ const actions = {
 									requestData.editorContext?.block?.name ||
 									'',
 								blockContext,
+								executionContract,
 								prompt: requestData.prompt || '',
 								...sanitizedPayload,
 								requestMeta,
@@ -2735,6 +2739,8 @@ const actions = {
 				select.getBlockRecommendations( clientId ) || null;
 			const storedRecommendations = storedRecommendationPayload || {};
 			const blockContext = storedRecommendations.blockContext || {};
+			const executionContract =
+				storedRecommendations.executionContract || null;
 			const blockEditorSelect =
 				registry?.select?.( 'core/block-editor' ) || {};
 			const blockEditorDispatch =
@@ -2743,7 +2749,8 @@ const actions = {
 				blockEditorSelect.getBlockAttributes?.( clientId ) || {};
 			const execution = getBlockSuggestionExecutionInfo(
 				suggestion,
-				blockContext
+				blockContext,
+				executionContract
 			);
 			const allowedUpdates = execution.allowedUpdates;
 			let nextAttributes = null;
@@ -4403,14 +4410,17 @@ function reducer( state = DEFAULT_STATE, action ) {
 				navigationResultToken: state.navigationResultToken + 1,
 				navigationReviewRequestToken:
 					state.navigationReviewRequestToken + 1,
-				navigationReviewFreshnessStatus:
-					action.reviewContextSignature ? 'fresh' : 'idle',
+				navigationReviewFreshnessStatus: action.reviewContextSignature
+					? 'fresh'
+					: 'idle',
 				navigationStatus: 'ready',
 				navigationError: null,
 				navigationReviewStaleReason: null,
 			};
 		case 'SET_NAVIGATION_REVIEW_FRESHNESS_STATE':
-			if ( isStaleNavigationReviewRequest( state, action.requestToken ) ) {
+			if (
+				isStaleNavigationReviewRequest( state, action.requestToken )
+			) {
 				return state;
 			}
 

@@ -1336,6 +1336,7 @@ final class Registration {
 					'items' => $suggestion_schema,
 				],
 				'explanation' => [ 'type' => 'string' ],
+				'executionContract' => [ 'type' => 'object' ],
 				'resolvedContextSignature' => [ 'type' => 'string' ],
 			],
 		];

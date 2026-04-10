@@ -17,13 +17,15 @@ source ~/.nvm/nvm.sh && nvm use
 npm ci
 ```
 
+If you want to review or override the Docker defaults, copy `.env.example` to `.env` before starting the stack. The `wp:*` npm scripts also create `.env` from `.env.example` automatically when it is missing.
+
 ## Start The Local Stack
 
 ```bash
 npm run wp:start
 ```
 
-This brings up the repo's Docker-backed WordPress environment from `docker-compose.yml`.
+This brings up the repo's Docker-backed WordPress environment from `docker-compose.yml` and bootstraps a local `.env` from `.env.example` when needed.
 
 ## Build The Plugin
 

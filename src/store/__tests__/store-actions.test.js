@@ -84,12 +84,21 @@ describe( 'store action thunks', () => {
 	} );
 
 	test( 'fetchBlockRecommendations stores the request signature without posting it to the API', async () => {
+		const executionContract = {
+			allowedPanels: [ 'general' ],
+			styleSupportPaths: [ 'color.background' ],
+			presetSlugs: {
+				color: [ 'accent' ],
+			},
+		};
+
 		apiFetch.mockResolvedValue( {
 			payload: {
 				settings: [],
 				styles: [],
 				block: [ { label: 'Rewrite intro' } ],
 				explanation: 'Mocked response',
+				executionContract,
 			},
 		} );
 
@@ -147,6 +156,7 @@ describe( 'store action thunks', () => {
 					blockName: 'core/paragraph',
 					blockContext: context.block,
 					explanation: 'Mocked response',
+					executionContract,
 				} ),
 			} )
 		);
@@ -860,8 +870,7 @@ describe( 'store action thunks', () => {
 			currentRequestSignature,
 			{
 				menuId: 42,
-				navigationMarkup:
-					'<!-- wp:navigation {"ref":42} /-->',
+				navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
 				prompt: 'Simplify the header navigation.',
 				editorContext: {
 					block: {
@@ -880,8 +889,7 @@ describe( 'store action thunks', () => {
 				method: 'POST',
 				data: {
 					menuId: 42,
-					navigationMarkup:
-						'<!-- wp:navigation {"ref":42} /-->',
+					navigationMarkup: '<!-- wp:navigation {"ref":42} /-->',
 					prompt: 'Simplify the header navigation.',
 					editorContext: {
 						block: {
@@ -2031,6 +2039,85 @@ describe( 'store action thunks', () => {
 					},
 				},
 				prompt: 'Tighten the copy.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.'
+			)
+		);
+		expect( result ).toBe( false );
+	} );
+
+	test( 'applySuggestion uses the stored execution contract to block unsupported preset updates', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: { name: 'core/paragraph' },
+				executionContract: {
+					allowedPanels: [ 'color' ],
+					styleSupportPaths: [ 'color.background' ],
+					presetSlugs: {
+						color: [ 'base' ],
+					},
+				},
+				prompt: 'Use a stronger color treatment.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Old copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Use accent background',
+				panel: 'color',
+				attributeUpdates: {
+					backgroundColor: 'accent',
+				},
+			},
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/paragraph',
+					},
+				},
+				prompt: 'Use a stronger color treatment.',
 			}
 		)( {
 			dispatch,

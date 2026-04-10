@@ -386,13 +386,16 @@ export function BlockRecommendationsContent( {
 	const { executableBlockSuggestions, advisoryBlockSuggestions } =
 		useMemo( () => {
 			const blockContext = recommendations?.blockContext || {};
+			const executionContract =
+				recommendations?.executionContract || null;
 			const executable = [];
 			const advisory = [];
 
 			for ( const suggestion of blockSuggestions ) {
 				const execution = getBlockSuggestionExecutionInfo(
 					suggestion,
-					blockContext
+					blockContext,
+					executionContract
 				);
 
 				if ( execution.isExecutable ) {
@@ -406,7 +409,11 @@ export function BlockRecommendationsContent( {
 				executableBlockSuggestions: executable,
 				advisoryBlockSuggestions: advisory,
 			};
-		}, [ blockSuggestions, recommendations?.blockContext ] );
+		}, [
+			blockSuggestions,
+			recommendations?.blockContext,
+			recommendations?.executionContract,
+		] );
 	const featuredSuggestion = useMemo(
 		() =>
 			isStaleResult
