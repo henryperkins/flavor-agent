@@ -183,10 +183,11 @@ final class PromptBudget {
 	 * @param array<int, array{key: string, content: string, priority: int}> $sections
 	 */
 	private static function get_lowest_priority_index( array $sections ): int {
-		$lowest_index    = count( $sections ) - 1;
+		$count           = count( $sections );
+		$lowest_index    = $count - 1;
 		$lowest_priority = $sections[ $lowest_index ]['priority'] ?? 0;
 
-		for ( $index = count( $sections ) - 2; $index >= 0; --$index ) {
+		for ( $index = $count - 2; $index >= 0; --$index ) {
 			$priority = $sections[ $index ]['priority'] ?? 0;
 			if ( $priority < $lowest_priority ) {
 				$lowest_index    = $index;

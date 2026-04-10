@@ -1940,7 +1940,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 						staleReason:
 							action.status === 'error' ||
 							( action.status === 'idle' &&
-								null !== action.staleReason )
+								action.staleReason !== null )
 								? action.staleReason ?? null
 								: null,
 					},
