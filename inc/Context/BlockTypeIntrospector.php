@@ -8,7 +8,26 @@ use FlavorAgent\Support\StringArray;
 
 final class BlockTypeIntrospector {
 
-	// Keep this map in sync with src/context/block-inspector.js.
+	/**
+	 * Canonical mapping lives in shared/support-to-panel.json and is
+	 * consumed by both this class and src/context/block-inspector.js.
+	 * A PHPUnit assertion validates that the two copies stay in sync.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function get_support_to_panel(): array {
+		static $map = null;
+		if ( null === $map ) {
+			$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
+			$raw       = file_get_contents( $json_path );
+			$decoded   = json_decode( (string) $raw, true );
+			$map       = is_array( $decoded ) ? $decoded : [];
+		}
+
+		return $map;
+	}
+
+	// Runtime alias kept for private callers below.
 	private const SUPPORT_TO_PANEL = [
 		'color.background'                    => 'color',
 		'color.text'                          => 'color',

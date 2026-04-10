@@ -6,6 +6,7 @@ namespace FlavorAgent\AzureOpenAI;
 
 use FlavorAgent\LLM\WordPressAIClient;
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Support\MetricsNormalizer;
 
 final class ResponsesClient extends BaseHttpClient {
 
@@ -274,7 +275,7 @@ final class ResponsesClient extends BaseHttpClient {
 
 		$instructions_chars = self::measure_payload_value( $payload['instructions'] ?? null );
 		$input_chars        = self::measure_payload_value( $payload['input'] ?? null );
-		$max_output_tokens  = self::normalize_metric_int( $payload['max_output_tokens'] ?? null );
+		$max_output_tokens  = MetricsNormalizer::normalize_metric_int( $payload['max_output_tokens'] ?? null );
 		$reasoning_effort   = trim(
 			(string) (
 				is_array( $payload['reasoning'] ?? null )
@@ -339,10 +340,10 @@ final class ResponsesClient extends BaseHttpClient {
 			$headers,
 			[ 'apim-request-id', 'x-request-id', 'request-id', 'x-ms-request-id' ]
 		);
-		$processing_ms       = self::normalize_metric_int(
+		$processing_ms       = MetricsNormalizer::normalize_metric_int(
 			self::first_header_value( $headers, [ 'openai-processing-ms', 'x-openai-processing-ms' ] )
 		);
-		$retry_after         = self::normalize_metric_int(
+		$retry_after         = MetricsNormalizer::normalize_metric_int(
 			self::first_header_value( $headers, [ 'retry-after' ] )
 		);
 		$region              = self::first_header_value( $headers, [ 'x-ms-region' ] );
@@ -394,13 +395,13 @@ final class ResponsesClient extends BaseHttpClient {
 			'message' => trim( $error->get_error_message( $error_code ) ),
 		];
 
-		$http_status = self::normalize_metric_int( $error_data['http_status'] ?? $error_data['status'] ?? null );
+		$http_status = MetricsNormalizer::normalize_metric_int( $error_data['http_status'] ?? $error_data['status'] ?? null );
 
 		if ( null !== $http_status ) {
 			$response_summary['httpStatus'] = $http_status;
 		}
 
-		$response_body_bytes = self::normalize_metric_int( $error_data['response_body_bytes'] ?? null );
+		$response_body_bytes = MetricsNormalizer::normalize_metric_int( $error_data['response_body_bytes'] ?? null );
 
 		if ( null !== $response_body_bytes ) {
 			$response_summary['bodyBytes'] = $response_body_bytes;
@@ -418,7 +419,7 @@ final class ResponsesClient extends BaseHttpClient {
 			$response_headers,
 			[ 'apim-request-id', 'x-request-id', 'request-id', 'x-ms-request-id' ]
 		);
-		$retry_after         = self::normalize_metric_int( $error_data['retry_after'] ?? null );
+		$retry_after         = MetricsNormalizer::normalize_metric_int( $error_data['retry_after'] ?? null );
 
 		if ( null !== $provider_request_id ) {
 			$response_summary['providerRequestId'] = $provider_request_id;
@@ -502,9 +503,9 @@ final class ResponsesClient extends BaseHttpClient {
 		$usage = is_array( $data['usage'] ?? null ) ? $data['usage'] : [];
 		$token_usage = [];
 
-		$total = self::normalize_metric_int( $usage['total_tokens'] ?? $usage['totalTokens'] ?? null );
-		$input = self::normalize_metric_int( $usage['input_tokens'] ?? $usage['inputTokens'] ?? null );
-		$output = self::normalize_metric_int( $usage['output_tokens'] ?? $usage['outputTokens'] ?? null );
+		$total = MetricsNormalizer::normalize_metric_int( $usage['total_tokens'] ?? $usage['totalTokens'] ?? null );
+		$input = MetricsNormalizer::normalize_metric_int( $usage['input_tokens'] ?? $usage['inputTokens'] ?? null );
+		$output = MetricsNormalizer::normalize_metric_int( $usage['output_tokens'] ?? $usage['outputTokens'] ?? null );
 
 		if ( null !== $total ) {
 			$token_usage['total'] = $total;
@@ -522,25 +523,5 @@ final class ResponsesClient extends BaseHttpClient {
 			'tokenUsage' => $token_usage,
 			'latencyMs'  => max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) ),
 		];
-	}
-
-	private static function normalize_metric_int( $value ): ?int {
-		if ( is_int( $value ) ) {
-			return $value >= 0 ? $value : null;
-		}
-
-		if ( is_float( $value ) ) {
-			$normalized = (int) round( $value );
-
-			return $normalized >= 0 ? $normalized : null;
-		}
-
-		if ( is_string( $value ) && '' !== trim( $value ) && preg_match( '/^-?\d+$/', $value ) ) {
-			$normalized = (int) $value;
-
-			return $normalized >= 0 ? $normalized : null;
-		}
-
-		return null;
 	}
 }

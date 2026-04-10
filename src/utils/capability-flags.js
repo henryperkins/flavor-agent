@@ -111,43 +111,57 @@ function getDefaultActions( surface, data, reason ) {
 	].filter( Boolean );
 }
 
-function getDefaultMessage( surface, reason ) {
-	switch ( surface ) {
-		case 'block':
-			return 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.';
-		case 'content':
-			return 'Content recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
-		case 'template':
-			return 'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
-		case 'template-part':
-			return 'Template-part recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
-		case 'navigation':
-			if ( reason === 'missing_theme_capability' ) {
-				return 'Navigation recommendations require the edit_theme_options capability.';
-			}
+// ── Shared message fragments ────────────────────────────────
+const CHAT_PROVIDER_MESSAGE =
+	'use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
+const THEME_CAPABILITY_MESSAGE = 'require the edit_theme_options capability.';
 
-			return 'Navigation recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
-		case 'global-styles':
-			if ( reason === 'missing_theme_capability' ) {
-				return 'Global Styles recommendations require the edit_theme_options capability.';
-			}
-
-			return 'Global Styles recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
-		case 'style-book':
-			if ( reason === 'surface_not_implemented' ) {
-				return 'Style Book recommendations are not available in this plugin build yet.';
-			}
-
-			if ( reason === 'missing_theme_capability' ) {
-				return 'Style Book recommendations require the edit_theme_options capability.';
-			}
-
-			return 'Style Book recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
-		case 'pattern':
-			return 'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable chat provider from Settings > Flavor Agent or Settings > Connectors.';
+// ── Surface-specific message configuration ──────────────────
+const SURFACE_MESSAGES = Object.freeze( {
+	block: {
 		default:
-			return 'This Flavor Agent surface is not available right now.';
+			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.',
+	},
+	content: {
+		default: `Content recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+	},
+	template: {
+		default: `Template recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+	},
+	'template-part': {
+		default: `Template-part recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+	},
+	navigation: {
+		missing_theme_capability: `Navigation recommendations ${ THEME_CAPABILITY_MESSAGE }`,
+		default: `Navigation recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+	},
+	'global-styles': {
+		missing_theme_capability: `Global Styles recommendations ${ THEME_CAPABILITY_MESSAGE }`,
+		default: `Global Styles recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+	},
+	'style-book': {
+		surface_not_implemented:
+			'Style Book recommendations are not available in this plugin build yet.',
+		missing_theme_capability: `Style Book recommendations ${ THEME_CAPABILITY_MESSAGE }`,
+		default: `Style Book recommendations ${ CHAT_PROVIDER_MESSAGE }`,
+	},
+	pattern: {
+		default:
+			'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable chat provider from Settings > Flavor Agent or Settings > Connectors.',
+	},
+} );
+
+function getDefaultMessage( surface, reason ) {
+	const surfaceConfig = SURFACE_MESSAGES[ surface ];
+	if ( surfaceConfig ) {
+		return (
+			surfaceConfig[ reason ] ||
+			surfaceConfig.default ||
+			'This Flavor Agent surface is not available right now.'
+		);
 	}
+
+	return 'This Flavor Agent surface is not available right now.';
 }
 
 export function getSurfaceCapability( surface, input = null ) {

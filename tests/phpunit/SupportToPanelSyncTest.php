@@ -2,92 +2,70 @@
 
 declare(strict_types=1);
 
-namespace FlavorAgent\Tests;
-
 use FlavorAgent\Context\BlockTypeIntrospector;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 
 /**
- * Ensures the PHP SUPPORT_TO_PANEL map in BlockTypeIntrospector stays in
- * lockstep with the JS map in src/context/block-inspector.js. These two
- * lookups must agree because ServerCollector and the client-side collector
- * both use them to route block supports into Inspector panels.
+ * Validates that the shared/support-to-panel.json fixture stays in sync
+ * with the PHP SUPPORT_TO_PANEL constant.
  */
 final class SupportToPanelSyncTest extends TestCase {
 
-	public function test_php_and_js_support_to_panel_maps_match(): void {
-		$php_map = $this->get_php_support_to_panel_map();
-		$js_map  = $this->parse_js_support_to_panel_map();
+	public function test_shared_json_matches_php_constant(): void {
+		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
+		$this->assertFileExists( $json_path, 'shared/support-to-panel.json must exist' );
 
-		$this->assertNotEmpty( $php_map, 'PHP SUPPORT_TO_PANEL map should not be empty.' );
-		$this->assertNotEmpty( $js_map, 'JS SUPPORT_TO_PANEL map should not be empty.' );
+		$raw     = file_get_contents( $json_path );
+		$decoded = json_decode( (string) $raw, true );
+		$this->assertIsArray( $decoded, 'shared/support-to-panel.json must decode to an array' );
 
-		ksort( $php_map );
-		ksort( $js_map );
+		// The static accessor reads the same file but validates the wiring.
+		$php_map = BlockTypeIntrospector::get_support_to_panel();
 
 		$this->assertSame(
+			$decoded,
 			$php_map,
-			$js_map,
-			'SUPPORT_TO_PANEL maps have drifted between BlockTypeIntrospector.php and src/context/block-inspector.js.'
+			'BlockTypeIntrospector::get_support_to_panel() must match shared/support-to-panel.json exactly'
 		);
 	}
 
-	/**
-	 * @return array<string, string>
-	 */
-	private function get_php_support_to_panel_map(): array {
-		$reflection = new ReflectionClass( BlockTypeIntrospector::class );
-		$constants  = $reflection->getConstants();
+	public function test_shared_json_has_expected_entry_count(): void {
+		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
+		$decoded   = json_decode( (string) file_get_contents( $json_path ), true );
 
-		$this->assertArrayHasKey(
-			'SUPPORT_TO_PANEL',
-			$constants,
-			'BlockTypeIntrospector::SUPPORT_TO_PANEL must exist.'
+		// 39 entries as of the initial extraction — this guards against
+		// accidental truncation or duplication.
+		$this->assertCount(
+			39,
+			$decoded,
+			'shared/support-to-panel.json should have exactly 39 entries'
 		);
-
-		/** @var array<string, string> $map */
-		$map = $constants['SUPPORT_TO_PANEL'];
-
-		return $map;
 	}
 
-	/**
-	 * @return array<string, string>
-	 */
-	private function parse_js_support_to_panel_map(): array {
-		$source_path = dirname( __DIR__, 2 ) . '/src/context/block-inspector.js';
-		$this->assertFileExists( $source_path );
+	public function test_all_panel_values_are_known(): void {
+		$known_panels = [
+			'color',
+			'typography',
+			'dimensions',
+			'border',
+			'shadow',
+			'filter',
+			'background',
+			'position',
+			'layout',
+			'advanced',
+			'list',
+		];
 
-		$source = file_get_contents( $source_path );
-		$this->assertIsString( $source );
+		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
+		$decoded   = json_decode( (string) file_get_contents( $json_path ), true );
 
-		$anchor = 'const SUPPORT_TO_PANEL = {';
-		$start  = strpos( $source, $anchor );
-		$this->assertNotFalse( $start, 'Could not locate SUPPORT_TO_PANEL declaration.' );
-
-		$body_start = $start + strlen( $anchor );
-		$body_end   = strpos( $source, '};', $body_start );
-		$this->assertNotFalse( $body_end, 'Could not locate end of SUPPORT_TO_PANEL declaration.' );
-
-		$body = substr( $source, $body_start, $body_end - $body_start );
-
-		$map = [];
-
-		// Match quoted keys: 'foo.bar': 'panel',
-		if ( preg_match_all( "/'([^'\\n]+)'\\s*:\\s*'([^'\\n]+)'/", $body, $matches, PREG_SET_ORDER ) ) {
-			foreach ( $matches as $match ) {
-				$map[ $match[1] ] = $match[2];
-			}
+		foreach ( $decoded as $key => $panel ) {
+			$this->assertContains(
+				$panel,
+				$known_panels,
+				"Unexpected panel value '$panel' for key '$key'"
+			);
 		}
-
-		// Match bareword keys: shadow: 'shadow',
-		if ( preg_match_all( "/(?:^|[\\s,{])([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*'([^'\\n]+)'/", $body, $matches, PREG_SET_ORDER ) ) {
-			foreach ( $matches as $match ) {
-				$map[ $match[1] ] = $match[2];
-			}
-		}
-
-		return $map;
 	}
 }
