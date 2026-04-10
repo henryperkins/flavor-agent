@@ -20,6 +20,8 @@ final class BlockAbilities {
 
 	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
 
+	private const DOCS_SCOPE_MAX_ITEMS = 3;
+
 	public static function recommend_block( mixed $input ): array|\WP_Error {
 		$input                  = self::normalize_map( $input );
 		$resolve_signature_only = filter_var(
@@ -237,12 +239,12 @@ final class BlockAbilities {
 			$normalized['siblingSummariesAfter'] = $sibling_summaries_after;
 		}
 
-		$structural_ancestors = self::normalize_structural_summary_items( $context['structuralAncestors'] ?? [] );
+		$structural_ancestors = self::normalize_structural_ancestor_items( $context['structuralAncestors'] ?? [] );
 		if ( ! empty( $structural_ancestors ) ) {
 			$normalized['structuralAncestors'] = $structural_ancestors;
 		}
 
-		$structural_branch = self::normalize_structural_summary_items( $context['structuralBranch'] ?? [], true );
+		$structural_branch = self::normalize_structural_branch_items( $context['structuralBranch'] ?? [] );
 		if ( ! empty( $structural_branch ) ) {
 			$normalized['structuralBranch'] = $structural_branch;
 		}
@@ -283,8 +285,8 @@ final class BlockAbilities {
 		$context['block']['supportsContentRole'] = ! empty( $selected['supportsContentRole'] ) || ! empty( $context['block']['supportsContentRole'] );
 		$context['siblingsBefore']               = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
 		$context['siblingsAfter']                = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
-		$context['structuralAncestors']          = self::normalize_structural_summary_items( $selected['structuralAncestors'] ?? [] );
-		$context['structuralBranch']             = self::normalize_structural_summary_items( $selected['structuralBranch'] ?? [], true );
+		$context['structuralAncestors']          = self::normalize_structural_ancestor_items( $selected['structuralAncestors'] ?? [] );
+		$context['structuralBranch']             = self::normalize_structural_branch_items( $selected['structuralBranch'] ?? [] );
 		$context['themeTokens']                  = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 
 		$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
@@ -443,8 +445,28 @@ final class BlockAbilities {
 		return $normalized;
 	}
 
-	private static function normalize_structural_summary_items( mixed $raw_items, bool $include_children = false, int $depth = 0 ): array {
-		$items      = array_slice( self::normalize_list( $raw_items ), 0, self::STRUCTURAL_SUMMARY_MAX_ITEMS );
+	private static function normalize_structural_ancestor_items( mixed $raw_items ): array {
+		$items = self::normalize_list( $raw_items );
+
+		if ( count( $items ) > self::STRUCTURAL_SUMMARY_MAX_ITEMS ) {
+			$items = array_slice( $items, -self::STRUCTURAL_SUMMARY_MAX_ITEMS );
+		}
+
+		return self::normalize_structural_summary_items( $items );
+	}
+
+	private static function normalize_structural_branch_items( mixed $raw_items ): array {
+		return self::normalize_structural_summary_items(
+			array_slice(
+				self::normalize_list( $raw_items ),
+				0,
+				self::STRUCTURAL_SUMMARY_MAX_ITEMS
+			),
+			true
+		);
+	}
+
+	private static function normalize_structural_summary_items( array $items, bool $include_children = false, int $depth = 0 ): array {
 		$normalized = [];
 
 		foreach ( $items as $item ) {
@@ -581,6 +603,225 @@ final class BlockAbilities {
 		);
 	}
 
+	private static function normalize_docs_scope_token( mixed $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		return sanitize_key( str_replace( '/', '-', $value ) );
+	}
+
+	private static function collect_unique_docs_scope_tokens( array $values, int $limit = self::DOCS_SCOPE_MAX_ITEMS ): array {
+		$tokens = [];
+
+		foreach ( $values as $value ) {
+			$token = self::normalize_docs_scope_token( $value );
+
+			if ( '' === $token || in_array( $token, $tokens, true ) ) {
+				continue;
+			}
+
+			$tokens[] = $token;
+
+			if ( count( $tokens ) >= $limit ) {
+				break;
+			}
+		}
+
+		return $tokens;
+	}
+
+	private static function classify_docs_background_tone( mixed $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		$normalized = strtolower( sanitize_text_field( $value ) );
+
+		if ( '' === $normalized ) {
+			return '';
+		}
+
+		foreach ( [ 'contrast', 'dark', 'black', 'foreground' ] as $needle ) {
+			if ( str_contains( $normalized, $needle ) ) {
+				return 'contrast';
+			}
+		}
+
+		return 'custom';
+	}
+
+	private static function get_parent_docs_scope_summary( array $context ): array {
+		$parent_context = self::normalize_parent_context( $context['parentContext'] ?? [] );
+
+		if ( empty( $parent_context ) ) {
+			return [];
+		}
+
+		$visual_hints = self::normalize_map( $parent_context['visualHints'] ?? [] );
+		$summary      = [];
+		$parent_role  = self::normalize_docs_scope_token( $parent_context['role'] ?? '' );
+		$parent_tag   = self::normalize_docs_scope_token( $visual_hints['tagName'] ?? '' );
+		$parent_layout = self::normalize_docs_scope_token(
+			self::get_value_from_path( $visual_hints, [ 'layout', 'type' ] )
+		);
+		$background_tone = self::classify_docs_background_tone(
+			$visual_hints['backgroundColor']
+			?? self::get_value_from_path( $visual_hints, [ 'style', 'color', 'background' ] )
+			?? $visual_hints['gradient']
+			?? null
+		);
+		$dim_ratio = $visual_hints['dimRatio'] ?? null;
+
+		if ( '' !== $parent_role ) {
+			$summary['parentRole'] = $parent_role;
+		}
+
+		if ( '' !== $parent_tag ) {
+			$summary['parentTag'] = $parent_tag;
+		}
+
+		if ( '' !== $parent_layout ) {
+			$summary['parentLayout'] = $parent_layout;
+		}
+
+		if ( '' !== $background_tone ) {
+			$summary['parentBackgroundTone'] = $background_tone;
+		}
+
+		if ( ( is_int( $dim_ratio ) || is_float( $dim_ratio ) || is_numeric( $dim_ratio ) ) && (float) $dim_ratio > 0 ) {
+			$summary['parentHasOverlay'] = true;
+		}
+
+		return $summary;
+	}
+
+	private static function get_sibling_docs_scope_summary( array $context ): array {
+		$summaries = array_merge(
+			self::normalize_sibling_summaries( $context['siblingSummariesBefore'] ?? [] ),
+			self::normalize_sibling_summaries( $context['siblingSummariesAfter'] ?? [] )
+		);
+
+		if ( empty( $summaries ) ) {
+			return [];
+		}
+
+		$roles      = [];
+		$alignments = [];
+
+		foreach ( $summaries as $summary ) {
+			$role = self::normalize_docs_scope_token( $summary['role'] ?? '' );
+
+			if ( '' === $role ) {
+				$role = self::normalize_docs_scope_token( $summary['block'] ?? '' );
+			}
+
+			if ( '' !== $role ) {
+				$roles[] = $role;
+			}
+
+			$visual_hints = self::normalize_map( $summary['visualHints'] ?? [] );
+			$alignment    = self::normalize_docs_scope_token(
+				$visual_hints['align'] ?? $visual_hints['textAlign'] ?? ''
+			);
+
+			if ( '' !== $alignment ) {
+				$alignments[] = $alignment;
+			}
+		}
+
+		$summary = [];
+		$roles   = self::collect_unique_docs_scope_tokens( $roles );
+		$alignments = self::collect_unique_docs_scope_tokens( $alignments );
+
+		if ( ! empty( $roles ) ) {
+			$summary['siblingRoles'] = $roles;
+		}
+
+		if ( ! empty( $alignments ) ) {
+			$summary['siblingAlignments'] = $alignments;
+		}
+
+		return $summary;
+	}
+
+	private static function get_ancestor_scope_token( array $ancestor ): string {
+		$role = self::normalize_docs_scope_token( $ancestor['role'] ?? '' );
+
+		if ( '' !== $role ) {
+			return $role;
+		}
+
+		$template_area = self::normalize_docs_scope_token( $ancestor['templateArea'] ?? '' );
+
+		if ( '' !== $template_area ) {
+			return $template_area . '-area';
+		}
+
+		$template_part = self::normalize_docs_scope_token( $ancestor['templatePartSlug'] ?? '' );
+
+		if ( '' !== $template_part ) {
+			return $template_part;
+		}
+
+		return self::normalize_docs_scope_token( $ancestor['block'] ?? '' );
+	}
+
+	private static function get_ancestor_docs_scope_summary( array $context ): array {
+		$ancestors = self::normalize_structural_ancestor_items( $context['structuralAncestors'] ?? [] );
+
+		if ( empty( $ancestors ) ) {
+			return [];
+		}
+
+		$scope = [];
+
+		foreach ( array_slice( $ancestors, -self::DOCS_SCOPE_MAX_ITEMS ) as $ancestor ) {
+			$token = self::get_ancestor_scope_token( $ancestor );
+
+			if ( '' !== $token ) {
+				$scope[] = $token;
+			}
+		}
+
+		$scope = self::collect_unique_docs_scope_tokens( $scope );
+
+		return ! empty( $scope )
+			? [ 'ancestorScopes' => $scope ]
+			: [];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_block_docs_scope_summary( array $context ): array {
+		$block           = self::normalize_map( $context['block'] ?? [] );
+		$identity        = self::normalize_map( $block['structuralIdentity'] ?? [] );
+		$structural_role = self::normalize_docs_scope_token( $identity['role'] ?? '' );
+		$location        = self::normalize_docs_scope_token( $identity['location'] ?? '' );
+		$template_area   = self::normalize_docs_scope_token( $identity['templateArea'] ?? '' );
+		$summary         = [];
+
+		if ( '' !== $structural_role ) {
+			$summary['structuralRole'] = $structural_role;
+		}
+
+		if ( '' !== $location ) {
+			$summary['location'] = $location;
+		}
+
+		if ( '' !== $template_area ) {
+			$summary['templateArea'] = $template_area;
+		}
+
+		return array_merge(
+			$summary,
+			self::get_parent_docs_scope_summary( $context ),
+			self::get_sibling_docs_scope_summary( $context ),
+			self::get_ancestor_docs_scope_summary( $context )
+		);
+	}
+
 	private static function build_wordpress_docs_entity_key( array $context ): string {
 		$block      = self::normalize_map( $context['block'] ?? [] );
 		$block_name = is_string( $block['name'] ?? null ) ? sanitize_text_field( (string) $block['name'] ) : '';
@@ -592,6 +833,7 @@ final class BlockAbilities {
 		$block         = self::normalize_map( $context['block'] ?? [] );
 		$block_name    = is_string( $block['name'] ?? null ) ? sanitize_text_field( $block['name'] ) : '';
 		$block_title   = is_string( $block['title'] ?? null ) ? sanitize_text_field( $block['title'] ) : '';
+		$scope_summary = self::build_block_docs_scope_summary( $context );
 		$panel_keys    = array_keys( self::normalize_map( $block['inspectorPanels'] ?? [] ) );
 		$panel_summary = array_values(
 			array_filter(
@@ -623,21 +865,48 @@ final class BlockAbilities {
 			$parts[] = 'contentOnly editing constraints';
 		}
 
-			$identity        = self::normalize_map( $block['structuralIdentity'] ?? [] );
-			$structural_role = is_string( $identity['role'] ?? null ) ? sanitize_key( (string) $identity['role'] ) : '';
-			$location        = is_string( $identity['location'] ?? null ) ? sanitize_key( (string) $identity['location'] ) : '';
-			$template_area   = is_string( $identity['templateArea'] ?? null ) ? sanitize_key( (string) $identity['templateArea'] ) : '';
-
-		if ( $structural_role !== '' ) {
-			$parts[] = 'structural role ' . $structural_role;
+		if ( ! empty( $scope_summary['structuralRole'] ) ) {
+			$parts[] = 'structural role ' . $scope_summary['structuralRole'];
 		}
 
-		if ( $location !== '' ) {
-			$parts[] = 'page location ' . $location;
+		if ( ! empty( $scope_summary['location'] ) ) {
+			$parts[] = 'page location ' . $scope_summary['location'];
 		}
 
-		if ( $template_area !== '' ) {
-			$parts[] = 'template area ' . $template_area;
+		if ( ! empty( $scope_summary['templateArea'] ) ) {
+			$parts[] = 'template area ' . $scope_summary['templateArea'];
+		}
+
+		if ( ! empty( $scope_summary['parentRole'] ) ) {
+			$parts[] = 'parent container role ' . $scope_summary['parentRole'];
+		}
+
+		if ( ! empty( $scope_summary['parentTag'] ) ) {
+			$parts[] = 'parent tag ' . $scope_summary['parentTag'];
+		}
+
+		if ( ! empty( $scope_summary['parentLayout'] ) ) {
+			$parts[] = 'parent layout ' . $scope_summary['parentLayout'];
+		}
+
+		if ( ! empty( $scope_summary['parentBackgroundTone'] ) ) {
+			$parts[] = 'parent background ' . $scope_summary['parentBackgroundTone'];
+		}
+
+		if ( ! empty( $scope_summary['parentHasOverlay'] ) ) {
+			$parts[] = 'parent overlay';
+		}
+
+		if ( ! empty( $scope_summary['siblingRoles'] ) ) {
+			$parts[] = 'nearby sibling roles ' . implode( ', ', $scope_summary['siblingRoles'] );
+		}
+
+		if ( ! empty( $scope_summary['siblingAlignments'] ) ) {
+			$parts[] = 'nearby sibling alignments ' . implode( ', ', $scope_summary['siblingAlignments'] );
+		}
+
+		if ( ! empty( $scope_summary['ancestorScopes'] ) ) {
+			$parts[] = 'nearest ancestors ' . implode( ', ', $scope_summary['ancestorScopes'] );
 		}
 
 		if ( ! empty( $block['editingMode'] ) && $block['editingMode'] !== 'default' ) {
@@ -672,6 +941,7 @@ final class BlockAbilities {
 		}
 
 		$block         = self::normalize_map( $context['block'] ?? [] );
+		$scope_summary = self::build_block_docs_scope_summary( $context );
 		$panel_keys    = array_keys( self::normalize_map( $block['inspectorPanels'] ?? [] ) );
 		$panel_summary = array_values(
 			array_filter(
@@ -682,11 +952,6 @@ final class BlockAbilities {
 			)
 		);
 		sort( $panel_summary );
-
-		$identity        = self::normalize_map( $block['structuralIdentity'] ?? [] );
-		$structural_role = is_string( $identity['role'] ?? null ) ? sanitize_key( (string) $identity['role'] ) : '';
-		$location        = is_string( $identity['location'] ?? null ) ? sanitize_key( (string) $identity['location'] ) : '';
-		$template_area   = is_string( $identity['templateArea'] ?? null ) ? sanitize_key( (string) $identity['templateArea'] ) : '';
 		$editing_mode    = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
 		$family_context  = [
 			'surface'   => 'block',
@@ -697,16 +962,32 @@ final class BlockAbilities {
 			$family_context['inspectorPanels'] = $panel_summary;
 		}
 
-		if ( $structural_role !== '' ) {
-			$family_context['structuralRole'] = $structural_role;
+		if ( ! empty( $scope_summary['structuralRole'] ) ) {
+			$family_context['structuralRole'] = $scope_summary['structuralRole'];
 		}
 
-		if ( $location !== '' ) {
-			$family_context['location'] = $location;
+		if ( ! empty( $scope_summary['location'] ) ) {
+			$family_context['location'] = $scope_summary['location'];
 		}
 
-		if ( $template_area !== '' ) {
-			$family_context['templateArea'] = $template_area;
+		if ( ! empty( $scope_summary['templateArea'] ) ) {
+			$family_context['templateArea'] = $scope_summary['templateArea'];
+		}
+
+		foreach ( [ 'parentRole', 'parentTag', 'parentLayout', 'parentBackgroundTone' ] as $scope_key ) {
+			if ( ! empty( $scope_summary[ $scope_key ] ) ) {
+				$family_context[ $scope_key ] = $scope_summary[ $scope_key ];
+			}
+		}
+
+		foreach ( [ 'siblingRoles', 'siblingAlignments', 'ancestorScopes' ] as $scope_key ) {
+			if ( ! empty( $scope_summary[ $scope_key ] ) ) {
+				$family_context[ $scope_key ] = $scope_summary[ $scope_key ];
+			}
+		}
+
+		if ( ! empty( $scope_summary['parentHasOverlay'] ) ) {
+			$family_context['parentHasOverlay'] = true;
 		}
 
 		if ( ! empty( $block['isInsideContentOnly'] ) || $editing_mode === 'contentOnly' ) {

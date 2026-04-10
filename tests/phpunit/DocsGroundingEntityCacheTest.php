@@ -611,6 +611,148 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_block_docs_query_and_family_context_include_parent_sibling_and_ancestor_scope_summary(): void {
+		$prompt          = 'Simplify navigation labels.';
+		$context_a       = [
+			'block'                  => [
+				'name'               => 'core/navigation',
+				'inspectorPanels'    => [
+					'color' => true,
+				],
+				'structuralIdentity' => [
+					'role'     => 'navigation',
+					'location' => 'content',
+				],
+			],
+			'parentContext'          => [
+				'block'       => 'core/cover',
+				'role'        => 'hero-cover',
+				'visualHints' => [
+					'backgroundColor' => 'contrast',
+					'dimRatio'        => 70,
+					'layout'          => [
+						'type' => 'constrained',
+					],
+					'tagName'         => 'header',
+				],
+			],
+			'siblingSummariesBefore' => [
+				[
+					'block'       => 'core/heading',
+					'role'        => 'lede-heading',
+					'visualHints' => [
+						'align' => 'wide',
+					],
+				],
+			],
+			'siblingSummariesAfter'  => [
+				[
+					'block'       => 'core/buttons',
+					'visualHints' => [
+						'textAlign' => 'center',
+					],
+				],
+			],
+			'structuralAncestors'    => [
+				[
+					'block' => 'core/template-part',
+					'role'  => 'header-slot',
+				],
+				[
+					'block' => 'core/group',
+					'role'  => 'hero-group',
+				],
+			],
+		];
+		$context_b       = [
+			'block'                  => [
+				'name'               => 'core/navigation',
+				'inspectorPanels'    => [
+					'color' => true,
+				],
+				'structuralIdentity' => [
+					'role'     => 'navigation',
+					'location' => 'content',
+				],
+			],
+			'parentContext'          => [
+				'block'       => 'core/group',
+				'role'        => 'article-shell',
+				'visualHints' => [
+					'backgroundColor' => 'base',
+					'layout'          => [
+						'type' => 'flex',
+					],
+					'tagName'         => 'section',
+				],
+			],
+			'siblingSummariesBefore' => [
+				[
+					'block'       => 'core/paragraph',
+					'role'        => 'intro-copy',
+					'visualHints' => [
+						'textAlign' => 'left',
+					],
+				],
+			],
+			'structuralAncestors'    => [
+				[
+					'block' => 'core/group',
+					'role'  => 'content-shell',
+				],
+				[
+					'block' => 'core/group',
+					'role'  => 'article-body',
+				],
+			],
+		];
+		$query_a         = $this->invoke_private_string_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_query',
+			[ $context_a, $prompt ]
+		);
+		$query_b         = $this->invoke_private_string_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_query',
+			[ $context_b, $prompt ]
+		);
+		$family_a        = $this->invoke_private_array_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_family_context',
+			[ $context_a ]
+		);
+		$family_b        = $this->invoke_private_array_method(
+			BlockAbilities::class,
+			'build_wordpress_docs_family_context',
+			[ $context_b ]
+		);
+
+		$this->assertNotSame( $query_a, $query_b );
+		$this->assertStringContainsString( 'parent container role hero-cover', $query_a );
+		$this->assertStringContainsString( 'parent tag header', $query_a );
+		$this->assertStringContainsString( 'parent layout constrained', $query_a );
+		$this->assertStringContainsString( 'parent background contrast', $query_a );
+		$this->assertStringContainsString( 'parent overlay', $query_a );
+		$this->assertStringContainsString( 'nearby sibling roles lede-heading, core-buttons', $query_a );
+		$this->assertStringContainsString( 'nearby sibling alignments wide, center', $query_a );
+		$this->assertStringContainsString( 'nearest ancestors header-slot, hero-group', $query_a );
+		$this->assertStringContainsString( 'parent layout flex', $query_b );
+		$this->assertStringContainsString( 'nearest ancestors content-shell, article-body', $query_b );
+		$this->assertSame( 'hero-cover', $family_a['parentRole'] ?? null );
+		$this->assertSame( 'header', $family_a['parentTag'] ?? null );
+		$this->assertSame( 'constrained', $family_a['parentLayout'] ?? null );
+		$this->assertSame( 'contrast', $family_a['parentBackgroundTone'] ?? null );
+		$this->assertTrue( (bool) ( $family_a['parentHasOverlay'] ?? false ) );
+		$this->assertSame( [ 'lede-heading', 'core-buttons' ], $family_a['siblingRoles'] ?? null );
+		$this->assertSame( [ 'wide', 'center' ], $family_a['siblingAlignments'] ?? null );
+		$this->assertSame( [ 'header-slot', 'hero-group' ], $family_a['ancestorScopes'] ?? null );
+		$this->assertNotSame( $family_a, $family_b );
+		$this->assertNotSame(
+			$this->build_family_cache_key( $family_a, 4 ),
+			$this->build_family_cache_key( $family_b, 4 )
+		);
+	}
+
 	public function test_explicit_docs_search_seeds_entity_cache_from_entity_key(): void {
 		$this->prime_search_response(
 			'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',

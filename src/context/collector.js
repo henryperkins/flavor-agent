@@ -17,6 +17,7 @@ import {
 	annotateStructuralIdentity,
 	findBranchRoot,
 	findNodePath,
+	getStructuralIdentityFingerprintAttributes,
 	toStructuralSummary,
 } from '../utils/structural-identity';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
@@ -24,7 +25,8 @@ import {
 	BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
 	BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
 	BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH,
-	capBlockStructuralSummaryItems,
+	capBlockStructuralAncestorItems,
+	capBlockStructuralBranchItems,
 	buildBlockRecommendationContextSignature,
 } from '../utils/block-recommendation-context';
 import { buildContextSignature } from '../utils/context-signature';
@@ -270,9 +272,9 @@ function fingerprintTree( tree ) {
 		return ( Array.isArray( nodes ) ? nodes : [] ).map( ( node ) => ( {
 			clientId: node?.clientId || '',
 			name: node?.name || '',
-			// buildContextSignature() normalizes nested key order for the full
-			// fingerprint, so the raw attribute object can stay intact here.
-			currentAttributes: node?.currentAttributes || {},
+			identityAttributes: getStructuralIdentityFingerprintAttributes(
+				node
+			),
 			innerBlocks: toIdentityInputs( node?.innerBlocks || [] ),
 		} ) );
 	}
@@ -355,7 +357,7 @@ export function collectBlockContext( clientId ) {
 	if ( path ) {
 		const selectedNode = path[ path.length - 1 ];
 		blockIdentity = selectedNode?.structuralIdentity || {};
-		structuralAncestors = capBlockStructuralSummaryItems(
+		structuralAncestors = capBlockStructuralAncestorItems(
 			path.slice( 0, -1 ).map( ( node ) => toStructuralSummary( node ) )
 		);
 		branchRoot = findBranchRoot( path );
@@ -375,7 +377,7 @@ export function collectBlockContext( clientId ) {
 	}
 
 	const structuralBranch = branchRoot
-		? capBlockStructuralSummaryItems(
+		? capBlockStructuralBranchItems(
 				summarizeTree( [ branchRoot ], {
 					focusClientId: clientId,
 					includeBlockCapabilities: false,

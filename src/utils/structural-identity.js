@@ -31,6 +31,41 @@ function getNodeAttributes( node ) {
 	return {};
 }
 
+export function getStructuralIdentityFingerprintAttributes( node ) {
+	const attributes = getNodeAttributes( node );
+	const fingerprint = {};
+
+	if ( node?.name === 'core/template-part' ) {
+		if ( typeof attributes.area === 'string' && attributes.area !== '' ) {
+			fingerprint.area = attributes.area;
+		}
+
+		if ( typeof attributes.slug === 'string' && attributes.slug !== '' ) {
+			fingerprint.slug = attributes.slug;
+		}
+
+		if (
+			typeof attributes.tagName === 'string' &&
+			attributes.tagName !== ''
+		) {
+			fingerprint.tagName = attributes.tagName;
+		}
+	}
+
+	if (
+		node?.name === 'core/query' &&
+		attributes?.query &&
+		typeof attributes.query === 'object' &&
+		'inherit' in attributes.query
+	) {
+		fingerprint.query = {
+			inherit: attributes.query.inherit,
+		};
+	}
+
+	return fingerprint;
+}
+
 function getBlockKey( blockName ) {
 	if ( typeof blockName !== 'string' || blockName === '' ) {
 		return 'block';

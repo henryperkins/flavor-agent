@@ -38,6 +38,7 @@ jest.mock( '../theme-tokens', () => ( {
 const mockAnnotateStructuralIdentity = jest.fn();
 const mockFindBranchRoot = jest.fn();
 const mockFindNodePath = jest.fn();
+const mockGetStructuralIdentityFingerprintAttributes = jest.fn();
 const mockToStructuralSummary = jest.fn();
 
 jest.mock( '../../utils/structural-identity', () => ( {
@@ -45,6 +46,8 @@ jest.mock( '../../utils/structural-identity', () => ( {
 		mockAnnotateStructuralIdentity( ...args ),
 	findBranchRoot: ( ...args ) => mockFindBranchRoot( ...args ),
 	findNodePath: ( ...args ) => mockFindNodePath( ...args ),
+	getStructuralIdentityFingerprintAttributes: ( ...args ) =>
+		mockGetStructuralIdentityFingerprintAttributes( ...args ),
 	toStructuralSummary: ( ...args ) => mockToStructuralSummary( ...args ),
 } ) );
 
@@ -66,7 +69,41 @@ describe( 'collectBlockContext', () => {
 		mockAnnotateStructuralIdentity.mockReset();
 		mockFindBranchRoot.mockReset();
 		mockFindNodePath.mockReset();
+		mockGetStructuralIdentityFingerprintAttributes.mockReset();
 		mockToStructuralSummary.mockReset();
+		mockGetStructuralIdentityFingerprintAttributes.mockImplementation(
+			( node ) => {
+				const attributes = node?.currentAttributes || {};
+				const fingerprint = {};
+
+				if ( node?.name === 'core/template-part' ) {
+					if ( attributes.area ) {
+						fingerprint.area = attributes.area;
+					}
+
+					if ( attributes.slug ) {
+						fingerprint.slug = attributes.slug;
+					}
+
+					if ( attributes.tagName ) {
+						fingerprint.tagName = attributes.tagName;
+					}
+				}
+
+				if (
+					node?.name === 'core/query' &&
+					attributes?.query &&
+					typeof attributes.query === 'object' &&
+					'inherit' in attributes.query
+				) {
+					fingerprint.query = {
+						inherit: attributes.query.inherit,
+					};
+				}
+
+				return fingerprint;
+			}
+		);
 		invalidateAnnotatedTreeCache();
 	} );
 
@@ -268,10 +305,103 @@ describe( 'collectBlockContext', () => {
 		const result = collectBlockContext( 'client-1' );
 
 		expect( result.structuralAncestors ).toHaveLength( 6 );
-		expect( result.structuralAncestors[ 5 ] ).toEqual( {
-			block: 'core/group-6',
-			role: 'ancestor-6',
+		expect( result.structuralAncestors[ 0 ] ).toEqual( {
+			block: 'core/group-2',
+			role: 'ancestor-2',
 		} );
+		expect( result.structuralAncestors[ 5 ] ).toEqual( {
+			block: 'core/group-7',
+			role: 'ancestor-7',
+		} );
+	} );
+
+	test( 'does not rebuild the annotated tree when unrelated attributes change', () => {
+		mockIntrospectBlockTree
+			.mockReturnValueOnce( [
+				{
+					clientId: 'node-1',
+					name: 'core/paragraph',
+					currentAttributes: {
+						content: 'Alpha',
+						className: 'has-drop-cap',
+						textColor: 'contrast',
+					},
+					innerBlocks: [],
+				},
+			] )
+			.mockReturnValueOnce( [
+				{
+					clientId: 'node-1',
+					name: 'core/paragraph',
+					currentAttributes: {
+						content: 'Beta',
+						className: 'has-background',
+						textColor: 'accent',
+					},
+					innerBlocks: [],
+				},
+			] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [
+			{
+				clientId: 'node-1',
+				name: 'core/paragraph',
+				innerBlocks: [],
+				structuralIdentity: {},
+			},
+		] );
+
+		getAnnotatedBlockTree( 10 );
+		getAnnotatedBlockTree( 10 );
+
+		expect( mockAnnotateStructuralIdentity ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'rebuilds when template-part location evidence changes without tree shape changes', () => {
+		mockIntrospectBlockTree
+			.mockReturnValueOnce( [
+				{
+					clientId: 'part-1',
+					name: 'core/template-part',
+					currentAttributes: {
+						slug: 'site-header',
+						tagName: 'header',
+					},
+					innerBlocks: [],
+				},
+			] )
+			.mockReturnValueOnce( [
+				{
+					clientId: 'part-1',
+					name: 'core/template-part',
+					currentAttributes: {
+						slug: 'site-footer',
+						tagName: 'footer',
+					},
+					innerBlocks: [],
+				},
+			] );
+		mockAnnotateStructuralIdentity
+			.mockReturnValueOnce( [
+				{
+					clientId: 'part-1',
+					name: 'core/template-part',
+					innerBlocks: [],
+					structuralIdentity: { role: 'header-slot' },
+				},
+			] )
+			.mockReturnValueOnce( [
+				{
+					clientId: 'part-1',
+					name: 'core/template-part',
+					innerBlocks: [],
+					structuralIdentity: { role: 'footer-slot' },
+				},
+			] );
+
+		getAnnotatedBlockTree( 10 );
+		getAnnotatedBlockTree( 10 );
+
+		expect( mockAnnotateStructuralIdentity ).toHaveBeenCalledTimes( 2 );
 	} );
 
 	test( 'includes parent context and sibling summaries with visual hints', () => {
@@ -660,6 +790,40 @@ describe( 'getAnnotatedBlockTree', () => {
 	beforeEach( () => {
 		mockIntrospectBlockTree.mockReset();
 		mockAnnotateStructuralIdentity.mockReset();
+		mockGetStructuralIdentityFingerprintAttributes.mockReset();
+		mockGetStructuralIdentityFingerprintAttributes.mockImplementation(
+			( node ) => {
+				const attributes = node?.currentAttributes || {};
+				const fingerprint = {};
+
+				if ( node?.name === 'core/template-part' ) {
+					if ( attributes.area ) {
+						fingerprint.area = attributes.area;
+					}
+
+					if ( attributes.slug ) {
+						fingerprint.slug = attributes.slug;
+					}
+
+					if ( attributes.tagName ) {
+						fingerprint.tagName = attributes.tagName;
+					}
+				}
+
+				if (
+					node?.name === 'core/query' &&
+					attributes?.query &&
+					typeof attributes.query === 'object' &&
+					'inherit' in attributes.query
+				) {
+					fingerprint.query = {
+						inherit: attributes.query.inherit,
+					};
+				}
+
+				return fingerprint;
+			}
+		);
 		invalidateAnnotatedTreeCache();
 	} );
 

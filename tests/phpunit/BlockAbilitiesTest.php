@@ -475,7 +475,8 @@ final class BlockAbilitiesTest extends TestCase {
 		);
 
 		$this->assertCount( 6, $prepared['context']['structuralAncestors'] );
-		$this->assertSame( 'core/group-6', $prepared['context']['structuralAncestors'][5]['block'] );
+		$this->assertSame( 'core/group-3', $prepared['context']['structuralAncestors'][0]['block'] );
+		$this->assertSame( 'core/group-8', $prepared['context']['structuralAncestors'][5]['block'] );
 		$this->assertCount( 6, $prepared['context']['structuralBranch'] );
 		$this->assertSame( 'core/branch-6', $prepared['context']['structuralBranch'][5]['block'] );
 	}
