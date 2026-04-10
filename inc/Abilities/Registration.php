@@ -6,6 +6,12 @@ namespace FlavorAgent\Abilities;
 
 final class Registration {
 
+	private const STRUCTURAL_SUMMARY_MAX_ITEMS = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_CHILDREN = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
+
 	public static function register_category(): void {
 		wp_register_ability_category(
 			'flavor-agent',
@@ -1086,11 +1092,13 @@ final class Registration {
 					'type'        => 'array',
 					'description' => 'Summarized structural ancestors leading to the selected block.',
 					'items'       => self::structural_summary_item_schema(),
+					'maxItems'    => self::STRUCTURAL_SUMMARY_MAX_ITEMS,
 				],
 				'structuralBranch'    => [
 					'type'        => 'array',
 					'description' => 'Summarized structural branch rooted at the nearest structural ancestor.',
 					'items'       => self::structural_summary_item_schema( true ),
+					'maxItems'    => self::STRUCTURAL_SUMMARY_MAX_ITEMS,
 				],
 				'blockVisibility'     => self::open_object_schema(
 					[],
@@ -1142,12 +1150,18 @@ final class Registration {
 			'moreChildren'     => [ 'type' => 'integer' ],
 		];
 
-		if ( $include_children ) {
+		if ( $include_children || $depth > 0 ) {
 			$properties['isSelected'] = [ 'type' => 'boolean' ];
+		}
+
+		if ( $include_children ) {
 			$properties['children']   = [
-				'type'  => 'array',
-				'items' => self::structural_summary_item_schema( $depth < 1, $depth + 1 ),
-				'maxItems' => 6,
+				'type'     => 'array',
+				'items'    => self::structural_summary_item_schema(
+					$depth + 1 < self::STRUCTURAL_SUMMARY_MAX_DEPTH,
+					$depth + 1
+				),
+				'maxItems' => self::STRUCTURAL_SUMMARY_MAX_CHILDREN,
 			];
 		}
 

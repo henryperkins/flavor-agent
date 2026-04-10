@@ -36,7 +36,7 @@ final class PromptFormattingTest extends TestCase {
 		$prompt = Prompt::build_user( $context );
 
 		$this->assertStringContainsString(
-			'template-part(header) "Header slot" > core/group (container)',
+			'template-part(header) "Header slot" > group (container)',
 			$prompt
 		);
 		$this->assertStringContainsString(
@@ -84,10 +84,34 @@ final class PromptFormattingTest extends TestCase {
 		$prompt = Prompt::build_user( $context );
 
 		$this->assertStringContainsString( "template-part\n", $prompt );
-		$this->assertStringContainsString( 'core/group', $prompt );
-		$this->assertStringContainsString( 'core/cover (header-cover)', $prompt );
+		$this->assertStringContainsString( 'group (8 children)', $prompt );
+		$this->assertStringContainsString( 'cover (header-cover)', $prompt );
 		$this->assertStringContainsString( 'heading <- selected', $prompt );
 		$this->assertStringContainsString( '... +2 more children not shown', $prompt );
+	}
+
+	public function test_build_user_surfaces_child_count_when_branch_children_are_partial(): void {
+		$context = [
+			'block'            => [
+				'name' => 'core/paragraph',
+			],
+			'structuralBranch' => [
+				[
+					'block'        => 'core/group',
+					'childCount'   => 8,
+					'moreChildren' => 5,
+					'children'     => [
+						[ 'block' => 'core/paragraph', 'isSelected' => true ],
+					],
+				],
+			],
+			'themeTokens'      => [],
+		];
+
+		$prompt = Prompt::build_user( $context );
+
+		$this->assertStringContainsString( 'group (8 children)', $prompt );
+		$this->assertStringContainsString( '... +5 more children not shown', $prompt );
 	}
 
 	public function test_build_user_includes_parent_container_section(): void {
@@ -138,8 +162,8 @@ final class PromptFormattingTest extends TestCase {
 
 		$prompt = Prompt::build_user( $context );
 
-		$this->assertStringContainsString( "Before:\n  - core/paragraph (lede; textAlign:center)", $prompt );
-		$this->assertStringContainsString( "After:\n  - core/image (align:wide)", $prompt );
+		$this->assertStringContainsString( "Before:\n  - paragraph (lede; textAlign:center)", $prompt );
+		$this->assertStringContainsString( "After:\n  - image (align:wide)", $prompt );
 	}
 
 	public function test_build_user_falls_back_to_bare_siblings_without_summaries(): void {
@@ -227,9 +251,9 @@ final class PromptFormattingTest extends TestCase {
 
 		$this->assertStringContainsString( 'Before:', $prompt );
 		$this->assertStringContainsString( 'After:', $prompt );
-		$this->assertStringContainsString( 'core/heading (section-heading', $prompt );
-		$this->assertStringContainsString( 'core/image (align:wide)', $prompt );
-		$this->assertStringContainsString( 'core/group (content-area)', $prompt );
+		$this->assertStringContainsString( 'heading (section-heading', $prompt );
+		$this->assertStringContainsString( 'image (align:wide)', $prompt );
+		$this->assertStringContainsString( 'group (content-area)', $prompt );
 		$this->assertStringContainsString( 'bg:base', $prompt );
 		$this->assertStringContainsString( 'paragraph <- selected', $prompt );
 	}

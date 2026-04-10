@@ -69,6 +69,8 @@ final class RegistrationTest extends TestCase {
 				?? false
 			)
 		);
+		$this->assertSame( 6, $selected_block['properties']['structuralAncestors']['maxItems'] ?? null );
+		$this->assertSame( 6, $selected_block['properties']['structuralBranch']['maxItems'] ?? null );
 		$this->assertSame( 3, $selected_block['properties']['siblingSummariesBefore']['maxItems'] ?? null );
 		$this->assertSame( 3, $selected_block['properties']['siblingSummariesAfter']['maxItems'] ?? null );
 	}
@@ -114,6 +116,23 @@ final class RegistrationTest extends TestCase {
 		$this->assertFalse( (bool) ( $parent_schema['properties']['visualHints']['additionalProperties'] ?? true ) );
 		$this->assertFalse( (bool) ( $sibling_schema['additionalProperties'] ?? true ) );
 		$this->assertFalse( (bool) ( $sibling_schema['properties']['visualHints']['additionalProperties'] ?? true ) );
+	}
+
+	public function test_structural_branch_schema_allows_selected_leaf_markers_at_max_depth(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability          = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? [];
+		$selected_block   = $ability['input_schema']['properties']['selectedBlock'] ?? [];
+		$branch_item      = $selected_block['properties']['structuralBranch']['items'] ?? [];
+		$child_item       = $branch_item['properties']['children']['items'] ?? [];
+		$grandchild_item  = $child_item['properties']['children']['items'] ?? [];
+		$grandchild_props = $grandchild_item['properties'] ?? [];
+
+		$this->assertArrayHasKey( 'children', $branch_item['properties'] ?? [] );
+		$this->assertArrayHasKey( 'children', $child_item['properties'] ?? [] );
+		$this->assertArrayHasKey( 'isSelected', $grandchild_props );
+		$this->assertArrayNotHasKey( 'children', $grandchild_props );
 	}
 
 	public function test_register_abilities_exposes_content_recommendation_schema(): void {

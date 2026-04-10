@@ -205,6 +205,75 @@ describe( 'collectBlockContext', () => {
 		expect( mockFindBranchRoot ).not.toHaveBeenCalled();
 	} );
 
+	test( 'caps structural ancestors to the server-visible limit', () => {
+		const ancestorNodes = Array.from(
+			{ length: 7 },
+			( _unused, index ) => ( {
+				clientId: `ancestor-${ index + 1 }`,
+				name: `core/group-${ index + 1 }`,
+				innerBlocks: [],
+				structuralIdentity: { role: `ancestor-${ index + 1 }` },
+			} )
+		);
+		const selectedNode = {
+			clientId: 'client-1',
+			name: 'core/button',
+			innerBlocks: [],
+			structuralIdentity: { role: 'cta-button' },
+		};
+
+		mockIntrospectBlockInstance.mockReturnValue( {
+			name: 'core/button',
+			title: 'Button',
+			currentAttributes: { text: 'Read more' },
+			inspectorPanels: {},
+			bindableAttributes: [],
+			styles: [],
+			activeStyle: null,
+			variations: [],
+			supportsContentRole: false,
+			contentAttributes: {},
+			configAttributes: {},
+			editingMode: 'default',
+			isInsideContentOnly: false,
+			blockVisibility: null,
+			childCount: 0,
+		} );
+
+		mockIntrospectBlockTree.mockReturnValue( [
+			{
+				clientId: 'ancestor-1',
+				innerBlocks: [ { clientId: 'client-1', innerBlocks: [] } ],
+			},
+		] );
+		mockAnnotateStructuralIdentity.mockReturnValue( [
+			ancestorNodes[ 0 ],
+		] );
+		mockFindNodePath.mockReturnValue( [ ...ancestorNodes, selectedNode ] );
+		mockFindBranchRoot.mockReturnValue( ancestorNodes[ 0 ] );
+		mockToStructuralSummary.mockImplementation( ( node ) => ( {
+			block: node.name,
+			role: node.structuralIdentity?.role,
+		} ) );
+		mockSummarizeTree.mockReturnValue( [ { block: 'core/group-5' } ] );
+
+		mockCollectThemeTokens.mockReturnValue( { color: {} } );
+		mockSummarizeTokens.mockReturnValue( { colors: [] } );
+		mockSelect.mockReturnValue( {
+			getBlockRootClientId: jest.fn().mockReturnValue( null ),
+			getBlockOrder: jest.fn().mockReturnValue( [] ),
+			getBlockName: jest.fn(),
+		} );
+
+		const result = collectBlockContext( 'client-1' );
+
+		expect( result.structuralAncestors ).toHaveLength( 6 );
+		expect( result.structuralAncestors[ 5 ] ).toEqual( {
+			block: 'core/group-6',
+			role: 'ancestor-6',
+		} );
+	} );
+
 	test( 'includes parent context and sibling summaries with visual hints', () => {
 		const selectedNode = {
 			clientId: 'client-1',
@@ -412,12 +481,12 @@ describe( 'collectBlockContext', () => {
 		mockSummarizeTokens.mockReturnValue( {} );
 		mockSelect.mockReturnValue( {
 			getBlockRootClientId: jest.fn().mockReturnValue( 'root' ),
-			getBlockOrder: jest
+			getBlockOrder: jest.fn().mockReturnValue( [ 'sib-1', 'target' ] ),
+			getBlockName: jest
 				.fn()
-				.mockReturnValue( [ 'sib-1', 'target' ] ),
-			getBlockName: jest.fn().mockImplementation( ( id ) =>
-				id === 'sib-1' ? 'core/heading' : undefined
-			),
+				.mockImplementation( ( id ) =>
+					id === 'sib-1' ? 'core/heading' : undefined
+				),
 			getBlockAttributes: jest.fn().mockImplementation( ( id ) => {
 				if ( id === 'sib-1' ) {
 					return {
@@ -504,9 +573,7 @@ describe( 'collectBlockContext', () => {
 		mockIntrospectBlockTree.mockReturnValue( [
 			{
 				clientId: 'parent-deep',
-				innerBlocks: [
-					{ clientId: 'child-1', innerBlocks: [] },
-				],
+				innerBlocks: [ { clientId: 'child-1', innerBlocks: [] } ],
 			},
 		] );
 		mockAnnotateStructuralIdentity.mockReturnValue( [] );
@@ -515,12 +582,12 @@ describe( 'collectBlockContext', () => {
 		mockSummarizeTokens.mockReturnValue( {} );
 		mockSelect.mockReturnValue( {
 			getBlockRootClientId: jest.fn().mockReturnValue( 'parent-deep' ),
-			getBlockOrder: jest
+			getBlockOrder: jest.fn().mockReturnValue( [ 'child-1' ] ),
+			getBlockName: jest
 				.fn()
-				.mockReturnValue( [ 'child-1' ] ),
-			getBlockName: jest.fn().mockImplementation( ( id ) =>
-				id === 'parent-deep' ? 'core/cover' : undefined
-			),
+				.mockImplementation( ( id ) =>
+					id === 'parent-deep' ? 'core/cover' : undefined
+				),
 			getBlockAttributes: jest.fn().mockReturnValue( {
 				backgroundColor: 'contrast',
 			} ),
@@ -572,9 +639,7 @@ describe( 'collectBlockContext', () => {
 		mockSummarizeTokens.mockReturnValue( {} );
 		mockSelect.mockReturnValue( {
 			getBlockRootClientId: jest.fn().mockReturnValue( 'root' ),
-			getBlockOrder: jest
-				.fn()
-				.mockReturnValue( [ 'a', 'target', 'b' ] ),
+			getBlockOrder: jest.fn().mockReturnValue( [ 'a', 'target', 'b' ] ),
 			getBlockName: jest.fn().mockImplementation( ( id ) => {
 				const map = { a: 'core/heading', b: 'core/image' };
 				return map[ id ];
@@ -806,6 +871,7 @@ describe( 'getLiveBlockContextSignature', () => {
 	 * module-level `select` for those reads.  collectBlockContext (called
 	 * internally) *does* use the module-level `select`, so we must also set
 	 * up mockSelect.
+	 * @param {Object} editorOverrides
 	 */
 	function buildRegistrySelect( editorOverrides = {} ) {
 		const baseEditor = {
@@ -893,18 +959,18 @@ describe( 'getLiveBlockContextSignature', () => {
 
 		// Second pass: place inside a parent with visual hints.
 		mockSelect.mockReturnValue( {
-			getBlockRootClientId: jest
-				.fn()
-				.mockReturnValue( 'parent-group' ),
+			getBlockRootClientId: jest.fn().mockReturnValue( 'parent-group' ),
 			getBlockOrder: jest.fn().mockReturnValue( [ 'test-block' ] ),
-			getBlockName: jest.fn().mockImplementation( ( id ) =>
-				id === 'parent-group' ? 'core/group' : 'core/paragraph'
-			),
-			getBlockAttributes: jest.fn().mockImplementation( ( id ) =>
-				id === 'parent-group'
-					? { backgroundColor: 'contrast' }
-					: {}
-			),
+			getBlockName: jest
+				.fn()
+				.mockImplementation( ( id ) =>
+					id === 'parent-group' ? 'core/group' : 'core/paragraph'
+				),
+			getBlockAttributes: jest
+				.fn()
+				.mockImplementation( ( id ) =>
+					id === 'parent-group' ? { backgroundColor: 'contrast' } : {}
+				),
 			getBlockCount: jest.fn().mockReturnValue( 1 ),
 		} );
 
@@ -913,11 +979,11 @@ describe( 'getLiveBlockContextSignature', () => {
 				getBlockRootClientId: jest
 					.fn()
 					.mockReturnValue( 'parent-group' ),
-				getBlockName: jest.fn().mockImplementation( ( id ) =>
-					id === 'parent-group'
-						? 'core/group'
-						: 'core/paragraph'
-				),
+				getBlockName: jest
+					.fn()
+					.mockImplementation( ( id ) =>
+						id === 'parent-group' ? 'core/group' : 'core/paragraph'
+					),
 				getBlockAttributes: jest
 					.fn()
 					.mockImplementation( ( id ) =>
@@ -949,12 +1015,8 @@ describe( 'getLiveBlockContextSignature', () => {
 
 		const sig1 = getLiveBlockContextSignature(
 			buildRegistrySelect( {
-				getBlockRootClientId: jest
-					.fn()
-					.mockReturnValue( 'root' ),
-				getBlockOrder: jest
-					.fn()
-					.mockReturnValue( [ 'test-block' ] ),
+				getBlockRootClientId: jest.fn().mockReturnValue( 'root' ),
+				getBlockOrder: jest.fn().mockReturnValue( [ 'test-block' ] ),
 				getBlockCount: jest.fn().mockReturnValue( 1 ),
 			} ),
 			'test-block'
@@ -975,14 +1037,18 @@ describe( 'getLiveBlockContextSignature', () => {
 			getBlockOrder: jest
 				.fn()
 				.mockReturnValue( [ 'sibling-1', 'test-block' ] ),
-			getBlockName: jest.fn().mockImplementation( ( id ) =>
-				id === 'sibling-1' ? 'core/heading' : 'core/paragraph'
-			),
-			getBlockAttributes: jest.fn().mockImplementation( ( id ) =>
-				id === 'sibling-1'
-					? { align: 'wide', textColor: 'primary' }
-					: {}
-			),
+			getBlockName: jest
+				.fn()
+				.mockImplementation( ( id ) =>
+					id === 'sibling-1' ? 'core/heading' : 'core/paragraph'
+				),
+			getBlockAttributes: jest
+				.fn()
+				.mockImplementation( ( id ) =>
+					id === 'sibling-1'
+						? { align: 'wide', textColor: 'primary' }
+						: {}
+				),
 			getBlockCount: jest.fn().mockReturnValue( 2 ),
 		} );
 
@@ -990,17 +1056,15 @@ describe( 'getLiveBlockContextSignature', () => {
 
 		const sig2 = getLiveBlockContextSignature(
 			buildRegistrySelect( {
-				getBlockRootClientId: jest
-					.fn()
-					.mockReturnValue( 'root' ),
+				getBlockRootClientId: jest.fn().mockReturnValue( 'root' ),
 				getBlockOrder: jest
 					.fn()
 					.mockReturnValue( [ 'sibling-1', 'test-block' ] ),
-				getBlockName: jest.fn().mockImplementation( ( id ) =>
-					id === 'sibling-1'
-						? 'core/heading'
-						: 'core/paragraph'
-				),
+				getBlockName: jest
+					.fn()
+					.mockImplementation( ( id ) =>
+						id === 'sibling-1' ? 'core/heading' : 'core/paragraph'
+					),
 				getBlockAttributes: jest
 					.fn()
 					.mockImplementation( ( id ) =>

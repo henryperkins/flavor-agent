@@ -447,7 +447,7 @@ SYSTEM;
 			$label = '(unknown block)';
 		}
 
-		if ( ! empty( $node['childCount'] ) && empty( $node['children'] ) ) {
+		if ( ! empty( $node['childCount'] ) ) {
 			$label .= ' (' . (int) $node['childCount'] . ' children)';
 		}
 
@@ -562,7 +562,7 @@ SYSTEM;
 				continue;
 			}
 
-			$label = sanitize_text_field( (string) $summary['block'] );
+			$label = self::get_block_key( $summary['block'] );
 			$meta  = [];
 
 			if ( ! empty( $summary['role'] ) ) {
@@ -589,7 +589,7 @@ SYSTEM;
 			return '';
 		}
 
-		$label = sanitize_text_field( (string) $node['block'] );
+		$label = self::get_block_key( $node['block'] );
 
 		if ( ! empty( $node['templateArea'] ) ) {
 			$label .= '(' . sanitize_text_field( (string) $node['templateArea'] ) . ')';
@@ -606,6 +606,23 @@ SYSTEM;
 		}
 
 		return $label;
+	}
+
+	private static function get_block_key( mixed $block_name ): string {
+		if ( ! is_string( $block_name ) || '' === $block_name ) {
+			return '';
+		}
+
+		$normalized = sanitize_text_field( $block_name );
+
+		if ( str_contains( $normalized, '/' ) ) {
+			$parts = explode( '/', $normalized );
+			$short = end( $parts );
+
+			return is_string( $short ) && '' !== $short ? $short : $normalized;
+		}
+
+		return $normalized;
 	}
 
 	/**

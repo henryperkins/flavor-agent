@@ -20,7 +20,13 @@ import {
 	toStructuralSummary,
 } from '../utils/structural-identity';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
-import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
+import {
+	BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
+	BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
+	BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH,
+	capBlockStructuralSummaryItems,
+	buildBlockRecommendationContextSignature,
+} from '../utils/block-recommendation-context';
 import { buildContextSignature } from '../utils/context-signature';
 export { buildBlockRecommendationContextSignature };
 
@@ -310,13 +316,12 @@ export function collectBlockContext( clientId ) {
 	if ( path ) {
 		const selectedNode = path[ path.length - 1 ];
 		blockIdentity = selectedNode?.structuralIdentity || {};
-		structuralAncestors = path
-			.slice( 0, -1 )
-			.map( ( node ) => toStructuralSummary( node ) );
+		structuralAncestors = capBlockStructuralSummaryItems(
+			path.slice( 0, -1 ).map( ( node ) => toStructuralSummary( node ) )
+		);
 		branchRoot = findBranchRoot( path );
 	}
 
-	const maxBranchDepth = 3;
 	if ( branchRoot && path ) {
 		const rootIndex = path.findIndex(
 			( node ) => node?.clientId === branchRoot.clientId
@@ -324,19 +329,22 @@ export function collectBlockContext( clientId ) {
 		const depthFromRoot =
 			rootIndex === -1 ? path.length : path.length - rootIndex;
 
-		if ( depthFromRoot > maxBranchDepth ) {
-			branchRoot = path[ path.length - maxBranchDepth ];
+		if ( depthFromRoot > BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH ) {
+			branchRoot =
+				path[ path.length - BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH ];
 		}
 	}
 
 	const structuralBranch = branchRoot
-		? summarizeTree( [ branchRoot ], {
-				focusClientId: clientId,
-				includeBlockCapabilities: false,
-				includeStructuralIdentity: true,
-				maxChildren: 6,
-				maxDepth: maxBranchDepth,
-		  } )
+		? capBlockStructuralSummaryItems(
+				summarizeTree( [ branchRoot ], {
+					focusClientId: clientId,
+					includeBlockCapabilities: false,
+					includeStructuralIdentity: true,
+					maxChildren: BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
+					maxDepth: BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH,
+				} )
+		  )
 		: [];
 
 	const themeTokens = collectThemeTokens();
@@ -362,18 +370,26 @@ export function collectBlockContext( clientId ) {
 			childCount: instance.childCount,
 			structuralIdentity: blockIdentity,
 		},
-		siblingsBefore: getSiblingNames( clientId, 'before', 3 ),
-		siblingsAfter: getSiblingNames( clientId, 'after', 3 ),
+		siblingsBefore: getSiblingNames(
+			clientId,
+			'before',
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+		),
+		siblingsAfter: getSiblingNames(
+			clientId,
+			'after',
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+		),
 		siblingSummariesBefore: getSiblingSummaries(
 			clientId,
 			'before',
-			3,
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
 			annotatedTree
 		),
 		siblingSummariesAfter: getSiblingSummaries(
 			clientId,
 			'after',
-			3,
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
 			annotatedTree
 		),
 		...( parentContext ? { parentContext } : {} ),
@@ -427,8 +443,19 @@ function subscribeToBlockContextSources( registrySelect, clientId ) {
 			index === -1
 				? []
 				: order
-						.slice( Math.max( 0, index - 3 ), index )
-						.concat( order.slice( index + 1, index + 4 ) );
+						.slice(
+							Math.max(
+								0,
+								index - BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+							),
+							index
+						)
+						.concat(
+							order.slice(
+								index + 1,
+								index + 1 + BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+							)
+						);
 
 		siblingIds.forEach( ( id ) => {
 			editor.getBlockAttributes?.( id );

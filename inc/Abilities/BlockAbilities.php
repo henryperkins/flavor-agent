@@ -14,6 +14,12 @@ use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
 
+	private const STRUCTURAL_SUMMARY_MAX_ITEMS = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_CHILDREN = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
+
 	public static function recommend_block( mixed $input ): array|\WP_Error {
 		$input = self::normalize_map( $input );
 		$resolve_signature_only = filter_var(
@@ -438,9 +444,8 @@ final class BlockAbilities {
 	}
 
 	private static function normalize_structural_summary_items( mixed $raw_items, bool $include_children = false, int $depth = 0 ): array {
-		$items       = self::normalize_list( $raw_items );
+		$items       = array_slice( self::normalize_list( $raw_items ), 0, self::STRUCTURAL_SUMMARY_MAX_ITEMS );
 		$normalized  = [];
-		$max_depth   = 2;
 
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
@@ -492,11 +497,34 @@ final class BlockAbilities {
 				$summary['moreChildren'] = (int) $item['moreChildren'];
 			}
 
-			if ( $include_children && $depth < $max_depth ) {
-				$children = self::normalize_structural_summary_items( $item['children'] ?? [], true, $depth + 1 );
+			if ( $include_children ) {
+				$raw_children        = self::normalize_list( $item['children'] ?? [] );
+				$hidden_child_count  = max( 0, (int) ( $summary['moreChildren'] ?? 0 ) );
+				$displayed_children  = [];
 
-				if ( ! empty( $children ) ) {
-					$summary['children'] = $children;
+				if ( $depth < self::STRUCTURAL_SUMMARY_MAX_DEPTH ) {
+					$visible_children = array_slice( $raw_children, 0, self::STRUCTURAL_SUMMARY_MAX_CHILDREN );
+					$hidden_child_count += max( 0, count( $raw_children ) - count( $visible_children ) );
+					$displayed_children = self::normalize_structural_summary_items( $visible_children, true, $depth + 1 );
+				} else {
+					$hidden_child_count += count( $raw_children );
+				}
+
+				if ( ! empty( $displayed_children ) ) {
+					$summary['children'] = $displayed_children;
+				}
+
+				if ( isset( $summary['childCount'] ) ) {
+					$hidden_child_count = max(
+						$hidden_child_count,
+						max( 0, (int) $summary['childCount'] - count( $displayed_children ) )
+					);
+				}
+
+				if ( $hidden_child_count > 0 ) {
+					$summary['moreChildren'] = $hidden_child_count;
+				} else {
+					unset( $summary['moreChildren'] );
 				}
 			}
 
