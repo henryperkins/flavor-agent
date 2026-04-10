@@ -245,6 +245,241 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertArrayNotHasKey( 'bindings', $prepared['context']['block']['inspectorPanels'] );
 	}
 
+	public function test_prepare_recommend_block_input_preserves_parent_and_sibling_summaries_from_editor_context(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block'                  => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [],
+					],
+					'parentContext'          => [
+						'block'       => 'core/cover',
+						'title'       => 'Header Cover',
+						'role'        => 'header-cover',
+						'job'         => 'Cover in header',
+						'childCount'  => 5,
+						'visualHints' => [
+							'backgroundColor' => 'contrast',
+							'layout'          => [
+								'type'           => 'constrained',
+								'justifyContent' => 'center',
+							],
+							'unknown'         => 'drop-me',
+						],
+					],
+					'siblingSummariesBefore' => [
+						[
+							'block'       => 'core/heading',
+							'role'        => 'lede-heading',
+							'visualHints' => [
+								'align'       => 'wide',
+								'style'       => [ 'color' => [ 'text' => 'var(--wp--preset--color--contrast)' ] ],
+								'unsupported' => 'ignore',
+							],
+						],
+						[
+							'block' => '',
+							'role'  => 'skip-me',
+						],
+						[ 'block' => 'core/image' ],
+						[ 'block' => 'core/separator' ],
+					],
+					'siblingSummariesAfter'  => [
+						[
+							'block'       => 'core/buttons',
+							'visualHints' => [ 'textAlign' => 'center' ],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'block'       => 'core/cover',
+				'title'       => 'Header Cover',
+				'role'        => 'header-cover',
+				'job'         => 'Cover in header',
+				'childCount'  => 5,
+				'visualHints' => [
+					'backgroundColor' => 'contrast',
+					'layout'          => [
+						'type'           => 'constrained',
+						'justifyContent' => 'center',
+					],
+				],
+			],
+			$prepared['context']['parentContext']
+		);
+		$this->assertSame(
+			[
+				[
+					'block'       => 'core/heading',
+					'role'        => 'lede-heading',
+					'visualHints' => [
+						'align' => 'wide',
+						'style' => [ 'color' => [ 'text' => 'var(--wp--preset--color--contrast)' ] ],
+					],
+				],
+				[
+					'block' => 'core/image',
+				],
+			],
+			$prepared['context']['siblingSummariesBefore']
+		);
+		$this->assertSame(
+			[
+				[
+					'block'       => 'core/buttons',
+					'visualHints' => [ 'textAlign' => 'center' ],
+				],
+			],
+			$prepared['context']['siblingSummariesAfter']
+		);
+	}
+
+	public function test_prepare_recommend_block_input_normalizes_parent_and_sibling_context_from_selected_block(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'selectedBlock' => [
+					'blockName'              => 'core/paragraph',
+					'attributes'             => [],
+					'parentContext'          => [
+						'block'       => 'core/group',
+						'visualHints' => [
+							'backgroundColor' => 'base',
+							'tagName'         => 'header',
+							'minHeight'       => 80,
+							'minHeightUnit'   => 'vh',
+							'extra'           => 'drop',
+						],
+					],
+					'siblingSummariesBefore' => [
+						[
+							'block'       => 'core/heading',
+							'visualHints' => [
+								'textAlign' => 'center',
+								'unknown'   => 'x',
+							],
+						],
+						[
+							'block' => 'core/image',
+							'role'  => '<script>alert(1)</script>',
+						],
+					],
+					'siblingSummariesAfter'  => [
+						[
+							'block'       => 'core/buttons',
+							'visualHints' => [ 'align' => 'wide' ],
+						],
+						[ 'block' => 'core/separator' ],
+						[ 'block' => 'core/list' ],
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'block'       => 'core/group',
+				'visualHints' => [
+					'backgroundColor' => 'base',
+					'minHeight'       => 80,
+					'minHeightUnit'   => 'vh',
+					'tagName'         => 'header',
+				],
+			],
+			$prepared['context']['parentContext']
+		);
+		$this->assertSame(
+			[
+				[
+					'block'       => 'core/heading',
+					'visualHints' => [ 'textAlign' => 'center' ],
+				],
+				[
+					'block' => 'core/image',
+					'role'  => 'alert(1)',
+				],
+			],
+			$prepared['context']['siblingSummariesBefore']
+		);
+		$this->assertSame(
+			[
+				[
+					'block'       => 'core/buttons',
+					'visualHints' => [ 'align' => 'wide' ],
+				],
+				[ 'block' => 'core/separator' ],
+				[ 'block' => 'core/list' ],
+			],
+			$prepared['context']['siblingSummariesAfter']
+		);
+	}
+
+	public function test_prepare_recommend_block_input_bounds_structural_branch_children_from_editor_context(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block'            => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [],
+					],
+					'structuralBranch' => [
+						[
+							'block'      => 'core/group',
+							'childCount' => 9,
+							'children'   => [
+								[ 'block' => 'core/paragraph', 'isSelected' => true ],
+								[ 'block' => 'core/image' ],
+								[ 'block' => 'core/buttons' ],
+								[ 'block' => 'core/spacer' ],
+								[ 'block' => 'core/separator' ],
+								[ 'block' => 'core/list' ],
+								[ 'block' => 'core/quote' ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertCount( 6, $prepared['context']['structuralBranch'][0]['children'] );
+		$this->assertSame( 9, $prepared['context']['structuralBranch'][0]['childCount'] );
+		$this->assertSame( 3, $prepared['context']['structuralBranch'][0]['moreChildren'] );
+	}
+
+	public function test_prepare_recommend_block_input_bounds_structural_summary_root_items_from_editor_context(): void {
+		$prepared = $this->invoke_prepare_recommend_block_input(
+			[
+				'editorContext' => [
+					'block'               => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [],
+					],
+					'structuralAncestors' => array_map(
+						static fn( int $index ): array => [
+							'block' => 'core/group-' . $index,
+						],
+						range( 1, 8 )
+					),
+					'structuralBranch'    => array_map(
+						static fn( int $index ): array => [
+							'block' => 'core/branch-' . $index,
+						],
+						range( 1, 8 )
+					),
+				],
+			]
+		);
+
+		$this->assertCount( 6, $prepared['context']['structuralAncestors'] );
+		$this->assertSame( 'core/group-6', $prepared['context']['structuralAncestors'][5]['block'] );
+		$this->assertCount( 6, $prepared['context']['structuralBranch'] );
+		$this->assertSame( 'core/branch-6', $prepared['context']['structuralBranch'][5]['block'] );
+	}
+
 	public function test_recommend_block_short_circuits_disabled_blocks_before_api_key_validation(): void {
 		$result = BlockAbilities::recommend_block(
 			[

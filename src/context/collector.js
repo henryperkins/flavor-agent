@@ -20,9 +20,234 @@ import {
 	toStructuralSummary,
 } from '../utils/structural-identity';
 import { collectThemeTokens, summarizeTokens } from './theme-tokens';
-import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
+import {
+	BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
+	BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
+	BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH,
+	capBlockStructuralSummaryItems,
+	buildBlockRecommendationContextSignature,
+} from '../utils/block-recommendation-context';
 import { buildContextSignature } from '../utils/context-signature';
 export { buildBlockRecommendationContextSignature };
+
+const BASE_VISUAL_HINT_PATHS = [
+	'backgroundColor',
+	'textColor',
+	'gradient',
+	'align',
+	'textAlign',
+	'style.color.background',
+	'style.color.text',
+	'layout.type',
+	'layout.justifyContent',
+];
+
+const PARENT_VISUAL_HINT_PATHS = [
+	...BASE_VISUAL_HINT_PATHS,
+	'dimRatio',
+	'minHeight',
+	'minHeightUnit',
+	'tagName',
+];
+
+function getValueAtPath( source, pathSegments ) {
+	if ( ! source || 'object' !== typeof source ) {
+		return undefined;
+	}
+
+	return pathSegments.reduce(
+		( value, segment ) =>
+			value && 'object' === typeof value && segment in value
+				? value[ segment ]
+				: undefined,
+		source
+	);
+}
+
+function setNestedHint( target, pathSegments, value ) {
+	let cursor = target;
+
+	pathSegments.forEach( ( segment, index ) => {
+		if ( index === pathSegments.length - 1 ) {
+			cursor[ segment ] = value;
+			return;
+		}
+
+		if ( ! cursor[ segment ] || 'object' !== typeof cursor[ segment ] ) {
+			cursor[ segment ] = {};
+		}
+		cursor = cursor[ segment ];
+	} );
+}
+
+function extractVisualHints( attributes, allowlist ) {
+	const hints = {};
+
+	if ( ! attributes || 'object' !== typeof attributes ) {
+		return hints;
+	}
+
+	allowlist.forEach( ( path ) => {
+		const segments = path.split( '.' );
+		const value = getValueAtPath( attributes, segments );
+
+		if (
+			value === undefined ||
+			value === null ||
+			value === '' ||
+			( typeof value === 'object' &&
+				! Array.isArray( value ) &&
+				Object.keys( value ).length === 0 )
+		) {
+			return;
+		}
+
+		setNestedHint( hints, segments, value );
+	} );
+
+	return hints;
+}
+
+/**
+ * Build a clientId → structuralIdentity lookup index from an annotated tree.
+ * Single O(n) traversal; pass the result to helpers that would otherwise each
+ * call findNodePath() (an O(n) tree walk) for every sibling and parent.
+ *
+ * @param {object[]} annotatedTree Annotated block tree.
+ * @return {Object} Plain object keyed by clientId.
+ */
+function buildIdentityIndex( annotatedTree ) {
+	const index = {};
+	function visit( nodes ) {
+		if ( ! Array.isArray( nodes ) ) {
+			return;
+		}
+		for ( const node of nodes ) {
+			if ( node?.clientId ) {
+				index[ node.clientId ] = node.structuralIdentity || {};
+			}
+			visit( node?.innerBlocks );
+		}
+	}
+	visit( annotatedTree );
+	return index;
+}
+
+function findStructuralIdentity( annotatedTree, clientId, identityIndex ) {
+	if ( ! clientId ) {
+		return {};
+	}
+
+	if ( identityIndex ) {
+		return identityIndex[ clientId ] || {};
+	}
+
+	if ( ! Array.isArray( annotatedTree ) ) {
+		return {};
+	}
+
+	const path = findNodePath(
+		annotatedTree,
+		( node ) => node?.clientId === clientId
+	);
+
+	return path?.[ path.length - 1 ]?.structuralIdentity || {};
+}
+
+function getSiblingSummaries( clientId, direction, count, annotatedTree, identityIndex ) {
+	const editor = select( blockEditorStore );
+	const rootId = editor.getBlockRootClientId( clientId );
+	const order = editor.getBlockOrder( rootId || '' );
+	const index = order.indexOf( clientId );
+	if ( index === -1 ) {
+		return [];
+	}
+
+	const slice =
+		direction === 'before'
+			? order.slice( Math.max( 0, index - count ), index )
+			: order.slice( index + 1, index + 1 + count );
+
+	return slice
+		.map( ( id ) => {
+			const blockName = editor.getBlockName( id );
+
+			if ( ! blockName ) {
+				return null;
+			}
+
+			const attributes = editor.getBlockAttributes?.( id ) || {};
+			const visualHints = extractVisualHints(
+				attributes,
+				BASE_VISUAL_HINT_PATHS
+			);
+			const identity = findStructuralIdentity( annotatedTree, id, identityIndex );
+			const summary = {
+				block: blockName,
+			};
+
+			if ( identity.role ) {
+				summary.role = identity.role;
+			}
+
+			if ( Object.keys( visualHints ).length ) {
+				summary.visualHints = visualHints;
+			}
+
+			return summary;
+		} )
+		.filter( Boolean );
+}
+
+function getParentContext( clientId, annotatedTree, identityIndex ) {
+	const editor = select( blockEditorStore );
+	const parentId = editor.getBlockRootClientId( clientId );
+
+	if ( ! parentId ) {
+		return null;
+	}
+
+	const parentBlockName = editor.getBlockName( parentId );
+	if ( ! parentBlockName ) {
+		return null;
+	}
+
+	const blocks = select( blocksStore );
+	const attributes = editor.getBlockAttributes?.( parentId ) || {};
+	const visualHints = extractVisualHints(
+		attributes,
+		PARENT_VISUAL_HINT_PATHS
+	);
+	const parentType = blocks.getBlockType?.( parentBlockName );
+	const identity = findStructuralIdentity( annotatedTree, parentId, identityIndex );
+	const parentContext = {
+		block: parentBlockName,
+		title: parentType?.title || '',
+		childCount: editor.getBlockCount?.( parentId ) || 0,
+	};
+
+	if ( identity.role ) {
+		parentContext.role = identity.role;
+	}
+
+	if ( identity.job ) {
+		parentContext.job = identity.job;
+	}
+
+	if ( Object.keys( visualHints ).length ) {
+		parentContext.visualHints = visualHints;
+	}
+
+	if ( ! parentContext.title ) {
+		delete parentContext.title;
+	}
+
+	if ( ! parentContext.childCount ) {
+		delete parentContext.childCount;
+	}
+
+	return Object.keys( parentContext ).length ? parentContext : null;
+}
 
 // ── Annotated tree cache ─────────────────────────────────────────────────────
 //
@@ -112,6 +337,12 @@ export function collectBlockContext( clientId ) {
 	// Single annotated tree shared by both the structural context pass and
 	// the structuralBranch summarizeTree pass — no double annotation.
 	const annotatedTree = getAnnotatedBlockTree();
+
+	// Build a clientId → structuralIdentity index once so that getParentContext()
+	// and getSiblingSummaries() can do O(1) lookups instead of an O(n) tree walk
+	// per call.
+	const identityIndex = buildIdentityIndex( annotatedTree );
+
 	const path = findNodePath(
 		annotatedTree,
 		( n ) => n?.clientId === clientId
@@ -124,24 +355,40 @@ export function collectBlockContext( clientId ) {
 	if ( path ) {
 		const selectedNode = path[ path.length - 1 ];
 		blockIdentity = selectedNode?.structuralIdentity || {};
-		structuralAncestors = path
-			.slice( 0, -1 )
-			.map( ( node ) => toStructuralSummary( node ) );
+		structuralAncestors = capBlockStructuralSummaryItems(
+			path.slice( 0, -1 ).map( ( node ) => toStructuralSummary( node ) )
+		);
 		branchRoot = findBranchRoot( path );
 	}
 
+	if ( branchRoot && path ) {
+		const rootIndex = path.findIndex(
+			( node ) => node?.clientId === branchRoot.clientId
+		);
+		const depthFromRoot =
+			rootIndex === -1 ? path.length : path.length - rootIndex;
+
+		if ( depthFromRoot > BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH ) {
+			branchRoot =
+				path[ path.length - BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH ];
+		}
+	}
+
 	const structuralBranch = branchRoot
-		? summarizeTree( [ branchRoot ], {
-				focusClientId: clientId,
-				includeBlockCapabilities: false,
-				includeStructuralIdentity: true,
-				maxChildren: 6,
-				maxDepth: 3,
-		  } )
+		? capBlockStructuralSummaryItems(
+				summarizeTree( [ branchRoot ], {
+					focusClientId: clientId,
+					includeBlockCapabilities: false,
+					includeStructuralIdentity: true,
+					maxChildren: BLOCK_STRUCTURAL_BRANCH_MAX_CHILDREN,
+					maxDepth: BLOCK_STRUCTURAL_BRANCH_MAX_DEPTH,
+				} )
+		  )
 		: [];
 
 	const themeTokens = collectThemeTokens();
 	const tokenSummary = summarizeTokens( themeTokens );
+	const parentContext = getParentContext( clientId, annotatedTree, identityIndex );
 
 	return {
 		block: {
@@ -162,8 +409,31 @@ export function collectBlockContext( clientId ) {
 			childCount: instance.childCount,
 			structuralIdentity: blockIdentity,
 		},
-		siblingsBefore: getSiblingNames( clientId, 'before', 3 ),
-		siblingsAfter: getSiblingNames( clientId, 'after', 3 ),
+		siblingsBefore: getSiblingNames(
+			clientId,
+			'before',
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+		),
+		siblingsAfter: getSiblingNames(
+			clientId,
+			'after',
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+		),
+		siblingSummariesBefore: getSiblingSummaries(
+			clientId,
+			'before',
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
+			annotatedTree,
+			identityIndex
+		),
+		siblingSummariesAfter: getSiblingSummaries(
+			clientId,
+			'after',
+			BLOCK_SIBLING_SUMMARY_MAX_ITEMS,
+			annotatedTree,
+			identityIndex
+		),
+		...( parentContext ? { parentContext } : {} ),
 		structuralAncestors,
 		structuralBranch,
 		themeTokens: tokenSummary,
@@ -200,6 +470,39 @@ function subscribeToBlockContextSources( registrySelect, clientId ) {
 	editor.getBlockOrder?.( rootId );
 	editor.getBlocks?.();
 	editor.getSettings?.();
+
+	if ( rootId ) {
+		editor.getBlockAttributes?.( rootId );
+		editor.getBlockName?.( rootId );
+		editor.getBlockCount?.( rootId );
+	}
+
+	if ( Array.isArray( editor.getBlockOrder?.( rootId ) ) ) {
+		const order = editor.getBlockOrder( rootId );
+		const index = order.indexOf( clientId );
+		const siblingIds =
+			index === -1
+				? []
+				: order
+						.slice(
+							Math.max(
+								0,
+								index - BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+							),
+							index
+						)
+						.concat(
+							order.slice(
+								index + 1,
+								index + 1 + BLOCK_SIBLING_SUMMARY_MAX_ITEMS
+							)
+						);
+
+		siblingIds.forEach( ( id ) => {
+			editor.getBlockAttributes?.( id );
+			editor.getBlockName?.( id );
+		} );
+	}
 
 	if ( blockName ) {
 		const blocks = registrySelect( blocksStore );

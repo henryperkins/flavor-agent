@@ -16,11 +16,14 @@ final class BlockContextCollector {
 		string $block_name,
 		array $attributes = [],
 		array $inner_blocks = [],
-		bool $is_inside_content_only = false
+		bool $is_inside_content_only = false,
+		array $parent_context = [],
+		array $sibling_summaries_before = [],
+		array $sibling_summaries_after = []
 	): array {
 		$type_info = $this->block_type_introspector->introspect_block_type( $block_name );
 
-		return [
+		$result = [
 			'block'          => [
 				'name'                => $block_name,
 				'title'               => $type_info['title'] ?? '',
@@ -45,5 +48,19 @@ final class BlockContextCollector {
 			'siblingsAfter'  => [],
 			'themeTokens'    => $this->theme_token_collector->for_tokens(),
 		];
+
+		if ( ! empty( $parent_context ) ) {
+			$result['parentContext'] = $parent_context;
+		}
+
+		if ( ! empty( $sibling_summaries_before ) ) {
+			$result['siblingSummariesBefore'] = $sibling_summaries_before;
+		}
+
+		if ( ! empty( $sibling_summaries_after ) ) {
+			$result['siblingSummariesAfter'] = $sibling_summaries_after;
+		}
+
+		return $result;
 	}
 }

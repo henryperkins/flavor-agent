@@ -14,8 +14,14 @@ use FlavorAgent\Support\StringArray;
 
 final class BlockAbilities {
 
+	private const STRUCTURAL_SUMMARY_MAX_ITEMS = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_CHILDREN = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
+
 	public static function recommend_block( mixed $input ): array|\WP_Error {
-		$input = self::normalize_map( $input );
+		$input                  = self::normalize_map( $input );
 		$resolve_signature_only = filter_var(
 			$input['resolveSignatureOnly'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
@@ -213,20 +219,35 @@ final class BlockAbilities {
 			$normalized['block']['configAttributes'] = $config_attributes;
 		}
 
-			$normalized['siblingsBefore'] = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
-			$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
+		$normalized['siblingsBefore'] = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
+		$normalized['siblingsAfter']  = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
 
-			$structural_ancestors = self::normalize_list( $context['structuralAncestors'] ?? [] );
+		$parent_context = self::normalize_parent_context( $context['parentContext'] ?? [] );
+		if ( ! empty( $parent_context ) ) {
+			$normalized['parentContext'] = $parent_context;
+		}
+
+		$sibling_summaries_before = self::normalize_sibling_summaries( $context['siblingSummariesBefore'] ?? [] );
+		if ( ! empty( $sibling_summaries_before ) ) {
+			$normalized['siblingSummariesBefore'] = $sibling_summaries_before;
+		}
+
+		$sibling_summaries_after = self::normalize_sibling_summaries( $context['siblingSummariesAfter'] ?? [] );
+		if ( ! empty( $sibling_summaries_after ) ) {
+			$normalized['siblingSummariesAfter'] = $sibling_summaries_after;
+		}
+
+		$structural_ancestors = self::normalize_structural_summary_items( $context['structuralAncestors'] ?? [] );
 		if ( ! empty( $structural_ancestors ) ) {
 			$normalized['structuralAncestors'] = $structural_ancestors;
 		}
 
-			$structural_branch = self::normalize_list( $context['structuralBranch'] ?? [] );
+		$structural_branch = self::normalize_structural_summary_items( $context['structuralBranch'] ?? [], true );
 		if ( ! empty( $structural_branch ) ) {
 			$normalized['structuralBranch'] = $structural_branch;
 		}
 
-			$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+		$theme_tokens = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
 		if ( ! empty( $theme_tokens ) ) {
 			$normalized['themeTokens'] = $theme_tokens;
 		}
@@ -235,31 +256,43 @@ final class BlockAbilities {
 	}
 
 	private static function build_context_from_selected_block( mixed $raw_selected ): array|\WP_Error {
-		$selected               = self::normalize_selected_block( self::normalize_map( $raw_selected ) );
-		$block_name             = is_string( $selected['blockName'] ?? null ) ? sanitize_text_field( $selected['blockName'] ) : '';
-		$attributes             = self::normalize_map( $selected['attributes'] ?? [] );
-		$inner_blocks           = self::normalize_list( $selected['innerBlocks'] ?? [] );
-		$is_inside_content_only = ! empty( $selected['isInsideContentOnly'] );
+		$selected                 = self::normalize_selected_block( self::normalize_map( $raw_selected ) );
+		$block_name               = is_string( $selected['blockName'] ?? null ) ? sanitize_text_field( $selected['blockName'] ) : '';
+		$attributes               = self::normalize_map( $selected['attributes'] ?? [] );
+		$inner_blocks             = self::normalize_list( $selected['innerBlocks'] ?? [] );
+		$is_inside_content_only   = ! empty( $selected['isInsideContentOnly'] );
+		$parent_context           = self::normalize_parent_context( $selected['parentContext'] ?? [] );
+		$sibling_summaries_before = self::normalize_sibling_summaries( $selected['siblingSummariesBefore'] ?? [] );
+		$sibling_summaries_after  = self::normalize_sibling_summaries( $selected['siblingSummariesAfter'] ?? [] );
 
 		if ( '' === $block_name ) {
 			return new \WP_Error( 'missing_block_name', 'selectedBlock.blockName is required.', [ 'status' => 400 ] );
 		}
 
-			$context                                 = ServerCollector::for_block( $block_name, $attributes, $inner_blocks, $is_inside_content_only );
-			$context['block']['editingMode']         = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
-			$context['siblingsBefore']               = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
-			$context['siblingsAfter']                = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
-			$context['structuralAncestors']          = self::normalize_list( $selected['structuralAncestors'] ?? [] );
-			$context['structuralBranch']             = self::normalize_list( $selected['structuralBranch'] ?? [] );
-			$context['themeTokens']                  = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
-			$context['block']['supportsContentRole'] = ! empty( $selected['supportsContentRole'] ) || ! empty( $context['block']['supportsContentRole'] );
+		$context = ServerCollector::for_block(
+			$block_name,
+			$attributes,
+			$inner_blocks,
+			$is_inside_content_only,
+			$parent_context,
+			$sibling_summaries_before,
+			$sibling_summaries_after
+		);
 
-			$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
+		$context['block']['editingMode']         = self::normalize_editing_mode( $selected['editingMode'] ?? $context['block']['editingMode'] ?? 'default' );
+		$context['block']['supportsContentRole'] = ! empty( $selected['supportsContentRole'] ) || ! empty( $context['block']['supportsContentRole'] );
+		$context['siblingsBefore']               = StringArray::sanitize( $context['siblingsBefore'] ?? [] );
+		$context['siblingsAfter']                = StringArray::sanitize( $context['siblingsAfter'] ?? [] );
+		$context['structuralAncestors']          = self::normalize_structural_summary_items( $selected['structuralAncestors'] ?? [] );
+		$context['structuralBranch']             = self::normalize_structural_summary_items( $selected['structuralBranch'] ?? [], true );
+		$context['themeTokens']                  = self::normalize_theme_tokens( $context['themeTokens'] ?? [] );
+
+		$structural_identity = self::normalize_map( $selected['structuralIdentity'] ?? [] );
 		if ( ! empty( $structural_identity ) ) {
 			$context['block']['structuralIdentity'] = $structural_identity;
 		}
 
-			return $context;
+		return $context;
 	}
 
 	private static function normalize_selected_block( array $selected ): array {
@@ -288,6 +321,221 @@ final class BlockAbilities {
 		$selected['attributes'] = $attributes;
 
 		return $selected;
+	}
+
+	private static function normalize_visual_hints( mixed $raw_hints, bool $allow_parent_extensions = false ): array {
+		$map   = self::normalize_map( $raw_hints );
+		$paths = [
+			'backgroundColor',
+			'textColor',
+			'gradient',
+			'align',
+			'textAlign',
+			'style.color.background',
+			'style.color.text',
+			'layout.type',
+			'layout.justifyContent',
+		];
+
+		if ( $allow_parent_extensions ) {
+			$paths = array_merge(
+				$paths,
+				[ 'dimRatio', 'minHeight', 'minHeightUnit', 'tagName' ]
+			);
+		}
+
+		$normalized = [];
+
+		foreach ( $paths as $path ) {
+			$segments = explode( '.', $path );
+			$value    = self::get_value_from_path( $map, $segments );
+
+			if ( null === $value || '' === $value ) {
+				continue;
+			}
+
+			$sanitized = self::sanitize_scalar( $value );
+
+			if ( null === $sanitized || '' === $sanitized ) {
+				continue;
+			}
+
+			self::set_value_at_path( $normalized, $segments, $sanitized );
+		}
+
+		return $normalized;
+	}
+
+	private static function normalize_sibling_summaries( mixed $raw_summaries ): array {
+		$summaries  = array_slice( self::normalize_list( $raw_summaries ), 0, 3 );
+		$normalized = [];
+
+		foreach ( $summaries as $summary ) {
+			if ( ! is_array( $summary ) ) {
+				continue;
+			}
+			$block = is_string( $summary['block'] ?? null ) ? sanitize_text_field( $summary['block'] ) : '';
+
+			if ( '' === $block ) {
+				continue;
+			}
+
+			$entry = [
+				'block' => $block,
+			];
+
+			$role = is_string( $summary['role'] ?? null ) ? sanitize_text_field( $summary['role'] ) : '';
+			if ( '' !== $role ) {
+				$entry['role'] = $role;
+			}
+
+			$visual_hints = self::normalize_visual_hints( $summary['visualHints'] ?? [] );
+			if ( ! empty( $visual_hints ) ) {
+				$entry['visualHints'] = $visual_hints;
+			}
+
+			$normalized[] = $entry;
+		}
+
+		return $normalized;
+	}
+
+	private static function normalize_parent_context( mixed $raw_parent ): array {
+		$parent = self::normalize_map( $raw_parent );
+
+		if ( empty( $parent ) ) {
+			return [];
+		}
+
+		$block = is_string( $parent['block'] ?? null ) ? sanitize_text_field( $parent['block'] ) : '';
+		if ( '' === $block ) {
+			return [];
+		}
+
+		$normalized = [
+			'block' => $block,
+		];
+
+		$title = is_string( $parent['title'] ?? null ) ? sanitize_text_field( $parent['title'] ) : '';
+		if ( '' !== $title ) {
+			$normalized['title'] = $title;
+		}
+
+		$role = is_string( $parent['role'] ?? null ) ? sanitize_text_field( $parent['role'] ) : '';
+		if ( '' !== $role ) {
+			$normalized['role'] = $role;
+		}
+
+		$job = is_string( $parent['job'] ?? null ) ? sanitize_text_field( $parent['job'] ) : '';
+		if ( '' !== $job ) {
+			$normalized['job'] = $job;
+		}
+
+		if ( isset( $parent['childCount'] ) && ( is_int( $parent['childCount'] ) || is_numeric( $parent['childCount'] ) ) ) {
+			$normalized['childCount'] = (int) $parent['childCount'];
+		}
+
+		$visual_hints = self::normalize_visual_hints( $parent['visualHints'] ?? [], true );
+		if ( ! empty( $visual_hints ) ) {
+			$normalized['visualHints'] = $visual_hints;
+		}
+
+		return $normalized;
+	}
+
+	private static function normalize_structural_summary_items( mixed $raw_items, bool $include_children = false, int $depth = 0 ): array {
+		$items      = array_slice( self::normalize_list( $raw_items ), 0, self::STRUCTURAL_SUMMARY_MAX_ITEMS );
+		$normalized = [];
+
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$block = is_string( $item['block'] ?? null ) ? sanitize_text_field( $item['block'] ) : '';
+
+			if ( '' === $block ) {
+				continue;
+			}
+
+			$summary = [ 'block' => $block ];
+
+			$title = is_string( $item['title'] ?? null ) ? sanitize_text_field( $item['title'] ) : '';
+			if ( '' !== $title ) {
+				$summary['title'] = $title;
+			}
+
+			$role = is_string( $item['role'] ?? null ) ? sanitize_text_field( $item['role'] ) : '';
+			if ( '' !== $role ) {
+				$summary['role'] = $role;
+			}
+
+			$job = is_string( $item['job'] ?? null ) ? sanitize_text_field( $item['job'] ) : '';
+			if ( '' !== $job ) {
+				$summary['job'] = $job;
+			}
+
+			$location = is_string( $item['location'] ?? null ) ? sanitize_text_field( $item['location'] ) : '';
+			if ( '' !== $location ) {
+				$summary['location'] = $location;
+			}
+
+			$template_area = is_string( $item['templateArea'] ?? null ) ? sanitize_text_field( $item['templateArea'] ) : '';
+			if ( '' !== $template_area ) {
+				$summary['templateArea'] = $template_area;
+			}
+
+			$template_part = is_string( $item['templatePartSlug'] ?? null ) ? sanitize_text_field( $item['templatePartSlug'] ) : '';
+			if ( '' !== $template_part ) {
+				$summary['templatePartSlug'] = $template_part;
+			}
+
+			if ( isset( $item['childCount'] ) && ( is_int( $item['childCount'] ) || is_numeric( $item['childCount'] ) ) ) {
+				$summary['childCount'] = (int) $item['childCount'];
+			}
+
+			if ( isset( $item['moreChildren'] ) && ( is_int( $item['moreChildren'] ) || is_numeric( $item['moreChildren'] ) ) ) {
+				$summary['moreChildren'] = (int) $item['moreChildren'];
+			}
+
+			if ( $include_children ) {
+				$raw_children       = self::normalize_list( $item['children'] ?? [] );
+				$hidden_child_count = max( 0, (int) ( $summary['moreChildren'] ?? 0 ) );
+				$displayed_children = [];
+
+				if ( $depth < self::STRUCTURAL_SUMMARY_MAX_DEPTH ) {
+					$visible_children    = array_slice( $raw_children, 0, self::STRUCTURAL_SUMMARY_MAX_CHILDREN );
+					$hidden_child_count += max( 0, count( $raw_children ) - count( $visible_children ) );
+					$displayed_children  = self::normalize_structural_summary_items( $visible_children, true, $depth + 1 );
+				} else {
+					$hidden_child_count += count( $raw_children );
+				}
+
+				if ( ! empty( $displayed_children ) ) {
+					$summary['children'] = $displayed_children;
+				}
+
+				if ( isset( $summary['childCount'] ) ) {
+					$hidden_child_count = max(
+						$hidden_child_count,
+						max( 0, (int) $summary['childCount'] - count( $displayed_children ) )
+					);
+				}
+
+				if ( $hidden_child_count > 0 ) {
+					$summary['moreChildren'] = $hidden_child_count;
+				} else {
+					unset( $summary['moreChildren'] );
+				}
+			}
+
+			if ( isset( $item['isSelected'] ) ) {
+				$summary['isSelected'] = (bool) $item['isSelected'];
+			}
+
+			$normalized[] = $summary;
+		}
+
+		return $normalized;
 	}
 
 	private static function normalize_theme_tokens( mixed $raw_tokens ): array {
@@ -507,6 +755,52 @@ final class BlockAbilities {
 			|| null === $value
 		) {
 			return $value;
+		}
+
+		return null;
+	}
+
+	private static function get_value_from_path( array $source, array $path ): mixed {
+		$current = $source;
+
+		foreach ( $path as $segment ) {
+			if ( ! is_array( $current ) || ! array_key_exists( $segment, $current ) ) {
+				return null;
+			}
+			$current = $current[ $segment ];
+		}
+
+		return $current;
+	}
+
+	private static function set_value_at_path( array &$target, array $path, mixed $value ): void {
+		$cursor = &$target;
+
+		foreach ( $path as $index => $segment ) {
+			if ( $index === count( $path ) - 1 ) {
+				$cursor[ $segment ] = $value;
+				return;
+			}
+
+			if ( ! isset( $cursor[ $segment ] ) || ! is_array( $cursor[ $segment ] ) ) {
+				$cursor[ $segment ] = [];
+			}
+
+			$cursor = &$cursor[ $segment ];
+		}
+	}
+
+	private static function sanitize_scalar( mixed $value ): string|int|float|bool|null {
+		if ( is_string( $value ) ) {
+			return sanitize_text_field( $value );
+		}
+
+		if ( is_int( $value ) || is_float( $value ) || is_bool( $value ) ) {
+			return $value;
+		}
+
+		if ( is_numeric( $value ) ) {
+			return $value + 0;
 		}
 
 		return null;

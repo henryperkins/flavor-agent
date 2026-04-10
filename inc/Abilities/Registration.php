@@ -6,6 +6,12 @@ namespace FlavorAgent\Abilities;
 
 final class Registration {
 
+	private const STRUCTURAL_SUMMARY_MAX_ITEMS = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_CHILDREN = 6;
+
+	private const STRUCTURAL_SUMMARY_MAX_DEPTH = 2;
+
 	public static function register_category(): void {
 		wp_register_ability_category(
 			'flavor-agent',
@@ -1066,16 +1072,33 @@ final class Registration {
 					'type'        => 'integer',
 					'description' => 'Number of direct child blocks nested inside the selected block.',
 				],
+				'parentContext'       => self::parent_context_schema(),
+				'siblingSummariesBefore' => [
+					'type'        => 'array',
+					'description' => 'Sibling block summaries before the selected block.',
+					'items'       => self::sibling_summary_schema(),
+					'maxItems'    => 3,
+					'default'     => [],
+				],
+				'siblingSummariesAfter'  => [
+					'type'        => 'array',
+					'description' => 'Sibling block summaries after the selected block.',
+					'items'       => self::sibling_summary_schema(),
+					'maxItems'    => 3,
+					'default'     => [],
+				],
 				'structuralIdentity'  => self::structural_identity_schema(),
 				'structuralAncestors' => [
 					'type'        => 'array',
 					'description' => 'Summarized structural ancestors leading to the selected block.',
 					'items'       => self::structural_summary_item_schema(),
+					'maxItems'    => self::STRUCTURAL_SUMMARY_MAX_ITEMS,
 				],
 				'structuralBranch'    => [
 					'type'        => 'array',
 					'description' => 'Summarized structural branch rooted at the nearest structural ancestor.',
 					'items'       => self::structural_summary_item_schema( true ),
+					'maxItems'    => self::STRUCTURAL_SUMMARY_MAX_ITEMS,
 				],
 				'blockVisibility'     => self::open_object_schema(
 					[],
@@ -1114,25 +1137,112 @@ final class Registration {
 		);
 	}
 
-	private static function structural_summary_item_schema( bool $include_children = false ): array {
+	private static function structural_summary_item_schema( bool $include_children = false, int $depth = 0 ): array {
 		$properties = [
 			'block'            => [ 'type' => 'string' ],
+			'title'            => [ 'type' => 'string' ],
 			'role'             => [ 'type' => 'string' ],
 			'job'              => [ 'type' => 'string' ],
 			'location'         => [ 'type' => 'string' ],
 			'templateArea'     => [ 'type' => 'string' ],
 			'templatePartSlug' => [ 'type' => 'string' ],
+			'childCount'       => [ 'type' => 'integer' ],
+			'moreChildren'     => [ 'type' => 'integer' ],
 		];
 
-		if ( $include_children ) {
+		if ( $include_children || $depth > 0 ) {
 			$properties['isSelected'] = [ 'type' => 'boolean' ];
+		}
+
+		if ( $include_children ) {
 			$properties['children']   = [
-				'type'  => 'array',
-				'items' => self::open_object_schema(),
+				'type'     => 'array',
+				'items'    => self::structural_summary_item_schema(
+					$depth + 1 < self::STRUCTURAL_SUMMARY_MAX_DEPTH,
+					$depth + 1
+				),
+				'maxItems' => self::STRUCTURAL_SUMMARY_MAX_CHILDREN,
 			];
 		}
 
-		return self::open_object_schema( $properties );
+		return [
+			'type'                 => 'object',
+			'properties'           => $properties,
+			'additionalProperties' => false,
+		];
+	}
+
+	private static function parent_context_schema(): array {
+		return [
+			'type'                 => 'object',
+			'description'          => 'Optional parent container summary for the selected block.',
+			'properties'           => [
+				'block'       => [ 'type' => 'string' ],
+				'title'       => [ 'type' => 'string' ],
+				'role'        => [ 'type' => 'string' ],
+				'job'         => [ 'type' => 'string' ],
+				'childCount'  => [ 'type' => 'integer' ],
+				'visualHints' => self::visual_hints_schema( true ),
+			],
+			'additionalProperties' => false,
+		];
+	}
+
+	private static function sibling_summary_schema(): array {
+		return [
+			'type'                 => 'object',
+			'properties'           => [
+				'block'       => [ 'type' => 'string' ],
+				'role'        => [ 'type' => 'string' ],
+				'visualHints' => self::visual_hints_schema(),
+			],
+			'additionalProperties' => false,
+		];
+	}
+
+	private static function visual_hints_schema( bool $include_parent_extensions = false ): array {
+		$schema = [
+			'type'                 => 'object',
+			'properties'           => [
+				'backgroundColor' => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+				'textColor'       => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+				'gradient'        => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+				'align'           => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+				'textAlign'       => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+				'style'           => [
+					'type'                 => 'object',
+					'properties'           => [
+						'color' => [
+							'type'                 => 'object',
+							'properties'           => [
+								'background' => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+								'text'       => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+							],
+							'additionalProperties' => false,
+						],
+					],
+					'additionalProperties' => false,
+				],
+				'layout'          => [
+					'type'                 => 'object',
+					'properties'           => [
+						'type'           => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+						'justifyContent' => [ 'type' => [ 'string', 'number', 'boolean' ] ],
+					],
+					'additionalProperties' => false,
+				],
+			],
+			'additionalProperties' => false,
+		];
+
+		if ( $include_parent_extensions ) {
+			$schema['properties']['dimRatio']      = [ 'type' => [ 'string', 'number', 'boolean' ] ];
+			$schema['properties']['minHeight']     = [ 'type' => [ 'string', 'number', 'boolean' ] ];
+			$schema['properties']['minHeightUnit'] = [ 'type' => [ 'string', 'number', 'boolean' ] ];
+			$schema['properties']['tagName']       = [ 'type' => [ 'string', 'number', 'boolean' ] ];
+		}
+
+		return $schema;
 	}
 
 	private static function pattern_insertion_context_schema(): array {
