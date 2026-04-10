@@ -27,49 +27,6 @@ final class BlockTypeIntrospector {
 		return $map;
 	}
 
-	// Runtime alias kept for private callers below.
-	private const SUPPORT_TO_PANEL = [
-		'color.background'                    => 'color',
-		'color.text'                          => 'color',
-		'color.link'                          => 'color',
-		'color.heading'                       => 'color',
-		'color.button'                        => 'color',
-		'color.gradients'                     => 'color',
-		'typography.fontSize'                 => 'typography',
-		'typography.fontFamily'               => 'typography',
-		'typography.__experimentalFontFamily' => 'typography',
-		'typography.fitText'                  => 'typography',
-		'typography.fontStyle'                => 'typography',
-		'typography.fontWeight'               => 'typography',
-		'typography.letterSpacing'            => 'typography',
-		'typography.lineHeight'               => 'typography',
-		'typography.textDecoration'           => 'typography',
-		'typography.textAlign'                => 'typography',
-		'typography.textIndent'               => 'typography',
-		'typography.textTransform'            => 'typography',
-		'spacing.margin'                      => 'dimensions',
-		'spacing.padding'                     => 'dimensions',
-		'spacing.blockGap'                    => 'dimensions',
-		'dimensions.aspectRatio'              => 'dimensions',
-		'dimensions.minHeight'                => 'dimensions',
-		'dimensions.height'                   => 'dimensions',
-		'dimensions.width'                    => 'dimensions',
-		'border.color'                        => 'border',
-		'border.radius'                       => 'border',
-		'border.style'                        => 'border',
-		'border.width'                        => 'border',
-		'shadow'                              => 'shadow',
-		'filter.duotone'                      => 'filter',
-		'background.backgroundImage'          => 'background',
-		'background.backgroundSize'           => 'background',
-		'position.sticky'                     => 'position',
-		'position.fixed'                      => 'position',
-		'layout'                              => 'layout',
-		'anchor'                              => 'advanced',
-		'customCSS'                           => 'advanced',
-		'listView'                            => 'list',
-	];
-
 	private const GENERAL_PANEL_EXCLUDED_ATTRIBUTES = [
 		'className' => true,
 		'metadata'  => true,
@@ -169,7 +126,7 @@ final class BlockTypeIntrospector {
 		$flat   = $this->flatten_supports( $supports );
 
 		foreach ( $flat as [ $path, $value ] ) {
-			$panel_key = self::SUPPORT_TO_PANEL[ $path ] ?? null;
+			$panel_key = self::get_support_to_panel()[ $path ] ?? null;
 
 			if ( $panel_key && $this->is_truthy( $value ) ) {
 				$panels[ $panel_key ]   = $panels[ $panel_key ] ?? [];

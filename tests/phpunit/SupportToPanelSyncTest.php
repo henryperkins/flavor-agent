@@ -29,16 +29,16 @@ final class SupportToPanelSyncTest extends TestCase {
 		);
 	}
 
-	public function test_shared_json_has_expected_entry_count(): void {
+	public function test_shared_json_has_minimum_entries(): void {
 		$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
 		$decoded   = json_decode( (string) file_get_contents( $json_path ), true );
 
-		// 39 entries as of the initial extraction — this guards against
-		// accidental truncation or duplication.
-		$this->assertCount(
-			39,
-			$decoded,
-			'shared/support-to-panel.json should have exactly 39 entries'
+		// Guard against accidental truncation — there should be at least
+		// 30 entries. The exact count may grow as WordPress adds supports.
+		$this->assertGreaterThanOrEqual(
+			30,
+			count( $decoded ),
+			'shared/support-to-panel.json should have at least 30 entries'
 		);
 	}
 

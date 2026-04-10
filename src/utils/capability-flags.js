@@ -151,17 +151,16 @@ const SURFACE_MESSAGES = Object.freeze( {
 	},
 } );
 
+const FALLBACK_MESSAGE =
+	'This Flavor Agent surface is not available right now.';
+
 function getDefaultMessage( surface, reason ) {
 	const surfaceConfig = SURFACE_MESSAGES[ surface ];
 	if ( surfaceConfig ) {
-		return (
-			surfaceConfig[ reason ] ||
-			surfaceConfig.default ||
-			'This Flavor Agent surface is not available right now.'
-		);
+		return surfaceConfig[ reason ] || surfaceConfig.default || FALLBACK_MESSAGE;
 	}
 
-	return 'This Flavor Agent surface is not available right now.';
+	return FALLBACK_MESSAGE;
 }
 
 export function getSurfaceCapability( surface, input = null ) {

@@ -87,7 +87,7 @@ final class PromptBudget {
 			return 0;
 		}
 
-		return (int) ceil( strlen( $text ) / self::CHARS_PER_TOKEN );
+		return (int) ceil( mb_strlen( $text, 'UTF-8' ) / self::CHARS_PER_TOKEN );
 	}
 
 	/**
