@@ -698,4 +698,57 @@ describe( 'ActivityLogApp', () => {
 			'configurationOwnerOperator=is'
 		);
 	} );
+
+	test( 'renders an inline error state instead of the empty activity copy when loading fails', async () => {
+		apiFetch.mockRejectedValueOnce(
+			new Error( 'Activity fetch failed for this admin session.' )
+		);
+
+		await renderApp();
+
+		expect( getContainer().textContent ).toContain(
+			'Activity log unavailable'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Activity fetch failed for this admin session.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'No AI activity has been recorded yet.'
+		);
+		expect( getContainer().querySelector( '[role="alert"]' ) ).toBeNull();
+	} );
+
+	test( 'retries loading activity from the inline error state', async () => {
+		apiFetch
+			.mockRejectedValueOnce( new Error( 'Activity fetch failed.' ) )
+			.mockResolvedValueOnce(
+				buildResponse( [
+					createEntry( {
+						id: 'activity-2',
+						suggestion: 'Recovered activity entry',
+					} ),
+				] )
+			);
+
+		await renderApp();
+
+		const retryButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find(
+			( element ) => element.textContent === 'Retry loading activity'
+		);
+
+		expect( retryButton ).toBeDefined();
+
+		await act( async () => {
+			retryButton.click();
+		} );
+		await flushEffects();
+
+		expect( getVisibleTitles() ).toEqual( [ 'Recovered activity entry' ] );
+		expect( getContainer().textContent ).not.toContain(
+			'Activity log unavailable'
+		);
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
 } );

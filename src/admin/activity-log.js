@@ -5,7 +5,6 @@ import {
 	CardBody,
 	CardHeader,
 	Icon,
-	Notice,
 	Spinner,
 } from '@wordpress/components';
 import { createRoot, useEffect, useMemo, useState } from '@wordpress/element';
@@ -323,6 +322,35 @@ function EmptyState( { view } ) {
 					No matching activity
 				</h3>
 				<p className="flavor-agent-activity-log__copy">{ message }</p>
+			</CardBody>
+		</Card>
+	);
+}
+
+function ErrorState( { error, onRetry } ) {
+	return (
+		<Card
+			className="flavor-agent-activity-log__empty flavor-agent-activity-log__error-state"
+			size="small"
+		>
+			<CardBody>
+				<div className="flavor-agent-activity-log__error-heading">
+					<span className="flavor-agent-activity-log__error-icon">
+						<Icon icon={ warning } />
+					</span>
+					<h3 className="flavor-agent-activity-log__section-title">
+						Activity log unavailable
+					</h3>
+				</div>
+				<p className="flavor-agent-activity-log__copy">
+					{ error ||
+						'Flavor Agent could not load the recent AI activity log.' }
+				</p>
+				<div className="flavor-agent-activity-log__empty-actions">
+					<Button variant="secondary" onClick={ onRetry }>
+						Retry loading activity
+					</Button>
+				</div>
 			</CardBody>
 		</Card>
 	);
@@ -1269,6 +1297,14 @@ export function ActivityLogApp( { bootData } ) {
 		defaultView,
 		viewOptions
 	);
+	const emptyState = error ? (
+		<ErrorState
+			error={ error }
+			onRetry={ () => setReloadToken( ( value ) => value + 1 ) }
+		/>
+	) : (
+		<EmptyState view={ effectiveView } />
+	);
 
 	return (
 		<div className="flavor-agent-activity-log">
@@ -1329,7 +1365,7 @@ export function ActivityLogApp( { bootData } ) {
 					isViewModified ? () => setView( defaultView ) : false
 				}
 				isLoading={ isLoading }
-				empty={ <EmptyState view={ effectiveView } /> }
+				empty={ emptyState }
 			>
 				<div className="flavor-agent-activity-log__overview">
 					<div className="flavor-agent-activity-log__summary">
@@ -1390,12 +1426,6 @@ export function ActivityLogApp( { bootData } ) {
 					</div>
 				</div>
 			</DataViews>
-
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			) }
 		</div>
 	);
 }

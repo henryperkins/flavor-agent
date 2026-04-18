@@ -43,7 +43,29 @@ final class ActivityPage {
 	public static function render_page(): void {
 		?>
 		<div class="wrap">
-			<div id="flavor-agent-activity-log-root"></div>
+			<div id="flavor-agent-activity-log-root">
+				<div class="flavor-agent-activity-log__fallback">
+					<h1><?php echo esc_html__( 'AI Activity Log', 'flavor-agent' ); ?></h1>
+					<div class="notice notice-warning inline">
+						<p>
+							<?php
+							echo esc_html__(
+								'Flavor Agent could not load the interactive activity log. Reload this page. If the problem persists, rebuild the plugin assets and try again.',
+								'flavor-agent'
+							);
+							?>
+						</p>
+						<p>
+							<a class="button button-secondary" href="<?php echo esc_attr( admin_url( 'options-general.php?page=flavor-agent' ) ); ?>">
+								<?php echo esc_html__( 'Flavor Agent settings', 'flavor-agent' ); ?>
+							</a>
+							<a class="button button-secondary" href="<?php echo esc_attr( admin_url( 'options-connectors.php' ) ); ?>">
+								<?php echo esc_html__( 'Connectors', 'flavor-agent' ); ?>
+							</a>
+						</p>
+					</div>
+				</div>
+			</div>
 		</div>
 		<?php
 	}

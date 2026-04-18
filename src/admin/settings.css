@@ -537,6 +537,26 @@
 	gap: 20px;
 }
 
+.flavor-agent-sync-panel__summary,
+.flavor-agent-sync-panel__prerequisites {
+	margin: 0;
+	color: var(--flavor-agent-brand-muted);
+	font-size: var(--wpds-font-size-md, 13px);
+	line-height: 1.6;
+}
+
+.flavor-agent-sync-panel__summary {
+	max-width: 70ch;
+	color: var(--flavor-agent-brand-ink);
+}
+
+.flavor-agent-sync-panel__prerequisites {
+	padding: 14px 16px;
+	border: 1px solid rgba(11, 123, 128, 0.14);
+	border-radius: var(--flavor-agent-radius-xl);
+	background: rgba(237, 247, 247, 0.58);
+}
+
 .flavor-agent-sync-panel__metrics {
 	display: grid;
 	gap: 12px;
@@ -576,6 +596,34 @@
 
 .flavor-agent-sync-panel__metric-value--error {
 	color: var(--wpds-color-fg-content-error-weak, #cc1818);
+}
+
+.flavor-agent-sync-panel__technical {
+	overflow: hidden;
+	border: 1px solid rgba(11, 123, 128, 0.14);
+	border-radius: var(--flavor-agent-radius-xl);
+	background: rgba(255, 255, 255, 0.72);
+}
+
+.flavor-agent-sync-panel__technical-summary {
+	cursor: pointer;
+	padding: 14px 16px;
+	color: var(--flavor-agent-brand-ink);
+	font-size: var(--wpds-font-size-md, 13px);
+	font-weight: 600;
+	line-height: 1.5;
+}
+
+.flavor-agent-sync-panel__technical[open]
+	.flavor-agent-sync-panel__technical-summary {
+	border-bottom: 1px solid rgba(11, 123, 128, 0.14);
+}
+
+.flavor-agent-sync-panel__technical-body {
+	display: grid;
+	gap: 12px;
+	padding: 16px;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .flavor-agent-sync-panel__actions {

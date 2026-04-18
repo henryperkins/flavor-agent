@@ -1,0 +1,465 @@
+- generic [ref=e2]:
+  - navigation "Main menu":
+    - link "Skip to main content" [ref=e3] [cursor=pointer]:
+      - /url: "#wpbody-content"
+    - link "Skip to toolbar" [ref=e4] [cursor=pointer]:
+      - /url: "#wp-toolbar"
+    - list [ref=e7]:
+      - listitem [ref=e8]:
+        - link "Dashboard" [ref=e9] [cursor=pointer]:
+          - /url: index.php
+          - generic [ref=e10]: 
+          - generic [ref=e11]: Dashboard
+        - list [ref=e12]:
+          - listitem [ref=e13]:
+            - link "Home" [ref=e14] [cursor=pointer]:
+              - /url: index.php
+          - listitem [ref=e15]:
+            - link "Updates" [ref=e16] [cursor=pointer]:
+              - /url: update-core.php
+      - listitem [ref=e17]
+      - listitem [ref=e19]:
+        - link "Posts" [ref=e20] [cursor=pointer]:
+          - /url: edit.php
+          - generic [ref=e21]: 
+          - generic [ref=e22]: Posts
+        - list [ref=e23]:
+          - listitem [ref=e24]:
+            - link "All Posts" [ref=e25] [cursor=pointer]:
+              - /url: edit.php
+          - listitem [ref=e26]:
+            - link "Add Post" [ref=e27] [cursor=pointer]:
+              - /url: post-new.php
+          - listitem [ref=e28]:
+            - link "Categories" [ref=e29] [cursor=pointer]:
+              - /url: edit-tags.php?taxonomy=category
+          - listitem [ref=e30]:
+            - link "Tags" [ref=e31] [cursor=pointer]:
+              - /url: edit-tags.php?taxonomy=post_tag
+      - listitem [ref=e32]:
+        - link "Media" [ref=e33] [cursor=pointer]:
+          - /url: upload.php
+          - generic [ref=e34]: 
+          - generic [ref=e35]: Media
+        - list [ref=e36]:
+          - listitem [ref=e37]:
+            - link "Library" [ref=e38] [cursor=pointer]:
+              - /url: upload.php
+          - listitem [ref=e39]:
+            - link "Add Media File" [ref=e40] [cursor=pointer]:
+              - /url: media-new.php
+          - listitem [ref=e41]:
+            - link "Generate Image" [ref=e42] [cursor=pointer]:
+              - /url: upload.php?page=generate-image
+      - listitem [ref=e43]:
+        - link "Pages" [ref=e44] [cursor=pointer]:
+          - /url: edit.php?post_type=page
+          - generic [ref=e45]: 
+          - generic [ref=e46]: Pages
+        - list [ref=e47]:
+          - listitem [ref=e48]:
+            - link "All Pages" [ref=e49] [cursor=pointer]:
+              - /url: edit.php?post_type=page
+          - listitem [ref=e50]:
+            - link "Add Page" [ref=e51] [cursor=pointer]:
+              - /url: post-new.php?post_type=page
+      - listitem [ref=e52]:
+        - link "Comments" [ref=e53] [cursor=pointer]:
+          - /url: edit-comments.php
+          - generic [ref=e54]: 
+          - generic [ref=e55]: Comments
+      - listitem [ref=e56]
+      - listitem [ref=e58]:
+        - link "Appearance" [ref=e59] [cursor=pointer]:
+          - /url: themes.php
+          - generic [ref=e60]: 
+          - generic [ref=e61]: Appearance
+        - list [ref=e62]:
+          - listitem [ref=e63]:
+            - link "Themes" [ref=e64] [cursor=pointer]:
+              - /url: themes.php
+          - listitem [ref=e65]:
+            - link "Editor" [ref=e66] [cursor=pointer]:
+              - /url: site-editor.php
+          - listitem [ref=e67]:
+            - link "Fonts" [ref=e68] [cursor=pointer]:
+              - /url: themes.php?page=font-library-wp-admin
+      - listitem [ref=e69]:
+        - link "Plugins" [ref=e70] [cursor=pointer]:
+          - /url: plugins.php
+          - generic [ref=e71]: 
+          - generic [ref=e72]: Plugins
+        - list [ref=e73]:
+          - listitem [ref=e74]:
+            - link "Installed Plugins" [ref=e75] [cursor=pointer]:
+              - /url: plugins.php
+          - listitem [ref=e76]:
+            - link "Add Plugin" [ref=e77] [cursor=pointer]:
+              - /url: plugin-install.php
+      - listitem [ref=e78]:
+        - link "Users" [ref=e79] [cursor=pointer]:
+          - /url: users.php
+          - generic [ref=e80]: 
+          - generic [ref=e81]: Users
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - link "All Users" [ref=e84] [cursor=pointer]:
+              - /url: users.php
+          - listitem [ref=e85]:
+            - link "Add User" [ref=e86] [cursor=pointer]:
+              - /url: user-new.php
+          - listitem [ref=e87]:
+            - link "Profile" [ref=e88] [cursor=pointer]:
+              - /url: profile.php
+      - listitem [ref=e89]:
+        - link "Tools" [ref=e90] [cursor=pointer]:
+          - /url: tools.php
+          - generic [ref=e91]: 
+          - generic [ref=e92]: Tools
+        - list [ref=e93]:
+          - listitem [ref=e94]:
+            - link "Available Tools" [ref=e95] [cursor=pointer]:
+              - /url: tools.php
+          - listitem [ref=e96]:
+            - link "Import" [ref=e97] [cursor=pointer]:
+              - /url: import.php
+          - listitem [ref=e98]:
+            - link "Export" [ref=e99] [cursor=pointer]:
+              - /url: export.php
+          - listitem [ref=e100]:
+            - link "Site Health" [ref=e101] [cursor=pointer]:
+              - /url: site-health.php
+          - listitem [ref=e102]:
+            - link "Export Personal Data" [ref=e103] [cursor=pointer]:
+              - /url: export-personal-data.php
+          - listitem [ref=e104]:
+            - link "Erase Personal Data" [ref=e105] [cursor=pointer]:
+              - /url: erase-personal-data.php
+          - listitem [ref=e106]:
+            - link "Beta Testing" [ref=e107] [cursor=pointer]:
+              - /url: tools.php?page=wp-beta-tester
+          - listitem [ref=e108]:
+            - link "Abilities Explorer" [ref=e109] [cursor=pointer]:
+              - /url: tools.php?page=ai-abilities-explorer
+          - listitem [ref=e110]:
+            - link "Theme File Editor" [ref=e111] [cursor=pointer]:
+              - /url: theme-editor.php
+          - listitem [ref=e112]:
+            - link "Plugin File Editor" [ref=e113] [cursor=pointer]:
+              - /url: plugin-editor.php
+      - listitem [ref=e114]:
+        - link "Settings" [ref=e115] [cursor=pointer]:
+          - /url: options-general.php
+          - generic [ref=e116]: 
+          - generic [ref=e117]: Settings
+        - list [ref=e118]:
+          - listitem [ref=e119]:
+            - link "General" [ref=e120] [cursor=pointer]:
+              - /url: options-general.php
+          - listitem [ref=e121]:
+            - link "Connectors" [ref=e122] [cursor=pointer]:
+              - /url: options-general.php?page=options-connectors-wp-admin
+          - listitem [ref=e123]:
+            - link "AI" [ref=e124] [cursor=pointer]:
+              - /url: options-general.php?page=ai-wp-admin
+          - listitem [ref=e125]:
+            - link "Writing" [ref=e126] [cursor=pointer]:
+              - /url: options-writing.php
+          - listitem [ref=e127]:
+            - link "Reading" [ref=e128] [cursor=pointer]:
+              - /url: options-reading.php
+          - listitem [ref=e129]:
+            - link "Discussion" [ref=e130] [cursor=pointer]:
+              - /url: options-discussion.php
+          - listitem [ref=e131]:
+            - link "Media" [ref=e132] [cursor=pointer]:
+              - /url: options-media.php
+          - listitem [ref=e133]:
+            - link "Permalinks" [ref=e134] [cursor=pointer]:
+              - /url: options-permalink.php
+          - listitem [ref=e135]:
+            - link "Privacy" [ref=e136] [cursor=pointer]:
+              - /url: options-privacy.php
+          - listitem [ref=e137]:
+            - link "AI Activity" [ref=e138] [cursor=pointer]:
+              - /url: options-general.php?page=flavor-agent-activity
+          - listitem [ref=e139]:
+            - link "Flavor Agent" [ref=e140] [cursor=pointer]:
+              - /url: options-general.php?page=flavor-agent
+      - listitem [ref=e141]
+      - listitem [ref=e143]:
+        - link "Gutenberg" [ref=e144] [cursor=pointer]:
+          - /url: admin.php?page=gutenberg
+          - generic [ref=e145]: 
+          - generic [ref=e146]: Gutenberg
+        - list [ref=e147]:
+          - listitem [ref=e148]:
+            - link "Demo" [ref=e149] [cursor=pointer]:
+              - /url: admin.php?page=gutenberg
+          - listitem [ref=e150]:
+            - link "Support" [ref=e151] [cursor=pointer]:
+              - /url: https://wordpress.org/support/plugin/gutenberg
+          - listitem [ref=e152]:
+            - link "Documentation" [ref=e153] [cursor=pointer]:
+              - /url: https://developer.wordpress.org/block-editor
+          - listitem [ref=e154]:
+            - link "Experiments" [ref=e155] [cursor=pointer]:
+              - /url: admin.php?page=gutenberg-experiments
+      - listitem [ref=e156]:
+        - button "Collapse Main menu" [expanded] [ref=e157] [cursor=pointer]:
+          - generic [ref=e159]: Collapse Menu
+  - generic [ref=e160]:
+    - generic [ref=e161]:
+      - navigation "Toolbar":
+        - menu:
+          - group [ref=e162]:
+            - menuitem "About WordPress" [ref=e163] [cursor=pointer]:
+              - generic [ref=e165]: About WordPress
+          - group [ref=e166]:
+            - menuitem "Flavor Agent Dev" [ref=e167] [cursor=pointer]
+          - group [ref=e168]:
+            - menuitem "Ctrl+K Open command palette" [ref=e169] [cursor=pointer]:
+              - generic [ref=e170]:
+                - text: Ctrl+K
+                - generic [ref=e171]: Open command palette
+          - group [ref=e172]:
+            - menuitem "0 Comments in moderation" [ref=e173] [cursor=pointer]:
+              - generic [ref=e175]: "0"
+              - generic [ref=e176]: 0 Comments in moderation
+          - group [ref=e177]:
+            - menuitem "New" [ref=e178] [cursor=pointer]:
+              - generic [ref=e180]: New
+        - menu [ref=e181]:
+          - group [ref=e182]:
+            - menuitem "Howdy, admin" [ref=e183] [cursor=pointer]
+    - main [ref=e184]:
+      - generic [ref=e185]:
+        - generic [ref=e186]:
+          - button "Screen Options" [ref=e188] [cursor=pointer]
+          - button "Help" [ref=e190] [cursor=pointer]
+        - generic [ref=e191]:
+          - heading "Plugins" [level=1] [ref=e192]
+          - link "Add Plugin" [ref=e193] [cursor=pointer]:
+            - /url: http://localhost:8888/wp-admin/plugin-install.php
+          - heading "Filter plugins list" [level=2] [ref=e194]
+          - list [ref=e195]:
+            - listitem [ref=e196]:
+              - link "All (6)" [ref=e197] [cursor=pointer]:
+                - /url: plugins.php?plugin_status=all
+              - text: "|"
+            - listitem [ref=e198]:
+              - link "Active (4)" [ref=e199] [cursor=pointer]:
+                - /url: plugins.php?plugin_status=active
+              - text: "|"
+            - listitem [ref=e200]:
+              - link "Inactive (2)" [ref=e201] [cursor=pointer]:
+                - /url: plugins.php?plugin_status=inactive
+              - text: "|"
+            - listitem [ref=e202]:
+              - link "Auto-updates Disabled (6)" [ref=e203] [cursor=pointer]:
+                - /url: plugins.php?plugin_status=auto-update-disabled
+          - paragraph [ref=e204]:
+            - generic [ref=e205]: Search installed plugins
+            - searchbox "Search installed plugins" [ref=e206]
+          - generic [ref=e207]:
+            - generic [ref=e208]:
+              - generic [ref=e209]:
+                - generic [ref=e210]: Select bulk action
+                - combobox "Select bulk action" [ref=e211] [cursor=pointer]:
+                  - option "Bulk actions" [selected]
+                  - option "Activate"
+                  - option "Deactivate"
+                  - option "Update"
+                  - option "Delete"
+                  - option "Enable Auto-updates"
+                  - option "Disable Auto-updates"
+                - button "Apply" [ref=e212] [cursor=pointer]
+              - generic [ref=e214]: 6 items
+            - heading "Plugins list" [level=2] [ref=e215]
+            - table [ref=e216]:
+              - rowgroup [ref=e217]:
+                - row "Select All Plugin Description Automatic Updates" [ref=e218]:
+                  - cell "Select All" [ref=e219]:
+                    - checkbox "Select All" [ref=e220] [cursor=pointer]
+                    - generic [ref=e222]: Select All
+                  - columnheader "Plugin" [ref=e223]
+                  - columnheader "Description" [ref=e224]
+                  - columnheader "Automatic Updates" [ref=e225]
+              - rowgroup [ref=e226]:
+                - row "Select AI AI Connectors | Settings | Deactivate AI AI features, experiments and capabilities for WordPress. Version 0.7.0 | By WordPress.org Contributors | More information about AI Enable auto-updates" [ref=e227]:
+                  - rowheader "Select AI" [ref=e228]:
+                    - generic [ref=e230]: Select AI
+                    - checkbox "Select AI" [ref=e231] [cursor=pointer]
+                  - cell "AI Connectors | Settings | Deactivate AI" [ref=e232]:
+                    - strong [ref=e233]: AI
+                    - generic [ref=e234]:
+                      - generic [ref=e235]:
+                        - link "Connectors" [ref=e236] [cursor=pointer]:
+                          - /url: http://localhost:8888/wp-admin/options-connectors.php
+                        - text: "|"
+                      - generic [ref=e237]:
+                        - link "Settings" [ref=e238] [cursor=pointer]:
+                          - /url: http://localhost:8888/wp-admin/options-general.php?page=ai-wp-admin
+                        - text: "|"
+                      - link "Deactivate AI" [ref=e240] [cursor=pointer]:
+                        - /url: plugins.php?action=deactivate&plugin=ai%2Fai.php&plugin_status=all&paged=1&s&_wpnonce=307198f0df
+                        - text: Deactivate
+                  - cell "AI features, experiments and capabilities for WordPress. Version 0.7.0 | By WordPress.org Contributors | More information about AI" [ref=e241]:
+                    - paragraph [ref=e243]: AI features, experiments and capabilities for WordPress.
+                    - generic [ref=e244]:
+                      - text: Version 0.7.0 | By
+                      - link "WordPress.org Contributors" [ref=e245] [cursor=pointer]:
+                        - /url: https://make.wordpress.org/ai/
+                      - text: "|"
+                      - link "More information about AI" [ref=e246] [cursor=pointer]:
+                        - /url: http://localhost:8888/wp-admin/plugin-install.php?tab=plugin-information&plugin=ai&TB_iframe=true&width=600&height=550
+                        - text: View details
+                  - cell "Enable auto-updates" [ref=e247]:
+                    - button "Enable auto-updates" [ref=e248] [cursor=pointer]:  Enable auto-updates
+                - 'row "Select Akismet Anti-spam: Spam Protection Akismet Anti-spam: Spam Protection Activate Akismet Anti-spam: Spam Protection | Delete Akismet Anti-spam: Spam Protection Used by millions, Akismet is quite possibly the best way in the world to protect your blog from spam. Akismet Anti-spam keeps your site protected even while you sleep. To get started: activate the Akismet plugin and then go to your Akismet Settings page to set up your API key. Version 5.6 | By Automattic - Anti-spam Team | More information about Akismet Anti-spam: Spam Protection Enable auto-updates" [ref=e249]':
+                  - 'rowheader "Select Akismet Anti-spam: Spam Protection" [ref=e250]':
+                    - generic [ref=e252]: "Select Akismet Anti-spam: Spam Protection"
+                    - 'checkbox "Select Akismet Anti-spam: Spam Protection" [ref=e253] [cursor=pointer]'
+                  - 'cell "Akismet Anti-spam: Spam Protection Activate Akismet Anti-spam: Spam Protection | Delete Akismet Anti-spam: Spam Protection" [ref=e254]':
+                    - strong [ref=e255]: "Akismet Anti-spam: Spam Protection"
+                    - generic [ref=e256]:
+                      - generic [ref=e257]:
+                        - 'link "Activate Akismet Anti-spam: Spam Protection" [ref=e258] [cursor=pointer]':
+                          - /url: plugins.php?action=activate&plugin=akismet%2Fakismet.php&plugin_status=all&paged=1&s&_wpnonce=7bf12b1e8f
+                          - text: Activate
+                        - text: "|"
+                      - 'link "Delete Akismet Anti-spam: Spam Protection" [ref=e260] [cursor=pointer]':
+                        - /url: plugins.php?action=delete-selected&checked%5B0%5D=akismet%2Fakismet.php&plugin_status=all&paged=1&s&_wpnonce=2df6fd3cf1
+                        - text: Delete
+                  - 'cell "Used by millions, Akismet is quite possibly the best way in the world to protect your blog from spam. Akismet Anti-spam keeps your site protected even while you sleep. To get started: activate the Akismet plugin and then go to your Akismet Settings page to set up your API key. Version 5.6 | By Automattic - Anti-spam Team | More information about Akismet Anti-spam: Spam Protection" [ref=e261]':
+                    - paragraph [ref=e263]:
+                      - text: Used by millions, Akismet is quite possibly the best way in the world to
+                      - strong [ref=e264]: protect your blog from spam
+                      - text: ". Akismet Anti-spam keeps your site protected even while you sleep. To get started: activate the Akismet plugin and then go to your Akismet Settings page to set up your API key."
+                    - generic [ref=e265]:
+                      - text: Version 5.6 | By
+                      - link "Automattic - Anti-spam Team" [ref=e266] [cursor=pointer]:
+                        - /url: https://automattic.com/wordpress-plugins/
+                      - text: "|"
+                      - 'link "More information about Akismet Anti-spam: Spam Protection" [ref=e267] [cursor=pointer]':
+                        - /url: http://localhost:8888/wp-admin/plugin-install.php?tab=plugin-information&plugin=akismet&TB_iframe=true&width=600&height=550
+                        - text: View details
+                  - cell "Enable auto-updates" [ref=e268]:
+                    - button "Enable auto-updates" [ref=e269] [cursor=pointer]:  Enable auto-updates
+                - row "Select Flavor Agent Flavor Agent Deactivate Flavor Agent AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including blocks, patterns, templates, template parts, navigation, Global Styles, Style Book, and AI Activity. Version 0.1.0 | By Lakefront Digital" [ref=e270]:
+                  - rowheader "Select Flavor Agent" [ref=e271]:
+                    - generic [ref=e273]: Select Flavor Agent
+                    - checkbox "Select Flavor Agent" [ref=e274] [cursor=pointer]
+                  - cell "Flavor Agent Deactivate Flavor Agent" [ref=e275]:
+                    - strong [ref=e276]: Flavor Agent
+                    - link "Deactivate Flavor Agent" [ref=e279] [cursor=pointer]:
+                      - /url: plugins.php?action=deactivate&plugin=flavor-agent%2Fflavor-agent.php&plugin_status=all&paged=1&s&_wpnonce=3f9c0574fa
+                      - text: Deactivate
+                  - cell "AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including blocks, patterns, templates, template parts, navigation, Global Styles, Style Book, and AI Activity. Version 0.1.0 | By Lakefront Digital" [ref=e280]:
+                    - paragraph [ref=e282]: AI-assisted recommendations across native Gutenberg and wp-admin surfaces, including blocks, patterns, templates, template parts, navigation, Global Styles, Style Book, and AI Activity.
+                    - generic [ref=e283]: Version 0.1.0 | By Lakefront Digital
+                  - cell [ref=e284]
+                - row "Select Gutenberg Gutenberg Deactivate Gutenberg Printing since 1440. This is the development plugin for the block editor, site editor, and other future WordPress core functionality. Version 22.9.0 | By Gutenberg Team | More information about Gutenberg Enable auto-updates" [ref=e285]:
+                  - rowheader "Select Gutenberg" [ref=e286]:
+                    - generic [ref=e288]: Select Gutenberg
+                    - checkbox "Select Gutenberg" [ref=e289] [cursor=pointer]
+                  - cell "Gutenberg Deactivate Gutenberg" [ref=e290]:
+                    - strong [ref=e291]: Gutenberg
+                    - link "Deactivate Gutenberg" [ref=e294] [cursor=pointer]:
+                      - /url: plugins.php?action=deactivate&plugin=gutenberg%2Fgutenberg.php&plugin_status=all&paged=1&s&_wpnonce=2cea19fd76
+                      - text: Deactivate
+                  - cell "Printing since 1440. This is the development plugin for the block editor, site editor, and other future WordPress core functionality. Version 22.9.0 | By Gutenberg Team | More information about Gutenberg" [ref=e295]:
+                    - paragraph [ref=e297]: Printing since 1440. This is the development plugin for the block editor, site editor, and other future WordPress core functionality.
+                    - generic [ref=e298]:
+                      - text: Version 22.9.0 | By Gutenberg Team |
+                      - link "More information about Gutenberg" [ref=e299] [cursor=pointer]:
+                        - /url: http://localhost:8888/wp-admin/plugin-install.php?tab=plugin-information&plugin=gutenberg&TB_iframe=true&width=600&height=550
+                        - text: View details
+                  - cell "Enable auto-updates" [ref=e300]:
+                    - button "Enable auto-updates" [ref=e301] [cursor=pointer]:  Enable auto-updates
+                - 'row "Select Hello Dolly Hello Dolly Activate Hello Dolly | Delete Hello Dolly This is not just a plugin, it symbolizes the hope and enthusiasm of an entire generation summed up in two words sung most famously by Louis Armstrong: Hello, Dolly. When activated you will randomly see a lyric from Hello, Dolly in the upper right of your admin screen on every page. Version 1.7.2 | By Matt Mullenweg | More information about Hello Dolly Enable auto-updates" [ref=e302]':
+                  - rowheader "Select Hello Dolly" [ref=e303]:
+                    - generic [ref=e305]: Select Hello Dolly
+                    - checkbox "Select Hello Dolly" [ref=e306] [cursor=pointer]
+                  - cell "Hello Dolly Activate Hello Dolly | Delete Hello Dolly" [ref=e307]:
+                    - strong [ref=e308]: Hello Dolly
+                    - generic [ref=e309]:
+                      - generic [ref=e310]:
+                        - link "Activate Hello Dolly" [ref=e311] [cursor=pointer]:
+                          - /url: plugins.php?action=activate&plugin=hello.php&plugin_status=all&paged=1&s&_wpnonce=41c71a23d5
+                          - text: Activate
+                        - text: "|"
+                      - link "Delete Hello Dolly" [ref=e313] [cursor=pointer]:
+                        - /url: plugins.php?action=delete-selected&checked%5B0%5D=hello.php&plugin_status=all&paged=1&s&_wpnonce=2df6fd3cf1
+                        - text: Delete
+                  - 'cell "This is not just a plugin, it symbolizes the hope and enthusiasm of an entire generation summed up in two words sung most famously by Louis Armstrong: Hello, Dolly. When activated you will randomly see a lyric from Hello, Dolly in the upper right of your admin screen on every page. Version 1.7.2 | By Matt Mullenweg | More information about Hello Dolly" [ref=e314]':
+                    - paragraph [ref=e316]: "This is not just a plugin, it symbolizes the hope and enthusiasm of an entire generation summed up in two words sung most famously by Louis Armstrong: Hello, Dolly. When activated you will randomly see a lyric from Hello, Dolly in the upper right of your admin screen on every page."
+                    - generic [ref=e317]:
+                      - text: Version 1.7.2 | By
+                      - link "Matt Mullenweg" [ref=e318] [cursor=pointer]:
+                        - /url: http://ma.tt/
+                      - text: "|"
+                      - link "More information about Hello Dolly" [ref=e319] [cursor=pointer]:
+                        - /url: http://localhost:8888/wp-admin/plugin-install.php?tab=plugin-information&plugin=hello-dolly&TB_iframe=true&width=600&height=550
+                        - text: View details
+                  - cell "Enable auto-updates" [ref=e320]:
+                    - button "Enable auto-updates" [ref=e321] [cursor=pointer]:  Enable auto-updates
+                - row "Select WordPress Beta Tester WordPress Beta Tester Settings | Deactivate WordPress Beta Tester Allows you to easily upgrade to Beta releases. Version 4.0.0 | By WordPress Upgrade/Install Team | More information about WordPress Beta Tester Enable auto-updates" [ref=e322]:
+                  - rowheader "Select WordPress Beta Tester" [ref=e323]:
+                    - generic [ref=e325]: Select WordPress Beta Tester
+                    - checkbox "Select WordPress Beta Tester" [ref=e326] [cursor=pointer]
+                  - cell "WordPress Beta Tester Settings | Deactivate WordPress Beta Tester" [ref=e327]:
+                    - strong [ref=e328]: WordPress Beta Tester
+                    - generic [ref=e329]:
+                      - generic [ref=e330]:
+                        - link "Settings" [ref=e331] [cursor=pointer]:
+                          - /url: http://localhost:8888/wp-admin/tools.php?page=wp-beta-tester
+                        - text: "|"
+                      - link "Deactivate WordPress Beta Tester" [ref=e333] [cursor=pointer]:
+                        - /url: plugins.php?action=deactivate&plugin=wordpress-beta-tester%2Fwp-beta-tester.php&plugin_status=all&paged=1&s&_wpnonce=db8ed199b3
+                        - text: Deactivate
+                  - cell "Allows you to easily upgrade to Beta releases. Version 4.0.0 | By WordPress Upgrade/Install Team | More information about WordPress Beta Tester" [ref=e334]:
+                    - paragraph [ref=e336]: Allows you to easily upgrade to Beta releases.
+                    - generic [ref=e337]:
+                      - text: Version 4.0.0 | By
+                      - link "WordPress Upgrade/Install Team" [ref=e338] [cursor=pointer]:
+                        - /url: https://make.wordpress.org/core/components/upgrade-install/
+                      - text: "|"
+                      - link "More information about WordPress Beta Tester" [ref=e339] [cursor=pointer]:
+                        - /url: http://localhost:8888/wp-admin/plugin-install.php?tab=plugin-information&plugin=wordpress-beta-tester&TB_iframe=true&width=600&height=550
+                        - text: View details
+                  - cell "Enable auto-updates" [ref=e340]:
+                    - button "Enable auto-updates" [ref=e341] [cursor=pointer]:  Enable auto-updates
+              - rowgroup [ref=e342]:
+                - row "Select All Plugin Description Automatic Updates" [ref=e343]:
+                  - cell "Select All" [ref=e344]:
+                    - checkbox "Select All" [ref=e345] [cursor=pointer]
+                    - generic [ref=e347]: Select All
+                  - columnheader "Plugin" [ref=e348]
+                  - columnheader "Description" [ref=e349]
+                  - columnheader "Automatic Updates" [ref=e350]
+            - generic [ref=e351]:
+              - generic [ref=e352]:
+                - generic [ref=e353]: Select bulk action
+                - combobox "Select bulk action" [ref=e354] [cursor=pointer]:
+                  - option "Bulk actions" [selected]
+                  - option "Activate"
+                  - option "Deactivate"
+                  - option "Update"
+                  - option "Delete"
+                  - option "Enable Auto-updates"
+                  - option "Disable Auto-updates"
+                - button "Apply" [ref=e355] [cursor=pointer]
+              - generic [ref=e357]: 6 items
+  - contentinfo [ref=e358]:
+    - paragraph [ref=e359]:
+      - generic [ref=e360]:
+        - text: Thank you for creating with
+        - link "WordPress" [ref=e361] [cursor=pointer]:
+          - /url: https://wordpress.org/
+        - text: .
+    - paragraph [ref=e362]:
+      - text: You are using a development version (7.1-alpha-62244). Cool! Please
+      - link "stay updated" [ref=e363] [cursor=pointer]:
+        - /url: http://localhost:8888/wp-admin/update-core.php
+      - text: .

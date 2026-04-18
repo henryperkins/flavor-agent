@@ -95,6 +95,16 @@
   max-width: 72ch;
 }
 
+.flavor-agent-activity-log__fallback h1 {
+  margin-bottom: 12px;
+}
+
+.flavor-agent-activity-log__fallback .notice p:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .flavor-agent-activity-log__masthead-actions,
 .flavor-agent-activity-log__controls,
 .flavor-agent-activity-log__controls-main,
@@ -372,6 +382,25 @@
   flex-direction: column;
   gap: 8px;
   padding: 24px;
+}
+
+.flavor-agent-activity-log__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.flavor-agent-activity-log__error-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flavor-agent-activity-log__error-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--wpds-color-fg-content-warning-weak, #926300);
 }
 
 .flavor-agent-activity-log__entry-title {
