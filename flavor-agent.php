@@ -49,6 +49,8 @@ add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ],
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
 add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
+add_action( 'admin_enqueue_scripts', [ FlavorAgent\Admin\ActivityPage::class, 'maybe_enqueue_assets' ] );
+add_action( 'admin_enqueue_scripts', [ FlavorAgent\Settings::class, 'maybe_enqueue_admin_assets' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );
 add_action( 'admin_init', [ FlavorAgent\Settings::class, 'register_settings' ] );

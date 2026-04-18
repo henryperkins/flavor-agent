@@ -918,6 +918,58 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_should_enqueue_admin_assets_accepts_settings_and_admin_hook_variants(): void {
+		$method = new ReflectionMethod( Settings::class, 'should_enqueue_admin_assets' );
+		$method->setAccessible( true );
+
+		$this->assertTrue(
+			$method->invoke( null, 'settings_page_flavor-agent', 'admin_page_flavor-agent' )
+		);
+		$this->assertTrue(
+			$method->invoke( null, 'admin_page_flavor-agent', 'settings_page_flavor-agent' )
+		);
+	}
+
+	public function test_should_enqueue_admin_assets_falls_back_to_request_slug_and_current_screen(): void {
+		$method = new ReflectionMethod( Settings::class, 'should_enqueue_admin_assets' );
+		$method->setAccessible( true );
+
+		$_GET = [
+			'page' => 'flavor-agent',
+		];
+
+		$this->assertTrue(
+			$method->invoke( null, 'dashboard_page_demo', 'settings_page_flavor-agent' )
+		);
+
+		$_GET = [];
+		WordPressTestState::$current_screen = (object) [
+			'id'   => 'settings_page_flavor-agent',
+			'base' => 'settings_page_flavor-agent',
+		];
+
+		$this->assertTrue(
+			$method->invoke( null, 'dashboard_page_demo', 'admin_page_flavor-agent' )
+		);
+	}
+
+	public function test_should_enqueue_admin_assets_rejects_other_admin_pages(): void {
+		$method = new ReflectionMethod( Settings::class, 'should_enqueue_admin_assets' );
+		$method->setAccessible( true );
+
+		$_GET = [
+			'page' => 'plugins',
+		];
+		WordPressTestState::$current_screen = (object) [
+			'id'   => 'plugins',
+			'base' => 'plugins',
+		];
+
+		$this->assertFalse(
+			$method->invoke( null, 'plugins.php', 'settings_page_flavor-agent' )
+		);
+	}
+
 	public function test_render_page_keeps_cloudflare_override_controls_available(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id'  => 'account-123',
