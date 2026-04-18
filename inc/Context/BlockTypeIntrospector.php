@@ -8,48 +8,24 @@ use FlavorAgent\Support\StringArray;
 
 final class BlockTypeIntrospector {
 
-	// Keep this map in sync with src/context/block-inspector.js.
-	private const SUPPORT_TO_PANEL = [
-		'color.background'                    => 'color',
-		'color.text'                          => 'color',
-		'color.link'                          => 'color',
-		'color.heading'                       => 'color',
-		'color.button'                        => 'color',
-		'color.gradients'                     => 'color',
-		'typography.fontSize'                 => 'typography',
-		'typography.fontFamily'               => 'typography',
-		'typography.__experimentalFontFamily' => 'typography',
-		'typography.fitText'                  => 'typography',
-		'typography.fontStyle'                => 'typography',
-		'typography.fontWeight'               => 'typography',
-		'typography.letterSpacing'            => 'typography',
-		'typography.lineHeight'               => 'typography',
-		'typography.textDecoration'           => 'typography',
-		'typography.textAlign'                => 'typography',
-		'typography.textIndent'               => 'typography',
-		'typography.textTransform'            => 'typography',
-		'spacing.margin'                      => 'dimensions',
-		'spacing.padding'                     => 'dimensions',
-		'spacing.blockGap'                    => 'dimensions',
-		'dimensions.aspectRatio'              => 'dimensions',
-		'dimensions.minHeight'                => 'dimensions',
-		'dimensions.height'                   => 'dimensions',
-		'dimensions.width'                    => 'dimensions',
-		'border.color'                        => 'border',
-		'border.radius'                       => 'border',
-		'border.style'                        => 'border',
-		'border.width'                        => 'border',
-		'shadow'                              => 'shadow',
-		'filter.duotone'                      => 'filter',
-		'background.backgroundImage'          => 'background',
-		'background.backgroundSize'           => 'background',
-		'position.sticky'                     => 'position',
-		'position.fixed'                      => 'position',
-		'layout'                              => 'layout',
-		'anchor'                              => 'advanced',
-		'customCSS'                           => 'advanced',
-		'listView'                            => 'list',
-	];
+	/**
+	 * Canonical mapping lives in shared/support-to-panel.json and is
+	 * consumed by both this class and src/context/block-inspector.js.
+	 * A PHPUnit assertion validates that the two copies stay in sync.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function get_support_to_panel(): array {
+		static $map = null;
+		if ( null === $map ) {
+			$json_path = dirname( __DIR__, 2 ) . '/shared/support-to-panel.json';
+			$raw       = file_get_contents( $json_path );
+			$decoded   = json_decode( (string) $raw, true );
+			$map       = is_array( $decoded ) ? $decoded : [];
+		}
+
+		return $map;
+	}
 
 	private const GENERAL_PANEL_EXCLUDED_ATTRIBUTES = [
 		'className' => true,
@@ -150,7 +126,7 @@ final class BlockTypeIntrospector {
 		$flat   = $this->flatten_supports( $supports );
 
 		foreach ( $flat as [ $path, $value ] ) {
-			$panel_key = self::SUPPORT_TO_PANEL[ $path ] ?? null;
+			$panel_key = self::get_support_to_panel()[ $path ] ?? null;
 
 			if ( $panel_key && $this->is_truthy( $value ) ) {
 				$panels[ $panel_key ]   = $panels[ $panel_key ] ?? [];

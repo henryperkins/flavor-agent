@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\LLM;
 
 use FlavorAgent\OpenAI\Provider;
+use FlavorAgent\Support\MetricsNormalizer;
 use WordPress\AI_Client\AI_Client;
 
 final class WordPressAIClient {
@@ -292,9 +293,9 @@ final class WordPressAIClient {
 		if ( is_array( $result['tokenUsage'] ?? null ) ) {
 			$token_usage = [];
 
-			$total = self::normalize_metric_int( $result['tokenUsage']['total'] ?? null );
-			$input = self::normalize_metric_int( $result['tokenUsage']['input'] ?? null );
-			$output = self::normalize_metric_int( $result['tokenUsage']['output'] ?? null );
+			$total = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['total'] ?? null );
+			$input = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['input'] ?? null );
+			$output = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['output'] ?? null );
 
 			if ( null !== $total ) {
 				$token_usage['total'] = $total;
@@ -313,7 +314,7 @@ final class WordPressAIClient {
 			}
 		}
 
-		$latency_ms = self::normalize_metric_int( $result['latencyMs'] ?? null );
+		$latency_ms = MetricsNormalizer::normalize_metric_int( $result['latencyMs'] ?? null );
 		if ( null !== $latency_ms ) {
 			$metrics['latencyMs'] = $latency_ms;
 		}
@@ -322,25 +323,5 @@ final class WordPressAIClient {
 			'text'    => $text,
 			'metrics' => $metrics,
 		];
-	}
-
-	private static function normalize_metric_int( mixed $value ): ?int {
-		if ( is_int( $value ) ) {
-			return $value >= 0 ? $value : null;
-		}
-
-		if ( is_float( $value ) ) {
-			$normalized = (int) round( $value );
-
-			return $normalized >= 0 ? $normalized : null;
-		}
-
-		if ( is_string( $value ) && '' !== trim( $value ) && preg_match( '/^-?\d+$/', $value ) ) {
-			$normalized = (int) $value;
-
-			return $normalized >= 0 ? $normalized : null;
-		}
-
-		return null;
 	}
 }

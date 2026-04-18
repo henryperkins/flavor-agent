@@ -74,24 +74,28 @@ SYSTEM;
 	 * @param array  $docs_guidance WordPress docs grounding chunks.
 	 */
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$sections = [];
+		$budget = new PromptBudget();
 
-		// Navigation identity.
-		$location   = (string) ( $context['location'] ?? 'unknown' );
-		$sections[] = "## Navigation\nLocation: {$location}";
+		// ── Priority 100: Navigation identity (always kept) ──
+		$identity_lines = [];
+		$location       = (string) ( $context['location'] ?? 'unknown' );
+		$identity_lines[] = "## Navigation\nLocation: {$location}";
 
 		if ( array_key_exists( 'menuId', $context ) && null !== $context['menuId'] ) {
-			$sections[] = 'Menu id: ' . (int) $context['menuId'];
+			$identity_lines[] = 'Menu id: ' . (int) $context['menuId'];
 		}
 
 		if ( array_key_exists( 'menuItemCount', $context ) ) {
-			$sections[] = 'Menu item count: ' . (int) $context['menuItemCount'];
+			$identity_lines[] = 'Menu item count: ' . (int) $context['menuItemCount'];
 		}
 
 		if ( array_key_exists( 'maxDepth', $context ) ) {
-			$sections[] = 'Max depth: ' . (int) $context['maxDepth'];
+			$identity_lines[] = 'Max depth: ' . (int) $context['maxDepth'];
 		}
 
+		$budget->add_section( 'identity', implode( "\n", $identity_lines ), 100 );
+
+		// ── Priority 60: Location context ──
 		$location_details = is_array( $context['locationDetails'] ?? null ) ? $context['locationDetails'] : [];
 		if ( count( $location_details ) > 0 ) {
 			$lines = [];
@@ -105,18 +109,19 @@ SYSTEM;
 			}
 
 			if ( count( $lines ) > 0 ) {
-				$sections[] = "## Location Context\n" . implode( "\n", $lines );
+				$budget->add_section( 'location', "## Location Context\n" . implode( "\n", $lines ), 60 );
 			}
 		}
 
+		// ── Priority 55: Live editor context ──
 		$editor_context_lines = self::format_editor_context(
 			is_array( $context['editorContext'] ?? null ) ? $context['editorContext'] : []
 		);
 		if ( $editor_context_lines !== '' ) {
-			$sections[] = "## Live Editor Context\n{$editor_context_lines}";
+			$budget->add_section( 'editor_context', "## Live Editor Context\n{$editor_context_lines}", 55 );
 		}
 
-		// Current attributes.
+		// ── Priority 70: Current attributes ──
 		$attrs = is_array( $context['attributes'] ?? null ) ? $context['attributes'] : [];
 		if ( count( $attrs ) > 0 ) {
 			$lines = [];
@@ -124,22 +129,24 @@ SYSTEM;
 				$display = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value;
 				$lines[] = "- `{$key}`: {$display}";
 			}
-			$sections[] = "## Current Attributes\n" . implode( "\n", $lines );
+			$budget->add_section( 'attributes', "## Current Attributes\n" . implode( "\n", $lines ), 70 );
 		}
 
-		// Menu structure.
+		// ── Priority 90: Menu structure (critical for recommendations) ──
 		$items = is_array( $context['menuItems'] ?? null ) ? $context['menuItems'] : [];
 		if ( count( $items ) > 0 ) {
-			$sections[] = "## Menu Structure\n" . self::format_menu_items( $items, 0 );
+			$budget->add_section( 'menu_structure', "## Menu Structure\n" . self::format_menu_items( $items, 0 ), 90 );
 		} else {
-			$sections[] = "## Menu Structure\nNo menu items found. The navigation block may use a Page List or be empty.";
+			$budget->add_section( 'menu_structure', "## Menu Structure\nNo menu items found. The navigation block may use a Page List or be empty.", 90 );
 		}
 
+		// ── Priority 85: Target inventory ──
 		$target_inventory = is_array( $context['targetInventory'] ?? null ) ? $context['targetInventory'] : [];
 		if ( count( $target_inventory ) > 0 ) {
-			$sections[] = "## Current Menu Target Inventory\n" . self::format_target_inventory( $target_inventory );
+			$budget->add_section( 'target_inventory', "## Current Menu Target Inventory\n" . self::format_target_inventory( $target_inventory ), 85 );
 		}
 
+		// ── Priority 50: Structure summary ──
 		$structure_summary = is_array( $context['structureSummary'] ?? null ) ? $context['structureSummary'] : [];
 		if ( count( $structure_summary ) > 0 ) {
 			$lines = [];
@@ -163,14 +170,14 @@ SYSTEM;
 			}
 
 			if ( count( $lines ) > 0 ) {
-				$sections[] = "## Structure Summary\n" . implode( "\n", $lines );
+				$budget->add_section( 'structure_summary', "## Structure Summary\n" . implode( "\n", $lines ), 50 );
 			}
 		}
 
-		// Overlay template parts (WP 7.0+).
+		// ── Priority 45: Overlay template parts ──
 		$overlay_parts = is_array( $context['overlayTemplateParts'] ?? null ) ? $context['overlayTemplateParts'] : [];
 		if ( count( $overlay_parts ) > 0 ) {
-			$lines      = array_map(
+			$lines = array_map(
 				static fn( array $part ): string => sprintf(
 					'- `%s`: %s',
 					(string) ( $part['slug'] ?? '' ),
@@ -178,9 +185,10 @@ SYSTEM;
 				),
 				$overlay_parts
 			);
-			$sections[] = "## Navigation Overlay Template Parts (WP 7.0+)\n" . implode( "\n", $lines );
+			$budget->add_section( 'overlay_parts', "## Navigation Overlay Template Parts (WP 7.0+)\n" . implode( "\n", $lines ), 45 );
 		}
 
+		// ── Priority 40: Overlay context ──
 		$overlay_context = is_array( $context['overlayContext'] ?? null ) ? $context['overlayContext'] : [];
 		if ( count( $overlay_context ) > 0 ) {
 			$lines = [];
@@ -203,18 +211,18 @@ SYSTEM;
 			}
 
 			if ( count( $lines ) > 0 ) {
-				$sections[] = "## Overlay Context\n" . implode( "\n", $lines );
+				$budget->add_section( 'overlay_context', "## Overlay Context\n" . implode( "\n", $lines ), 40 );
 			}
 		}
 
-		// Theme tokens.
+		// ── Priority 30: Theme tokens ──
 		$tokens      = is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : [];
 		$token_lines = ThemeTokenFormatter::format( $tokens );
 		if ( $token_lines !== '' ) {
-			$sections[] = "## Theme Design Tokens\n{$token_lines}";
+			$budget->add_section( 'theme_tokens', "## Theme Design Tokens\n{$token_lines}", 30 );
 		}
 
-		// WordPress docs guidance.
+		// ── Priority 20: WordPress docs guidance (lowest priority, trimmed first) ──
 		if ( count( $docs_guidance ) > 0 ) {
 			$guidance_lines = [];
 
@@ -231,16 +239,16 @@ SYSTEM;
 			}
 
 			if ( count( $guidance_lines ) > 0 ) {
-				$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines );
+				$budget->add_section( 'docs_guidance', "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines ), 20 );
 			}
 		}
 
-		// User prompt.
+		// ── Priority 95: User prompt (near-critical) ──
 		if ( $prompt !== '' ) {
-			$sections[] = "## User Instruction\n{$prompt}";
+			$budget->add_section( 'user_prompt', "## User Instruction\n{$prompt}", 95 );
 		}
 
-		return implode( "\n\n", $sections );
+		return $budget->assemble();
 	}
 
 	/**

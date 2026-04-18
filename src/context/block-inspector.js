@@ -16,50 +16,12 @@ import { store as blockEditorStore } from '@wordpress/block-editor';
 
 // ── Supports → Inspector panel mapping ──────────────────────
 
-// Keep this map in sync with BlockTypeIntrospector::SUPPORT_TO_PANEL
-// (inc/Context/BlockTypeIntrospector.php). Parity is enforced by
-// tests/phpunit/SupportToPanelSyncTest.php.
-const SUPPORT_TO_PANEL = {
-	'color.background': 'color',
-	'color.text': 'color',
-	'color.link': 'color',
-	'color.heading': 'color',
-	'color.button': 'color',
-	'color.gradients': 'color',
-	'typography.fontSize': 'typography',
-	'typography.fontFamily': 'typography',
-	'typography.__experimentalFontFamily': 'typography',
-	'typography.fitText': 'typography',
-	'typography.fontStyle': 'typography',
-	'typography.fontWeight': 'typography',
-	'typography.letterSpacing': 'typography',
-	'typography.lineHeight': 'typography',
-	'typography.textDecoration': 'typography',
-	'typography.textAlign': 'typography',
-	'typography.textIndent': 'typography',
-	'typography.textTransform': 'typography',
-	'spacing.margin': 'dimensions',
-	'spacing.padding': 'dimensions',
-	'spacing.blockGap': 'dimensions',
-	'dimensions.aspectRatio': 'dimensions',
-	'dimensions.minHeight': 'dimensions',
-	'dimensions.height': 'dimensions',
-	'dimensions.width': 'dimensions',
-	'border.color': 'border',
-	'border.radius': 'border',
-	'border.style': 'border',
-	'border.width': 'border',
-	shadow: 'shadow',
-	'filter.duotone': 'filter',
-	'background.backgroundImage': 'background',
-	'background.backgroundSize': 'background',
-	'position.sticky': 'position',
-	'position.fixed': 'position',
-	layout: 'layout',
-	anchor: 'advanced',
-	customCSS: 'advanced',
-	listView: 'list',
-};
+// Canonical mapping lives in shared/support-to-panel.json and is
+// consumed by both this module and inc/Context/BlockTypeIntrospector.php.
+// A PHPUnit assertion validates that the PHP copy stays in sync.
+import supportToPanelMap from '../../shared/support-to-panel.json';
+
+const SUPPORT_TO_PANEL = supportToPanelMap;
 
 const GENERAL_PANEL_EXCLUDED_ATTRIBUTES = new Set( [
 	'className',

@@ -15,6 +15,7 @@ import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
+import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
@@ -666,22 +667,13 @@ export default function NavigationRecommendations( {
 						/>
 
 						{ isStaleResult && (
-							<div className="flavor-agent-navigation-embedded__stale">
-								<p className="flavor-agent-explanation flavor-agent-panel__note">
-									{ staleMessage }
-								</p>
-								<Button
-									size="small"
-									variant="secondary"
-									onClick={ handleRefresh }
-									disabled={ isLoading }
-									className="flavor-agent-navigation-embedded__refresh"
-								>
-									{ isLoading
-										? `${ REFRESH_ACTION_LABEL }\u2026`
-										: REFRESH_ACTION_LABEL }
-								</Button>
-							</div>
+							<StaleResultBanner
+								message={ staleMessage }
+								onRefresh={ handleRefresh }
+								isRefreshing={ isLoading }
+								variant="embedded"
+								className="flavor-agent-navigation-embedded__stale"
+							/>
 						) }
 
 						<AIStatusNotice

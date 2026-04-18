@@ -564,6 +564,35 @@
   color: var(--wpds-color-fg-content-warning, #8a4b00);
 }
 
+/* ── Stale Result Banner ── */
+.flavor-agent-stale-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--wpds-border-radius-md, 4px);
+  border: 1px solid var(--wpds-color-stroke-surface-warning, #cc8b00);
+  background: var(--wpds-color-bg-surface-warning-weak, #fff8e5);
+}
+
+.flavor-agent-stale-banner--embedded {
+  padding: 6px 10px;
+}
+
+.flavor-agent-stale-banner__message {
+  flex: 1 1 0;
+  margin: 0;
+  font-size: var(--wpds-font-size-xs, 11px);
+  line-height: 1.5;
+  color: var(--wpds-color-fg-content-warning, #8a4b00);
+}
+
+.flavor-agent-stale-banner__refresh.components-button {
+  min-height: 28px;
+  border-radius: var(--wpds-border-radius-md, 4px);
+}
+
 .flavor-agent-capability-notice {
   display: flex;
   flex-direction: column;

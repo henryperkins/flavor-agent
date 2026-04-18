@@ -1747,6 +1747,52 @@ const actions = {
 		} )( activityId );
 	},
 
+	revalidateBlockReviewFreshness( clientId, requestInput = null ) {
+		return async ( { dispatch, select } ) => {
+			if ( ! clientId || ! requestInput ) {
+				return;
+			}
+
+			const storedResolvedSig =
+				select.getBlockResolvedContextSignature?.( clientId ) || '';
+
+			if ( ! storedResolvedSig ) {
+				return;
+			}
+
+			try {
+				const response = await apiFetch( {
+					path: '/flavor-agent/v1/recommend-block',
+					method: 'POST',
+					data: {
+						...requestInput,
+						resolveSignatureOnly: true,
+					},
+				} );
+
+				const serverSig = response?.resolvedContextSignature || '';
+
+				if (
+					serverSig &&
+					storedResolvedSig &&
+					serverSig !== storedResolvedSig
+				) {
+					dispatch(
+						actions.setBlockApplyState(
+							clientId,
+							'idle',
+							null,
+							null,
+							'server'
+						)
+					);
+				}
+			} catch {
+				// Background revalidation failures are silent.
+			}
+		};
+	},
+
 	revalidateNavigationReviewFreshness(
 		currentRequestSignature = null,
 		liveRequestInput = null
@@ -1892,7 +1938,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 								? action.suggestionKey ?? null
 								: currentEntry.lastAppliedSuggestionKey,
 						staleReason:
-							action.status === 'error'
+							action.status === 'error' ||
+							( action.status === 'idle' &&
+								action.staleReason !== null )
 								? action.staleReason ?? null
 								: null,
 					},
@@ -1902,7 +1950,7 @@ function reducer( state = DEFAULT_STATE, action ) {
 		case 'CLEAR_BLOCK_RECS': {
 			const hasExistingState = Boolean(
 				state.blockRecommendations[ action.clientId ] ||
-				state.blockRequestState[ action.clientId ]
+					state.blockRequestState[ action.clientId ]
 			);
 
 			if ( ! hasExistingState ) {
