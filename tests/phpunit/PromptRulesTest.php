@@ -688,6 +688,73 @@ final class PromptRulesTest extends TestCase {
 		);
 	}
 
+	public function test_enforce_block_context_rules_keeps_block_suggestions_when_panel_mapping_is_unknown(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Set custom alignment',
+						'panel'            => 'layout',
+						'attributeUpdates' => [
+							'align' => 'wide',
+						],
+					],
+				],
+				'explanation' => 'Block suggestions should survive when the execution contract is not authoritative.',
+			],
+			[],
+			[
+				'panelMappingKnown'        => false,
+				'allowedPanels'            => [],
+				'hasExplicitlyEmptyPanels' => false,
+				'styleSupportPaths'        => [],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Set custom alignment',
+					'panel'            => 'layout',
+					'attributeUpdates' => [
+						'align' => 'wide',
+					],
+				],
+			],
+			$result['block']
+		);
+	}
+
+	public function test_enforce_block_context_rules_drops_block_suggestions_with_unknown_panel_when_mapping_is_known(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Set custom alignment',
+						'panel'            => 'layout',
+						'attributeUpdates' => [
+							'align' => 'wide',
+						],
+					],
+				],
+				'explanation' => 'Block suggestions targeting an unknown panel should drop when the contract is authoritative.',
+			],
+			[],
+			[
+				'panelMappingKnown'        => true,
+				'allowedPanels'            => [ 'color' ],
+				'hasExplicitlyEmptyPanels' => false,
+				'styleSupportPaths'        => [],
+			]
+		);
+
+		$this->assertSame( [], $result['block'] );
+	}
+
 	public function test_enforce_block_context_rules_drops_unsupported_presets_and_unregistered_style_variations(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[
