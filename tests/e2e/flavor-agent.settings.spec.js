@@ -1,14 +1,14 @@
 const { test, expect } = require( '@playwright/test' );
 
 async function waitForWordPressReady( page ) {
-	for ( let attempt = 0; attempt < 12; attempt++ ) {
+	for ( let attempt = 0; attempt < 30; attempt++ ) {
 		const loadingText = page.getByText( 'WordPress is not ready yet' );
 
 		if ( ! ( await loadingText.count() ) ) {
 			return;
 		}
 
-		await page.waitForTimeout( 1000 );
+		await page.waitForTimeout( 2000 );
 		await page.reload( { waitUntil: 'domcontentloaded' } );
 	}
 

@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-07
+> Last updated: 2026-04-18
 
 ## Working
 
@@ -91,6 +91,8 @@
 
 ## Recent Verification
 
+- 2026-04-18 phase-0-closeout: Playground E2E harness stabilized. `npx playwright test --config=playwright.config.js` now reports **7 passed / 2 failed** (previously 5f/4p → 3f/6p → 2f/7p across iterations). Key fixes: pinned `@wp-playground/cli@3.1.13` in `playwright.config.js` (3.1.15+ regressed); bumped `.env` and `.env.example` to `wordpress:beta-7.0-RC2-php8.2-apache`; refreshed selectors for UI-refactor drift (placeholder `Describe the outcome you want for this block.`, `.flavor-agent-capability-notice`, `.flavor-agent-navigation-embedded`); widened `waitForWordPressReady` polling window from 12×1s to 30×2s to absorb Playground cold-start jitter; `registerTemplatePattern` helper now writes `blockPatterns`, `__experimentalAdditionalBlockPatterns`, and `__experimentalBlockPatterns` so the three-tier pattern-settings compat layer resolves consistently; block inspector test now clicks `Get Suggestions` against a mocked `**/*recommend-block*` route so the real `resolvedContextSignature` handshake populates.
+- 2026-04-18 phase-0-closeout: two persistent Playground failures tracked as followups — (a) template apply smoke fails on `insert_pattern` with "Pattern X could not be inserted into this template." after `blockEditorDispatch.insertBlocks` — the post-insert `getCurrentBlockSlice` returns empty, suggesting either a Playground-only timing gap between dispatch and the synchronous select, or a real product bug in how the insertion root/index is resolved for `placement: 'end'`; (b) block inspector smoke post-reload `.flavor-agent-activity-row` Undo button does not appear — the server-backed activity repository hydration path after page reload is not re-establishing the recent-action row under the Playground harness. Neither is a regression introduced by this stabilization pass; both predate it and need their own focused investigation.
 - 2026-04-07 docs-backbone-refresh: `bash scripts/check-doc-freshness.sh` passed.
 - 2026-04-04 phase-1-closeout: `vendor/bin/phpunit --filter '(InfraAbilitiesTest|SettingsTest|StyleAbilitiesTest|StylePromptTest|ServerCollectorTest|EditorSurfaceCapabilitiesTest|ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest)'` passed (`121` tests, `669` assertions).
 - 2026-04-04 toolchain-support-fix: default-host Node `24.14.1` / npm `11.11.0` completed `npm ci --engine-strict=false`, `npm run build`, and `npm run test:unit -- --runInBand` successfully; the repo support contract was then updated so `engine-strict` now accepts both Node `24.x` / npm `11.x` and Node `20.x` / npm `10.x`.

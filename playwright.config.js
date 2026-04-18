@@ -24,7 +24,9 @@ module.exports = defineConfig( {
 		// Playground's current 7.0 beta editor runtime breaks before plugin bootstrap,
 		// so smoke coverage stays on stable 6.9.4 via the MU-plugin loader harness.
 		command: [
-			'npx @wp-playground/cli@latest server',
+			// Pinned to the last-known-good CLI from the 2026-03-27 green run.
+			// Bumping this requires rerunning the full playground smoke suite.
+			'npx @wp-playground/cli@3.1.13 server',
 			`--port ${ port }`,
 			'--wp=6.9.4',
 			'--login',

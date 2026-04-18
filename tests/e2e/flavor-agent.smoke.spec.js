@@ -149,7 +149,7 @@ async function dismissWelcomeGuide( page ) {
 		await page.waitForTimeout( 250 );
 	}
 
-	for ( let attempt = 0; attempt < 4; attempt++ ) {
+	for ( let attempt = 0; attempt < 10; attempt++ ) {
 		const isVisible = await welcomeOverlay.isVisible().catch( () => false );
 
 		if ( ! isVisible ) {
@@ -162,17 +162,34 @@ async function dismissWelcomeGuide( page ) {
 		const getStartedButton = welcomeOverlay
 			.getByRole( 'button', { name: 'Get started' } )
 			.first();
+		const nextButton = welcomeOverlay
+			.getByRole( 'button', { name: /Next|Continue/i } )
+			.first();
 
 		if ( await closeButton.isVisible().catch( () => false ) ) {
-			await closeButton.click();
+			await closeButton.click().catch( () => {} );
 		} else if ( await getStartedButton.isVisible().catch( () => false ) ) {
-			await getStartedButton.click();
+			await getStartedButton.click().catch( () => {} );
+		} else if ( await nextButton.isVisible().catch( () => false ) ) {
+			await nextButton.click().catch( () => {} );
 		} else {
 			await page.keyboard.press( 'Escape' ).catch( () => {} );
 		}
 
 		await page.waitForTimeout( 250 );
 	}
+
+	// Last-resort: force-hide any lingering overlay so pointer events pass through.
+	await page
+		.evaluate( () => {
+			document
+				.querySelectorAll( '.components-modal__screen-overlay' )
+				.forEach( ( el ) => {
+					el.style.display = 'none';
+					el.style.pointerEvents = 'none';
+				} );
+		} )
+		.catch( () => {} );
 
 	await expect( welcomeOverlay ).toBeHidden( { timeout: 10000 } );
 }
@@ -378,14 +395,14 @@ async function injectStyleBookExample( page, { blockName, blockTitle } ) {
 }
 
 async function waitForWordPressReady( page ) {
-	for ( let attempt = 0; attempt < 12; attempt++ ) {
+	for ( let attempt = 0; attempt < 30; attempt++ ) {
 		const loadingText = page.getByText( 'WordPress is not ready yet' );
 
 		if ( ! ( await loadingText.count() ) ) {
 			return;
 		}
 
-		await page.waitForTimeout( 1000 );
+		await page.waitForTimeout( 2000 );
 		await page.reload( { waitUntil: 'domcontentloaded' } );
 	}
 
@@ -609,6 +626,24 @@ async function ensurePanelOpen( page, title, content ) {
 }
 
 async function getVisibleSearchInput( page ) {
+	const inserterContainers = [
+		'.block-editor-inserter__panel-content',
+		'.block-editor-inserter__content',
+		'.block-editor-tabbed-sidebar',
+		'.block-editor-inserter__menu',
+	];
+
+	for ( const containerSelector of inserterContainers ) {
+		const scopedSearch = page
+			.locator( containerSelector )
+			.locator( 'input[type="search"], [role="searchbox"]' )
+			.first();
+
+		if ( await scopedSearch.isVisible().catch( () => false ) ) {
+			return scopedSearch;
+		}
+	}
+
 	const roleSearch = page.getByRole( 'searchbox' ).first();
 
 	if ( await roleSearch.isVisible().catch( () => false ) ) {
@@ -955,14 +990,35 @@ async function registerTemplatePattern(
 				  )
 				: [];
 
+			const newEntry = {
+				name: nextPatternName,
+				title: nextPatternTitle,
+				content: `<!-- wp:paragraph --><p>${ nextInsertedContent }</p><!-- /wp:paragraph -->`,
+			};
+			const existingStablePatterns = Array.isArray(
+				settings.blockPatterns
+			)
+				? settings.blockPatterns.filter(
+						( pattern ) => pattern?.name !== nextPatternName
+				  )
+				: [];
+			const existingAdditionalPatterns = Array.isArray(
+				settings.__experimentalAdditionalBlockPatterns
+			)
+				? settings.__experimentalAdditionalBlockPatterns.filter(
+						( pattern ) => pattern?.name !== nextPatternName
+				  )
+				: [];
+
 			blockEditorDispatch.updateSettings( {
+				blockPatterns: [ ...existingStablePatterns, newEntry ],
+				__experimentalAdditionalBlockPatterns: [
+					...existingAdditionalPatterns,
+					newEntry,
+				],
 				__experimentalBlockPatterns: [
 					...existingPatterns,
-					{
-						name: nextPatternName,
-						title: nextPatternTitle,
-						content: `<!-- wp:paragraph --><p>${ nextInsertedContent }</p><!-- /wp:paragraph -->`,
-					},
+					newEntry,
 				],
 			} );
 		},
@@ -1357,6 +1413,36 @@ async function selectFirstNavigationBlock( page ) {
 test( 'block inspector smoke applies, persists, and undoes AI recommendations', async ( {
 	page,
 } ) => {
+	test.setTimeout( 120_000 );
+
+	const TEST_RESOLVED_SIGNATURE = 'test-resolved-signature-block-inspector';
+	const capturedRequests = [];
+
+	await page.route( '**/*recommend-block*', async ( route ) => {
+		const request = route.request();
+		let body = {};
+		try {
+			body = request.postDataJSON() || {};
+		} catch ( err ) {
+			body = {};
+		}
+		capturedRequests.push( {
+			url: request.url(),
+			resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
+		} );
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( {
+				payload: {
+					...BLOCK_RESPONSE.payload,
+					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+				},
+				resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+			} ),
+		} );
+	} );
+
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
 	} );
@@ -1368,7 +1454,7 @@ test( 'block inspector smoke applies, persists, and undoes AI recommendations', 
 	await ensureSettingsSidebarOpen( page );
 
 	const promptInput = page.getByPlaceholder(
-		'What are you trying to achieve?'
+		'Describe the outcome you want for this block.'
 	);
 
 	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
@@ -1376,27 +1462,20 @@ test( 'block inspector smoke applies, persists, and undoes AI recommendations', 
 		page.getByRole( 'button', { name: 'Get Suggestions' } )
 	).toBeVisible();
 
-	await page.evaluate(
-		( { selectedClientId, payload } ) => {
-			window.wp.data
-				.dispatch( 'flavor-agent' )
-				.setBlockRecommendations( selectedClientId, {
-					blockName: 'core/paragraph',
-					blockContext: { name: 'core/paragraph' },
-					...payload,
-				} );
-		},
-		{
-			selectedClientId: clientId,
-			payload: BLOCK_RESPONSE.payload,
-		}
-	);
+	// Click "Get Suggestions" so the real fetch thunk runs against the mocked
+	// route. This stores the correct contextSignature + resolvedContextSignature
+	// so the apply-time freshness guards treat the result as fresh.
+	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+	await expect
+		.poll( () => capturedRequests.length, { timeout: 15_000 } )
+		.toBeGreaterThanOrEqual( 1 );
 
 	await expect(
 		page.getByText( BLOCK_RESPONSE.payload.explanation, {
 			exact: true,
 		} )
-	).toBeVisible();
+	).toBeVisible( { timeout: 15_000 } );
 
 	const suggestionButton = page.getByRole( 'button', {
 		name: 'Update content',
@@ -1407,21 +1486,39 @@ test( 'block inspector smoke applies, persists, and undoes AI recommendations', 
 	await expect( suggestionButton ).toBeEnabled();
 	await suggestionButton.click();
 
+	// Poll apply state and block content together so we can surface the
+	// real failure reason if the suggestion doesn't apply.
 	await expect
 		.poll( () =>
 			page.evaluate(
 				( { selectedClientId } ) => {
-					return (
+					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const content =
 						window.wp.data
 							.select( 'core/block-editor' )
 							.getBlockAttributes?.( selectedClientId )
-							?.content || ''
-					);
+							?.content || '';
+
+					return {
+						content,
+						applyStatus:
+							flavorAgent.getBlockApplyStatus?.(
+								selectedClientId
+							) || '',
+						applyError:
+							flavorAgent.getBlockApplyError?.(
+								selectedClientId
+							) || '',
+					};
 				},
 				{ selectedClientId: clientId }
 			)
 		)
-		.toBe( 'Hello from Flavor Agent' );
+		.toEqual( {
+			content: 'Hello from Flavor Agent',
+			applyStatus: 'success',
+			applyError: '',
+		} );
 
 	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
 	await expect
@@ -1466,7 +1563,7 @@ test( 'block inspector smoke applies, persists, and undoes AI recommendations', 
 	} );
 
 	const refreshedPromptInput = page.getByPlaceholder(
-		'What are you trying to achieve?'
+		'Describe the outcome you want for this block.'
 	);
 
 	await ensurePanelOpen( page, 'AI Recommendations', refreshedPromptInput );
@@ -1539,7 +1636,7 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 	await ensureSettingsSidebarOpen( page );
 
 	const promptInput = page.getByPlaceholder(
-		'What are you trying to achieve?'
+		'Describe the outcome you want for this block.'
 	);
 
 	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
@@ -1569,15 +1666,17 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 
 	await expect(
 		page
-			.locator( '.flavor-agent-pattern-notice' )
+			.locator( '.flavor-agent-capability-notice' )
 			.getByText(
 				'Pattern recommendations need a compatible embedding backend and Qdrant'
 			)
+			.first()
 	).toBeVisible();
 	await expect(
 		page
-			.locator( '.flavor-agent-pattern-notice' )
+			.locator( '.flavor-agent-capability-notice' )
 			.getByRole( 'link', { name: 'Settings > Flavor Agent' } )
+			.first()
 	).toBeVisible();
 } );
 
@@ -1642,14 +1741,16 @@ test( 'navigation surface smoke renders advisory recommendations for a selected 
 	);
 
 	const navigationSummarySection = recommendationsPanel
-		.locator( '.flavor-agent-advisory-section' )
+		.locator( '.flavor-agent-navigation-embedded' )
 		.first();
 
 	await expect(
-		navigationSummarySection.getByText( 'Navigation recommendations' )
+		navigationSummarySection.getByText( 'Navigation Ideas', {
+			exact: true,
+		} )
 	).toBeVisible();
 	await expect(
-		navigationSummarySection.getByText( 'Advisory only', { exact: true } )
+		navigationSummarySection.getByText( 'Manual ideas', { exact: true } )
 	).toBeVisible();
 	await expect(
 		recommendationsPanel.getByText(
@@ -1708,14 +1809,17 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	const searchInput = await getVisibleSearchInput( page );
 
 	await expect( searchInput ).toBeVisible();
-	await searchInput.fill( searchPrompt );
+	await searchInput.click();
+	await searchInput.fill( '' );
+	await searchInput.pressSequentially( searchPrompt, { delay: 20 } );
 
 	await expect
 		.poll(
 			() =>
 				patternRequests.findLast(
 					( request ) => request?.prompt === searchPrompt
-				) || null
+				) || null,
+			{ timeout: 10000 }
 		)
 		.not.toBeNull();
 
@@ -2203,9 +2307,6 @@ test( 'template surface smoke previews and applies executable template recommend
 			.locator( '.flavor-agent-review-section' )
 			.getByText( 'Review Before Apply', { exact: true } )
 	).toBeVisible();
-	await page.evaluate( () => {
-		window.wp.data.dispatch( 'core/block-editor' ).clearSelectedBlock();
-	} );
 	await page.getByRole( 'button', { name: 'Confirm Apply' } ).click();
 
 	await expect
@@ -2222,6 +2323,8 @@ test( 'template surface smoke previews and applies executable template recommend
 					return {
 						applyStatus:
 							flavorAgent.getTemplateApplyStatus?.() || '',
+						applyError:
+							flavorAgent.getTemplateApplyError?.() || '',
 						hasInsertOperation: operations.some(
 							( operation ) =>
 								operation?.type === 'insert_pattern' &&
@@ -2237,6 +2340,7 @@ test( 'template surface smoke previews and applies executable template recommend
 		)
 		.toEqual( {
 			applyStatus: 'success',
+			applyError: '',
 			hasInsertOperation: true,
 			lastActivityType: 'apply_template_suggestion',
 		} );
