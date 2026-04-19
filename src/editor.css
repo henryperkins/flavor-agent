@@ -191,8 +191,6 @@
   min-width: 0;
   white-space: normal;
   overflow: visible;
-  text-overflow: clip;
-  line-height: 1.4;
 }
 
 .flavor-agent-panel__composer-starters--stacked
