@@ -909,8 +909,6 @@
 
 /* ---------------------------------------------------------------
  * Shared: Section header
- * Used in: SettingsRecommendations, StylesRecommendations,
- *          InspectorInjector (block suggestions), TemplateRecommender
  * --------------------------------------------------------------- */
 
 .flavor-agent-section-label {
