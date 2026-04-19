@@ -160,6 +160,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
 }
 
 .flavor-agent-panel__composer-starters--stacked {
@@ -171,12 +174,25 @@
   min-height: 30px;
   max-width: 100%;
   height: auto;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border-radius: var(--wpds-border-radius-md, 4px);
   justify-content: flex-start;
+  align-items: flex-start;
   text-align: left;
   white-space: normal;
   word-break: break-word;
+  overflow: visible;
+  line-height: 1.4;
+}
+
+.flavor-agent-panel__composer-starter.components-button .components-button__text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.4;
 }
 
 .flavor-agent-panel__composer-starters--stacked
