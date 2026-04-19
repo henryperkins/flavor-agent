@@ -127,6 +127,25 @@ describe( 'ContentRecommender', () => {
 		expect( text ).toContain( 'Post' );
 		expect( text ).toContain( 'Working draft' );
 		expect( text ).toContain( 'Start a fresh draft' );
+		expect( text ).toContain(
+			'What should Flavor Agent do with this post?'
+		);
+		expect( text ).toContain(
+			'Works from a title, short brief, or rough outline.'
+		);
+
+		// The composer label must be visually rendered (not hidden off-screen).
+		const labelSpan = Array.from(
+			getContainer().querySelectorAll( 'span' )
+		).find(
+			( span ) =>
+				span.textContent ===
+				'What should Flavor Agent do with this post?'
+		);
+		expect( labelSpan ).not.toBeUndefined();
+		expect( labelSpan.style.position ).not.toBe( 'absolute' );
+		expect( labelSpan.style.left ).not.toBe( '-9999px' );
+
 		expect( text ).toContain( 'Generate Draft' );
 		expect( text ).not.toContain( 'Current document' );
 

@@ -1,4 +1,7 @@
-import { Button, ButtonGroup } from '@wordpress/components';
+import {
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+} from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
@@ -19,7 +22,8 @@ const CONTENT_MODE_CONFIG = {
 	draft: {
 		label: 'Draft',
 		title: 'Start a fresh draft',
-		placeholder: 'Describe the angle, audience, or structure you want.',
+		placeholder:
+			'Describe the draft you want (for example: concise launch post for store managers).',
 		helperText: 'Works from a title, short brief, or rough outline.',
 		fetchLabel: 'Generate Draft',
 		starterPrompts: [
@@ -31,7 +35,8 @@ const CONTENT_MODE_CONFIG = {
 	edit: {
 		label: 'Edit',
 		title: 'Refine what is already here',
-		placeholder: 'Describe the revision pass you want.',
+		placeholder:
+			'Describe the revision pass (for example: tighten intro and trim repetition).',
 		helperText: 'Best when this post already has copy you want to tighten.',
 		fetchLabel: 'Revise Draft',
 		starterPrompts: [
@@ -43,7 +48,8 @@ const CONTENT_MODE_CONFIG = {
 	critique: {
 		label: 'Critique',
 		title: 'Stress-test the draft',
-		placeholder: 'Describe the critique you want.',
+		placeholder:
+			'Describe the critique focus (for example: clarity gaps and weak transitions).',
 		helperText: 'Flags weak lines, clarity gaps, and structural drift.',
 		fetchLabel: 'Run Critique',
 		starterPrompts: [
@@ -247,36 +253,32 @@ export default function ContentRecommender() {
 						<SurfaceComposer
 							title={ activeMode.title }
 							meta={
-								<ButtonGroup
+								<ToggleGroupControl
 									className="flavor-agent-content-recommender__modes"
-									aria-label="Content mode"
+									label="Content mode"
+									hideLabelFromVision
+									value={ contentMode }
+									onChange={ ( nextMode ) => {
+										if (
+											CONTENT_MODES.includes( nextMode )
+										) {
+											setContentMode( nextMode );
+										}
+									} }
 								>
 									{ CONTENT_MODES.map( ( mode ) => (
-										<Button
+										<ToggleGroupControlOption
 											key={ mode }
-											variant="secondary"
-											size="small"
-											aria-pressed={
-												mode === contentMode
-											}
-											className={ `flavor-agent-content-recommender__mode-button${
-												mode === contentMode
-													? ' is-active'
-													: ''
-											}` }
-											onClick={ () =>
-												setContentMode( mode )
-											}
-										>
-											{ formatModeLabel( mode ) }
-										</Button>
+											className="flavor-agent-content-recommender__mode-option"
+											value={ mode }
+											label={ formatModeLabel( mode ) }
+										/>
 									) ) }
-								</ButtonGroup>
+								</ToggleGroupControl>
 							}
 							prompt={ prompt }
 							onPromptChange={ setPrompt }
 							label={ `What should Flavor Agent do with this ${ documentNoun }?` }
-							hideLabelFromVision
 							placeholder={ activeMode.placeholder }
 							helperText={ activeMode.helperText }
 							rows={ 4 }

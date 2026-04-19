@@ -964,7 +964,7 @@ final class Page {
 				</div>
 				<details class="flavor-agent-sync-panel__technical">
 					<summary class="flavor-agent-sync-panel__technical-summary">
-						<?php echo esc_html__( 'Technical Details', 'flavor-agent' ); ?>
+						<?php echo esc_html__( 'Technical details', 'flavor-agent' ); ?>
 					</summary>
 					<div class="flavor-agent-sync-panel__technical-body">
 						<?php
@@ -987,7 +987,7 @@ final class Page {
 					<button
 						type="button"
 						id="flavor-agent-sync-button"
-						class="button button-secondary"
+						class="button button-primary"
 						<?php echo $has_prerequisites ? '' : 'disabled'; ?>
 					>
 						<?php echo esc_html__( 'Sync Pattern Catalog', 'flavor-agent' ); ?>
@@ -1025,32 +1025,32 @@ final class Page {
 		}
 
 		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Complete the embeddings setup in Chat Provider and add Qdrant before you sync the pattern index.', 'flavor-agent' );
+			return __( 'Finish embeddings setup in Chat Provider and add Qdrant before syncing the pattern index.', 'flavor-agent' );
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Complete the embeddings setup in Chat Provider before you sync the pattern index.', 'flavor-agent' );
+			return __( 'Finish embeddings setup in Chat Provider before syncing the pattern index.', 'flavor-agent' );
 		}
 
-		return __( 'Add the Qdrant URL and API key before you sync the pattern index.', 'flavor-agent' );
+		return __( 'Add the Qdrant URL and API key before syncing the pattern index.', 'flavor-agent' );
 	}
 
 	private static function get_pattern_sync_status_sentence( array $page_state ): string {
 		$state = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : [];
 
 		if ( '' !== self::get_pattern_sync_prerequisite_message( $page_state ) ) {
-			return __( 'Pattern recommendations are not available until the required setup is complete.', 'flavor-agent' );
+			return __( 'Pattern recommendations stay unavailable until setup is complete.', 'flavor-agent' );
 		}
 
 		if ( ! empty( $state['last_error'] ) ) {
-			return __( 'Pattern recommendations need attention before they can be trusted.', 'flavor-agent' );
+			return __( 'Pattern recommendations need attention before use.', 'flavor-agent' );
 		}
 
 		return match ( (string) ( $state['status'] ?? 'uninitialized' ) ) {
 			'ready' => __( 'Pattern recommendations are ready.', 'flavor-agent' ),
-			'stale' => __( 'Pattern recommendations are usable but out of date.', 'flavor-agent' ),
+			'stale' => __( 'Pattern recommendations are available but out of date.', 'flavor-agent' ),
 			'indexing' => __( 'Pattern recommendations are syncing now.', 'flavor-agent' ),
-			default => __( 'Pattern recommendations are not available until you sync the catalog.', 'flavor-agent' ),
+			default => __( 'Pattern recommendations stay unavailable until you sync the catalog.', 'flavor-agent' ),
 		};
 	}
 
