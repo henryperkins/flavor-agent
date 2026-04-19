@@ -1247,6 +1247,14 @@
   background: var(--wpds-color-bg-surface-neutral-strong, #fff);
 }
 
+@media (forced-colors: active) {
+  .flavor-agent-prompt textarea:focus-visible {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
 .flavor-agent-prompt textarea:disabled {
   border-color: var(--wpds-color-stroke-surface-neutral-subtle, #c3c4c7);
   background: var(--wpds-color-bg-surface-neutral, #f6f7f7);
