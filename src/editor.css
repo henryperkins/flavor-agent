@@ -91,17 +91,17 @@
 
 .flavor-agent-panel__eyebrow {
   margin: 0 0 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--wpds-font-size-xs, 11px);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
   color: var(--flavor-agent-editor-muted);
 }
 
 .flavor-agent-panel__intro-copy {
   margin: 0;
   font-size: var(--wpds-font-size-sm, 12px);
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--flavor-agent-editor-muted);
   max-width: none;
 }
@@ -135,17 +135,17 @@
 
 .flavor-agent-panel__composer-eyebrow {
   margin: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--wpds-font-size-xs, 11px);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
   color: var(--flavor-agent-editor-muted);
 }
 
 .flavor-agent-panel__composer-title {
   font-size: var(--wpds-font-size-md, 13px);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--flavor-agent-editor-text);
 }
 
@@ -195,7 +195,7 @@
 .flavor-agent-panel__composer-helper {
   margin: 0;
   font-size: var(--wpds-font-size-xs, 11px);
-  line-height: 1.45;
+  line-height: 1.6;
   color: var(--flavor-agent-editor-muted);
 }
 
@@ -220,10 +220,10 @@
 
 .flavor-agent-panel__group-title {
   min-width: 0;
-  font-size: var(--wpds-font-size-xs, 11px);
+  font-size: var(--wpds-font-size-sm, 12px);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--flavor-agent-editor-muted);
 }
 
@@ -908,16 +908,17 @@
 }
 
 /* ---------------------------------------------------------------
- * Shared: Section header (uppercase label above grouped items)
+ * Shared: Section header
  * Used in: SettingsRecommendations, StylesRecommendations,
  *          InspectorInjector (block suggestions), TemplateRecommender
  * --------------------------------------------------------------- */
 
 .flavor-agent-section-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: var(--wpds-font-size-sm, 12px);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
   color: var(--flavor-agent-editor-muted);
   margin-bottom: 8px;
 }
@@ -1296,7 +1297,7 @@
 .flavor-agent-review-section__summary {
   margin: 0 0 10px;
   font-size: var(--wpds-font-size-sm, 12px);
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--flavor-agent-editor-muted);
 }
 
@@ -1603,7 +1604,7 @@
 
 .flavor-agent-subpanel-hint {
   font-size: var(--wpds-font-size-xs, 11px);
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--flavor-agent-editor-muted);
   margin: 0;
   font-style: italic;
