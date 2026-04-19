@@ -17,11 +17,13 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## What The User Can Configure
 
 - Active AI provider selection (`azure_openai`, `openai_native`, or a configured Connectors-backed provider)
-- Azure OpenAI endpoint, API key, embedding deployment, and chat deployment
-- OpenAI Native API key override plus embedding and chat model IDs
+- Azure OpenAI endpoint, API key, embedding deployment, responses deployment, and default reasoning effort
+- OpenAI Native API key override plus embedding and responses model IDs
 - Qdrant URL and API key
+- Pattern recommendation ranking threshold and max results
 - Cloudflare AI Search max result count
 - Cloudflare AI Search override credentials for older installs or explicit custom-endpoint use
+- Guidelines: site context, copy guidelines, image guidelines, and additional guidelines
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
 ## Backend Gating Rules
@@ -29,7 +31,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Surface | Primary gate |
 |---|---|
 | Block recommendations | `ChatClient::is_supported()`; honors the selected provider when it is a configured connector-backed provider, otherwise uses the selected direct provider when configured here, otherwise falls back to the generic WordPress AI Client / Connectors path |
-| Pattern recommendations | Active provider embeddings, Qdrant configured, any usable chat provider (direct or connector-backed), and a usable pattern index |
+| Pattern recommendations | Any configured direct embedding backend (`azure_openai` or `openai_native`), Qdrant configured, any usable chat provider (direct or connector-backed), and a usable pattern index. The selected chat provider may be connector-backed while embeddings still resolve through the direct-provider runtime. |
 | Template recommendations | Active provider chat configured (direct or connector-backed) |
 | Template-part recommendations | Active provider chat configured (direct or connector-backed) |
 | Navigation recommendations | Active provider chat configured (direct or connector-backed) and current user can edit theme options |

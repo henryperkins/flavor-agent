@@ -128,7 +128,7 @@ Activity entries are automatically pruned by a daily cron event (`flavor_agent_p
 | Default query limit | 20 |
 | Maximum query limit | 100 |
 
-Schema version 2 also projects filterable admin-audit metadata into dedicated columns so privileged global reads can filter by provenance without decoding every `request_json` blob. The projected fields cover post type/entity identifiers, block path, operation metadata, provider/backend/model labels, provider path, configuration owner, credential source, selected provider, ability, route, prompt, and reference. The admin page still hydrates the current page from the full stored rows so the details view can show the complete request and before/after payloads.
+Schema version 3 also projects filterable admin-audit metadata into dedicated columns so privileged global reads can filter by provenance without decoding every `request_json` blob. The projected fields cover post type/entity identifiers, block path, operation metadata, provider/backend/model labels, provider path, configuration owner, credential source, selected provider, ability, route, prompt, and reference. The admin page still hydrates the current page from the full stored rows so the details view can show the complete request and before/after payloads.
 
 ## Primary Source Files
 
