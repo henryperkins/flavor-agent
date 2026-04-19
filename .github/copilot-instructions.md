@@ -37,6 +37,13 @@ npm run test:e2e:playground     # fast Playground smoke suite
 npm run test:e2e:wp70           # Docker-backed WP 7.0 Site Editor suite
 npm run check:docs              # stale-doc freshness guard
 
+# Aggregate verification (single entry point for automated runs)
+npm run verify                  # build + lint + plugin-check + unit + PHP + E2E → output/verify/summary.json
+npm run verify -- --skip=lint-plugin  # omit plugin-check when WP-CLI or WP root is unavailable
+npm run verify -- --skip-e2e    # fast loop without Playwright suites
+npm run verify -- --only=build,unit   # run a subset
+npm run verify -- --dry-run     # list planned steps as JSON
+
 # Local Docker environment
 npm run wp:start       # docker compose up
 npm run wp:stop        # docker compose down

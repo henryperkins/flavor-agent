@@ -15,6 +15,11 @@ npm run test:unit -- --runInBand  # Jest unit tests
 npm run test:e2e       # Playwright smoke suites (Playground + WP 7.0)
 npm run test:e2e:playground  # fast Playground smoke suite
 npm run test:e2e:wp70  # Docker-backed WP 7.0 Site Editor suite
+npm run verify         # aggregate: build + lint + plugin-check + unit + PHP + E2E → output/verify/summary.json
+npm run verify -- --skip=lint-plugin  # omit plugin-check when WP-CLI or WP root is unavailable
+npm run verify -- --skip-e2e       # same pipeline without Playwright suites (fast loop)
+npm run verify -- --only=build,unit  # run a subset of steps
+npm run verify -- --dry-run        # print planned steps as JSON and exit
 npm run check:docs     # stale-doc freshness guard
 npm run wp:start       # docker compose up (local dev)
 npm run wp:stop        # docker compose down
@@ -29,6 +34,17 @@ vendor/bin/phpunit     # PHPUnit tests (direct)
 ```
 
 PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `store/update-helpers.test.js`) or in `__tests__/` directories.
+
+### Agent-executable verification
+
+`npm run verify` (implemented in `scripts/verify.js`) is the single entry point for automated verification. It runs `build`, `lint-js`, `lint-plugin`, `unit`, `lint-php`, `test-php`, `e2e-playground`, and `e2e-wp70` in order, streaming output while capturing per-step logs.
+
+Artifacts (all under `output/verify/`, which is gitignored):
+
+- `summary.json` — structured run report (`schemaVersion`, `status` of `pass`/`fail`/`incomplete`, `counts`, per-step `{status, exitCode, durationMs, startedAt, finishedAt, stdoutPath, stderrPath}`, artifact paths changed by the current run, environment)
+- `<step>.stdout.log` and `<step>.stderr.log` — full per-step output
+
+The final stdout line is `VERIFY_RESULT={...}` (one-line JSON with `status`, `summaryPath`, `counts`) so agents can parse the outcome without reading the full report. Exit codes: `0` pass, `1` any failure or implicitly skipped step (required tool missing), `2` argument error. A step marked `skipped` via `--only`/`--skip`/`--skip-e2e` never fails the run; a step skipped because its required tool is unavailable flips the overall status to `incomplete` (exit `1`). `lint-plugin` specifically requires `bash`, `wp`, and a resolvable WordPress root for `WP_PLUGIN_CHECK_PATH`; use `--skip=lint-plugin` when those prerequisites are intentionally absent.
 
 ## Architecture
 
