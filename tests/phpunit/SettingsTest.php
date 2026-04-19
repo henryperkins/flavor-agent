@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Admin\Settings\Assets;
+use FlavorAgent\Admin\Settings\Feedback;
+use FlavorAgent\Admin\Settings\Page;
+use FlavorAgent\Admin\Settings\State;
+use FlavorAgent\Admin\Settings\Utils;
+use FlavorAgent\Admin\Settings\Validation;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Settings;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use ReflectionProperty;
 
 final class SettingsTest extends TestCase {
 
@@ -155,7 +159,7 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_sanitize_azure_settings_revert_invalid_values_and_report_one_error(): void {
+	public function test_sanitize_azure_settings_revert_invalid_values_and_report_fallback_notices(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'old-key',
@@ -190,8 +194,81 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'old-key', Settings::sanitize_azure_openai_key( 'bad-key' ) );
 		$this->assertSame( 'old-embed', Settings::sanitize_azure_embedding_deployment( 'bad-embed' ) );
 		$this->assertSame( 'old-chat', Settings::sanitize_azure_chat_deployment( 'bad-chat' ) );
-		$this->assertCount( 1, WordPressTestState::$settings_errors );
-		$this->assertSame( 'Azure authentication failed', WordPressTestState::$settings_errors[0]['message'] );
+		$this->assertSame(
+			[
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_azure_validation',
+					'message' => 'Azure authentication failed',
+					'type'    => 'error',
+				],
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_azure_validation_preserved',
+					'message' => 'We kept your previous Azure settings because validation failed.',
+					'type'    => 'warning',
+				],
+			],
+			WordPressTestState::$settings_errors
+		);
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_sanitize_azure_settings_request_scopes_validation_feedback_when_feedback_key_is_present(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'old-key',
+			'flavor_agent_azure_embedding_deployment' => 'old-embed',
+			'flavor_agent_azure_chat_deployment'      => 'old-chat',
+		];
+		$_POST                       = [
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_settings_feedback_key'      => 'azure-error-scope',
+			'flavor_agent_azure_openai_endpoint'      => 'https://bad.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'bad-key',
+			'flavor_agent_azure_embedding_deployment' => 'bad-embed',
+			'flavor_agent_azure_chat_deployment'      => 'bad-chat',
+		];
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 403,
+			],
+			'body'     => wp_json_encode(
+				[
+					'error' => [
+						'message' => 'Azure authentication failed',
+					],
+				]
+			),
+		];
+
+		$this->assertSame(
+			'https://old.openai.azure.com/',
+			Settings::sanitize_azure_openai_endpoint( 'https://bad.openai.azure.com/' )
+		);
+		$this->assertSame( 'old-key', Settings::sanitize_azure_openai_key( 'bad-key' ) );
+		$this->assertSame( 'old-embed', Settings::sanitize_azure_embedding_deployment( 'bad-embed' ) );
+		$this->assertSame( 'old-chat', Settings::sanitize_azure_chat_deployment( 'bad-chat' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+
+		$storage_key = Feedback::get_storage_key( 'azure-error-scope' );
+		$feedback    = WordPressTestState::$transients[ $storage_key ] ?? [];
+
+		$this->assertSame( 'chat', $feedback['focus_section'] ?? '' );
+		$this->assertSame(
+			[
+				[
+					'tone'    => 'error',
+					'message' => 'Azure authentication failed',
+				],
+				[
+					'tone'    => 'warning',
+					'message' => 'We kept your previous Azure settings because validation failed.',
+				],
+			],
+			$feedback['messages']['chat'] ?? []
+		);
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
@@ -329,7 +406,7 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_sanitize_openai_native_settings_revert_invalid_values_and_report_one_error(): void {
+	public function test_sanitize_openai_native_settings_revert_invalid_values_and_report_fallback_notices(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => 'old-key',
@@ -361,8 +438,23 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'old-key', Settings::sanitize_openai_native_api_key( 'bad-key' ) );
 		$this->assertSame( 'old-embed', Settings::sanitize_openai_native_embedding_model( 'bad-embed' ) );
 		$this->assertSame( 'old-chat', Settings::sanitize_openai_native_chat_model( 'bad-chat' ) );
-		$this->assertCount( 1, WordPressTestState::$settings_errors );
-		$this->assertSame( 'OpenAI authentication failed', WordPressTestState::$settings_errors[0]['message'] );
+		$this->assertSame(
+			[
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_openai_native_validation',
+					'message' => 'OpenAI authentication failed',
+					'type'    => 'error',
+				],
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_openai_native_validation_preserved',
+					'message' => 'We kept your previous OpenAI Native settings because validation failed.',
+					'type'    => 'warning',
+				],
+			],
+			WordPressTestState::$settings_errors
+		);
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
@@ -486,7 +578,7 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_sanitize_qdrant_settings_revert_invalid_values_and_report_one_error(): void {
+	public function test_sanitize_qdrant_settings_revert_invalid_values_and_report_fallback_notices(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_qdrant_url' => 'https://old.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key' => 'old-key',
@@ -515,8 +607,23 @@ final class SettingsTest extends TestCase {
 			Settings::sanitize_qdrant_url( 'https://bad.cloud.qdrant.io:6333' )
 		);
 		$this->assertSame( 'old-key', Settings::sanitize_qdrant_key( 'bad-key' ) );
-		$this->assertCount( 1, WordPressTestState::$settings_errors );
-		$this->assertSame( 'Invalid Qdrant API key', WordPressTestState::$settings_errors[0]['message'] );
+		$this->assertSame(
+			[
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_qdrant_validation',
+					'message' => 'Invalid Qdrant API key',
+					'type'    => 'error',
+				],
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_qdrant_validation_preserved',
+					'message' => 'We kept your previous Qdrant settings because validation failed.',
+					'type'    => 'warning',
+				],
+			],
+			WordPressTestState::$settings_errors
+		);
 		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
 	}
 
@@ -621,7 +728,7 @@ final class SettingsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_ai_search_account_id', WordPressTestState::$options );
 	}
 
-	public function test_sanitize_cloudflare_settings_reverts_invalid_values_and_reports_error_once(): void {
+	public function test_sanitize_cloudflare_settings_reverts_invalid_values_and_reports_fallback_notices_from_error_responses(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-old',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs-old',
@@ -652,10 +759,22 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'account-old', Settings::sanitize_cloudflare_account_id( 'account-new' ) );
 		$this->assertSame( 'wp-dev-docs-old', Settings::sanitize_cloudflare_instance_id( 'wp-dev-docs-new' ) );
 		$this->assertSame( 'token-old', Settings::sanitize_cloudflare_api_token( 'token-new' ) );
-		$this->assertCount( 1, WordPressTestState::$settings_errors );
 		$this->assertSame(
-			'Authentication error',
-			WordPressTestState::$settings_errors[0]['message']
+			[
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_cloudflare_ai_search_validation',
+					'message' => 'Authentication error',
+					'type'    => 'error',
+				],
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_cloudflare_ai_search_validation_preserved',
+					'message' => 'We kept your previous docs grounding settings because validation failed.',
+					'type'    => 'warning',
+				],
+			],
+			WordPressTestState::$settings_errors
 		);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
@@ -682,7 +801,7 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
-	public function test_sanitize_cloudflare_settings_reverts_incompatible_values_and_reports_error_once(): void {
+	public function test_sanitize_cloudflare_settings_reverts_incompatible_values_and_reports_fallback_notices(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-old',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs-old',
@@ -722,10 +841,22 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'account-old', Settings::sanitize_cloudflare_account_id( 'account-new' ) );
 		$this->assertSame( 'wp-dev-docs-old', Settings::sanitize_cloudflare_instance_id( 'wp-dev-docs-new' ) );
 		$this->assertSame( 'token-old', Settings::sanitize_cloudflare_api_token( 'token-new' ) );
-		$this->assertCount( 1, WordPressTestState::$settings_errors );
 		$this->assertSame(
-			'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from this instance. Use the official WordPress developer docs index before saving these credentials.',
-			WordPressTestState::$settings_errors[0]['message']
+			[
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_cloudflare_ai_search_validation',
+					'message' => 'Cloudflare AI Search validation could not confirm trusted developer.wordpress.org content from this instance. Use the official WordPress developer docs index before saving these credentials.',
+					'type'    => 'error',
+				],
+				[
+					'setting' => 'flavor_agent_settings',
+					'code'    => 'flavor_agent_cloudflare_ai_search_validation_preserved',
+					'message' => 'We kept your previous docs grounding settings because validation failed.',
+					'type'    => 'warning',
+				],
+			],
+			WordPressTestState::$settings_errors
 		);
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
@@ -752,9 +883,37 @@ final class SettingsTest extends TestCase {
 		];
 
 		ob_start();
-		$method = new ReflectionMethod( Settings::class, 'render_settings_notices' );
-		$method->setAccessible( true );
-		$method->invoke( null );
+		Page::render_settings_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Settings saved.', $output );
+		$this->assertStringContainsString( 'Authentication error', $output );
+		$this->assertArrayNotHasKey( 'settings_errors', WordPressTestState::$transients );
+	}
+
+	public function test_render_settings_notices_displays_plugin_messages_when_request_scoped_feedback_is_present(): void {
+		$_GET = [
+			'settings-updated'                    => 'true',
+			'flavor_agent_settings_feedback_key' => 'token-user-1',
+		];
+
+		WordPressTestState::$transients['settings_errors'] = [
+			[
+				'setting' => 'general',
+				'code'    => 'settings_updated',
+				'message' => 'Settings saved.',
+				'type'    => 'success',
+			],
+			[
+				'setting' => 'flavor_agent_settings',
+				'code'    => 'flavor_agent_cloudflare_ai_search_validation',
+				'message' => 'Authentication error',
+				'type'    => 'error',
+			],
+		];
+
+		ob_start();
+		Page::render_settings_notices();
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'Settings saved.', $output );
@@ -919,27 +1078,21 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_should_enqueue_admin_assets_accepts_settings_and_admin_hook_variants(): void {
-		$method = new ReflectionMethod( Settings::class, 'should_enqueue_admin_assets' );
-		$method->setAccessible( true );
-
 		$this->assertTrue(
-			$method->invoke( null, 'settings_page_flavor-agent', 'admin_page_flavor-agent' )
+			Assets::should_enqueue_assets( 'settings_page_flavor-agent', 'admin_page_flavor-agent' )
 		);
 		$this->assertTrue(
-			$method->invoke( null, 'admin_page_flavor-agent', 'settings_page_flavor-agent' )
+			Assets::should_enqueue_assets( 'admin_page_flavor-agent', 'settings_page_flavor-agent' )
 		);
 	}
 
 	public function test_should_enqueue_admin_assets_falls_back_to_request_slug_and_current_screen(): void {
-		$method = new ReflectionMethod( Settings::class, 'should_enqueue_admin_assets' );
-		$method->setAccessible( true );
-
 		$_GET = [
 			'page' => 'flavor-agent',
 		];
 
 		$this->assertTrue(
-			$method->invoke( null, 'dashboard_page_demo', 'settings_page_flavor-agent' )
+			Assets::should_enqueue_assets( 'dashboard_page_demo', 'settings_page_flavor-agent' )
 		);
 
 		$_GET = [];
@@ -949,14 +1102,11 @@ final class SettingsTest extends TestCase {
 		];
 
 		$this->assertTrue(
-			$method->invoke( null, 'dashboard_page_demo', 'admin_page_flavor-agent' )
+			Assets::should_enqueue_assets( 'dashboard_page_demo', 'admin_page_flavor-agent' )
 		);
 	}
 
 	public function test_should_enqueue_admin_assets_rejects_other_admin_pages(): void {
-		$method = new ReflectionMethod( Settings::class, 'should_enqueue_admin_assets' );
-		$method->setAccessible( true );
-
 		$_GET = [
 			'page' => 'plugins',
 		];
@@ -966,8 +1116,330 @@ final class SettingsTest extends TestCase {
 		];
 
 		$this->assertFalse(
-			$method->invoke( null, 'plugins.php', 'settings_page_flavor-agent' )
+			Assets::should_enqueue_assets( 'plugins.php', 'settings_page_flavor-agent' )
 		);
+	}
+
+	public function test_has_settings_updated_query_flag_requires_true_literal(): void {
+		$_GET = [
+			'settings-updated' => 'true',
+		];
+		$this->assertTrue( Feedback::has_settings_updated_query_flag() );
+
+		$_GET = [
+			'settings-updated' => '1',
+		];
+		$this->assertFalse( Feedback::has_settings_updated_query_flag() );
+
+		$_GET = [
+			'settings-updated' => 'false',
+		];
+		$this->assertFalse( Feedback::has_settings_updated_query_flag() );
+	}
+
+	public function test_merge_html_attributes_appends_class_values(): void {
+		$result = Utils::merge_html_attributes(
+			[
+				'class' => 'base-class',
+				'href'  => 'https://example.com',
+			],
+			[
+				'class'          => 'extra-class',
+				'data-test-role' => 'badge',
+			]
+		);
+
+		$this->assertSame( 'base-class extra-class', $result['class'] );
+		$this->assertSame( 'https://example.com', $result['href'] );
+		$this->assertSame( 'badge', $result['data-test-role'] );
+	}
+
+	public function test_encode_json_payload_returns_fallback_for_unencodable_values(): void {
+		$handle = fopen( 'php://temp', 'r' );
+
+		$this->assertIsResource( $handle );
+
+		try {
+			$this->assertSame( '[]', Utils::encode_json_payload( $handle ) );
+		} finally {
+			fclose( $handle );
+		}
+	}
+
+	public function test_encode_json_payload_hex_escapes_script_terminators_when_requested(): void {
+		$result = Utils::encode_json_payload(
+			[
+				'label' => '</script><script>alert(1)</script>',
+			],
+			'[]',
+			JSON_HEX_TAG
+		);
+
+		$this->assertStringContainsString( '\\u003C/script\\u003E', $result );
+		$this->assertStringNotContainsString( '</script>', $result );
+	}
+
+	public function test_read_admin_asset_metadata_rejects_malformed_manifest(): void {
+		$asset_path = tempnam( sys_get_temp_dir(), 'fa-asset-' );
+
+		$this->assertIsString( $asset_path );
+		file_put_contents( $asset_path, "<?php return [ 'version' => '1.0.0' ];" );
+
+		try {
+			$this->assertNull( Assets::read_asset_metadata( $asset_path ) );
+		} finally {
+			unlink( $asset_path );
+		}
+	}
+
+	public function test_read_admin_asset_metadata_rejects_invalid_version_types(): void {
+		$asset_path = tempnam( sys_get_temp_dir(), 'fa-asset-' );
+
+		$this->assertIsString( $asset_path );
+		file_put_contents(
+			$asset_path,
+			"<?php return [ 'dependencies' => [ 'wp-element' ], 'version' => [ '1.0.0' ] ];"
+		);
+
+		try {
+			$this->assertNull( Assets::read_asset_metadata( $asset_path ) );
+		} finally {
+			unlink( $asset_path );
+		}
+	}
+
+	public function test_read_admin_asset_metadata_accepts_valid_manifest(): void {
+		$asset_path = tempnam( sys_get_temp_dir(), 'fa-asset-' );
+
+		$this->assertIsString( $asset_path );
+		file_put_contents(
+			$asset_path,
+			"<?php return [ 'dependencies' => [ 'wp-element', '', 123 ], 'version' => '1.2.3' ];"
+		);
+
+		try {
+			$this->assertSame(
+				[
+					'dependencies' => [ 'wp-element' ],
+					'version'      => '1.2.3',
+				],
+				Assets::read_asset_metadata( $asset_path )
+			);
+		} finally {
+			unlink( $asset_path );
+		}
+	}
+
+	public function test_read_settings_page_feedback_only_consumes_when_requested(): void {
+		WordPressTestState::$current_user_id = 7;
+		$storage_key                        = Feedback::get_storage_key( 'feedback-token' );
+
+		WordPressTestState::$transients[ $storage_key ] = [
+			'changed_sections' => [
+				'chat' => true,
+			],
+			'messages'         => [
+				'chat' => [
+					[
+						'tone'    => 'success',
+						'message' => 'Chat provider saved.',
+					],
+				],
+			],
+			'focus_section'    => 'chat',
+		];
+
+		$peeked = Feedback::read_settings_page_feedback( 'feedback-token', false );
+		$this->assertTrue( (bool) $peeked['changed_sections']['chat'] );
+		$this->assertSame( 'Chat provider saved.', $peeked['messages']['chat'][0]['message'] );
+		$this->assertArrayHasKey( $storage_key, WordPressTestState::$transients );
+
+		$consumed = Feedback::read_settings_page_feedback( 'feedback-token', true );
+		$this->assertSame( 'chat', $consumed['focus_section'] );
+		$this->assertArrayNotHasKey( $storage_key, WordPressTestState::$transients );
+	}
+
+	public function test_get_feedback_message_entries_accepts_legacy_single_message_shape(): void {
+		$entries = Feedback::get_feedback_message_entries(
+			[
+				'messages' => [
+					'chat' => [
+						'tone'    => 'warning',
+						'message' => 'Legacy warning.',
+					],
+				],
+			],
+			'chat'
+		);
+
+		$this->assertSame(
+			[
+				[
+					'tone'    => 'warning',
+					'message' => 'Legacy warning.',
+				],
+			],
+			$entries
+		);
+	}
+
+	public function test_record_section_feedback_message_appends_messages_for_the_same_section(): void {
+		$_POST = [
+			'option_page'                         => 'flavor_agent_settings',
+			'flavor_agent_settings_feedback_key' => 'feedback-token',
+		];
+
+		Feedback::record_section_feedback_message(
+			'chat',
+			'warning',
+			'First message.'
+		);
+		Feedback::record_section_feedback_message(
+			'chat',
+			'error',
+			'Second message.',
+			true
+		);
+
+		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
+
+		$this->assertSame(
+			[
+				[
+					'tone'    => 'warning',
+					'message' => 'First message.',
+				],
+				[
+					'tone'    => 'error',
+					'message' => 'Second message.',
+				],
+			],
+			$feedback['messages']['chat'] ?? []
+		);
+		$this->assertSame( 'chat', $feedback['focus_section'] ?? '' );
+	}
+
+	public function test_record_section_feedback_message_preserves_the_first_focus_section(): void {
+		$_POST = [
+			'option_page'                         => 'flavor_agent_settings',
+			'flavor_agent_settings_feedback_key' => 'focus-token',
+		];
+
+		Feedback::record_section_feedback_message(
+			'chat',
+			'error',
+			'Chat failed.',
+			true
+		);
+		Feedback::record_section_feedback_message(
+			'docs',
+			'error',
+			'Docs failed.',
+			true
+		);
+
+		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
+
+		$this->assertSame( 'chat', $feedback['focus_section'] ?? '' );
+	}
+
+	public function test_render_settings_save_summary_keeps_other_success_notices_when_one_section_has_errors(): void {
+		$_GET = [
+			'settings-updated' => 'true',
+		];
+
+		ob_start();
+		Page::render_settings_save_summary(
+			[
+				'changed_sections' => [
+					'chat' => true,
+					'docs' => true,
+				],
+				'messages'         => [
+					'chat' => [
+						[
+							'tone'    => 'error',
+							'message' => 'Azure validation failed.',
+						],
+					],
+				],
+			]
+		);
+		$output = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'Chat provider saved.', $output );
+		$this->assertStringContainsString( 'Docs grounding settings saved.', $output );
+	}
+
+	public function test_determine_default_open_group_defaults_to_chat_when_runtime_chat_is_not_ready(): void {
+		$state                        = $this->build_default_open_group_state();
+		$state['runtime_chat']        = [ 'configured' => false ];
+		$state['runtime_embedding']   = [ 'configured' => true ];
+		$state['qdrant_configured']   = true;
+		$state['docs_configured']     = true;
+		$state['prewarm_state']       = [ 'status' => 'failed' ];
+		$state['runtime_docs_grounding'] = [ 'status' => 'error' ];
+
+		$this->assertSame(
+			'chat',
+			State::determine_default_open_group( $state )
+		);
+	}
+
+	public function test_determine_default_open_group_prioritizes_patterns_when_pattern_backends_are_partial(): void {
+		$state                      = $this->build_default_open_group_state();
+		$state['qdrant_configured'] = true;
+
+		$this->assertSame(
+			'patterns',
+			State::determine_default_open_group( $state )
+		);
+	}
+
+	public function test_determine_default_open_group_prioritizes_docs_for_runtime_failures(): void {
+		$state                            = $this->build_default_open_group_state();
+		$state['docs_configured']         = true;
+		$state['runtime_docs_grounding']  = [ 'status' => 'retrying' ];
+
+		$this->assertSame(
+			'docs',
+			State::determine_default_open_group( $state )
+		);
+	}
+
+	public function test_determine_default_open_group_falls_back_to_chat_when_everything_is_healthy(): void {
+		$this->assertSame(
+			'chat',
+			State::determine_default_open_group( $this->build_default_open_group_state() )
+		);
+	}
+
+	public function test_resolve_azure_submission_values_invalidates_the_cache_when_the_request_payload_changes(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => '',
+			'flavor_agent_azure_openai_key'           => '',
+			'flavor_agent_azure_embedding_deployment' => 'old-embed',
+			'flavor_agent_azure_chat_deployment'      => 'old-chat',
+		];
+		$_POST                       = [
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => '',
+			'flavor_agent_azure_embedding_deployment' => 'first-embed',
+			'flavor_agent_azure_chat_deployment'      => 'first-chat',
+		];
+
+		$first_resolution = Validation::resolve_azure_submission_values();
+
+		$_POST['flavor_agent_azure_embedding_deployment'] = 'second-embed';
+		$_POST['flavor_agent_azure_chat_deployment']      = 'second-chat';
+
+		$second_resolution = Validation::resolve_azure_submission_values();
+
+		$this->assertSame( 'first-embed', $first_resolution['flavor_agent_azure_embedding_deployment'] );
+		$this->assertSame( 'first-chat', $first_resolution['flavor_agent_azure_chat_deployment'] );
+		$this->assertSame( 'second-embed', $second_resolution['flavor_agent_azure_embedding_deployment'] );
+		$this->assertSame( 'second-chat', $second_resolution['flavor_agent_azure_chat_deployment'] );
 	}
 
 	public function test_render_page_keeps_cloudflare_override_controls_available(): void {
@@ -1138,25 +1610,18 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_get_pattern_sync_reason_label_handles_collection_rebuild_reasons(): void {
-		$method = new ReflectionMethod( Settings::class, 'get_pattern_sync_reason_label' );
-		$method->setAccessible( true );
-
 		$this->assertSame(
 			'Pattern index collection is missing and needs a rebuild.',
-			$method->invoke( null, 'collection_missing' )
+			State::get_pattern_sync_reason_label( 'collection_missing' )
 		);
 		$this->assertSame(
 			'Pattern index collection vector size no longer matches the active embedding configuration.',
-			$method->invoke( null, 'collection_size_mismatch' )
+			State::get_pattern_sync_reason_label( 'collection_size_mismatch' )
 		);
 	}
 
 	public function test_get_docs_overview_status_reports_retrying_from_runtime_grounding_state(): void {
-		$method = new ReflectionMethod( Settings::class, 'get_docs_overview_status' );
-		$method->setAccessible( true );
-
-		$result = $method->invoke(
-			null,
+		$result = State::get_docs_overview_status(
 			[
 				'docs_configured'         => true,
 				'prewarm_state'           => [
@@ -1224,37 +1689,27 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Last error (async warm): Cloudflare timed out.', $output );
 	}
 
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_default_open_group_state(): array {
+		return [
+			'runtime_chat'           => [ 'configured' => true ],
+			'pattern_state'          => [
+				'last_error' => '',
+				'status'     => 'ok',
+			],
+			'patterns_ready'         => false,
+			'qdrant_configured'      => false,
+			'runtime_embedding'      => [ 'configured' => false ],
+			'docs_configured'        => false,
+			'prewarm_state'          => [ 'status' => 'ok' ],
+			'runtime_docs_grounding' => [ 'status' => 'ok' ],
+		];
+	}
+
 	private function reset_validation_state(): void {
-		$azure_state = new ReflectionProperty( Settings::class, 'azure_validation_state' );
-		$azure_state->setAccessible( true );
-		$azure_state->setValue( null, null );
-
-		$azure_reported = new ReflectionProperty( Settings::class, 'azure_validation_error_reported' );
-		$azure_reported->setAccessible( true );
-		$azure_reported->setValue( null, false );
-
-		$native_state = new ReflectionProperty( Settings::class, 'native_openai_validation_state' );
-		$native_state->setAccessible( true );
-		$native_state->setValue( null, null );
-
-		$native_reported = new ReflectionProperty( Settings::class, 'native_openai_validation_error_reported' );
-		$native_reported->setAccessible( true );
-		$native_reported->setValue( null, false );
-
-		$qdrant_state = new ReflectionProperty( Settings::class, 'qdrant_validation_state' );
-		$qdrant_state->setAccessible( true );
-		$qdrant_state->setValue( null, null );
-
-		$qdrant_reported = new ReflectionProperty( Settings::class, 'qdrant_validation_error_reported' );
-		$qdrant_reported->setAccessible( true );
-		$qdrant_reported->setValue( null, false );
-
-		$state = new ReflectionProperty( Settings::class, 'cloudflare_validation_state' );
-		$state->setAccessible( true );
-		$state->setValue( null, null );
-
-		$reported = new ReflectionProperty( Settings::class, 'cloudflare_validation_error_reported' );
-		$reported->setAccessible( true );
-		$reported->setValue( null, false );
+		Validation::reset();
+		Assets::reset();
 	}
 }

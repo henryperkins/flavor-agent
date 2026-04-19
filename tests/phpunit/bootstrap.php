@@ -1284,8 +1284,8 @@ namespace {
 	}
 
 	if ( ! function_exists( 'wp_json_encode' ) ) {
-		function wp_json_encode( $value ) {
-			return json_encode( $value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		function wp_json_encode( $value, int $flags = 0, int $depth = 512 ) {
+			return json_encode( $value, $flags | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE, $depth );
 		}
 	}
 
