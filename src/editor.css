@@ -54,6 +54,10 @@
     --wpds-color-bg-surface-neutral-weak,
     #f6f7f7
   );
+  --flavor-agent-editor-space-4: var(--wpds-dimension-gap-xs, 4px);
+  --flavor-agent-editor-space-8: var(--wpds-dimension-gap-sm, 8px);
+  --flavor-agent-editor-space-12: var(--wpds-dimension-gap-md, 12px);
+  --flavor-agent-editor-space-16: var(--wpds-dimension-gap-lg, 16px);
 }
 
 /* ---------------------------------------------------------------
@@ -63,8 +67,8 @@
 .flavor-agent-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--wpds-dimension-gap-sm, 8px);
-  padding-top: 4px;
+  gap: var(--flavor-agent-editor-space-16);
+  padding-top: var(--flavor-agent-editor-space-4);
   font-family: var(--flavor-agent-editor-font-sans);
 }
 
@@ -79,7 +83,10 @@
 
 .flavor-agent-panel__intro {
   position: relative;
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--flavor-agent-editor-space-8);
+  padding: var(--flavor-agent-editor-space-12);
   border-radius: var(--flavor-agent-editor-radius-lg);
   background: transparent;
 }
@@ -90,7 +97,7 @@
 }
 
 .flavor-agent-panel__eyebrow {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -109,8 +116,8 @@
 .flavor-agent-panel__composer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--flavor-agent-editor-space-12);
+  padding: var(--flavor-agent-editor-space-12);
   border-color: var(--flavor-agent-editor-stroke-subtle);
   background: var(--flavor-agent-editor-panel-bg);
 }
@@ -123,7 +130,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--flavor-agent-editor-space-8);
 }
 
 .flavor-agent-panel__composer-copy {
@@ -200,7 +207,10 @@
 }
 
 .flavor-agent-panel__group {
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--flavor-agent-editor-space-12);
+  padding: var(--flavor-agent-editor-space-12);
   border-radius: var(--flavor-agent-editor-radius-lg);
 }
 
@@ -214,8 +224,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--wpds-dimension-gap-sm, 8px);
-  margin-bottom: 10px;
+  gap: var(--flavor-agent-editor-space-8);
 }
 
 .flavor-agent-panel__group-title {
@@ -230,7 +239,7 @@
 .flavor-agent-panel__group-body {
   display: flex;
   flex-direction: column;
-  gap: var(--wpds-dimension-gap-sm, 8px);
+  gap: var(--flavor-agent-editor-space-8);
 }
 
 .flavor-agent-navigation-embedded {
@@ -720,7 +729,7 @@
 }
 
 .flavor-agent-content-recommender__document-title {
-  margin-top: 8px;
+  margin: 0;
   color: var(--flavor-agent-editor-text);
   font-family: var(--flavor-agent-editor-font-sans);
   font-size: 15px;
@@ -939,7 +948,10 @@
  * --------------------------------------------------------------- */
 
 .flavor-agent-card {
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--flavor-agent-editor-space-8);
+  padding: var(--flavor-agent-editor-space-12);
   margin-bottom: 0;
   background: var(--wpds-color-bg-surface-neutral-strong, #ffffff);
   border-radius: var(--flavor-agent-editor-radius-lg);
@@ -949,7 +961,7 @@
 
 .flavor-agent-card--template {
   margin-top: 0;
-  padding: 12px;
+  padding: var(--flavor-agent-editor-space-12);
 }
 
 .flavor-agent-card__header {
@@ -960,7 +972,7 @@
 }
 
 .flavor-agent-card__header--spaced {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .flavor-agent-card__lead {
@@ -986,7 +998,7 @@
 
 .flavor-agent-card__description {
   font-size: var(--wpds-font-size-sm, 12px);
-  margin: 0 0 10px;
+  margin: 0;
   line-height: 1.5;
   color: var(--flavor-agent-editor-muted);
 }
@@ -996,7 +1008,7 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--wpds-dimension-gap-sm, 8px);
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .flavor-agent-card__value {
