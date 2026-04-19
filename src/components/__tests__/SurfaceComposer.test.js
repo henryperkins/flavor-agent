@@ -207,4 +207,27 @@ describe( 'SurfaceComposer', () => {
 			'Press Cmd/Ctrl+Enter to submit.'
 		);
 	} );
+
+	test( 'keeps keyboard tab order logical from textarea to submit action', () => {
+		act( () => {
+			getRoot().render(
+				<SurfaceComposer
+					prompt=""
+					onPromptChange={ mockOnPromptChange }
+					onFetch={ mockOnFetch }
+				/>
+			);
+		} );
+
+		const textarea = getContainer().querySelector( 'textarea' );
+		const button = getContainer().querySelector( 'button' );
+
+		// Keyboard-only verification: focus should move through the DOM order.
+		expect( textarea.tabIndex ).toBeGreaterThanOrEqual( 0 );
+		expect( button.tabIndex ).toBeGreaterThanOrEqual( 0 );
+		expect(
+			textarea.compareDocumentPosition( button ) &
+				Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+	} );
 } );

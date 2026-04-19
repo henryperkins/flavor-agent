@@ -127,6 +127,12 @@ describe( 'ContentRecommender', () => {
 		expect( text ).toContain( 'Post' );
 		expect( text ).toContain( 'Working draft' );
 		expect( text ).toContain( 'Start a fresh draft' );
+		expect( text ).toContain(
+			'What should Flavor Agent do with this post?'
+		);
+		expect( text ).toContain(
+			'Works from a title, short brief, or rough outline.'
+		);
 		expect( text ).toContain( 'Generate Draft' );
 		expect( text ).not.toContain( 'Current document' );
 
