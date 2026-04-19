@@ -748,52 +748,70 @@
 
 .flavor-agent-content-recommender__modes {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   max-width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 2px;
+  border: 1px solid var(--flavor-agent-editor-stroke-subtle);
+  border-radius: var(--wpds-border-radius-pill, 999px);
+  background: var(--wpds-color-bg-surface-neutral, #f6f7f7);
 }
 
-.flavor-agent-content-recommender__mode-button.components-button {
+.flavor-agent-content-recommender__mode-option.components-button {
   min-height: 30px;
-  padding: 0 10px;
-  border-radius: var(--wpds-border-radius-md, 4px);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--wpds-border-radius-pill, 999px);
+  background: transparent;
+  color: var(--flavor-agent-editor-muted);
   box-shadow: none;
-  font-size: var(--wpds-font-size-xs, 11px);
+  font-size: var(--wpds-font-size-sm, 12px);
   font-weight: 600;
 }
 
-.flavor-agent-content-recommender__mode-button.components-button:hover:not(
+.flavor-agent-content-recommender__mode-option.components-button:hover:not(
     :disabled
   ),
-.flavor-agent-content-recommender__mode-button.components-button:focus:not(
+.flavor-agent-content-recommender__mode-option.components-button:focus:not(
     :disabled
   ) {
+  color: var(--flavor-agent-editor-text);
+  background: var(--wpds-color-bg-surface-neutral-strong, #fff);
   box-shadow: none;
 }
 
-.flavor-agent-content-recommender__mode-button.components-button.is-active,
-.flavor-agent-content-recommender__mode-button.components-button[aria-pressed="true"] {
-  border-color: var(--flavor-agent-editor-accent);
+.flavor-agent-content-recommender__mode-option.components-button:active:not(
+    :disabled
+  ) {
+  color: var(--flavor-agent-editor-text);
+  background: var(--wpds-color-bg-surface-neutral-subtle, #eceff1);
+}
+
+.flavor-agent-content-recommender__mode-option.components-button.is-active,
+.flavor-agent-content-recommender__mode-option.components-button[aria-pressed="true"],
+.flavor-agent-content-recommender__mode-option.components-button[aria-checked="true"] {
+  border-color: transparent;
   background: var(--flavor-agent-editor-accent);
   color: #fff;
   box-shadow: none;
 }
 
-.flavor-agent-content-recommender__mode-button.components-button.is-active:hover:not(
+.flavor-agent-content-recommender__mode-option.components-button.is-active:hover:not(
     :disabled
   ),
-.flavor-agent-content-recommender__mode-button.components-button.is-active:focus:not(
+.flavor-agent-content-recommender__mode-option.components-button.is-active:focus:not(
     :disabled
   ),
-.flavor-agent-content-recommender__mode-button.components-button[aria-pressed="true"]:hover:not(
+.flavor-agent-content-recommender__mode-option.components-button[aria-pressed="true"]:hover:not(
     :disabled
   ),
-.flavor-agent-content-recommender__mode-button.components-button[aria-pressed="true"]:focus:not(
+.flavor-agent-content-recommender__mode-option.components-button[aria-pressed="true"]:focus:not(
+    :disabled
+  ),
+.flavor-agent-content-recommender__mode-option.components-button[aria-checked="true"]:hover:not(
+    :disabled
+  ),
+.flavor-agent-content-recommender__mode-option.components-button[aria-checked="true"]:focus:not(
     :disabled
   ) {
   border-color: var(--flavor-agent-editor-accent-strong);
