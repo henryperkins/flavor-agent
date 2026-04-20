@@ -32,7 +32,7 @@ If the option is missing or invalid, the provider defaults to `azure_openai`. Th
 
 `ChatClient::is_supported()` returns `true` if either tier is available. This is the gate for the `flavor-agent/recommend-block` ability.
 
-Template, template-part, navigation, Global Styles, and Style Book recommendations also use the selected provider. When the selected provider is connector-backed, `ResponsesClient::rank()` delegates to `wp_ai_client_prompt()->using_provider( $provider_id )`. Pattern recommendations remain direct-backend only because Flavor Agent still owns embedding generation and Qdrant indexing itself.
+Template, template-part, navigation, Global Styles, and Style Book recommendations also use the selected provider. When the selected provider is connector-backed, `ResponsesClient::rank()` delegates to `wp_ai_client_prompt()->using_provider( $provider_id )`. Pattern recommendations split the runtime: chat follows the selected-provider flow above, while embeddings stay direct-backend only because Flavor Agent still owns embedding generation and Qdrant indexing itself.
 
 ## Azure OpenAI Configuration
 
@@ -42,7 +42,7 @@ Requires all three options to be non-empty:
 |---|---|
 | `flavor_agent_azure_openai_endpoint` | Azure resource endpoint URL |
 | `flavor_agent_azure_openai_key` | API key |
-| `flavor_agent_azure_chat_deployment` | Chat deployment name |
+| `flavor_agent_azure_chat_deployment` | Responses deployment name |
 
 Embedding also requires `flavor_agent_azure_embedding_deployment`.
 
@@ -50,12 +50,12 @@ Authentication uses the `api-key` header.
 
 ## OpenAI Native Configuration
 
-Chat requires a non-empty API key and model. Embedding requires a non-empty API key and embedding model.
+Responses requests require a non-empty API key and model. Embedding requires a non-empty API key and embedding model.
 
 | Option | Purpose |
 |---|---|
 | `flavor_agent_openai_native_api_key` | Plugin-specific API key (highest priority) |
-| `flavor_agent_openai_native_chat_model` | Chat model name |
+| `flavor_agent_openai_native_chat_model` | Responses model name |
 | `flavor_agent_openai_native_embedding_model` | Embedding model name |
 
 ### API Key Fallback Chain
@@ -79,6 +79,14 @@ Connector-backed providers do not use the plugin's direct endpoint settings. Fla
 - requests are routed via `wp_ai_client_prompt()->using_provider( $provider_id )`
 - the active chat model is reported as `provider-managed`
 - embedding generation remains unavailable, so pattern recommendations still require `azure_openai` or `openai_native`
+
+### Worked Example: Connector-Backed Chat With Direct Embeddings
+
+- Selected provider: a connector-backed provider from `Settings > Connectors`
+- Block, template, template-part, navigation, Global Styles, and Style Book chat requests run through that connector when it is currently supported for text generation
+- Pattern recommendation chat can also use that connector-backed provider
+- Pattern recommendation embeddings still resolve through the direct-provider runtime, starting with the selected provider if it is direct and otherwise falling back across `azure_openai` and `openai_native`
+- If no direct embedding backend is configured, pattern recommendations stay unavailable even though the chat-only recommendation surfaces can still work
 
 ## Backend-to-Surface Map
 

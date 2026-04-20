@@ -23,7 +23,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Pattern recommendation ranking threshold and max results
 - Cloudflare AI Search max result count
 - Cloudflare AI Search override credentials for older installs or explicit custom-endpoint use
-- Guidelines: site context, copy guidelines, image guidelines, and additional guidelines
+- Guidelines: Site Context, Copy Guidelines, Image Guidelines, and Additional Guidelines
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
 ## Backend Gating Rules
@@ -70,8 +70,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Guardrails And Failure Modes
 
 - Block recommendations do not require plugin-managed chat credentials if the WordPress AI Client / Connectors path is available
-- Pattern recommendations fail closed when either the active direct provider or Qdrant is not configured
-- Connector-backed providers currently apply only to chat surfaces; pattern embeddings remain plugin-managed
+- Pattern recommendations fail closed when no direct embedding backend is configured or Qdrant is unavailable, even if the selected chat provider is connector-backed
+- Pattern recommendations can mix a connector-backed chat provider with direct-provider embeddings; embeddings remain plugin-managed
 - Cloudflare validation only accepts guidance sourced from `developer.wordpress.org`
 - Sync is admin-only and does not bypass pattern-index validation or locking rules
 
@@ -85,9 +85,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Key Implementation Files
 
 - `inc/Settings.php`
+- `inc/Admin/Settings/Registrar.php`
 - `inc/OpenAI/Provider.php`
 - `inc/AzureOpenAI/ConfigurationValidator.php`
 - `inc/Abilities/InfraAbilities.php`
+- `inc/Abilities/PatternAbilities.php`
 - `inc/Abilities/WordPressDocsAbilities.php`
 - `inc/Abilities/SurfaceCapabilities.php` — shared surface readiness checks; see `docs/reference/shared-internals.md`
 - `inc/Patterns/PatternIndex.php`

@@ -40,6 +40,50 @@ Implicit template insertions are invalid. If `placement` is omitted, the suggest
 
 `patternSuggestions` is an advisory summary derived from validated `insert_pattern` operations. It is not a fallback path that keeps otherwise non-executable template suggestions alive.
 
+### Minimal Valid Template Examples
+
+Assign an empty area to a template part:
+
+```json
+{
+  "type": "assign_template_part",
+  "slug": "header-minimal",
+  "area": "header"
+}
+```
+
+Replace an already assigned template part:
+
+```json
+{
+  "type": "replace_template_part",
+  "currentSlug": "header-default",
+  "slug": "header-minimal",
+  "area": "header"
+}
+```
+
+Insert a pattern at the beginning of the template:
+
+```json
+{
+  "type": "insert_pattern",
+  "patternName": "my-theme/hero",
+  "placement": "start"
+}
+```
+
+Insert a pattern relative to a known top-level block path:
+
+```json
+{
+  "type": "insert_pattern",
+  "patternName": "my-theme/cta",
+  "placement": "before_block_path",
+  "targetPath": [2]
+}
+```
+
 ### Anchor Validation
 
 Template insertions are only executable when the requested placement is present in the current editor-collected top-level anchor inventory.
@@ -92,6 +136,40 @@ Same four placements as template operations: `start`, `end`, `before_block_path`
 - `remove_block` requires the same target match and `remove_block` in `allowedOperations`
 - The server builds executable targets with per-block `allowedOperations` lists from the template-part's block tree before validation
 
+### Minimal Valid Template-Part Examples
+
+Insert a pattern after a concrete block path:
+
+```json
+{
+  "type": "insert_pattern",
+  "patternName": "my-theme/feature-grid",
+  "placement": "after_block_path",
+  "targetPath": [1]
+}
+```
+
+Replace a specific block with a pattern:
+
+```json
+{
+  "type": "replace_block_with_pattern",
+  "targetPath": [1, 0],
+  "expectedBlockName": "core/group",
+  "patternName": "my-theme/feature-grid"
+}
+```
+
+Remove a specific block:
+
+```json
+{
+  "type": "remove_block",
+  "targetPath": [3],
+  "expectedBlockName": "core/separator"
+}
+```
+
 ## Style Operations
 
 Defined in `inc/LLM/StylePrompt.php`. These operations target Global Styles or Style Book block styles.
@@ -120,6 +198,46 @@ Validated `set_styles` and `set_block_styles` operations are enriched with:
 
 - `valueType` — `preset` or `freeform`
 - `presetType`, `presetSlug`, `cssVar` — when the value resolves to a theme preset
+
+### Minimal Valid Style Examples
+
+Apply a theme variation before any overrides:
+
+```json
+{
+  "type": "set_theme_variation",
+  "variationIndex": 1,
+  "variationTitle": "Midnight"
+}
+```
+
+Set a Global Styles preset-backed value:
+
+```json
+{
+  "type": "set_styles",
+  "path": ["color", "background"],
+  "value": "var:preset|color|accent"
+}
+```
+
+Set a Style Book block-scoped value:
+
+```json
+{
+  "type": "set_block_styles",
+  "blockName": "core/paragraph",
+  "path": ["typography", "fontSize"],
+  "value": "var:preset|font-size|body"
+}
+```
+
+### Quick Invalid Examples
+
+- `insert_pattern` without `placement` is invalid; the client does not guess an insertion point
+- `before_block_path` and `after_block_path` are invalid without a non-empty numeric `targetPath`
+- `replace_block_with_pattern` and `remove_block` are invalid without `expectedBlockName`
+- `set_theme_variation` is invalid on `style-book` and must appear before any `set_styles` or `set_block_styles` overrides
 
 ## Primary Source Files
 

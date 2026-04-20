@@ -17,6 +17,8 @@ live_docs=(
 	"${repo_root}/docs/features/pattern-recommendations.md"
 	"${repo_root}/docs/features/settings-backends-and-sync.md"
 	"${repo_root}/docs/reference/abilities-and-routes.md"
+	"${repo_root}/docs/reference/provider-precedence.md"
+	"${repo_root}/docs/reference/activity-state-machine.md"
 )
 
 fail=0
@@ -25,7 +27,7 @@ for f in "${live_docs[@]}"; do
 	[[ -f "$f" ]] || { echo "Missing live doc: $f" >&2; fail=1; }
 done
 
-# Fixed-string search — pattern must NOT appear in the given files.
+# Fixed-string search -- pattern must NOT appear in the given files.
 check_absent() {
 	local description="$1"
 	local pattern="$2"
@@ -39,7 +41,7 @@ check_absent() {
 	fi
 }
 
-# Regex search — pattern MUST appear in the given files.
+# Regex search -- pattern MUST appear in the given files.
 check_present() {
 	local description="$1"
 	local pattern="$2"
@@ -100,6 +102,31 @@ check_present \
 	'pattern docs should mention both plugin settings and connectors for setup' \
 	'Settings > Flavor Agent.*Settings > Connectors' \
 	"${repo_root}/docs/features/pattern-recommendations.md"
+
+check_present \
+	'settings docs should cover Azure reasoning effort' \
+	'Reasoning Effort|reasoning effort' \
+	"${repo_root}/docs/features/settings-backends-and-sync.md"
+
+check_present \
+	'settings docs should cover pattern ranking controls' \
+	'Ranking Threshold|ranking threshold|Max Results|max results' \
+	"${repo_root}/docs/features/settings-backends-and-sync.md"
+
+check_present \
+	'settings docs should cover guidelines fields' \
+	'Site Context.*Copy Guidelines.*Image Guidelines.*Additional Guidelines' \
+	"${repo_root}/docs/features/settings-backends-and-sync.md"
+
+check_present \
+	'settings docs should describe the connector-chat plus direct-embeddings split for patterns' \
+	'connector-backed.*direct-provider runtime|direct-provider runtime.*connector-backed' \
+	"${repo_root}/docs/features/settings-backends-and-sync.md"
+
+check_present \
+	'activity state machine should reflect schema version 3' \
+	'Schema version 3' \
+	"${repo_root}/docs/reference/activity-state-machine.md"
 
 if [[ "${fail}" -ne 0 ]]; then
 	echo "Run the relevant doc update(s) and re-check the live docs." >&2

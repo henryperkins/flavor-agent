@@ -50,4 +50,6 @@ When a shipped surface changes, update:
 2. `docs/FEATURE_SURFACE_MATRIX.md`
 3. `docs/reference/abilities-and-routes.md` when the contract changed
 4. `docs/reference/recommendation-ui-consistency.md` when the interaction model, shared taxonomy, or intentional exceptions change
-5. `STATUS.md` if verified behavior changed
+5. `docs/reference/provider-precedence.md` when backend selection, fallback order, or connector-vs-direct ownership changes
+6. `docs/reference/activity-state-machine.md` when activity persistence, undo transitions, admin-audit status buckets, or schema/storage semantics change
+7. `STATUS.md` if verified behavior changed

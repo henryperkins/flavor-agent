@@ -583,3 +583,4 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/utils/recommendation-request-signature.js`
 - `src/store/executable-surface-runtime.js`
 - `inc/Support/RecommendationResolvedSignature.php`
+- `inc/Support/RecommendationReviewSignature.php`
