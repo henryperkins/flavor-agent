@@ -61,9 +61,9 @@ Read these documents in this order:
 7. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.
-8. `docs/2026-03-25-roadmap-aligned-execution-plan.md`
-   - Current forward plan.
-   - Use this for milestone order, file targets, acceptance tests, and roadmap alignment.
+8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md`
+   - Release-cycle research snapshots for upstream WordPress changes that matter to Flavor Agent.
+   - Use these for compatibility and migration context, not for the live product backlog.
 
 ## Doc Ownership
 
@@ -96,11 +96,10 @@ Each top-level doc has one job:
 6. `docs/flavor-agent-readme.md` answers:
    - How does the broader editor architecture fit together?
    - How do the surface docs fit into the repo-level implementation story?
-7. `docs/2026-03-25-roadmap-aligned-execution-plan.md` answers:
-   - What should we build next?
-   - In what order?
-   - In which files?
-   - With which tests?
+7. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md` answer:
+   - Which upstream WordPress 7.0 and Gutenberg changes matter to Flavor Agent?
+   - Which release-cycle notes are authoritative or merely supplemental?
+   - Which migration or tooling opportunities are worth tracking without treating them as shipped repo behavior?
 
 ## Update Contract
 
@@ -112,7 +111,7 @@ When changing the plugin:
 4. Update the matching file in `docs/features/` if a shipped surface behavior changes.
 5. Update the matching file in `docs/reference/` if an ability, route, permission, response contract, provider chain, operation vocabulary, or undo lifecycle changes.
 6. Update `docs/flavor-agent-readme.md` if the architecture-level editor flow or repo walkthrough changes.
-7. Update `docs/2026-03-25-roadmap-aligned-execution-plan.md` if milestone order, file targets, or acceptance gates materially change.
+7. Update the relevant WordPress reference snapshot (`docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, or `docs/wp7-migration-opportunities.md`) when upstream WordPress release-cycle research or migration guidance changes.
 8. Delete or rewrite stale planning docs instead of letting two forward-looking plans compete.
 
 ## Current Backbone
@@ -125,6 +124,6 @@ Right now the intended doc stack is:
 4. Per-surface deep dives: `docs/features/README.md`
 5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, provider-precedence, template-operations, activity-state-machine)
 6. Architecture companion: `docs/flavor-agent-readme.md`
-7. Way forward: `docs/2026-03-25-roadmap-aligned-execution-plan.md`
+7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md`
 
 If those seven docs stay aligned, the repo has a solid documentation backbone.

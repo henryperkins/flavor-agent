@@ -25,7 +25,7 @@ for f in "${live_docs[@]}"; do
 	[[ -f "$f" ]] || { echo "Missing live doc: $f" >&2; fail=1; }
 done
 
-# Fixed-string search — pattern must NOT appear in the given files.
+# Fixed-string search -- pattern must NOT appear in the given files.
 check_absent() {
 	local description="$1"
 	local pattern="$2"
@@ -39,7 +39,7 @@ check_absent() {
 	fi
 }
 
-# Regex search — pattern MUST appear in the given files.
+# Regex search -- pattern MUST appear in the given files.
 check_present() {
 	local description="$1"
 	local pattern="$2"

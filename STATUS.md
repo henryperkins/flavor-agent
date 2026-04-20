@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-18
+> Last updated: 2026-04-20
 
 ## Working
 
@@ -75,7 +75,7 @@
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - JS tooling now defaults to Node `24.x` with npm `11.x` via `.nvmrc`, and the repo's `engine-strict` gate now accepts both the latest-LTS Node `24.x` / npm `11.x` toolchain and the previously verified Node `20.x` / npm `10.x` toolchain.
 - Browser coverage is intentionally split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for refresh/drift-sensitive flows that Playground cannot hold open reliably. The default `npm run test:e2e` command now aggregates both harnesses, and the checked-in smoke suite now covers block, navigation, pattern, template, `wp_template_part`, and Global Styles surfaces. The remaining operational prerequisite is Docker on PATH for the WP 7.0 half.
-- WordPress `7.0` is still pre-release, and the cycle was extended on 2026-03-31 with a revised final release date still pending. The Docker-backed Site Editor harness now pins `wordpress:beta-7.0-RC2-php8.2-apache`, which matches the latest checked pre-release tag from Docker Hub on 2026-04-04; swap that override once the official stable image exists and Core publishes the final 7.0 timeline.
+- WordPress `7.0` is still pre-release. As of 2026-04-20, the official release page still says an updated schedule for the 7.0 final stretch will be published no later than April 22, 2026. The Docker-backed Site Editor harness currently pins `wordpress:beta-7.0-RC2-php8.2-apache`, which matched the latest checked pre-release tag from Docker Hub on 2026-04-04; swap that override once the official stable `7.0` image exists and Core publishes the revised final timeline.
 - The 2026-04-04 Phase 1 acceptance rerun exposed browser-harness regressions in both environments: Playground now fails before the post-editor title/input bootstrap and later misses expected pattern/template UI selectors, while the Docker-backed WP 7.0 RC2 harness boots but fails to find expected Global Styles and template/template-part panel controls. The non-browser acceptance checks remain green.
 - Full browser/manual regression QA for the recommendation-surface consistency pass is still open. Current verification covers source alignment, docs alignment, and targeted unit coverage, but not a complete editor walkthrough for stale-state disablement, content-restricted block behavior, or Styles-sidebar portal switching.
 - `recommend-navigation` now has a first-party inspector surface, plugin REST route, and checked-in browser smoke, and it is intentionally advisory-only through v1.0. There is still no validated navigation apply contract.
@@ -185,10 +185,7 @@
 - **`docs/reference/template-operations.md`** -- Template and template-part operation vocabulary, placement rules, and validation requirements
 - **`docs/reference/activity-state-machine.md`** -- Activity persistence, undo state transitions, pruning rules, and sync behavior
 - **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference, including style surfaces and the admin audit surface
-- **`docs/2026-03-25-roadmap-aligned-execution-plan.md`** -- Active forward plan aligned to WordPress 7.0, Gutenberg, and official AI plugin roadmaps
-- **`docs/2026-04-03-wordpress-direction-review.md`** -- Supplemental dated direction review incorporating the 2026-03-31 Core decision to extend the WordPress 7.0 cycle
-- **`docs/2026-04-03-three-phase-roadmap.md`** -- Supplemental dated three-phase roadmap translating the direction review into concrete execution phases, file targets, and acceptance checks
 - **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
-- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 / Gutenberg 22.8 stable plus 22.9 RC reference snapshot for compatibility and API research
+- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 and late-cycle Gutenberg reference snapshot for compatibility and API research
 - **`docs/wordpress-7.0-developer-docs-index.md`** -- Discovery snapshot of official WordPress 7.0 developer documentation sources
 - **`docs/wp7-migration-opportunities.md`** -- Point-in-time WordPress 7.0 migration assessment; useful for follow-up ideas, not the live backlog

@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-07
+> Last updated: 2026-04-20
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -15,9 +15,9 @@ Use these documents together:
 5. `docs/features/README.md` -- deep-dive user-flow documentation for each shipped surface
 6. `docs/reference/` -- canonical programmatic and shared-surface contract docs (abilities-and-routes, shared-internals, recommendation-ui-consistency, provider-precedence, template-operations, activity-state-machine)
 7. `docs/flavor-agent-readme.md` -- editor-flow and architecture companion
-8. `docs/2026-03-25-roadmap-aligned-execution-plan.md` -- active forward plan
+8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md` -- WordPress 7.0 release-cycle research snapshots and migration watch items
 
-Supplemental dated planning docs such as `docs/2026-04-03-wordpress-direction-review.md` and `docs/2026-04-03-three-phase-roadmap.md` are historical context, not the active plan of record.
+Historical planning docs referenced in older commits are not part of the current documentation backbone; use git history if that context is needed.
 
 ## What This Plugin Is
 
@@ -273,9 +273,9 @@ flavor-agent/
     FEATURE_SURFACE_MATRIX.md Feature surface and gating matrix
     flavor-agent-readme.md  Architecture and editor flow reference
     local-wordpress-ide.md  Local WordPress + devcontainer workflow
-    2026-03-25-roadmap-aligned-execution-plan.md Active forward plan
-    2026-04-03-wordpress-direction-review.md Supplemental dated direction review
-    2026-04-03-three-phase-roadmap.md Supplemental dated roadmap translation
+    wordpress-7.0-developer-docs-index.md Discovery snapshot of official WordPress 7.0 developer documentation sources
+    wordpress-7.0-gutenberg-22.8-reference.md WordPress 7.0 and Gutenberg late-cycle compatibility reference snapshot
+    wp7-migration-opportunities.md Point-in-time WordPress 7.0 migration assessment and follow-up opportunities
     features/
       README.md             Entry point for per-surface deep dives
       activity-and-audit.md
@@ -779,10 +779,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/reference/activity-state-machine.md`                         | Undo states, transitions, ordered undo, and pruning                                                        | **Current**                    |
 | `docs/flavor-agent-readme.md`                                      | Architecture details: editor flows, settings, style surfaces, pattern lifecycle, and admin audit          | **Current**                    |
 | `docs/local-wordpress-ide.md`                                      | Local Docker/devcontainer workflow and host setup                                                          | **Current**                    |
-| `docs/2026-03-25-roadmap-aligned-execution-plan.md`                | Active forward plan aligned to the current WordPress 7.0 and Gutenberg roadmap context                     | **Current**                    |
-| `docs/2026-04-03-wordpress-direction-review.md`                    | Supplemental dated direction review after the WordPress 7.0 schedule extension                              | **Supplemental context**       |
-| `docs/2026-04-03-three-phase-roadmap.md`                           | Supplemental dated three-phase execution framing derived from the direction review                           | **Supplemental context**       |
-| `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WP 7.0 plus Gutenberg 22.8 stable / 22.9 RC API changes, new features, deprecations, and plugin impact     | **Reference snapshot**         |
+| `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WordPress 7.0 and late-cycle Gutenberg API changes, new features, deprecations, and plugin impact snapshot | **Reference snapshot**         |
 | `docs/wordpress-7.0-developer-docs-index.md`                       | Discovery snapshot of official WordPress 7.0 developer documentation sources                               | **Reference snapshot**         |
 | `docs/wp7-migration-opportunities.md`                              | Point-in-time WordPress 7.0 migration assessment and follow-up opportunities                               | **Reference snapshot**         |
 | `docs/superpowers/specs/2026-03-17-pattern-badge-status-design.md` | Implemented design spec for pattern badge status surface                                                   | **Implemented reference spec** |

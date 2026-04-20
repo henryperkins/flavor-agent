@@ -1,11 +1,11 @@
 # WP 7.0 Migration Opportunities
 
 Generated: 2026-03-25
-Verified: 2026-03-27
+Verified: 2026-04-20
 
 > Status: point-in-time migration assessment, not the live backlog.
-> Verification basis: current source tree, targeted PHPUnit/JS coverage, and official WordPress 7.0 release-cycle docs/dev notes re-checked on 2026-03-27.
-> Use `docs/2026-03-25-roadmap-aligned-execution-plan.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `STATUS.md` for current priorities and shipped behavior.
+> Verification basis: current source tree, targeted doc and source review, and official WordPress 7.0 release-cycle docs/dev notes re-checked on 2026-04-20.
+> Use `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `STATUS.md` for current priorities and shipped behavior.
 
 ## Applied Changes
 
@@ -78,11 +78,41 @@ The plugin already has partial Connectors integration: `inc/OpenAI/Provider.php`
 
 Qdrant and Cloudflare AI Search should remain plugin-owned for now. The current Connectors screen is AI-provider-centric, so forcing non-provider infrastructure into it would add abstraction drift rather than reduce it.
 
+### Connector Ecosystem Growth (watch)
+
+The April 2026 roundup and the March 25, 2026 Make/AI community testing call show the Connectors ecosystem moving beyond the three initial official providers. OpenRouter, Ollama, and Mistral are now concrete examples of third-party providers registering with the WordPress AI Client and surfacing through the same connector model.
+
+For Flavor Agent, this is a documentation and compatibility watch item more than a code-migration requirement:
+
+- keep connector-backed chat support framed as a real first-class runtime path
+- avoid docs or UX copy that implies only OpenAI, Anthropic, and Google matter
+- keep embeddings, Qdrant, and Cloudflare AI Search explicitly plugin-owned
+
 ### Client-Side Abilities API (no immediate code change)
 
 WordPress 7.0 now ships `@wordpress/abilities` plus `@wordpress/core-abilities` for client-side ability registration, querying, and execution. Because Flavor Agent already registers its abilities in PHP with `meta.show_in_rest`, those abilities are now automatically hydrated into the admin-side `core/abilities` store when core loads `@wordpress/core-abilities`.
 
 No code change is required for the current first-party UI. The plugin can keep using feature-specific REST endpoints and its own `@wordpress/data` store for scoped permission checks, preview/apply flow, and undo. The new client-side store is mainly an additional integration surface for future admin-only tooling or browser-agent workflows.
+
+### Playground MCP Workflows (optional)
+
+WordPress Playground now has an official MCP server via the `@wp-playground/mcp` package. This creates a new upstream-supported path for agent-assisted local WordPress workflows:
+
+- file reads and writes inside a Playground site
+- direct PHP execution
+- browser navigation and request-driven checks
+
+For this repo, that is an optional contributor-workflow opportunity, not a runtime migration target. It may eventually belong in local-dev or agent-runbook docs, but it should not displace the current Docker and Playwright workflows unless the team chooses to standardize on it.
+
+### `@wordpress/build` Evaluation (tooling watch)
+
+The April 2, 2026 `@wordpress/build` article describes the new build tool as the longer-term engine under `@wordpress/scripts`, not as an immediate replacement requirement for every plugin repo.
+
+For Flavor Agent:
+
+- stay on `@wordpress/scripts` for now
+- watch future upstream releases for changes that alter generated asset registration or build conventions
+- only plan an explicit migration if the repo's current `wp-scripts` workflow stops matching upstream expectations or if a switch would clearly simplify this codebase
 
 ### Pattern Overrides for Custom Blocks (feature)
 
@@ -111,3 +141,4 @@ WP 7.0 defaults unsynced patterns and template parts to `contentOnly` mode. The 
 - **DataViews/DataForm** - no migration opportunity for the Settings page itself; the separate `Settings > AI Activity` admin surface already uses DataViews/DataForm
 - **PHP-only block registration** - plugin doesn't register blocks
 - **Real-time collaboration** - not relevant to AI recommendations
+- **Most April 2026 roundup UI bullets** - items like waveform visuals, hidden form inputs, or command-palette grouping do not currently change Flavor Agent contracts or compatibility posture
