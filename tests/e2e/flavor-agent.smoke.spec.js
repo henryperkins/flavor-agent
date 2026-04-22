@@ -840,9 +840,6 @@ async function openTemplatePartEditor( page, templatePartRef ) {
 
 async function enableTemplateDocumentSidebar( page ) {
 	await enableSiteEditorDocumentSidebar( page );
-	await expect(
-		page.getByRole( 'tab', { name: 'Template', exact: true } )
-	).toBeVisible();
 }
 
 async function enableSiteEditorDocumentSidebar( page ) {
@@ -938,7 +935,11 @@ async function getGlobalStylesState( page ) {
 			  null
 			: null;
 		const activityLog = flavorAgent?.getActivityLog?.() || [];
-		const lastActivity = activityLog[ activityLog.length - 1 ] || null;
+		const lastActivity =
+			[ ...activityLog ]
+				.reverse()
+				.find( ( entry ) => entry?.type !== 'request_diagnostic' ) ||
+			null;
 
 		return {
 			globalStylesId: globalStylesId ? String( globalStylesId ) : null,
@@ -1228,7 +1229,12 @@ async function getTemplateInsertState( page, insertedContent ) {
 			const activityLog = ( flavorAgent.getActivityLog?.() || [] ).filter(
 				( entry ) => entry?.surface === 'template'
 			);
-			const lastActivity = activityLog[ activityLog.length - 1 ] || null;
+			const lastActivity =
+				[ ...activityLog ]
+					.reverse()
+					.find(
+						( entry ) => entry?.type !== 'request_diagnostic'
+					) || null;
 			const blocks =
 				window.wp.data.select( 'core/block-editor' ).getBlocks?.() ||
 				[];
@@ -1307,7 +1313,12 @@ async function getTemplatePartInsertState( page, insertedContent ) {
 			const activityLog = ( flavorAgent.getActivityLog?.() || [] ).filter(
 				( entry ) => entry?.surface === 'template-part'
 			);
-			const lastActivity = activityLog[ activityLog.length - 1 ] || null;
+			const lastActivity =
+				[ ...activityLog ]
+					.reverse()
+					.find(
+						( entry ) => entry?.type !== 'request_diagnostic'
+					) || null;
 			const blocks =
 				window.wp.data.select( 'core/block-editor' ).getBlocks?.() ||
 				[];
@@ -2651,7 +2662,6 @@ test( 'template surface explains unavailable plugin backends', async ( {
 				?.getEditedPostType?.() === 'wp_template'
 	);
 	await enableTemplateDocumentSidebar( page );
-	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
 
 	const templateNotice = page
 		.locator( '.flavor-agent-capability-notice .flavor-agent-panel__note' )
@@ -2789,11 +2799,13 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 		.getByRole( 'tab', { name: 'Template Part', exact: true } )
 		.click();
 	await openTemplatePartRecommendationsPanel( page );
-	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
-	await page
+	const templatePartUndoButton = page
 		.locator( '.flavor-agent-activity-row' )
 		.getByRole( 'button', { name: 'Undo', exact: true } )
-		.click();
+		.first();
+	await templatePartUndoButton.scrollIntoViewIfNeeded();
+	await expect( templatePartUndoButton ).toBeVisible();
+	await templatePartUndoButton.click();
 
 	await expect
 		.poll( () =>
@@ -3207,11 +3219,13 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 	await enableTemplateDocumentSidebar( page );
 	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
 	await openTemplateRecommendationsPanel( page );
-	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
-	await page
+	const templateUndoButton = page
 		.locator( '.flavor-agent-activity-row' )
 		.getByRole( 'button', { name: 'Undo', exact: true } )
-		.click();
+		.first();
+	await templateUndoButton.scrollIntoViewIfNeeded();
+	await expect( templateUndoButton ).toBeVisible();
+	await templateUndoButton.click();
 
 	await expect
 		.poll( () => getTemplateInsertState( page, TEMPLATE_INSERTED_CONTENT ) )

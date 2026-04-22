@@ -138,9 +138,9 @@ final class AzureBackendValidationTest extends TestCase {
 
 	public function test_rank_uses_configured_azure_reasoning_effort(): void {
 		WordPressTestState::$options              = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+			'flavor_agent_azure_openai_endpoint'  => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'       => 'azure-key',
+			'flavor_agent_azure_chat_deployment'  => 'chat-deployment',
 			'flavor_agent_azure_reasoning_effort' => 'xhigh',
 		];
 		WordPressTestState::$remote_post_response = [
@@ -185,7 +185,7 @@ final class AzureBackendValidationTest extends TestCase {
 		];
 
 		$result = ResponsesClient::rank( 'system prompt', 'user prompt' );
-		$meta = Provider::active_chat_request_meta();
+		$meta   = Provider::active_chat_request_meta();
 
 		$this->assertSame( 'ranked output', $result );
 		$this->assertSame( 90, $meta['tokenUsage']['total'] ?? null );
@@ -244,8 +244,8 @@ final class AzureBackendValidationTest extends TestCase {
 	}
 
 	public function test_parse_retry_after_header_supports_http_dates(): void {
-		$now     = time();
-		$header  = gmdate( 'D, d M Y H:i:s \G\M\T', $now + 7 );
+		$now    = time();
+		$header = gmdate( 'D, d M Y H:i:s \G\M\T', $now + 7 );
 		$parsed = BaseHttpClient::parse_retry_after_header( $header, $now );
 
 		$this->assertSame( 7, $parsed );
@@ -323,7 +323,7 @@ final class AzureBackendValidationTest extends TestCase {
 
 	public function test_rank_uses_saved_reasoning_effort_for_selected_connector_providers(): void {
 		WordPressTestState::$options = [
-			'flavor_agent_openai_provider'         => 'anthropic',
+			'flavor_agent_openai_provider'        => 'anthropic',
 			'flavor_agent_azure_reasoning_effort' => 'xhigh',
 		];
 
@@ -398,7 +398,7 @@ final class AzureBackendValidationTest extends TestCase {
 	}
 
 	public function test_qdrant_search_returns_a_retryable_rate_limit_error(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options              = [
 			'flavor_agent_qdrant_url' => 'https://example.qdrant.io',
 			'flavor_agent_qdrant_key' => 'qdrant-key',
 		];
@@ -427,7 +427,7 @@ final class AzureBackendValidationTest extends TestCase {
 	}
 
 	public function test_embed_batch_rejects_mixed_dimensions(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options              = [
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
@@ -586,7 +586,7 @@ final class AzureBackendValidationTest extends TestCase {
 	}
 
 	public function test_rank_uses_saved_reasoning_effort_for_wordpress_ai_client_fallback(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options                        = [
 			'flavor_agent_azure_reasoning_effort' => 'high',
 		];
 		WordPressTestState::$ai_client_supported            = true;

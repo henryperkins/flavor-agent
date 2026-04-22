@@ -185,10 +185,7 @@ describe( 'navigation request state', () => {
 			)
 		).toBe( 'idle' );
 		expect(
-			selectors.getNavigationReviewStaleReason(
-				staleCompletion,
-				'nav-1'
-			)
+			selectors.getNavigationReviewStaleReason( staleCompletion, 'nav-1' )
 		).toBeNull();
 	} );
 } );

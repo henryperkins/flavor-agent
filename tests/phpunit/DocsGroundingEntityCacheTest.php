@@ -612,8 +612,8 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 	}
 
 	public function test_block_docs_query_and_family_context_include_parent_sibling_and_ancestor_scope_summary(): void {
-		$prompt          = 'Simplify navigation labels.';
-		$context_a       = [
+		$prompt    = 'Simplify navigation labels.';
+		$context_a = [
 			'block'                  => [
 				'name'               => 'core/navigation',
 				'inspectorPanels'    => [
@@ -664,7 +664,7 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 				],
 			],
 		];
-		$context_b       = [
+		$context_b = [
 			'block'                  => [
 				'name'               => 'core/navigation',
 				'inspectorPanels'    => [
@@ -706,22 +706,22 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 				],
 			],
 		];
-		$query_a         = $this->invoke_private_string_method(
+		$query_a   = $this->invoke_private_string_method(
 			BlockAbilities::class,
 			'build_wordpress_docs_query',
 			[ $context_a, $prompt ]
 		);
-		$query_b         = $this->invoke_private_string_method(
+		$query_b   = $this->invoke_private_string_method(
 			BlockAbilities::class,
 			'build_wordpress_docs_query',
 			[ $context_b, $prompt ]
 		);
-		$family_a        = $this->invoke_private_array_method(
+		$family_a  = $this->invoke_private_array_method(
 			BlockAbilities::class,
 			'build_wordpress_docs_family_context',
 			[ $context_a ]
 		);
-		$family_b        = $this->invoke_private_array_method(
+		$family_b  = $this->invoke_private_array_method(
 			BlockAbilities::class,
 			'build_wordpress_docs_family_context',
 			[ $context_b ]

@@ -9,11 +9,15 @@ import {
 } from './activity-history';
 
 export function getScopeKey( scope = null ) {
-	return typeof scope?.scopeKey === 'string' && scope.scopeKey.trim()
-		? scope.scopeKey.trim()
-		: typeof scope?.key === 'string' && scope.key.trim()
-		? scope.key.trim()
-		: null;
+	if ( typeof scope?.scopeKey === 'string' && scope.scopeKey.trim() ) {
+		return scope.scopeKey.trim();
+	}
+
+	if ( typeof scope?.key === 'string' && scope.key.trim() ) {
+		return scope.key.trim();
+	}
+
+	return null;
 }
 
 export function buildActivityDocument( scope ) {
@@ -539,10 +543,16 @@ export function createLoadActivitySessionAction( {
 					);
 				}
 
-				syncActivitySession( dispatch, select, scope, setActivitySession, {
-					allowUnsavedMigration:
-						options?.allowUnsavedMigration === true,
-				} );
+				syncActivitySession(
+					dispatch,
+					select,
+					scope,
+					setActivitySession,
+					{
+						allowUnsavedMigration:
+							options?.allowUnsavedMigration === true,
+					}
+				);
 
 				return;
 			}
@@ -557,7 +567,8 @@ export function createLoadActivitySessionAction( {
 						options?.allowUnsavedMigration === true,
 				}
 			);
-			const pendingEntries = workingEntries.filter( isLocalActivityEntry );
+			const pendingEntries =
+				workingEntries.filter( isLocalActivityEntry );
 			const { persistedEntries, failedEntries, terminalEntries } =
 				await persistPendingActivityEntries( pendingEntries );
 			const terminalEntryIds = new Set(
@@ -565,9 +576,8 @@ export function createLoadActivitySessionAction( {
 			);
 
 			try {
-				const serverEntries = await fetchServerActivityEntries(
-					nextScopeKey
-				);
+				const serverEntries =
+					await fetchServerActivityEntries( nextScopeKey );
 				const mergedEntries = mergeActivityEntries(
 					serverEntries,
 					persistedEntries,

@@ -145,8 +145,8 @@ final class NavigationAbilitiesTest extends TestCase {
 		$baseline_signature = $method->invoke(
 			null,
 			[
-				'location'       => 'header',
-				'overlayContext' => [
+				'location'             => 'header',
+				'overlayContext'       => [
 					'usesOverlay'                  => true,
 					'overlayMode'                  => 'mobile',
 					'hasDedicatedOverlayParts'     => true,
@@ -173,8 +173,8 @@ final class NavigationAbilitiesTest extends TestCase {
 		$changed_signature  = $method->invoke(
 			null,
 			[
-				'location'       => 'header',
-				'overlayContext' => [
+				'location'             => 'header',
+				'overlayContext'       => [
 					'usesOverlay'                  => true,
 					'overlayMode'                  => 'mobile',
 					'hasDedicatedOverlayParts'     => true,

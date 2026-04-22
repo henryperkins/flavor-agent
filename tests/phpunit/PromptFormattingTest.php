@@ -56,14 +56,17 @@ final class PromptFormattingTest extends TestCase {
 					'block'    => 'core/template-part',
 					'children' => [
 						[
-							'block'       => 'core/group',
-							'childCount'  => 8,
-							'children'    => [
+							'block'        => 'core/group',
+							'childCount'   => 8,
+							'children'     => [
 								[
 									'block'    => 'core/cover',
 									'role'     => 'header-cover',
 									'children' => [
-										[ 'block' => 'core/heading', 'isSelected' => true ],
+										[
+											'block'      => 'core/heading',
+											'isSelected' => true,
+										],
 										[ 'block' => 'core/paragraph' ],
 										[ 'block' => 'core/buttons' ],
 									],
@@ -101,7 +104,10 @@ final class PromptFormattingTest extends TestCase {
 					'childCount'   => 8,
 					'moreChildren' => 5,
 					'children'     => [
-						[ 'block' => 'core/paragraph', 'isSelected' => true ],
+						[
+							'block'      => 'core/paragraph',
+							'isSelected' => true,
+						],
 					],
 				],
 			],
@@ -143,21 +149,21 @@ final class PromptFormattingTest extends TestCase {
 
 	public function test_build_user_formats_sibling_summaries_with_hints(): void {
 		$context = [
-			'block'                   => [ 'name' => 'core/button' ],
-			'siblingSummariesBefore'  => [
+			'block'                  => [ 'name' => 'core/button' ],
+			'siblingSummariesBefore' => [
 				[
 					'block'       => 'core/paragraph',
 					'role'        => 'lede',
 					'visualHints' => [ 'textAlign' => 'center' ],
 				],
 			],
-			'siblingSummariesAfter'   => [
+			'siblingSummariesAfter'  => [
 				[
 					'block'       => 'core/image',
 					'visualHints' => [ 'align' => 'wide' ],
 				],
 			],
-			'themeTokens'             => [],
+			'themeTokens'            => [],
 		];
 
 		$prompt = Prompt::build_user( $context );
@@ -182,8 +188,8 @@ final class PromptFormattingTest extends TestCase {
 
 	public function test_build_user_omits_parent_section_when_parent_context_absent(): void {
 		$context = [
-			'block'        => [ 'name' => 'core/button' ],
-			'themeTokens'  => [],
+			'block'       => [ 'name' => 'core/button' ],
+			'themeTokens' => [],
 		];
 
 		$prompt = Prompt::build_user( $context );
@@ -218,25 +224,34 @@ final class PromptFormattingTest extends TestCase {
 					'visualHints' => [ 'align' => 'wide' ],
 				],
 			],
-			'parentContext'           => [
+			'parentContext'          => [
 				'block'       => 'core/group',
 				'role'        => 'content-area',
 				'childCount'  => 3,
 				'visualHints' => [ 'backgroundColor' => 'base' ],
 			],
 			'structuralAncestors'    => [
-				[ 'block' => 'core/group', 'role' => 'content-area' ],
+				[
+					'block' => 'core/group',
+					'role'  => 'content-area',
+				],
 			],
 			'structuralBranch'       => [
 				[
 					'block'    => 'core/group',
 					'children' => [
-						[ 'block' => 'core/paragraph', 'isSelected' => true ],
+						[
+							'block'      => 'core/paragraph',
+							'isSelected' => true,
+						],
 					],
 				],
 			],
 			'themeTokens'            => [
-				'colors' => [ 'base' => '#fff', 'contrast' => '#000' ],
+				'colors' => [
+					'base'     => '#fff',
+					'contrast' => '#000',
+				],
 			],
 		];
 

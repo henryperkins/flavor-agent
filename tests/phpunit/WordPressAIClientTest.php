@@ -69,7 +69,7 @@ final class WordPressAIClientTest extends TestCase {
 	}
 
 	public function test_chat_locks_the_prompt_to_the_requested_provider(): void {
-		WordPressTestState::$ai_client_provider_support    = [
+		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
 		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
@@ -100,7 +100,7 @@ final class WordPressAIClientTest extends TestCase {
 	}
 
 	public function test_chat_records_token_and_latency_metrics_when_the_ai_client_returns_structured_metadata(): void {
-		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = [
 			'text'       => '{"explanation":"Use the accent color."}',
 			'tokenUsage' => [
@@ -115,7 +115,7 @@ final class WordPressAIClientTest extends TestCase {
 			'WordPress Gutenberg block styling and configuration assistant.',
 			'Recommend a better block.'
 		);
-		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
 
 		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
 		$this->assertSame( 42, $meta['tokenUsage']['total'] ?? null );

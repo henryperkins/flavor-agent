@@ -46,6 +46,18 @@ Artifacts (all under `output/verify/`, which is gitignored):
 
 The final stdout line is `VERIFY_RESULT={...}` (one-line JSON with `status`, `summaryPath`, `counts`) so agents can parse the outcome without reading the full report. Exit codes: `0` pass, `1` any failure or implicitly skipped step (required tool missing), `2` argument error. A step marked `skipped` via `--only`/`--skip`/`--skip-e2e` never fails the run; a step skipped because its required tool is unavailable flips the overall status to `incomplete` (exit `1`). `lint-plugin` specifically requires `bash`, `wp`, and a resolvable WordPress root for `WP_PLUGIN_CHECK_PATH`; use `--skip=lint-plugin` when those prerequisites are intentionally absent.
 
+### Cross-surface validation gates
+
+For any change that touches more than one recommendation surface or any shared subsystem such as REST or ability contracts, provider routing, freshness signatures, activity and undo, shared UI taxonomy, or operator and admin paths, follow `docs/reference/cross-surface-validation-gates.md`.
+
+Treat the gates there as additive release stops:
+
+- run the nearest targeted PHPUnit and JS suites
+- run `node scripts/verify.js --skip-e2e` and inspect `output/verify/summary.json`
+- run `npm run check:docs` when contracts, surfacing rules, operator paths, or contributor docs changed
+- run the matching Playwright harnesses (`playground` for post-editor, block, pattern, and navigation flows; `wp70` for Site Editor template, template-part, Global Styles, and Style Book flows)
+- if a browser harness is known-red or unavailable, record that blocker or an explicit waiver instead of silently skipping it
+
 ## Architecture
 
 **PHP backend** (`inc/`, PSR-4 namespace `FlavorAgent\`):
@@ -182,6 +194,7 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/README.md` — documentation backbone: reading order, ownership, and update contract
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
+- `docs/reference/cross-surface-validation-gates.md` — additive release gates and required evidence for multi-surface or shared-subsystem changes
 - `docs/features/README.md` — entry point for detailed per-surface docs
 - `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
 - `docs/reference/shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers

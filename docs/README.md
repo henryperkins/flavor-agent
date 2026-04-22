@@ -54,6 +54,7 @@ Read these documents in this order:
    - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
+   - `cross-surface-validation-gates.md` — additive hard-stop validation rules and release evidence for multi-surface or shared-subsystem changes.
    - `pattern-recommendation-debugging.md` — operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage.
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `template-operations.md` — operation types, placements, and validation rules per surface.
@@ -89,6 +90,7 @@ Each top-level doc has one job:
    - `abilities-and-routes.md` — Which ability or route owns a contract? Which permissions and backend gates apply?
    - `shared-internals.md` — Which cross-cutting store utilities, shared UI components, and context helpers do the surfaces share?
    - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
+   - `cross-surface-validation-gates.md` — Which release gates does a multi-surface or shared-subsystem change trigger, and what evidence is required before sign-off?
    - `pattern-recommendation-debugging.md` — How do you debug sync, Qdrant collection health, raw retrieval, and reranking failures?
    - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
@@ -109,7 +111,7 @@ When changing the plugin:
 2. Update `docs/SOURCE_OF_TRUTH.md` if the product definition, inventory, guardrails, or backlog framing changes.
 3. Update `docs/FEATURE_SURFACE_MATRIX.md` if a surface location, gating rule, or apply/undo contract changes.
 4. Update the matching file in `docs/features/` if a shipped surface behavior changes.
-5. Update the matching file in `docs/reference/` if an ability, route, permission, response contract, provider chain, operation vocabulary, or undo lifecycle changes.
+5. Update the matching file in `docs/reference/` if an ability, route, permission, response contract, provider chain, operation vocabulary, undo lifecycle, or release-validation rule changes.
 6. Update `docs/flavor-agent-readme.md` if the architecture-level editor flow or repo walkthrough changes.
 7. Update the relevant WordPress reference snapshot (`docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, or `docs/wp7-migration-opportunities.md`) when upstream WordPress release-cycle research or migration guidance changes.
 8. Delete or rewrite stale planning docs instead of letting two forward-looking plans compete.
@@ -122,7 +124,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, provider-precedence, template-operations, activity-state-machine)
+5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, provider-precedence, template-operations, activity-state-machine)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md`
 

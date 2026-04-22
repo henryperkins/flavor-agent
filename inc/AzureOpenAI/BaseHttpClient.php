@@ -43,9 +43,9 @@ abstract class BaseHttpClient {
 			);
 		}
 
-		$status = wp_remote_retrieve_response_code( $response );
-		$raw_body = wp_remote_retrieve_body( $response );
-		$data     = json_decode( $raw_body, true );
+		$status           = wp_remote_retrieve_response_code( $response );
+		$raw_body         = wp_remote_retrieve_body( $response );
+		$data             = json_decode( $raw_body, true );
 		$response_headers = self::extract_response_headers( $response );
 
 		if ( 429 === $status ) {
@@ -113,10 +113,10 @@ abstract class BaseHttpClient {
 			$message,
 			array_merge(
 				[
-				'status'          => 429,
-				'retryable'       => true,
-				'retry_after'     => $retry_after,
-				'retry_after_raw' => false !== $header ? trim( $header ) : null,
+					'status'          => 429,
+					'retryable'       => true,
+					'retry_after'     => $retry_after,
+					'retry_after_raw' => false !== $header ? trim( $header ) : null,
 				],
 				$extra_data
 			)

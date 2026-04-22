@@ -156,7 +156,13 @@ function findStructuralIdentity( annotatedTree, clientId, identityIndex ) {
 	return path?.[ path.length - 1 ]?.structuralIdentity || {};
 }
 
-function getSiblingSummaries( clientId, direction, count, annotatedTree, identityIndex ) {
+function getSiblingSummaries(
+	clientId,
+	direction,
+	count,
+	annotatedTree,
+	identityIndex
+) {
 	const editor = select( blockEditorStore );
 	const rootId = editor.getBlockRootClientId( clientId );
 	const order = editor.getBlockOrder( rootId || '' );
@@ -183,7 +189,11 @@ function getSiblingSummaries( clientId, direction, count, annotatedTree, identit
 				attributes,
 				BASE_VISUAL_HINT_PATHS
 			);
-			const identity = findStructuralIdentity( annotatedTree, id, identityIndex );
+			const identity = findStructuralIdentity(
+				annotatedTree,
+				id,
+				identityIndex
+			);
 			const summary = {
 				block: blockName,
 			};
@@ -290,7 +300,11 @@ function getParentContext( clientId, annotatedTree, identityIndex ) {
 		PARENT_VISUAL_HINT_PATHS
 	);
 	const parentType = blocks.getBlockType?.( parentBlockName );
-	const identity = findStructuralIdentity( annotatedTree, parentId, identityIndex );
+	const identity = findStructuralIdentity(
+		annotatedTree,
+		parentId,
+		identityIndex
+	);
 	const parentContext = {
 		block: parentBlockName,
 		title: parentType?.title || '',
@@ -394,9 +408,8 @@ function fingerprintTree( tree ) {
 		return ( Array.isArray( nodes ) ? nodes : [] ).map( ( node ) => ( {
 			clientId: node?.clientId || '',
 			name: node?.name || '',
-			identityAttributes: getStructuralIdentityFingerprintAttributes(
-				node
-			),
+			identityAttributes:
+				getStructuralIdentityFingerprintAttributes( node ),
 			innerBlocks: toIdentityInputs( node?.innerBlocks || [] ),
 		} ) );
 	}
@@ -511,7 +524,11 @@ export function collectBlockContext( clientId ) {
 		: [];
 
 	const { summary: tokenSummary } = getCachedThemeTokens();
-	const parentContext = getParentContext( clientId, annotatedTree, identityIndex );
+	const parentContext = getParentContext(
+		clientId,
+		annotatedTree,
+		identityIndex
+	);
 
 	return {
 		block: {

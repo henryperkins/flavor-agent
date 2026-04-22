@@ -34,10 +34,6 @@ import {
 } from './activity-session';
 import {
 	buildBlockActivityEntry,
-	buildGlobalStylesActivityEntryFromStore,
-	buildStyleBookActivityEntryFromStore,
-	buildTemplateActivityEntryFromStore,
-	buildTemplatePartActivityEntryFromStore,
 	createUndoActivityAction,
 	findBlockPath,
 	getNextLastUndoneActivityId,
@@ -56,7 +52,6 @@ import {
 import {
 	attributeSnapshotsMatch,
 	buildSafeAttributeUpdates,
-	buildUndoAttributeUpdates,
 	buildBlockRecommendationDiagnostics,
 	getBlockSuggestionExecutionInfo,
 	sanitizeRecommendationsForContext,

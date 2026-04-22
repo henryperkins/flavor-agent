@@ -230,9 +230,8 @@ describe( 'SurfaceComposer', () => {
 		// Keyboard-only verification: focus should move through the DOM order.
 		expect( textarea.tabIndex ).toBeGreaterThanOrEqual( 0 );
 		expect( button.tabIndex ).toBeGreaterThanOrEqual( 0 );
-		expect(
-			textarea.compareDocumentPosition( button ) &
-				Node.DOCUMENT_POSITION_FOLLOWING
-		).toBeTruthy();
+		expect( textarea.compareDocumentPosition( button ) ).toBe(
+			window.Node.DOCUMENT_POSITION_FOLLOWING
+		);
 	} );
 } );

@@ -212,8 +212,8 @@ final class Provider {
 	 */
 	public static function chat_configuration( ?string $provider = null, array $overrides = [] ): array {
 		if ( null === $provider ) {
-			$config = self::runtime_chat_configuration( $overrides );
-			self::$last_runtime_chat_configuration = $config;
+			$config                                     = self::runtime_chat_configuration( $overrides );
+			self::$last_runtime_chat_configuration      = $config;
 			self::$has_fresh_runtime_chat_configuration = true;
 
 			return $config;
@@ -362,29 +362,29 @@ final class Provider {
 	 * }
 	 */
 	public static function active_chat_request_meta(): array {
-		$selected_provider = self::get();
-		$config            = (
+		$selected_provider                          = self::get();
+		$config                                     = (
 			self::$has_fresh_runtime_chat_configuration
 			&& is_array( self::$last_runtime_chat_configuration )
 		)
 			? self::$last_runtime_chat_configuration
 			: self::chat_configuration();
 		self::$has_fresh_runtime_chat_configuration = false;
-		$provider          = self::normalize_provider_for_request_meta(
+		$provider                                   = self::normalize_provider_for_request_meta(
 			(string) ( $config['provider'] ?? $selected_provider )
 		);
-		$provider_label    = self::provider_label_for_request_meta( $provider );
-		$connector_meta    = self::connector_meta_for_request_meta( $provider );
-		$metrics           = self::active_chat_metrics();
-		$diagnostics       = self::active_chat_diagnostics();
-		$backend_label     = trim( (string) ( $config['label'] ?? $provider_label ) );
-		$model             = trim( (string) ( $config['model'] ?? '' ) );
-		$used_fallback     = $provider !== $selected_provider;
-		$owner             = 'flavor_agent';
-		$owner_label       = 'Settings > Flavor Agent';
-		$path_label        = 'Flavor Agent chat backend';
-		$credential_source = 'plugin_settings';
-		$credential_label  = 'Settings > Flavor Agent';
+		$provider_label                             = self::provider_label_for_request_meta( $provider );
+		$connector_meta                             = self::connector_meta_for_request_meta( $provider );
+		$metrics                                    = self::active_chat_metrics();
+		$diagnostics                                = self::active_chat_diagnostics();
+		$backend_label                              = trim( (string) ( $config['label'] ?? $provider_label ) );
+		$model                                      = trim( (string) ( $config['model'] ?? '' ) );
+		$used_fallback                              = $provider !== $selected_provider;
+		$owner                                      = 'flavor_agent';
+		$owner_label                                = 'Settings > Flavor Agent';
+		$path_label                                 = 'Flavor Agent chat backend';
+		$credential_source                          = 'plugin_settings';
+		$credential_label                           = 'Settings > Flavor Agent';
 
 		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
 			$owner             = 'connectors';
@@ -469,7 +469,7 @@ final class Provider {
 	public static function record_runtime_chat_metrics( ?array $metrics ): void {
 		$normalized = self::normalize_runtime_chat_metrics( $metrics );
 
-		self::$last_runtime_chat_metrics = null !== $normalized
+		self::$last_runtime_chat_metrics      = null !== $normalized
 			? $normalized
 			: null;
 		self::$has_fresh_runtime_chat_metrics = true;
@@ -481,7 +481,7 @@ final class Provider {
 	public static function record_runtime_chat_diagnostics( ?array $diagnostics ): void {
 		$normalized = self::normalize_runtime_chat_diagnostics( $diagnostics );
 
-		self::$last_runtime_chat_diagnostics = null !== $normalized
+		self::$last_runtime_chat_diagnostics      = null !== $normalized
 			? $normalized
 			: null;
 		self::$has_fresh_runtime_chat_diagnostics = true;
@@ -618,8 +618,8 @@ final class Provider {
 		$token_usage = [];
 
 		if ( is_array( $metrics['tokenUsage'] ?? null ) ) {
-			$total = self::normalize_runtime_metric_int( $metrics['tokenUsage']['total'] ?? null );
-			$input = self::normalize_runtime_metric_int( $metrics['tokenUsage']['input'] ?? null );
+			$total  = self::normalize_runtime_metric_int( $metrics['tokenUsage']['total'] ?? null );
+			$input  = self::normalize_runtime_metric_int( $metrics['tokenUsage']['input'] ?? null );
 			$output = self::normalize_runtime_metric_int( $metrics['tokenUsage']['output'] ?? null );
 
 			if ( null !== $total ) {

@@ -1411,12 +1411,12 @@ final class TemplateAbilities {
 	private static function build_template_review_context_signature( array $context ): string {
 		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
 		$payload      = [
-			'template'      => self::normalize_template_review_identity( $context ),
-			'allowedAreas'  => self::normalize_template_review_allowed_areas(
+			'template'       => self::normalize_template_review_identity( $context ),
+			'allowedAreas'   => self::normalize_template_review_allowed_areas(
 				is_array( $context['allowedAreas'] ?? null ) ? $context['allowedAreas'] : []
 			),
 			'availableParts' => self::normalize_template_review_available_parts( $context ),
-			'patterns' => self::normalize_template_review_patterns(
+			'patterns'       => self::normalize_template_review_patterns(
 				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
 				self::REVIEW_TEMPLATE_PATTERN_LIMIT
 			),
@@ -1439,7 +1439,7 @@ final class TemplateAbilities {
 		// Review freshness hashes only server-owned context so docs cache churn does not mark stored results stale.
 		$payload      = [
 			'templatePart' => self::normalize_template_part_review_identity( $context ),
-			'patterns' => self::normalize_template_review_patterns(
+			'patterns'     => self::normalize_template_review_patterns(
 				is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [],
 				self::REVIEW_TEMPLATE_PART_PATTERN_LIMIT
 			),

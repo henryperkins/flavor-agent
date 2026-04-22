@@ -96,26 +96,26 @@ final class TemplatePromptTest extends TestCase {
 	public function test_build_user_includes_enriched_theme_tokens(): void {
 		$prompt = TemplatePrompt::build_user(
 			[
-				'templateType'  => 'single',
-				'title'         => 'Single Post',
-				'assignedParts' => [],
-				'emptyAreas'    => [],
+				'templateType'   => 'single',
+				'title'          => 'Single Post',
+				'assignedParts'  => [],
+				'emptyAreas'     => [],
 				'availableParts' => [],
-				'patterns'      => [],
-				'themeTokens'   => [
-					'colors'         => [ 'primary: #0073aa' ],
-					'gradients'      => [ 'vivid: linear-gradient(135deg, #00f, #f0f)' ],
-					'fontSizes'      => [ 'small: 0.875rem' ],
-					'fontFamilies'   => [ 'inter: Inter, sans-serif' ],
-					'spacing'        => [ '20: 0.5rem' ],
-					'shadows'        => [ 'natural: 6px 6px 9px rgba(0,0,0,0.2)' ],
-					'colorPresets'   => [
+				'patterns'       => [],
+				'themeTokens'    => [
+					'colors'          => [ 'primary: #0073aa' ],
+					'gradients'       => [ 'vivid: linear-gradient(135deg, #00f, #f0f)' ],
+					'fontSizes'       => [ 'small: 0.875rem' ],
+					'fontFamilies'    => [ 'inter: Inter, sans-serif' ],
+					'spacing'         => [ '20: 0.5rem' ],
+					'shadows'         => [ 'natural: 6px 6px 9px rgba(0,0,0,0.2)' ],
+					'colorPresets'    => [
 						[
 							'slug'   => 'primary',
 							'cssVar' => 'var(--wp--preset--color--primary)',
 						],
 					],
-					'layout'         => [
+					'layout'          => [
 						'content'                       => '650px',
 						'wide'                          => '1200px',
 						'allowEditing'                  => true,

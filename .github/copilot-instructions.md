@@ -52,6 +52,8 @@ npm run wp:reset       # docker compose down -v (destroys volumes)
 
 `build/` and `vendor/` are gitignored. Run `npm run build` before testing changes in WordPress.
 
+For any change that touches more than one recommendation surface or any shared subsystem such as REST or ability contracts, provider routing, freshness signatures, activity and undo, shared UI taxonomy, or operator and admin paths, follow `docs/reference/cross-surface-validation-gates.md`. Treat those gates as additive release stops: run the nearest targeted PHPUnit and JS suites, run `node scripts/verify.js --skip-e2e`, run `npm run check:docs` when contracts or contributor docs changed, and run the matching Playwright harnesses. If a browser harness is known-red or unavailable, record that blocker or an explicit waiver instead of silently skipping it.
+
 ## High-level architecture
 
 `flavor-agent.php` is the runtime bootstrap. It wires editor asset enqueueing, REST routes, the settings page, Abilities API registration, pattern-index lifecycle hooks, and docs-grounding cron. It localizes three JS globals: `flavorAgentData` (editor — REST URL, nonce, settings/connectors URLs, `canManageFlavorAgentSettings`, structured surface capabilities, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendContent`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, `canRecommendGlobalStyles`, `canRecommendStyleBook`, and template-part areas), `flavorAgentAdmin` (settings page), and `flavorAgentActivityLog` (AI Activity admin page — REST URL, nonce, admin URLs, `defaultPerPage`, `maxPerPage`, `locale`, and `timeZone`).
@@ -112,5 +114,6 @@ Inspector sub-panel suggestion chips rely on the existing ToolsPanel grid layout
 
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
+- `docs/reference/cross-surface-validation-gates.md` — additive release gates and required evidence for multi-surface or shared-subsystem changes
 - `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
 - `STATUS.md` — working feature inventory and verification log

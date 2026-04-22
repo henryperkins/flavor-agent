@@ -31,25 +31,25 @@ final class BlockRecommendationExecutionContract {
 		);
 
 		return [
-			'inspectorPanels'         => $inspector_panels,
-			'allowedPanels'           => array_values( array_keys( $inspector_panels ) ),
-			'panelMappingKnown'       => [] !== $inspector_panels || $panel_mapping_explicit,
+			'inspectorPanels'          => $inspector_panels,
+			'allowedPanels'            => array_values( array_keys( $inspector_panels ) ),
+			'panelMappingKnown'        => [] !== $inspector_panels || $panel_mapping_explicit,
 			'hasExplicitlyEmptyPanels' => $panel_mapping_explicit && [] === $inspector_panels,
-			'styleSupportPaths'       => self::collect_style_support_paths( $inspector_panels ),
-			'bindableAttributes'      => StringArray::sanitize( $block['bindableAttributes'] ?? [] ),
-			'contentAttributeKeys'    => $content_keys,
-			'configAttributeKeys'     => array_values(
+			'styleSupportPaths'        => self::collect_style_support_paths( $inspector_panels ),
+			'bindableAttributes'       => StringArray::sanitize( $block['bindableAttributes'] ?? [] ),
+			'contentAttributeKeys'     => $content_keys,
+			'configAttributeKeys'      => array_values(
 				array_filter(
 					array_keys( self::normalize_map( $block['configAttributes'] ?? [] ) ),
 					'is_string'
 				)
 			),
-			'supportsContentRole'     => ! empty( $block['supportsContentRole'] ),
-			'editingMode'             => self::normalize_editing_mode( $block['editingMode'] ?? 'default' ),
-			'isInsideContentOnly'     => ! empty( $block['isInsideContentOnly'] ),
+			'supportsContentRole'      => ! empty( $block['supportsContentRole'] ),
+			'editingMode'              => self::normalize_editing_mode( $block['editingMode'] ?? 'default' ),
+			'isInsideContentOnly'      => ! empty( $block['isInsideContentOnly'] ),
 			'usesInnerBlocksAsContent' => ! empty( $block['supportsContentRole'] ) && [] === $content_keys,
-			'registeredStyles'        => self::collect_registered_style_names( $block['styles'] ?? [] ),
-			'presetSlugs'             => [
+			'registeredStyles'         => self::collect_registered_style_names( $block['styles'] ?? [] ),
+			'presetSlugs'              => [
 				'color'      => self::collect_preset_slugs( $theme_tokens['colorPresets'] ?? [] ),
 				'gradient'   => self::collect_preset_slugs( $theme_tokens['gradientPresets'] ?? [] ),
 				'duotone'    => self::collect_preset_slugs( $theme_tokens['duotonePresets'] ?? [] ),
@@ -58,8 +58,8 @@ final class BlockRecommendationExecutionContract {
 				'spacing'    => self::collect_preset_slugs( $theme_tokens['spacingPresets'] ?? [] ),
 				'shadow'     => self::collect_preset_slugs( $theme_tokens['shadowPresets'] ?? [] ),
 			],
-			'enabledFeatures'         => self::normalize_map( $theme_tokens['enabledFeatures'] ?? [] ),
-			'layout'                  => self::normalize_map( $theme_tokens['layout'] ?? [] ),
+			'enabledFeatures'          => self::normalize_map( $theme_tokens['enabledFeatures'] ?? [] ),
+			'layout'                   => self::normalize_map( $theme_tokens['layout'] ?? [] ),
 		];
 	}
 

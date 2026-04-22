@@ -178,7 +178,9 @@ describe( 'block request state', () => {
 			actions.setBlockRequestState( 'block-a', 'ready', null, 3 )
 		);
 
-		expect( selectors.getBlockRecommendations( state, 'block-a' ) ).toBeNull();
+		expect(
+			selectors.getBlockRecommendations( state, 'block-a' )
+		).toBeNull();
 		expect( selectors.getBlockStatus( state, 'block-a' ) ).toBe( 'idle' );
 		expect( selectors.getBlockRequestToken( state, 'block-a' ) ).toBe( 4 );
 	} );

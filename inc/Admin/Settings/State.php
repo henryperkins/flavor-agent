@@ -19,19 +19,19 @@ final class State {
 	 * @return array<string, mixed>
 	 */
 	public static function get_page_state(): array {
-		$selected_provider      = Provider::get();
-		$selected_chat          = Provider::chat_configuration( $selected_provider );
-		$runtime_chat           = Provider::chat_configuration();
-		$selected_embedding     = Provider::embedding_configuration( $selected_provider );
-		$runtime_embedding      = Provider::embedding_configuration();
-		$qdrant_configured      = '' !== (string) get_option( 'flavor_agent_qdrant_url', '' )
+		$selected_provider       = Provider::get();
+		$selected_chat           = Provider::chat_configuration( $selected_provider );
+		$runtime_chat            = Provider::chat_configuration();
+		$selected_embedding      = Provider::embedding_configuration( $selected_provider );
+		$runtime_embedding       = Provider::embedding_configuration();
+		$qdrant_configured       = '' !== (string) get_option( 'flavor_agent_qdrant_url', '' )
 			&& '' !== (string) get_option( 'flavor_agent_qdrant_key', '' );
-		$pattern_state          = PatternIndex::get_runtime_state();
+		$pattern_state           = PatternIndex::get_runtime_state();
 		$patterns_ready_for_sync = PatternIndex::recommendation_backends_configured();
-		$docs_configured        = AISearchClient::is_configured();
-		$prewarm_state          = AISearchClient::get_prewarm_state();
-		$runtime_docs_grounding = AISearchClient::get_runtime_state();
-		$guidelines_enabled     = Guidelines::has_any();
+		$docs_configured         = AISearchClient::is_configured();
+		$prewarm_state           = AISearchClient::get_prewarm_state();
+		$runtime_docs_grounding  = AISearchClient::get_runtime_state();
+		$guidelines_enabled      = Guidelines::has_any();
 
 		return [
 			'selected_provider'      => $selected_provider,

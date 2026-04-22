@@ -637,6 +637,47 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
+	test( 'getBlockSuggestionExecutionInfo allows freeform block gap updates when the block supports them', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					attributeUpdates: {
+						style: {
+							spacing: {
+								blockGap: '1rem',
+							},
+						},
+					},
+				},
+				{
+					inspectorPanels: {
+						dimensions: [ 'spacing.blockGap' ],
+					},
+					isInsideContentOnly: false,
+				},
+				{
+					allowedPanels: [ 'dimensions' ],
+					panelMappingKnown: true,
+					presetSlugs: {
+						spacing: [],
+					},
+					styleSupportPaths: [ 'spacing.blockGap' ],
+				}
+			)
+		).toEqual( {
+			allowedUpdates: {
+				style: {
+					spacing: {
+						blockGap: '1rem',
+					},
+				},
+			},
+			isAdvisory: false,
+			isAdvisoryOnly: false,
+			isExecutable: true,
+		} );
+	} );
+
 	test( 'sanitizeRecommendationsForContext preserves optional UI metadata for unlocked blocks', () => {
 		const recommendations = {
 			settings: [
