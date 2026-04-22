@@ -86,6 +86,8 @@ SYSTEM;
 	}
 
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
+		$max_tokens         = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'style' );
+		$budget             = new PromptBudget( $max_tokens );
 		$scope               = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
 		$style_context       = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
 		$theme_tokens        = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
@@ -96,109 +98,107 @@ SYSTEM;
 		$design_semantics    = is_array( $style_context['designSemantics'] ?? null ) ? $style_context['designSemantics'] : [];
 		$template_visibility = is_array( $style_context['templateVisibility'] ?? null ) ? $style_context['templateVisibility'] : [];
 		$surface             = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
-		$sections            = [];
 
-		$sections[] = '## Scope';
-		$sections[] = 'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' );
-		$sections[] = 'Scope key: ' . (string) ( $scope['scopeKey'] ?? '' );
-		$sections[] = 'Global styles id: ' . (string) ( $scope['globalStylesId'] ?? '' );
-		$sections[] = 'Post type: ' . (string) ( $scope['postType'] ?? '' );
-		$sections[] = 'Entity id: ' . (string) ( $scope['entityId'] ?? '' );
-		$sections[] = 'Entity kind: ' . (string) ( $scope['entityKind'] ?? '' );
-		$sections[] = 'Entity name: ' . (string) ( $scope['entityName'] ?? '' );
+		$scope_lines   = [
+			'## Scope',
+			'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' ),
+			'Scope key: ' . (string) ( $scope['scopeKey'] ?? '' ),
+			'Global styles id: ' . (string) ( $scope['globalStylesId'] ?? '' ),
+			'Post type: ' . (string) ( $scope['postType'] ?? '' ),
+			'Entity id: ' . (string) ( $scope['entityId'] ?? '' ),
+			'Entity kind: ' . (string) ( $scope['entityKind'] ?? '' ),
+			'Entity name: ' . (string) ( $scope['entityName'] ?? '' ),
+		];
 
 		if ( 'style-book' === $surface ) {
 			if ( ! empty( $scope['blockName'] ) ) {
-				$sections[] = 'Block name: ' . (string) $scope['blockName'];
+				$scope_lines[] = 'Block name: ' . (string) $scope['blockName'];
 			}
 
 			if ( ! empty( $scope['blockTitle'] ) ) {
-				$sections[] = 'Block title: ' . (string) $scope['blockTitle'];
+				$scope_lines[] = 'Block title: ' . (string) $scope['blockTitle'];
 			}
 		}
 
 		if ( ! empty( $scope['stylesheet'] ) ) {
-			$sections[] = 'Stylesheet: ' . (string) $scope['stylesheet'];
+			$scope_lines[] = 'Stylesheet: ' . (string) $scope['stylesheet'];
 		}
 
 		if ( ! empty( $scope['templateSlug'] ) ) {
-			$sections[] = 'Template slug: ' . (string) $scope['templateSlug'];
+			$scope_lines[] = 'Template slug: ' . (string) $scope['templateSlug'];
 		}
 
 		if ( ! empty( $scope['templateType'] ) ) {
-			$sections[] = 'Template type: ' . (string) $scope['templateType'];
+			$scope_lines[] = 'Template type: ' . (string) $scope['templateType'];
 		}
 
-		$sections[] = '';
-		$sections[] = '## Current Global Styles user config';
-		$sections[] = wp_json_encode( $style_context['currentConfig'] ?? [] );
-		$sections[] = '';
-		$sections[] = '## Current merged style config';
-		$sections[] = wp_json_encode( $style_context['mergedConfig'] ?? [] );
+		$budget->add_section( 'scope', implode( "\n", $scope_lines ), 100 );
+		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( $style_context['currentConfig'] ?? [] ), 90 );
+		$budget->add_section( 'merged_config', "## Current merged style config\n" . wp_json_encode( $style_context['mergedConfig'] ?? [] ), 85 );
 
 		if ( 'style-book' === $surface && [] !== $style_book_target ) {
-			$sections[] = '';
-			$sections[] = '## Style Book target';
+			$target_lines = [ '## Style Book target' ];
 
 			if ( ! empty( $style_book_target['blockName'] ) ) {
-				$sections[] = 'Target block name: ' . (string) $style_book_target['blockName'];
+				$target_lines[] = 'Target block name: ' . (string) $style_book_target['blockName'];
 			}
 
 			if ( ! empty( $style_book_target['blockTitle'] ) ) {
-				$sections[] = 'Target block title: ' . (string) $style_book_target['blockTitle'];
+				$target_lines[] = 'Target block title: ' . (string) $style_book_target['blockTitle'];
 			}
 
 			if ( ! empty( $style_book_target['description'] ) ) {
-				$sections[] = 'Target description: ' . (string) $style_book_target['description'];
+				$target_lines[] = 'Target description: ' . (string) $style_book_target['description'];
 			}
 
 			if ( ! empty( $style_book_target['currentStyles'] ) ) {
-				$sections[] = 'Current target styles: ' . wp_json_encode( $style_book_target['currentStyles'] );
+				$target_lines[] = 'Current target styles: ' . wp_json_encode( $style_book_target['currentStyles'] );
 			}
 
 			if ( ! empty( $style_book_target['mergedStyles'] ) ) {
-				$sections[] = 'Merged target styles: ' . wp_json_encode( $style_book_target['mergedStyles'] );
+				$target_lines[] = 'Merged target styles: ' . wp_json_encode( $style_book_target['mergedStyles'] );
 			}
+
+			$budget->add_section( 'style_book_target', implode( "\n", $target_lines ), 80 );
 		}
 
 		if ( 'style-book' === $surface && [] !== $block_manifest ) {
-			$sections[] = '';
-			$sections[] = '## Target block supports';
-			$sections[] = 'Supports: ' . wp_json_encode( $block_manifest['supports'] ?? [] );
-			$sections[] = 'Inspector panels: ' . wp_json_encode( $block_manifest['inspectorPanels'] ?? [] );
+			$budget->add_section(
+				'block_supports',
+				"## Target block supports\nSupports: " . wp_json_encode( $block_manifest['supports'] ?? [] )
+				. "\nInspector panels: " . wp_json_encode( $block_manifest['inspectorPanels'] ?? [] ),
+				75
+			);
 		}
 
 		if ( ! empty( $style_context['themeTokenDiagnostics'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Theme token diagnostics';
-			$sections[] = wp_json_encode( $style_context['themeTokenDiagnostics'] );
+			$budget->add_section( 'theme_token_diagnostics', "## Theme token diagnostics\n" . wp_json_encode( $style_context['themeTokenDiagnostics'] ), 60 );
 		}
 
 		if ( ! empty( $theme_tokens['diagnostics'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Server theme token diagnostics';
-			$sections[] = wp_json_encode( $theme_tokens['diagnostics'] );
+			$budget->add_section( 'server_theme_token_diagnostics', "## Server theme token diagnostics\n" . wp_json_encode( $theme_tokens['diagnostics'] ), 58 );
 		}
 
-		$sections[] = '';
-		$sections[] = '## Theme tokens';
-		$sections[] = 'Colors: ' . implode( ', ', (array) ( $theme_tokens['colors'] ?? [] ) );
-		$sections[] = 'Gradients: ' . implode( ', ', (array) ( $theme_tokens['gradients'] ?? [] ) );
-		$sections[] = 'Font sizes: ' . implode( ', ', (array) ( $theme_tokens['fontSizes'] ?? [] ) );
-		$sections[] = 'Font families: ' . implode( ', ', (array) ( $theme_tokens['fontFamilies'] ?? [] ) );
-		$sections[] = 'Spacing: ' . implode( ', ', (array) ( $theme_tokens['spacing'] ?? [] ) );
-		$sections[] = 'Shadows: ' . implode( ', ', (array) ( $theme_tokens['shadows'] ?? [] ) );
-		$sections[] = 'Duotone presets: ' . implode( ', ', (array) ( $theme_tokens['duotone'] ?? [] ) );
-		$sections[] = 'Duotone preset details: ' . wp_json_encode( $theme_tokens['duotonePresets'] ?? [] );
-		$sections[] = 'Layout: ' . wp_json_encode( $theme_tokens['layout'] ?? [] );
-		$sections[] = 'Enabled features: ' . wp_json_encode( $theme_tokens['enabledFeatures'] ?? [] );
-		$sections[] = 'Element styles: ' . wp_json_encode( $theme_tokens['elementStyles'] ?? [] );
-		$sections[] = 'Block pseudo-class styles: ' . wp_json_encode( $theme_tokens['blockPseudoStyles'] ?? [] );
+		$theme_token_lines = [
+			'## Theme tokens',
+			'Colors: ' . implode( ', ', (array) ( $theme_tokens['colors'] ?? [] ) ),
+			'Gradients: ' . implode( ', ', (array) ( $theme_tokens['gradients'] ?? [] ) ),
+			'Font sizes: ' . implode( ', ', (array) ( $theme_tokens['fontSizes'] ?? [] ) ),
+			'Font families: ' . implode( ', ', (array) ( $theme_tokens['fontFamilies'] ?? [] ) ),
+			'Spacing: ' . implode( ', ', (array) ( $theme_tokens['spacing'] ?? [] ) ),
+			'Shadows: ' . implode( ', ', (array) ( $theme_tokens['shadows'] ?? [] ) ),
+			'Duotone presets: ' . implode( ', ', (array) ( $theme_tokens['duotone'] ?? [] ) ),
+			'Duotone preset details: ' . wp_json_encode( $theme_tokens['duotonePresets'] ?? [] ),
+			'Layout: ' . wp_json_encode( $theme_tokens['layout'] ?? [] ),
+			'Enabled features: ' . wp_json_encode( $theme_tokens['enabledFeatures'] ?? [] ),
+			'Element styles: ' . wp_json_encode( $theme_tokens['elementStyles'] ?? [] ),
+			'Block pseudo-class styles: ' . wp_json_encode( $theme_tokens['blockPseudoStyles'] ?? [] ),
+		];
+		$budget->add_section( 'theme_tokens', implode( "\n", $theme_token_lines ), 30 );
 
-		$sections[] = '';
-		$sections[] = '## Supported style paths';
+		$supported_path_lines = [ '## Supported style paths' ];
 		if ( 'style-book' === $surface ) {
-			$sections[] = 'These paths apply relative to styles.blocks.<target-block>.';
+			$supported_path_lines[] = 'These paths apply relative to styles.blocks.<target-block>.';
 		}
 
 		foreach ( $supported_paths as $path_entry ) {
@@ -213,16 +213,16 @@ SYSTEM;
 				continue;
 			}
 
-			$sections[] = sprintf( '- %s (%s)', $path, $value_source );
+			$supported_path_lines[] = sprintf( '- %s (%s)', $path, $value_source );
 		}
+		$budget->add_section( 'supported_style_paths', implode( "\n", $supported_path_lines ), 88 );
 
 		$variations = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
 		if ( 'style-book' !== $surface && [] !== $variations ) {
-			$sections[] = '';
-			$sections[] = '## Available theme style variations';
+			$variation_lines = [ '## Available theme style variations' ];
 
 			if ( '' !== (string) ( $style_context['activeVariationTitle'] ?? '' ) ) {
-				$sections[] = sprintf(
+				$variation_lines[] = sprintf(
 					'Active variation: #%d %s',
 					(int) ( $style_context['activeVariationIndex'] ?? -1 ),
 					(string) $style_context['activeVariationTitle']
@@ -261,40 +261,33 @@ SYSTEM;
 					$variation_summary .= ' - differs: ' . $diff_summary;
 				}
 
-				$sections[] = $variation_summary;
+				$variation_lines[] = $variation_summary;
 
 				if ( ! empty( $variation['settings'] ) ) {
-					$sections[] = '  settings: ' . wp_json_encode( $variation['settings'] );
+					$variation_lines[] = '  settings: ' . wp_json_encode( $variation['settings'] );
 				}
 
 				if ( ! empty( $variation['styles'] ) ) {
-					$sections[] = '  styles: ' . wp_json_encode( $variation['styles'] );
+					$variation_lines[] = '  styles: ' . wp_json_encode( $variation['styles'] );
 				}
 			}
+
+			$budget->add_section( 'available_variations', implode( "\n", $variation_lines ), 70 );
 		}
 
 		if ( [] !== $template_structure ) {
-			$sections[] = '';
-			$sections[] = '## Current template structure';
-			$sections[] = wp_json_encode( $template_structure );
+			$budget->add_section( 'template_structure', "## Current template structure\n" . wp_json_encode( $template_structure ), 55 );
 		}
 
 		if ( [] !== $design_semantics ) {
 			$design_semantic_lines = self::format_design_semantics_summary( $design_semantics );
 
 			if ( [] !== $design_semantic_lines ) {
-				$sections[] = '';
-				$sections[] = '## Design semantic context';
-
-				foreach ( $design_semantic_lines as $design_semantic_line ) {
-					$sections[] = $design_semantic_line;
-				}
+				$budget->add_section( 'design_semantics', "## Design semantic context\n" . implode( "\n", $design_semantic_lines ), 50 );
 			}
 		}
 
-		$sections[] = '';
-		$sections[] = '## Viewport visibility constraints';
-		$sections[] = self::format_template_visibility_summary( $template_visibility );
+		$budget->add_section( 'viewport_visibility', "## Viewport visibility constraints\n" . self::format_template_visibility_summary( $template_visibility ), 45 );
 
 		if ( [] !== $docs_guidance ) {
 			$guidance_lines = [];
@@ -312,25 +305,57 @@ SYSTEM;
 			}
 
 			if ( [] !== $guidance_lines ) {
-				$sections[] = '';
-				$sections[] = '## WordPress Developer Guidance';
-				foreach ( $guidance_lines as $guidance_line ) {
-					$sections[] = $guidance_line;
-				}
+				$budget->add_section( 'docs_guidance', "## WordPress Developer Guidance\n" . implode( "\n", $guidance_lines ), 20 );
 			}
 		}
 
-		$sections[] = '';
-		$sections[] = '## User instruction';
-		$sections[] = '' !== trim( $prompt )
-			? trim( $prompt )
-			: (
-				'style-book' === $surface
-					? 'Recommend one or two safe Style Book improvements.'
-					: 'Recommend one or two safe Global Styles improvements.'
-			);
+		$budget->add_section(
+			'user_instruction',
+			"## User instruction\n" . (
+				'' !== trim( $prompt )
+					? trim( $prompt )
+					: (
+						'style-book' === $surface
+							? 'Recommend one or two safe Style Book improvements.'
+							: 'Recommend one or two safe Global Styles improvements.'
+					)
+			),
+			95
+		);
 
-		return implode( "\n", $sections );
+		foreach ( self::get_few_shot_examples() as $index => $example ) {
+			$budget->add_section( 'few_shot_' . $index, $example, 10 );
+		}
+
+		return $budget->assemble();
+	}
+
+	public static function get_few_shot_examples(): array {
+		return [
+			<<<'EXAMPLE'
+## Example - global styles palette adjustment
+
+Input context:
+- Surface: global-styles
+- Supported paths include `color.background`
+- Theme variation `Midnight` is available
+
+Expected response:
+{"suggestions":[{"label":"Use the Midnight variation","description":"Switch to the darker preset variation before adding custom overrides.","category":"variation","tone":"executable","operations":[{"type":"set_theme_variation","variationIndex":1,"variationTitle":"Midnight"}]}],"explanation":"Prefer a theme-provided variation when it already matches the requested mood."}
+EXAMPLE,
+			<<<'EXAMPLE'
+## Example - style book text emphasis
+
+Input context:
+- Surface: style-book
+- Target block: `core/paragraph`
+- Supported paths include `color.text`
+- Theme palette includes `accent`
+
+Expected response:
+{"suggestions":[{"label":"Use the accent text preset","description":"Apply the theme accent color to the paragraph text for a stronger emphasis cue.","category":"color","tone":"executable","operations":[{"type":"set_block_styles","blockName":"core/paragraph","path":["color","text"],"value":"var:preset|color|accent","valueType":"preset","presetType":"color","presetSlug":"accent","cssVar":"var(--wp--preset--color--accent)"}]}],"explanation":"Keep the change inside supported block style paths and theme presets."}
+EXAMPLE,
+		];
 	}
 
 	/**

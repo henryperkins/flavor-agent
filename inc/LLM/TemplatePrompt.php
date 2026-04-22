@@ -108,11 +108,12 @@ SYSTEM;
 	 * @param string $prompt  Optional user instruction.
 	 */
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$sections = [];
+		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'template' );
+		$budget     = new PromptBudget( $max_tokens );
 
 		$type       = (string) ( $context['templateType'] ?? 'unknown' );
 		$title      = (string) ( $context['title'] ?? $type );
-		$sections[] = "## Template\nType: {$type}\nTitle: {$title}";
+		$budget->add_section( 'identity', "## Template\nType: {$type}\nTitle: {$title}", 100 );
 
 		$assigned = is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [];
 		if ( count( $assigned ) > 0 ) {
@@ -124,15 +125,19 @@ SYSTEM;
 				),
 				$assigned
 			);
-			$sections[] = "## Assigned Template Parts\n" . implode( "\n", $lines );
+			$budget->add_section( 'assigned_parts', "## Assigned Template Parts\n" . implode( "\n", $lines ), 90 );
 		} else {
-			$sections[] = "## Assigned Template Parts\nNone - this template has no template parts assigned.";
+			$budget->add_section( 'assigned_parts', "## Assigned Template Parts\nNone - this template has no template parts assigned.", 90 );
 		}
 
 		$empty_areas = is_array( $context['emptyAreas'] ?? null ) ? $context['emptyAreas'] : [];
-		$sections[]  = count( $empty_areas ) > 0
-			? "## Explicitly Empty Areas\n" . implode( ', ', $empty_areas )
-			: "## Explicitly Empty Areas\nNone detected.";
+		$budget->add_section(
+			'empty_areas',
+			count( $empty_areas ) > 0
+				? "## Explicitly Empty Areas\n" . implode( ', ', $empty_areas )
+				: "## Explicitly Empty Areas\nNone detected.",
+			88
+		);
 
 		$assigned_slugs = array_column( $assigned, 'slug' );
 		$available      = array_values(
@@ -151,9 +156,9 @@ SYSTEM;
 				),
 				$available
 			);
-			$sections[] = "## Available Template Parts\n" . implode( "\n", $lines );
+			$budget->add_section( 'available_parts', "## Available Template Parts\n" . implode( "\n", $lines ), 60 );
 		} else {
-			$sections[] = "## Available Template Parts\nNo unused template parts available.";
+			$budget->add_section( 'available_parts', "## Available Template Parts\nNo unused template parts available.", 60 );
 		}
 
 		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
@@ -192,9 +197,9 @@ SYSTEM;
 				$header .= 'Showing ' . $max . ' of ' . count( $patterns ) . " patterns.\n";
 			}
 
-			$sections[] = $header . implode( "\n", $lines );
+			$budget->add_section( 'patterns', $header . implode( "\n", $lines ), 55 );
 		} else {
-			$sections[] = "## Available Patterns\nNo patterns available for this template type.";
+			$budget->add_section( 'patterns', "## Available Patterns\nNo patterns available for this template type.", 55 );
 		}
 
 		$top_level_block_tree = is_array( $context['topLevelBlockTree'] ?? null ) ? $context['topLevelBlockTree'] : [];
@@ -228,36 +233,42 @@ SYSTEM;
 		}
 
 		if ( count( $structure_lines ) > 0 ) {
-			$sections[] = "## Structure Summary\n" . implode( "\n", $structure_lines );
+			$budget->add_section( 'structure_summary', "## Structure Summary\n" . implode( "\n", $structure_lines ), 70 );
 		}
 
 		if ( count( $top_level_block_tree ) > 0 ) {
-			$sections[] = "## Current Top-Level Template Structure\n" . self::format_template_block_tree( $top_level_block_tree );
+			$budget->add_section( 'top_level_structure', "## Current Top-Level Template Structure\n" . self::format_template_block_tree( $top_level_block_tree ), 85 );
 		}
 
 		$insertion_anchors = is_array( $context['topLevelInsertionAnchors'] ?? null ) ? $context['topLevelInsertionAnchors'] : [];
 		if ( count( $insertion_anchors ) > 0 ) {
-			$sections[] = "## Executable Pattern Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors );
+			$budget->add_section( 'insertion_anchors', "## Executable Pattern Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors ), 80 );
 		}
 
 		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null )
 			? $context['currentPatternOverrides']
 			: [];
-		$sections[]                = "## Current Pattern Override Blocks\n"
-			. self::format_current_pattern_overrides( $current_pattern_overrides );
+		$budget->add_section(
+			'pattern_overrides',
+			"## Current Pattern Override Blocks\n" . self::format_current_pattern_overrides( $current_pattern_overrides ),
+			50
+		);
 
 		$current_viewport_visibility = is_array( $context['currentViewportVisibility'] ?? null )
 			? $context['currentViewportVisibility']
 			: [];
-		$sections[]                  = "## Current Viewport Visibility Constraints\n"
-			. self::format_current_viewport_visibility( $current_viewport_visibility );
+		$budget->add_section(
+			'viewport_visibility',
+			"## Current Viewport Visibility Constraints\n" . self::format_current_viewport_visibility( $current_viewport_visibility ),
+			45
+		);
 
 		$formatted_tokens = ThemeTokenFormatter::format(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
 		);
 
 		if ( $formatted_tokens !== '' ) {
-			$sections[] = "## Theme Tokens\n{$formatted_tokens}";
+			$budget->add_section( 'theme_tokens', "## Theme Tokens\n{$formatted_tokens}", 30 );
 		}
 
 		if ( ! empty( $docs_guidance ) ) {
@@ -276,16 +287,38 @@ SYSTEM;
 			}
 
 			if ( count( $lines ) > 0 ) {
-				$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $lines );
+				$budget->add_section( 'docs_guidance', "## WordPress Developer Guidance\n" . implode( "\n", $lines ), 20 );
 			}
 		}
 
 		$instruction = trim( $prompt ) !== ''
 			? trim( $prompt )
 			: 'Suggest improvements for this template.';
-		$sections[]  = "## User Instruction\n{$instruction}";
+		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95 );
 
-		return implode( "\n\n", $sections );
+		foreach ( self::get_few_shot_examples() as $index => $example ) {
+			$budget->add_section( 'few_shot_' . $index, $example, 10 );
+		}
+
+		return $budget->assemble();
+	}
+
+	public static function get_few_shot_examples(): array {
+		return [
+			<<<'EXAMPLE'
+## Example - home template with an empty footer slot
+
+Input context:
+- Template type: home
+- Assigned parts: `site-header`
+- Explicitly empty areas: `footer`
+- Available template parts: `footer-minimal` for `footer`
+- Available patterns: `theme/hero`
+
+Expected response:
+{"suggestions":[{"label":"Fill the footer slot","description":"Assign the available footer part before layering new patterns.","operations":[{"type":"assign_template_part","slug":"footer-minimal","area":"footer"}],"templateParts":[{"slug":"footer-minimal","area":"footer","reason":"Completes the explicit footer area with a registered part."}],"patternSuggestions":[]}],"explanation":"Resolve empty structural slots first, then add optional pattern accents."}
+EXAMPLE,
+		];
 	}
 
 	/**

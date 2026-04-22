@@ -9,6 +9,7 @@ use FlavorAgent\Context\BlockRecommendationExecutionContract;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\ChatClient;
 use FlavorAgent\LLM\Prompt;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\RecommendationResolvedSignature;
 use FlavorAgent\Support\StringArray;
@@ -71,7 +72,12 @@ final class BlockAbilities {
 			$execution_contract
 		);
 
-		$result = ChatClient::chat( $system_prompt, $user_prompt );
+		$result = ChatClient::chat(
+			$system_prompt,
+			$user_prompt,
+			ResponseSchema::get( 'block' ),
+			'flavor_agent_block'
+		);
 
 		if ( is_wp_error( $result ) ) {
 			return $result;

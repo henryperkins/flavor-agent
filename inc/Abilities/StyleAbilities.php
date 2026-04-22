@@ -7,6 +7,7 @@ namespace FlavorAgent\Abilities;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\StylePrompt;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\RecommendationResolvedSignature;
@@ -130,7 +131,10 @@ final class StyleAbilities {
 
 		$result = ResponsesClient::rank(
 			$system_prompt,
-			$user_prompt
+			$user_prompt,
+			null,
+			ResponseSchema::get( 'style' ),
+			'flavor_agent_style'
 		);
 
 		if ( is_wp_error( $result ) ) {

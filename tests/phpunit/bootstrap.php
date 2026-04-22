@@ -195,6 +195,14 @@ namespace WordPress\AI_Client {
 			return $this;
 		}
 
+		public function as_json_response( ?array $schema ): self {
+			WordPressTestState::$last_ai_client_prompt['json_schema'] = is_array( $schema )
+				? $schema
+				: null;
+
+			return $this;
+		}
+
 		public function is_supported_for_text_generation(): bool {
 			$provider = WordPressTestState::$last_ai_client_prompt['provider'] ?? '';
 
@@ -239,6 +247,12 @@ namespace {
 						WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
 							? (string) ( $reasoning['effort'] ?? '' )
 							: (string) $reasoning;
+
+						return $this;
+					case 'as_json_response':
+						WordPressTestState::$last_ai_client_prompt['json_schema'] = is_array( $arguments[0] ?? null )
+							? $arguments[0]
+							: null;
 
 						return $this;
 					case 'is_supported_for_text_generation':

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\LLM\ChatClient;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\WritingPrompt;
 use FlavorAgent\Support\StringArray;
 
@@ -42,7 +43,9 @@ final class ContentAbilities {
 
 		$result = ChatClient::chat(
 			WritingPrompt::build_system(),
-			WritingPrompt::build_user( $context, $prompt )
+			WritingPrompt::build_user( $context, $prompt ),
+			ResponseSchema::get( 'content' ),
+			'flavor_agent_content'
 		);
 
 		if ( is_wp_error( $result ) ) {

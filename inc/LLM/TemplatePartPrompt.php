@@ -98,18 +98,19 @@ SYSTEM;
 	 * @param array  $docs_guidance WordPress docs grounding chunks.
 	 */
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$sections = [];
+		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'template_part' );
+		$budget     = new PromptBudget( $max_tokens );
 
 		$ref   = (string) ( $context['templatePartRef'] ?? 'unknown' );
 		$slug  = (string) ( $context['slug'] ?? '' );
 		$title = (string) ( $context['title'] ?? $slug );
 		$area  = (string) ( $context['area'] ?? 'uncategorized' );
 
-		$sections[] = "## Template Part\nRef: {$ref}\nSlug: {$slug}\nTitle: {$title}\nArea: {$area}";
+		$budget->add_section( 'identity', "## Template Part\nRef: {$ref}\nSlug: {$slug}\nTitle: {$title}\nArea: {$area}", 100 );
 
 		$top_level_blocks = is_array( $context['topLevelBlocks'] ?? null ) ? $context['topLevelBlocks'] : [];
 		if ( count( $top_level_blocks ) > 0 ) {
-			$sections[] = '## Top-Level Blocks' . "\n" . implode( ', ', $top_level_blocks );
+			$budget->add_section( 'top_level_blocks', '## Top-Level Blocks' . "\n" . implode( ', ', $top_level_blocks ), 90 );
 		}
 
 		$structure_stats = is_array( $context['structureStats'] ?? null ) ? $context['structureStats'] : [];
@@ -170,37 +171,40 @@ SYSTEM;
 		}
 
 		if ( count( $structure_lines ) > 0 ) {
-			$sections[] = "## Structure Summary\n" . implode( "\n", $structure_lines );
+			$budget->add_section( 'structure_summary', "## Structure Summary\n" . implode( "\n", $structure_lines ), 70 );
 		}
 
 		$block_tree = is_array( $context['blockTree'] ?? null ) ? $context['blockTree'] : [];
 		if ( count( $block_tree ) > 0 ) {
-			$sections[] = "## Current Block Tree\n" . self::format_block_tree( $block_tree );
+			$budget->add_section( 'block_tree', "## Current Block Tree\n" . self::format_block_tree( $block_tree ), 85 );
 		} else {
-			$sections[] = "## Current Block Tree\nThis template part is empty.";
+			$budget->add_section( 'block_tree', "## Current Block Tree\nThis template part is empty.", 85 );
 		}
 
 		$operation_targets = is_array( $context['operationTargets'] ?? null ) ? $context['operationTargets'] : [];
 		if ( count( $operation_targets ) > 0 ) {
-			$sections[] = "## Executable Operation Targets\n" . self::format_operation_targets( $operation_targets );
+			$budget->add_section( 'operation_targets', "## Executable Operation Targets\n" . self::format_operation_targets( $operation_targets ), 80 );
 		}
 
 		$insertion_anchors = is_array( $context['insertionAnchors'] ?? null ) ? $context['insertionAnchors'] : [];
 		if ( count( $insertion_anchors ) > 0 ) {
-			$sections[] = "## Executable Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors );
+			$budget->add_section( 'insertion_anchors', "## Executable Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors ), 75 );
 		}
 
 		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
 		$formatted_constraints  = self::format_structural_constraints( $structural_constraints );
 		if ( $formatted_constraints !== '' ) {
-			$sections[] = "## Structural Constraints\n{$formatted_constraints}";
+			$budget->add_section( 'structural_constraints', "## Structural Constraints\n{$formatted_constraints}", 60 );
 		}
 
 		$current_pattern_overrides = is_array( $context['currentPatternOverrides'] ?? null )
 			? $context['currentPatternOverrides']
 			: [];
-		$sections[]                = "## Current Pattern Override Blocks\n"
-			. self::format_current_pattern_overrides( $current_pattern_overrides );
+		$budget->add_section(
+			'pattern_overrides',
+			"## Current Pattern Override Blocks\n" . self::format_current_pattern_overrides( $current_pattern_overrides ),
+			50
+		);
 
 		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
 		if ( count( $patterns ) > 0 ) {
@@ -236,16 +240,16 @@ SYSTEM;
 				$header .= 'Showing ' . $max . ' of ' . count( $patterns ) . " patterns.\n";
 			}
 
-			$sections[] = $header . implode( "\n", $lines );
+			$budget->add_section( 'patterns', $header . implode( "\n", $lines ), 55 );
 		} else {
-			$sections[] = "## Available Patterns\nNo area-relevant patterns are available.";
+			$budget->add_section( 'patterns', "## Available Patterns\nNo area-relevant patterns are available.", 55 );
 		}
 
 		$theme_tokens = ThemeTokenFormatter::format(
 			is_array( $context['themeTokens'] ?? null ) ? $context['themeTokens'] : []
 		);
 		if ( $theme_tokens !== '' ) {
-			$sections[] = "## Theme Tokens\n{$theme_tokens}";
+			$budget->add_section( 'theme_tokens', "## Theme Tokens\n{$theme_tokens}", 30 );
 		}
 
 		if ( count( $docs_guidance ) > 0 ) {
@@ -264,16 +268,37 @@ SYSTEM;
 			}
 
 			if ( count( $lines ) > 0 ) {
-				$sections[] = "## WordPress Developer Guidance\n" . implode( "\n", $lines );
+				$budget->add_section( 'docs_guidance', "## WordPress Developer Guidance\n" . implode( "\n", $lines ), 20 );
 			}
 		}
 
 		$instruction = trim( $prompt ) !== ''
 			? trim( $prompt )
 			: 'Suggest improvements for this template part.';
-		$sections[]  = "## User Instruction\n{$instruction}";
+		$budget->add_section( 'user_instruction', "## User Instruction\n{$instruction}", 95 );
 
-		return implode( "\n\n", $sections );
+		foreach ( self::get_few_shot_examples() as $index => $example ) {
+			$budget->add_section( 'few_shot_' . $index, $example, 10 );
+		}
+
+		return $budget->assemble();
+	}
+
+	public static function get_few_shot_examples(): array {
+		return [
+			<<<'EXAMPLE'
+## Example - header template part with a weak utility row
+
+Input context:
+- Template part: `header`
+- Current block tree includes `core/site-logo` and `core/navigation`
+- Available patterns: `theme/header-utility`
+- Insert anchors include `before_block_path` for the navigation block
+
+Expected response:
+{"suggestions":[{"label":"Add a utility row before navigation","description":"Insert the utility pattern ahead of the menu cluster to separate branding from utility links.","blockHints":[{"path":[0,1],"label":"Navigation block","reason":"This is the busiest structural target in the header."}],"patternSuggestions":["theme/header-utility"],"operations":[{"type":"insert_pattern","patternName":"theme/header-utility","placement":"before_block_path","targetPath":[0,1]}]}],"explanation":"Use a small pre-navigation utility row instead of overloading the main menu."}
+EXAMPLE,
+		];
 	}
 
 	/**

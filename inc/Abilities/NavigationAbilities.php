@@ -8,6 +8,7 @@ use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
 use FlavorAgent\LLM\NavigationPrompt;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\ThemeTokenFormatter;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Support\NormalizesInput;
@@ -73,7 +74,13 @@ final class NavigationAbilities {
 			$docs_guidance
 		);
 
-		$result = ResponsesClient::rank( $system, $user );
+		$result = ResponsesClient::rank(
+			$system,
+			$user,
+			null,
+			ResponseSchema::get( 'navigation' ),
+			'flavor_agent_navigation'
+		);
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

@@ -31,7 +31,13 @@ final class WordPressAIClient {
 		return ! is_wp_error( $supported ) && (bool) $supported;
 	}
 
-	public static function chat( string $system_prompt, string $user_prompt, ?string $provider = null, ?string $reasoning_effort = null ): string|\WP_Error {
+	public static function chat(
+		string $system_prompt,
+		string $user_prompt,
+		?string $provider = null,
+		?string $reasoning_effort = null,
+		?array $schema = null
+	): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
 		$prompt = self::make_prompt( $user_prompt );
@@ -53,6 +59,12 @@ final class WordPressAIClient {
 		}
 
 		$prompt = self::apply_reasoning_effort( $prompt, $reasoning_effort );
+
+		if ( is_wp_error( $prompt ) ) {
+			return $prompt;
+		}
+
+		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -237,6 +249,32 @@ final class WordPressAIClient {
 		}
 
 		return $prompt;
+	}
+
+	private static function apply_output_schema( object $prompt, ?array $schema ): object|\WP_Error {
+		if ( null === $schema || [] === $schema ) {
+			return $prompt;
+		}
+
+		if ( ! is_callable( [ $prompt, 'as_json_response' ] ) ) {
+			return $prompt;
+		}
+
+		$updated_prompt = self::call_prompt_method( $prompt, 'as_json_response', [ $schema ] );
+
+		if ( is_wp_error( $updated_prompt ) ) {
+			return $updated_prompt;
+		}
+
+		if ( ! is_object( $updated_prompt ) ) {
+			return new \WP_Error(
+				'wp_ai_client_invalid_prompt',
+				'WordPress AI Client did not return a prompt builder from as_json_response.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		return $updated_prompt;
 	}
 
 	private static function call_prompt_method( object $prompt, string $method, array $arguments = [] ): mixed {
