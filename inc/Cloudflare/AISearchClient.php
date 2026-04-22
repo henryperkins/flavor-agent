@@ -6,35 +6,35 @@ namespace FlavorAgent\Cloudflare;
 
 final class AISearchClient {
 
-	private const DEFAULT_MAX_RESULTS        = 4;
-	private const MAX_MAX_RESULTS            = 8;
-	private const ALLOWED_DOC_HOST           = 'developer.wordpress.org';
-	private const ALLOWED_SOURCE_KEY_PREFIX  = 'developer.wordpress.org/';
-	private const CACHE_KEY_PREFIX           = 'flavor_agent_ai_search_';
-	private const CACHE_TTL                  = 21600;
-	private const FAMILY_CACHE_PREFIX        = 'flavor_agent_docs_family_';
-	private const FAMILY_CACHE_TTL           = 28800;
-	private const ENTITY_CACHE_PREFIX        = 'flavor_agent_docs_entity_';
-	private const ENTITY_CACHE_TTL           = 43200;
-	private const VALIDATION_PROBE_QUERY     = 'block editor';
-	private const VALIDATION_PROBE_RESULTS   = 3;
-	private const DEFAULT_PUBLIC_SEARCH_URL  = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
-	private const PUBLIC_HOST_SUFFIX         = '.search.ai.cloudflare.com';
-	private const PREWARM_STATE_OPTION       = 'flavor_agent_docs_prewarm_state';
-	private const RUNTIME_STATE_OPTION       = 'flavor_agent_docs_runtime_state';
-	private const WARM_QUEUE_OPTION          = 'flavor_agent_docs_warm_queue';
-	private const PREWARM_THROTTLE_SECONDS   = 3600;
-	private const FOREGROUND_WARM_LOCK_PREFIX = 'flavor_agent_docs_foreground_warm_';
-	private const FOREGROUND_WARM_LOCK_TTL    = 30;
-	private const FOREGROUND_WARM_TIMEOUT     = 5;
+	private const DEFAULT_MAX_RESULTS           = 4;
+	private const MAX_MAX_RESULTS               = 8;
+	private const ALLOWED_DOC_HOST              = 'developer.wordpress.org';
+	private const ALLOWED_SOURCE_KEY_PREFIX     = 'developer.wordpress.org/';
+	private const CACHE_KEY_PREFIX              = 'flavor_agent_ai_search_';
+	private const CACHE_TTL                     = 21600;
+	private const FAMILY_CACHE_PREFIX           = 'flavor_agent_docs_family_';
+	private const FAMILY_CACHE_TTL              = 28800;
+	private const ENTITY_CACHE_PREFIX           = 'flavor_agent_docs_entity_';
+	private const ENTITY_CACHE_TTL              = 43200;
+	private const VALIDATION_PROBE_QUERY        = 'block editor';
+	private const VALIDATION_PROBE_RESULTS      = 3;
+	private const DEFAULT_PUBLIC_SEARCH_URL     = 'https://c5d54c4a-27df-4034-80da-ca6054684fcd.search.ai.cloudflare.com/search';
+	private const PUBLIC_HOST_SUFFIX            = '.search.ai.cloudflare.com';
+	private const PREWARM_STATE_OPTION          = 'flavor_agent_docs_prewarm_state';
+	private const RUNTIME_STATE_OPTION          = 'flavor_agent_docs_runtime_state';
+	private const WARM_QUEUE_OPTION             = 'flavor_agent_docs_warm_queue';
+	private const PREWARM_THROTTLE_SECONDS      = 3600;
+	private const FOREGROUND_WARM_LOCK_PREFIX   = 'flavor_agent_docs_foreground_warm_';
+	private const FOREGROUND_WARM_LOCK_TTL      = 30;
+	private const FOREGROUND_WARM_TIMEOUT       = 5;
 	private const WARM_QUEUE_RETRY_BASE_SECONDS = 60;
 	private const WARM_QUEUE_RETRY_MAX_SECONDS  = 900;
-	private const MAX_FAMILY_CONTEXT_DEPTH   = 8;
-	private const GUIDANCE_BLOCK_EDITOR_KEY  = 'guidance:block-editor';
-	private const GUIDANCE_GLOBAL_STYLES_KEY = 'guidance:global-styles';
-	private const GUIDANCE_STYLE_BOOK_KEY    = 'guidance:style-book';
-	private const GUIDANCE_TEMPLATE_KEY      = 'guidance:template';
-	private const GUIDANCE_TEMPLATE_PART_KEY = 'guidance:template-part';
+	private const MAX_FAMILY_CONTEXT_DEPTH      = 8;
+	private const GUIDANCE_BLOCK_EDITOR_KEY     = 'guidance:block-editor';
+	private const GUIDANCE_GLOBAL_STYLES_KEY    = 'guidance:global-styles';
+	private const GUIDANCE_STYLE_BOOK_KEY       = 'guidance:style-book';
+	private const GUIDANCE_TEMPLATE_KEY         = 'guidance:template';
+	private const GUIDANCE_TEMPLATE_PART_KEY    = 'guidance:template-part';
 
 	public const PREWARM_CRON_HOOK      = 'flavor_agent_prewarm_docs';
 	public const CONTEXT_WARM_CRON_HOOK = 'flavor_agent_warm_docs_context';
@@ -271,10 +271,10 @@ final class AISearchClient {
 		}
 
 		$fallback_type = 'entity';
-		$guidance = self::maybe_search_entity( $entity_key );
+		$guidance      = self::maybe_search_entity( $entity_key );
 
 		if ( [] === $guidance ) {
-			$guidance = self::maybe_search_entity(
+			$guidance      = self::maybe_search_entity(
 				self::resolve_generic_entity_fallback( $entity_key, $family_context )
 			);
 			$fallback_type = [] === $guidance ? 'none' : 'generic';
@@ -622,21 +622,21 @@ final class AISearchClient {
 	public static function get_runtime_state(): array {
 		if ( ! self::is_configured() ) {
 			return [
-				'status'                => 'off',
-				'queueDepth'            => 0,
-				'nextQueueAttemptAt'    => '',
-				'lastSearchAt'          => '',
-				'lastSearchMode'        => '',
-				'lastResultCount'       => 0,
-				'lastTrustedSuccessAt'  => '',
-				'lastTrustedSuccessMode'=> '',
-				'lastServedAt'          => '',
-				'lastServedMode'        => '',
-				'lastFallbackType'      => '',
-				'lastErrorAt'           => '',
-				'lastErrorMode'         => '',
-				'lastErrorCode'         => '',
-				'lastErrorMessage'      => '',
+				'status'                 => 'off',
+				'queueDepth'             => 0,
+				'nextQueueAttemptAt'     => '',
+				'lastSearchAt'           => '',
+				'lastSearchMode'         => '',
+				'lastResultCount'        => 0,
+				'lastTrustedSuccessAt'   => '',
+				'lastTrustedSuccessMode' => '',
+				'lastServedAt'           => '',
+				'lastServedMode'         => '',
+				'lastFallbackType'       => '',
+				'lastErrorAt'            => '',
+				'lastErrorMode'          => '',
+				'lastErrorCode'          => '',
+				'lastErrorMessage'       => '',
 			];
 		}
 
@@ -645,21 +645,21 @@ final class AISearchClient {
 		$next_queue_attempt = self::resolve_next_context_warm_attempt( $queue );
 
 		return [
-			'status'                => self::resolve_runtime_status( $state, $queue ),
-			'queueDepth'            => count( $queue ),
-			'nextQueueAttemptAt'    => $next_queue_attempt > 0 ? gmdate( 'Y-m-d H:i:s', $next_queue_attempt ) : '',
-			'lastSearchAt'          => (string) ( $state['lastSearchAt'] ?? '' ),
-			'lastSearchMode'        => (string) ( $state['lastSearchMode'] ?? '' ),
-			'lastResultCount'       => (int) ( $state['lastResultCount'] ?? 0 ),
-			'lastTrustedSuccessAt'  => (string) ( $state['lastTrustedSuccessAt'] ?? '' ),
-			'lastTrustedSuccessMode'=> (string) ( $state['lastTrustedSuccessMode'] ?? '' ),
-			'lastServedAt'          => (string) ( $state['lastServedAt'] ?? '' ),
-			'lastServedMode'        => (string) ( $state['lastServedMode'] ?? '' ),
-			'lastFallbackType'      => (string) ( $state['lastFallbackType'] ?? '' ),
-			'lastErrorAt'           => (string) ( $state['lastErrorAt'] ?? '' ),
-			'lastErrorMode'         => (string) ( $state['lastErrorMode'] ?? '' ),
-			'lastErrorCode'         => (string) ( $state['lastErrorCode'] ?? '' ),
-			'lastErrorMessage'      => (string) ( $state['lastErrorMessage'] ?? '' ),
+			'status'                 => self::resolve_runtime_status( $state, $queue ),
+			'queueDepth'             => count( $queue ),
+			'nextQueueAttemptAt'     => $next_queue_attempt > 0 ? gmdate( 'Y-m-d H:i:s', $next_queue_attempt ) : '',
+			'lastSearchAt'           => (string) ( $state['lastSearchAt'] ?? '' ),
+			'lastSearchMode'         => (string) ( $state['lastSearchMode'] ?? '' ),
+			'lastResultCount'        => (int) ( $state['lastResultCount'] ?? 0 ),
+			'lastTrustedSuccessAt'   => (string) ( $state['lastTrustedSuccessAt'] ?? '' ),
+			'lastTrustedSuccessMode' => (string) ( $state['lastTrustedSuccessMode'] ?? '' ),
+			'lastServedAt'           => (string) ( $state['lastServedAt'] ?? '' ),
+			'lastServedMode'         => (string) ( $state['lastServedMode'] ?? '' ),
+			'lastFallbackType'       => (string) ( $state['lastFallbackType'] ?? '' ),
+			'lastErrorAt'            => (string) ( $state['lastErrorAt'] ?? '' ),
+			'lastErrorMode'          => (string) ( $state['lastErrorMode'] ?? '' ),
+			'lastErrorCode'          => (string) ( $state['lastErrorCode'] ?? '' ),
+			'lastErrorMessage'       => (string) ( $state['lastErrorMessage'] ?? '' ),
 		];
 	}
 
@@ -1100,12 +1100,12 @@ final class AISearchClient {
 		}
 
 		return [
-			'query'         => $query,
-			'entityKey'     => self::normalize_entity_key( (string) ( $entry['entityKey'] ?? '' ) ),
-			'familyContext' => self::normalize_family_context(
+			'query'            => $query,
+			'entityKey'        => self::normalize_entity_key( (string) ( $entry['entityKey'] ?? '' ) ),
+			'familyContext'    => self::normalize_family_context(
 				is_array( $entry['familyContext'] ?? null ) ? $entry['familyContext'] : []
 			),
-			'maxResults'    => self::normalize_max_results(
+			'maxResults'       => self::normalize_max_results(
 				isset( $entry['maxResults'] ) ? (int) $entry['maxResults'] : null
 			),
 			'attempts'         => max( 0, (int) ( $entry['attempts'] ?? 0 ) ),
@@ -1274,27 +1274,27 @@ final class AISearchClient {
 	}
 
 	private static function record_runtime_search_error( string $runtime_mode, \WP_Error $error ): void {
-		$state                    = self::read_runtime_state();
-		$timestamp                = self::current_runtime_timestamp();
-		$state['lastSearchAt']    = $timestamp;
-		$state['lastSearchMode']  = sanitize_key( $runtime_mode );
-		$state['lastResultCount'] = 0;
-		$state['lastErrorAt']     = $timestamp;
-		$state['lastErrorMode']   = sanitize_key( $runtime_mode );
-		$state['lastErrorCode']   = sanitize_key( $error->get_error_code() );
+		$state                     = self::read_runtime_state();
+		$timestamp                 = self::current_runtime_timestamp();
+		$state['lastSearchAt']     = $timestamp;
+		$state['lastSearchMode']   = sanitize_key( $runtime_mode );
+		$state['lastResultCount']  = 0;
+		$state['lastErrorAt']      = $timestamp;
+		$state['lastErrorMode']    = sanitize_key( $runtime_mode );
+		$state['lastErrorCode']    = sanitize_key( $error->get_error_code() );
 		$state['lastErrorMessage'] = sanitize_text_field( $error->get_error_message() );
 
 		self::write_runtime_state( $state );
 	}
 
 	private static function record_runtime_search_empty_result( string $runtime_mode ): void {
-		$state                    = self::read_runtime_state();
-		$state['lastSearchAt']    = self::current_runtime_timestamp();
-		$state['lastSearchMode']  = sanitize_key( $runtime_mode );
-		$state['lastResultCount'] = 0;
-		$state['lastErrorAt']     = '';
-		$state['lastErrorMode']   = '';
-		$state['lastErrorCode']   = '';
+		$state                     = self::read_runtime_state();
+		$state['lastSearchAt']     = self::current_runtime_timestamp();
+		$state['lastSearchMode']   = sanitize_key( $runtime_mode );
+		$state['lastResultCount']  = 0;
+		$state['lastErrorAt']      = '';
+		$state['lastErrorMode']    = '';
+		$state['lastErrorCode']    = '';
 		$state['lastErrorMessage'] = '';
 
 		self::write_runtime_state( $state );
@@ -1343,9 +1343,9 @@ final class AISearchClient {
 	 * }> $queue
 	 */
 	private static function resolve_runtime_status( array $state, array $queue ): string {
-		$last_search_at  = self::parse_runtime_timestamp( (string) ( $state['lastSearchAt'] ?? '' ) );
-		$last_success_at = self::parse_runtime_timestamp( (string) ( $state['lastTrustedSuccessAt'] ?? '' ) );
-		$last_error_at   = self::parse_runtime_timestamp( (string) ( $state['lastErrorAt'] ?? '' ) );
+		$last_search_at    = self::parse_runtime_timestamp( (string) ( $state['lastSearchAt'] ?? '' ) );
+		$last_success_at   = self::parse_runtime_timestamp( (string) ( $state['lastTrustedSuccessAt'] ?? '' ) );
+		$last_error_at     = self::parse_runtime_timestamp( (string) ( $state['lastErrorAt'] ?? '' ) );
 		$last_result_count = (int) ( $state['lastResultCount'] ?? 0 );
 
 		if ( [] !== $queue ) {
@@ -1847,7 +1847,7 @@ final class AISearchClient {
 			}
 
 			$seen_object_ids[ $object_id ] = true;
-			$value = get_object_vars( $value );
+			$value                         = get_object_vars( $value );
 		}
 
 		if ( is_array( $value ) ) {

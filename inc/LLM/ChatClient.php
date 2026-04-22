@@ -15,10 +15,15 @@ final class ChatClient {
 		return Provider::chat_configured();
 	}
 
-	public static function chat( string $system_prompt, string $user_prompt ): string|\WP_Error {
+	public static function chat(
+		string $system_prompt,
+		string $user_prompt,
+		?array $schema = null,
+		?string $schema_name = null
+	): string|\WP_Error {
 		$result = Provider::chat_configured()
-			? ResponsesClient::rank( $system_prompt, $user_prompt )
-			: WordPressAIClient::chat( $system_prompt, $user_prompt );
+			? ResponsesClient::rank( $system_prompt, $user_prompt, null, $schema, $schema_name )
+			: WordPressAIClient::chat( $system_prompt, $user_prompt, null, null, $schema );
 
 		if (
 			is_wp_error( $result )

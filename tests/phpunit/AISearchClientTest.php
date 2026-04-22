@@ -170,7 +170,7 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_search_rejects_chunks_without_explicit_trusted_urls_even_with_trusted_source_keys(): void {
-		WordPressTestState::$options              = [
+		WordPressTestState::$options                  = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
@@ -1077,7 +1077,7 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_process_context_warm_queue_seeds_exact_family_and_entity_caches(): void {
-		WordPressTestState::$options              = [
+		WordPressTestState::$options               = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',

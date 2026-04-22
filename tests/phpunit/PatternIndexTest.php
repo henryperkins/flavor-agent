@@ -48,18 +48,18 @@ final class PatternIndexTest extends TestCase {
 		$content = str_repeat( 'x', 520 );
 		$text    = PatternIndex::build_embedding_text(
 			[
-				'title'         => 'Hero',
-				'description'   => 'Editorial hero',
-				'categories'    => [ 'marketing', 'featured' ],
-				'blockTypes'    => [ 'core/group', 'core/heading' ],
-				'templateTypes' => [ 'home', 'front-page' ],
+				'title'            => 'Hero',
+				'description'      => 'Editorial hero',
+				'categories'       => [ 'marketing', 'featured' ],
+				'blockTypes'       => [ 'core/group', 'core/heading' ],
+				'templateTypes'    => [ 'home', 'front-page' ],
 				'patternOverrides' => [
 					'hasOverrides'       => true,
 					'overrideAttributes' => [
 						'core/heading' => [ 'content' ],
 					],
 				],
-				'content'       => $content,
+				'content'          => $content,
 			]
 		);
 
@@ -391,7 +391,7 @@ final class PatternIndexTest extends TestCase {
 		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
 
 		$this->queue_signature_probe();
-		WordPressTestState::$remote_get_responses[] = $this->qdrant_response(
+		WordPressTestState::$remote_get_responses[]  = $this->qdrant_response(
 			404,
 			[
 				'status' => [

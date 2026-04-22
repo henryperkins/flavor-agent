@@ -19,9 +19,11 @@ final class ProviderTest extends TestCase {
 	}
 
 	public function test_choices_fall_back_to_direct_providers_when_connector_registry_throws(): void {
-		WordPressTestState::set_connector_api_errors( [
-			'wp_get_connectors' => 'Connector registry exploded.',
-		] );
+		WordPressTestState::set_connector_api_errors(
+			[
+				'wp_get_connectors' => 'Connector registry exploded.',
+			]
+		);
 
 		$this->assertSame(
 			[
@@ -33,10 +35,12 @@ final class ProviderTest extends TestCase {
 	}
 
 	public function test_openai_connector_status_falls_back_when_connector_api_throws(): void {
-		WordPressTestState::set_connector_api_errors( [
-			'wp_get_connector'           => 'Connector lookup exploded.',
-			'wp_is_connector_registered' => 'Connector registration check exploded.',
-		] );
+		WordPressTestState::set_connector_api_errors(
+			[
+				'wp_get_connector'           => 'Connector lookup exploded.',
+				'wp_is_connector_registered' => 'Connector registration check exploded.',
+			]
+		);
 
 		$status = Provider::openai_connector_status();
 
@@ -53,9 +57,11 @@ final class ProviderTest extends TestCase {
 		WordPressTestState::$options = [
 			Provider::OPTION_NAME => 'anthropic',
 		];
-		WordPressTestState::set_connector_api_errors( [
-			'wp_get_connectors' => 'Connector registry exploded.',
-		] );
+		WordPressTestState::set_connector_api_errors(
+			[
+				'wp_get_connectors' => 'Connector registry exploded.',
+			]
+		);
 		WordPressTestState::$ai_client_supported = true;
 
 		$config = Provider::chat_configuration();
@@ -67,14 +73,14 @@ final class ProviderTest extends TestCase {
 
 	public function test_active_chat_request_meta_reports_azure_path_from_flavor_agent_settings(): void {
 		WordPressTestState::$options = [
-			Provider::OPTION_NAME                     => Provider::AZURE,
-			'flavor_agent_azure_openai_endpoint'     => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'          => 'azure-key',
-			'flavor_agent_azure_chat_deployment'     => 'gpt-5.3-chat',
+			Provider::OPTION_NAME                => Provider::AZURE,
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'gpt-5.3-chat',
 		];
 
 		$config = Provider::chat_configuration();
-		$meta = Provider::active_chat_request_meta();
+		$meta   = Provider::active_chat_request_meta();
 
 		$this->assertSame( Provider::AZURE, $config['provider'] );
 		$this->assertSame( Provider::AZURE, $meta['provider'] );
@@ -93,10 +99,10 @@ final class ProviderTest extends TestCase {
 	}
 
 	public function test_active_chat_request_meta_reports_native_connector_split_ownership(): void {
-		WordPressTestState::$options = [
-			Provider::OPTION_NAME                         => Provider::NATIVE,
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
-			'connectors_ai_openai_api_key'               => 'connector-key',
+		WordPressTestState::$options    = [
+			Provider::OPTION_NAME                   => Provider::NATIVE,
+			'flavor_agent_openai_native_chat_model' => 'gpt-5.4',
+			'connectors_ai_openai_api_key'          => 'connector-key',
 		];
 		WordPressTestState::$connectors = [
 			'openai' => [
@@ -109,7 +115,7 @@ final class ProviderTest extends TestCase {
 		];
 
 		$config = Provider::chat_configuration();
-		$meta = Provider::active_chat_request_meta();
+		$meta   = Provider::active_chat_request_meta();
 
 		$this->assertSame( Provider::NATIVE, $config['provider'] );
 		$this->assertSame( Provider::NATIVE, $meta['provider'] );
@@ -133,10 +139,10 @@ final class ProviderTest extends TestCase {
 	}
 
 	public function test_active_chat_request_meta_reports_connector_identity_for_connector_provider(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options             = [
 			Provider::OPTION_NAME => 'anthropic',
 		];
-		WordPressTestState::$connectors = [
+		WordPressTestState::$connectors          = [
 			'anthropic' => [
 				'type'           => 'ai_provider',
 				'name'           => 'Anthropic',

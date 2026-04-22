@@ -157,7 +157,9 @@ const FALLBACK_MESSAGE =
 function getDefaultMessage( surface, reason ) {
 	const surfaceConfig = SURFACE_MESSAGES[ surface ];
 	if ( surfaceConfig ) {
-		return surfaceConfig[ reason ] || surfaceConfig.default || FALLBACK_MESSAGE;
+		return (
+			surfaceConfig[ reason ] || surfaceConfig.default || FALLBACK_MESSAGE
+		);
 	}
 
 	return FALLBACK_MESSAGE;

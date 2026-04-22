@@ -1,6 +1,6 @@
 import {
-	__experimentalToggleGroupControl as ToggleGroupControl,
-	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+	ToggleGroupControl,
+	ToggleGroupControlOption,
 } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -177,15 +177,6 @@ export default function ContentRecommender() {
 		contentStatus === 'ready' && Boolean( contentRecommendation );
 	const hasOutput =
 		hasResult && hasRecommendationOutput( contentRecommendation );
-	const activeMode = getContentModeConfig( contentMode );
-	const documentTypeLabel =
-		formatContextLabel( postContext.postType ) || 'Post';
-	const documentStatusLabel = formatContextLabel( postContext.status );
-	const documentNoun = documentTypeLabel.toLowerCase();
-	const hasDocumentTitle = Boolean( postContext.title.trim() );
-	const documentTitle = hasDocumentTitle
-		? postContext.title.trim()
-		: `Untitled ${ documentNoun }`;
 	const statusNotice = useSelect(
 		( select ) =>
 			select( STORE_NAME ).getSurfaceStatusNotice( 'content', {
@@ -219,6 +210,16 @@ export default function ContentRecommender() {
 	if ( ! hasSupportedPost ) {
 		return null;
 	}
+
+	const activeMode = getContentModeConfig( contentMode );
+	const documentTypeLabel =
+		formatContextLabel( postContext.postType ) || 'Post';
+	const documentStatusLabel = formatContextLabel( postContext.status );
+	const documentNoun = documentTypeLabel.toLowerCase();
+	const hasDocumentTitle = Boolean( postContext.title.trim() );
+	const documentTitle = hasDocumentTitle
+		? postContext.title.trim()
+		: `Untitled ${ documentNoun }`;
 
 	return (
 		<PluginDocumentSettingPanel

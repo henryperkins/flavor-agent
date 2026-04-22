@@ -1,25 +1,29 @@
-# WordPress 7.0 / Gutenberg 22.8-22.9 RC -- Developer Reference
+# WordPress 7.0 / Gutenberg 22.8-22.9 Stable -- Developer Reference (April 2026 Snapshot)
 
 > Compiled: 2026-03-19
-> Reviewed: 2026-04-03
-> Sources: WP 7.0-beta5 core, Gutenberg 22.8.0 and 22.8.1 release notes, the Gutenberg 22.9 release checklist, and official dev notes through 2026-03-24
-> Scope anchor: Flavor Agent should treat Gutenberg 22.9 RC as the current pre-release compatibility probe, with 22.8.1 as the last stable plugin baseline for this WordPress 7.0 cycle snapshot
+> Reviewed: 2026-04-20
+> Sources: the current WordPress 7.0 release page, the April 2, 2026 `Path Forward` post, Gutenberg 22.8.0 and 22.8.1 release notes, the published Gutenberg 22.9 release post, the April 2026 developer roundup, the March 17, 2026 Playground MCP announcement, the April 2, 2026 `@wordpress/build` article, and official dev notes through 2026-04-10
+> Scope anchor: Flavor Agent should treat the current WordPress 7.0 release page plus Gutenberg 22.9 stable as the latest late-cycle compatibility snapshot, with WordPress 7.0 still pre-release as of April 20, 2026
 > Scope: API changes, new features, and deprecations relevant to block editor plugin development
 > Status: release-cycle reference snapshot, not the live backlog or the canonical source for shipped Flavor Agent behavior.
-> Use `STATUS.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `docs/2026-03-25-roadmap-aligned-execution-plan.md` for current product truth and priorities.
+> Use `STATUS.md`, `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, and `docs/features/` for current product truth and priorities.
 
 ### Official References
 
 - [WordPress 7.0 Beta 5](https://wordpress.org/news/2026/03/wordpress-7-0-beta-5/) -- Official beta announcement with Playground / ZIP / WP-CLI test paths
+- [The Path Forward for WordPress 7.0](https://make.wordpress.org/core/2026/04/02/the-path-forward-for-wordpress-7-0/) -- April 2026 release-cycle status update
+- [What's New for Developers (April 2026)](https://developer.wordpress.org/news/2026/04/whats-new-for-developers-april-2026/) -- Monthly roundup with late-cycle ecosystem notes
 - [What's New for Developers (March 2026)](https://developer.wordpress.org/news/2026/03/whats-new-for-developers-march-2026/) -- Monthly roundup
 - [WordPress 7.0 Release Page](https://make.wordpress.org/core/7-0/) -- Schedule, leads, milestones
 - [Planning for 7.0](https://make.wordpress.org/core/2025/12/11/planning-for-7-0/) -- Feature targets and roadmap
 - [AI as a WordPress Fundamental](https://make.wordpress.org/core/2025/12/04/ai-as-a-wordpress-fundamental/) -- Vision for AI in core
 - [Introducing the AI Client in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/) -- Final WordPress 7.0 AI client dev note
 - [Client-Side Abilities API in WordPress 7.0](https://make.wordpress.org/core/2026/03/24/client-side-abilities-api-in-wordpress-7-0/) -- Final JavaScript Abilities API dev note
-- [Gutenberg 22.9 release checklist](https://github.com/WordPress/gutenberg/issues/76956) -- RC date 2026-04-01, planned stable date 2026-04-08
+- [What’s new in Gutenberg 22.9? (8 April)](https://make.wordpress.org/core/2026/04/09/whats-new-in-gutenberg-22-9-8-april/) -- Published 22.9 stable release summary
 - [Gutenberg 22.8.0 Release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0) -- Release notes for the 2026-03-25 scope anchor
 - [Gutenberg 22.8.1 Release](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1) -- Patch release notes for the 2026-03-26 bugfix baseline
+- [Connect AI coding agents to WordPress Playground with MCP](https://make.wordpress.org/playground/2026/03/17/connect-ai-coding-agents-to-wordpress-playground-with-mcp/) -- Official agent tooling for local Playground workflows
+- [@wordpress/build, the next generation of WordPress plugin build tooling](https://developer.wordpress.org/news/2026/04/wordpress-build-the-next-generation-of-wordpress-plugin-build-tooling/) -- Tooling-direction watch item for plugin build pipelines
 
 ---
 
@@ -37,7 +41,9 @@
 10. [Block API and Editor Changes](#block-api-and-editor-changes)
 11. [Experimental API Status](#experimental-api-status)
 12. [New WP-CLI Commands](#new-wp-cli-commands)
-13. [Impact on Flavor Agent](#impact-on-flavor-agent)
+13. [Playground MCP](#playground-mcp)
+14. [Build Tooling Watch](#build-tooling-watch)
+15. [Impact on Flavor Agent](#impact-on-flavor-agent)
 
 ---
 
@@ -56,6 +62,12 @@ A unified framework for registering and managing external service integrations. 
 - A **connector** represents a connection to an external service with standardized metadata, authentication, and plugin association.
 - AI provider plugins that register with the WP AI Client's `ProviderRegistry` get **automatic connector integration** -- no explicit registration needed.
 - Built-in connectors: **Anthropic**, **Google**, **OpenAI** (hardcoded defaults, enriched by provider plugin metadata).
+
+### Late-Cycle April 2026 Notes
+
+- Gutenberg 22.8 added Connectors extensibility improvements, which reinforces the repo's current strategy of treating connector-backed providers as real runtime inputs rather than a narrow built-in list.
+- The April 2026 developer roundup and the March 25 community testing call show the ecosystem growing beyond the three initial official providers, with OpenRouter, Ollama, and Mistral already published as community connectors.
+- For Flavor Agent, this changes the practical connector landscape more than the core API shape: connector-backed chat paths matter more, while embeddings and Qdrant remain intentionally plugin-owned.
 
 ### Public Functions
 
@@ -803,7 +815,7 @@ New [Icon block (#71227)](https://github.com/WordPress/gutenberg/pull/71227) wit
 
 ### Still Experimental (No Stable Replacement)
 
-These APIs remain experimental in both WP 7.0 and the late-cycle Gutenberg 22.8/22.9 RC snapshots. They are the correct and only way to access their respective features.
+These APIs remain experimental in both WP 7.0 and the late-cycle Gutenberg 22.8/22.9 stable snapshot. They are the correct and only way to access their respective features.
 
 | API | Used By | Notes |
 |-----|---------|-------|
@@ -868,6 +880,35 @@ wp package install wp-cli/ability-command:dev-main
 
 Both targeting WP-CLI 3.0 stable (end of March 2026).
 
+## Playground MCP
+
+**Announcement:** [Connect AI coding agents to WordPress Playground with MCP](https://make.wordpress.org/playground/2026/03/17/connect-ai-coding-agents-to-wordpress-playground-with-mcp/)
+
+WordPress Playground now has an official MCP server via the `@wp-playground/mcp` package. It runs as a local Node.js stdio server and forwards tool calls into a browser-based Playground instance over WebSocket.
+
+### Why It Matters Here
+
+- It gives Flavor Agent contributors an official way to drive local Playground sites through an agent without inventing custom glue code.
+- It is a workflow and tooling opportunity, not a new runtime dependency for the plugin.
+- It complements the repo's existing Playground-based browser harness and WordPress-local development notes, but it should remain optional until the team explicitly chooses to standardize on it.
+
+### No Immediate Product Change
+
+- Flavor Agent does not need to ship or require Playground MCP support to keep its current first-party surfaces working.
+- The most relevant follow-up is documentation: note that official Playground MCP exists for local experimentation, debugging, and agent-assisted plugin/theme workflows.
+
+## Build Tooling Watch
+
+**Article:** [@wordpress/build, the next generation of WordPress plugin build tooling](https://developer.wordpress.org/news/2026/04/wordpress-build-the-next-generation-of-wordpress-plugin-build-tooling/)
+
+The April 2, 2026 article positions `@wordpress/build` as the future engine under `@wordpress/scripts`, with Gutenberg already using it internally. The article explicitly says the long-term plan is to let plugin developers benefit without forcing an immediate workflow change.
+
+### Relevance To Flavor Agent
+
+- The repo currently uses `@wordpress/scripts` and should keep doing so in this refresh.
+- This is a tooling-direction watch item rather than an adoption task.
+- The main thing worth tracking is whether future `@wordpress/scripts` releases absorb `@wordpress/build` behavior in ways that affect generated assets, script registration, or repo conventions.
+
 ## Other Dev Notes
 
 | Topic | Link |
@@ -878,7 +919,10 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | DataViews / DataForm | [DataViews, DataForm, et al. in WordPress 7.0](https://make.wordpress.org/core/2026/03/04/dataviews-dataform-et-al-in-wordpress-7-0/) |
 | Breadcrumb Block Filters | [Breadcrumb block filters](https://make.wordpress.org/core/2026/03/04/breadcrumb-block-filters/) |
 | PHP 7.2/7.3 Dropped | [Dropping support for PHP 7.2 and 7.3](https://make.wordpress.org/core/2026/01/09/dropping-support-for-php-7-2-and-7-3/) |
-| Gutenberg 22.9 RC | [Gutenberg 22.9 release checklist](https://github.com/WordPress/gutenberg/issues/76956) |
+| WordPress 7.0 release status | [The Path Forward for WordPress 7.0](https://make.wordpress.org/core/2026/04/02/the-path-forward-for-wordpress-7-0/) |
+| Gutenberg 22.9 stable | [What’s new in Gutenberg 22.9? (8 April)](https://make.wordpress.org/core/2026/04/09/whats-new-in-gutenberg-22-9-8-april/) |
+| Playground MCP | [Connect AI coding agents to WordPress Playground with MCP](https://make.wordpress.org/playground/2026/03/17/connect-ai-coding-agents-to-wordpress-playground-with-mcp/) |
+| `@wordpress/build` | [@wordpress/build, the next generation of WordPress plugin build tooling](https://developer.wordpress.org/news/2026/04/wordpress-build-the-next-generation-of-wordpress-plugin-build-tooling/) |
 | Gutenberg 22.8.1 | [Release 22.8.1](https://github.com/WordPress/gutenberg/releases/tag/v22.8.1) |
 | Gutenberg 22.8.0 | [Release 22.8.0](https://github.com/WordPress/gutenberg/releases/tag/v22.8.0) |
 | Gutenberg 22.7 | [What's new in Gutenberg 22.7 (11 March)](https://make.wordpress.org/core/2026/03/11/whats-new-in-gutenberg-22-7-11-march/) |
@@ -899,6 +943,9 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | Opportunity | Description |
 |-------------|-------------|
 | Bindings panel routing for LLM | Keep the dedicated `bindings` inspector surface aligned with the prompt schema so bindings-aware suggestions can route back to the correct UI. |
+| Connector ecosystem growth | Keep connector-backed chat support and docs aligned with a world where community providers are now normal, not exceptional. |
+| Playground MCP workflows | Decide later whether the official `@wp-playground/mcp` flow belongs in local-dev guidance or agent-assist runbooks. |
+| `@wordpress/build` watch | Re-evaluate only when `@wordpress/scripts` absorbs it in a way that changes repo conventions or generated output. |
 
 ### No Action Needed
 
@@ -913,6 +960,9 @@ Both targeting WP-CLI 3.0 stable (end of March 2026).
 | Navigation overlay support | `recommend-navigation` is implemented, and server-side navigation context already collects `navigation-overlay` template parts. |
 | Editor iframe changes (punted to 7.1) | Plugin uses iframe-safe patterns already |
 | New typography supports (`fitText`, `textIndent`) | Mapped in both support collectors and exposed through the typography panel model |
+| Community connector providers | These broaden the supported chat ecosystem, but the existing connector-backed provider model already fits them without contract changes. |
+| Playground MCP | Useful for contributor workflows, but not required for the shipped plugin or browser harnesses. |
+| `@wordpress/build` direction | The repo can stay on `@wordpress/scripts`; the published direction is explicitly low-disruption rather than an immediate migration demand. |
 | All three `__experimental*` pattern APIs | Still the correct and only way to access these features |
 | `PluginDocumentSettingPanel` location | Already imports from `@wordpress/editor` |
 | `setIsInserterOpened` location | Already dispatches on `core/editor` |

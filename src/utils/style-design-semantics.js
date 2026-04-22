@@ -137,12 +137,11 @@ function resolveEmphasisHint( {
 	siblingCount = 1,
 	childCount = 0,
 } = {} ) {
-	const role = String( identity?.role || '' );
-	const location = String( identity?.location || '' );
-
 	if ( hiddenViewports.length > 0 ) {
 		return 'conditional';
 	}
+
+	const role = String( identity?.role || '' );
 
 	if (
 		[
@@ -154,6 +153,8 @@ function resolveEmphasisHint( {
 	) {
 		return 'primary';
 	}
+
+	const location = String( identity?.location || '' );
 
 	if (
 		location === 'footer' ||

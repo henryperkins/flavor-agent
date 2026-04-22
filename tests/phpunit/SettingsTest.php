@@ -893,7 +893,7 @@ final class SettingsTest extends TestCase {
 
 	public function test_render_settings_notices_displays_plugin_messages_when_request_scoped_feedback_is_present(): void {
 		$_GET = [
-			'settings-updated'                    => 'true',
+			'settings-updated'                   => 'true',
 			'flavor_agent_settings_feedback_key' => 'token-user-1',
 		];
 
@@ -1018,7 +1018,7 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_register_contextual_help_uses_native_wp_screen_help_tabs(): void {
-		$screen = new \WP_Screen();
+		$screen                             = new \WP_Screen();
 		WordPressTestState::$current_screen = $screen;
 
 		Settings::register_contextual_help();
@@ -1095,7 +1095,7 @@ final class SettingsTest extends TestCase {
 			Assets::should_enqueue_assets( 'dashboard_page_demo', 'settings_page_flavor-agent' )
 		);
 
-		$_GET = [];
+		$_GET                               = [];
 		WordPressTestState::$current_screen = (object) [
 			'id'   => 'settings_page_flavor-agent',
 			'base' => 'settings_page_flavor-agent',
@@ -1107,7 +1107,7 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_should_enqueue_admin_assets_rejects_other_admin_pages(): void {
-		$_GET = [
+		$_GET                               = [
 			'page' => 'plugins',
 		];
 		WordPressTestState::$current_screen = (object) [
@@ -1232,7 +1232,7 @@ final class SettingsTest extends TestCase {
 
 	public function test_read_settings_page_feedback_only_consumes_when_requested(): void {
 		WordPressTestState::$current_user_id = 7;
-		$storage_key                        = Feedback::get_storage_key( 'feedback-token' );
+		$storage_key                         = Feedback::get_storage_key( 'feedback-token' );
 
 		WordPressTestState::$transients[ $storage_key ] = [
 			'changed_sections' => [
@@ -1285,7 +1285,7 @@ final class SettingsTest extends TestCase {
 
 	public function test_record_section_feedback_message_appends_messages_for_the_same_section(): void {
 		$_POST = [
-			'option_page'                         => 'flavor_agent_settings',
+			'option_page'                        => 'flavor_agent_settings',
 			'flavor_agent_settings_feedback_key' => 'feedback-token',
 		];
 
@@ -1321,7 +1321,7 @@ final class SettingsTest extends TestCase {
 
 	public function test_record_section_feedback_message_preserves_the_first_focus_section(): void {
 		$_POST = [
-			'option_page'                         => 'flavor_agent_settings',
+			'option_page'                        => 'flavor_agent_settings',
 			'flavor_agent_settings_feedback_key' => 'focus-token',
 		];
 
@@ -1372,12 +1372,12 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_determine_default_open_group_defaults_to_chat_when_runtime_chat_is_not_ready(): void {
-		$state                        = $this->build_default_open_group_state();
-		$state['runtime_chat']        = [ 'configured' => false ];
-		$state['runtime_embedding']   = [ 'configured' => true ];
-		$state['qdrant_configured']   = true;
-		$state['docs_configured']     = true;
-		$state['prewarm_state']       = [ 'status' => 'failed' ];
+		$state                           = $this->build_default_open_group_state();
+		$state['runtime_chat']           = [ 'configured' => false ];
+		$state['runtime_embedding']      = [ 'configured' => true ];
+		$state['qdrant_configured']      = true;
+		$state['docs_configured']        = true;
+		$state['prewarm_state']          = [ 'status' => 'failed' ];
 		$state['runtime_docs_grounding'] = [ 'status' => 'error' ];
 
 		$this->assertSame(
@@ -1397,9 +1397,9 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_determine_default_open_group_prioritizes_docs_for_runtime_failures(): void {
-		$state                            = $this->build_default_open_group_state();
-		$state['docs_configured']         = true;
-		$state['runtime_docs_grounding']  = [ 'status' => 'retrying' ];
+		$state                           = $this->build_default_open_group_state();
+		$state['docs_configured']        = true;
+		$state['runtime_docs_grounding'] = [ 'status' => 'retrying' ];
 
 		$this->assertSame(
 			'docs',
@@ -1444,9 +1444,9 @@ final class SettingsTest extends TestCase {
 
 	public function test_render_page_keeps_cloudflare_override_controls_available(): void {
 		WordPressTestState::$options = [
-			'flavor_agent_cloudflare_ai_search_account_id'  => 'account-123',
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
-			'flavor_agent_cloudflare_ai_search_api_token'   => 'token-xyz',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
 
 		ob_start();
@@ -1487,8 +1487,8 @@ final class SettingsTest extends TestCase {
 
 	public function test_render_page_consumes_request_scoped_feedback_only_for_the_matching_user(): void {
 		WordPressTestState::$current_user_id = 1;
-		$_POST                              = [
-			'option_page'                         => 'flavor_agent_settings',
+		$_POST                               = [
+			'option_page'                        => 'flavor_agent_settings',
 			'flavor_agent_settings_feedback_key' => 'token-user-1',
 		];
 
@@ -1496,7 +1496,7 @@ final class SettingsTest extends TestCase {
 
 		$_POST = [];
 		$_GET  = [
-			'settings-updated'                    => 'true',
+			'settings-updated'                   => 'true',
 			'flavor_agent_settings_feedback_key' => 'token-user-1',
 		];
 
@@ -1543,7 +1543,7 @@ final class SettingsTest extends TestCase {
 
 	public function test_sanitize_guideline_copy_marks_guidelines_feedback_and_sanitizes_text(): void {
 		$_POST = [
-			'option_page'                         => 'flavor_agent_settings',
+			'option_page'                        => 'flavor_agent_settings',
 			'flavor_agent_settings_feedback_key' => 'guidelines-copy',
 		];
 
@@ -1564,7 +1564,7 @@ final class SettingsTest extends TestCase {
 			],
 		];
 		$_POST                       = [
-			'option_page'                         => 'flavor_agent_settings',
+			'option_page'                        => 'flavor_agent_settings',
 			'flavor_agent_settings_feedback_key' => 'guidelines-blocks',
 		];
 
@@ -1623,8 +1623,8 @@ final class SettingsTest extends TestCase {
 	public function test_get_docs_overview_status_reports_retrying_from_runtime_grounding_state(): void {
 		$result = State::get_docs_overview_status(
 			[
-				'docs_configured'         => true,
-				'prewarm_state'           => [
+				'docs_configured'        => true,
+				'prewarm_state'          => [
 					'status' => 'ok',
 				],
 				'runtime_docs_grounding' => [
@@ -1661,7 +1661,7 @@ final class SettingsTest extends TestCase {
 				'lastErrorCode'          => 'http_request_failed',
 				'lastErrorMessage'       => 'Cloudflare timed out.',
 			],
-			'flavor_agent_docs_warm_queue'                => [
+			'flavor_agent_docs_warm_queue'                 => [
 				[
 					'query'            => 'navigation footer guidance',
 					'entityKey'        => 'core/navigation',

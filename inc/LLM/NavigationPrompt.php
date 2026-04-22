@@ -77,8 +77,8 @@ SYSTEM;
 		$budget = new PromptBudget();
 
 		// ── Priority 100: Navigation identity (always kept) ──
-		$identity_lines = [];
-		$location       = (string) ( $context['location'] ?? 'unknown' );
+		$identity_lines   = [];
+		$location         = (string) ( $context['location'] ?? 'unknown' );
 		$identity_lines[] = "## Navigation\nLocation: {$location}";
 
 		if ( array_key_exists( 'menuId', $context ) && null !== $context['menuId'] ) {

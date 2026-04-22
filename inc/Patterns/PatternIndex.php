@@ -15,10 +15,10 @@ final class PatternIndex {
 	public const STATE_OPTION = 'flavor_agent_pattern_index_state';
 	public const CRON_HOOK    = 'flavor_agent_reindex_patterns';
 
-	private const LOCK_TRANSIENT = 'flavor_agent_sync_lock';
-	private const LOCK_TTL       = 300;
-	private const COOLDOWN       = 300;
-	private const BATCH_SIZE     = 100;
+	private const LOCK_TRANSIENT              = 'flavor_agent_sync_lock';
+	private const LOCK_TTL                    = 300;
+	private const COOLDOWN                    = 300;
+	private const BATCH_SIZE                  = 100;
 	private const COMPATIBILITY_STALE_REASONS = [
 		'embedding_signature_changed',
 		'qdrant_url_changed',
@@ -36,26 +36,26 @@ final class PatternIndex {
 
 	public static function get_state(): array {
 		$defaults = [
-			'status'               => 'uninitialized',
-			'fingerprint'          => '',
-			'qdrant_url'           => '',
-			'qdrant_collection'    => '',
-			'openai_provider'      => '',
-			'openai_endpoint'      => '',
-			'embedding_model'      => '',
-			'embedding_dimension'  => 0,
-			'embedding_signature'  => '',
-			'last_synced_at'       => null,
-			'last_attempt_at'      => null,
-			'indexed_count'        => 0,
-			'last_error'           => null,
-			'last_error_code'      => '',
-			'last_error_status'    => 0,
-			'last_error_retryable' => false,
+			'status'                 => 'uninitialized',
+			'fingerprint'            => '',
+			'qdrant_url'             => '',
+			'qdrant_collection'      => '',
+			'openai_provider'        => '',
+			'openai_endpoint'        => '',
+			'embedding_model'        => '',
+			'embedding_dimension'    => 0,
+			'embedding_signature'    => '',
+			'last_synced_at'         => null,
+			'last_attempt_at'        => null,
+			'indexed_count'          => 0,
+			'last_error'             => null,
+			'last_error_code'        => '',
+			'last_error_status'      => 0,
+			'last_error_retryable'   => false,
 			'last_error_retry_after' => null,
-			'stale_reason'         => '',
-			'stale_reasons'        => [],
-			'pattern_fingerprints' => [],
+			'stale_reason'           => '',
+			'stale_reasons'          => [],
+			'pattern_fingerprints'   => [],
 		];
 
 		return wp_parse_args( get_option( self::STATE_OPTION, $defaults ), $defaults );
@@ -85,16 +85,16 @@ final class PatternIndex {
 	}
 
 	public static function save_state( array $state ): void {
-		$state['embedding_dimension'] = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
-		$state['embedding_signature'] = (string) ( $state['embedding_signature'] ?? '' );
-		$state['last_error_code']      = (string) ( $state['last_error_code'] ?? '' );
-		$state['last_error_status']    = max( 0, (int) ( $state['last_error_status'] ?? 0 ) );
-		$state['last_error_retryable'] = ! empty( $state['last_error_retryable'] );
+		$state['embedding_dimension']    = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+		$state['embedding_signature']    = (string) ( $state['embedding_signature'] ?? '' );
+		$state['last_error_code']        = (string) ( $state['last_error_code'] ?? '' );
+		$state['last_error_status']      = max( 0, (int) ( $state['last_error_status'] ?? 0 ) );
+		$state['last_error_retryable']   = ! empty( $state['last_error_retryable'] );
 		$state['last_error_retry_after'] = isset( $state['last_error_retry_after'] ) && $state['last_error_retry_after'] !== null
 			? max( 1, min( 60, (int) $state['last_error_retry_after'] ) )
 			: null;
-		$state['stale_reason']        = (string) ( $state['stale_reason'] ?? '' );
-		$state['stale_reasons']       = self::normalize_stale_reasons( $state );
+		$state['stale_reason']           = (string) ( $state['stale_reason'] ?? '' );
+		$state['stale_reasons']          = self::normalize_stale_reasons( $state );
 
 		update_option( self::STATE_OPTION, $state, false );
 	}
@@ -426,7 +426,7 @@ final class PatternIndex {
 
 		$state['last_attempt_at'] = gmdate( 'c' );
 		self::save_state( $state );
-		$probe       = self::probe_active_embedding_signature();
+		$probe = self::probe_active_embedding_signature();
 
 		if ( is_wp_error( $probe ) ) {
 			self::save_error_state( $probe );
@@ -434,17 +434,17 @@ final class PatternIndex {
 		}
 
 		// Steps 4-6: Determine if re-index is needed.
-		$qdrant_url        = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_collection = QdrantClient::get_collection_name( $probe['signature'] );
-		$openai_provider   = $probe['signature']['provider'];
-		$openai_endpoint   = $probe['endpoint'];
-		$embedding_model   = $probe['signature']['model'];
-		$embedding_dimension = $probe['signature']['dimension'];
-		$embedding_signature = $probe['signature']['signature_hash'];
+		$qdrant_url                    = get_option( 'flavor_agent_qdrant_url', '' );
+		$qdrant_collection             = QdrantClient::get_collection_name( $probe['signature'] );
+		$openai_provider               = $probe['signature']['provider'];
+		$openai_endpoint               = $probe['endpoint'];
+		$embedding_model               = $probe['signature']['model'];
+		$embedding_dimension           = $probe['signature']['dimension'];
+		$embedding_signature           = $probe['signature']['signature_hash'];
 		$previous_pattern_fingerprints = is_array( $state['pattern_fingerprints'] ?? null )
 			? $state['pattern_fingerprints']
 			: [];
-		$has_usable_index = self::has_usable_index( $state );
+		$has_usable_index              = self::has_usable_index( $state );
 
 		$needs_reindex = ! $has_usable_index
 			|| $state['fingerprint'] !== $fingerprint
@@ -510,7 +510,7 @@ final class PatternIndex {
 			$current_pattern_fingerprints[ $uuid ] = self::compute_pattern_fingerprint( $pattern );
 		}
 
-		$requires_full_reindex         = ! $has_usable_index
+		$requires_full_reindex = ! $has_usable_index
 			|| $state['qdrant_url'] !== $qdrant_url
 			|| $state['qdrant_collection'] !== $qdrant_collection
 			|| $state['embedding_signature'] !== $embedding_signature
@@ -650,15 +650,15 @@ final class PatternIndex {
 				'id'      => $uuid,
 				'vector'  => $vectors[ $i ],
 				'payload' => [
-					'name'          => $p['name'],
-					'title'         => $p['title'],
-					'description'   => $p['description'] ?? '',
-					'categories'    => $p['categories'] ?? [],
-					'blockTypes'    => $p['blockTypes'] ?? [],
-					'templateTypes' => $p['templateTypes'] ?? [],
+					'name'             => $p['name'],
+					'title'            => $p['title'],
+					'description'      => $p['description'] ?? '',
+					'categories'       => $p['categories'] ?? [],
+					'blockTypes'       => $p['blockTypes'] ?? [],
+					'templateTypes'    => $p['templateTypes'] ?? [],
 					'patternOverrides' => $p['patternOverrides'] ?? [],
-					'traits'        => self::infer_layout_traits( $p ),
-					'content'       => $p['content'] ?? '',
+					'traits'           => self::infer_layout_traits( $p ),
+					'content'          => $p['content'] ?? '',
 				],
 			];
 		}
@@ -707,7 +707,7 @@ final class PatternIndex {
 			$reasons[] = 'openai_endpoint_changed';
 		}
 
-		$current_dimension = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
+		$current_dimension   = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
 		$expected_collection = QdrantClient::get_collection_name(
 			EmbeddingSignature::from_configuration( $current_config, $current_dimension )
 		);
@@ -750,11 +750,11 @@ final class PatternIndex {
 		$state = self::get_state();
 
 		if ( is_wp_error( $error ) ) {
-			$data                           = $error->get_error_data();
-			$state['last_error']           = $error->get_error_message();
-			$state['last_error_code']      = (string) $error->get_error_code();
-			$state['last_error_status']    = is_array( $data ) ? max( 0, (int) ( $data['status'] ?? 0 ) ) : 0;
-			$state['last_error_retryable'] = is_array( $data ) && ! empty( $data['retryable'] );
+			$data                            = $error->get_error_data();
+			$state['last_error']             = $error->get_error_message();
+			$state['last_error_code']        = (string) $error->get_error_code();
+			$state['last_error_status']      = is_array( $data ) ? max( 0, (int) ( $data['status'] ?? 0 ) ) : 0;
+			$state['last_error_retryable']   = is_array( $data ) && ! empty( $data['retryable'] );
 			$state['last_error_retry_after'] = is_array( $data ) && isset( $data['retry_after'] ) && $data['retry_after'] !== null
 				? max( 1, min( 60, (int) $data['retry_after'] ) )
 				: null;

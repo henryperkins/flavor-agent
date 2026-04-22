@@ -7,6 +7,7 @@ namespace FlavorAgent\Abilities;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\LLM\TemplatePrompt;
 use FlavorAgent\LLM\TemplatePartPrompt;
 use FlavorAgent\LLM\ThemeTokenFormatter;
@@ -115,7 +116,13 @@ final class TemplateAbilities {
 			$docs_guidance
 		);
 
-		$result = ResponsesClient::rank( $system, $user );
+		$result = ResponsesClient::rank(
+			$system,
+			$user,
+			null,
+			ResponseSchema::get( 'template' ),
+			'flavor_agent_template'
+		);
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -204,7 +211,13 @@ final class TemplateAbilities {
 			$docs_guidance
 		);
 
-		$result = ResponsesClient::rank( $system, $user );
+		$result = ResponsesClient::rank(
+			$system,
+			$user,
+			null,
+			ResponseSchema::get( 'template_part' ),
+			'flavor_agent_template_part'
+		);
 
 		if ( is_wp_error( $result ) ) {
 			return $result;

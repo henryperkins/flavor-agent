@@ -45,8 +45,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			value: '',
 		} );
 		const hydratedResultKeyRef = useRef( null );
-		const { revalidateBlockReviewFreshness } =
-			useDispatch( STORE_NAME );
+		const { revalidateBlockReviewFreshness } = useDispatch( STORE_NAME );
 		const {
 			recommendations,
 			editingMode,
@@ -204,7 +203,11 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 		// (already used by template/style/navigation surfaces) to blocks,
 		// so stale detection happens without re-running the full LLM call.
 		useEffect( () => {
-			if ( status !== 'ready' || ! hasStoredResult || ! currentRequestInput ) {
+			if (
+				status !== 'ready' ||
+				! hasStoredResult ||
+				! currentRequestInput
+			) {
 				return;
 			}
 

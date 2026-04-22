@@ -8,6 +8,8 @@ description: "Learn about all the new updates coming to WordPress for developers
 tags:
   - "clippings"
 ---
+> **Note:** This file is a clipped source snapshot created on April 19, 2026. Treat it as research input rather than canonical Flavor Agent product truth. For maintained repo takeaways from the same upstream material, use `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md`.
+
 One of the more exciting things about working on an open-source project of the size and scope of WordPress is that anything can happen.
 
 On [March 31, 2026, it was announced](https://make.wordpress.org/core/2026/03/31/extending-the-7-0-cycle/) that the WordPress 7.0 release cycle needed to be extended to get the Real-Time Collaboration (RTC) database architecture right. Then, on April 2nd, a [follow-up post](https://make.wordpress.org/core/2026/04/02/the-path-forward-for-wordpress-7-0/) spelled out exactly what that means in practice.

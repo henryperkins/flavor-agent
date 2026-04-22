@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-07
+> Last updated: 2026-04-21
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -13,11 +13,11 @@ Use these documents together:
 3. `STATUS.md` -- current verified state and known issues
 4. `docs/FEATURE_SURFACE_MATRIX.md` -- feature locations, surfacing conditions, and apply/undo matrix
 5. `docs/features/README.md` -- deep-dive user-flow documentation for each shipped surface
-6. `docs/reference/` -- canonical programmatic and shared-surface contract docs (abilities-and-routes, shared-internals, recommendation-ui-consistency, provider-precedence, template-operations, activity-state-machine)
+6. `docs/reference/` -- canonical programmatic and shared-surface contract docs (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, provider-precedence, template-operations, activity-state-machine)
 7. `docs/flavor-agent-readme.md` -- editor-flow and architecture companion
-8. `docs/2026-03-25-roadmap-aligned-execution-plan.md` -- active forward plan
+8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md` -- WordPress 7.0 release-cycle research snapshots and migration watch items
 
-Supplemental dated planning docs such as `docs/2026-04-03-wordpress-direction-review.md` and `docs/2026-04-03-three-phase-roadmap.md` are historical context, not the active plan of record.
+Historical planning docs referenced in older commits are not part of the current documentation backbone; use git history if that context is needed.
 
 ## What This Plugin Is
 
@@ -273,9 +273,9 @@ flavor-agent/
     FEATURE_SURFACE_MATRIX.md Feature surface and gating matrix
     flavor-agent-readme.md  Architecture and editor flow reference
     local-wordpress-ide.md  Local WordPress + devcontainer workflow
-    2026-03-25-roadmap-aligned-execution-plan.md Active forward plan
-    2026-04-03-wordpress-direction-review.md Supplemental dated direction review
-    2026-04-03-three-phase-roadmap.md Supplemental dated roadmap translation
+    wordpress-7.0-developer-docs-index.md Discovery snapshot of official WordPress 7.0 developer documentation sources
+    wordpress-7.0-gutenberg-22.8-reference.md WordPress 7.0 and Gutenberg late-cycle compatibility reference snapshot
+    wp7-migration-opportunities.md Point-in-time WordPress 7.0 migration assessment and follow-up opportunities
     features/
       README.md             Entry point for per-surface deep dives
       activity-and-audit.md
@@ -774,15 +774,13 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 | `docs/reference/abilities-and-routes.md`                           | Canonical ability and REST contract reference                                                              | **Current**                    |
 | `docs/reference/shared-internals.md`                               | Shared store utilities, UI components, and context helpers                                                  | **Current**                    |
 | `docs/reference/recommendation-ui-consistency.md`                  | Cross-surface interaction-model split, shared taxonomy, and intentional recommendation-surface exceptions  | **Current**                    |
+| `docs/reference/cross-surface-validation-gates.md`                 | Additive release gates and required evidence for multi-surface or shared-subsystem changes                  | **Current**                    |
 | `docs/reference/provider-precedence.md`                            | AI backend selection and credential fallback chain                                                         | **Current**                    |
 | `docs/reference/template-operations.md`                            | Operation type vocabulary and validation rules per surface                                                 | **Current**                    |
 | `docs/reference/activity-state-machine.md`                         | Undo states, transitions, ordered undo, and pruning                                                        | **Current**                    |
 | `docs/flavor-agent-readme.md`                                      | Architecture details: editor flows, settings, style surfaces, pattern lifecycle, and admin audit          | **Current**                    |
 | `docs/local-wordpress-ide.md`                                      | Local Docker/devcontainer workflow and host setup                                                          | **Current**                    |
-| `docs/2026-03-25-roadmap-aligned-execution-plan.md`                | Active forward plan aligned to the current WordPress 7.0 and Gutenberg roadmap context                     | **Current**                    |
-| `docs/2026-04-03-wordpress-direction-review.md`                    | Supplemental dated direction review after the WordPress 7.0 schedule extension                              | **Supplemental context**       |
-| `docs/2026-04-03-three-phase-roadmap.md`                           | Supplemental dated three-phase execution framing derived from the direction review                           | **Supplemental context**       |
-| `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WP 7.0 plus Gutenberg 22.8 stable / 22.9 RC API changes, new features, deprecations, and plugin impact     | **Reference snapshot**         |
+| `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WordPress 7.0 and late-cycle Gutenberg API changes, new features, deprecations, and plugin impact snapshot | **Reference snapshot**         |
 | `docs/wordpress-7.0-developer-docs-index.md`                       | Discovery snapshot of official WordPress 7.0 developer documentation sources                               | **Reference snapshot**         |
 | `docs/wp7-migration-opportunities.md`                              | Point-in-time WordPress 7.0 migration assessment and follow-up opportunities                               | **Reference snapshot**         |
 | `docs/superpowers/specs/2026-03-17-pattern-badge-status-design.md` | Implemented design spec for pattern badge status surface                                                   | **Implemented reference spec** |
@@ -805,6 +803,7 @@ npm run test:unit -- --runInBand     # Jest unit tests
 npm run test:e2e                     # Default Playwright smoke coverage (Playground + WP 7.0 harness)
 npm run test:e2e:playground          # Fast 6.9.4 Playground smoke harness
 npm run test:e2e:wp70                # Docker-backed WP 7.0 Site Editor harness
+node scripts/verify.js --skip-e2e    # Baseline non-browser release gate for cross-surface changes
 npm run wp:start                     # Local Docker stack up
 npm run wp:stop                      # Local Docker stack down
 npm run wp:reset                     # Local Docker stack reset
@@ -818,6 +817,18 @@ composer test:php                    # PHPUnit alias
 vendor/bin/phpunit                   # PHPUnit tests (direct)
 vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (direct)
 ```
+
+## Cross-Surface Validation
+
+Multi-surface validation is an explicit release contract, not an implicit reviewer judgment call. Use `docs/reference/cross-surface-validation-gates.md` whenever a change touches more than one recommendation surface or any shared subsystem such as REST or ability contracts, provider routing, freshness signatures, activity and undo, shared UI taxonomy, or operator and admin paths.
+
+Minimum sign-off evidence:
+
+- nearest targeted PHPUnit and JS suites for the touched subsystem
+- `node scripts/verify.js --skip-e2e` plus `output/verify/summary.json`
+- `npm run check:docs` when contracts, surfacing rules, operator paths, or contributor docs changed
+- targeted Playwright coverage in the matching harnesses: `playground` for post-editor, block, pattern, and navigation flows; `wp70` for Site Editor template, template-part, Global Styles, and Style Book flows
+- a recorded blocker or explicit waiver for any known-red or unavailable browser harness, with `STATUS.md` as the source of truth for current harness health
 
 ## Key Technical Decisions
 
@@ -833,3 +844,4 @@ vendor/bin/phpcs --standard=phpcs.xml.dist inc/ flavor-agent.php  # WPCS lint (d
 10. **Pattern Overrides, expanded `contentOnly`, and first-style extras stay bounded**: Pattern Overrides-aware ranking, broader `contentOnly` structural semantics, width/height preset transforms, and pseudo-element-aware token extraction are all deferred until later bounded milestones rather than being treated as ambient WP 7.0 work.
 11. **`customCSS` recommendation generation is out of scope for v1**: The product remains grounded in native Gutenberg structures and theme tokens, not raw CSS authoring.
 12. **Surface readiness uses one shared contract**: `flavorAgentData.capabilities.surfaces` and `flavor-agent/check-status` now read from the same `SurfaceCapabilities` shape so first-party UI and external diagnostics expose the same surface keys, reason codes, actions, and messages.
+13. **Cross-surface release evidence is explicit**: When a change crosses surfaces or shared subsystems, validation gates are additive and sign-off requires targeted tests, the non-browser aggregate verifier, docs freshness when applicable, and the matching browser harnesses or an explicit recorded blocker or waiver.

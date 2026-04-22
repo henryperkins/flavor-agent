@@ -558,13 +558,6 @@ function initializeGuidelinesManager( root ) {
 	const fileInput = guidelinesRoot.querySelector(
 		'[data-guidelines-file-input]'
 	);
-	const noticeRoot = guidelinesRoot.querySelector(
-		'[data-guidelines-notice]'
-	);
-	const blocksPanel = guidelinesRoot.querySelector(
-		'.flavor-agent-guidelines__blocks-panel'
-	);
-
 	if (
 		! hiddenInput ||
 		! optionsNode ||
@@ -579,6 +572,13 @@ function initializeGuidelinesManager( root ) {
 	) {
 		return;
 	}
+
+	const noticeRoot = guidelinesRoot.querySelector(
+		'[data-guidelines-notice]'
+	);
+	const blocksPanel = guidelinesRoot.querySelector(
+		'.flavor-agent-guidelines__blocks-panel'
+	);
 
 	const parsedOptions = parseJsonValue( optionsNode.textContent, [] );
 	const blockOptions = Array.isArray( parsedOptions )
@@ -747,6 +747,7 @@ function initializeGuidelinesManager( root ) {
 				if (
 					typeof window !== 'undefined' &&
 					typeof window.confirm === 'function' &&
+					// eslint-disable-next-line no-alert
 					! window.confirm(
 						`Remove the block guideline for ${ label }?`
 					)
@@ -830,7 +831,6 @@ function initializeGuidelinesManager( root ) {
 	saveButton.addEventListener( 'click', () => {
 		const blockName =
 			editingBlock || normalizeText( blockSelect.value ).trim();
-		const guidelines = normalizeText( blockText.value ).trim();
 
 		if ( ! blockName ) {
 			renderNotice(
@@ -840,6 +840,8 @@ function initializeGuidelinesManager( root ) {
 			);
 			return;
 		}
+
+		const guidelines = normalizeText( blockText.value ).trim();
 
 		if ( ! guidelines ) {
 			renderNotice(

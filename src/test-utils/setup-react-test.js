@@ -1,3 +1,5 @@
+/* global afterEach, beforeEach */
+
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { act } = require( 'react' );
 const { createRoot } = require( '@wordpress/element' );
@@ -7,7 +9,7 @@ const { createRoot } = require( '@wordpress/element' );
  *
  * Returns getter functions so callers always see the current beforeEach value.
  *
- * @return {{ getContainer: () => HTMLDivElement, getRoot: () => import('react-dom/client').Root }}
+ * @return {{ getContainer: () => HTMLDivElement, getRoot: () => import('react-dom/client').Root }} Test DOM accessors.
  */
 function setupReactTest() {
 	let container = null;

@@ -88,7 +88,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_block_wraps_payload_with_client_id(): void {
-		WordPressTestState::$options = [];
+		WordPressTestState::$options                        = [];
 		WordPressTestState::$ai_client_generate_text_result = [
 			'text'       => '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			'tokenUsage' => [
@@ -173,9 +173,9 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_block_signature_only_wraps_minimal_payload_and_skips_model_call(): void {
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id'] = 'account-123';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id']  = 'account-123';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
-		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']  = 'token-xyz';
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']   = 'token-xyz';
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
 		$request->set_param( 'clientId', 'client-123' );
@@ -591,12 +591,12 @@ final class AgentControllerTest extends TestCase {
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'               => 'error',
-					'last_synced_at'       => null,
-					'last_error'           => 'Rate limited.',
-					'last_error_code'      => 'rate_limited',
-					'last_error_status'    => 429,
-					'last_error_retryable' => true,
+					'status'                 => 'error',
+					'last_synced_at'         => null,
+					'last_error'             => 'Rate limited.',
+					'last_error_code'        => 'rate_limited',
+					'last_error_status'      => 429,
+					'last_error_retryable'   => true,
 					'last_error_retry_after' => 9,
 				]
 			)
@@ -1096,7 +1096,7 @@ final class AgentControllerTest extends TestCase {
 						],
 					],
 				],
-				'structureStats'   => [
+				'structureStats'    => [
 					'blockCount'         => 2,
 					'maxDepth'           => 1,
 					'topLevelBlockCount' => 2,
@@ -1246,7 +1246,7 @@ final class AgentControllerTest extends TestCase {
 			'area'    => 'footer',
 			'content' => '<!-- wp:paragraph --><p>Footer</p><!-- /wp:paragraph -->',
 		];
-		WordPressTestState::$remote_post_response               = [
+		WordPressTestState::$remote_post_response                  = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
@@ -1254,16 +1254,16 @@ final class AgentControllerTest extends TestCase {
 						[
 							'suggestions' => [
 								[
-									'label'        => 'Add footer template part',
-									'description'  => 'Use the new live footer area.',
-									'operations'   => [
+									'label'              => 'Add footer template part',
+									'description'        => 'Use the new live footer area.',
+									'operations'         => [
 										[
 											'type' => 'assign_template_part',
 											'slug' => 'footer-main',
 											'area' => 'footer',
 										],
 									],
-									'templateParts' => [
+									'templateParts'      => [
 										[
 											'slug'   => 'footer-main',
 											'area'   => 'footer',
@@ -1490,7 +1490,7 @@ final class AgentControllerTest extends TestCase {
 	public function test_handle_recommend_template_part_prefers_full_live_editor_structure_over_saved_structure(): void {
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:paragraph --><p>Saved Header</p><!-- /wp:paragraph -->';
-		WordPressTestState::$remote_post_response = [
+		WordPressTestState::$remote_post_response                            = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
@@ -1695,7 +1695,7 @@ final class AgentControllerTest extends TestCase {
 	public function test_handle_recommend_template_part_treats_empty_live_structure_as_authoritative(): void {
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:group --><!-- wp:navigation /--><!-- /wp:group -->';
-		WordPressTestState::$remote_post_response = [
+		WordPressTestState::$remote_post_response                            = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
@@ -1786,7 +1786,7 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_navigation_forwards_selected_navigation_context(): void {
 		ActivityRepository::install();
-		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		WordPressTestState::$capabilities['edit_theme_options']              = true;
 		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
 			'post_type'    => 'wp_navigation',
@@ -2294,11 +2294,11 @@ final class AgentControllerTest extends TestCase {
 	private function configure_pattern_recommendation_backends(): void {
 		WordPressTestState::$options = [
 			Provider::OPTION_NAME                        => Provider::NATIVE,
-			'flavor_agent_openai_native_api_key'        => 'native-key',
+			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'     => 'gpt-5.4',
-			'flavor_agent_qdrant_url'                   => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                   => 'qdrant-key',
+			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
+			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
 	}
 
@@ -2343,24 +2343,24 @@ final class AgentControllerTest extends TestCase {
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'              => 'ready',
-					'fingerprint'         => PatternIndex::compute_fingerprint( $patterns ),
-					'qdrant_url'          => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'   => QdrantClient::get_collection_name( $embedding_signature ),
-					'openai_provider'     => $embedding_config['provider'],
-					'openai_endpoint'     => $embedding_config['endpoint'],
-					'embedding_model'     => $embedding_config['model'],
-					'embedding_dimension' => 2,
-					'embedding_signature' => $embedding_signature['signature_hash'],
-					'last_synced_at'      => '2026-03-24T00:00:00+00:00',
-					'last_attempt_at'     => '2026-03-24T00:00:00+00:00',
-					'indexed_count'        => count( $patterns ),
-					'last_error'           => null,
-					'last_error_code'      => '',
-					'last_error_status'    => 0,
-					'last_error_retryable' => false,
+					'status'                 => 'ready',
+					'fingerprint'            => PatternIndex::compute_fingerprint( $patterns ),
+					'qdrant_url'             => (string) get_option( 'flavor_agent_qdrant_url', '' ),
+					'qdrant_collection'      => QdrantClient::get_collection_name( $embedding_signature ),
+					'openai_provider'        => $embedding_config['provider'],
+					'openai_endpoint'        => $embedding_config['endpoint'],
+					'embedding_model'        => $embedding_config['model'],
+					'embedding_dimension'    => 2,
+					'embedding_signature'    => $embedding_signature['signature_hash'],
+					'last_synced_at'         => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'        => '2026-03-24T00:00:00+00:00',
+					'indexed_count'          => count( $patterns ),
+					'last_error'             => null,
+					'last_error_code'        => '',
+					'last_error_status'      => 0,
+					'last_error_retryable'   => false,
 					'last_error_retry_after' => null,
-					'pattern_fingerprints' => $pattern_fingerprints,
+					'pattern_fingerprints'   => $pattern_fingerprints,
 				]
 			)
 		);

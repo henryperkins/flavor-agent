@@ -1,6 +1,5 @@
 import { serialize } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
-import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import {
 	useCallback,
@@ -22,7 +21,6 @@ import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
 import {
 	MANUAL_IDEAS_LABEL,
-	REFRESH_ACTION_LABEL,
 	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import {

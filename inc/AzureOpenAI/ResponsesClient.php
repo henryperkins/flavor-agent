@@ -70,7 +70,13 @@ final class ResponsesClient extends BaseHttpClient {
 	 *
 	 * @return string|\WP_Error The assistant's text response.
 	 */
-	public static function rank( string $instructions, string $input, ?string $reasoning_effort = null ): string|\WP_Error {
+	public static function rank(
+		string $instructions,
+		string $input,
+		?string $reasoning_effort = null,
+		?array $schema = null,
+		?string $schema_name = null
+	): string|\WP_Error {
 		Provider::record_runtime_chat_metrics( null );
 		Provider::record_runtime_chat_diagnostics( null );
 
@@ -83,7 +89,8 @@ final class ResponsesClient extends BaseHttpClient {
 				$instructions,
 				$input,
 				Provider::is_connector( $config['provider'] ) ? $config['provider'] : null,
-				$resolved_reasoning_effort
+				$resolved_reasoning_effort,
+				$schema
 			);
 		}
 
@@ -98,14 +105,25 @@ final class ResponsesClient extends BaseHttpClient {
 			);
 		}
 
-		$body = wp_json_encode(
-			[
-				'model'        => $config['model'],
-				'instructions' => $instructions,
-				'input'        => $input,
-				'reasoning'    => self::reasoning_options( $resolved_reasoning_effort, $provider ),
-			]
-		);
+		$payload = [
+			'model'        => $config['model'],
+			'instructions' => $instructions,
+			'input'        => $input,
+			'reasoning'    => self::reasoning_options( $resolved_reasoning_effort, $provider ),
+		];
+
+		if ( is_array( $schema ) && [] !== $schema ) {
+			$payload['text'] = [
+				'format' => [
+					'type'   => 'json_schema',
+					'name'   => sanitize_key( $schema_name ?? 'flavor_agent_response' ),
+					'schema' => $schema,
+					'strict' => true,
+				],
+			];
+		}
+
+		$body = wp_json_encode( $payload );
 
 		return self::request( $config['url'], $config['headers'], $body, $config['label'] );
 	}

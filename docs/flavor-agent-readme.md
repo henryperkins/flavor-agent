@@ -2,7 +2,7 @@
 
 Flavor Agent is a WordPress plugin that adds AI-assisted recommendations directly to the native Gutenberg editor and wp-admin surfaces.
 
-This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`. For the current shared-surface taxonomy and intentional exceptions, use `docs/reference/recommendation-ui-consistency.md`.
+This document is the editor-flow reference. For overall doc ownership and reading order, start with `docs/README.md`. For canonical scope and inventory, use `docs/SOURCE_OF_TRUTH.md`. For current verified state, use `STATUS.md`. For exact surface-by-surface conditions, use `docs/FEATURE_SURFACE_MATRIX.md` and the deep dives in `docs/features/`. For the current shared-surface taxonomy and intentional exceptions, use `docs/reference/recommendation-ui-consistency.md`. For release evidence when a change crosses surfaces or shared subsystems, use `docs/reference/cross-surface-validation-gates.md`.
 
 It currently has seven primary editor experiences:
 
@@ -251,6 +251,8 @@ npm run test:e2e
 composer lint:php
 vendor/bin/phpunit
 ```
+
+For cross-surface or shared-subsystem changes, treat `docs/reference/cross-surface-validation-gates.md` as the sign-off checklist: run the nearest targeted suites, `node scripts/verify.js --skip-e2e`, `npm run check:docs` when docs or contracts changed, and the matching Playwright harnesses or record the blocker.
 
 ## Compatibility Notes
 
