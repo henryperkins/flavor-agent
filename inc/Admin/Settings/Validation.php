@@ -56,16 +56,16 @@ final class Validation {
 	private static ?array $submission_request_fingerprint = null;
 
 	public static function reset(): void {
-		self::$azure_validation_state                 = null;
-		self::$azure_validation_error_reported        = false;
-		self::$native_openai_validation_state         = null;
+		self::$azure_validation_state                  = null;
+		self::$azure_validation_error_reported         = false;
+		self::$native_openai_validation_state          = null;
 		self::$native_openai_validation_error_reported = false;
-		self::$qdrant_validation_state                = null;
-		self::$qdrant_validation_error_reported       = false;
-		self::$cloudflare_validation_state            = null;
-		self::$cloudflare_validation_error_reported   = false;
-		self::$submission_value_cache                 = [];
-		self::$submission_request_fingerprint         = null;
+		self::$qdrant_validation_state                 = null;
+		self::$qdrant_validation_error_reported        = false;
+		self::$cloudflare_validation_state             = null;
+		self::$cloudflare_validation_error_reported    = false;
+		self::$submission_value_cache                  = [];
+		self::$submission_request_fingerprint          = null;
 	}
 
 	public static function sanitize_grounding_result_count( mixed $value ): int {
@@ -248,11 +248,11 @@ final class Validation {
 			'azure',
 			static function () use ( $current_values ): array {
 				return [
-					'flavor_agent_azure_openai_endpoint'      => self::read_posted_url_value(
+					'flavor_agent_azure_openai_endpoint' => self::read_posted_url_value(
 						'flavor_agent_azure_openai_endpoint',
 						$current_values['flavor_agent_azure_openai_endpoint']
 					),
-					'flavor_agent_azure_openai_key'           => self::read_posted_text_value(
+					'flavor_agent_azure_openai_key'      => self::read_posted_text_value(
 						'flavor_agent_azure_openai_key',
 						$current_values['flavor_agent_azure_openai_key']
 					),
@@ -260,7 +260,7 @@ final class Validation {
 						'flavor_agent_azure_embedding_deployment',
 						$current_values['flavor_agent_azure_embedding_deployment']
 					),
-					'flavor_agent_azure_chat_deployment'      => self::read_posted_text_value(
+					'flavor_agent_azure_chat_deployment' => self::read_posted_text_value(
 						'flavor_agent_azure_chat_deployment',
 						$current_values['flavor_agent_azure_chat_deployment']
 					),
@@ -341,7 +341,7 @@ final class Validation {
 			'openai_native',
 			static function () use ( $current_values ): array {
 				return [
-					'flavor_agent_openai_native_api_key'         => self::read_posted_text_value(
+					'flavor_agent_openai_native_api_key' => self::read_posted_text_value(
 						'flavor_agent_openai_native_api_key',
 						$current_values['flavor_agent_openai_native_api_key']
 					),
@@ -349,7 +349,7 @@ final class Validation {
 						'flavor_agent_openai_native_embedding_model',
 						$current_values['flavor_agent_openai_native_embedding_model']
 					),
-					'flavor_agent_openai_native_chat_model'      => self::read_posted_text_value(
+					'flavor_agent_openai_native_chat_model' => self::read_posted_text_value(
 						'flavor_agent_openai_native_chat_model',
 						$current_values['flavor_agent_openai_native_chat_model']
 					),
@@ -717,9 +717,9 @@ final class Validation {
 	private static function get_current_openai_native_values(): array {
 		return self::get_current_option_values(
 			[
-				'flavor_agent_openai_native_api_key'         => 'sanitize_text_field',
+				'flavor_agent_openai_native_api_key'    => 'sanitize_text_field',
 				'flavor_agent_openai_native_embedding_model' => 'sanitize_text_field',
-				'flavor_agent_openai_native_chat_model'      => 'sanitize_text_field',
+				'flavor_agent_openai_native_chat_model' => 'sanitize_text_field',
 			]
 		);
 	}

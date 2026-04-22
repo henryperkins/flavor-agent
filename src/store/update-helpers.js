@@ -769,6 +769,7 @@ function validateStyleLeafValue( dotPath, value, executionContract ) {
 			featureKey: 'blockGap',
 			presetType: 'spacing',
 			allowCustomProperty: true,
+			fallbackValidator: FREEFORM_STYLE_VALIDATORS.LENGTH_OR_PERCENTAGE,
 		},
 		'border.color': {
 			supportPath: 'border.color',

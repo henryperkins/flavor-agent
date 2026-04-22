@@ -8,7 +8,6 @@ import {
 	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../utils/template-actions';
-import { buildActivityDocument } from './activity-session';
 import { resolveActivityBlock } from './block-targeting';
 import {
 	createActivityEntry,
@@ -23,6 +22,7 @@ import {
 } from './update-helpers';
 import {
 	buildActivityPersistenceUpdate,
+	buildActivityDocument,
 	buildNonRetryableUndoSyncEntry,
 	buildUndoAuditSyncError,
 	fetchServerActivityEntries,
@@ -491,7 +491,8 @@ export function createUndoActivityAction( {
 			);
 			let activityLog = select.getActivityLog?.() || [];
 			let activity =
-				activityLog.find( ( entry ) => entry?.id === activityId ) || null;
+				activityLog.find( ( entry ) => entry?.id === activityId ) ||
+				null;
 
 			if ( ! activity ) {
 				localDispatch(
@@ -576,8 +577,8 @@ export function createUndoActivityAction( {
 						await fetchServerActivityEntries( scopeKey );
 					const refreshedEntries = mergeActivityEntries(
 						serverEntries,
-						activityLog.filter( ( entry ) =>
-							entry?.persistence?.status !== 'server'
+						activityLog.filter(
+							( entry ) => entry?.persistence?.status !== 'server'
 						)
 					);
 
@@ -611,7 +612,10 @@ export function createUndoActivityAction( {
 				}
 			}
 
-			const entityEntries = getEntityActivityEntries( activityLog, activity );
+			const entityEntries = getEntityActivityEntries(
+				activityLog,
+				activity
+			);
 			const runtimeUndoResolver = getActivityRuntimeUndoResolver(
 				activity?.surface,
 				registry
@@ -621,7 +625,8 @@ export function createUndoActivityAction( {
 					entityEntries,
 					runtimeUndoResolver
 				).find( ( entry ) => entry?.id === activityId ) || null;
-			const currentPendingSyncType = getPendingActivitySyncType( activity );
+			const currentPendingSyncType =
+				getPendingActivitySyncType( activity );
 			const buildUndoTransitionEntry = (
 				status,
 				error = null,
@@ -761,7 +766,9 @@ export function createUndoActivityAction( {
 					: syncResult.error ||
 					  buildUndoAuditSyncError( failureMessage );
 
-				localDispatch( setUndoState( 'error', surfacedError, activityId ) );
+				localDispatch(
+					setUndoState( 'error', surfacedError, activityId )
+				);
 
 				return {
 					ok: false,
@@ -802,7 +809,10 @@ export function createUndoActivityAction( {
 				activity.surface === 'global-styles' ||
 				activity.surface === 'style-book'
 			) {
-				result = undoGlobalStyleSuggestionOperations( activity, registry );
+				result = undoGlobalStyleSuggestionOperations(
+					activity,
+					registry
+				);
 			} else {
 				result = undoBlockActivity( activity, registry );
 			}
@@ -818,7 +828,9 @@ export function createUndoActivityAction( {
 					: syncResult.error ||
 					  buildUndoAuditSyncError( failureMessage );
 
-				localDispatch( setUndoState( 'error', surfacedError, activityId ) );
+				localDispatch(
+					setUndoState( 'error', surfacedError, activityId )
+				);
 
 				return {
 					...result,
@@ -833,7 +845,9 @@ export function createUndoActivityAction( {
 					syncResult.error ||
 					buildUndoAuditSyncError( 'Undo applied locally.' );
 
-				localDispatch( setUndoState( 'error', surfacedError, activityId ) );
+				localDispatch(
+					setUndoState( 'error', surfacedError, activityId )
+				);
 
 				return {
 					...result,

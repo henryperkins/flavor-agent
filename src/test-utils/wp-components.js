@@ -3,7 +3,11 @@ function joinClassNames( ...values ) {
 }
 
 function mockWpComponents( overrides = {} ) {
-	const { Children, Fragment, createElement } = require( '@wordpress/element' );
+	const {
+		Children,
+		Fragment,
+		createElement,
+	} = require( '@wordpress/element' );
 
 	function Button( {
 		children,
@@ -47,6 +51,42 @@ function mockWpComponents( overrides = {} ) {
 			children || label || ''
 		);
 	}
+
+	const ToggleGroupControl = ( {
+		children,
+		className,
+		label,
+		onChange = () => {},
+		value,
+	} ) =>
+		createElement(
+			'div',
+			{
+				className,
+				role: 'group',
+				'aria-label': label,
+			},
+			Children.map( children, ( child ) => {
+				if ( ! child?.props ) {
+					return child;
+				}
+
+				const optionValue = child.props.value;
+				const selected = optionValue === value;
+
+				return createElement(
+					'button',
+					{
+						type: 'button',
+						className: child.props.className,
+						'aria-pressed': selected,
+						onClick: () => onChange( optionValue ),
+					},
+					child.props.label || child.props.children || ''
+				);
+			} )
+		);
+	const ToggleGroupControlOption = () => null;
 
 	return {
 		Button,
@@ -163,41 +203,10 @@ function mockWpComponents( overrides = {} ) {
 			);
 		},
 		Tooltip: ( { children } ) => createElement( Fragment, null, children ),
-		__experimentalToggleGroupControl: ( {
-			children,
-			className,
-			label,
-			onChange = () => {},
-			value,
-		} ) =>
-			createElement(
-				'div',
-				{
-					className,
-					role: 'group',
-					'aria-label': label,
-				},
-				Children.map( children, ( child ) => {
-					if ( ! child?.props ) {
-						return child;
-					}
-
-					const optionValue = child.props.value;
-					const selected = optionValue === value;
-
-					return createElement(
-						'button',
-						{
-							type: 'button',
-							className: child.props.className,
-							'aria-pressed': selected,
-							onClick: () => onChange( optionValue ),
-						},
-						child.props.label || child.props.children || ''
-					);
-				} )
-			),
-		__experimentalToggleGroupControlOption: () => null,
+		ToggleGroupControl,
+		ToggleGroupControlOption,
+		__experimentalToggleGroupControl: ToggleGroupControl,
+		__experimentalToggleGroupControlOption: ToggleGroupControlOption,
 		...overrides,
 	};
 }

@@ -310,8 +310,7 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 			return buildStyleBookRecommendationRequestSignature( {
 				scope: {
 					scopeKey: select.getStyleBookScopeKey?.() || '',
-					globalStylesId:
-						select.getStyleBookGlobalStylesId?.() || '',
+					globalStylesId: select.getStyleBookGlobalStylesId?.() || '',
 					entityId: select.getStyleBookGlobalStylesId?.() || '',
 					blockName: select.getStyleBookBlockName?.() || '',
 				},
@@ -442,22 +441,23 @@ export function createExecutableSurfaceStateActionCreators( runtime ) {
 				};
 			};
 
-		actionCreators[ def.methodNames.setApplyState ] = function setApplyState(
-			status,
-			error = null,
-			suggestionKey = null,
-			operations = [],
-			staleReason = null
-		) {
-			return {
-				type: def.types.setApplyState,
+		actionCreators[ def.methodNames.setApplyState ] =
+			function setApplyState(
 				status,
-				error,
-				suggestionKey,
-				operations,
-				staleReason,
+				error = null,
+				suggestionKey = null,
+				operations = [],
+				staleReason = null
+			) {
+				return {
+					type: def.types.setApplyState,
+					status,
+					error,
+					suggestionKey,
+					operations,
+					staleReason,
+				};
 			};
-		};
 
 		actionCreators[ def.methodNames.clearRecommendations ] =
 			function clearRecommendations() {
@@ -527,7 +527,8 @@ function createReviewConfig( def, actions ) {
 		getStoredRequestSignature: def.buildStoredRequestSignature,
 		getStoredReviewContextSignature: ( select ) =>
 			select[ def.methodNames.getReviewContextSignature ]?.() || null,
-		setReviewStateAction: actions[ def.methodNames.setReviewFreshnessState ],
+		setReviewStateAction:
+			actions[ def.methodNames.setReviewFreshnessState ],
 		surface: def.surface,
 	} );
 }
@@ -611,9 +612,7 @@ function reduceExecutableSurface( state, action, def ) {
 					? 'idle'
 					: state[ def.applyStatusKey ],
 			[ def.applyErrorKey ]:
-				action.status === 'loading'
-					? null
-					: state[ def.applyErrorKey ],
+				action.status === 'loading' ? null : state[ def.applyErrorKey ],
 			[ def.lastAppliedSuggestionKey ]:
 				action.status === 'loading'
 					? null
@@ -689,9 +688,7 @@ function reduceExecutableSurface( state, action, def ) {
 			[ def.reviewFreshnessStatusKey ]:
 				action.status ?? state[ def.reviewFreshnessStatusKey ],
 			[ def.reviewStaleReasonKey ]:
-				action.status === 'stale'
-					? action.staleReason ?? null
-					: null,
+				action.status === 'stale' ? action.staleReason ?? null : null,
 		};
 	}
 
@@ -724,9 +721,7 @@ function reduceExecutableSurface( state, action, def ) {
 					? action.operations ?? []
 					: state[ def.lastAppliedOperationsKey ],
 			[ def.staleReasonKey ]:
-				action.status === 'error'
-					? action.staleReason ?? null
-					: null,
+				action.status === 'error' ? action.staleReason ?? null : null,
 		};
 	}
 
@@ -736,7 +731,8 @@ function reduceExecutableSurface( state, action, def ) {
 			...buildSurfaceDefaultState( def ),
 			[ def.requestTokenKey ]: state[ def.requestTokenKey ] + 1,
 			[ def.resultTokenKey ]: state[ def.resultTokenKey ] + 1,
-			[ def.reviewRequestTokenKey ]: state[ def.reviewRequestTokenKey ] + 1,
+			[ def.reviewRequestTokenKey ]:
+				state[ def.reviewRequestTokenKey ] + 1,
 		};
 	}
 
@@ -812,7 +808,9 @@ export function createExecutableSurfaceSelectors( {
 				requestStatus: state[ def.statusKey ],
 				requestError: normalizeStringMessage( state[ def.errorKey ] ),
 				applyStatus: state[ def.applyStatusKey ],
-				applyError: normalizeStringMessage( state[ def.applyErrorKey ] ),
+				applyError: normalizeStringMessage(
+					state[ def.applyErrorKey ]
+				),
 				undoStatus: state.undoStatus,
 				undoError: normalizeStringMessage( options.undoError ),
 				hasResult: def.hasResult( state ),

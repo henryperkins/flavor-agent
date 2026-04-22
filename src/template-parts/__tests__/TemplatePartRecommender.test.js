@@ -513,8 +513,7 @@ describe( 'TemplatePartRecommender', () => {
 					},
 				],
 				templatePartResultRef: 'theme//header',
-				templatePartSelectedSuggestionKey:
-					'Replace navigation block-0',
+				templatePartSelectedSuggestionKey: 'Replace navigation block-0',
 				templatePartStatus: 'ready',
 				templatePartReviewStaleReason: 'server-review',
 			},

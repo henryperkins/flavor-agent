@@ -80,10 +80,10 @@ final class ChatClientTest extends TestCase {
 	}
 
 	public function test_selected_connector_provider_routes_block_recommendations_through_the_wordpress_ai_client(): void {
-		WordPressTestState::$options                   = [
+		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
-		WordPressTestState::$connectors                = [
+		WordPressTestState::$connectors                     = [
 			'anthropic' => [
 				'name'           => 'Anthropic',
 				'description'    => 'Anthropic connector',
@@ -94,7 +94,7 @@ final class ChatClientTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$ai_client_provider_support = [
+		WordPressTestState::$ai_client_provider_support     = [
 			'anthropic' => true,
 		];
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';

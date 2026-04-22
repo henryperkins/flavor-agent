@@ -25,7 +25,7 @@ const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import ActivitySessionBootstrap from '../ActivitySessionBootstrap';
 
-const { getContainer, getRoot } = setupReactTest();
+const { getRoot } = setupReactTest();
 
 let currentEditorState = null;
 let currentInterfaceState = null;

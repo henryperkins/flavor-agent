@@ -72,7 +72,7 @@ final class ActivityPageTest extends TestCase {
 			$method->invoke( null, 'dashboard_page_demo', 'settings_page_flavor-agent-activity' )
 		);
 
-		$_GET = [];
+		$_GET                               = [];
 		WordPressTestState::$current_screen = (object) [
 			'id'   => 'settings_page_flavor-agent-activity',
 			'base' => 'settings_page_flavor-agent-activity',
@@ -87,7 +87,7 @@ final class ActivityPageTest extends TestCase {
 		$method = new ReflectionMethod( ActivityPage::class, 'should_enqueue_assets' );
 		$method->setAccessible( true );
 
-		$_GET = [
+		$_GET                               = [
 			'page' => 'plugins',
 		];
 		WordPressTestState::$current_screen = (object) [

@@ -512,7 +512,7 @@ describe( 'settings page controller', () => {
 			},
 		} );
 		const clickSpy = jest
-			.spyOn( HTMLAnchorElement.prototype, 'click' )
+			.spyOn( window.HTMLAnchorElement.prototype, 'click' )
 			.mockImplementation( () => {} );
 		const originalBlob = global.Blob;
 		const originalCreateObjectURL = URL.createObjectURL;

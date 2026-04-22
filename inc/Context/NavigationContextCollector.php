@@ -83,18 +83,18 @@ final class NavigationContextCollector {
 			'maxDepth'             => $this->navigation_parser->measure_menu_depth( $menu_items ),
 			'structureSummary'     => $structure_summary,
 			'overlayContext'       => [
-				'usesOverlay'                 => $uses_overlay,
-				'overlayMode'                 => (string) ( $attributes['overlayMenu'] ?? 'never' ),
-				'hasDedicatedOverlayParts'    => count( $overlay_parts ) > 0,
-				'overlayTemplatePartCount'    => count( $overlay_parts ),
-				'overlayTemplatePartSlugs'    => $this->collect_overlay_slugs( $overlay_parts ),
-				'siteHasDedicatedOverlayParts'=> count( $site_overlay_parts ) > 0,
-				'siteOverlayTemplatePartCount'=> count( $site_overlay_parts ),
-				'siteOverlayTemplatePartSlugs'=> $this->collect_overlay_slugs( $site_overlay_parts ),
-				'overlayReferenceScope'       => count( $overlay_parts ) > 0
+				'usesOverlay'                  => $uses_overlay,
+				'overlayMode'                  => (string) ( $attributes['overlayMenu'] ?? 'never' ),
+				'hasDedicatedOverlayParts'     => count( $overlay_parts ) > 0,
+				'overlayTemplatePartCount'     => count( $overlay_parts ),
+				'overlayTemplatePartSlugs'     => $this->collect_overlay_slugs( $overlay_parts ),
+				'siteHasDedicatedOverlayParts' => count( $site_overlay_parts ) > 0,
+				'siteOverlayTemplatePartCount' => count( $site_overlay_parts ),
+				'siteOverlayTemplatePartSlugs' => $this->collect_overlay_slugs( $site_overlay_parts ),
+				'overlayReferenceScope'        => count( $overlay_parts ) > 0
 					? 'scoped'
 					: ( count( $site_overlay_parts ) > 0 ? 'site-only' : 'none' ),
-				'overlayReferenceSource'      => $scoped_overlay_match['source'],
+				'overlayReferenceSource'       => $scoped_overlay_match['source'],
 			],
 			'overlayTemplateParts' => $overlay_parts,
 			'editorContext'        => $editor_context,
@@ -147,7 +147,7 @@ final class NavigationContextCollector {
 	 * @return array<string, mixed>
 	 */
 	private function resolve_location_details_from_editor_context( array $editor_context ): array {
-		$block     = $this->normalize_map( $editor_context['block'] ?? [] );
+		$block      = $this->normalize_map( $editor_context['block'] ?? [] );
 		$candidates = [];
 
 		$block_identity = $this->normalize_map( $block['structuralIdentity'] ?? [] );
@@ -293,9 +293,9 @@ final class NavigationContextCollector {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private function filter_overlay_parts_by_context( array $overlay_parts, array $location_details ): array {
-		$location         = sanitize_key( (string) ( $location_details['area'] ?? '' ) );
+		$location           = sanitize_key( (string) ( $location_details['area'] ?? '' ) );
 		$template_part_slug = sanitize_key( (string) ( $location_details['templatePartSlug'] ?? '' ) );
-		$scored           = [];
+		$scored             = [];
 
 		foreach ( $overlay_parts as $part ) {
 			$slug       = sanitize_key( (string) ( $part['slug'] ?? '' ) );

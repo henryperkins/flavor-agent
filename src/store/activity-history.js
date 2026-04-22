@@ -79,12 +79,17 @@ function buildUndoState( timestamp, undo = {} ) {
 	return {
 		canUndo: status === 'available' ? undo?.canUndo ?? true : false,
 		status,
-		error:
-			status === 'blocked'
-				? undo?.error || ORDERED_UNDO_BLOCKED_ERROR
-				: status === 'review'
-				? null
-				: undo?.error ?? null,
+		error: ( () => {
+			if ( status === 'blocked' ) {
+				return undo?.error || ORDERED_UNDO_BLOCKED_ERROR;
+			}
+
+			if ( status === 'review' ) {
+				return null;
+			}
+
+			return undo?.error ?? null;
+		} )(),
 		updatedAt,
 		undoneAt,
 	};

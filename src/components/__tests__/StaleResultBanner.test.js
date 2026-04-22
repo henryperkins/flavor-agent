@@ -35,7 +35,9 @@ describe( 'StaleResultBanner', () => {
 		renderBanner();
 
 		const text = getContainer().textContent;
-		expect( text ).toContain( 'Context has changed since the last request' );
+		expect( text ).toContain(
+			'Context has changed since the last request'
+		);
 	} );
 
 	test( 'renders a refresh button when onRefresh is provided', () => {

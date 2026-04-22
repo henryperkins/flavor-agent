@@ -844,6 +844,14 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 	test( 'renders embedded navigation after the block lanes when navigation guidance is present', () => {
 		mockShouldRenderNavigationRecommendations = true;
+		mockCollectBlockContext.mockReturnValue( {
+			block: {
+				name: 'core/navigation',
+				inspectorPanels: {
+					dimensions: [ 'spacing.blockGap' ],
+				},
+			},
+		} );
 		currentState = createState( {
 			blockEditor: {
 				selectedBlockClientId: null,
@@ -891,6 +899,20 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 								type: 'structural_recommendation',
 							},
 						],
+						blockContext: {
+							name: 'core/navigation',
+							inspectorPanels: {
+								dimensions: [ 'spacing.blockGap' ],
+							},
+						},
+						executionContract: {
+							allowedPanels: [ 'dimensions' ],
+							panelMappingKnown: true,
+							presetSlugs: {
+								spacing: [],
+							},
+							styleSupportPaths: [ 'spacing.blockGap' ],
+						},
 					},
 				},
 				blockContextSignatures: {

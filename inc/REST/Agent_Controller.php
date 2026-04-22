@@ -57,7 +57,7 @@ final class Agent_Controller {
 			'route'               => 'POST /flavor-agent/v1/recommend-template-part',
 			'includeProviderMeta' => true,
 		],
-		'sync-patterns'          => [
+		'sync-patterns'           => [
 			'route'               => 'POST /flavor-agent/v1/sync-patterns',
 			'includeProviderMeta' => false,
 		],
@@ -72,19 +72,19 @@ final class Agent_Controller {
 				'callback'            => [ __CLASS__, 'handle_recommend_block' ],
 				'permission_callback' => static fn(): bool => \current_user_can( 'edit_posts' ),
 				'args'                => [
-					'editorContext' => [
+					'editorContext'        => [
 						'required'          => true,
 						'type'              => 'object',
 						'description'       => 'Block context snapshot from the editor.',
 						'validate_callback' => static fn( mixed $value ): bool => \is_array( $value ) || \is_object( $value ),
 					],
-					'prompt'        => [
+					'prompt'               => [
 						'required'          => false,
 						'type'              => 'string',
 						'default'           => '',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
-					'clientId'      => [
+					'clientId'             => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
@@ -203,18 +203,18 @@ final class Agent_Controller {
 				'callback'            => [ __CLASS__, 'handle_recommend_navigation' ],
 				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
-					'menuId'           => [
+					'menuId'               => [
 						'required'          => false,
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					],
-					'navigationMarkup' => [
+					'navigationMarkup'     => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => [ __CLASS__, 'sanitize_block_markup' ],
 						'validate_callback' => static fn( mixed $value ): bool => \is_string( $value ),
 					],
-					'prompt'           => [
+					'prompt'               => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
@@ -224,13 +224,13 @@ final class Agent_Controller {
 						'type'              => 'boolean',
 						'sanitize_callback' => 'rest_sanitize_boolean',
 					],
-					'editorContext'    => [
+					'editorContext'        => [
 						'required'          => false,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
-					'document'         => [
+					'document'             => [
 						'required'          => false,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
@@ -248,19 +248,19 @@ final class Agent_Controller {
 				'callback'            => [ __CLASS__, 'handle_recommend_style' ],
 				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
-					'scope'        => [
+					'scope'                => [
 						'required'          => true,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
-					'styleContext' => [
+					'styleContext'         => [
 						'required'          => true,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
-					'prompt'       => [
+					'prompt'               => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
@@ -282,35 +282,35 @@ final class Agent_Controller {
 				'callback'            => [ __CLASS__, 'handle_recommend_template' ],
 				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
-					'templateRef'         => [
+					'templateRef'          => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => static fn( mixed $value ): bool => \is_string( $value ) && $value !== '',
 					],
-					'templateType'        => [
+					'templateType'         => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'prompt'              => [
+					'prompt'               => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
-					'visiblePatternNames' => [
+					'visiblePatternNames'  => [
 						'required'          => false,
 						'type'              => 'array',
 						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
 					],
-					'editorSlots'         => [
+					'editorSlots'          => [
 						'required'          => false,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
-					'editorStructure'     => [
+					'editorStructure'      => [
 						'required'          => false,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
@@ -333,24 +333,24 @@ final class Agent_Controller {
 				'callback'            => [ __CLASS__, 'handle_recommend_template_part' ],
 				'permission_callback' => static fn(): bool => \current_user_can( 'edit_theme_options' ),
 				'args'                => [
-					'templatePartRef'     => [
+					'templatePartRef'      => [
 						'required'          => true,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 						'validate_callback' => static fn( mixed $value ): bool => \is_string( $value ) && $value !== '',
 					],
-					'prompt'              => [
+					'prompt'               => [
 						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
-					'visiblePatternNames' => [
+					'visiblePatternNames'  => [
 						'required'          => false,
 						'type'              => 'array',
 						'validate_callback' => [ __CLASS__, 'validate_string_array' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
 					],
-					'editorStructure'     => [
+					'editorStructure'      => [
 						'required'          => false,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
@@ -374,200 +374,200 @@ final class Agent_Controller {
 					'callback'            => [ __CLASS__, 'handle_get_activity' ],
 					'permission_callback' => [ ActivityPermissions::class, 'can_access_activity_request' ],
 					'args'                => [
-						'scopeKey'              => [
+						'scopeKey'                   => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'global'                => [
+						'global'                     => [
 							'required'          => false,
 							'type'              => 'boolean',
 							'default'           => false,
 							'sanitize_callback' => static fn( mixed $value ): bool => \in_array( $value, [ true, 1, '1', 'true', 'yes' ], true ),
 						],
-						'surface'               => [
+						'surface'                    => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'entityType'            => [
+						'entityType'                 => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'entityRef'             => [
+						'entityRef'                  => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'userId'                => [
+						'userId'                     => [
 							'required'          => false,
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 						],
-					'postType'              => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'provider'              => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'providerPath'          => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'configurationOwner'    => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'credentialSource'      => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'selectedProvider'      => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'entityId'              => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-						'blockPath'             => [
+						'postType'                   => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'operationType'         => [
+						'provider'                   => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'status'                => [
+						'providerPath'               => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'page'                  => [
+						'configurationOwner'         => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'credentialSource'           => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'selectedProvider'           => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'entityId'                   => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'blockPath'                  => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'operationType'              => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'status'                     => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'page'                       => [
 							'required'          => false,
 							'type'              => 'integer',
 							'default'           => 1,
 							'sanitize_callback' => 'absint',
 						],
-						'perPage'               => [
+						'perPage'                    => [
 							'required'          => false,
 							'type'              => 'integer',
 							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
 							'sanitize_callback' => 'absint',
 						],
-						'search'                => [
+						'search'                     => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'sortField'             => [
+						'sortField'                  => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'sortDirection'         => [
+						'sortDirection'              => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'surfaceOperator'       => [
+						'surfaceOperator'            => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'statusOperator'        => [
+						'statusOperator'             => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-					'postTypeOperator'      => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'providerOperator'      => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'providerPathOperator'  => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'configurationOwnerOperator' => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'credentialSourceOperator' => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'selectedProviderOperator' => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'entityIdOperator'      => [
-						'required'          => false,
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-						],
-						'blockPathOperator'     => [
+						'postTypeOperator'           => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'userIdOperator'        => [
+						'providerOperator'           => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'operationTypeOperator' => [
+						'providerPathOperator'       => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'day'                   => [
+						'configurationOwnerOperator' => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'dayEnd'                => [
+						'credentialSourceOperator'   => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'dayOperator'           => [
+						'selectedProviderOperator'   => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'dayRelativeValue'      => [
+						'entityIdOperator'           => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'blockPathOperator'          => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'userIdOperator'             => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'operationTypeOperator'      => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'day'                        => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'dayEnd'                     => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'dayOperator'                => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'dayRelativeValue'           => [
 							'required'          => false,
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 						],
-						'dayRelativeUnit'       => [
+						'dayRelativeUnit'            => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'limit'                 => [
+						'limit'                      => [
 							'required'          => false,
 							'type'              => 'integer',
 							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
@@ -651,8 +651,8 @@ final class Agent_Controller {
 		$resolve_signature_only = self::is_signature_only_request( $request );
 		$result                 = BlockAbilities::recommend_block(
 			[
-				'editorContext'       => $request->get_param( 'editorContext' ),
-				'prompt'              => $request->get_param( 'prompt' ),
+				'editorContext'        => $request->get_param( 'editorContext' ),
+				'prompt'               => $request->get_param( 'prompt' ),
 				'resolveSignatureOnly' => $resolve_signature_only,
 			]
 		);
@@ -920,7 +920,7 @@ final class Agent_Controller {
 			$request_meta['ability'] = $route_definition['ability'];
 		}
 
-		$request_meta['route'] = $route_definition['route'];
+		$request_meta['route']  = $route_definition['route'];
 		$payload['requestMeta'] = $request_meta;
 
 		return $payload;
@@ -933,9 +933,9 @@ final class Agent_Controller {
 			return $error;
 		}
 
-		$code = $error->get_error_code();
-		$data = $error->get_error_data( $code );
-		$data = \is_array( $data )
+		$code         = $error->get_error_code();
+		$data         = $error->get_error_data( $code );
+		$data         = \is_array( $data )
 			? $data
 			: ( null !== $data ? [ 'originalData' => $data ] : [] );
 		$request_meta = \is_array( $data['requestMeta'] ?? null )
@@ -1015,10 +1015,10 @@ final class Agent_Controller {
 					'prompt' => trim( (string) ( $request_context['prompt'] ?? '' ) ),
 				],
 				'after'           => [
-					'prompt'          => trim( (string) ( $request_context['prompt'] ?? '' ) ),
-					'resultCount'     => self::get_request_result_count( $surface, $payload ),
-					'explanation'     => trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
-					'requestContext'  => $request_context,
+					'prompt'         => trim( (string) ( $request_context['prompt'] ?? '' ) ),
+					'resultCount'    => self::get_request_result_count( $surface, $payload ),
+					'explanation'    => trim( (string) ( $payload['explanation'] ?? $payload['summary'] ?? '' ) ),
+					'requestContext' => $request_context,
 				],
 				'request'         => [
 					'prompt'    => trim( (string) ( $request_context['prompt'] ?? '' ) ),
@@ -1054,8 +1054,8 @@ final class Agent_Controller {
 			return;
 		}
 
-		$reference = self::build_request_diagnostic_reference( $surface, $target, $document );
-		$message   = trim( (string) $error->get_error_message() );
+		$reference  = self::build_request_diagnostic_reference( $surface, $target, $document );
+		$message    = trim( (string) $error->get_error_message() );
 		$error_data = $error->get_error_data();
 		$error_data = \is_array( $error_data ) ? $error_data : [];
 
@@ -1306,43 +1306,43 @@ final class Agent_Controller {
 		if ( $is_global_request ) {
 			$result = ActivityRepository::query_admin(
 				[
-					'scopeKey'              => $request->get_param( 'scopeKey' ),
-					'surface'               => $request->get_param( 'surface' ),
-					'surfaceOperator'       => $request->get_param( 'surfaceOperator' ),
-					'status'                => $request->get_param( 'status' ),
-					'statusOperator'        => $request->get_param( 'statusOperator' ),
-					'postType'              => $request->get_param( 'postType' ),
-					'postTypeOperator'      => $request->get_param( 'postTypeOperator' ),
-					'provider'              => $request->get_param( 'provider' ),
-					'providerOperator'      => $request->get_param( 'providerOperator' ),
-					'providerPath'          => $request->get_param( 'providerPath' ),
-					'providerPathOperator'  => $request->get_param( 'providerPathOperator' ),
-					'configurationOwner'    => $request->get_param( 'configurationOwner' ),
+					'scopeKey'                   => $request->get_param( 'scopeKey' ),
+					'surface'                    => $request->get_param( 'surface' ),
+					'surfaceOperator'            => $request->get_param( 'surfaceOperator' ),
+					'status'                     => $request->get_param( 'status' ),
+					'statusOperator'             => $request->get_param( 'statusOperator' ),
+					'postType'                   => $request->get_param( 'postType' ),
+					'postTypeOperator'           => $request->get_param( 'postTypeOperator' ),
+					'provider'                   => $request->get_param( 'provider' ),
+					'providerOperator'           => $request->get_param( 'providerOperator' ),
+					'providerPath'               => $request->get_param( 'providerPath' ),
+					'providerPathOperator'       => $request->get_param( 'providerPathOperator' ),
+					'configurationOwner'         => $request->get_param( 'configurationOwner' ),
 					'configurationOwnerOperator' => $request->get_param( 'configurationOwnerOperator' ),
-					'credentialSource'      => $request->get_param( 'credentialSource' ),
-					'credentialSourceOperator' => $request->get_param( 'credentialSourceOperator' ),
-					'selectedProvider'      => $request->get_param( 'selectedProvider' ),
-					'selectedProviderOperator' => $request->get_param( 'selectedProviderOperator' ),
-					'entityId'              => $request->get_param( 'entityId' ),
-					'entityIdOperator'      => $request->get_param( 'entityIdOperator' ),
-					'blockPath'             => $request->get_param( 'blockPath' ),
-					'blockPathOperator'     => $request->get_param( 'blockPathOperator' ),
-					'userId'                => $request->get_param( 'userId' ),
-					'userIdOperator'        => $request->get_param( 'userIdOperator' ),
-					'operationType'         => $request->get_param( 'operationType' ),
-					'operationTypeOperator' => $request->get_param( 'operationTypeOperator' ),
-					'entityType'            => $request->get_param( 'entityType' ),
-					'entityRef'             => $request->get_param( 'entityRef' ),
-					'page'                  => $request->get_param( 'page' ),
-					'perPage'               => $request->get_param( 'perPage' ),
-					'search'                => $request->get_param( 'search' ),
-					'sortField'             => $request->get_param( 'sortField' ),
-					'sortDirection'         => $request->get_param( 'sortDirection' ),
-					'day'                   => $request->get_param( 'day' ),
-					'dayEnd'                => $request->get_param( 'dayEnd' ),
-					'dayOperator'           => $request->get_param( 'dayOperator' ),
-					'dayRelativeValue'      => $request->get_param( 'dayRelativeValue' ),
-					'dayRelativeUnit'       => $request->get_param( 'dayRelativeUnit' ),
+					'credentialSource'           => $request->get_param( 'credentialSource' ),
+					'credentialSourceOperator'   => $request->get_param( 'credentialSourceOperator' ),
+					'selectedProvider'           => $request->get_param( 'selectedProvider' ),
+					'selectedProviderOperator'   => $request->get_param( 'selectedProviderOperator' ),
+					'entityId'                   => $request->get_param( 'entityId' ),
+					'entityIdOperator'           => $request->get_param( 'entityIdOperator' ),
+					'blockPath'                  => $request->get_param( 'blockPath' ),
+					'blockPathOperator'          => $request->get_param( 'blockPathOperator' ),
+					'userId'                     => $request->get_param( 'userId' ),
+					'userIdOperator'             => $request->get_param( 'userIdOperator' ),
+					'operationType'              => $request->get_param( 'operationType' ),
+					'operationTypeOperator'      => $request->get_param( 'operationTypeOperator' ),
+					'entityType'                 => $request->get_param( 'entityType' ),
+					'entityRef'                  => $request->get_param( 'entityRef' ),
+					'page'                       => $request->get_param( 'page' ),
+					'perPage'                    => $request->get_param( 'perPage' ),
+					'search'                     => $request->get_param( 'search' ),
+					'sortField'                  => $request->get_param( 'sortField' ),
+					'sortDirection'              => $request->get_param( 'sortDirection' ),
+					'day'                        => $request->get_param( 'day' ),
+					'dayEnd'                     => $request->get_param( 'dayEnd' ),
+					'dayOperator'                => $request->get_param( 'dayOperator' ),
+					'dayRelativeValue'           => $request->get_param( 'dayRelativeValue' ),
+					'dayRelativeUnit'            => $request->get_param( 'dayRelativeUnit' ),
 				]
 			);
 

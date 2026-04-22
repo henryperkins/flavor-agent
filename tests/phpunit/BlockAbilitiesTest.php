@@ -431,7 +431,10 @@ final class BlockAbilitiesTest extends TestCase {
 							'block'      => 'core/group',
 							'childCount' => 9,
 							'children'   => [
-								[ 'block' => 'core/paragraph', 'isSelected' => true ],
+								[
+									'block'      => 'core/paragraph',
+									'isSelected' => true,
+								],
 								[ 'block' => 'core/image' ],
 								[ 'block' => 'core/buttons' ],
 								[ 'block' => 'core/spacer' ],
@@ -583,7 +586,7 @@ final class BlockAbilitiesTest extends TestCase {
 				'score'     => 0.91,
 			],
 		];
-		WordPressTestState::$last_remote_post = [];
+		WordPressTestState::$last_remote_post                                  = [];
 
 		$with_docs = BlockAbilities::recommend_block(
 			array_merge(

@@ -24,12 +24,12 @@ final class PatternCatalog {
 	}
 
 	public function for_patterns( ?array $categories = null, ?array $block_types = null, ?array $template_types = null ): array {
-		$registry = \WP_Block_Patterns_Registry::get_instance();
-		$all      = $registry->get_all_registered();
+		$registry    = \WP_Block_Patterns_Registry::get_instance();
+		$all         = $registry->get_all_registered();
 		$fingerprint = $this->build_registry_fingerprint( $all );
 
 		if ( $this->registry_fingerprint !== $fingerprint ) {
-			$this->pattern_query_cache    = [];
+			$this->pattern_query_cache  = [];
 			$this->registry_fingerprint = $fingerprint;
 		}
 
@@ -47,7 +47,7 @@ final class PatternCatalog {
 		if ( false !== $cache_key && isset( $this->pattern_query_cache[ $cache_key ] ) ) {
 			return $this->pattern_query_cache[ $cache_key ];
 		}
-		$result   = [];
+		$result = [];
 
 		foreach ( $all as $pattern ) {
 			if ( null !== $categories ) {

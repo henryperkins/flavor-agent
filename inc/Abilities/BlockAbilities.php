@@ -37,8 +37,8 @@ final class BlockAbilities {
 			return $prepared;
 		}
 
-		$context = $prepared['context'];
-		$prompt  = $prepared['prompt'];
+		$context            = $prepared['context'];
+		$prompt             = $prepared['prompt'];
 		$execution_contract = BlockRecommendationExecutionContract::from_context( $context );
 
 		$resolved_context_signature = RecommendationResolvedSignature::from_payload(
@@ -181,7 +181,7 @@ final class BlockAbilities {
 		}
 
 		if ( array_key_exists( 'inspectorPanels', $block ) ) {
-			$inspector_panels = self::normalize_map( $block['inspectorPanels'] ?? [] );
+			$inspector_panels                               = self::normalize_map( $block['inspectorPanels'] ?? [] );
 			$normalized['block']['inspectorPanels']         = $inspector_panels;
 			$normalized['block']['inspectorPanelsExplicit'] = true;
 		}
@@ -674,11 +674,11 @@ final class BlockAbilities {
 			return [];
 		}
 
-		$visual_hints = self::normalize_map( $parent_context['visualHints'] ?? [] );
-		$summary      = [];
-		$parent_role  = self::normalize_docs_scope_token( $parent_context['role'] ?? '' );
-		$parent_tag   = self::normalize_docs_scope_token( $visual_hints['tagName'] ?? '' );
-		$parent_layout = self::normalize_docs_scope_token(
+		$visual_hints    = self::normalize_map( $parent_context['visualHints'] ?? [] );
+		$summary         = [];
+		$parent_role     = self::normalize_docs_scope_token( $parent_context['role'] ?? '' );
+		$parent_tag      = self::normalize_docs_scope_token( $visual_hints['tagName'] ?? '' );
+		$parent_layout   = self::normalize_docs_scope_token(
 			self::get_value_from_path( $visual_hints, [ 'layout', 'type' ] )
 		);
 		$background_tone = self::classify_docs_background_tone(
@@ -687,7 +687,7 @@ final class BlockAbilities {
 			?? $visual_hints['gradient']
 			?? null
 		);
-		$dim_ratio = $visual_hints['dimRatio'] ?? null;
+		$dim_ratio       = $visual_hints['dimRatio'] ?? null;
 
 		if ( '' !== $parent_role ) {
 			$summary['parentRole'] = $parent_role;
@@ -746,8 +746,8 @@ final class BlockAbilities {
 			}
 		}
 
-		$summary = [];
-		$roles   = self::collect_unique_docs_scope_tokens( $roles );
+		$summary    = [];
+		$roles      = self::collect_unique_docs_scope_tokens( $roles );
 		$alignments = self::collect_unique_docs_scope_tokens( $alignments );
 
 		if ( ! empty( $roles ) ) {
@@ -968,8 +968,8 @@ final class BlockAbilities {
 			)
 		);
 		sort( $panel_summary );
-		$editing_mode    = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
-		$family_context  = [
+		$editing_mode   = self::normalize_editing_mode( $block['editingMode'] ?? 'default' );
+		$family_context = [
 			'surface'   => 'block',
 			'entityKey' => $entity_key,
 		];

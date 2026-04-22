@@ -29,7 +29,7 @@ final class EmbeddingClient extends BaseHttpClient {
 			);
 		}
 
-		$config   = Provider::embedding_configuration(
+		$config = Provider::embedding_configuration(
 			$provider,
 			Provider::is_native( $provider )
 				? [

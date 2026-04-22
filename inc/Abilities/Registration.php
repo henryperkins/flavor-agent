@@ -45,8 +45,8 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'selectedBlock' => self::selected_block_input_schema(),
-						'prompt'        => [
+						'selectedBlock'        => self::selected_block_input_schema(),
+						'prompt'               => [
 							'type'        => 'string',
 							'description' => 'Optional user instruction',
 						],
@@ -220,14 +220,14 @@ final class Registration {
 							'items' => [
 								'type'       => 'object',
 								'properties' => [
-									'name'       => [ 'type' => 'string' ],
-									'title'      => [ 'type' => 'string' ],
-									'score'      => [ 'type' => 'number' ],
-									'reason'     => [ 'type' => 'string' ],
-									'categories' => [ 'type' => 'array' ],
-									'patternOverrides' => [ 'type' => 'object' ],
+									'name'                 => [ 'type' => 'string' ],
+									'title'                => [ 'type' => 'string' ],
+									'score'                => [ 'type' => 'number' ],
+									'reason'               => [ 'type' => 'string' ],
+									'categories'           => [ 'type' => 'array' ],
+									'patternOverrides'     => [ 'type' => 'object' ],
 									'overrideCapabilities' => self::pattern_override_capabilities_schema(),
-									'content'    => [ 'type' => 'string' ],
+									'content'              => [ 'type' => 'string' ],
 								],
 							],
 						],
@@ -270,14 +270,14 @@ final class Registration {
 							'items' => [
 								'type'       => 'object',
 								'properties' => [
-									'name'          => [ 'type' => 'string' ],
-									'title'         => [ 'type' => 'string' ],
-									'description'   => [ 'type' => 'string' ],
-									'categories'    => [ 'type' => 'array' ],
-									'blockTypes'    => [ 'type' => 'array' ],
-									'templateTypes' => [ 'type' => 'array' ],
+									'name'             => [ 'type' => 'string' ],
+									'title'            => [ 'type' => 'string' ],
+									'description'      => [ 'type' => 'string' ],
+									'categories'       => [ 'type' => 'array' ],
+									'blockTypes'       => [ 'type' => 'array' ],
+									'templateTypes'    => [ 'type' => 'array' ],
 									'patternOverrides' => [ 'type' => 'object' ],
-									'content'       => [ 'type' => 'string' ],
+									'content'          => [ 'type' => 'string' ],
 								],
 							],
 						],
@@ -300,24 +300,24 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'templateRef'         => [
+						'templateRef'          => [
 							'type'        => 'string',
 							'description' => 'Template identifier from the Site Editor.',
 						],
-						'templateType'        => [
+						'templateType'         => [
 							'type'        => 'string',
 							'description' => 'Normalized template type (single, page, 404, etc.). Derived from templateRef if absent.',
 						],
-						'prompt'              => [ 'type' => 'string' ],
+						'prompt'               => [ 'type' => 'string' ],
 						'resolveSignatureOnly' => [
 							'type'        => 'boolean',
 							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
 						],
-						'visiblePatternNames' => [
+						'visiblePatternNames'  => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
 						],
-						'editorSlots'         => [
+						'editorSlots'          => [
 							'type'       => 'object',
 							'properties' => [
 								'assignedParts' => [
@@ -340,10 +340,10 @@ final class Registration {
 								],
 							],
 						],
-						'editorStructure'     => [
+						'editorStructure'      => [
 							'type'       => 'object',
 							'properties' => [
-								'topLevelBlockTree' => [
+								'topLevelBlockTree'       => [
 									'type'  => 'array',
 									'items' => [
 										'type'       => 'object',
@@ -367,17 +367,17 @@ final class Registration {
 										],
 									],
 								],
-								'structureStats' => [
+								'structureStats'          => [
 									'type'       => 'object',
 									'properties' => [
-										'blockCount'         => [ 'type' => 'integer' ],
-										'maxDepth'           => [ 'type' => 'integer' ],
+										'blockCount'       => [ 'type' => 'integer' ],
+										'maxDepth'         => [ 'type' => 'integer' ],
 										'topLevelBlockCount' => [ 'type' => 'integer' ],
-										'hasNavigation'      => [ 'type' => 'boolean' ],
-										'hasQuery'           => [ 'type' => 'boolean' ],
-										'hasTemplateParts'   => [ 'type' => 'boolean' ],
+										'hasNavigation'    => [ 'type' => 'boolean' ],
+										'hasQuery'         => [ 'type' => 'boolean' ],
+										'hasTemplateParts' => [ 'type' => 'boolean' ],
 										'firstTopLevelBlock' => [ 'type' => 'string' ],
-										'lastTopLevelBlock'  => [ 'type' => 'string' ],
+										'lastTopLevelBlock' => [ 'type' => 'string' ],
 									],
 								],
 								'currentPatternOverrides' => [ 'type' => 'object' ],
@@ -390,7 +390,7 @@ final class Registration {
 				'output_schema'       => [
 					'type'       => 'object',
 					'properties' => [
-						'suggestions' => [
+						'suggestions'              => [
 							'type'  => 'array',
 							'items' => [
 								'type'       => 'object',
@@ -450,8 +450,8 @@ final class Registration {
 								],
 							],
 						],
-						'explanation' => [ 'type' => 'string' ],
-						'reviewContextSignature' => [ 'type' => 'string' ],
+						'explanation'              => [ 'type' => 'string' ],
+						'reviewContextSignature'   => [ 'type' => 'string' ],
 						'resolvedContextSignature' => [ 'type' => 'string' ],
 					],
 				],
@@ -470,23 +470,23 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'templatePartRef'     => [
+						'templatePartRef'      => [
 							'type'        => 'string',
 							'description' => 'Template-part identifier from the Site Editor.',
 						],
-						'prompt'              => [ 'type' => 'string' ],
+						'prompt'               => [ 'type' => 'string' ],
 						'resolveSignatureOnly' => [
 							'type'        => 'boolean',
 							'description' => 'When true, only resolve the server-issued review/apply context signatures without calling the model.',
 						],
-						'visiblePatternNames' => [
+						'visiblePatternNames'  => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
 						],
-						'editorStructure'     => [
+						'editorStructure'      => [
 							'type'       => 'object',
 							'properties' => [
-								'blockTree' => [
+								'blockTree'               => [
 									'type'  => 'array',
 									'items' => [
 										'type'       => 'object',
@@ -506,7 +506,7 @@ final class Registration {
 										],
 									],
 								],
-								'allBlockPaths' => [
+								'allBlockPaths'           => [
 									'type'  => 'array',
 									'items' => [
 										'type'       => 'object',
@@ -522,46 +522,46 @@ final class Registration {
 										],
 									],
 								],
-								'topLevelBlocks' => [
+								'topLevelBlocks'          => [
 									'type'  => 'array',
 									'items' => [ 'type' => 'string' ],
 								],
-								'blockCounts' => [
+								'blockCounts'             => [
 									'type' => 'object',
 								],
-								'structureStats' => [
+								'structureStats'          => [
 									'type'       => 'object',
 									'properties' => [
-										'blockCount'            => [ 'type' => 'integer' ],
-										'maxDepth'              => [ 'type' => 'integer' ],
-										'hasNavigation'         => [ 'type' => 'boolean' ],
-										'containsLogo'          => [ 'type' => 'boolean' ],
-										'containsSiteTitle'     => [ 'type' => 'boolean' ],
-										'containsSearch'        => [ 'type' => 'boolean' ],
-										'containsSocialLinks'   => [ 'type' => 'boolean' ],
-										'containsQuery'         => [ 'type' => 'boolean' ],
-										'containsColumns'       => [ 'type' => 'boolean' ],
-										'containsButtons'       => [ 'type' => 'boolean' ],
-										'containsSpacer'        => [ 'type' => 'boolean' ],
-										'containsSeparator'     => [ 'type' => 'boolean' ],
-										'firstTopLevelBlock'    => [ 'type' => 'string' ],
-										'lastTopLevelBlock'     => [ 'type' => 'string' ],
+										'blockCount'      => [ 'type' => 'integer' ],
+										'maxDepth'        => [ 'type' => 'integer' ],
+										'hasNavigation'   => [ 'type' => 'boolean' ],
+										'containsLogo'    => [ 'type' => 'boolean' ],
+										'containsSiteTitle' => [ 'type' => 'boolean' ],
+										'containsSearch'  => [ 'type' => 'boolean' ],
+										'containsSocialLinks' => [ 'type' => 'boolean' ],
+										'containsQuery'   => [ 'type' => 'boolean' ],
+										'containsColumns' => [ 'type' => 'boolean' ],
+										'containsButtons' => [ 'type' => 'boolean' ],
+										'containsSpacer'  => [ 'type' => 'boolean' ],
+										'containsSeparator' => [ 'type' => 'boolean' ],
+										'firstTopLevelBlock' => [ 'type' => 'string' ],
+										'lastTopLevelBlock' => [ 'type' => 'string' ],
 										'hasSingleWrapperGroup' => [ 'type' => 'boolean' ],
-										'isNearlyEmpty'         => [ 'type' => 'boolean' ],
+										'isNearlyEmpty'   => [ 'type' => 'boolean' ],
 									],
 								],
 								'currentPatternOverrides' => [ 'type' => 'object' ],
-								'operationTargets' => [
+								'operationTargets'        => [
 									'type'  => 'array',
 									'items' => [
 										'type'       => 'object',
 										'properties' => [
-											'path'              => [
+											'path'  => [
 												'type'  => 'array',
 												'items' => [ 'type' => 'integer' ],
 											],
-											'name'              => [ 'type' => 'string' ],
-											'label'             => [ 'type' => 'string' ],
+											'name'  => [ 'type' => 'string' ],
+											'label' => [ 'type' => 'string' ],
 											'allowedOperations' => [
 												'type'  => 'array',
 												'items' => [ 'type' => 'string' ],
@@ -573,7 +573,7 @@ final class Registration {
 										],
 									],
 								],
-								'insertionAnchors' => [
+								'insertionAnchors'        => [
 									'type'  => 'array',
 									'items' => [
 										'type'       => 'object',
@@ -588,7 +588,7 @@ final class Registration {
 										],
 									],
 								],
-								'structuralConstraints' => [
+								'structuralConstraints'   => [
 									'type'       => 'object',
 									'properties' => [
 										'contentOnlyPaths' => [
@@ -617,7 +617,7 @@ final class Registration {
 				'output_schema'       => [
 					'type'       => 'object',
 					'properties' => [
-						'suggestions' => [
+						'suggestions'              => [
 							'type'  => 'array',
 							'items' => [
 								'type'       => 'object',
@@ -648,23 +648,23 @@ final class Registration {
 										'items' => [
 											'type'       => 'object',
 											'properties' => [
-												'type'              => [ 'type' => 'string' ],
-												'patternName'       => [ 'type' => 'string' ],
-												'placement'         => [ 'type' => 'string' ],
-												'targetPath'        => [
-													'type'  => 'array',
+												'type' => [ 'type' => 'string' ],
+												'patternName' => [ 'type' => 'string' ],
+												'placement' => [ 'type' => 'string' ],
+												'targetPath' => [
+													'type' => 'array',
 													'items' => [ 'type' => 'integer' ],
 												],
 												'expectedBlockName' => [ 'type' => 'string' ],
-												'expectedTarget'    => [ 'type' => 'object' ],
+												'expectedTarget' => [ 'type' => 'object' ],
 											],
 										],
 									],
 								],
 							],
 						],
-						'explanation' => [ 'type' => 'string' ],
-						'reviewContextSignature' => [ 'type' => 'string' ],
+						'explanation'              => [ 'type' => 'string' ],
+						'reviewContextSignature'   => [ 'type' => 'string' ],
 						'resolvedContextSignature' => [ 'type' => 'string' ],
 					],
 				],
@@ -723,15 +723,15 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'menuId'           => [
+						'menuId'               => [
 							'type'        => 'integer',
 							'description' => 'Nav menu ID',
 						],
-						'navigationMarkup' => [
+						'navigationMarkup'     => [
 							'type'        => 'string',
 							'description' => 'Serialized navigation block markup',
 						],
-						'editorContext'    => [
+						'editorContext'        => [
 							'type'        => 'object',
 							'description' => 'Selected navigation block context snapshot from the editor.',
 						],
@@ -739,13 +739,13 @@ final class Registration {
 							'type'        => 'boolean',
 							'description' => 'When true, only resolve the server-backed review freshness signature without calling the model.',
 						],
-						'prompt'           => [ 'type' => 'string' ],
+						'prompt'               => [ 'type' => 'string' ],
 					],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
 					'properties' => [
-						'suggestions' => [
+						'suggestions'            => [
 							'type'  => 'array',
 							'items' => [
 								'type'       => 'object',
@@ -758,11 +758,11 @@ final class Registration {
 										'items' => [
 											'type'       => 'object',
 											'properties' => [
-												'type'       => [ 'type' => 'string' ],
-												'target'     => [ 'type' => 'string' ],
-												'detail'     => [ 'type' => 'string' ],
+												'type'   => [ 'type' => 'string' ],
+												'target' => [ 'type' => 'string' ],
+												'detail' => [ 'type' => 'string' ],
 												'targetPath' => [
-													'type'  => 'array',
+													'type' => 'array',
 													'items' => [ 'type' => 'integer' ],
 												],
 											],
@@ -771,7 +771,7 @@ final class Registration {
 								],
 							],
 						],
-						'explanation' => [ 'type' => 'string' ],
+						'explanation'            => [ 'type' => 'string' ],
 						'reviewContextSignature' => [ 'type' => 'string' ],
 					],
 				],
@@ -792,7 +792,7 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'scope'        => self::open_object_schema(
+						'scope'                => self::open_object_schema(
 							[
 								'surface'        => [ 'type' => 'string' ],
 								'scopeKey'       => [ 'type' => 'string' ],
@@ -807,7 +807,7 @@ final class Registration {
 							],
 							'Resolved style surface scope descriptor from the Site Editor.'
 						),
-						'styleContext' => self::open_object_schema(
+						'styleContext'         => self::open_object_schema(
 							[
 								'currentConfig'         => self::open_object_schema(),
 								'mergedConfig'          => self::open_object_schema(),
@@ -824,7 +824,7 @@ final class Registration {
 										'reason'      => [ 'type' => 'string' ],
 									]
 								),
-								'designSemantics'      => self::open_object_schema(),
+								'designSemantics'       => self::open_object_schema(),
 								'styleBookTarget'       => self::open_object_schema(
 									[
 										'blockName'     => [ 'type' => 'string' ],
@@ -837,7 +837,7 @@ final class Registration {
 							],
 							'Current style surface editor context needed for style recommendations.'
 						),
-						'prompt'       => [
+						'prompt'               => [
 							'type'        => 'string',
 							'description' => 'Optional user instruction',
 						],
@@ -1043,36 +1043,36 @@ final class Registration {
 		return [
 			'type'                 => 'object',
 			'properties'           => [
-				'blockName'           => [
+				'blockName'              => [
 					'type'        => 'string',
 					'description' => 'Block type name (e.g. core/group).',
 				],
-				'attributes'          => self::open_object_schema(
+				'attributes'             => self::open_object_schema(
 					[],
 					'Current block attributes. Canonical visibility state lives in attributes.metadata.blockVisibility.'
 				),
-				'innerBlocks'         => [
+				'innerBlocks'            => [
 					'type'        => 'array',
 					'description' => 'Nested blocks (optional).',
 					'items'       => self::open_object_schema(),
 				],
-				'isInsideContentOnly' => [
+				'isInsideContentOnly'    => [
 					'type'        => 'boolean',
 					'description' => 'Whether the block is inside a contentOnly editing container.',
 				],
-				'supportsContentRole' => [
+				'supportsContentRole'    => [
 					'type'        => 'boolean',
 					'description' => 'Whether the block declares supports.contentRole and is content-editable through inner blocks or content attributes.',
 				],
-				'editingMode'         => [
+				'editingMode'            => [
 					'type'        => 'string',
 					'description' => 'Current editing mode for the selected block.',
 				],
-				'childCount'          => [
+				'childCount'             => [
 					'type'        => 'integer',
 					'description' => 'Number of direct child blocks nested inside the selected block.',
 				],
-				'parentContext'       => self::parent_context_schema(),
+				'parentContext'          => self::parent_context_schema(),
 				'siblingSummariesBefore' => [
 					'type'        => 'array',
 					'description' => 'Sibling block summaries before the selected block.',
@@ -1087,20 +1087,20 @@ final class Registration {
 					'maxItems'    => 3,
 					'default'     => [],
 				],
-				'structuralIdentity'  => self::structural_identity_schema(),
-				'structuralAncestors' => [
+				'structuralIdentity'     => self::structural_identity_schema(),
+				'structuralAncestors'    => [
 					'type'        => 'array',
 					'description' => 'Summarized structural ancestors leading to the selected block.',
 					'items'       => self::structural_summary_item_schema(),
 					'maxItems'    => self::STRUCTURAL_SUMMARY_MAX_ITEMS,
 				],
-				'structuralBranch'    => [
+				'structuralBranch'       => [
 					'type'        => 'array',
 					'description' => 'Summarized structural branch rooted at the nearest structural ancestor.',
 					'items'       => self::structural_summary_item_schema( true ),
 					'maxItems'    => self::STRUCTURAL_SUMMARY_MAX_ITEMS,
 				],
-				'blockVisibility'     => self::open_object_schema(
+				'blockVisibility'        => self::open_object_schema(
 					[],
 					'Deprecated legacy alias for attributes.metadata.blockVisibility. Accepted for backward compatibility.'
 				),
@@ -1155,7 +1155,7 @@ final class Registration {
 		}
 
 		if ( $include_children ) {
-			$properties['children']   = [
+			$properties['children'] = [
 				'type'     => 'array',
 				'items'    => self::structural_summary_item_schema(
 					$depth + 1 < self::STRUCTURAL_SUMMARY_MAX_DEPTH,
@@ -1323,20 +1323,20 @@ final class Registration {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'settings'    => [
+				'settings'                 => [
 					'type'  => 'array',
 					'items' => $suggestion_schema,
 				],
-				'styles'      => [
+				'styles'                   => [
 					'type'  => 'array',
 					'items' => $suggestion_schema,
 				],
-				'block'       => [
+				'block'                    => [
 					'type'  => 'array',
 					'items' => $suggestion_schema,
 				],
-				'explanation' => [ 'type' => 'string' ],
-				'executionContract' => [ 'type' => 'object' ],
+				'explanation'              => [ 'type' => 'string' ],
+				'executionContract'        => [ 'type' => 'object' ],
 				'resolvedContextSignature' => [ 'type' => 'string' ],
 			],
 		];
@@ -1346,7 +1346,7 @@ final class Registration {
 		return [
 			'type'       => 'object',
 			'properties' => [
-				'suggestions' => [
+				'suggestions'              => [
 					'type'  => 'array',
 					'items' => [
 						'type'       => 'object',
@@ -1379,8 +1379,8 @@ final class Registration {
 						],
 					],
 				],
-				'explanation' => [ 'type' => 'string' ],
-				'reviewContextSignature' => [ 'type' => 'string' ],
+				'explanation'              => [ 'type' => 'string' ],
+				'reviewContextSignature'   => [ 'type' => 'string' ],
 				'resolvedContextSignature' => [ 'type' => 'string' ],
 			],
 		];

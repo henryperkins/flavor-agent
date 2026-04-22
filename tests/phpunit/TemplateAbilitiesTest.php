@@ -321,7 +321,7 @@ final class TemplateAbilitiesTest extends TestCase {
 					),
 					'editorStructure'      => $this->build_template_editor_structure_payload(
 						[
-							'topLevelBlockTree' => [
+							'topLevelBlockTree'         => [
 								[
 									'path'       => [ 0 ],
 									'name'       => 'core/query',
@@ -332,7 +332,7 @@ final class TemplateAbilitiesTest extends TestCase {
 									'childCount' => 3,
 								],
 							],
-							'structureStats'    => [
+							'structureStats'            => [
 								'blockCount'         => 6,
 								'maxDepth'           => 3,
 								'topLevelBlockCount' => 1,
@@ -342,15 +342,15 @@ final class TemplateAbilitiesTest extends TestCase {
 								'firstTopLevelBlock' => 'core/query',
 								'lastTopLevelBlock'  => 'core/query',
 							],
-							'currentPatternOverrides' => [
+							'currentPatternOverrides'   => [
 								'hasOverrides' => true,
 								'blockCount'   => 1,
 								'blockNames'   => [ 'core/query' ],
 								'blocks'       => [
 									[
-										'path'               => [ 0 ],
-										'name'               => 'core/query',
-										'label'              => 'Query Loop',
+										'path'  => [ 0 ],
+										'name'  => 'core/query',
+										'label' => 'Query Loop',
 										'overrideAttributes' => [ 'query' ],
 										'usesDefaultBinding' => false,
 									],
@@ -436,7 +436,7 @@ final class TemplateAbilitiesTest extends TestCase {
 				[
 					'editorStructure'      => $this->build_template_part_editor_structure_payload(
 						[
-							'blockTree' => [
+							'blockTree'               => [
 								[
 									'path'       => [ 0 ],
 									'name'       => 'core/navigation',
@@ -448,7 +448,7 @@ final class TemplateAbilitiesTest extends TestCase {
 									'children'   => [],
 								],
 							],
-							'allBlockPaths' => [
+							'allBlockPaths'           => [
 								[
 									'path'       => [ 0 ],
 									'name'       => 'core/navigation',
@@ -459,11 +459,11 @@ final class TemplateAbilitiesTest extends TestCase {
 									'childCount' => 0,
 								],
 							],
-							'topLevelBlocks' => [ 'core/navigation' ],
-							'blockCounts'    => [
+							'topLevelBlocks'          => [ 'core/navigation' ],
+							'blockCounts'             => [
 								'core/navigation' => 1,
 							],
-							'structureStats' => [
+							'structureStats'          => [
 								'blockCount'            => 1,
 								'maxDepth'              => 1,
 								'hasNavigation'         => true,
@@ -487,7 +487,7 @@ final class TemplateAbilitiesTest extends TestCase {
 								'blockNames'   => [],
 								'blocks'       => [],
 							],
-							'operationTargets' => [
+							'operationTargets'        => [
 								[
 									'path'              => [ 0 ],
 									'name'              => 'core/navigation',
@@ -496,7 +496,7 @@ final class TemplateAbilitiesTest extends TestCase {
 									'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
 								],
 							],
-							'insertionAnchors' => [
+							'insertionAnchors'        => [
 								[
 									'placement' => 'start',
 									'label'     => 'Start of template part',
@@ -512,7 +512,7 @@ final class TemplateAbilitiesTest extends TestCase {
 									'label'     => 'End of template part',
 								],
 							],
-							'structuralConstraints' => [
+							'structuralConstraints'   => [
 								'contentOnlyPaths' => [],
 								'lockedPaths'      => [],
 								'hasContentOnly'   => false,
@@ -646,7 +646,7 @@ final class TemplateAbilitiesTest extends TestCase {
 			[
 				$this->build_template_review_signature_context(
 					[
-						'allowedAreas'  => [ 'footer', 'header' ],
+						'allowedAreas'   => [ 'footer', 'header' ],
 						'availableParts' => [
 							[
 								'slug'  => 'site-header',
@@ -800,15 +800,15 @@ final class TemplateAbilitiesTest extends TestCase {
 	private function build_template_review_signature_context( array $overrides = [] ): array {
 		return array_merge(
 			[
-				'templateType'  => 'home',
-				'title'         => 'Home',
-				'assignedParts' => [
+				'templateType'   => 'home',
+				'title'          => 'Home',
+				'assignedParts'  => [
 					[
 						'slug' => 'site-header',
 						'area' => 'header',
 					],
 				],
-				'allowedAreas'  => [ 'header' ],
+				'allowedAreas'   => [ 'header' ],
 				'availableParts' => [
 					[
 						'slug'  => 'site-header',
@@ -821,8 +821,8 @@ final class TemplateAbilitiesTest extends TestCase {
 						'area'  => 'footer',
 					],
 				],
-				'patterns'      => [],
-				'themeTokens'   => [],
+				'patterns'       => [],
+				'themeTokens'    => [],
 			],
 			$overrides
 		);
@@ -835,10 +835,10 @@ final class TemplateAbilitiesTest extends TestCase {
 	private function build_template_part_review_signature_context( array $overrides = [] ): array {
 		return array_merge(
 			[
-				'slug'       => 'header',
-				'title'      => 'Header',
-				'area'       => 'header',
-				'patterns'   => [],
+				'slug'        => 'header',
+				'title'       => 'Header',
+				'area'        => 'header',
+				'patterns'    => [],
 				'themeTokens' => [],
 			],
 			$overrides
@@ -883,7 +883,7 @@ final class TemplateAbilitiesTest extends TestCase {
 	private function build_template_editor_structure_payload( array $overrides = [] ): array {
 		return array_merge(
 			[
-				'topLevelBlockTree' => [
+				'topLevelBlockTree'         => [
 					[
 						'path'       => [ 0 ],
 						'name'       => 'core/group',
@@ -894,7 +894,7 @@ final class TemplateAbilitiesTest extends TestCase {
 						'childCount' => 2,
 					],
 				],
-				'structureStats' => [
+				'structureStats'            => [
 					'blockCount'         => 4,
 					'maxDepth'           => 2,
 					'topLevelBlockCount' => 1,
@@ -904,7 +904,7 @@ final class TemplateAbilitiesTest extends TestCase {
 					'firstTopLevelBlock' => 'core/group',
 					'lastTopLevelBlock'  => 'core/group',
 				],
-				'currentPatternOverrides' => [
+				'currentPatternOverrides'   => [
 					'hasOverrides' => false,
 					'blockCount'   => 0,
 					'blockNames'   => [],
@@ -937,7 +937,7 @@ final class TemplateAbilitiesTest extends TestCase {
 	private function build_template_part_editor_structure_payload( array $overrides = [] ): array {
 		return array_merge(
 			[
-				'blockTree' => [
+				'blockTree'               => [
 					[
 						'path'       => [ 0 ],
 						'name'       => 'core/group',
@@ -958,7 +958,7 @@ final class TemplateAbilitiesTest extends TestCase {
 						],
 					],
 				],
-				'allBlockPaths' => [
+				'allBlockPaths'           => [
 					[
 						'path'       => [ 0 ],
 						'name'       => 'core/group',
@@ -976,12 +976,12 @@ final class TemplateAbilitiesTest extends TestCase {
 						'childCount' => 0,
 					],
 				],
-				'topLevelBlocks' => [ 'core/group' ],
-				'blockCounts'    => [
+				'topLevelBlocks'          => [ 'core/group' ],
+				'blockCounts'             => [
 					'core/group'      => 1,
 					'core/site-title' => 1,
 				],
-				'structureStats' => [
+				'structureStats'          => [
 					'blockCount'            => 2,
 					'maxDepth'              => 2,
 					'hasNavigation'         => false,
@@ -1005,7 +1005,7 @@ final class TemplateAbilitiesTest extends TestCase {
 					'blockNames'   => [],
 					'blocks'       => [],
 				],
-				'operationTargets' => [
+				'operationTargets'        => [
 					[
 						'path'              => [ 0 ],
 						'name'              => 'core/group',
@@ -1014,7 +1014,7 @@ final class TemplateAbilitiesTest extends TestCase {
 						'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
 					],
 				],
-				'insertionAnchors' => [
+				'insertionAnchors'        => [
 					[
 						'placement' => 'start',
 						'label'     => 'Start of template part',
@@ -1030,7 +1030,7 @@ final class TemplateAbilitiesTest extends TestCase {
 						'label'     => 'End of template part',
 					],
 				],
-				'structuralConstraints' => [
+				'structuralConstraints'   => [
 					'contentOnlyPaths' => [],
 					'lockedPaths'      => [],
 					'hasContentOnly'   => false,
