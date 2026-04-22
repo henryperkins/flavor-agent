@@ -28,7 +28,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "1.58.2",
-		"@wordpress/scripts": "^30.0.0",
+		"@wordpress/scripts": "^32.0.0",
 		"repomix": "^1.13.1"
 	},
 	"dependencies": {
