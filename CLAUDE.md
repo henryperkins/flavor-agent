@@ -200,5 +200,4 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/reference/shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers
 - `docs/flavor-agent-readme.md` — architecture companion and editor-flow reference
 - `docs/local-wordpress-ide.md` — local Docker/devcontainer workflow
-- `docs/2026-03-25-roadmap-aligned-execution-plan.md` — active forward plan
 - `STATUS.md` — working feature inventory and verification log

@@ -115,6 +115,23 @@ check_present \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
 
+# Skill replicas must match the canonical .claude/skills/ tree. Edit skills
+# only in .claude/skills/ and run scripts/sync-skills.sh to refresh replicas.
+canonical_skills="${repo_root}/.claude/skills"
+for replica in "${repo_root}/.cursor/skills" "${repo_root}/.codex/skills" "${repo_root}/.github/skills"; do
+	if [[ ! -d "${replica}" ]]; then
+		echo "Skill replica missing: ${replica}" >&2
+		fail=1
+		continue
+	fi
+	if ! diff -rq "${canonical_skills}" "${replica}" >/dev/null 2>&1; then
+		echo "Skill replica drift: ${replica} differs from ${canonical_skills}." >&2
+		echo "Run scripts/sync-skills.sh to replicate canonical skills." >&2
+		diff -rq "${canonical_skills}" "${replica}" >&2 || true
+		fail=1
+	fi
+done
+
 if [[ "${fail}" -ne 0 ]]; then
 	echo "Run the relevant doc update(s) and re-check the live docs." >&2
 	exit 1

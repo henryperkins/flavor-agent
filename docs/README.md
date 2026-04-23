@@ -129,3 +129,12 @@ Right now the intended doc stack is:
 7. WordPress compatibility and migration snapshots: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md`
 
 If those seven docs stay aligned, the repo has a solid documentation backbone.
+
+## Audits and Research
+
+Point-in-time artifacts that do not belong in the reading order but are preserved for context:
+
+1. `docs/audits/` — completed or in-flight audit prompts and reports. These do not reflect live plugin state; treat them as historical analysis. Delete or supersede rather than silently updating.
+2. `docs/research/` — external research snapshots (upstream WordPress announcements, design-trend writeups). Use as inspiration or compatibility context, not as the plugin's own spec.
+
+If an audit or research doc becomes load-bearing for a decision, promote it into the backbone (`docs/reference/` or a per-surface feature doc) rather than leaving it in these directories.
