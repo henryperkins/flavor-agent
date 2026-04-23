@@ -6,18 +6,7 @@
 
 ## Documentation Backbone
 
-Use these documents together:
-
-1. `docs/README.md` -- entry point and doc ownership map
-2. `docs/SOURCE_OF_TRUTH.md` -- canonical product definition and architecture
-3. `STATUS.md` -- current verified state and known issues
-4. `docs/FEATURE_SURFACE_MATRIX.md` -- feature locations, surfacing conditions, and apply/undo matrix
-5. `docs/features/README.md` -- deep-dive user-flow documentation for each shipped surface
-6. `docs/reference/` -- canonical programmatic and shared-surface contract docs (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, provider-precedence, template-operations, activity-state-machine)
-7. `docs/flavor-agent-readme.md` -- editor-flow and architecture companion
-8. `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md` -- WordPress 7.0 release-cycle research snapshots and migration watch items
-
-Historical planning docs referenced in older commits are not part of the current documentation backbone; use git history if that context is needed.
+See `docs/README.md` for the documentation backbone, reading order, ownership, and update contract.
 
 ## What This Plugin Is
 
@@ -760,32 +749,6 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [ ] Navigation overlay generation
 - [ ] Multi-turn conversation (context carryover across recommendation rounds)
 - [ ] Batch recommendations (multiple blocks at once)
-
-## Doc Index
-
-| Document                                                           | Purpose                                                                                                    | Status                         |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `docs/README.md`                                                   | Documentation backbone, reading order, and update contract                                                 | **Current**                    |
-| `docs/SOURCE_OF_TRUTH.md`                                          | Definitive project reference: scope, architecture, inventory, roadmap                                      | **Current**                    |
-| `docs/FEATURE_SURFACE_MATRIX.md`                                   | Fast map of every shipped surface, gating condition, and apply/undo path                                   | **Current**                    |
-| `docs/features/README.md`                                          | Entry point for detailed feature docs covering end-to-end flows                                            | **Current**                    |
-| `docs/features/content-recommendations.md`                         | Programmatic content lane contract and current no-first-party-UI status                                     | **Current**                    |
-| `docs/features/style-and-theme-intelligence.md`                    | Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo | **Current**                    |
-| `docs/reference/abilities-and-routes.md`                           | Canonical ability and REST contract reference                                                              | **Current**                    |
-| `docs/reference/shared-internals.md`                               | Shared store utilities, UI components, and context helpers                                                  | **Current**                    |
-| `docs/reference/recommendation-ui-consistency.md`                  | Cross-surface interaction-model split, shared taxonomy, and intentional recommendation-surface exceptions  | **Current**                    |
-| `docs/reference/cross-surface-validation-gates.md`                 | Additive release gates and required evidence for multi-surface or shared-subsystem changes                  | **Current**                    |
-| `docs/reference/provider-precedence.md`                            | AI backend selection and credential fallback chain                                                         | **Current**                    |
-| `docs/reference/template-operations.md`                            | Operation type vocabulary and validation rules per surface                                                 | **Current**                    |
-| `docs/reference/activity-state-machine.md`                         | Undo states, transitions, ordered undo, and pruning                                                        | **Current**                    |
-| `docs/flavor-agent-readme.md`                                      | Architecture details: editor flows, settings, style surfaces, pattern lifecycle, and admin audit          | **Current**                    |
-| `docs/local-wordpress-ide.md`                                      | Local Docker/devcontainer workflow and host setup                                                          | **Current**                    |
-| `docs/wordpress-7.0-gutenberg-22.8-reference.md`                   | WordPress 7.0 and late-cycle Gutenberg API changes, new features, deprecations, and plugin impact snapshot | **Reference snapshot**         |
-| `docs/wordpress-7.0-developer-docs-index.md`                       | Discovery snapshot of official WordPress 7.0 developer documentation sources                               | **Reference snapshot**         |
-| `docs/wp7-migration-opportunities.md`                              | Point-in-time WordPress 7.0 migration assessment and follow-up opportunities                               | **Reference snapshot**         |
-| `docs/superpowers/specs/2026-03-17-pattern-badge-status-design.md` | Implemented design spec for pattern badge status surface                                                   | **Implemented reference spec** |
-| `CLAUDE.md`                                                        | Claude Code project instructions: commands, architecture, gotchas                                          | **Current**                    |
-| `STATUS.md`                                                        | Working feature inventory and verification log                                                             | **Current**                    |
 
 ## Build and Dev Commands
 

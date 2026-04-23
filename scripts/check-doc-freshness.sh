@@ -53,6 +53,30 @@ check_present() {
 	fi
 }
 
+# Regex search -- pattern MUST appear in EACH given file independently.
+# Use this to enforce byte-parity of a shared fact across multiple docs.
+check_present_in_each() {
+	local description="$1"
+	local pattern="$2"
+	shift 2
+
+	local missing=()
+	local f
+	for f in "$@"; do
+		if ! rg -n --no-heading --color never -- "$pattern" "$f" >/dev/null; then
+			missing+=("$f")
+		fi
+	done
+
+	if (( ${#missing[@]} > 0 )); then
+		echo "Doc freshness check failed: ${description}" >&2
+		for f in "${missing[@]}"; do
+			echo "  missing from: ${f}" >&2
+		done
+		fail=1
+	fi
+}
+
 check_absent \
 	'old 11-ability wording still appears in live docs' \
 	'11 abilities' \
@@ -71,6 +95,11 @@ check_absent \
 check_absent \
 	'old activity-log boot field name still appears in live docs' \
 	'defaultLimit' \
+	"${live_docs[@]}"
+
+check_absent \
+	'renamed settings-page entry point still appears as src/admin/sync-button.js in live docs' \
+	'src/admin/sync-button.js' \
 	"${live_docs[@]}"
 
 check_absent \
@@ -112,6 +141,22 @@ check_present \
 	'agent runbooks should mention the cross-surface validation gate reference' \
 	'cross-surface-validation-gates\.md' \
 	"${repo_root}/AGENTS.md" \
+	"${repo_root}/CLAUDE.md" \
+	"${repo_root}/.github/copilot-instructions.md"
+
+# Parity guards: shared facts that must stay byte-identical across contributor
+# runbooks (CLAUDE.md for Claude Code, copilot-instructions.md for Copilot).
+# If one file is updated but the other isn't, the drifted copy no longer
+# contains the canonical string and this check fails.
+check_present_in_each \
+	'webpack entry-point list drifted between CLAUDE.md and copilot-instructions.md' \
+	'`src/index\.js` \(editor\), `src/admin/settings-page\.js` \(settings page\), and `src/admin/activity-log\.js` \(AI Activity admin page\)' \
+	"${repo_root}/CLAUDE.md" \
+	"${repo_root}/.github/copilot-instructions.md"
+
+check_present_in_each \
+	'ability count drifted between CLAUDE.md and copilot-instructions.md' \
+	'13 abilities across block, pattern, template, navigation, docs, infra, content, and style categories' \
 	"${repo_root}/CLAUDE.md" \
 	"${repo_root}/.github/copilot-instructions.md"
 

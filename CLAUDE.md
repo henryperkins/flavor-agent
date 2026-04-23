@@ -96,6 +96,13 @@ Treat the gates there as additive release stops:
 | `Abilities\ContentAbilities`         | Content recommendation handlers (scaffold)                                                                                             |
 | `Abilities\SurfaceCapabilities`      | Shared surface readiness checks and localized capability flag assembly                                                                 |
 | `Settings`                           | Admin settings page (provider selection, Azure/OpenAI Native/Qdrant/Cloudflare, validation, sync, diagnostics)                                                         |
+| `Support\CollectsDocsGuidance`       | Docs-guidance collection trait shared across prompt surfaces                                                                                                           |
+| `Support\FormatsDocsGuidance`        | Docs-guidance formatting helpers                                                                                                                                       |
+| `Support\MetricsNormalizer`          | Non-negative metric integer normalization for tokens, latency, and byte counts                                                                                         |
+| `Support\NormalizesInput`            | Structured input normalization trait used by abilities and REST handlers                                                                                               |
+| `Support\RankingContract`            | Suggestion contract normalization (score, reason, source signals, freshness meta, safety mode)                                                                         |
+| `Support\RecommendationResolvedSignature` | Stable hash of surface + resolved apply context for apply-time freshness checks                                                                                   |
+| `Support\RecommendationReviewSignature`   | Stable hash of surface + review context for review-time freshness checks                                                                                          |
 | `Support\StringArray`                | String array sanitization utility                                                                                                                                      |
 
 **JS frontend** (`src/`, built with `@wordpress/scripts`):
@@ -110,10 +117,16 @@ Treat the gates there as additive release stops:
 | `components/AIAdvisorySection.js`           | Advisory-only suggestion section for non-executable recommendations                                                           |
 | `components/AIReviewSection.js`             | Review-before-apply confirmation panel for executable recommendations                                                         |
 | `inspector/InspectorInjector.js`            | `editor.BlockEdit` HOC — injects AI panels into all blocks                                                                    |
+| `inspector/BlockRecommendationsPanel.js`    | Main block prompt composer, grouped lanes, inline apply feedback, and recent-activity shell                                   |
+| `inspector/NavigationRecommendations.js`    | Embedded advisory panel for selected `core/navigation` blocks                                                                 |
 | `inspector/SettingsRecommendations.js`      | Settings tab suggestions                                                                                                      |
 | `inspector/StylesRecommendations.js`        | Appearance tab suggestions + style variation pills                                                                            |
 | `inspector/SuggestionChips.js`              | Reusable chip component for sub-panel suggestions                                                                             |
+| `inspector/block-recommendation-request.js` | Block request signature builder and freshness derivation used by the main panel and projections                               |
+| `inspector/group-by-panel.js`               | Panel-grouping utility for Inspector suggestions                                                                              |
+| `inspector/panel-delegation.js`             | Routes Inspector projections between block and navigation surfaces                                                            |
 | `inspector/suggestion-keys.js`              | Stable key generation for applied-state tracking                                                                              |
+| `inspector/use-suggestion-apply-feedback.js`| Shared apply-feedback hook for chip/card apply state                                                                          |
 | `context/block-inspector.js`                | Client-side block introspection (supports, attributes, styles)                                                                |
 | `context/theme-tokens.js`                   | Design token extraction from theme.json + global styles                                                                       |
 | `context/collector.js`                      | Combines block + theme + structural context for LLM calls                                                                     |

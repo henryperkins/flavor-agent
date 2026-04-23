@@ -103,20 +103,4 @@ Prior verification entries (2026-03-19 through 2026-04-18) are available in git 
 
 ## Documentation
 
-- **`docs/README.md`** -- Documentation entry point: purpose, reading order, ownership, and update contract
-- **`docs/SOURCE_OF_TRUTH.md`** -- Definitive project reference: scope, architecture, inventory, roadmap, definition of done
-- **`docs/FEATURE_SURFACE_MATRIX.md`** -- Fast matrix for every shipped surface: location, surfacing conditions, gating, and apply/undo support
-- **`docs/features/README.md`** -- Entry point for the detailed surface docs in `docs/features/`
-- **`docs/features/style-and-theme-intelligence.md`** -- Detailed Global Styles and Style Book surface doc: scope contract, prompt/apply flow, guardrails, and undo
-- **`docs/reference/abilities-and-routes.md`** -- Canonical mapping of Abilities API contracts, REST routes, permissions, and first-party callers
-- **`docs/reference/shared-internals.md`** -- Cross-cutting store utilities, shared UI components, context helpers, and session/activity hydration behavior
-- **`docs/reference/recommendation-ui-consistency.md`** -- Current recommendation-surface interaction models, shared taxonomy, and intentional exceptions
-- **`docs/reference/cross-surface-validation-gates.md`** -- Additive release gates and required evidence for multi-surface or shared-subsystem changes
-- **`docs/reference/provider-precedence.md`** -- Backend selection order, credential fallback chain, and surface-to-provider routing
-- **`docs/reference/template-operations.md`** -- Template and template-part operation vocabulary, placement rules, and validation requirements
-- **`docs/reference/activity-state-machine.md`** -- Activity persistence, undo state transitions, pruning rules, and sync behavior
-- **`docs/flavor-agent-readme.md`** -- Architecture details and editor-flow companion reference, including style surfaces and the admin audit surface
-- **`docs/local-wordpress-ide.md`** -- Local Docker/devcontainer workflow and daily development setup
-- **`docs/wordpress-7.0-gutenberg-22.8-reference.md`** -- WordPress 7.0 and late-cycle Gutenberg reference snapshot for compatibility and API research
-- **`docs/wordpress-7.0-developer-docs-index.md`** -- Discovery snapshot of official WordPress 7.0 developer documentation sources
-- **`docs/wp7-migration-opportunities.md`** -- Point-in-time WordPress 7.0 migration assessment; useful for follow-up ideas, not the live backlog
+See `docs/README.md` for the documentation backbone, reading order, ownership, and update contract.
