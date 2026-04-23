@@ -99,6 +99,23 @@ final class TemplateAbilitiesTest extends TestCase {
 		parent::tearDown();
 	}
 
+	public function test_list_template_parts_can_omit_or_include_content(): void {
+		$metadata_only = TemplateAbilities::list_template_parts( [] );
+		$with_content  = TemplateAbilities::list_template_parts(
+			[
+				'includeContent' => true,
+			]
+		);
+
+		$this->assertCount( 1, $metadata_only['templateParts'] );
+		$this->assertArrayNotHasKey( 'content', $metadata_only['templateParts'][0] );
+		$this->assertSame( 'header', $metadata_only['templateParts'][0]['slug'] );
+		$this->assertSame(
+			'<!-- wp:group {"tagName":"header"} --><div>Header</div><!-- /wp:group -->',
+			$with_content['templateParts'][0]['content']
+		);
+	}
+
 	public function test_recommend_template_resolve_signature_only_returns_review_and_resolved_signatures(): void {
 		$result = TemplateAbilities::recommend_template(
 			[

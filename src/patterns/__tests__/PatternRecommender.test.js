@@ -1,11 +1,13 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
+const mockCloneBlock = jest.fn();
+const mockCreateBlock = jest.fn();
+const mockParse = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
+const mockInsertBlocks = jest.fn();
+const mockCreateSuccessNotice = jest.fn();
 const mockGetBlockAttributes = jest.fn();
-const mockGetBlockPatternCategories = jest.fn();
-const mockGetBlockPatterns = jest.fn();
-const mockSetBlockPatternCategories = jest.fn();
-const mockSetBlockPatterns = jest.fn();
+const mockGetAllowedPatterns = jest.fn();
 const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
@@ -18,6 +20,12 @@ jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
 } ) );
 
+jest.mock( '@wordpress/blocks', () => ( {
+	cloneBlock: ( ...args ) => mockCloneBlock( ...args ),
+	createBlock: ( ...args ) => mockCreateBlock( ...args ),
+	parse: ( ...args ) => mockParse( ...args ),
+} ) );
+
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
@@ -27,13 +35,17 @@ jest.mock( '@wordpress/editor', () => ( {
 	store: 'core/editor',
 } ) );
 
+jest.mock( '@wordpress/i18n', () => ( {
+	__: ( value ) => value,
+	sprintf: ( template, value ) => template.replace( '%s', value ),
+} ) );
+
+jest.mock( '@wordpress/notices', () => ( {
+	store: 'core/notices',
+} ) );
+
 jest.mock( '../pattern-settings', () => ( {
-	getBlockPatternCategories: ( ...args ) =>
-		mockGetBlockPatternCategories( ...args ),
-	getBlockPatterns: ( ...args ) => mockGetBlockPatterns( ...args ),
-	setBlockPatternCategories: ( ...args ) =>
-		mockSetBlockPatternCategories( ...args ),
-	setBlockPatterns: ( ...args ) => mockSetBlockPatterns( ...args ),
+	getAllowedPatterns: ( ...args ) => mockGetAllowedPatterns( ...args ),
 } ) );
 
 jest.mock( '../inserter-dom', () => ( {
@@ -74,7 +86,6 @@ function createSelectMap() {
 			getEditedPostId: jest.fn( () => state.editSite.postId ),
 		},
 		'core/block-editor': {
-			getSettings: jest.fn( () => state.blockEditor.settings || {} ),
 			getSelectedBlockClientId: jest.fn(
 				() => state.blockEditor.selectedBlockClientId
 			),
@@ -122,17 +133,17 @@ describe( 'PatternRecommender', () => {
 			postType: 'page',
 			isInserterOpen: true,
 			visiblePatternNames: [ 'theme/hero' ],
+			allowedPatterns: [],
 			editSite: {
 				postType: 'page',
 				postId: null,
 			},
 			blockEditor: {
-				settings: {},
-				runtimeCategories: [],
 				selectedBlockClientId: null,
 				selectedBlockName: null,
 				insertionPoint: {
 					rootClientId: 'root-a',
+					index: 0,
 				},
 				blockNames: { 'root-a': 'core/group' },
 				blockOrder: { 'root-a': [] },
@@ -147,30 +158,57 @@ describe( 'PatternRecommender', () => {
 		};
 		mockUseDispatch.mockReset();
 		mockUseSelect.mockReset();
+		mockCloneBlock.mockReset();
+		mockCreateBlock.mockReset();
+		mockParse.mockReset();
 		mockFetchPatternRecommendations.mockReset();
+		mockInsertBlocks.mockReset();
+		mockCreateSuccessNotice.mockReset();
 		mockGetBlockAttributes.mockReset();
-		mockGetBlockPatternCategories.mockReset();
-		mockGetBlockPatterns.mockReset();
-		mockSetBlockPatternCategories.mockReset();
-		mockSetBlockPatterns.mockReset();
+		mockGetAllowedPatterns.mockReset();
 		mockFindInserterContainer.mockReset();
 		mockFindInserterSearchInput.mockReset();
 		mockGetVisiblePatternNames.mockReset();
-		mockUseDispatch.mockReturnValue( {
-			fetchPatternRecommendations: mockFetchPatternRecommendations,
+		mockUseDispatch.mockImplementation( ( storeName ) => {
+			if ( storeName === 'flavor-agent' ) {
+				return {
+					fetchPatternRecommendations:
+						mockFetchPatternRecommendations,
+				};
+			}
+
+			if ( storeName === 'core/block-editor' ) {
+				return {
+					insertBlocks: mockInsertBlocks,
+				};
+			}
+
+			if ( storeName === 'core/notices' ) {
+				return {
+					createSuccessNotice: mockCreateSuccessNotice,
+				};
+			}
+
+			return {};
 		} );
 		mockUseSelect.mockImplementation( ( callback ) =>
 			callback( ( storeName ) => createSelectMap()[ storeName ] )
 		);
-		mockGetBlockPatterns.mockImplementation(
-			() => state.blockEditor.runtimePatterns || []
-		);
+		mockCloneBlock.mockImplementation( ( block ) => ( {
+			...block,
+			cloned: true,
+		} ) );
+		mockCreateBlock.mockImplementation( ( name, attributes ) => ( {
+			name,
+			attributes,
+		} ) );
+		mockParse.mockReturnValue( [] );
 		mockGetBlockAttributes.mockImplementation(
 			( clientId ) =>
 				( state.blockEditor.blockAttributes || {} )[ clientId ] || {}
 		);
-		mockGetBlockPatternCategories.mockImplementation(
-			() => state.blockEditor.runtimeCategories || []
+		mockGetAllowedPatterns.mockImplementation(
+			() => state.allowedPatterns
 		);
 		mockGetVisiblePatternNames.mockImplementation(
 			() => state.visiblePatternNames
@@ -180,6 +218,14 @@ describe( 'PatternRecommender', () => {
 	} );
 
 	afterEach( () => {
+		try {
+			act( () => {
+				getRoot().unmount();
+			} );
+		} catch ( error ) {
+			// Ignore unmount errors from already-unmounted roots in test cleanup.
+		}
+		document.body.innerHTML = '';
 		state = null;
 		delete window.flavorAgentData;
 		window.MutationObserver = originalMutationObserver;
@@ -187,7 +233,7 @@ describe( 'PatternRecommender', () => {
 		jest.useRealTimers();
 	} );
 
-	test( 'disconnects the observer cleanly when the inserter search input never appears', () => {
+	test( 'disconnects the observers cleanly when the inserter search input never appears', () => {
 		const observerInstances = [];
 
 		mockFindInserterSearchInput.mockReturnValue( null );
@@ -317,237 +363,6 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
-	test( 'reapplies recommendations when the pattern registry becomes available after the initial fetch', () => {
-		state.store.patternRecommendations = [
-			{
-				name: 'theme/hero',
-				score: 0.94,
-				reason: 'Recommended hero pattern.',
-			},
-		];
-		state.blockEditor.settings = {};
-		state.blockEditor.runtimePatterns = [];
-
-		renderComponent();
-
-		expect( mockSetBlockPatterns ).not.toHaveBeenCalled();
-
-		state.blockEditor.settings = {
-			blockPatterns: [
-				{
-					name: 'theme/hero',
-					title: 'Hero',
-					categories: [ 'featured' ],
-				},
-			],
-		};
-		state.blockEditor.runtimeCategories = [
-			{ name: 'featured', label: 'Featured' },
-		];
-		state.blockEditor.runtimePatterns = [
-			{
-				name: 'theme/hero',
-				title: 'Hero',
-				categories: [ 'featured' ],
-			},
-		];
-
-		renderComponent();
-
-		expect( mockSetBlockPatterns ).toHaveBeenCalledWith( [
-			{
-				name: 'theme/hero',
-				title: 'Hero',
-				description: 'Recommended hero pattern.',
-				categories: [ 'featured', 'recommended' ],
-				keywords: [ 'recommended', 'hero', 'pattern' ],
-			},
-		] );
-		expect( mockSetBlockPatternCategories ).toHaveBeenCalledWith( [
-			{ name: 'featured', label: 'Featured' },
-			{ name: 'recommended', label: 'Recommended' },
-		] );
-	} );
-
-	test( 'does not remove a native recommended category after a new editor session mounts', () => {
-		let secondContainer = null;
-		let secondRoot = null;
-
-		state.store.patternRecommendations = [
-			{
-				name: 'theme/hero',
-				score: 0.94,
-				reason: 'Recommended hero pattern.',
-			},
-		];
-		state.blockEditor.settings = {
-			blockPatterns: [
-				{
-					name: 'theme/hero',
-					title: 'Hero',
-					categories: [ 'featured' ],
-				},
-			],
-			blockPatternCategories: [ { name: 'featured', label: 'Featured' } ],
-		};
-		state.blockEditor.runtimeCategories = [
-			{ name: 'featured', label: 'Featured' },
-		];
-		state.blockEditor.runtimePatterns = [
-			{
-				name: 'theme/hero',
-				title: 'Hero',
-				categories: [ 'featured' ],
-			},
-		];
-
-		renderComponent();
-
-		act( () => {
-			getRoot().unmount();
-		} );
-
-		mockSetBlockPatternCategories.mockClear();
-		mockSetBlockPatterns.mockClear();
-
-		state.store.patternRecommendations = [];
-		state.blockEditor.settings = {
-			blockPatterns: [
-				{
-					name: 'theme/hero',
-					title: 'Hero',
-					categories: [ 'featured' ],
-				},
-			],
-			blockPatternCategories: [
-				{ name: 'featured', label: 'Featured' },
-				{ name: 'recommended', label: 'Recommended' },
-			],
-		};
-		state.blockEditor.runtimeCategories = [
-			{ name: 'featured', label: 'Featured' },
-			{ name: 'recommended', label: 'Recommended' },
-		];
-		state.blockEditor.runtimePatterns = [
-			{
-				name: 'theme/hero',
-				title: 'Hero',
-				categories: [ 'featured' ],
-			},
-		];
-
-		secondContainer = document.createElement( 'div' );
-		document.body.appendChild( secondContainer );
-		secondRoot = createRoot( secondContainer );
-
-		act( () => {
-			secondRoot.render( <PatternRecommender /> );
-		} );
-
-		expect( mockSetBlockPatternCategories ).toHaveBeenLastCalledWith( [
-			{ name: 'featured', label: 'Featured' },
-			{ name: 'recommended', label: 'Recommended' },
-		] );
-
-		act( () => {
-			secondRoot.unmount();
-		} );
-		secondContainer.remove();
-	} );
-
-	test( 'stops owning the recommended category when the registry replaces it with a native entry', () => {
-		state.store.patternRecommendations = [
-			{
-				name: 'theme/hero',
-				score: 0.94,
-				reason: 'Recommended hero pattern.',
-			},
-		];
-		state.blockEditor.settings = {
-			blockPatterns: [
-				{
-					name: 'theme/hero',
-					title: 'Hero',
-					categories: [ 'featured' ],
-				},
-			],
-			blockPatternCategories: [ { name: 'featured', label: 'Featured' } ],
-		};
-		state.blockEditor.runtimeCategories = [
-			{ name: 'featured', label: 'Featured' },
-		];
-		state.blockEditor.runtimePatterns = [
-			{
-				name: 'theme/hero',
-				title: 'Hero',
-				categories: [ 'featured' ],
-			},
-		];
-
-		renderComponent();
-
-		state.blockEditor.settings = {
-			blockPatterns: [
-				{
-					name: 'theme/hero',
-					title: 'Hero',
-					categories: [ 'featured' ],
-				},
-			],
-			blockPatternCategories: [
-				{ name: 'featured', label: 'Featured' },
-				{ name: 'recommended', label: 'Recommended' },
-			],
-		};
-		state.blockEditor.runtimeCategories = [
-			{ name: 'featured', label: 'Featured' },
-			{ name: 'recommended', label: 'Recommended' },
-		];
-
-		renderComponent();
-
-		state.store.patternRecommendations = [];
-
-		renderComponent();
-
-		expect( mockSetBlockPatternCategories ).toHaveBeenLastCalledWith( [
-			{ name: 'featured', label: 'Featured' },
-			{ name: 'recommended', label: 'Recommended' },
-		] );
-	} );
-
-	test( 'refetches when visible pattern names hydrate after the initial empty load', () => {
-		state.visiblePatternNames = [];
-
-		renderComponent();
-
-		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
-		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
-			postType: 'page',
-			visiblePatternNames: [],
-			insertionContext: {
-				rootBlock: 'core/group',
-				ancestors: [ 'core/group' ],
-				nearbySiblings: [],
-			},
-		} );
-
-		state.visiblePatternNames = [ 'theme/hero' ];
-
-		renderComponent();
-
-		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
-		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
-			postType: 'page',
-			visiblePatternNames: [ 'theme/hero' ],
-			insertionContext: {
-				rootBlock: 'core/group',
-				ancestors: [ 'core/group' ],
-				nearbySiblings: [],
-			},
-		} );
-	} );
-
 	test( 'shows a shared capability notice inside the inserter when pattern recommendations are unavailable', () => {
 		const inserterContainer = document.createElement( 'div' );
 
@@ -574,16 +389,6 @@ describe( 'PatternRecommender', () => {
 				'.flavor-agent-pattern-inserter-slot'
 			)
 		).not.toBeNull();
-
-		act( () => {
-			getRoot().unmount();
-		} );
-
-		expect(
-			inserterContainer.querySelector(
-				'.flavor-agent-pattern-inserter-slot'
-			)
-		).toBeNull();
 	} );
 
 	test( 'renders a loading notice inside the inserter while ranking patterns', () => {
@@ -616,6 +421,45 @@ describe( 'PatternRecommender', () => {
 			'Flavor Agent did not find a strong pattern match for this insertion point yet.'
 		);
 		expect( document.body.textContent ).toContain( 'No matches yet' );
+	} );
+
+	test( 'shows an unavailable-native-pattern message until the allowed pattern list hydrates', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain(
+			'Flavor Agent found ranked patterns, but Gutenberg is not currently exposing those patterns for this insertion point.'
+		);
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			},
+		];
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain( 'Hero' );
+		expect( document.body.textContent ).toContain(
+			'AI-ranked patterns stay local to this shelf.'
+		);
 	} );
 
 	test( 'renders an error notice with retry inside the inserter when ranking fails', () => {
@@ -651,8 +495,20 @@ describe( 'PatternRecommender', () => {
 		} );
 	} );
 
-	test( 'renders a persistent summary inside the inserter when recommendations are ready', () => {
+	test( 'renders a local inserter shelf and inserts matched allowed patterns', () => {
 		const inserterContainer = document.createElement( 'div' );
+		const allowedPattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						content: 'Hello world',
+					},
+				},
+			],
+		};
 
 		inserterContainer.className = 'block-editor-inserter__panel-content';
 		document.body.appendChild( inserterContainer );
@@ -663,27 +519,132 @@ describe( 'PatternRecommender', () => {
 				score: 0.94,
 				reason: 'Recommended hero pattern.',
 			},
-			{
-				name: 'theme/footer',
-				score: 0.91,
-				reason: 'Recommended footer pattern.',
-			},
 		];
+		state.allowedPatterns = [ allowedPattern ];
 		mockFindInserterContainer.mockReturnValue( inserterContainer );
 
 		renderComponent();
 
+		expect( document.body.textContent ).toContain( 'Hero' );
 		expect( document.body.textContent ).toContain(
-			'Recommended now includes 2 AI-ranked patterns for this insertion point.'
+			'Recommended hero pattern.'
 		);
-		expect(
-			inserterContainer.querySelector(
-				'.flavor-agent-pattern-inserter-slot'
-			)
-		).not.toBeNull();
+		expect( document.body.textContent ).toContain(
+			'AI-ranked patterns stay local to this shelf.'
+		);
+
+		act( () => {
+			Array.from( inserterContainer.querySelectorAll( 'button' ) )
+				.find( ( button ) => button.textContent === 'Insert' )
+				.click();
+		} );
+
+		expect( mockCloneBlock ).toHaveBeenCalledWith(
+			allowedPattern.blocks[ 0 ]
+		);
+		expect( mockInsertBlocks ).toHaveBeenCalledWith(
+			[
+				{
+					...allowedPattern.blocks[ 0 ],
+					cloned: true,
+				},
+			],
+			0,
+			'root-a',
+			false
+		);
+		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith(
+			'Block pattern "Hero" inserted.',
+			{
+				type: 'snackbar',
+				id: 'inserter-notice',
+			}
+		);
 	} );
 
-	test( 'reattaches the inserter summary when Gutenberg replaces the container', () => {
+	test( 'inserts synced user patterns via a core/block reference', () => {
+		const inserterContainer = document.createElement( 'div' );
+		const syncedPattern = {
+			name: 'core/block-flavor-agent-sync',
+			title: 'Synced Hero',
+			type: 'user',
+			syncStatus: 'fully',
+			id: 77,
+		};
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: syncedPattern.name,
+				score: 0.98,
+				reason: 'Best reusable match.',
+			},
+		];
+		state.allowedPatterns = [ syncedPattern ];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		act( () => {
+			Array.from( inserterContainer.querySelectorAll( 'button' ) )
+				.find( ( button ) => button.textContent === 'Insert' )
+				.click();
+		} );
+
+		expect( mockCreateBlock ).toHaveBeenCalledWith( 'core/block', {
+			ref: 77,
+		} );
+		expect( mockInsertBlocks ).toHaveBeenCalledWith(
+			[
+				{
+					name: 'core/block',
+					attributes: {
+						ref: 77,
+					},
+					cloned: true,
+				},
+			],
+			0,
+			'root-a',
+			false
+		);
+	} );
+
+	test( 'refetches when visible pattern names hydrate after the initial empty load', () => {
+		state.visiblePatternNames = [];
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+		} );
+
+		state.visiblePatternNames = [ 'theme/hero' ];
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+		} );
+	} );
+
+	test( 'reattaches the inserter shelf when Gutenberg replaces the container', () => {
 		const firstContainer = document.createElement( 'div' );
 		const secondContainer = document.createElement( 'div' );
 		const searchInput = {
@@ -703,6 +664,13 @@ describe( 'PatternRecommender', () => {
 				name: 'theme/hero',
 				score: 0.94,
 				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
 			},
 		];
 		mockFindInserterContainer.mockImplementation( () => currentContainer );
@@ -745,6 +713,122 @@ describe( 'PatternRecommender', () => {
 		} );
 
 		expect( observerInstances[ 0 ].disconnect ).toHaveBeenCalled();
+		secondContainer.remove();
+	} );
+
+	test( 'keeps search-triggered fetches debounced and includes the selected block context', () => {
+		const searchInput = {
+			addEventListener: jest.fn(),
+			removeEventListener: jest.fn(),
+		};
+		let inputListener = null;
+
+		state.blockEditor.selectedBlockClientId = 'block-1';
+		state.blockEditor.selectedBlockName = 'core/heading';
+		mockFindInserterSearchInput.mockReturnValue( searchInput );
+		searchInput.addEventListener.mockImplementation(
+			( event, listener ) => {
+				if ( event === 'input' ) {
+					inputListener = listener;
+				}
+			}
+		);
+
+		renderComponent();
+
+		expect( inputListener ).toEqual( expect.any( Function ) );
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			inputListener( {
+				target: {
+					value: 'hero',
+				},
+			} );
+			jest.advanceTimersByTime( 399 );
+		} );
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 1 );
+
+		act( () => {
+			jest.advanceTimersByTime( 1 );
+		} );
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
+		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+			prompt: 'hero',
+			blockContext: {
+				blockName: 'core/heading',
+			},
+		} );
+	} );
+
+	test( 'renders template recommendations with normalized template type when editing a site template', () => {
+		state.editSite = {
+			postType: 'wp_template',
+			postId: 'custom//front-page',
+		};
+
+		renderComponent();
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledWith( {
+			postType: 'page',
+			templateType: 'front-page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+		} );
+	} );
+
+	test( 'mounts cleanly in a second root after the first editor session unmounts', () => {
+		let secondContainer = null;
+		let secondRoot = null;
+
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			},
+		];
+
+		renderComponent();
+
+		act( () => {
+			getRoot().unmount();
+		} );
+
+		secondContainer = document.createElement( 'div' );
+		document.body.appendChild( secondContainer );
+		secondRoot = createRoot( secondContainer );
+
+		act( () => {
+			secondRoot.render( <PatternRecommender /> );
+		} );
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenCalledTimes( 2 );
+
+		act( () => {
+			secondRoot.unmount();
+		} );
 		secondContainer.remove();
 	} );
 } );

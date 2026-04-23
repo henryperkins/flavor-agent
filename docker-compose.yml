@@ -42,7 +42,10 @@ services:
         volumes:
             - wordpress_data:/var/www/html
             - ./:/var/www/html/wp-content/plugins/flavor-agent
+            - ./tests/e2e/wp70-plugins/flavor-agent-dense-fixtures:/var/www/html/wp-content/plugins/flavor-agent-dense-fixtures
             - ./tests/e2e/wp70-theme:/var/www/html/wp-content/themes/flavor-agent-e2e
+            - ./tests/e2e/wp70-themes/flavor-agent-classic:/var/www/html/wp-content/themes/flavor-agent-classic
+            - ./tests/e2e/wp70-themes/flavor-agent-child:/var/www/html/wp-content/themes/flavor-agent-child
         working_dir: /var/www/html
 
     phpmyadmin:

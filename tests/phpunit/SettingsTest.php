@@ -19,16 +19,26 @@ use PHPUnit\Framework\TestCase;
 
 final class SettingsTest extends TestCase {
 
+	private string|false $previous_openai_api_key;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->previous_openai_api_key = getenv( 'OPENAI_API_KEY' );
+		putenv( 'OPENAI_API_KEY' );
 		$_POST = [];
 		$_GET  = [];
 		$this->reset_validation_state();
 	}
 
 	protected function tearDown(): void {
+		if ( false === $this->previous_openai_api_key ) {
+			putenv( 'OPENAI_API_KEY' );
+		} else {
+			putenv( 'OPENAI_API_KEY=' . $this->previous_openai_api_key );
+		}
+
 		$_POST = [];
 		$_GET  = [];
 		$this->reset_validation_state();
@@ -1027,7 +1037,7 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'flavor-agent-overview', $screen->help_tabs[0]['id'] );
 		$this->assertSame( 'Overview', $screen->help_tabs[0]['title'] );
 		$this->assertStringContainsString( 'This screen keeps inline copy short', $screen->help_tabs[0]['content'] );
-		$this->assertStringContainsString( 'Configure Chat Provider first', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'Configure chat first. Settings &gt; Connectors is the primary path', $screen->help_tabs[0]['content'] );
 		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
 		$this->assertStringContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
 		$this->assertStringContainsString( 'built-in public developer.wordpress.org endpoint by default', $screen->help_tabs[1]['content'] );
@@ -1053,7 +1063,7 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString( 'Required', $output );
-		$this->assertStringContainsString( 'Choose the chat path Flavor Agent should prefer.', $output );
+		$this->assertStringContainsString( 'Chat uses Settings &gt; Connectors when available; direct Azure and OpenAI Native settings below remain as legacy fallback.', $output );
 		$this->assertStringContainsString( 'Optional', $output );
 		$this->assertStringContainsString( 'Add vector search for pattern recommendations.', $output );
 		$this->assertStringContainsString( 'Ground responses with developer.wordpress.org docs.', $output );

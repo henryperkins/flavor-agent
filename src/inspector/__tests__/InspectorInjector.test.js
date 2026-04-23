@@ -2,8 +2,6 @@ const mockUseSelect = jest.fn();
 const mockUseDispatch = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockRenderBlockRecommendationsPanel = jest.fn();
-const mockRenderSettingsRecommendations = jest.fn();
-const mockRenderStylesRecommendations = jest.fn();
 const mockRenderSuggestionChips = jest.fn();
 let mockRevalidateBlockReviewFreshness;
 
@@ -65,39 +63,17 @@ jest.mock( '../BlockRecommendationsPanel', () => ( {
 	},
 } ) );
 
-jest.mock( '../SettingsRecommendations', () => ( {
-	__esModule: true,
-	default: ( props ) => {
-		mockRenderSettingsRecommendations( props );
-
-		return (
-			<div>{ `Settings ${ props.suggestions.length }${
-				props.isStale ? ' stale' : ''
-			}` }</div>
-		);
-	},
-} ) );
-
-jest.mock( '../StylesRecommendations', () => ( {
-	__esModule: true,
-	default: ( props ) => {
-		mockRenderStylesRecommendations( props );
-
-		return (
-			<div>{ `Styles ${ props.suggestions.length }${
-				props.isStale ? ' stale' : ''
-			}` }</div>
-		);
-	},
-} ) );
-
 jest.mock( '../SuggestionChips', () => ( {
 	__esModule: true,
 	default: ( props ) => {
 		mockRenderSuggestionChips( props );
 
 		return (
-			<div>{ `${ props.label }${ props.isStale ? ' stale' : '' }` }</div>
+			<div>
+				{ `${ props.label }${ props.isStale ? ' stale' : '' }${
+					props.interactive === false ? ' passive' : ''
+				}` }
+			</div>
 		);
 	},
 } ) );
@@ -128,10 +104,6 @@ function renderComponent( props = {} ) {
 	} );
 }
 
-function getLatestProps( mockFn ) {
-	return mockFn.mock.calls[ mockFn.mock.calls.length - 1 ]?.[ 0 ] || null;
-}
-
 function getLatestChipProps( label ) {
 	const matchingCalls = mockRenderSuggestionChips.mock.calls
 		.map( ( [ props ] ) => props )
@@ -155,8 +127,10 @@ beforeEach( () => {
 		store: {
 			blockRecommendations: {
 				prompt: 'Keep the current direction.',
-				settings: [ { label: 'Use larger heading' } ],
-				styles: [ { label: 'Use accent color' } ],
+				settings: [
+					{ label: 'Use larger heading', panel: 'advanced' },
+				],
+				styles: [ { label: 'Use accent color', panel: 'color' } ],
 				block: [ { label: 'Hide on mobile' } ],
 			},
 			blockStatus: 'ready',
@@ -197,12 +171,16 @@ beforeEach( () => {
 } );
 
 describe( 'InspectorInjector', () => {
-	test( 'renders block-scoped settings and style inspector surfaces for fresh results', () => {
+	test( 'renders block-scoped passive delegated chip groups for fresh results', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
-		expect( getContainer().textContent ).toContain( 'Settings 1' );
-		expect( getContainer().textContent ).toContain( 'Styles 1' );
+		expect( getContainer().textContent ).toContain(
+			'AI color suggestions passive'
+		);
+		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
+
+		expect( colorChipProps?.interactive ).toBe( false );
 	} );
 
 	test( 'revalidates block freshness in the background for ready stored results', () => {
@@ -275,21 +253,20 @@ describe( 'InspectorInjector', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
-		expect( getContainer().textContent ).toContain( 'Settings 2 stale' );
-		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
 		expect( getContainer().textContent ).toContain(
-			'AI position suggestions stale'
+			'AI position suggestions stale passive'
 		);
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions stale'
+			'AI color suggestions stale passive'
 		);
 	} );
 
 	test( 'keeps stale projected settings visible after a same-clientId block edit changes context', () => {
 		renderComponent();
 
-		expect( getContainer().textContent ).toContain( 'Settings 1' );
-		expect( getContainer().textContent ).toContain( 'Styles 1' );
+		expect( getContainer().textContent ).toContain(
+			'AI color suggestions passive'
+		);
 
 		mockCollectBlockContext.mockReturnValue( {
 			block: {
@@ -300,8 +277,9 @@ describe( 'InspectorInjector', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
-		expect( getContainer().textContent ).toContain( 'Settings 1 stale' );
-		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
+		expect( getContainer().textContent ).toContain(
+			'AI color suggestions stale passive'
+		);
 	} );
 
 	test( 'marks projected settings, styles, and delegated chips stale when only the shared block prompt changes', () => {
@@ -323,8 +301,6 @@ describe( 'InspectorInjector', () => {
 
 		renderComponent();
 
-		expect( getContainer().textContent ).toContain( 'Settings 2' );
-		expect( getContainer().textContent ).toContain( 'Styles 1' );
 		expect( getContainer().textContent ).not.toContain( ' stale' );
 
 		act( () => {
@@ -355,34 +331,16 @@ describe( 'InspectorInjector', () => {
 					block: { name: 'core/paragraph' },
 				} ),
 			} );
-		const settingsProps = getLatestProps(
-			mockRenderSettingsRecommendations
-		);
-		const stylesProps = getLatestProps( mockRenderStylesRecommendations );
 		const positionChipProps = getLatestChipProps(
 			'AI position suggestions'
 		);
 		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
 
-		expect( getContainer().textContent ).toContain( 'Settings 2 stale' );
-		expect( getContainer().textContent ).toContain( 'Styles 1 stale' );
 		expect( getContainer().textContent ).toContain(
-			'AI position suggestions stale'
+			'AI position suggestions stale passive'
 		);
 		expect( getContainer().textContent ).toContain(
-			'AI color suggestions stale'
-		);
-		expect( settingsProps?.currentRequestSignature ).toBe(
-			expectedRequestSignature
-		);
-		expect( settingsProps?.currentRequestInput ).toEqual(
-			expectedRequestInput
-		);
-		expect( stylesProps?.currentRequestSignature ).toBe(
-			expectedRequestSignature
-		);
-		expect( stylesProps?.currentRequestInput ).toEqual(
-			expectedRequestInput
+			'AI color suggestions stale passive'
 		);
 		expect( positionChipProps?.currentRequestSignature ).toBe(
 			expectedRequestSignature
@@ -413,7 +371,8 @@ describe( 'InspectorInjector', () => {
 		renderComponent();
 
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
-		expect( getContainer().textContent ).toContain( 'Settings 1' );
-		expect( getContainer().textContent ).not.toContain( 'Styles 1' );
+		expect( getContainer().textContent ).not.toContain(
+			'AI color suggestions'
+		);
 	} );
 } );

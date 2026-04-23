@@ -111,13 +111,13 @@ SYSTEM;
 		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'template' );
 		$budget     = new PromptBudget( $max_tokens );
 
-		$type       = (string) ( $context['templateType'] ?? 'unknown' );
-		$title      = (string) ( $context['title'] ?? $type );
+		$type  = (string) ( $context['templateType'] ?? 'unknown' );
+		$title = (string) ( $context['title'] ?? $type );
 		$budget->add_section( 'identity', "## Template\nType: {$type}\nTitle: {$title}", 100 );
 
 		$assigned = is_array( $context['assignedParts'] ?? null ) ? $context['assignedParts'] : [];
 		if ( count( $assigned ) > 0 ) {
-			$lines      = array_map(
+			$lines = array_map(
 				static fn( array $part ): string => sprintf(
 					'- `%s` -> area: `%s`',
 					(string) ( $part['slug'] ?? '' ),
@@ -147,7 +147,7 @@ SYSTEM;
 			)
 		);
 		if ( count( $available ) > 0 ) {
-			$lines      = array_map(
+			$lines = array_map(
 				static fn( array $part ): string => sprintf(
 					'- `%s` - %s (area: %s)',
 					(string) ( $part['slug'] ?? '' ),
@@ -313,11 +313,12 @@ Input context:
 - Assigned parts: `site-header`
 - Explicitly empty areas: `footer`
 - Available template parts: `footer-minimal` for `footer`
-- Available patterns: `theme/hero`
+- Available patterns: `example/home-feature`
 
 Expected response:
 {"suggestions":[{"label":"Fill the footer slot","description":"Assign the available footer part before layering new patterns.","operations":[{"type":"assign_template_part","slug":"footer-minimal","area":"footer"}],"templateParts":[{"slug":"footer-minimal","area":"footer","reason":"Completes the explicit footer area with a registered part."}],"patternSuggestions":[]}],"explanation":"Resolve empty structural slots first, then add optional pattern accents."}
-EXAMPLE,
+EXAMPLE
+			,
 		];
 	}
 

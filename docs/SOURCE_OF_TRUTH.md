@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-21
+> Last updated: 2026-04-23
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -20,8 +20,8 @@ When a recommendation surface is in scope but unavailable, the native UI now sta
 
 Seven first-party recommendation surfaces exist today:
 
-1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector sidebar tabs, including a projection-only Styles tab and embedded navigation guidance when the selected block is `core/navigation`.
-2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through the native block inserter with a "Recommended" category; intentionally ranking/browse-only.
+1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector, with the main block panel owning apply and delegated native sub-panels acting as passive mirrors; selected `core/navigation` blocks also get embedded navigation guidance.
+2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through a Flavor Agent shelf inside the native block inserter; intentionally ranking/browse-only.
 3. **Template Recommendations** -- Review-before-apply template-part and pattern composition suggestions for Site Editor templates.
 4. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
 5. **Global Styles Recommender** -- Site Editor Global Styles suggestions bounded to native theme-supported style paths and registered style variations.
@@ -78,14 +78,14 @@ flavor-agent/
     Admin/
       ActivityPage.php      Settings > AI Activity screen registration and admin asset bootstrap
     Abilities/
-      Registration.php      Abilities API category + 13 ability registrations
-      BlockAbilities.php    recommend-block, introspect-block
+      Registration.php      Abilities API category + 20 ability registrations
+      BlockAbilities.php    recommend-block, introspect-block, list-allowed-blocks
       ContentAbilities.php  recommend-content
-      PatternAbilities.php  recommend-patterns, list-patterns
+      PatternAbilities.php  recommend-patterns, list-patterns, get-pattern, list-synced-patterns, get-synced-pattern
       TemplateAbilities.php recommend-template, recommend-template-part, list-template-parts
       StyleAbilities.php    recommend-style
       NavigationAbilities.php recommend-navigation
-      InfraAbilities.php    get-theme-tokens, check-status, backend inventory
+      InfraAbilities.php    get-active-theme, get-theme-presets, get-theme-styles, get-theme-tokens, check-status
       SurfaceCapabilities.php Shared localized + check-status surface readiness contract
       WordPressDocsAbilities.php search-wordpress-docs
     AzureOpenAI/
@@ -173,8 +173,6 @@ flavor-agent/
       InspectorInjector.js  `editor.BlockEdit` HOC for AI panel injection
       BlockRecommendationsPanel.js Block-level prompt and suggestion panel
       NavigationRecommendations.js Navigation advisory panel for `core/navigation`
-      SettingsRecommendations.js Settings tab suggestion cards
-      StylesRecommendations.js Projection-only Appearance tab + style variation pills
       SuggestionChips.js    Compact chips for sub-panel injection
       group-by-panel.js     Panel-grouping helpers
       panel-delegation.js   Inspector panel routing for block vs navigation surfaces
@@ -184,10 +182,10 @@ flavor-agent/
       pattern-settings.js   Stable/experimental pattern settings + selector diagnostics
       inserter-dom.js       Fail-closed inserter DOM discovery
       compat.js             Compatibility barrel for pattern settings + DOM helpers
-      PatternRecommender.js Headless fetcher + native inserter patching
+      PatternRecommender.js Headless fetcher + local inserter shelf
       InserterBadge.js      Badge portal on inserter toggle
       inserter-badge-state.js Pure badge view-model derivation
-      recommendation-utils.js Pattern metadata patching + badge reason extraction
+      recommendation-utils.js Badge reason extraction
       find-inserter-search-input.js Backward-compatible re-export
     review/
       notes-adapter.js      Shape-only adapter for future Notes/comment projection
@@ -263,7 +261,7 @@ flavor-agent/
     flavor-agent-readme.md  Architecture and editor flow reference
     local-wordpress-ide.md  Local WordPress + devcontainer workflow
     wordpress-7.0-developer-docs-index.md Discovery snapshot of official WordPress 7.0 developer documentation sources
-    wordpress-7.0-gutenberg-22.8-reference.md WordPress 7.0 and Gutenberg late-cycle compatibility reference snapshot
+    wordpress-7.0-gutenberg-23-impact-brief.md Current WordPress 7.0 and Gutenberg 23 repo-impact brief
     wp7-migration-opportunities.md Point-in-time WordPress 7.0 migration assessment and follow-up opportunities
     features/
       README.md             Entry point for per-surface deep dives
@@ -288,7 +286,7 @@ flavor-agent/
 
 | Service                          | Purpose                                                   | Required For                                                                                                    | Config Options                                                                                                                   |
 | -------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| WordPress AI Client + Connectors | Generic text-generation fallback and connector registry   | Block/content requests when no direct Flavor Agent chat backend is available, plus connector-backed chat paths | Core-managed in `Settings > Connectors`                                                                                          |
+| WordPress AI Client + Connectors | Primary chat runtime and connector registry              | Block/content/template/template-part/navigation/style requests whenever a shared Connectors-backed path is available, plus connector-backed chat paths | Core-managed in `Settings > Connectors`                                                                                          |
 | Provider selection               | Chooses Azure OpenAI, OpenAI Native, or a connector path | All chat-backed recommendation lanes plus pattern ranking                                                       | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a configured connector-backed provider)                     |
 | Azure OpenAI Embeddings          | Pattern embedding (3072-dim)                              | Pattern index + pattern recommendations when Azure is the active embedding backend                              | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment`                                                            |
 | Azure OpenAI Responses           | Chat + ranking                                            | Direct-provider block/content/template/template-part/navigation/style requests and pattern ranking              | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment`                                                                 |
@@ -309,9 +307,9 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 - **Trigger:** User selects a block, types optional prompt, clicks "Get Suggestions".
 - **Context sent:** Block name, attributes, styles, supports, inspector panels, editing mode, content/config attributes, child count, structural identity (role, location, position), sibling blocks, ancestor chain, theme tokens, WordPress docs guidance (cache-only).
-- **LLM:** `ChatClient::chat()`; prefers the direct plugin-managed provider when configured and otherwise falls back to the WordPress AI Client / Connectors path.
+- **LLM:** `ChatClient::chat()`; uses the selected connector-backed provider when available, otherwise prefers the generic WordPress AI Client / Connectors path, and only then falls back to the direct plugin-managed provider.
 - **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`.
-- **UI:** The main panel follows the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Apply now` lane, `Manual ideas` advisory section, and recent activity. The `styles` Inspector tab is projection-only, and selected `core/navigation` blocks append a nested advisory-only navigation subsection.
+- **UI:** The main panel follows the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Apply now` lane, `Manual ideas` advisory section, and recent activity. Settings and style suggestions are executable only from that main panel; delegated native Inspector sub-panels mirror the same result passively. Selected `core/navigation` blocks append a nested advisory-only navigation subsection.
 - **Apply:** Safe local block updates remain one-click. Safe deep-merge for `metadata` and `style` keys preserves unrelated attributes. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
 - **Guards:** Content-only blocks limit executable changes to content-safe attributes, may still surface broader advisory block ideas, suppress style projections, and keep `blockVisibility` (boolean and viewport-object forms) within the allowed contract. Disabled blocks receive no suggestions.
 
@@ -319,10 +317,10 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
 - **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores < 0.3 -> return max 8.
-- **Inserter integration:** Via `compat.js`, probes future stable pattern settings first for forward compatibility, but current Gutenberg trunk / WordPress 7.0 still resolves through `__experimentalAdditionalBlockPatterns` and `__experimentalBlockPatterns`. The adapter patches whichever path the editor actually exposes to add the "Recommended" category, enriched descriptions, and extracted keywords.
+- **Inserter integration:** The shelf stays local to Flavor Agent. It uses the current allowed-pattern selector to show only patterns Gutenberg already exposes for the active insertion root, then dispatches core block insertion from the shelf rather than patching the native registry.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
-- **Model:** This is intentionally a ranking/browse-only surface. Flavor Agent patches ordering and summary state inside the native inserter, but does not add its own review, apply, undo, or activity contract.
+- **Model:** This is intentionally a ranking/browse-only surface. Flavor Agent owns a local shelf and badge inside the native inserter, but does not add its own review, undo, or activity contract.
 
 #### Template Recommendations
 
@@ -376,7 +374,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 - **Sequence:** The recommendation surfaces now share one vocabulary and shell order, but not one mutation contract.
 - **Normalized states:** The shared editor-side vocabulary is `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, and `error`.
-- **Surface mapping:** The main block panel is direct-apply for safe local block updates. Template, template-part, Global Styles, and Style Book are review-before-apply surfaces. Navigation is an advisory-only nested subsection. The block Styles tab is a projection-only sub-surface of the current block request. Pattern recommendations remain ranking/browse-only in the native inserter.
+- **Surface mapping:** The main block panel is direct-apply for safe local block updates. Template, template-part, Global Styles, and Style Book are review-before-apply surfaces. Navigation is an advisory-only nested subsection. Delegated block Inspector sub-panels are passive mirrors of the current block result. Pattern recommendations remain ranking/browse-only in the native inserter.
 - **Shared UI:** `SurfaceScopeBar`, `RecommendationHero`, `AIStatusNotice`, `AIAdvisorySection`, and `AIReviewSection` now own the common scope/status/review framing, while `AIActivitySection` remains the shared undo/history block on executable surfaces.
 - **Notes future-proofing:** `src/review/notes-adapter.js` is a shape-only adapter for future Notes/comment projection. It normalizes shared review evidence but is not wired into runtime UI and does not depend on unstable editor APIs.
 
@@ -404,23 +402,30 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-All abilities registered with full JSON Schema input/output definitions:
+All 20 abilities are registered with full JSON Schema input/output definitions:
 
 | Ability                                | Handler                  | Permission           | Status             |
 | -------------------------------------- | ------------------------ | -------------------- | ------------------ |
 | `flavor-agent/recommend-block`         | `BlockAbilities`         | `edit_posts`         | Working            |
 | `flavor-agent/recommend-content`       | `ContentAbilities`       | `edit_posts`         | Working            |
 | `flavor-agent/introspect-block`        | `BlockAbilities`         | `edit_posts`         | Working (readonly) |
+| `flavor-agent/list-allowed-blocks`     | `BlockAbilities`         | `edit_posts`         | Working (readonly) |
 | `flavor-agent/recommend-patterns`      | `PatternAbilities`       | `edit_posts`         | Working            |
 | `flavor-agent/list-patterns`           | `PatternAbilities`       | `edit_posts`         | Working (readonly) |
+| `flavor-agent/get-pattern`             | `PatternAbilities`       | `edit_posts`         | Working (readonly) |
+| `flavor-agent/list-synced-patterns`    | `PatternAbilities`       | `edit_posts`         | Working (readonly) |
+| `flavor-agent/get-synced-pattern`      | `PatternAbilities`       | `edit_posts`         | Working (readonly) |
 | `flavor-agent/recommend-template`      | `TemplateAbilities`      | `edit_theme_options` | Working            |
 | `flavor-agent/recommend-template-part` | `TemplateAbilities`      | `edit_theme_options` | Working            |
 | `flavor-agent/recommend-style`         | `StyleAbilities`         | `edit_theme_options` | Working            |
-| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | `edit_theme_options` | Working (readonly) |
+| `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | `edit_theme_options` | Working            |
+| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | `edit_posts` metadata; `edit_theme_options` content | Working (readonly) |
 | `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | `manage_options`     | Working (readonly) |
+| `flavor-agent/get-active-theme`        | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
+| `flavor-agent/get-theme-presets`       | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
+| `flavor-agent/get-theme-styles`        | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
 | `flavor-agent/get-theme-tokens`        | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
 | `flavor-agent/check-status`            | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
-| `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | `edit_theme_options` | Working            |
 
 #### WordPress Docs Grounding (Cloudflare AI Search)
 
@@ -488,7 +493,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 3. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
 4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
-6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. Because WordPress `7.0` is still pre-release and the cycle was extended on 2026-03-31, that harness currently pins `wordpress:beta-7.0-RC2-php8.2-apache`, which matched the latest checked Docker Hub pre-release tag on 2026-04-04, until the official stable `7.0` image exists and Core publishes the final release timeline.
+6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. WordPress `7.0` remains pre-release as of 2026-04-23, and Core's updated schedule now targets 2026-05-20 for the general release, with 2026-05-08 `RC3` treated like a new Beta 1. The harness therefore still pins `wordpress:beta-7.0-RC2-php8.2-apache` until the official stable `7.0` Docker image exists and the repo intentionally switches over.
 7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews/DataForm timeline for privileged users, but there is still no diff-oriented inspection UI, no abilities-backed row actions/discovery layer, and no broader observability workflow beyond the stored timeline.
 8. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on active provider credentials and should be rerun whenever the configured provider path changes.
 
@@ -516,12 +521,12 @@ User selects block -> InspectorInjector renders AI panel
            -> ServerCollector::introspect_block_type() (server enrichment)
            -> AISearchClient::maybe_search_with_cache_fallbacks() (docs grounding)
            -> Prompt::build_system() + Prompt::build_user()
-           -> ChatClient::chat() (provider-first, WordPress AI Client fallback)
+           -> ChatClient::chat() (Connectors-first, then legacy direct fallback)
            -> Prompt::parse_response()
            -> Prompt::enforce_block_context_rules()
         <- JSON response: { settings, styles, block, explanation }
   -> store: SET_BLOCK_RECOMMENDATIONS
-  -> UI: main block panel lanes + StylesRecommendations projection + SuggestionChips
+  -> UI: main block panel lanes + passive delegated SuggestionChips mirrors
   -> User clicks "Apply" on a suggestion
      -> store thunk: applySuggestion(clientId, suggestion)
         -> update-helpers.js: buildSafeAttributeUpdates()
@@ -544,9 +549,8 @@ Editor loads (or inserter search changes)
            -> Parse ranking, filter < 0.3, rehydrate from payloads
         <- JSON response: [{ name, score, reason, ... }]
   -> store: SET_PATTERN_RECS + setPatternStatus('ready')
-  -> recommendation-utils.js: patchPatternMetadata()
-    -> compat.js: setBlockPatterns() (future stable key if present, otherwise current experimental path)
-     -> Adds "Recommended" category, enriched descriptions/keywords
+  -> PatternRecommender.js matches allowed patterns for the current inserter root
+  -> UI: local shelf + inserter badge
   -> InserterBadge renders count/loading/error via portal
 ```
 
@@ -681,7 +685,7 @@ This section is intentionally representative rather than a line-by-line manifest
 | Suite / area | Representative files | What's Covered |
 | ------------ | -------------------- | -------------- |
 | Contract and registration | `AgentControllerTest`, `RegistrationTest`, `EditorSurfaceCapabilitiesTest` | REST wrappers, ability schemas, localized capability payloads, activity endpoints, and route/shape validation |
-| Block and content abilities | `BlockAbilitiesTest`, `ContentAbilitiesTest`, `PromptGuidanceTest`, `PromptRulesTest`, `WordPressAIClientTest`, `ChatClientTest` | Block input normalization, editorial content scaffold behavior, prompt guardrails, and WordPress AI Client fallback behavior |
+| Block and content abilities | `BlockAbilitiesTest`, `ContentAbilitiesTest`, `PromptGuidanceTest`, `PromptRulesTest`, `WordPressAIClientTest`, `ChatClientTest` | Block input normalization, editorial content scaffold behavior, prompt guardrails, and Connectors-first chat runtime behavior |
 | Provider and backend configuration | `ProviderTest`, `SettingsTest`, `AzureBackendValidationTest`, `InfraAbilitiesTest` | Provider selection, connector/native credential precedence, backend diagnostics, validation rollback, and effective runtime metadata |
 | Pattern pipeline | `PatternAbilitiesTest`, `PatternCatalogTest`, `PatternIndexTest` | Registry filtering, recommendation pipeline behavior, sync/fingerprint lifecycle, and Qdrant-backed indexing rules |
 | Template, style, and navigation prompting | `TemplatePromptTest`, `TemplatePartPromptTest`, `StyleAbilitiesTest`, `StylePromptTest`, `NavigationAbilitiesTest` | Structured operations, bounded placements, style scope rules, variation parsing, and navigation advice parsing |
@@ -696,8 +700,8 @@ Current high-signal coverage map:
 | Area | Representative files | What's Covered |
 | ---- | -------------------- | -------------- |
 | Store state and activity orchestration | `src/store/__tests__/activity-history.test.js`, `activity-history-state.test.js`, `store-actions.test.js`, `template-apply-state.test.js`, `pattern-status.test.js`, `navigation-request-state.test.js` | Request lifecycle, stale-result rejection, activity hydration, undo coordination, and shared request/apply reducer state |
-| Inspector flows | `src/inspector/__tests__/BlockRecommendationsPanel.test.js`, `SettingsRecommendations.test.js`, `StylesRecommendations.test.js`, `NavigationRecommendations.test.js`, `InspectorInjector.test.js`, `panel-delegation.test.js`, `SuggestionChips.test.js`, `src/inspector/suggestion-keys.test.js` | Panel rendering, capability gating, delegated sub-panel behavior, navigation framing, and key generation |
-| Pattern inserter integration | `src/patterns/__tests__/PatternRecommender.test.js`, `InserterBadge.test.js`, `compat.test.js`, `recommendation-utils.test.js`, `find-inserter-search-input.test.js`, `inserter-badge-state.test.js` | Inserter DOM discovery, compat negotiation, metadata patching, badge state, and fetcher lifecycle |
+| Inspector flows | `src/inspector/__tests__/BlockRecommendationsPanel.test.js`, `NavigationRecommendations.test.js`, `InspectorInjector.test.js`, `panel-delegation.test.js`, `SuggestionChips.test.js`, `src/inspector/suggestion-keys.test.js` | Panel rendering, capability gating, delegated passive sub-panel behavior, navigation framing, and key generation |
+| Pattern inserter integration | `src/patterns/__tests__/PatternRecommender.test.js`, `InserterBadge.test.js`, `compat.test.js`, `recommendation-utils.test.js`, `find-inserter-search-input.test.js`, `inserter-badge-state.test.js` | Inserter DOM discovery, compat negotiation, local shelf rendering, badge state, and fetcher lifecycle |
 | Template and style surfaces | `src/templates/__tests__/TemplateRecommender.test.js`, `template-recommender-helpers.test.js`, `src/template-parts/__tests__/TemplatePartRecommender.test.js`, `src/global-styles/__tests__/GlobalStylesRecommender.test.js`, `src/style-book/__tests__/StyleBookRecommender.test.js` | Site Editor rendering, suggestion lifecycle, operation helpers, scope resolution, and panel portal behavior |
 | Shared UI composition | `src/components/__tests__/AIStatusNotice.test.js`, `AIAdvisorySection.test.js`, `AIReviewSection.test.js`, `AIActivitySection.test.js`, `ActivitySessionBootstrap.test.js`, `RecommendationHero.test.js`, `RecommendationLane.test.js`, `SurfaceComposer.test.js`, `SurfacePanelIntro.test.js`, `SurfaceScopeBar.test.js` | Shared review model, status framing, featured/grouped presentation, scope UI, and activity bootstrap behavior |
 | Utility modules | `src/utils/__tests__/editor-entity-contracts.test.js`, `editor-context-metadata.test.js`, `format-count.test.js`, `style-design-semantics.test.js`, `style-operations.test.js`, `template-actions.test.js`, `template-part-areas.test.js`, `template-types.test.js`, `visible-patterns.test.js`, `capability-flags.test.js`, `structural-identity.test.js` | Entity contracts, editor metadata summaries, formatting helpers, design semantics, deterministic apply/undo rules, and structural analysis |
@@ -712,7 +716,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Block Inspector recommendations with per-block loading/error state
 - [x] Content-only and disabled block guards
 - [x] Pattern recommendations via vector search + LLM ranking
-- [x] Native inserter integration (Recommended category, badge)
+- [x] Native inserter integration (local shelf, badge)
 - [x] Template composition panel with review-confirm-apply for validated operations
 - [x] Template-part recommendations panel
 - [x] Global Styles recommendations panel with review-confirm-apply for bounded site-level style changes
@@ -795,7 +799,7 @@ Minimum sign-off evidence:
 
 ## Key Technical Decisions
 
-1. **Shared provider selection, split execution paths**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both ride the same `Provider` selection layer, which can use Azure OpenAI, OpenAI Native, a configured connector-backed provider, or the generic WordPress AI Client fallback when no direct chat backend is configured. Pattern embeddings remain plugin-managed even when chat is connector-backed.
+1. **Shared provider selection, split execution paths**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both ride the same `Provider` selection layer, which uses a configured connector-backed provider when selected, otherwise prefers the generic WordPress AI Client runtime, and only then falls back to Azure OpenAI or OpenAI Native direct chat settings. Pattern embeddings remain plugin-managed even when chat is connector-backed.
 2. **Narrow approval model**: Block suggestions still apply inline on click, template/template-part/Global Styles/Style Book suggestions require review first, navigation stays advisory-only, and pattern recommendations stay ranking/browse-only. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.

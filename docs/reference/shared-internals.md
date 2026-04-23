@@ -319,7 +319,7 @@ Canonical abstraction layer between WordPress's dual editor stores (`core/editor
 | `getRecommendedPatternCategorySlug(postType)`            | Returns the recommended pattern category slug for a given post type                                                     |
 | `buildPostTypeEntityContract(postType, entity, ...args)` | Non-hook equivalent of `usePostTypeEntityContract` for imperative contexts                                              |
 
-**Consumers:** `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/patterns/PatternRecommender.js`
+**Consumers:** `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`
 
 ### `src/utils/capability-flags.js`
 
@@ -443,9 +443,9 @@ Single export `extractPatternNames()` that extracts distinct pattern names from 
 
 ### `src/patterns/recommendation-utils.js`
 
-Pure-function utilities for pattern metadata patching and badge reason extraction. `patchPatternMetadata()` rewrites the native pattern registry so recommended patterns appear in the `Recommended` category with contextual descriptions and keywords. `getPatternBadgeReason()` returns the reason from the highest-confidence recommendation for badge tooltip use.
+Small utility module for pattern badge reason extraction. `getPatternBadgeReason()` returns the reason from the highest-confidence recommendation for badge tooltip use.
 
-**Consumers:** `src/patterns/PatternRecommender.js`, `src/store/index.js`
+**Consumers:** `src/store/index.js`
 
 ## Template And Template-Part Utilities
 

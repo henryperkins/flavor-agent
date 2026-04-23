@@ -8,9 +8,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Injection point: `editor.BlockEdit` filter registered in `src/inspector/InspectorInjector.js`
 - Fallback surface: document settings panel titled `AI Recommendations` with the eyebrow `Last Selected Block` when the current selection clears but the last selected block still exists
 - Secondary surfaces after a successful block request:
-  - `SettingsRecommendations` in the default Inspector group
-  - `StylesRecommendations` in the `styles` group, as a projection-only view of the current block request's safe style results, with grouped section framing for block-level style rows and registered style variations
-  - compact `SuggestionChips` injected into sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, filter, and background, with lightweight applied feedback rendered directly beside the matching chip group
+  - executable `SuggestionChips` lanes for `block`, `settings`, and `styles` inside the main `AI Recommendations` panel
+  - passive mirrored `SuggestionChips` injected into delegated native sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, filter, and background so the user can see the current result beside the matching core controls without creating a second apply surface
 
 ## Surfacing Conditions
 
@@ -30,7 +29,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
 - The panel now states that inline apply is the exception for safe local block updates, while structural surfaces keep the same status/history framing but require preview first
 - The embedded navigation section remains a subordinate exception: it keeps its own request state and `Recommended Next Changes` wrapper because it is nested inside block recommendations rather than acting as a peer surface
-- Style suggestions preserve one-click apply in both the Styles tab and delegated native style sub-panels, but the Styles tab remains projection-only and the actual request composer stays in the main block panel
+- The main block panel is now the only executable block surface; delegated native sub-panels mirror the current result but do not own apply, refresh, or activity state
 - `Recent AI Actions` and inline undo use the same shared activity treatment as the template and template-part surfaces
 
 ## End-To-End Flow
@@ -40,9 +39,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 3. `fetchBlockRecommendations()` in `src/store/index.js` posts that context to `POST /flavor-agent/v1/recommend-block`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_block()` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
-6. `ChatClient::chat()` prefers the selected plugin provider when chat is configured and otherwise falls back to the WordPress AI Client / Connectors path
+6. `ChatClient::chat()` uses the selected connector-backed provider when available, otherwise prefers the generic WordPress AI Client / Connectors path, and only then falls back to the direct plugin-managed provider
 7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails
-8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders the matching cards and chips
+8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders executable lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
 9. When the user applies a suggestion, `applySuggestion()` first compares the stored client request signature, then re-posts the same request with `resolveSignatureOnly: true` to verify the current `resolvedContextSignature`, and only then safely merges allowed attribute updates into the current block and records an activity entry
 10. Inline undo calls `undoActivity()`, which validates the live block state before restoring the previous attribute snapshot
 
@@ -183,7 +182,7 @@ User selects block + prompt
 ## What This Surface Can Do
 
 - Suggest block settings changes, style changes, and broader block-level adjustments
-- Route suggestions into the Inspector location where the user would normally make that change
+- Keep block, settings, and style apply actions in one place while still mirroring the result into the native Inspector location where the user would normally inspect that change
 - Apply bounded attribute updates with safe handling for nested `style` and `metadata` keys
 - Record the apply action in the shared AI activity system and surface inline undo for the newest valid tail entry
 
@@ -207,7 +206,7 @@ User selects block + prompt
 | Store apply | `applySuggestion()` in `src/store/index.js` | Applies bounded attribute updates and records activity |
 | REST handler | `Agent_Controller::handle_recommend_block()` | Adapts the REST request to the backend ability |
 | Backend ability | `BlockAbilities::recommend_block()` | Normalizes input, gathers context, and runs the prompt pipeline |
-| LLM wrapper | `ChatClient::chat()` | Chooses plugin provider first, then WordPress AI Client fallback |
+| LLM wrapper | `ChatClient::chat()` | Uses the Connectors-first runtime, then falls back to legacy direct provider settings |
 | Prompt contract | `Prompt::build_user()` / `Prompt::parse_response()` | Builds and validates the structured block-suggestion payload |
 
 ## Related Routes And Abilities
@@ -220,8 +219,6 @@ User selects block + prompt
 
 - `src/inspector/InspectorInjector.js`
 - `src/inspector/BlockRecommendationsPanel.js`
-- `src/inspector/SettingsRecommendations.js`
-- `src/inspector/StylesRecommendations.js`
 - `src/inspector/SuggestionChips.js`
 - `src/inspector/suggestion-keys.js`
 - `src/context/collector.js`

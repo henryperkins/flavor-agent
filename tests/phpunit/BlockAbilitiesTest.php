@@ -610,6 +610,100 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
+	public function test_list_allowed_blocks_returns_registered_block_manifests(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/card',
+			[
+				'title'         => 'Card',
+				'allowedBlocks' => [ 'core/paragraph' ],
+			]
+		);
+
+		$result = BlockAbilities::list_allowed_blocks( [] );
+
+		$this->assertContains( 'plugin/card', array_column( $result['blocks'], 'name' ) );
+		$this->assertSame(
+			[ 'core/paragraph' ],
+			array_values(
+				array_filter(
+					$result['blocks'],
+					static fn ( array $block ): bool => 'plugin/card' === ( $block['name'] ?? '' )
+				)
+			)[0]['allowedBlocks']
+		);
+	}
+
+	public function test_list_allowed_blocks_supports_filters_pagination_and_variation_caps(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/card',
+			[
+				'title'      => 'Card',
+				'category'   => 'design',
+				'variations' => [
+					[
+						'name'  => 'feature',
+						'title' => 'Feature',
+					],
+					[
+						'name'  => 'compact',
+						'title' => 'Compact',
+					],
+				],
+			]
+		);
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/carousel',
+			[
+				'title'      => 'Carousel',
+				'category'   => 'design',
+				'variations' => [
+					[
+						'name'  => 'hero',
+						'title' => 'Hero',
+					],
+					[
+						'name'  => 'gallery',
+						'title' => 'Gallery',
+					],
+				],
+			]
+		);
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/notice',
+			[
+				'title'    => 'Notice',
+				'category' => 'widgets',
+			]
+		);
+
+		$paginated = BlockAbilities::list_allowed_blocks(
+			[
+				'search'   => 'car',
+				'category' => 'design',
+				'limit'    => 1,
+				'offset'   => 1,
+			]
+		);
+
+		$this->assertSame( 2, $paginated['total'] );
+		$this->assertCount( 1, $paginated['blocks'] );
+		$this->assertSame( 'plugin/carousel', $paginated['blocks'][0]['name'] );
+		$this->assertSame( [], $paginated['blocks'][0]['variations'] );
+
+		$with_variations = BlockAbilities::list_allowed_blocks(
+			[
+				'search'            => 'car',
+				'category'          => 'design',
+				'includeVariations' => true,
+				'maxVariations'     => 1,
+			]
+		);
+
+		$this->assertSame( 2, $with_variations['total'] );
+		$this->assertSame( 1, count( $with_variations['blocks'][0]['variations'] ) );
+		$this->assertSame( 1, count( $with_variations['blocks'][1]['variations'] ) );
+	}
+
 	/**
 	 * @return array{context: array, prompt: string}
 	 */

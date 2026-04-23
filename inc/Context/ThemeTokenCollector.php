@@ -10,6 +10,41 @@ final class ThemeTokenCollector {
 
 	private static ?array $cached_tokens = null;
 
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function for_active_theme(): array {
+		$theme      = function_exists( 'wp_get_theme' ) ? wp_get_theme() : null;
+		$name       = '';
+		$version    = '';
+		$stylesheet = '';
+		$template   = '';
+
+		if ( is_object( $theme ) ) {
+			if ( method_exists( $theme, 'get' ) ) {
+				$name    = sanitize_text_field( (string) $theme->get( 'Name' ) );
+				$version = sanitize_text_field( (string) $theme->get( 'Version' ) );
+			} else {
+				$name    = sanitize_text_field( (string) ( $theme->name ?? '' ) );
+				$version = sanitize_text_field( (string) ( $theme->version ?? '' ) );
+			}
+
+			$stylesheet = method_exists( $theme, 'get_stylesheet' )
+				? sanitize_key( (string) $theme->get_stylesheet() )
+				: sanitize_key( (string) ( $theme->stylesheet ?? '' ) );
+			$template   = method_exists( $theme, 'get_template' )
+				? sanitize_key( (string) $theme->get_template() )
+				: sanitize_key( (string) ( $theme->template ?? '' ) );
+		}
+
+		return [
+			'name'       => $name,
+			'version'    => $version,
+			'stylesheet' => $stylesheet,
+			'template'   => $template,
+		];
+	}
+
 	public function for_tokens(): array {
 		$settings      = wp_get_global_settings();
 		$global_styles = wp_get_global_styles();
@@ -208,6 +243,39 @@ final class ThemeTokenCollector {
 		];
 
 		return self::$cached_tokens;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function for_presets(): array {
+		$tokens = $this->for_tokens();
+
+		return [
+			'colorPresets'      => $tokens['colorPresets'] ?? [],
+			'gradientPresets'   => $tokens['gradientPresets'] ?? [],
+			'fontSizePresets'   => $tokens['fontSizePresets'] ?? [],
+			'fontFamilyPresets' => $tokens['fontFamilyPresets'] ?? [],
+			'spacingPresets'    => $tokens['spacingPresets'] ?? [],
+			'shadowPresets'     => $tokens['shadowPresets'] ?? [],
+			'duotonePresets'    => $tokens['duotonePresets'] ?? [],
+			'diagnostics'       => $tokens['diagnostics'] ?? [],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function for_styles(): array {
+		$tokens        = $this->for_tokens();
+		$global_styles = wp_get_global_styles();
+
+		return [
+			'styles'            => $global_styles,
+			'elementStyles'     => $tokens['elementStyles'] ?? [],
+			'blockPseudoStyles' => $tokens['blockPseudoStyles'] ?? [],
+			'diagnostics'       => $tokens['diagnostics'] ?? [],
+		];
 	}
 
 	private function merge_presets( array|string $feature ): array {

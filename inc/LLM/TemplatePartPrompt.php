@@ -292,12 +292,13 @@ SYSTEM;
 Input context:
 - Template part: `header`
 - Current block tree includes `core/site-logo` and `core/navigation`
-- Available patterns: `theme/header-utility`
+- Available patterns: `example/header-utility-row`
 - Insert anchors include `before_block_path` for the navigation block
 
 Expected response:
-{"suggestions":[{"label":"Add a utility row before navigation","description":"Insert the utility pattern ahead of the menu cluster to separate branding from utility links.","blockHints":[{"path":[0,1],"label":"Navigation block","reason":"This is the busiest structural target in the header."}],"patternSuggestions":["theme/header-utility"],"operations":[{"type":"insert_pattern","patternName":"theme/header-utility","placement":"before_block_path","targetPath":[0,1]}]}],"explanation":"Use a small pre-navigation utility row instead of overloading the main menu."}
-EXAMPLE,
+{"suggestions":[{"label":"Add a utility row before navigation","description":"Insert the utility pattern ahead of the menu cluster to separate branding from utility links.","blockHints":[{"path":[0,1],"label":"Navigation block","reason":"This is the busiest structural target in the header."}],"patternSuggestions":["example/header-utility-row"],"operations":[{"type":"insert_pattern","patternName":"example/header-utility-row","placement":"before_block_path","targetPath":[0,1]}]}],"explanation":"Use a small pre-navigation utility row instead of overloading the main menu."}
+EXAMPLE
+			,
 		];
 	}
 

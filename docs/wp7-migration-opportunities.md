@@ -6,6 +6,7 @@ Verified: 2026-04-20
 > Status: point-in-time migration assessment, not the live backlog. This doc has two parts: [Applied Changes](#applied-changes) records WP 7.0 migration work already shipped, and [Remaining Opportunities](#remaining-opportunities) lists still-open watch items and future-facing evaluations. Neither section is re-verified on every release — treat both as frozen snapshots and confirm against the current source tree before acting.
 > Verification basis: current source tree, targeted doc and source review, and official WordPress 7.0 release-cycle docs/dev notes re-checked on 2026-04-20.
 > Use `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/features/`, and `STATUS.md` for current priorities and shipped behavior.
+> Use `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` for the active remediation plan where Flavor Agent should stop duplicating Gutenberg or hand ownership back to core.
 
 ## Applied Changes
 

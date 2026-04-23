@@ -36,6 +36,7 @@ export default function SuggestionChips( {
 	currentRequestInput = null,
 	disabled = false,
 	isStale = false,
+	interactive = true,
 	title = '',
 	tone = '',
 } ) {
@@ -113,6 +114,19 @@ export default function SuggestionChips( {
 				</div>
 			) }
 
+			{ ! interactive && ! isStale && (
+				<div
+					className="flavor-agent-chip-surface__passive"
+					role="status"
+					aria-live="polite"
+				>
+					<p className="flavor-agent-panel__intro-copy">
+						These hints mirror the latest AI Recommendations result.
+						Apply them from that main panel.
+					</p>
+				</div>
+			) }
+
 			{ isStale && (
 				<div
 					className="flavor-agent-chip-surface__stale"
@@ -135,6 +149,40 @@ export default function SuggestionChips( {
 				{ suggestions.map( ( s ) => {
 					const key = getSuggestionKey( s );
 					const wasApplied = appliedKey === key;
+					const isChipDisabled =
+						Boolean( s?.isCurrentStyle ) ||
+						Boolean( s?.disabled ) ||
+						wasApplied ||
+						disabled ||
+						isStale;
+
+					if ( ! interactive ) {
+						return (
+							<span
+								key={ key }
+								className="flavor-agent-chip flavor-agent-chip--passive"
+								title={ s.description || s.label }
+								style={
+									s.preview
+										? {
+												'--flavor-agent-chip-preview':
+													s.preview,
+										  }
+										: undefined
+								}
+							>
+								<span className="flavor-agent-chip__label">
+									{ s.label }
+								</span>
+								{ s.preview && (
+									<span
+										className="flavor-agent-chip__preview"
+										aria-hidden="true"
+									/>
+								) }
+							</span>
+						);
+					}
 
 					return (
 						<Button
@@ -142,7 +190,7 @@ export default function SuggestionChips( {
 							variant={ wasApplied ? 'primary' : 'secondary' }
 							size="small"
 							onClick={ () => void handleApply( s ) }
-							disabled={ wasApplied || disabled || isStale }
+							disabled={ isChipDisabled }
 							title={ s.description || s.label }
 							icon={ wasApplied ? check : undefined }
 							className={ `flavor-agent-chip${
@@ -161,7 +209,7 @@ export default function SuggestionChips( {
 								{ s.label }
 							</span>
 							{ ! wasApplied &&
-								! disabled &&
+								! isChipDisabled &&
 								! isStale &&
 								s.preview && (
 									<span
@@ -174,7 +222,7 @@ export default function SuggestionChips( {
 				} ) }
 			</div>
 
-			{ feedback && (
+			{ interactive && feedback && (
 				<InlineActionFeedback
 					compact
 					message={ feedback.label }

@@ -37,15 +37,15 @@ final class ResponseSchema {
 	private static function block_schema(): array {
 		return self::strict_object(
 			[
-				'settings' => [
+				'settings'    => [
 					'type'  => 'array',
 					'items' => self::block_setting_style_item_schema(),
 				],
-				'styles' => [
+				'styles'      => [
 					'type'  => 'array',
 					'items' => self::block_setting_style_item_schema(),
 				],
-				'block' => [
+				'block'       => [
 					'type'  => 'array',
 					'items' => self::block_block_item_schema(),
 				],
@@ -61,32 +61,32 @@ final class ResponseSchema {
 					'type'  => 'array',
 					'items' => self::strict_object(
 						[
-							'label' => [ 'type' => 'string' ],
-							'description' => [ 'type' => 'string' ],
-							'operations' => [
+							'label'              => [ 'type' => 'string' ],
+							'description'        => [ 'type' => 'string' ],
+							'operations'         => [
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'type' => [
+										'type'           => [
 											'type' => 'string',
 											'enum' => [ 'assign_template_part', 'replace_template_part', 'insert_pattern' ],
 										],
-										'slug' => self::nullable_string(),
-										'area' => self::nullable_string(),
-										'currentSlug' => self::nullable_string(),
-										'patternName' => self::nullable_string(),
-										'placement' => self::nullable_string(),
-										'targetPath' => self::nullable_integer_array(),
+										'slug'           => self::nullable_string(),
+										'area'           => self::nullable_string(),
+										'currentSlug'    => self::nullable_string(),
+										'patternName'    => self::nullable_string(),
+										'placement'      => self::nullable_string(),
+										'targetPath'     => self::nullable_integer_array(),
 										'expectedTarget' => self::nullable_expected_target_schema(),
 									]
 								),
 							],
-							'templateParts' => [
+							'templateParts'      => [
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'slug' => [ 'type' => 'string' ],
-										'area' => [ 'type' => 'string' ],
+										'slug'   => [ 'type' => 'string' ],
+										'area'   => [ 'type' => 'string' ],
 										'reason' => [ 'type' => 'string' ],
 									]
 								),
@@ -110,19 +110,19 @@ final class ResponseSchema {
 					'type'  => 'array',
 					'items' => self::strict_object(
 						[
-							'label' => [ 'type' => 'string' ],
-							'description' => [ 'type' => 'string' ],
-							'blockHints' => [
+							'label'              => [ 'type' => 'string' ],
+							'description'        => [ 'type' => 'string' ],
+							'blockHints'         => [
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'path' => [
+										'path'      => [
 											'type'  => 'array',
 											'items' => [ 'type' => 'integer' ],
 										],
-										'label' => [ 'type' => 'string' ],
+										'label'     => [ 'type' => 'string' ],
 										'blockName' => [ 'type' => 'string' ],
-										'reason' => [ 'type' => 'string' ],
+										'reason'    => [ 'type' => 'string' ],
 									]
 								),
 							],
@@ -130,17 +130,17 @@ final class ResponseSchema {
 								'type'  => 'array',
 								'items' => [ 'type' => 'string' ],
 							],
-							'operations' => [
+							'operations'         => [
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'type' => [
+										'type'           => [
 											'type' => 'string',
 											'enum' => [ 'insert_pattern', 'replace_block_with_pattern', 'remove_block' ],
 										],
-										'patternName' => self::nullable_string(),
-										'placement' => self::nullable_string(),
-										'targetPath' => self::nullable_integer_array(),
+										'patternName'    => self::nullable_string(),
+										'placement'      => self::nullable_string(),
+										'targetPath'     => self::nullable_integer_array(),
 										'expectedBlockName' => self::nullable_string(),
 										'expectedTarget' => self::nullable_expected_target_schema(),
 									]
@@ -161,34 +161,34 @@ final class ResponseSchema {
 					'type'  => 'array',
 					'items' => self::strict_object(
 						[
-							'label' => [ 'type' => 'string' ],
+							'label'       => [ 'type' => 'string' ],
 							'description' => [ 'type' => 'string' ],
-							'category' => [
+							'category'    => [
 								'type' => 'string',
 								'enum' => [ 'variation', 'color', 'typography', 'spacing', 'border', 'shadow', 'advisory' ],
 							],
-							'tone' => [
+							'tone'        => [
 								'type' => 'string',
 								'enum' => [ 'executable', 'advisory' ],
 							],
-							'operations' => [
+							'operations'  => [
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'type' => [
+										'type'           => [
 											'type' => 'string',
 											'enum' => [ 'set_styles', 'set_block_styles', 'set_theme_variation' ],
 										],
-										'blockName' => self::nullable_string(),
-										'path' => [
+										'blockName'      => self::nullable_string(),
+										'path'           => [
 											'type'  => [ 'array', 'null' ],
 											'items' => [ 'type' => 'string' ],
 										],
-										'value' => self::any_value(),
-										'valueType' => self::nullable_string(),
-										'presetType' => self::nullable_string(),
-										'presetSlug' => self::nullable_string(),
-										'cssVar' => self::nullable_string(),
+										'value'          => self::any_value(),
+										'valueType'      => self::nullable_string(),
+										'presetType'     => self::nullable_string(),
+										'presetSlug'     => self::nullable_string(),
+										'cssVar'         => self::nullable_string(),
 										'variationIndex' => self::nullable_integer(),
 										'variationTitle' => self::nullable_string(),
 									]
@@ -209,23 +209,23 @@ final class ResponseSchema {
 					'type'  => 'array',
 					'items' => self::strict_object(
 						[
-							'label' => [ 'type' => 'string' ],
+							'label'       => [ 'type' => 'string' ],
 							'description' => [ 'type' => 'string' ],
-							'category' => [
+							'category'    => [
 								'type' => 'string',
 								'enum' => [ 'structure', 'overlay', 'accessibility' ],
 							],
-							'changes' => [
+							'changes'     => [
 								'type'  => 'array',
 								'items' => self::strict_object(
 									[
-										'type' => [
+										'type'       => [
 											'type' => 'string',
 											'enum' => [ 'reorder', 'group', 'ungroup', 'add-submenu', 'flatten', 'set-attribute' ],
 										],
 										'targetPath' => self::nullable_integer_array(),
-										'target' => [ 'type' => 'string' ],
-										'detail' => [ 'type' => 'string' ],
+										'target'     => [ 'type' => 'string' ],
+										'detail'     => [ 'type' => 'string' ],
 									]
 								),
 							],
@@ -240,23 +240,23 @@ final class ResponseSchema {
 	private static function content_schema(): array {
 		return self::strict_object(
 			[
-				'mode' => [
+				'mode'    => [
 					'type' => 'string',
 					'enum' => [ 'draft', 'edit', 'critique' ],
 				],
-				'title' => [ 'type' => 'string' ],
+				'title'   => [ 'type' => 'string' ],
 				'summary' => [ 'type' => 'string' ],
 				'content' => [ 'type' => 'string' ],
-				'notes' => [
+				'notes'   => [
 					'type'  => 'array',
 					'items' => [ 'type' => 'string' ],
 				],
-				'issues' => [
+				'issues'  => [
 					'type'  => 'array',
 					'items' => self::strict_object(
 						[
 							'original' => [ 'type' => 'string' ],
-							'problem' => [ 'type' => 'string' ],
+							'problem'  => [ 'type' => 'string' ],
 							'revision' => [ 'type' => 'string' ],
 						]
 					),
@@ -268,27 +268,27 @@ final class ResponseSchema {
 	private static function block_setting_style_item_schema(): array {
 		return self::strict_object(
 			[
-				'label' => [ 'type' => 'string' ],
-				'description' => [ 'type' => 'string' ],
-				'panel' => [
+				'label'            => [ 'type' => 'string' ],
+				'description'      => [ 'type' => 'string' ],
+				'panel'            => [
 					'type' => 'string',
 					'enum' => self::BLOCK_PANELS,
 				],
-				'type' => [
+				'type'             => [
 					'type' => [ 'string', 'null' ],
 					'enum' => [ 'attribute_change', 'style_variation', null ],
 				],
 				'attributeUpdates' => [
 					'type' => [ 'object', 'null' ],
 				],
-				'currentValue' => self::any_value(),
-				'suggestedValue' => self::any_value(),
-				'isCurrentStyle' => self::nullable_boolean(),
-				'isRecommended' => self::nullable_boolean(),
-				'confidence' => self::nullable_number(),
-				'preview' => self::nullable_string(),
-				'presetSlug' => self::nullable_string(),
-				'cssVar' => self::nullable_string(),
+				'currentValue'     => self::any_value(),
+				'suggestedValue'   => self::any_value(),
+				'isCurrentStyle'   => self::nullable_boolean(),
+				'isRecommended'    => self::nullable_boolean(),
+				'confidence'       => self::nullable_number(),
+				'preview'          => self::nullable_string(),
+				'presetSlug'       => self::nullable_string(),
+				'cssVar'           => self::nullable_string(),
 			]
 		);
 	}
@@ -296,27 +296,27 @@ final class ResponseSchema {
 	private static function block_block_item_schema(): array {
 		return self::strict_object(
 			[
-				'label' => [ 'type' => 'string' ],
-				'description' => [ 'type' => 'string' ],
-				'type' => [
+				'label'            => [ 'type' => 'string' ],
+				'description'      => [ 'type' => 'string' ],
+				'type'             => [
 					'type' => [ 'string', 'null' ],
 					'enum' => [ 'attribute_change', 'style_variation', 'structural_recommendation', 'pattern_replacement', null ],
 				],
 				'attributeUpdates' => [
 					'type' => [ 'object', 'null' ],
 				],
-				'panel' => [
+				'panel'            => [
 					'type' => [ 'string', 'null' ],
 					'enum' => array_merge( self::BLOCK_PANELS, [ null ] ),
 				],
-				'currentValue' => self::any_value(),
-				'suggestedValue' => self::any_value(),
-				'isCurrentStyle' => self::nullable_boolean(),
-				'isRecommended' => self::nullable_boolean(),
-				'confidence' => self::nullable_number(),
-				'preview' => self::nullable_string(),
-				'presetSlug' => self::nullable_string(),
-				'cssVar' => self::nullable_string(),
+				'currentValue'     => self::any_value(),
+				'suggestedValue'   => self::any_value(),
+				'isCurrentStyle'   => self::nullable_boolean(),
+				'isRecommended'    => self::nullable_boolean(),
+				'confidence'       => self::nullable_number(),
+				'preview'          => self::nullable_string(),
+				'presetSlug'       => self::nullable_string(),
+				'cssVar'           => self::nullable_string(),
 			]
 		);
 	}
@@ -324,14 +324,14 @@ final class ResponseSchema {
 	private static function nullable_expected_target_schema(): array {
 		return self::nullable_strict_object(
 			[
-				'name' => self::nullable_string(),
-				'label' => self::nullable_string(),
+				'name'       => self::nullable_string(),
+				'label'      => self::nullable_string(),
 				'attributes' => [ 'type' => 'object' ],
 				'childCount' => self::nullable_integer(),
-				'slot' => self::nullable_strict_object(
+				'slot'       => self::nullable_strict_object(
 					[
-						'slug' => self::nullable_string(),
-						'area' => self::nullable_string(),
+						'slug'    => self::nullable_string(),
+						'area'    => self::nullable_string(),
 						'isEmpty' => self::nullable_boolean(),
 					]
 				),

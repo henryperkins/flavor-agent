@@ -10,7 +10,7 @@ use WordPress\AI_Client\AI_Client;
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const SETUP_MESSAGE     = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
 	private const REASONING_EFFORTS = [ 'low', 'medium', 'high', 'xhigh' ];
 
 	public static function is_supported( ?string $provider = null ): bool {
@@ -85,7 +85,7 @@ final class WordPressAIClient {
 		}
 
 		$started_at = microtime( true );
-		$result = self::call_prompt_method( $prompt, 'generate_text' );
+		$result     = self::call_prompt_method( $prompt, 'generate_text' );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -251,7 +251,7 @@ final class WordPressAIClient {
 		return $prompt;
 	}
 
-	private static function apply_output_schema( object $prompt, ?array $schema ): object|\WP_Error {
+	private static function apply_output_schema( object $prompt, ?array $schema ): object {
 		if ( null === $schema || [] === $schema ) {
 			return $prompt;
 		}
@@ -331,8 +331,8 @@ final class WordPressAIClient {
 		if ( is_array( $result['tokenUsage'] ?? null ) ) {
 			$token_usage = [];
 
-			$total = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['total'] ?? null );
-			$input = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['input'] ?? null );
+			$total  = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['total'] ?? null );
+			$input  = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['input'] ?? null );
 			$output = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['output'] ?? null );
 
 			if ( null !== $total ) {

@@ -122,6 +122,35 @@ final class BlockAbilities {
 		return $manifest;
 	}
 
+	public static function list_allowed_blocks( mixed $input ): array {
+		$input              = self::normalize_map( $input );
+		$search             = isset( $input['search'] ) && is_string( $input['search'] )
+			? sanitize_text_field( $input['search'] )
+			: '';
+		$category           = isset( $input['category'] ) && is_string( $input['category'] )
+			? sanitize_key( $input['category'] )
+			: null;
+		$limit              = self::normalize_non_negative_int( $input['limit'] ?? null );
+		$offset             = self::normalize_non_negative_int( $input['offset'] ?? null ) ?? 0;
+		$include_variations = filter_var(
+			$input['includeVariations'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
+		$max_variations     = self::normalize_non_negative_int( $input['maxVariations'] ?? null );
+
+		return [
+			'blocks' => ServerCollector::for_registered_blocks(
+				$search,
+				$category,
+				$limit,
+				$offset,
+				$include_variations,
+				$max_variations ?? 10
+			),
+			'total'  => ServerCollector::count_registered_blocks( $search, $category ),
+		];
+	}
+
 	/**
 	 * Normalize recommend-block inputs from either the REST editorContext payload
 	 * or the Abilities selectedBlock payload into one canonical prompt context.
@@ -145,6 +174,19 @@ final class BlockAbilities {
 			'context' => $context,
 			'prompt'  => $prompt,
 		];
+	}
+
+	private static function normalize_non_negative_int( mixed $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value >= 0 ? $value : null;
+		}
+
+		if ( is_numeric( $value ) ) {
+			$normalized = (int) $value;
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		return null;
 	}
 
 	private static function build_context_from_editor_context( mixed $raw_context ): array|\WP_Error {

@@ -87,6 +87,10 @@ final class Provider {
 		return isset( self::registered_connector_choices()[ $provider ] );
 	}
 
+	public static function is_wordpress_ai_client( ?string $provider = null ): bool {
+		return sanitize_key( (string) ( $provider ?? self::get() ) ) === self::WORDPRESS_AI_CLIENT_PROVIDER;
+	}
+
 	public static function native_base_url(): string {
 		return self::NATIVE_BASE_URL;
 	}
@@ -386,7 +390,7 @@ final class Provider {
 		$credential_source                          = 'plugin_settings';
 		$credential_label                           = 'Settings > Flavor Agent';
 
-		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+		if ( self::is_wordpress_ai_client( $provider ) ) {
 			$owner             = 'connectors';
 			$owner_label       = 'Settings > Connectors';
 			$path_label        = 'WordPress AI Client via Settings > Connectors';
@@ -513,7 +517,7 @@ final class Provider {
 	private static function normalize_provider_for_request_meta( string $provider ): string {
 		$provider = sanitize_key( $provider );
 
-		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+		if ( self::is_wordpress_ai_client( $provider ) ) {
 			return $provider;
 		}
 
@@ -521,7 +525,7 @@ final class Provider {
 	}
 
 	private static function provider_label_for_request_meta( string $provider ): string {
-		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+		if ( self::is_wordpress_ai_client( $provider ) ) {
 			return 'WordPress AI Client';
 		}
 
@@ -532,7 +536,7 @@ final class Provider {
 	 * @return array{id: string, label: string, pluginSlug: string}
 	 */
 	private static function connector_meta_for_request_meta( string $provider ): array {
-		if ( self::WORDPRESS_AI_CLIENT_PROVIDER === $provider ) {
+		if ( self::is_wordpress_ai_client( $provider ) ) {
 			return [
 				'id'         => self::WORDPRESS_AI_CLIENT_PROVIDER,
 				'label'      => 'WordPress AI Client',
@@ -689,6 +693,14 @@ final class Provider {
 		$selected_provider = self::get();
 		$selected_config   = self::chat_configuration( $selected_provider, $overrides );
 
+		if ( self::is_connector( $selected_provider ) && $selected_config['configured'] ) {
+			return $selected_config;
+		}
+
+		if ( WordPressAIClient::is_supported() ) {
+			return self::wordpress_ai_client_configuration();
+		}
+
 		if ( $selected_config['configured'] ) {
 			return $selected_config;
 		}
@@ -703,19 +715,6 @@ final class Provider {
 			if ( $candidate_config['configured'] ) {
 				return $candidate_config;
 			}
-		}
-
-		if ( WordPressAIClient::is_supported() ) {
-			return [
-				'provider'   => self::WORDPRESS_AI_CLIENT_PROVIDER,
-				'endpoint'   => '',
-				'api_key'    => '',
-				'model'      => 'provider-managed',
-				'configured' => true,
-				'headers'    => [],
-				'url'        => '',
-				'label'      => 'WordPress AI Client',
-			];
 		}
 
 		return $selected_config;
@@ -809,6 +808,22 @@ final class Provider {
 		}
 
 		return $choices;
+	}
+
+	/**
+	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
+	 */
+	private static function wordpress_ai_client_configuration(): array {
+		return [
+			'provider'   => self::WORDPRESS_AI_CLIENT_PROVIDER,
+			'endpoint'   => '',
+			'api_key'    => '',
+			'model'      => 'provider-managed',
+			'configured' => true,
+			'headers'    => [],
+			'url'        => '',
+			'label'      => 'WordPress AI Client',
+		];
 	}
 
 	/**

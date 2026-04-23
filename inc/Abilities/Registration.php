@@ -82,19 +82,60 @@ final class Registration {
 				],
 				'output_schema'       => [
 					'type'       => 'object',
+					'properties' => self::block_manifest_schema_properties(),
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/list-allowed-blocks',
+			[
+				'label'               => __( 'List allowed blocks', 'flavor-agent' ),
+				'description'         => __( 'Return block types registered on the current site, with optional search, pagination, and variation payload controls.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ BlockAbilities::class, 'list_allowed_blocks' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
 					'properties' => [
-						'name'                => [ 'type' => 'string' ],
-						'title'               => [ 'type' => 'string' ],
-						'category'            => [ 'type' => 'string' ],
-						'supports'            => [ 'type' => 'object' ],
-						'inspectorPanels'     => [ 'type' => 'object' ],
-						'contentAttributes'   => [ 'type' => 'object' ],
-						'configAttributes'    => [ 'type' => 'object' ],
-						'styles'              => [ 'type' => 'array' ],
-						'variations'          => [ 'type' => 'array' ],
-						'supportsContentRole' => [ 'type' => 'boolean' ],
-						'parent'              => [ 'type' => [ 'array', 'null' ] ],
-						'allowedBlocks'       => [ 'type' => [ 'array', 'null' ] ],
+						'search'            => [
+							'type'        => 'string',
+							'description' => 'Optional case-insensitive search filter for block name or title.',
+						],
+						'category'          => [
+							'type'        => 'string',
+							'description' => 'Optional block category filter, for example design or text.',
+						],
+						'limit'             => [
+							'type'        => 'integer',
+							'description' => 'Optional maximum number of block manifests to return.',
+						],
+						'offset'            => [
+							'type'        => 'integer',
+							'description' => 'Optional offset for paginated block results.',
+						],
+						'includeVariations' => [
+							'type'        => 'boolean',
+							'description' => 'When true, include block variations in list results. Defaults to false for lighter payloads.',
+						],
+						'maxVariations'     => [
+							'type'        => 'integer',
+							'description' => 'Maximum number of variations to include per block when includeVariations is true. Defaults to 10.',
+						],
+					],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => [
+						'blocks' => [
+							'type'  => 'array',
+							'items' => [
+								'type'       => 'object',
+								'properties' => self::block_manifest_schema_properties(),
+							],
+						],
+						'total'  => [ 'type' => 'integer' ],
 					],
 				],
 				'meta'                => self::readonly_rest_meta(),
@@ -241,24 +282,40 @@ final class Registration {
 			'flavor-agent/list-patterns',
 			[
 				'label'               => __( 'List block patterns', 'flavor-agent' ),
-				'description'         => __( 'Return registered block patterns, optionally filtered by category, block type, or template type.', 'flavor-agent' ),
+				'description'         => __( 'Return registered block patterns, optionally filtered by category, block type, template type, search, and payload size controls.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ PatternAbilities::class, 'list_patterns' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'categories'    => [
+						'categories'     => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
 						],
-						'blockTypes'    => [
+						'blockTypes'     => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
 						],
-						'templateTypes' => [
+						'templateTypes'  => [
 							'type'  => 'array',
 							'items' => [ 'type' => 'string' ],
+						],
+						'search'         => [
+							'type'        => 'string',
+							'description' => 'Optional case-insensitive search filter for pattern name or title.',
+						],
+						'includeContent' => [
+							'type'        => 'boolean',
+							'description' => 'When true, include full pattern markup in list results. Defaults to false for lighter payloads.',
+						],
+						'limit'          => [
+							'type'        => 'integer',
+							'description' => 'Optional maximum number of patterns to return.',
+						],
+						'offset'         => [
+							'type'        => 'integer',
+							'description' => 'Optional offset for paginated pattern results.',
 						],
 					],
 				],
@@ -269,19 +326,113 @@ final class Registration {
 							'type'  => 'array',
 							'items' => [
 								'type'       => 'object',
-								'properties' => [
-									'name'             => [ 'type' => 'string' ],
-									'title'            => [ 'type' => 'string' ],
-									'description'      => [ 'type' => 'string' ],
-									'categories'       => [ 'type' => 'array' ],
-									'blockTypes'       => [ 'type' => 'array' ],
-									'templateTypes'    => [ 'type' => 'array' ],
-									'patternOverrides' => [ 'type' => 'object' ],
-									'content'          => [ 'type' => 'string' ],
-								],
+								'properties' => self::pattern_schema_properties(),
 							],
 						],
+						'total'    => [ 'type' => 'integer' ],
 					],
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/get-pattern',
+			[
+				'label'               => __( 'Get block pattern', 'flavor-agent' ),
+				'description'         => __( 'Return a single registered block pattern by name.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ PatternAbilities::class, 'get_pattern' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'patternId' => [
+							'type'        => 'string',
+							'description' => 'Registered pattern name, for example theme/hero.',
+						],
+					],
+					'required'   => [ 'patternId' ],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => self::pattern_schema_properties(),
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/list-synced-patterns',
+			[
+				'label'               => __( 'List synced patterns', 'flavor-agent' ),
+				'description'         => __( 'Return wp_block pattern entities available on the site, optionally filtered by sync status, search, and payload size controls.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ PatternAbilities::class, 'list_synced_patterns' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'syncStatus'     => [
+							'type'        => 'string',
+							'description' => 'Optional sync status filter: synced, partial, unsynced, or all.',
+						],
+						'search'         => [
+							'type'        => 'string',
+							'description' => 'Optional case-insensitive search filter for synced pattern title or slug.',
+						],
+						'includeContent' => [
+							'type'        => 'boolean',
+							'description' => 'When true, include full block markup in list results. Defaults to false for lighter payloads.',
+						],
+						'limit'          => [
+							'type'        => 'integer',
+							'description' => 'Optional maximum number of synced patterns to return.',
+						],
+						'offset'         => [
+							'type'        => 'integer',
+							'description' => 'Optional offset for paginated synced-pattern results.',
+						],
+					],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => [
+						'patterns' => [
+							'type'  => 'array',
+							'items' => [
+								'type'       => 'object',
+								'properties' => self::synced_pattern_schema_properties(),
+							],
+						],
+						'total'    => [ 'type' => 'integer' ],
+					],
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/get-synced-pattern',
+			[
+				'label'               => __( 'Get synced pattern', 'flavor-agent' ),
+				'description'         => __( 'Return a single wp_block pattern entity by numeric post ID.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ PatternAbilities::class, 'get_synced_pattern' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [
+						'patternId' => [
+							'type'        => 'integer',
+							'description' => 'wp_block post ID for the synced pattern.',
+						],
+					],
+					'required'   => [ 'patternId' ],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => self::synced_pattern_schema_properties(),
 				],
 				'meta'                => self::readonly_rest_meta(),
 			]
@@ -676,16 +827,20 @@ final class Registration {
 			'flavor-agent/list-template-parts',
 			[
 				'label'               => __( 'List template parts', 'flavor-agent' ),
-				'description'         => __( 'Return registered template parts, optionally filtered by area.', 'flavor-agent' ),
+				'description'         => __( 'Return registered template-part metadata for editors, with optional content only for users who can edit themes.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ TemplateAbilities::class, 'list_template_parts' ],
-				'permission_callback' => fn() => current_user_can( 'edit_theme_options' ),
+				'permission_callback' => [ self::class, 'can_list_template_parts' ],
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [
-						'area' => [
+						'area'           => [
 							'type'        => 'string',
 							'description' => 'Filter by area: header, footer, sidebar, navigation-overlay',
+						],
+						'includeContent' => [
+							'type'        => 'boolean',
+							'description' => 'When true, include template-part markup. This requires the edit_theme_options capability.',
 						],
 					],
 				],
@@ -911,6 +1066,66 @@ final class Registration {
 
 	private static function register_infra_abilities(): void {
 		wp_register_ability(
+			'flavor-agent/get-active-theme',
+			[
+				'label'               => __( 'Get active theme', 'flavor-agent' ),
+				'description'         => __( 'Return the active theme name, stylesheet, template, and version.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ InfraAbilities::class, 'get_active_theme' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => self::active_theme_schema_properties(),
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/get-theme-presets',
+			[
+				'label'               => __( 'Get theme presets', 'flavor-agent' ),
+				'description'         => __( 'Return the active theme design presets from global settings, including colors, typography, spacing, shadows, gradients, and duotone presets.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ InfraAbilities::class, 'get_theme_presets' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => self::theme_presets_schema_properties(),
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
+			'flavor-agent/get-theme-styles',
+			[
+				'label'               => __( 'Get theme styles', 'flavor-agent' ),
+				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles.', 'flavor-agent' ),
+				'category'            => 'flavor-agent',
+				'execute_callback'    => [ InfraAbilities::class, 'get_theme_styles' ],
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'input_schema'        => [
+					'type'       => 'object',
+					'properties' => [],
+				],
+				'output_schema'       => [
+					'type'       => 'object',
+					'properties' => self::theme_styles_schema_properties(),
+				],
+				'meta'                => self::readonly_rest_meta(),
+			]
+		);
+
+		wp_register_ability(
 			'flavor-agent/get-theme-tokens',
 			[
 				'label'               => __( 'Get theme design tokens', 'flavor-agent' ),
@@ -1023,6 +1238,28 @@ final class Registration {
 		);
 	}
 
+	public static function can_list_template_parts( mixed $input = null ): bool {
+		$can_edit_theme = current_user_can( 'edit_theme_options' );
+
+		if ( $can_edit_theme ) {
+			return true;
+		}
+
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return false;
+		}
+
+		$normalized_input = is_array( $input )
+			? $input
+			: ( is_object( $input ) ? get_object_vars( $input ) : [] );
+		$include_content  = filter_var(
+			$normalized_input['includeContent'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
+
+		return ! $include_content;
+	}
+
 	private static function public_recommendation_meta(): array {
 		return [
 			'show_in_rest' => true,
@@ -1036,6 +1273,107 @@ final class Registration {
 		return [
 			'show_in_rest' => true,
 			'readonly'     => true,
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function block_manifest_schema_properties(): array {
+		return [
+			'name'                => [ 'type' => 'string' ],
+			'title'               => [ 'type' => 'string' ],
+			'category'            => [ 'type' => 'string' ],
+			'description'         => [ 'type' => 'string' ],
+			'supports'            => [ 'type' => 'object' ],
+			'inspectorPanels'     => [ 'type' => 'object' ],
+			'bindableAttributes'  => [
+				'type'  => 'array',
+				'items' => [ 'type' => 'string' ],
+			],
+			'contentAttributes'   => [ 'type' => 'object' ],
+			'configAttributes'    => [ 'type' => 'object' ],
+			'styles'              => [ 'type' => 'array' ],
+			'variations'          => [ 'type' => 'array' ],
+			'supportsContentRole' => [ 'type' => 'boolean' ],
+			'parent'              => [ 'type' => [ 'array', 'null' ] ],
+			'allowedBlocks'       => [ 'type' => [ 'array', 'null' ] ],
+			'apiVersion'          => [ 'type' => 'integer' ],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function pattern_schema_properties(): array {
+		return [
+			'id'               => [ 'type' => 'string' ],
+			'name'             => [ 'type' => 'string' ],
+			'title'            => [ 'type' => 'string' ],
+			'description'      => [ 'type' => 'string' ],
+			'categories'       => [ 'type' => 'array' ],
+			'blockTypes'       => [ 'type' => 'array' ],
+			'templateTypes'    => [ 'type' => 'array' ],
+			'patternOverrides' => [ 'type' => 'object' ],
+			'content'          => [ 'type' => 'string' ],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function synced_pattern_schema_properties(): array {
+		return [
+			'id'                  => [ 'type' => 'integer' ],
+			'title'               => [ 'type' => 'string' ],
+			'slug'                => [ 'type' => 'string' ],
+			'content'             => [ 'type' => 'string' ],
+			'status'              => [ 'type' => 'string' ],
+			'authorId'            => [ 'type' => 'integer' ],
+			'dateGmt'             => [ 'type' => 'string' ],
+			'modifiedGmt'         => [ 'type' => 'string' ],
+			'syncStatus'          => [ 'type' => 'string' ],
+			'wpPatternSyncStatus' => [ 'type' => 'string' ],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function active_theme_schema_properties(): array {
+		return [
+			'name'       => [ 'type' => 'string' ],
+			'version'    => [ 'type' => 'string' ],
+			'stylesheet' => [ 'type' => 'string' ],
+			'template'   => [ 'type' => 'string' ],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function theme_presets_schema_properties(): array {
+		return [
+			'colorPresets'      => [ 'type' => 'array' ],
+			'gradientPresets'   => [ 'type' => 'array' ],
+			'fontSizePresets'   => [ 'type' => 'array' ],
+			'fontFamilyPresets' => [ 'type' => 'array' ],
+			'spacingPresets'    => [ 'type' => 'array' ],
+			'shadowPresets'     => [ 'type' => 'array' ],
+			'duotonePresets'    => [ 'type' => 'array' ],
+			'diagnostics'       => [ 'type' => 'object' ],
+		];
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function theme_styles_schema_properties(): array {
+		return [
+			'styles'            => [ 'type' => 'object' ],
+			'elementStyles'     => [ 'type' => 'object' ],
+			'blockPseudoStyles' => [ 'type' => 'object' ],
+			'diagnostics'       => [ 'type' => 'object' ],
 		];
 	}
 

@@ -84,7 +84,7 @@ final class ResponsesClient extends BaseHttpClient {
 		$provider                  = is_string( $config['provider'] ?? null ) ? $config['provider'] : null;
 		$resolved_reasoning_effort = self::resolve_reasoning_effort( $reasoning_effort, $provider );
 
-		if ( Provider::is_connector( $config['provider'] ) || 'wordpress_ai_client' === $config['provider'] ) {
+		if ( Provider::is_connector( $config['provider'] ) || Provider::is_wordpress_ai_client( $config['provider'] ) ) {
 			return WordPressAIClient::chat(
 				$instructions,
 				$input,
@@ -145,7 +145,7 @@ final class ResponsesClient extends BaseHttpClient {
 		if (
 			Provider::is_azure( $provider )
 			|| Provider::is_connector( $provider )
-			|| 'wordpress_ai_client' === $provider
+			|| Provider::is_wordpress_ai_client( $provider )
 		) {
 			return self::saved_reasoning_effort();
 		}
@@ -180,9 +180,9 @@ final class ResponsesClient extends BaseHttpClient {
 	 * @return string|\WP_Error The text content from the response.
 	 */
 	private static function request( string $url, array $headers, string $body, string $label ): string|\WP_Error {
-		$started_at = microtime( true );
+		$started_at       = microtime( true );
 		$base_diagnostics = self::build_base_diagnostics( $url, $body, self::REQUEST_TIMEOUT );
-		$response = self::post_json_with_retry(
+		$response         = self::post_json_with_retry(
 			$url,
 			$headers,
 			$body,
@@ -199,9 +199,9 @@ final class ResponsesClient extends BaseHttpClient {
 			return self::append_request_meta_to_error( $response );
 		}
 
-		$status = $response['status'];
-		$data   = $response['data'];
-		$metrics = self::extract_response_metrics(
+		$status      = $response['status'];
+		$data        = $response['data'];
+		$metrics     = self::extract_response_metrics(
 			is_array( $data ) ? $data : [],
 			$started_at
 		);
@@ -274,10 +274,10 @@ final class ResponsesClient extends BaseHttpClient {
 	 * }
 	 */
 	private static function build_base_diagnostics( string $url, string $body, int $timeout ): array {
-		$decoded_body = json_decode( $body, true );
-		$payload      = is_array( $decoded_body ) ? $decoded_body : [];
-		$host         = (string) wp_parse_url( $url, PHP_URL_HOST );
-		$path         = (string) wp_parse_url( $url, PHP_URL_PATH );
+		$decoded_body    = json_decode( $body, true );
+		$payload         = is_array( $decoded_body ) ? $decoded_body : [];
+		$host            = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$path            = (string) wp_parse_url( $url, PHP_URL_PATH );
 		$request_summary = [
 			'bodyBytes' => strlen( $body ),
 		];
@@ -404,9 +404,9 @@ final class ResponsesClient extends BaseHttpClient {
 	 * }
 	 */
 	private static function build_error_diagnostics( array $base_diagnostics, \WP_Error $error ): array {
-		$error_code = $error->get_error_code();
-		$error_data = $error->get_error_data( $error_code );
-		$error_data = is_array( $error_data ) ? $error_data : [];
+		$error_code       = $error->get_error_code();
+		$error_data       = $error->get_error_data( $error_code );
+		$error_data       = is_array( $error_data ) ? $error_data : [];
 		$response_summary = [];
 		$error_summary    = [
 			'code'    => $error_code,
@@ -518,11 +518,11 @@ final class ResponsesClient extends BaseHttpClient {
 	 * @return array{tokenUsage: array<string, int>, latencyMs: int}
 	 */
 	private static function extract_response_metrics( array $data, float $started_at ): array {
-		$usage = is_array( $data['usage'] ?? null ) ? $data['usage'] : [];
+		$usage       = is_array( $data['usage'] ?? null ) ? $data['usage'] : [];
 		$token_usage = [];
 
-		$total = MetricsNormalizer::normalize_metric_int( $usage['total_tokens'] ?? $usage['totalTokens'] ?? null );
-		$input = MetricsNormalizer::normalize_metric_int( $usage['input_tokens'] ?? $usage['inputTokens'] ?? null );
+		$total  = MetricsNormalizer::normalize_metric_int( $usage['total_tokens'] ?? $usage['totalTokens'] ?? null );
+		$input  = MetricsNormalizer::normalize_metric_int( $usage['input_tokens'] ?? $usage['inputTokens'] ?? null );
 		$output = MetricsNormalizer::normalize_metric_int( $usage['output_tokens'] ?? $usage['outputTokens'] ?? null );
 
 		if ( null !== $total ) {

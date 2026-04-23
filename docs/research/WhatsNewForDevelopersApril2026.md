@@ -8,7 +8,7 @@ description: "Learn about all the new updates coming to WordPress for developers
 tags:
   - "clippings"
 ---
-> **Note:** This file is a clipped source snapshot created on April 19, 2026. Treat it as research input rather than canonical Flavor Agent product truth. For maintained repo takeaways from the same upstream material, use `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-22.8-reference.md`, and `docs/wp7-migration-opportunities.md`.
+> **Note:** This file is a clipped source snapshot created on April 19, 2026. Treat it as research input rather than canonical Flavor Agent product truth. The WordPress 7.0 release schedule was updated on April 22, 2026 and Gutenberg 23.0.0 landed the same day, so use `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, and `docs/wp7-migration-opportunities.md` for maintained repo takeaways.
 
 One of the more exciting things about working on an open-source project of the size and scope of WordPress is that anything can happen.
 

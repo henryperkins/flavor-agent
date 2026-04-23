@@ -13,10 +13,32 @@ use FlavorAgent\OpenAI\Provider;
 final class InfraAbilities {
 
 	public static function get_theme_tokens( mixed $input ): array {
+		unset( $input );
+
 		return ServerCollector::for_tokens();
 	}
 
+	public static function get_active_theme( mixed $input ): array {
+		unset( $input );
+
+		return ServerCollector::for_active_theme();
+	}
+
+	public static function get_theme_presets( mixed $input ): array {
+		unset( $input );
+
+		return ServerCollector::for_theme_presets();
+	}
+
+	public static function get_theme_styles( mixed $input ): array {
+		unset( $input );
+
+		return ServerCollector::for_theme_styles();
+	}
+
 	public static function check_status( mixed $input ): array {
+		unset( $input );
+
 		$block_recommendations_configured = ChatClient::is_supported();
 		$wordpress_ai_client_configured   = WordPressAIClient::is_supported();
 		$openai_connector_status          = Provider::openai_connector_status();
@@ -122,7 +144,16 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/introspect-block', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-content', 'edit_posts', $chat_configured );
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-patterns', 'edit_posts' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/list-template-parts', 'edit_theme_options' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/get-pattern', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/list-synced-patterns', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/get-synced-pattern', 'edit_posts' );
+		if ( current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' ) ) {
+			$abilities[] = 'flavor-agent/list-template-parts';
+		}
+		self::maybe_add_ability( $abilities, 'flavor-agent/list-allowed-blocks', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/get-active-theme', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-presets', 'edit_posts' );
+		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-styles', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-tokens', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/check-status', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-block', 'edit_posts', $block_recommendations_configured );

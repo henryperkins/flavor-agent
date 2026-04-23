@@ -14,10 +14,24 @@ use PHPUnit\Framework\TestCase;
 
 final class AzureBackendValidationTest extends TestCase {
 
+	private string|false $previous_openai_api_key;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->previous_openai_api_key = getenv( 'OPENAI_API_KEY' );
+		putenv( 'OPENAI_API_KEY' );
+	}
+
+	protected function tearDown(): void {
+		if ( false === $this->previous_openai_api_key ) {
+			putenv( 'OPENAI_API_KEY' );
+		} else {
+			putenv( 'OPENAI_API_KEY=' . $this->previous_openai_api_key );
+		}
+
+		parent::tearDown();
 	}
 
 	public function test_embedding_validation_returns_remote_error_message(): void {
@@ -350,6 +364,24 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( 'connector ranked output', $result );
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 		$this->assertSame( 'xhigh', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_rank_prefers_the_generic_wordpress_ai_client_over_a_configured_direct_backend_when_available(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_openai_provider'       => Provider::AZURE,
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
+		];
+
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = 'WordPress AI client preferred output';
+
+		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
+
+		$this->assertSame( 'WordPress AI client preferred output', $result );
+		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 

@@ -310,5 +310,7 @@ if ( require.main === module ) {
 module.exports = {
 	bootstrapWp70Harness,
 	getWp70HarnessConfig,
+	resetSiteEditorState,
+	runWpCli,
 	teardownWp70Harness,
 };

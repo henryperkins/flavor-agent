@@ -39,7 +39,7 @@ final class Help {
 					[
 						'<p>' . esc_html__( 'This screen keeps inline copy short so the form stays focused on live settings and status.', 'flavor-agent' ) . '</p>',
 						'<ol>',
-						'<li>' . esc_html__( 'Configure Chat Provider first. It is the only required section.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Configure chat first. Settings > Connectors is the primary path and the only required section.', 'flavor-agent' ) . '</li>',
 						'<li>' . esc_html__( 'Add Pattern Recommendations if you want vector-backed pattern search and sync.', 'flavor-agent' ) . '</li>',
 						'<li>' . esc_html__( 'Use Docs Grounding for grounding limits, diagnostics, and any Cloudflare override values.', 'flavor-agent' ) . '</li>',
 						'<li>' . esc_html__( 'Use Guidelines for plugin-owned site, writing, image, and block notes.', 'flavor-agent' ) . '</li>',
@@ -55,10 +55,10 @@ final class Help {
 				'content'  => implode(
 					'',
 					[
-						'<p>' . esc_html__( 'Use Settings > Connectors for shared credentials used by connector-backed providers.', 'flavor-agent' ) . '</p>',
-						'<p>' . esc_html__( 'Use this screen for direct Azure or OpenAI Native settings, Qdrant, sync tuning, docs grounding limits, and plugin-owned guidelines.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Use Settings > Connectors for shared chat credentials and provider selection that Flavor Agent prefers at runtime.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'Use this screen for legacy direct Azure or OpenAI Native fallback settings, Qdrant, sync tuning, docs grounding limits, and plugin-owned guidelines.', 'flavor-agent' ) . '</p>',
 						'<ul>',
-						'<li>' . esc_html__( 'Azure and OpenAI Native fields on this page are only for direct provider configuration.', 'flavor-agent' ) . '</li>',
+						'<li>' . esc_html__( 'Azure and OpenAI Native fields on this page are for legacy direct chat fallback plus plugin-owned embeddings configuration.', 'flavor-agent' ) . '</li>',
 						'<li>' . esc_html__( 'OpenAI Native can use the plugin override, Settings > Connectors, or OPENAI_API_KEY. The active source is shown inline.', 'flavor-agent' ) . '</li>',
 						'<li>' . esc_html__( 'Pattern Sync needs both an embeddings backend and Qdrant before it can run.', 'flavor-agent' ) . '</li>',
 						'<li>' . esc_html__( 'Docs Grounding uses the built-in public developer.wordpress.org endpoint by default.', 'flavor-agent' ) . '</li>',
@@ -74,7 +74,8 @@ final class Help {
 				'content'  => implode(
 					'',
 					[
-						'<p>' . esc_html__( 'If the selected chat provider is incomplete, Flavor Agent can fall back to another configured chat path until you finish setup.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'When Settings > Connectors is available, Flavor Agent prefers that shared chat path. Direct Azure/OpenAI settings on this page remain a legacy fallback.', 'flavor-agent' ) . '</p>',
+						'<p>' . esc_html__( 'If the selected chat path is incomplete and no Connectors-backed runtime is ready, Flavor Agent can still fall back to another configured direct chat path until you finish setup.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Pattern Sync stays unavailable until both an embeddings backend and Qdrant are configured. The sync panel explains stale reasons, technical details, and the current index state.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Docs Grounding diagnostics summarize runtime grounding health, warm-queue activity, and the last docs prewarm run.', 'flavor-agent' ) . '</p>',
 						'<p>' . esc_html__( 'Guidelines import fills the form first. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape.', 'flavor-agent' ) . '</p>',

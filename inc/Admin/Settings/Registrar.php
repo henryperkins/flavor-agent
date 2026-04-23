@@ -268,7 +268,7 @@ final class Registrar {
 				'option'      => Provider::OPTION_NAME,
 				'label_for'   => Provider::OPTION_NAME,
 				'choices'     => Provider::choices( Provider::get() ),
-				'description' => 'Choose the provider Flavor Agent should try first.',
+				'description' => 'Choose the preferred chat path. Settings > Connectors is used first when available; direct Azure/OpenAI settings below remain as legacy fallback.',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
 		);
@@ -283,7 +283,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_azure_openai_endpoint',
 				'type'         => 'url',
 				'placeholder'  => 'https://my-resource.openai.azure.com/',
-				'description'  => 'Azure OpenAI resource URL.',
+				'description'  => 'Legacy direct Azure OpenAI resource URL.',
 				'autocomplete' => 'url',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -299,7 +299,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_azure_openai_key',
 				'type'         => 'password',
 				'placeholder'  => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-				'description'  => 'Key 1 or Key 2 for that resource.',
+				'description'  => 'Legacy direct Azure API key.',
 				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -314,7 +314,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_azure_embedding_deployment',
 				'label_for'    => 'flavor_agent_azure_embedding_deployment',
 				'placeholder'  => 'text-embedding-3-large',
-				'description'  => 'Embedding deployment name.',
+				'description'  => 'Embedding deployment name for the legacy direct Azure fallback.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -329,7 +329,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_azure_chat_deployment',
 				'label_for'    => 'flavor_agent_azure_chat_deployment',
 				'placeholder'  => 'gpt-5.4',
-				'description'  => 'Responses deployment name.',
+				'description'  => 'Responses deployment name for the legacy direct Azure fallback.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -350,7 +350,7 @@ final class Registrar {
 					'high'   => 'High',
 					'xhigh'  => 'XHigh',
 				],
-				'description' => 'Default reasoning effort for Azure ranking calls.',
+				'description' => 'Default reasoning effort for Connectors-first chat requests and legacy Azure ranking calls.',
 			]
 		);
 		add_settings_field(
@@ -364,7 +364,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_openai_native_api_key',
 				'type'         => 'password',
 				'placeholder'  => 'sk-...',
-				'description'  => 'Leave blank to use Connectors or OPENAI_API_KEY.',
+				'description'  => 'Legacy direct override. Leave blank to use Settings > Connectors or OPENAI_API_KEY.',
 				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -379,7 +379,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_openai_native_embedding_model',
 				'label_for'    => 'flavor_agent_openai_native_embedding_model',
 				'placeholder'  => 'text-embedding-3-large',
-				'description'  => 'Embedding model ID.',
+				'description'  => 'Embedding model ID for the legacy direct OpenAI fallback.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -394,7 +394,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_openai_native_chat_model',
 				'label_for'    => 'flavor_agent_openai_native_chat_model',
 				'placeholder'  => 'gpt-5.4',
-				'description'  => 'Responses model ID.',
+				'description'  => 'Responses model ID for the legacy direct OpenAI fallback.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]

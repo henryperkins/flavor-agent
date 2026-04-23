@@ -26,23 +26,14 @@ final class ChatClientTest extends TestCase {
 		$this->assertTrue( ChatClient::is_supported() );
 	}
 
-	public function test_chat_prefers_active_flavor_agent_provider_over_wordpress_ai_client(): void {
-		WordPressTestState::$options              = [
+	public function test_chat_prefers_the_wordpress_ai_client_when_connectors_are_available(): void {
+		WordPressTestState::$options                        = [
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
 		];
-		WordPressTestState::$ai_client_supported  = true;
-		WordPressTestState::$remote_post_response = [
-			'response' => [
-				'code' => 200,
-			],
-			'body'     => wp_json_encode(
-				[
-					'output_text' => '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
-				]
-			),
-		];
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
 		$result = ChatClient::chat( 'system prompt', 'user prompt' );
 
@@ -50,11 +41,8 @@ final class ChatClientTest extends TestCase {
 			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			$result
 		);
-		$this->assertSame(
-			'https://example.openai.azure.com/openai/v1/responses',
-			WordPressTestState::$last_remote_post['url']
-		);
-		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
 	public function test_chat_falls_back_to_wordpress_ai_client_when_plugin_chat_backend_is_not_configured(): void {

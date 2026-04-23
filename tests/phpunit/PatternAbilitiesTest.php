@@ -65,6 +65,192 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [ 'theme/header-utility' ], array_column( $result['patterns'], 'name' ) );
 	}
 
+	public function test_get_pattern_returns_registered_pattern_by_name(): void {
+		$this->register_pattern(
+			'theme/hero',
+			[
+				'title'   => 'Hero',
+				'content' => '<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$result = PatternAbilities::get_pattern(
+			[
+				'patternId' => 'theme/hero',
+			]
+		);
+
+		$this->assertSame( 'theme/hero', $result['id'] );
+		$this->assertSame( 'Hero', $result['title'] );
+	}
+
+	public function test_list_patterns_supports_search_pagination_and_lightweight_payloads(): void {
+		$this->register_pattern(
+			'theme/marketing-alpha',
+			[
+				'title'   => 'Marketing Alpha',
+				'content' => '<!-- wp:paragraph --><p>Alpha</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->register_pattern(
+			'theme/marketing-beta',
+			[
+				'title'   => 'Marketing Beta',
+				'content' => '<!-- wp:paragraph --><p>Beta</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->register_pattern(
+			'theme/editorial-gamma',
+			[
+				'title'   => 'Editorial Gamma',
+				'content' => '<!-- wp:paragraph --><p>Gamma</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$result = PatternAbilities::list_patterns(
+			[
+				'search'         => 'marketing',
+				'includeContent' => false,
+				'limit'          => 1,
+				'offset'         => 1,
+			]
+		);
+
+		$this->assertSame( 2, $result['total'] );
+		$this->assertCount( 1, $result['patterns'] );
+		$this->assertSame( 'theme/marketing-beta', $result['patterns'][0]['name'] );
+		$this->assertArrayNotHasKey( 'content', $result['patterns'][0] );
+	}
+
+	public function test_list_synced_patterns_defaults_to_synced_wp_block_posts(): void {
+		WordPressTestState::$posts     = [
+			11 => (object) [
+				'ID'                => 11,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Shared Header',
+				'post_name'         => 'shared-header',
+				'post_content'      => '<!-- wp:group -->Header<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 2,
+				'post_date_gmt'     => '2026-04-20 00:00:00',
+				'post_modified_gmt' => '2026-04-21 00:00:00',
+			],
+			12 => (object) [
+				'ID'                => 12,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Unsynced Promo',
+				'post_name'         => 'unsynced-promo',
+				'post_content'      => '<!-- wp:paragraph --><p>Promo</p><!-- /wp:paragraph -->',
+				'post_status'       => 'draft',
+				'post_author'       => 4,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+		WordPressTestState::$post_meta = [
+			12 => [
+				'wp_pattern_sync_status' => 'unsynced',
+			],
+		];
+
+		$result = PatternAbilities::list_synced_patterns( [] );
+
+		$this->assertSame( [ 11 ], array_column( $result['patterns'], 'id' ) );
+	}
+
+	public function test_list_synced_patterns_can_filter_partial_and_omit_content_by_default(): void {
+		WordPressTestState::$posts     = [
+			21 => (object) [
+				'ID'                => 21,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Alpha Partial',
+				'post_name'         => 'alpha-partial',
+				'post_content'      => '<!-- wp:group -->Alpha<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 2,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+			22 => (object) [
+				'ID'                => 22,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Beta Partial',
+				'post_name'         => 'beta-partial',
+				'post_content'      => '<!-- wp:group -->Beta<!-- /wp:group -->',
+				'post_status'       => 'draft',
+				'post_author'       => 3,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+			23 => (object) [
+				'ID'                => 23,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Gamma Synced',
+				'post_name'         => 'gamma-synced',
+				'post_content'      => '<!-- wp:group -->Gamma<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 4,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+		WordPressTestState::$post_meta = [
+			21 => [
+				'wp_pattern_sync_status' => 'partial',
+			],
+			22 => [
+				'wp_pattern_sync_status' => 'partial',
+			],
+		];
+
+		$result = PatternAbilities::list_synced_patterns(
+			[
+				'syncStatus' => 'partial',
+				'search'     => 'partial',
+				'limit'      => 1,
+				'offset'     => 1,
+			]
+		);
+
+		$this->assertSame( 2, $result['total'] );
+		$this->assertCount( 1, $result['patterns'] );
+		$this->assertSame( 22, $result['patterns'][0]['id'] );
+		$this->assertSame( 'partial', $result['patterns'][0]['syncStatus'] );
+		$this->assertSame( 'partial', $result['patterns'][0]['wpPatternSyncStatus'] );
+		$this->assertArrayNotHasKey( 'content', $result['patterns'][0] );
+	}
+
+	public function test_get_synced_pattern_returns_wp_block_pattern_entity(): void {
+		WordPressTestState::$posts     = [
+			12 => (object) [
+				'ID'                => 12,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Unsynced Promo',
+				'post_name'         => 'unsynced-promo',
+				'post_content'      => '<!-- wp:paragraph --><p>Promo</p><!-- /wp:paragraph -->',
+				'post_status'       => 'draft',
+				'post_author'       => 4,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+		WordPressTestState::$post_meta = [
+			12 => [
+				'wp_pattern_sync_status' => 'unsynced',
+			],
+		];
+
+		$result = PatternAbilities::get_synced_pattern(
+			[
+				'patternId' => 12,
+			]
+		);
+
+		$this->assertSame( 12, $result['id'] );
+		$this->assertSame( 'unsynced', $result['syncStatus'] );
+		$this->assertSame( 'unsynced', $result['wpPatternSyncStatus'] );
+	}
+
 	public function test_recommend_patterns_returns_missing_credentials_when_backends_are_not_configured(): void {
 		$result = PatternAbilities::recommend_patterns(
 			[

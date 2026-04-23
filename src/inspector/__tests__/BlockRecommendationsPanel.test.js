@@ -622,6 +622,98 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		);
 	} );
 
+	test( 'renders settings and style suggestions as executable lanes in the main panel', () => {
+		renderPanel();
+
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Hide on mobile',
+								description:
+									'Use viewport visibility for mobile.',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+							},
+						],
+						settings: [
+							{
+								label: 'Pin block',
+								panel: 'position',
+							},
+						],
+						styles: [
+							{
+								label: 'Use accent color',
+								panel: 'color',
+							},
+						],
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( {
+						block: {
+							name: 'core/paragraph',
+						},
+					} ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderPanel();
+
+		expect( getContainer().textContent ).toContain(
+			'Settings suggestions'
+		);
+		expect( getContainer().textContent ).toContain( 'Style suggestions' );
+		expect( mockSuggestionChips ).toHaveBeenCalledTimes( 3 );
+		expect( mockSuggestionChips.mock.calls[ 0 ][ 0 ] ).toEqual(
+			expect.objectContaining( {
+				label: 'AI block suggestions',
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Hide on mobile',
+					} ),
+				],
+			} )
+		);
+		expect( mockSuggestionChips.mock.calls[ 1 ][ 0 ] ).toEqual(
+			expect.objectContaining( {
+				label: 'AI settings suggestions',
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Pin block',
+					} ),
+				],
+			} )
+		);
+		expect( mockSuggestionChips.mock.calls[ 2 ][ 0 ] ).toEqual(
+			expect.objectContaining( {
+				label: 'AI style suggestions',
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Use accent color',
+					} ),
+				],
+			} )
+		);
+	} );
+
 	test( 'keeps purely advisory block suggestions out of one-click chips', () => {
 		renderPanel();
 

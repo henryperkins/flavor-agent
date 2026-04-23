@@ -29,8 +29,6 @@ import {
 	buildBlockRecommendationRequestData,
 	getBlockRecommendationFreshness,
 } from './block-recommendation-request';
-import SettingsRecommendations from './SettingsRecommendations';
-import StylesRecommendations from './StylesRecommendations';
 import SuggestionChips from './SuggestionChips';
 import {
 	SETTINGS_PANEL_DELEGATIONS,
@@ -153,10 +151,6 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 		const visibleSettingsRecommendations = hasVisibleResult
 			? recommendations?.settings || []
 			: [];
-		const visibleStyleRecommendations =
-			! isContentRestricted && hasVisibleResult
-				? recommendations?.styles || []
-				: [];
 		const visibleDelegatedStyleRecommendations =
 			! isContentRestricted && hasVisibleResult
 				? recommendations?.styles || []
@@ -229,7 +223,6 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			( visibleSettingsRecommendations.length > 0 ||
 				visibleDelegatedStyleRecommendations.length > 0 ||
 				visibleRecommendations.block?.length > 0 );
-		const hasStyleRecs = visibleStyleRecommendations.length > 0;
 
 		return (
 			<>
@@ -241,34 +234,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						prompt={ prompt }
 						onPromptChange={ handlePromptChange }
 					/>
-
-					{ hasInlineRecs &&
-						visibleSettingsRecommendations.length > 0 && (
-							<SettingsRecommendations
-								clientId={ clientId }
-								suggestions={ visibleSettingsRecommendations }
-								isStale={ isStaleResult }
-								currentRequestSignature={
-									currentRequestSignature
-								}
-								currentRequestInput={ currentRequestInput }
-							/>
-						) }
 				</InspectorControls>
-
-				{ /* The Styles tab projects safe style results from the main
-				   block request rather than owning its own request lifecycle. */ }
-				{ hasStyleRecs && (
-					<InspectorControls group="styles">
-						<StylesRecommendations
-							clientId={ clientId }
-							suggestions={ visibleStyleRecommendations }
-							isStale={ isStaleResult }
-							currentRequestSignature={ currentRequestSignature }
-							currentRequestInput={ currentRequestInput }
-						/>
-					</InspectorControls>
-				) }
 
 				{ hasInlineRecs && (
 					<>
@@ -331,6 +297,7 @@ function SubPanelSuggestions( {
 				clientId={ clientId }
 				suggestions={ filtered }
 				isStale={ isStale }
+				interactive={ false }
 				label={ label }
 				title={ title }
 				tone="Apply now"

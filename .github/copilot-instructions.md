@@ -74,7 +74,7 @@ For any change that touches more than one recommendation surface or any shared s
 
 ### Abilities API integration
 
-The plugin registers 13 abilities across block, pattern, template, navigation, docs, infra, content, and style categories via `wp_abilities_api_categories_init` and `wp_abilities_api_init`. On WP 7.0 admin screens, core auto-hydrates server-side abilities into the client-side `@wordpress/core-abilities` store.
+The plugin registers 20 abilities across block, pattern, template, navigation, docs, infra, content, and style categories, including design inspection helpers, via `wp_abilities_api_categories_init` and `wp_abilities_api_init`. On WP 7.0 admin screens, core auto-hydrates server-side abilities into the client-side `@wordpress/core-abilities` store.
 
 ### REST routes
 

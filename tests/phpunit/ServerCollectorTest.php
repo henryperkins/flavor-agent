@@ -102,6 +102,25 @@ final class ServerCollectorTest extends TestCase {
 		);
 	}
 
+	public function test_for_active_theme_returns_theme_identity(): void {
+		WordPressTestState::$active_theme = [
+			'name'       => 'Pattern Theme',
+			'version'    => '1.2.3',
+			'stylesheet' => 'pattern-theme',
+			'template'   => 'parent-theme',
+		];
+
+		$this->assertSame(
+			[
+				'name'       => 'Pattern Theme',
+				'version'    => '1.2.3',
+				'stylesheet' => 'pattern-theme',
+				'template'   => 'parent-theme',
+			],
+			ServerCollector::for_active_theme()
+		);
+	}
+
 	public function test_for_tokens_exposes_diagnostics(): void {
 		WordPressTestState::$global_settings = [
 			'color' => [
@@ -124,6 +143,78 @@ final class ServerCollectorTest extends TestCase {
 			],
 			$tokens['diagnostics']
 		);
+	}
+
+	public function test_for_theme_presets_returns_preset_families(): void {
+		WordPressTestState::$global_settings = [
+			'color'      => [
+				'palette' => [
+					[
+						'slug'  => 'accent',
+						'color' => '#ff5500',
+					],
+				],
+			],
+			'typography' => [
+				'fontSizes' => [
+					[
+						'slug' => 'small',
+						'size' => '12px',
+					],
+				],
+			],
+			'spacing'    => [
+				'spacingSizes' => [
+					[
+						'slug' => '40',
+						'size' => '1rem',
+					],
+				],
+			],
+		];
+
+		$presets = ServerCollector::for_theme_presets();
+
+		$this->assertSame( 'accent', $presets['colorPresets'][0]['slug'] );
+		$this->assertSame( 'small', $presets['fontSizePresets'][0]['slug'] );
+		$this->assertSame( '40', $presets['spacingPresets'][0]['slug'] );
+	}
+
+	public function test_for_theme_styles_returns_raw_and_extracted_style_data(): void {
+		WordPressTestState::$global_styles = [
+			'elements' => [
+				'button' => [
+					'color'  => [
+						'text' => 'var(--wp--preset--color--contrast)',
+					],
+					':hover' => [
+						'color' => [
+							'text' => 'var(--wp--preset--color--accent)',
+						],
+					],
+					':focus' => [
+						'color' => [
+							'text' => 'var(--wp--preset--color--base)',
+						],
+					],
+				],
+			],
+			'blocks'   => [
+				'core/button' => [
+					':hover' => [
+						'color' => [
+							'text' => 'var(--wp--preset--color--base)',
+						],
+					],
+				],
+			],
+		];
+
+		$styles = ServerCollector::for_theme_styles();
+
+		$this->assertSame( 'var(--wp--preset--color--contrast)', $styles['elementStyles']['button']['base']['text'] );
+		$this->assertSame( 'var(--wp--preset--color--base)', $styles['blockPseudoStyles']['core/button'][':hover']['color']['text'] );
+		$this->assertArrayHasKey( 'elements', $styles['styles'] );
 	}
 
 	public function test_introspect_block_type_supports_content_role_and_attribute_role(): void {
@@ -358,6 +449,225 @@ final class ServerCollectorTest extends TestCase {
 			$override_metadata['unsupportedAttributes'] ?? null
 		);
 		$this->assertTrue( $override_metadata['usesDefaultBinding'] ?? false );
+	}
+
+	public function test_for_pattern_returns_single_registered_pattern_by_name(): void {
+		$this->register_pattern(
+			'theme/hero',
+			[
+				'title'   => 'Hero',
+				'content' => '<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$pattern = ServerCollector::for_pattern( 'theme/hero' );
+
+		$this->assertIsArray( $pattern );
+		$this->assertSame( 'theme/hero', $pattern['id'] );
+		$this->assertSame( 'Hero', $pattern['title'] );
+	}
+
+	public function test_for_patterns_supports_search_pagination_and_lightweight_cached_results(): void {
+		$this->register_pattern(
+			'theme/marketing-alpha',
+			[
+				'title'   => 'Marketing Alpha',
+				'content' => '<!-- wp:paragraph --><p>Alpha</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->register_pattern(
+			'theme/marketing-beta',
+			[
+				'title'   => 'Marketing Beta',
+				'content' => '<!-- wp:paragraph --><p>Beta</p><!-- /wp:paragraph -->',
+			]
+		);
+		$this->register_pattern(
+			'theme/editorial-gamma',
+			[
+				'title'   => 'Editorial Gamma',
+				'content' => '<!-- wp:paragraph --><p>Gamma</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$first_page  = ServerCollector::for_patterns( null, null, null, false, 1, 0, 'marketing' );
+		$second_page = ServerCollector::for_patterns( null, null, null, false, 1, 1, 'marketing' );
+
+		$this->assertSame( 2, ServerCollector::count_patterns( null, null, null, 'marketing' ) );
+		$this->assertSame( 'theme/marketing-alpha', $first_page[0]['name'] );
+		$this->assertSame( 'theme/marketing-beta', $second_page[0]['name'] );
+		$this->assertArrayNotHasKey( 'content', $first_page[0] );
+		$this->assertArrayNotHasKey( 'content', $second_page[0] );
+	}
+
+	public function test_for_synced_patterns_filters_wp_block_posts_by_sync_status(): void {
+		WordPressTestState::$posts     = [
+			101 => (object) [
+				'ID'                => 101,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Shared Header',
+				'post_name'         => 'shared-header',
+				'post_content'      => '<!-- wp:group -->Header<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 3,
+				'post_date_gmt'     => '2026-04-20 00:00:00',
+				'post_modified_gmt' => '2026-04-21 00:00:00',
+			],
+			102 => (object) [
+				'ID'                => 102,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Local Promo',
+				'post_name'         => 'local-promo',
+				'post_content'      => '<!-- wp:paragraph --><p>Promo</p><!-- /wp:paragraph -->',
+				'post_status'       => 'draft',
+				'post_author'       => 5,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+		WordPressTestState::$post_meta = [
+			102 => [
+				'wp_pattern_sync_status' => 'unsynced',
+			],
+		];
+
+		$synced_patterns   = ServerCollector::for_synced_patterns();
+		$unsynced_patterns = ServerCollector::for_synced_patterns( 'unsynced' );
+		$synced_pattern    = ServerCollector::for_synced_pattern( 101 );
+
+		$this->assertSame( [ 101 ], array_column( $synced_patterns, 'id' ) );
+		$this->assertSame( [ 102 ], array_column( $unsynced_patterns, 'id' ) );
+		$this->assertSame( 'synced', $synced_pattern['syncStatus'] );
+		$this->assertSame( '', $synced_pattern['wpPatternSyncStatus'] );
+	}
+
+	public function test_for_synced_patterns_supports_partial_search_pagination_and_lightweight_results(): void {
+		WordPressTestState::$posts     = [
+			201 => (object) [
+				'ID'                => 201,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Alpha Partial',
+				'post_name'         => 'alpha-partial',
+				'post_content'      => '<!-- wp:group -->Alpha<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 3,
+				'post_date_gmt'     => '2026-04-20 00:00:00',
+				'post_modified_gmt' => '2026-04-21 00:00:00',
+			],
+			202 => (object) [
+				'ID'                => 202,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Beta Partial',
+				'post_name'         => 'beta-partial',
+				'post_content'      => '<!-- wp:group -->Beta<!-- /wp:group -->',
+				'post_status'       => 'draft',
+				'post_author'       => 5,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+			203 => (object) [
+				'ID'                => 203,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Gamma Synced',
+				'post_name'         => 'gamma-synced',
+				'post_content'      => '<!-- wp:group -->Gamma<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 6,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+		WordPressTestState::$post_meta = [
+			201 => [
+				'wp_pattern_sync_status' => 'partial',
+			],
+			202 => [
+				'wp_pattern_sync_status' => 'partial',
+			],
+		];
+
+		$patterns = ServerCollector::for_synced_patterns( 'partial', false, 1, 1, 'partial' );
+
+		$this->assertSame( 2, ServerCollector::count_synced_patterns( 'partial', 'partial' ) );
+		$this->assertCount( 1, $patterns );
+		$this->assertSame( 202, $patterns[0]['id'] );
+		$this->assertSame( 'partial', $patterns[0]['syncStatus'] );
+		$this->assertArrayNotHasKey( 'content', $patterns[0] );
+	}
+
+	public function test_for_registered_blocks_returns_sorted_block_manifests(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/beta',
+			[
+				'title' => 'Beta',
+			]
+		);
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/alpha',
+			[
+				'title'         => 'Alpha',
+				'allowedBlocks' => [ 'core/paragraph' ],
+			]
+		);
+
+		$blocks = ServerCollector::for_registered_blocks();
+
+		$this->assertSame( [ 'plugin/alpha', 'plugin/beta' ], array_column( $blocks, 'name' ) );
+		$this->assertSame( [ 'core/paragraph' ], $blocks[0]['allowedBlocks'] );
+	}
+
+	public function test_for_registered_blocks_supports_filters_and_variation_controls(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/card',
+			[
+				'title'      => 'Card',
+				'category'   => 'design',
+				'variations' => [
+					[
+						'name'  => 'feature',
+						'title' => 'Feature',
+					],
+					[
+						'name'  => 'compact',
+						'title' => 'Compact',
+					],
+				],
+			]
+		);
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/carousel',
+			[
+				'title'      => 'Carousel',
+				'category'   => 'design',
+				'variations' => [
+					[
+						'name'  => 'hero',
+						'title' => 'Hero',
+					],
+					[
+						'name'  => 'gallery',
+						'title' => 'Gallery',
+					],
+				],
+			]
+		);
+		\WP_Block_Type_Registry::get_instance()->register(
+			'plugin/notice',
+			[
+				'title'    => 'Notice',
+				'category' => 'widgets',
+			]
+		);
+
+		$metadata_only   = ServerCollector::for_registered_blocks( 'car', 'design', 1, 1, false );
+		$with_variations = ServerCollector::for_registered_blocks( 'car', 'design', null, 0, true, 1 );
+
+		$this->assertSame( 2, ServerCollector::count_registered_blocks( 'car', 'design' ) );
+		$this->assertCount( 1, $metadata_only );
+		$this->assertSame( 'plugin/carousel', $metadata_only[0]['name'] );
+		$this->assertSame( [], $metadata_only[0]['variations'] );
+		$this->assertSame( 1, count( $with_variations[0]['variations'] ) );
+		$this->assertSame( 1, count( $with_variations[1]['variations'] ) );
 	}
 
 	public function test_for_patterns_marks_supported_override_attributes_for_bindable_blocks(): void {

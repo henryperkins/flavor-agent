@@ -3,7 +3,7 @@
 Cross-surface comparison of the Flavor Agent recommendation UI across:
 
 - `src/inspector/BlockRecommendationsPanel.js`
-- `src/inspector/StylesRecommendations.js`
+- `src/inspector/NavigationRecommendations.js`
 - `src/patterns/PatternRecommender.js`
 - `src/templates/TemplateRecommender.js`
 - `src/template-parts/TemplatePartRecommender.js`
@@ -29,29 +29,32 @@ The most complete executable surfaces follow the same broad skeleton:
 7. review-before-apply section when required
 8. recent activity and undo
 
-That pattern is strongest in Style Book and Global Styles, mostly present in Template and Template-Part, now present in the main Block panel, and intentionally absent from the Pattern inserter affordance and the projection-only block style subpanel.
+That pattern is strongest in Style Book and Global Styles, mostly present in Template and Template-Part, fully present in the main Block panel, partially present in the advisory-only Navigation shell, and intentionally reduced or absent in the Pattern inserter affordance and the passive block Inspector sub-panel mirrors.
 
 ## Prompt-Layer Contract
 
-| Surface       | Prompt contract                                                                                                                                                                       | Real executable/advisory split       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| Block         | `Prompt.php` allows executable local block mutations plus advisory-only `structural_recommendation` and `pattern_replacement` items                                                   | Yes                                  |
-| Block styles  | Uses block recommendation payload grouped by inspector panel                                                                                                                          | Mostly executable only               |
-| Pattern       | Ranking and inserter patching, not a review/apply prompt flow                                                                                                                         | No lane split                        |
-| Template      | `TemplatePrompt.php` keeps `operations[]` as the executable source of truth when present and preserves validated advisory-only summaries when no safe deterministic apply path exists | Yes, with bounded advisory fallbacks |
-| Template-part | `TemplatePartPrompt.php` is advisory-first and only returns operations when the change is fully safe and deterministic                                                                | Yes                                  |
-| Style Book    | `StylePrompt.php` returns `tone=executable` or `tone=advisory`; executable items must carry valid operations                                                                          | Yes                                  |
-| Global Styles | `StylePrompt.php` returns `tone=executable` or `tone=advisory`; executable items must carry valid operations                                                                          | Yes                                  |
+| Surface        | Prompt contract                                                                                                                                                                       | Real executable/advisory split       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Block          | `Prompt.php` allows executable local block mutations plus advisory-only `structural_recommendation` and `pattern_replacement` items                                                   | Yes                                  |
+| Block settings mirrors | Uses the grouped block recommendation payload but only as passive mirrored chips inside delegated Inspector sub-panels                                                             | No                                   |
+| Block style mirrors   | Uses the grouped block recommendation payload but only as passive mirrored chips inside delegated Inspector sub-panels                                                             | No                                   |
+| Navigation     | `NavigationPrompt.php` returns advisory-only suggestion groups with validated `changes[]` metadata and no Flavor Agent apply path                                                     | Advisory-only                        |
+| Pattern        | Ranking and inserter patching, not a review/apply prompt flow                                                                                                                         | No lane split                        |
+| Template       | `TemplatePrompt.php` keeps `operations[]` as the executable source of truth when present and preserves validated advisory-only summaries when no safe deterministic apply path exists | Yes, with bounded advisory fallbacks |
+| Template-part  | `TemplatePartPrompt.php` is advisory-first and only returns operations when the change is fully safe and deterministic                                                                | Yes                                  |
+| Style Book     | `StylePrompt.php` returns `tone=executable` or `tone=advisory`; executable items must carry valid operations                                                                          | Yes                                  |
+| Global Styles  | `StylePrompt.php` returns `tone=executable` or `tone=advisory`; executable items must carry valid operations                                                                          | Yes                                  |
 
 ## Shared Component Matrix
 
-`StylesRecommendations.js` is a sub-surface inside the block inspector, so it is listed separately from the main block panel.
+`NavigationRecommendations.js` supports both the embedded block subsection and a standalone fallback shell, so the matrix marks shared pieces as partial where those variants intentionally diverge. Delegated block Inspector sub-panels now use passive `SuggestionChips` mirrors only, so they are summarized as one lightweight row rather than separate executable surfaces.
 
 | Surface                        | `RecommendationLane` | `RecommendationHero` | `AIAdvisorySection` | `AIReviewSection` | `AIActivitySection` | `SurfaceComposer` | `SurfacePanelIntro` | `SurfaceScopeBar` | `AIStatusNotice` | `CapabilityNotice` | Notes                                                                                |
 | ------------------------------ | -------------------- | -------------------- | ------------------- | ----------------- | ------------------- | ----------------- | ------------------- | ----------------- | ---------------- | ------------------ | ------------------------------------------------------------------------------------ |
 | Block inspector main panel     | Yes                  | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | One-click apply plus stale-result hero and embedded navigation subsection            |
-| Block inspector style subpanel | Yes                  | No                   | No                  | No                | No                  | No                | Yes                 | Yes (stale only)  | Yes              | No                 | Projection-only style rows and variation buttons plus shared apply-error notice      |
-| Pattern inserter affordance    | No                   | No                   | No                  | No                | No                  | No                | No                  | No                | No               | Yes                | Injected loading, empty, error, success, and setup notices only                      |
+| Block inspector passive subpanels | No                | No                   | No                  | No                | No                  | No                | No                  | No                | No               | No                 | Passive mirrored `SuggestionChips` only; no direct apply, stale refresh, or activity surface |
+| Navigation embedded / standalone | Partial            | Partial              | No                  | No                | No                  | Yes               | Partial             | Partial           | Yes              | Yes                | Advisory-only surface; standalone fallback uses scope/lane/hero, embedded flow uses lighter custom sections and stale banner |
+| Pattern inserter affordance    | No                   | No                   | No                  | No                | No                  | No                | No                  | No                | No               | Yes                | Injected local shelf plus loading, empty, error, and setup notices                   |
 | Template                       | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Preview-first structural surface                                                     |
 | Template-part                  | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Preview-first structural surface                                                     |
 | Style Book                     | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Portal-first Styles sidebar surface                                                  |
@@ -62,7 +65,8 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | Surface                        | Executable lane                                            | Advisory lane                           | Card or badge labels                                                                                  | Copy pattern                                           |
 | ------------------------------ | ---------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | Block inspector main panel     | `Apply now` with tone `Apply now` or `Stale`               | `Manual ideas` via `AIAdvisorySection`   | Hero uses `Apply now` or `Manual ideas`; advisory section now also shows `Advisory only`              | Clear direct-apply wording for local block attributes  |
-| Block inspector style subpanel | `Style Variations`, per-panel lanes, `Native Style Panels` | None                                    | Rows and delegated panel lane use `Apply now`                                                         | Direct apply beside native controls                    |
+| Block inspector passive subpanels | None                                                   | None                                    | Mirror labels come from the delegated chip group title only                                            | Context-only mirrors of the main block result          |
+| Navigation                     | None                                                       | `Recommended Next Changes` in the standalone shell; embedded sections keep the same manual tone without `AIAdvisorySection` | Category pills plus change counts; wrapper titles stay `Recommended Next Changes` / `Recommended next change` | Advisory-only navigation guidance in a lighter nested shell |
 | Pattern inserter               | None                                                       | None                                    | Summary and state notices use `Flavor Agent`, recommendation count pills, and retry text when needed  | Ranking affordance, not lane-based                     |
 | Template                       | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Preview-confirm flow with bounded advisory fallbacks   |
 | Template-part                  | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Best match for a true advisory-first structure surface |
@@ -74,14 +78,15 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 - The main recommendation surfaces now share the same three user-facing labels: `Apply now`, `Review first`, and `Manual ideas`.
 - The advisory badge policy is now standardized through `AIAdvisorySection`; full-panel advisory surfaces all show `Advisory only` unless a future surface has a documented reason to suppress it.
 - Navigation keeps `Recommended Next Changes` as its wrapper title, but that is now a documented embedded-surface exception rather than a second advisory taxonomy.
-- Block styles remains a projection-only embedded surface and still skips the full executable/manual split used by the larger panels.
+- Block settings and block styles no longer act as second apply surfaces. They are passive mirrors of the main block panel result.
 
 ## Review-Before-Apply Contract
 
 | Surface                        | Apply model                                         | Review model                                       | Confirm step           |
 | ------------------------------ | --------------------------------------------------- | -------------------------------------------------- | ---------------------- |
 | Block inspector main panel     | One-click apply for safe local block updates        | None                                               | No                     |
-| Block inspector style subpanel | One-click apply for style variations and style rows | None                                               | No                     |
+| Block inspector passive subpanels | No apply path                                   | None                                               | No                     |
+| Navigation                     | No apply path                                       | No preview/apply review contract; advisory follow-through only | No         |
 | Pattern inserter               | User inserts through core inserter UI               | Core pattern preview only                          | Core handles insertion |
 | Template                       | Select suggestion for review                        | Separate `AIReviewSection` renders below the lanes | Yes                    |
 | Template-part                  | Select suggestion for review                        | Separate `AIReviewSection` renders below the lanes | Yes                    |
@@ -90,7 +95,8 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 ### Practical Difference
 
-- The main Block panel and the lightweight block style subpanel are the only one-click apply surfaces. They apply immediately and use short-lived inline feedback beside the affected control.
+- The main Block panel is the only one-click apply block surface. Delegated native sub-panels now mirror the latest result but do not apply anything directly.
+- Navigation remains advisory-only. It owns its own request and stale-refresh shell, but it does not participate in the review-before-apply contract.
 - Template, Template-Part, Style Book, and Global Styles all preserve the review-before-apply contract and now present review with the same broad structure.
 - Those preview-first surfaces use a dedicated review panel below the lanes.
 - The active card stays visible as selected with `Review open`, while the shared lower panel owns confirm and cancel.
@@ -100,7 +106,8 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | Surface                        | Activity history | Undo model                                                                                        | Stale-result handling                                                                                                               |
 | ------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Block inspector main panel     | Yes              | Shared latest-valid tail undo; block snapshot must still match                                    | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
-| Block inspector style subpanel | No               | No surface-level undo                                                                             | Keeps stale results visible inside the projection surface, shows a stale scope bar, disables direct apply, and points refresh back to the main block `AI Recommendations` panel |
+| Block inspector passive subpanels | No            | No surface-level undo                                                                             | Mirrors the latest result passively; stale treatment stays on the main block panel rather than creating a second stale-management surface |
+| Navigation                     | No inline history; scoped audit rows only | No Flavor Agent undo                                                               | Keeps stale results visible, marks them stale, and offers refresh from the navigation surface                                       |
 | Pattern inserter               | No               | No Flavor Agent undo                                                                              | No stale UI                                                                                                                         |
 | Template                       | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
 | Template-part                  | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
@@ -115,6 +122,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 
 - Block, Navigation, Template, Template-Part, Style Book, and Global Styles now preserve the previous result, mark it stale, disable execution as needed, and offer refresh from the surface that owns the request lifecycle.
 - Block settings and block styles preserve stale projected results, but they intentionally do not own refresh. They disable apply and send the user back to the main block `AI Recommendations` panel to refresh the source request.
+- Navigation still exposes no inline activity section or undo affordance, though scoped read-only `request_diagnostic` rows now land in the admin audit surface.
 - Pattern still exposes no activity or undo affordance, which keeps it separate from the fuller recommendation surfaces even though its loading, empty, error, and success states are now explicit.
 
 ## Prompting And Composer Gaps
@@ -122,7 +130,9 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 | Surface                        | Starter prompts | Secondary helper text           | Submit hint | Scope bar |
 | ------------------------------ | --------------- | ------------------------------- | ----------- | --------- |
 | Block inspector main panel     | Yes             | Yes                             | Yes         | Yes       |
+| Block inspector settings subpanel | No          | Intro only                      | No          | Yes (stale only) |
 | Block inspector style subpanel | No              | Intro only                      | No          | Yes (stale only) |
+| Navigation                     | Yes             | Yes                             | No          | Partial: standalone scope bar, embedded stale banner |
 | Pattern inserter               | No              | No                              | No          | No        |
 | Template                       | Yes             | Yes                             | Yes         | Yes       |
 | Template-part                  | Yes             | Yes                             | Yes         | Yes       |
@@ -139,7 +149,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 
 - Block advisory suggestions now use `AIAdvisorySection`. The block panel remains a direct-apply exception only for executable local block updates.
 - Navigation keeps `Recommended Next Changes` as an embedded wrapper title, but the actual advisory taxonomy is the shared `Manual ideas` tone. Treat this as an intentional nested-surface exception, not drift.
-- The Settings and Styles tabs remain projection-only. They mirror safe local results from the main block request and intentionally do not own their own composer, refresh, capability notice, or activity history.
+- Delegated Settings and Styles sub-panels remain passive mirrors. They reflect safe local results from the main block request and intentionally do not own composer, refresh, capability, activity, or apply state.
 - Pattern recommendations remain ranking/browse-only and intentionally stay outside the lane/review/apply/undo contract.
 - Style Book and Global Styles remain portal-first Styles-sidebar surfaces with document-panel fallback; some mount-context divergence from inspector/document panels is expected and acceptable.
 

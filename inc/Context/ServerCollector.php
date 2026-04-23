@@ -20,6 +20,8 @@ final class ServerCollector {
 
 	private static ?PatternCatalog $pattern_catalog = null;
 
+	private static ?SyncedPatternRepository $synced_pattern_repository = null;
+
 	private static ?PatternCandidateSelector $pattern_candidate_selector = null;
 
 	private static ?TemplateRepository $template_repository = null;
@@ -44,8 +46,54 @@ final class ServerCollector {
 		return self::block_type_introspector()->resolve_inspector_panels( $supports );
 	}
 
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function for_registered_blocks(
+		?string $search = '',
+		?string $category = null,
+		?int $limit = null,
+		int $offset = 0,
+		bool $include_variations = false,
+		int $max_variations = 10
+	): array {
+		return self::block_type_introspector()->list_registered_blocks(
+			$search,
+			$category,
+			$limit,
+			$offset,
+			$include_variations,
+			$max_variations
+		);
+	}
+
+	public static function count_registered_blocks( ?string $search = '', ?string $category = null ): int {
+		return self::block_type_introspector()->count_registered_blocks( $search, $category );
+	}
+
 	public static function for_tokens(): array {
 		return self::theme_token_collector()->for_tokens();
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public static function for_active_theme(): array {
+		return self::theme_token_collector()->for_active_theme();
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public static function for_theme_presets(): array {
+		return self::theme_token_collector()->for_presets();
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public static function for_theme_styles(): array {
+		return self::theme_token_collector()->for_styles();
 	}
 
 	public static function for_block(
@@ -68,8 +116,75 @@ final class ServerCollector {
 		);
 	}
 
-	public static function for_patterns( ?array $categories = null, ?array $block_types = null, ?array $template_types = null ): array {
-		return self::pattern_catalog()->for_patterns( $categories, $block_types, $template_types );
+	public static function for_patterns(
+		?array $categories = null,
+		?array $block_types = null,
+		?array $template_types = null,
+		bool $include_content = true,
+		?int $limit = null,
+		int $offset = 0,
+		?string $search = null
+	): array {
+		return self::pattern_catalog()->for_patterns(
+			$categories,
+			$block_types,
+			$template_types,
+			$include_content,
+			$limit,
+			$offset,
+			$search
+		);
+	}
+
+	public static function count_patterns(
+		?array $categories = null,
+		?array $block_types = null,
+		?array $template_types = null,
+		?string $search = null
+	): int {
+		return self::pattern_catalog()->count_patterns(
+			$categories,
+			$block_types,
+			$template_types,
+			$search
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	public static function for_pattern( string $pattern_name ): ?array {
+		return self::pattern_catalog()->get_pattern( $pattern_name );
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function for_synced_patterns(
+		?string $sync_status = 'synced',
+		bool $include_content = false,
+		?int $limit = null,
+		int $offset = 0,
+		?string $search = null
+	): array {
+		return self::synced_pattern_repository()->for_patterns(
+			$sync_status,
+			$include_content,
+			$limit,
+			$offset,
+			$search
+		);
+	}
+
+	public static function count_synced_patterns( ?string $sync_status = 'synced', ?string $search = null ): int {
+		return self::synced_pattern_repository()->count_patterns( $sync_status, $search );
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	public static function for_synced_pattern( int $pattern_id ): ?array {
+		return self::synced_pattern_repository()->get_pattern( $pattern_id );
 	}
 
 	public static function for_template_parts( ?string $area = null, bool $include_content = true ): array {
@@ -133,6 +248,10 @@ final class ServerCollector {
 		return self::$pattern_catalog ??= new PatternCatalog(
 			self::pattern_override_analyzer()
 		);
+	}
+
+	private static function synced_pattern_repository(): SyncedPatternRepository {
+		return self::$synced_pattern_repository ??= new SyncedPatternRepository();
 	}
 
 	private static function pattern_candidate_selector(): PatternCandidateSelector {

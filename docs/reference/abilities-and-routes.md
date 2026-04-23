@@ -23,24 +23,38 @@ Use it when you need to answer:
 | `flavor-agent/recommend-block` | `edit_posts` | Meaningful output requires `ChatClient::is_supported()` | Block recommendation payload with `settings`, `styles`, `block`, and `explanation` | Block Inspector recommendations |
 | `flavor-agent/recommend-content` | `edit_posts` | Active provider chat configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and line-level rewrites | No direct first-party UI yet; programmatic scaffold for a future post-editor lane |
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/list-allowed-blocks` | `edit_posts` | None beyond capability | Site-wide registered block manifests plus `total`, with optional search, category, pagination, and variation controls; not filtered by current inserter context | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-patterns` | `edit_posts` | Active provider embeddings + chat, Qdrant configured, usable pattern index | Ranked registered patterns for the current editing context | Pattern inserter recommendations |
-| `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional filters | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional category, block-type, template-type, search, pagination, and `includeContent` controls, plus `total` | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/get-pattern` | `edit_posts` | None beyond capability | One registered block pattern by name; `patternId` is an alias for the returned string `id` | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/list-synced-patterns` | `edit_posts` | None beyond capability | `wp_block` pattern entities filtered by `syncStatus` (`synced`, `partial`, `unsynced`, or `all`), with optional search, pagination, `includeContent`, and `total` | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/get-synced-pattern` | `edit_posts` | None beyond capability | One `wp_block` pattern entity by numeric post ID | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-template` | `edit_theme_options` | Active provider chat configured | Template suggestions plus validated template-part operations and bounded pattern insertions with explicit placement and optional anchor metadata | Site Editor template panel |
 | `flavor-agent/recommend-template-part` | `edit_theme_options` | Active provider chat configured | Template-part suggestions, focus blocks, patterns, and validated bounded operations constrained by executable paths and anchors | Site Editor template-part panel |
 | `flavor-agent/recommend-style` | `edit_theme_options` | Active provider chat configured | Shared style suggestions for Global Styles and Style Book, constrained to validated `theme.json` paths, theme-backed values, and Global Styles-only theme variations | Site Editor Global Styles and Style Book panels |
-| `flavor-agent/list-template-parts` | `edit_theme_options` | None beyond capability | Registered template parts, optionally filtered by area | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/list-template-parts` | `edit_posts` for metadata, `edit_theme_options` for `includeContent: true` | None beyond capability | Registered template parts, optionally filtered by area, with optional content for theme-capable callers | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/recommend-navigation` | `edit_theme_options` | Active provider chat configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
 | `flavor-agent/search-wordpress-docs` | `manage_options` | Managed public docs backend available (legacy Cloudflare credentials optional) | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
+| `flavor-agent/get-active-theme` | `edit_posts` | None beyond capability | Active theme name, stylesheet, template, and version | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/get-theme-presets` | `edit_posts` | None beyond capability | Theme preset families from global settings: color, gradient, typography, spacing, shadow, and duotone | No direct first-party UI; helper and external-agent surface |
+| `flavor-agent/get-theme-styles` | `edit_posts` | None beyond capability | Applied global theme styles plus extracted element and pseudo-state summaries | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-theme-tokens` | `edit_posts` | None beyond capability | Theme token snapshot: colors, typography, spacing, layout, and related feature flags | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/check-status` | `edit_posts` | None beyond capability | Backend inventory, active model hint, and currently available ability list | Settings diagnostics and external-agent surface |
+| `flavor-agent/check-status` | `edit_posts` | None beyond capability | Backend inventory, active model hint, currently available ability list, and per-surface readiness map | Settings diagnostics and external-agent surface |
 
 ## Ability Notes
 
-- All thirteen abilities are registered in `inc/Abilities/Registration.php`
+- All twenty abilities are registered in `inc/Abilities/Registration.php`
 - On supported WordPress 7.0+ admin screens, core hydrates these server-registered abilities into the client-side abilities store
 - The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
 - `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
+- The `surfaces` map uses the keys `block`, `pattern`, `content`, `template`, `templatePart`, `navigation`, `globalStyles`, and `styleBook`. Each entry returns `available`, `reason`, `owner`, `actions`, `configurationLabel`, `configurationUrl`, `message`, and `advisoryOnly`.
+- `flavor-agent/get-pattern` resolves only by registered pattern name. The returned `id` is the same string as `name`, and `patternId` is a convenience alias for that same value.
+- `flavor-agent/list-patterns` supports `search`, `limit`, `offset`, and `includeContent`, returns `total`, and omits `content` by default.
+- `flavor-agent/list-synced-patterns` accepts `synced`, `partial`, `unsynced`, or `all`. It queries `wp_block` posts with `post_status = any`, so draft or private synced patterns can appear when the caller has access. It also supports `search`, `limit`, `offset`, and `includeContent`, returns `total`, and omits `content` by default.
+- `flavor-agent/list-allowed-blocks` returns the whole registered block registry rather than context-aware inserter results. It now also supports `search`, `category`, `limit`, `offset`, `includeVariations`, and `maxVariations`, returns `total`, and omits `variations` by default. `introspect-block` still returns up to 10 variations; `list-allowed-blocks` truncates only when `includeVariations` is enabled.
+- `flavor-agent/get-theme-styles` returns both raw `styles` and extracted summaries. `elementStyles.base`, `hover`, and `focus` are color-only objects, while `focusVisible` preserves the full `:focus-visible` object.
+- Helper permissions are intentionally asymmetric: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, and `get-theme-tokens` require `edit_posts`; `list-template-parts` now follows that same baseline for metadata reads but still requires `edit_theme_options` when `includeContent: true`; the theme-oriented recommendation surfaces remain `edit_theme_options` only.
 - The executable first-party editor surfaces (`block`, `template`, `template-part`, `global-styles`, and `style-book`) still compute a local request signature from the live context signature plus the composer prompt and scoped entity ref. That signature remains client-local and is not POSTed back to PHP.
 - The same five executable surfaces now also store a server `resolvedContextSignature` on normal responses. PHP computes that hash from the server-normalized apply context plus the sanitized prompt, so it still captures server-only context such as theme tokens, pattern candidates, and Style Book block-manifest details without making docs-cache churn part of freshness.
 - Template, template-part, Global Styles, Style Book, and advisory navigation responses also store a server `reviewContextSignature`. These review hashes cover docs-free server-owned context so background review freshness tracks real server drift without treating docs guidance churn as stale state.
@@ -71,6 +85,192 @@ Use it when you need to answer:
 - `GET /flavor-agent/v1/activity?global=1` is the only route that exposes the wp-admin audit feed. It is still intentionally a first audit slice rather than a full observability console: the response includes timeline entries, summary counts, pagination, and filter options, but not diff-oriented inspection or broader operator workflows.
 
 ## Example Contracts
+
+### Check-Status Response Shape
+
+```json
+{
+  "configured": true,
+  "model": "gpt-5.4-mini",
+  "availableAbilities": [
+    "flavor-agent/introspect-block",
+    "flavor-agent/get-theme-styles",
+    "flavor-agent/check-status"
+  ],
+  "surfaces": {
+    "block": {
+      "available": true,
+      "reason": "ready",
+      "owner": "plugin_or_core",
+      "actions": [],
+      "configurationLabel": "",
+      "configurationUrl": "",
+      "message": "Block recommendations are configured.",
+      "advisoryOnly": false
+    },
+    "navigation": {
+      "available": false,
+      "reason": "missing_theme_capability",
+      "owner": "plugin_or_core",
+      "actions": [],
+      "configurationLabel": "",
+      "configurationUrl": "",
+      "message": "Navigation recommendations require the edit_theme_options capability.",
+      "advisoryOnly": true
+    }
+  },
+  "backends": {
+    "openai_native": {
+      "configured": true,
+      "chatModel": "gpt-5.4-mini",
+      "embeddingModel": "text-embedding-3-small",
+      "credentialSource": "connector_database",
+      "connectorRegistered": true,
+      "connectorConfigured": true,
+      "connectorKeySource": "database"
+    }
+  }
+}
+```
+
+### List-Allowed-Blocks Response Shape
+
+```json
+{
+  "total": 237,
+  "blocks": [
+    {
+      "name": "core/group",
+      "title": "Group",
+      "category": "design",
+      "description": "Gather blocks in a container.",
+      "supports": {
+        "spacing": {
+          "padding": true
+        }
+      },
+      "inspectorPanels": {
+        "dimensions": ["minHeight"],
+        "general": ["tagName"]
+      },
+      "bindableAttributes": [],
+      "contentAttributes": {},
+      "configAttributes": {
+        "tagName": {
+          "type": "string",
+          "default": "div",
+          "role": "config"
+        }
+      },
+      "styles": [
+        {
+          "name": "default",
+          "label": "Default",
+          "isDefault": true
+        }
+      ],
+      "variations": [],
+      "supportsContentRole": false,
+      "parent": null,
+      "allowedBlocks": ["core/heading", "core/paragraph"],
+      "apiVersion": 3
+    }
+  ]
+}
+```
+
+This response is the full registered block registry sorted by title and then name. It is not filtered by the current inserter context. `total` reports the unpaginated match count. `variations` are omitted by default and truncate to the first `maxVariations` entries only when `includeVariations: true`.
+
+### List-Synced-Patterns Response Shape
+
+```json
+{
+  "total": 2,
+  "patterns": [
+    {
+      "id": 42,
+      "title": "Announcement Bar",
+      "slug": "announcement-bar",
+      "status": "draft",
+      "authorId": 1,
+      "dateGmt": "2026-04-23 13:40:18",
+      "modifiedGmt": "2026-04-23 13:52:09",
+      "syncStatus": "partial",
+      "wpPatternSyncStatus": "partial"
+    }
+  ]
+}
+```
+
+The request-side `syncStatus` filter accepts `synced`, `partial`, `unsynced`, or `all`. The list response omits `content` by default, returns `total`, and the underlying query uses `post_status = any`.
+
+### Theme Styles Response Shape
+
+```json
+{
+  "styles": {
+    "elements": {
+      "link": {
+        "color": {
+          "text": "var(--wp--preset--color--contrast)"
+        },
+        ":hover": {
+          "color": {
+            "text": "var(--wp--preset--color--accent)"
+          }
+        },
+        ":focus-visible": {
+          "color": {
+            "text": "var(--wp--preset--color--accent)"
+          },
+          "outline": {
+            "color": "var(--wp--preset--color--accent)",
+            "style": "solid",
+            "width": "2px"
+          }
+        }
+      }
+    }
+  },
+  "elementStyles": {
+    "link": {
+      "base": {
+        "text": "var(--wp--preset--color--contrast)"
+      },
+      "hover": {
+        "text": "var(--wp--preset--color--accent)"
+      },
+      "focus": {},
+      "focusVisible": {
+        "color": {
+          "text": "var(--wp--preset--color--accent)"
+        },
+        "outline": {
+          "color": "var(--wp--preset--color--accent)",
+          "style": "solid",
+          "width": "2px"
+        }
+      }
+    }
+  },
+  "blockPseudoStyles": {
+    "core/button": {
+      ":hover": {
+        "color": {
+          "background": "var(--wp--preset--color--accent)"
+        }
+      }
+    }
+  },
+  "diagnostics": {
+    "source": "server",
+    "settingsKey": "wp_get_global_settings",
+    "reason": "server-global-settings"
+  }
+}
+```
+
+`elementStyles.base`, `hover`, and `focus` expose only color maps. `focusVisible` preserves the full `:focus-visible` pseudo-state object.
 
 ### Block Recommendation REST Request
 

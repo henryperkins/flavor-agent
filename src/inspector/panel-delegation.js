@@ -3,9 +3,8 @@
  *
  * Panels listed here are rendered as SuggestionChips inside their
  * dedicated InspectorControls groups (SubPanelSuggestions in
- * InspectorInjector.js). The main StylesRecommendations and
- * SettingsRecommendations panels must exclude these to prevent
- * duplicate rendering.
+ * InspectorInjector.js). These chips are passive mirrors of the
+ * main block panel's executable results.
  *
  * Keep in sync with the SubPanelSuggestions list in InspectorInjector.js.
  */
@@ -14,7 +13,7 @@
  * Shared delegated Inspector panel metadata.
  *
  * The injector renders these as sub-panel chip groups while the main
- * recommendation panels exclude them to avoid duplicate rendering.
+ * block recommendation panel owns all executable apply actions.
  */
 export const STYLE_PANEL_DELEGATIONS = [
 	{

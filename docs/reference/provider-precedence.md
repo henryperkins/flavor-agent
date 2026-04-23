@@ -6,7 +6,7 @@ Use it when you need to answer:
 
 - which backend will serve a recommendation
 - what credential sources are checked and in what order
-- when the WordPress AI Client fallback activates
+- when the Connectors-first runtime activates
 
 ## Provider Selection
 
@@ -20,19 +20,20 @@ The `flavor_agent_openai_provider` option selects the active provider. Valid val
 
 If the option is missing or invalid, the provider defaults to `azure_openai`. The settings UI only lists connector-backed providers when they are currently usable for text generation, but the stored option may still retain a registered connector ID that later becomes unavailable.
 
-## Chat Fallback Chain
+## Chat Runtime Chain
 
 `ChatClient::chat()` is the only entry point for block recommendations.
 
-1. Flavor Agent first tries the selected provider from `flavor_agent_openai_provider`.
-2. If that selected provider is configured, requests run through `ResponsesClient::rank()`, which delegates connector-backed providers to `wp_ai_client_prompt()->using_provider( $provider_id )` and direct providers to the configured Responses API endpoint.
-3. If the selected provider is not configured, Flavor Agent tries the other direct provider (`azure_openai` or `openai_native`) before using the generic WordPress AI Client fallback.
-4. Only when no direct provider is configured does block chat fall back to the generic WordPress AI Client path (`WordPressAIClient::is_supported()`) with the synthetic `wordpress_ai_client` runtime provider.
-5. If the WordPress AI Client is also not supported, `runtime_chat_configuration()` returns the unconfigured selected provider config (`configured: false`). At this point `ChatClient::is_supported()` returns `false` and the `recommend-block` ability gate prevents requests from reaching the unconfigured provider.
+1. Flavor Agent reads the selected provider from `flavor_agent_openai_provider`.
+2. If that selected provider is a configured connector-backed provider, requests run through `wp_ai_client_prompt()->using_provider( $provider_id )`.
+3. Otherwise, if the generic WordPress AI Client path is available, Flavor Agent uses that Connectors-backed runtime first and reports the synthetic `wordpress_ai_client` runtime provider.
+4. Only when no Connectors-backed runtime is available does Flavor Agent use a configured direct provider from its own settings (`azure_openai` or `openai_native`).
+5. If the selected direct provider is not configured, Flavor Agent tries the other direct provider before returning the unconfigured selected provider config (`configured: false`).
+6. When no chat runtime is configured anywhere, `ChatClient::is_supported()` returns `false` and the `recommend-block` ability gate prevents requests from reaching the unconfigured provider.
 
 `ChatClient::is_supported()` returns `true` if either tier is available. This is the gate for the `flavor-agent/recommend-block` ability.
 
-Template, template-part, navigation, Global Styles, and Style Book recommendations also use the selected provider. When the selected provider is connector-backed, `ResponsesClient::rank()` delegates to `wp_ai_client_prompt()->using_provider( $provider_id )`. Pattern recommendations remain direct-backend only because Flavor Agent still owns embedding generation and Qdrant indexing itself.
+Template, template-part, navigation, Global Styles, and Style Book recommendations use the same runtime chat chain. Pattern recommendations still require a direct embeddings backend because Flavor Agent continues to own embedding generation and Qdrant indexing itself.
 
 ## Azure OpenAI Configuration
 
@@ -80,11 +81,13 @@ Connector-backed providers do not use the plugin's direct endpoint settings. Fla
 - the active chat model is reported as `provider-managed`
 - embedding generation remains unavailable, so pattern recommendations still require `azure_openai` or `openai_native`
 
+When no specific connector-backed provider is selected, Flavor Agent can still use the generic WordPress AI Client runtime whenever `WordPressAIClient::is_supported()` returns `true`.
+
 ## Backend-to-Surface Map
 
 | Surface | Chat required | Embeddings required | Qdrant required | Cloudflare AI Search required |
 |---|---|---|---|---|
-| Block recommendations | Yes (ChatClient, with WP AI Client fallback) | No | No | No |
+| Block recommendations | Yes (ChatClient, Connectors-first) | No | No | No |
 | Pattern recommendations | Yes | Yes | Yes | No |
 | Template recommendations | Yes | No | No | No |
 | Template-part recommendations | Yes | No | No | No |

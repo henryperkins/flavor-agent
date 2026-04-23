@@ -86,8 +86,8 @@ SYSTEM;
 	}
 
 	public static function build_user( array $context, string $prompt = '', array $docs_guidance = [] ): string {
-		$max_tokens         = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'style' );
-		$budget             = new PromptBudget( $max_tokens );
+		$max_tokens          = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'style' );
+		$budget              = new PromptBudget( $max_tokens );
 		$scope               = is_array( $context['scope'] ?? null ) ? $context['scope'] : [];
 		$style_context       = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
 		$theme_tokens        = is_array( $style_context['themeTokens'] ?? null ) ? $style_context['themeTokens'] : [];
@@ -99,7 +99,7 @@ SYSTEM;
 		$template_visibility = is_array( $style_context['templateVisibility'] ?? null ) ? $style_context['templateVisibility'] : [];
 		$surface             = sanitize_key( (string) ( $scope['surface'] ?? 'global-styles' ) );
 
-		$scope_lines   = [
+		$scope_lines = [
 			'## Scope',
 			'Surface: ' . ( $surface !== '' ? $surface : 'global-styles' ),
 			'Scope key: ' . (string) ( $scope['scopeKey'] ?? '' ),
@@ -342,7 +342,8 @@ Input context:
 
 Expected response:
 {"suggestions":[{"label":"Use the Midnight variation","description":"Switch to the darker preset variation before adding custom overrides.","category":"variation","tone":"executable","operations":[{"type":"set_theme_variation","variationIndex":1,"variationTitle":"Midnight"}]}],"explanation":"Prefer a theme-provided variation when it already matches the requested mood."}
-EXAMPLE,
+EXAMPLE
+			,
 			<<<'EXAMPLE'
 ## Example - style book text emphasis
 
@@ -354,7 +355,8 @@ Input context:
 
 Expected response:
 {"suggestions":[{"label":"Use the accent text preset","description":"Apply the theme accent color to the paragraph text for a stronger emphasis cue.","category":"color","tone":"executable","operations":[{"type":"set_block_styles","blockName":"core/paragraph","path":["color","text"],"value":"var:preset|color|accent","valueType":"preset","presetType":"color","presetSlug":"accent","cssVar":"var(--wp--preset--color--accent)"}]}],"explanation":"Keep the change inside supported block style paths and theme presets."}
-EXAMPLE,
+EXAMPLE
+			,
 		];
 	}
 

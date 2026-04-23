@@ -16,7 +16,7 @@ It currently has seven primary editor experiences:
 
 It also ships the AI Activity admin audit surface in wp-admin and a programmatic content-lane scaffold with no first-party post-editor UI yet.
 
-There is no separate approval sidebar in the current codebase. The seven surfaces intentionally split into three interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and the block Styles tab is projection-only rather than a standalone request surface. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data.
+There is no separate approval sidebar in the current codebase. The seven surfaces intentionally split into three interaction models: direct apply for safe local block updates, review-before-apply for template/template-part/Global Styles/Style Book, and ranking/browse-only for patterns. Navigation is an advisory-only nested subsection inside block recommendations, and delegated block Inspector sub-panels now act only as passive mirrors of the main block result rather than standalone request/apply surfaces. Block, template, template-part, Global Styles, and Style Book applies write activity entries with inline undo; the current UX is still editor-scoped even though persistence now flows through the shared server-backed activity backend, with `sessionStorage` retained only as an editor cache/fallback. The admin AI Activity screen in wp-admin reads the same server-backed activity data.
 
 ## Current Architecture
 
@@ -54,8 +54,8 @@ flavor-agent/
 │   ├── admin/                    # Settings-screen sync button script
 │   ├── components/               # Shared activity history/session bootstrap UI
 │   ├── context/                  # Editor-side block and theme collectors
-│   ├── inspector/                # InspectorControls injection and recommendation UI
-│   ├── patterns/                 # Inserter recommendation patching, badge, and compat adapter
+│   ├── inspector/                # InspectorControls injection, main block panel, and passive native sub-panel mirrors
+│   ├── patterns/                 # Inserter recommendation shelf, badge, and compat adapter
 │   ├── store/                    # @wordpress/data store, undo state, and persistence
 │   ├── templates/                # Site Editor template recommender + preview/apply helpers
 │   ├── template-parts/           # Site Editor template-part recommender
@@ -83,7 +83,7 @@ The request includes:
 
 The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
 
-This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. The Styles tab is only a projection of the current block request, and selected `core/navigation` blocks add a nested advisory-only `Recommended Next Changes` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
+This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. Delegated native Inspector sub-panels now mirror the current settings/style result passively instead of acting as separate apply surfaces, and selected `core/navigation` blocks add a nested advisory-only `Recommended Next Changes` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
 
 ### Pattern Recommendations
 
@@ -93,7 +93,7 @@ The client behavior is:
 
 - Passive fetch on editor load when the active provider plus Qdrant are configured.
 - Search-triggered refresh when the inserter search box changes.
-- Native pattern patching through `src/patterns/compat.js`, which probes future stable `blockPatterns` / `blockPatternCategories` keys for forward compatibility but currently lands on `__experimentalAdditional*` or `__experimental*` settings on Gutenberg trunk / WordPress 7.0.
+- A local inserter shelf that only renders ranked patterns currently exposed by Gutenberg's allowed-pattern selector for the active insertion root.
 - A toolbar badge that shows recommendation count, loading state, or error state next to the inserter toggle.
 
 The server behavior is:
@@ -106,7 +106,7 @@ The server behavior is:
 
 `visiblePatternNames` is now derived from the active inserter root, so nested insertion contexts only receive patterns WordPress already allows in that specific surface.
 
-This surface is intentionally ranking/browse-only. Flavor Agent reports loading, empty, error, and count state inside the inserter, but the user still inserts patterns through core UI and there is no Flavor Agent review/apply/undo contract here.
+This surface is intentionally ranking/browse-only. Flavor Agent reports loading, empty, error, count, and local-shelf state inside the inserter, but it does not create its own review/apply/undo contract for patterns.
 
 ### Template Recommendations
 
@@ -177,7 +177,8 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-When chat credentials are configured on that screen, Flavor Agent uses the selected provider for pattern, template, template-part, Global Styles, Style Book, and navigation recommendations. If not, block recommendations still fall back to the core `Settings > Connectors` screen through the WordPress AI Client path.
+Flavor Agent now resolves chat through a Connectors-first runtime. If a selected connector-backed provider is available, it is used directly through the WordPress AI Client. Otherwise Flavor Agent prefers the generic `Settings > Connectors` text-generation path before falling back to direct Azure OpenAI or OpenAI Native settings saved on this screen.
+The Azure OpenAI and OpenAI Native chat fields remain available as legacy direct fallback for chat, and the embeddings fields remain plugin-owned for pattern sync.
 When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for block/pattern/template/template-part/Global Styles/Style Book/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
 
 Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
@@ -196,7 +197,7 @@ Configured options:
 - `flavor_agent_qdrant_key`
 - `flavor_agent_cloudflare_ai_search_max_results`
 
-`flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native chat and embedding model IDs in its own settings either way.
+`flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native chat and embedding model IDs in its own settings either way, but chat uses the Connectors-first runtime whenever that shared path is available.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
 

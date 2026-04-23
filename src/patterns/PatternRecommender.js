@@ -1,11 +1,10 @@
 /**
  * Pattern Recommender
  *
- * Fetches AI-ranked pattern recommendations and patches the native
- * block inserter's pattern data so recommended patterns appear in
- * a "Recommended" category with contextual descriptions.
- * This surface intentionally stays ranking/browse-only and does not
- * participate in the apply/review/undo recommendation model.
+ * Fetches AI-ranked pattern recommendations and renders them as a
+ * Flavor Agent-owned shelf inside the inserter. This surface stays
+ * browse-only from Gutenberg's perspective: it does not rewrite the
+ * native pattern registry or category metadata.
  *
  * Two modes:
  * - Passive: fetches on editor load using postType
@@ -17,75 +16,36 @@
  * degradation stays isolated from the settings compatibility path.
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
+import { cloneBlock, createBlock, parse } from '@wordpress/blocks';
 import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import {
+	createPortal,
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
-	createPortal,
 } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
+import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
-import { formatCount } from '../utils/format-count';
-import {
-	getBlockPatternCategories,
-	getBlockPatterns,
-	setBlockPatternCategories,
-	setBlockPatterns,
-} from './pattern-settings';
-import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
-import {
-	patchPatternCategoryRegistry,
-	patchPatternMetadata,
-} from './recommendation-utils';
 import { STORE_NAME } from '../store';
+import { formatCount } from '../utils/format-count';
 import { getSurfaceCapability } from '../utils/capability-flags';
-import { usePostTypeEntityContract } from '../utils/editor-entity-contracts';
 import {
 	getTemplatePartAreaLookup,
 	inferTemplatePartArea,
 } from '../utils/template-part-areas';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
+import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
+import { getAllowedPatterns } from './pattern-settings';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const OBSERVER_TIMEOUT_MS = 3000;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
-
-function getRegistryVersion( entries, prefix, includeLabel = false ) {
-	if ( ! Array.isArray( entries ) ) {
-		return `${ prefix }:none`;
-	}
-
-	return `${ prefix }:${ entries
-		.map( ( entry, index ) => {
-			const name =
-				typeof entry?.name === 'string' && entry.name
-					? entry.name
-					: `index-${ index }`;
-
-			if ( ! includeLabel ) {
-				return name;
-			}
-
-			const label = typeof entry?.label === 'string' ? entry.label : '';
-
-			return `${ name }:${ label }`;
-		} )
-		.join( '|' ) }`;
-}
-
-function createPatchState() {
-	return {
-		originalMetadata: new Map(),
-		categoryOwnership: {
-			injectedCategories: new Set(),
-			registry: null,
-		},
-	};
-}
 
 function getNonEmptyString( value ) {
 	return typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
@@ -156,78 +116,131 @@ function buildInsertionContext( editor, inserterRootClientId, insertionPoint ) {
 	};
 }
 
-/**
- * Read-modify-write on block patterns via compatibility adapter.
- *
- * @param {Array}  recommendations     Current recommendation set.
- * @param {string} recommendedCategory Recommended category slug.
- * @param {Object} patchState          Surface-local rollback state.
- *
- * @return {void}
- */
-function patchInserterPatterns(
-	recommendations,
-	recommendedCategory,
-	patchState
-) {
-	const patterns = getBlockPatterns();
-
-	if ( patterns.length === 0 ) {
-		return;
-	}
-
-	const categories = getBlockPatternCategories();
-	const patched = patchPatternMetadata(
-		patterns,
-		recommendations,
-		patchState.originalMetadata,
-		recommendedCategory
-	);
-
-	setBlockPatterns( patched );
-	setBlockPatternCategories(
-		patchPatternCategoryRegistry(
-			categories,
-			recommendations,
-			patchState.categoryOwnership,
-			recommendedCategory
-		)
-	);
+function getPatternTitle( pattern ) {
+	return getNonEmptyString( pattern?.title ) || pattern?.name || 'Pattern';
 }
 
-function PatternSummary( { count } ) {
+function resolvePatternBlocks( pattern ) {
+	if (
+		pattern?.type === 'user' &&
+		pattern?.syncStatus !== 'unsynced' &&
+		pattern?.id
+	) {
+		return [ createBlock( 'core/block', { ref: pattern.id } ) ];
+	}
+
+	if ( Array.isArray( pattern?.blocks ) && pattern.blocks.length > 0 ) {
+		return pattern.blocks;
+	}
+
+	if ( typeof pattern?.content === 'string' && pattern.content.trim() ) {
+		try {
+			return parse( pattern.content );
+		} catch ( error ) {
+			return [];
+		}
+	}
+
+	return [];
+}
+
+function buildRecommendedPatterns( recommendations, allowedPatterns ) {
+	if (
+		! Array.isArray( recommendations ) ||
+		! Array.isArray( allowedPatterns )
+	) {
+		return [];
+	}
+
+	const allowedByName = new Map(
+		allowedPatterns
+			.filter(
+				( pattern ) => typeof pattern?.name === 'string' && pattern.name
+			)
+			.map( ( pattern ) => [ pattern.name, pattern ] )
+	);
+
+	return recommendations
+		.map( ( recommendation ) => {
+			const pattern = allowedByName.get( recommendation?.name );
+
+			if ( ! pattern ) {
+				return null;
+			}
+
+			return {
+				pattern,
+				recommendation,
+			};
+		} )
+		.filter( Boolean );
+}
+
+function PatternShelf( { items, onInsert } ) {
 	return (
 		<div
-			className="flavor-agent-pattern-summary"
+			className="flavor-agent-pattern-summary flavor-agent-pattern-shelf"
 			role="status"
 			aria-live="polite"
 		>
 			<div className="flavor-agent-pattern-summary__header">
 				<span className="flavor-agent-pill">Flavor Agent</span>
 				<span className="flavor-agent-pill">
-					{ formatCount( count, 'recommendation' ) }
+					{ formatCount( items.length, 'recommendation' ) }
 				</span>
 			</div>
 			<p className="flavor-agent-pattern-summary__copy">
-				Recommended now includes{ ' ' }
-				{ formatCount( count, 'AI-ranked pattern' ) } for this insertion
-				point.
+				AI-ranked patterns stay local to this shelf. Gutenberg&apos;s
+				native pattern registry stays unchanged.
 			</p>
+			<div className="flavor-agent-pattern-shelf__items">
+				{ items.map( ( { pattern, recommendation } ) => (
+					<div
+						key={ pattern.name }
+						className="flavor-agent-pattern-shelf__item"
+					>
+						<div className="flavor-agent-pattern-shelf__body">
+							<div className="flavor-agent-pattern-shelf__title">
+								{ getPatternTitle( pattern ) }
+							</div>
+							{ recommendation?.reason && (
+								<p className="flavor-agent-pattern-shelf__reason">
+									{ recommendation.reason }
+								</p>
+							) }
+						</div>
+						<Button
+							variant="secondary"
+							size="small"
+							onClick={ () => onInsert( pattern ) }
+						>
+							Insert
+						</Button>
+					</div>
+				) ) }
+			</div>
 		</div>
 	);
 }
 
-function PatternInserterNotice( { status, error = '', onRetry } ) {
-	let message = 'Preparing pattern recommendations for this insertion point.';
+function PatternInserterNotice( {
+	status,
+	error = '',
+	message = '',
+	onRetry,
+} ) {
+	let resolvedMessage =
+		message ||
+		'Preparing pattern recommendations for this insertion point.';
 
 	if ( status === 'loading' ) {
-		message = 'Ranking patterns for this insertion point.';
+		resolvedMessage = 'Ranking patterns for this insertion point.';
 	} else if ( status === 'error' ) {
-		message =
+		resolvedMessage =
 			error ||
 			'Pattern recommendation request failed for this insertion point.';
-	} else if ( status === 'empty' ) {
-		message =
+	} else if ( status === 'empty' && ! message ) {
+		resolvedMessage =
 			'Flavor Agent did not find a strong pattern match for this insertion point yet.';
 	}
 
@@ -246,7 +259,9 @@ function PatternInserterNotice( { status, error = '', onRetry } ) {
 					<span className="flavor-agent-pill">Ranking failed</span>
 				) }
 			</div>
-			<p className="flavor-agent-pattern-summary__copy">{ message }</p>
+			<p className="flavor-agent-pattern-summary__copy">
+				{ resolvedMessage }
+			</p>
 			{ status === 'error' && typeof onRetry === 'function' && (
 				<Button
 					variant="link"
@@ -283,7 +298,6 @@ export default function PatternRecommender() {
 
 		return normalizeTemplateType( editSite.getEditedPostId() );
 	}, [] );
-	const patternContract = usePostTypeEntityContract( 'wp_block' );
 	const selectedBlockName = useSelect( ( select ) => {
 		const clientId = select( blockEditorStore ).getSelectedBlockClientId();
 
@@ -293,20 +307,20 @@ export default function PatternRecommender() {
 
 		return select( blockEditorStore ).getBlockName( clientId );
 	}, [] );
-	const inserterRootClientId = useSelect( ( select ) => {
-		return (
-			select( blockEditorStore ).getBlockInsertionPoint?.()
-				?.rootClientId ?? null
-		);
-	}, [] );
+	const insertionPoint = useSelect(
+		( select ) =>
+			select( blockEditorStore ).getBlockInsertionPoint?.() || null,
+		[]
+	);
+	const inserterRootClientId = insertionPoint?.rootClientId ?? null;
+	const insertionIndex = insertionPoint?.index;
 	const insertionContext = useSelect(
 		( select ) => {
-			const editor = select( blockEditorStore );
-			const insertionPoint = editor.getBlockInsertionPoint?.();
-
 			if ( ! insertionPoint ) {
 				return null;
 			}
+
+			const editor = select( blockEditorStore );
 
 			return buildInsertionContext(
 				editor,
@@ -314,7 +328,7 @@ export default function PatternRecommender() {
 				insertionPoint
 			);
 		},
-		[ inserterRootClientId ]
+		[ inserterRootClientId, insertionPoint ]
 	);
 	const visiblePatternNames = useSelect(
 		( select ) => {
@@ -325,62 +339,15 @@ export default function PatternRecommender() {
 		},
 		[ inserterRootClientId ]
 	);
-	const patternRegistryVersion = useSelect( ( select ) => {
-		const settings = select( blockEditorStore ).getSettings?.() || {};
-
-		if ( Array.isArray( settings.blockPatterns ) ) {
-			return getRegistryVersion( settings.blockPatterns, 'stable' );
-		}
-
-		if ( Array.isArray( settings.__experimentalAdditionalBlockPatterns ) ) {
-			return getRegistryVersion(
-				settings.__experimentalAdditionalBlockPatterns,
-				'experimental-additional'
+	const allowedPatterns = useSelect(
+		( select ) => {
+			return getAllowedPatterns(
+				inserterRootClientId,
+				select( blockEditorStore )
 			);
-		}
-
-		if ( Array.isArray( settings.__experimentalBlockPatterns ) ) {
-			return getRegistryVersion(
-				settings.__experimentalBlockPatterns,
-				'experimental'
-			);
-		}
-
-		return 'none:0';
-	}, [] );
-	const categoryRegistryVersion = useSelect( ( select ) => {
-		const settings = select( blockEditorStore ).getSettings?.() || {};
-
-		if ( Array.isArray( settings.blockPatternCategories ) ) {
-			return getRegistryVersion(
-				settings.blockPatternCategories,
-				'stable',
-				true
-			);
-		}
-
-		if (
-			Array.isArray(
-				settings.__experimentalAdditionalBlockPatternCategories
-			)
-		) {
-			return getRegistryVersion(
-				settings.__experimentalAdditionalBlockPatternCategories,
-				'experimental-additional',
-				true
-			);
-		}
-
-		if ( Array.isArray( settings.__experimentalBlockPatternCategories ) ) {
-			return getRegistryVersion(
-				settings.__experimentalBlockPatternCategories,
-				'experimental',
-				true
-			);
-		}
-
-		return 'none:0';
-	}, [] );
+		},
+		[ inserterRootClientId ]
+	);
 	const { patternError, patternStatus, recommendations } = useSelect(
 		( select ) => {
 			const store = select( STORE_NAME );
@@ -394,7 +361,8 @@ export default function PatternRecommender() {
 		[]
 	);
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
-	const patchStateRef = useRef( createPatchState() );
+	const { insertBlocks } = useDispatch( blockEditorStore );
+	const { createSuccessNotice } = useDispatch( noticesStore );
 	const observerRef = useRef( null );
 	const listenerRef = useRef( null );
 	const debounceRef = useRef( null );
@@ -414,6 +382,10 @@ export default function PatternRecommender() {
 			patternStatus === 'error' ||
 			patternStatus === 'ready' ||
 			patternStatus === 'idle' );
+	const recommendedPatterns = useMemo(
+		() => buildRecommendedPatterns( recommendations, allowedPatterns ),
+		[ allowedPatterns, recommendations ]
+	);
 
 	const buildBaseInput = useCallback( () => {
 		const input = {
@@ -463,6 +435,40 @@ export default function PatternRecommender() {
 		fetchPatternRecommendations,
 	] );
 
+	const handleInsertPattern = useCallback(
+		( pattern ) => {
+			const blocks = resolvePatternBlocks( pattern );
+
+			if ( blocks.length === 0 ) {
+				return;
+			}
+
+			insertBlocks(
+				blocks.map( ( block ) => cloneBlock( block ) ),
+				insertionIndex,
+				inserterRootClientId,
+				false
+			);
+			createSuccessNotice(
+				sprintf(
+					/* translators: %s: block pattern title. */
+					__( 'Block pattern "%s" inserted.' ),
+					getPatternTitle( pattern )
+				),
+				{
+					type: 'snackbar',
+					id: 'inserter-notice',
+				}
+			);
+		},
+		[
+			createSuccessNotice,
+			insertBlocks,
+			insertionIndex,
+			inserterRootClientId,
+		]
+	);
+
 	useEffect( () => {
 		if ( ! canRecommend || ! postType ) {
 			return;
@@ -474,19 +480,6 @@ export default function PatternRecommender() {
 		postType,
 		buildBaseInput,
 		fetchPatternRecommendations,
-	] );
-
-	useEffect( () => {
-		patchInserterPatterns(
-			recommendations,
-			patternContract.recommendedPatternCategory,
-			patchStateRef.current
-		);
-	}, [
-		recommendations,
-		patternRegistryVersion,
-		categoryRegistryVersion,
-		patternContract.recommendedPatternCategory,
 	] );
 
 	useEffect( () => {
@@ -684,8 +677,16 @@ export default function PatternRecommender() {
 
 		if ( ! canRecommend ) {
 			notice = <CapabilityNotice surface="pattern" />;
-		} else if ( patternStatus === 'ready' && recommendations.length > 0 ) {
-			notice = <PatternSummary count={ recommendations.length } />;
+		} else if (
+			patternStatus === 'ready' &&
+			recommendedPatterns.length > 0
+		) {
+			notice = (
+				<PatternShelf
+					items={ recommendedPatterns }
+					onInsert={ handleInsertPattern }
+				/>
+			);
 		} else if ( patternStatus === 'error' ) {
 			notice = (
 				<PatternInserterNotice
@@ -695,7 +696,17 @@ export default function PatternRecommender() {
 				/>
 			);
 		} else if ( patternStatus === 'ready' ) {
-			notice = <PatternInserterNotice status="empty" />;
+			notice = (
+				<PatternInserterNotice
+					status="empty"
+					message={
+						Array.isArray( recommendations ) &&
+						recommendations.length > 0
+							? 'Flavor Agent found ranked patterns, but Gutenberg is not currently exposing those patterns for this insertion point.'
+							: ''
+					}
+				/>
+			);
 		} else {
 			notice = <PatternInserterNotice status="loading" />;
 		}

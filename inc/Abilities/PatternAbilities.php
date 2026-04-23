@@ -42,14 +42,113 @@ final class PatternAbilities {
 	private const MAX_LLM_CONTENT_PREVIEW_CHARS          = 240;
 
 	public static function list_patterns( mixed $input ): array {
-		$input          = self::normalize_input( $input );
-		$categories     = $input['categories'] ?? null;
-		$block_types    = $input['blockTypes'] ?? null;
-		$template_types = $input['templateTypes'] ?? null;
+		$input           = self::normalize_input( $input );
+		$categories      = $input['categories'] ?? null;
+		$block_types     = $input['blockTypes'] ?? null;
+		$template_types  = $input['templateTypes'] ?? null;
+		$include_content = filter_var(
+			$input['includeContent'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
+		$limit           = self::normalize_non_negative_int( $input['limit'] ?? null );
+		$offset          = self::normalize_non_negative_int( $input['offset'] ?? null ) ?? 0;
+		$search          = isset( $input['search'] ) && is_string( $input['search'] )
+			? sanitize_text_field( $input['search'] )
+			: null;
 
 		return [
-			'patterns' => ServerCollector::for_patterns( $categories, $block_types, $template_types ),
+			'patterns' => ServerCollector::for_patterns(
+				$categories,
+				$block_types,
+				$template_types,
+				$include_content,
+				$limit,
+				$offset,
+				$search
+			),
+			'total'    => ServerCollector::count_patterns(
+				$categories,
+				$block_types,
+				$template_types,
+				$search
+			),
 		];
+	}
+
+	public static function get_pattern( mixed $input ): array|\WP_Error {
+		$input      = self::normalize_input( $input );
+		$pattern_id = isset( $input['patternId'] )
+			? sanitize_text_field( (string) $input['patternId'] )
+			: sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+
+		if ( '' === $pattern_id ) {
+			return new \WP_Error( 'missing_pattern_id', 'patternId is required.', [ 'status' => 400 ] );
+		}
+
+		$pattern = ServerCollector::for_pattern( $pattern_id );
+
+		if ( ! is_array( $pattern ) ) {
+			return new \WP_Error( 'pattern_not_found', "Pattern '{$pattern_id}' is not registered.", [ 'status' => 404 ] );
+		}
+
+		return $pattern;
+	}
+
+	public static function list_synced_patterns( mixed $input ): array {
+		$input           = self::normalize_input( $input );
+		$sync_status     = isset( $input['syncStatus'] ) && is_string( $input['syncStatus'] )
+			? sanitize_key( $input['syncStatus'] )
+			: 'synced';
+		$include_content = filter_var(
+			$input['includeContent'] ?? false,
+			FILTER_VALIDATE_BOOLEAN
+		);
+		$limit           = self::normalize_non_negative_int( $input['limit'] ?? null );
+		$offset          = self::normalize_non_negative_int( $input['offset'] ?? null ) ?? 0;
+		$search          = isset( $input['search'] ) && is_string( $input['search'] )
+			? sanitize_text_field( $input['search'] )
+			: null;
+
+		return [
+			'patterns' => ServerCollector::for_synced_patterns(
+				$sync_status,
+				$include_content,
+				$limit,
+				$offset,
+				$search
+			),
+			'total'    => ServerCollector::count_synced_patterns( $sync_status, $search ),
+		];
+	}
+
+	public static function get_synced_pattern( mixed $input ): array|\WP_Error {
+		$input      = self::normalize_input( $input );
+		$pattern_id = absint( $input['patternId'] ?? ( $input['id'] ?? 0 ) );
+
+		if ( $pattern_id <= 0 ) {
+			return new \WP_Error( 'missing_pattern_id', 'patternId is required.', [ 'status' => 400 ] );
+		}
+
+		$pattern = ServerCollector::for_synced_pattern( $pattern_id );
+
+		if ( ! is_array( $pattern ) ) {
+			return new \WP_Error( 'pattern_not_found', "Synced pattern '{$pattern_id}' was not found.", [ 'status' => 404 ] );
+		}
+
+		return $pattern;
+	}
+
+	private static function normalize_non_negative_int( mixed $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value >= 0 ? $value : null;
+		}
+
+		if ( is_numeric( $value ) ) {
+			$normalized = (int) $value;
+			return $normalized >= 0 ? $normalized : null;
+		}
+
+		return null;
 	}
 
 	/**

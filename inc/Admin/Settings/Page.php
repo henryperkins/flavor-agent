@@ -443,6 +443,11 @@ final class Page {
 				Provider::OPTION_NAME,
 			]
 		);
+		?>
+		<p class="description">
+			<?php echo esc_html__( 'Shared chat credentials live in Settings > Connectors. The Azure and OpenAI fields below stay available as legacy direct fallback for chat and as plugin-owned embeddings configuration for pattern sync.', 'flavor-agent' ); ?>
+		</p>
+		<?php
 
 		if ( Provider::is_connector( (string) $state['selected_provider'] ) ) {
 			?>
@@ -466,7 +471,7 @@ final class Page {
 
 		if ( Provider::is_azure( (string) $state['selected_provider'] ) ) {
 			self::render_subsection_heading(
-				__( 'Direct Azure Settings', 'flavor-agent' )
+				__( 'Legacy Direct Azure Settings', 'flavor-agent' )
 			);
 			self::render_registered_section_callback( 'flavor_agent_azure' );
 			self::render_registered_fields_table(
@@ -483,7 +488,7 @@ final class Page {
 		}
 
 		self::render_subsection_heading(
-			__( 'Direct OpenAI Settings', 'flavor-agent' )
+			__( 'Legacy Direct OpenAI Settings', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_openai_native' );
 		self::render_registered_fields_table(

@@ -9,7 +9,7 @@ use FlavorAgent\OpenAI\Provider;
 
 final class ChatClient {
 
-	private const SETUP_MESSAGE = 'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors, to enable block recommendations.';
+	private const SETUP_MESSAGE = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations. Direct Azure OpenAI and OpenAI Native settings in Settings > Flavor Agent remain available as legacy fallback.';
 
 	public static function is_supported(): bool {
 		return Provider::chat_configured();

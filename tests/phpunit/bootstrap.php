@@ -21,6 +21,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $global_styles = [];
 
+		public static array $active_theme = [];
+
 		public static array $last_remote_post = [];
 
 		public static array $last_remote_get = [];
@@ -67,6 +69,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, object> */
 		public static array $posts = [];
 
+		/** @var array<int, array<string, mixed>> */
+		public static array $post_meta = [];
+
 		/** @var array<string, array<int, array<string, mixed>>> */
 		public static array $db_tables = [];
 
@@ -107,6 +112,7 @@ namespace FlavorAgent\Tests\Support {
 		public static function reset(): void {
 			self::$global_settings             = [];
 			self::$global_styles               = [];
+			self::$active_theme                = [];
 			self::$last_remote_post            = [];
 			self::$last_remote_get             = [];
 			self::$remote_post_calls           = [];
@@ -127,6 +133,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$updated_options              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$post_meta                   = [];
 			self::$db_tables                   = [];
 			self::$db_queries                  = [];
 			self::$filters                     = [];
@@ -862,6 +869,37 @@ namespace {
 		}
 	}
 
+	if ( ! class_exists( 'WP_Theme' ) ) {
+		class WP_Theme {
+
+			/**
+			 * @param array<string, mixed> $data
+			 */
+			public function __construct(
+				private array $data = []
+			) {
+			}
+
+			public function get( string $field ) {
+				return match ( $field ) {
+					'Name'       => $this->data['name'] ?? '',
+					'Version'    => $this->data['version'] ?? '',
+					'Stylesheet' => $this->data['stylesheet'] ?? '',
+					'Template'   => $this->data['template'] ?? '',
+					default      => $this->data[ $field ] ?? '',
+				};
+			}
+
+			public function get_stylesheet(): string {
+				return (string) ( $this->data['stylesheet'] ?? '' );
+			}
+
+			public function get_template(): string {
+				return (string) ( $this->data['template'] ?? '' );
+			}
+		}
+	}
+
 	if ( ! function_exists( 'get_option' ) ) {
 		function get_option( string $name, $default = false ) {
 			return WordPressTestState::$options[ $name ] ?? $default;
@@ -1237,6 +1275,14 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'wp_get_theme' ) ) {
+		function wp_get_theme( ?string $stylesheet = null, ?string $theme_root = null ) {
+			unset( $stylesheet, $theme_root );
+
+			return new \WP_Theme( WordPressTestState::$active_theme );
+		}
+	}
+
 	if ( ! function_exists( 'get_current_screen' ) ) {
 		function get_current_screen() {
 			return WordPressTestState::$current_screen;
@@ -1294,6 +1340,115 @@ namespace {
 			}
 
 			return null;
+		}
+	}
+
+	if ( ! function_exists( 'get_posts' ) ) {
+		function get_posts( array $args = [] ): array {
+			$posts     = array_values( WordPressTestState::$posts );
+			$post_type = isset( $args['post_type'] ) ? (string) $args['post_type'] : '';
+			$post_status = isset( $args['post_status'] ) ? $args['post_status'] : 'publish';
+			$search      = isset( $args['s'] ) ? sanitize_text_field( (string) $args['s'] ) : '';
+			$orderby     = isset( $args['orderby'] ) ? sanitize_key( (string) $args['orderby'] ) : 'date';
+			$order       = strtoupper( (string) ( $args['order'] ?? 'DESC' ) );
+
+			if ( '' !== $post_type ) {
+				$posts = array_values(
+					array_filter(
+						$posts,
+						static fn ( object $post ): bool => (string) ( $post->post_type ?? '' ) === $post_type
+					)
+				);
+			}
+
+			if ( 'any' !== $post_status ) {
+				$allowed_statuses = is_array( $post_status ) ? $post_status : [ $post_status ];
+				$posts            = array_values(
+					array_filter(
+						$posts,
+						static fn ( object $post ): bool => in_array(
+							(string) ( $post->post_status ?? '' ),
+							array_map( 'strval', $allowed_statuses ),
+							true
+						)
+					)
+				);
+			}
+
+			if ( '' !== $search ) {
+				$search = strtolower( $search );
+				$posts  = array_values(
+					array_filter(
+						$posts,
+						static function ( object $post ) use ( $search ): bool {
+							$haystacks = [
+								strtolower( (string) ( $post->post_title ?? '' ) ),
+								strtolower( (string) ( $post->post_name ?? '' ) ),
+							];
+
+							foreach ( $haystacks as $haystack ) {
+								if ( str_contains( $haystack, $search ) ) {
+									return true;
+								}
+							}
+
+							return false;
+						}
+					)
+				);
+			}
+
+			usort(
+				$posts,
+				static function ( object $left, object $right ) use ( $orderby, $order ): int {
+					$comparison = match ( $orderby ) {
+						'title' => strcasecmp(
+							(string) ( $left->post_title ?? '' ),
+							(string) ( $right->post_title ?? '' )
+						),
+						'id' => (int) ( $left->ID ?? 0 ) <=> (int) ( $right->ID ?? 0 ),
+						default => strcmp(
+							(string) ( $left->post_date_gmt ?? '' ),
+							(string) ( $right->post_date_gmt ?? '' )
+						),
+					};
+
+					return 'ASC' === $order ? $comparison : -1 * $comparison;
+				}
+			);
+
+			$offset = isset( $args['offset'] ) ? max( 0, (int) $args['offset'] ) : 0;
+			$limit  = isset( $args['posts_per_page'] ) && (int) $args['posts_per_page'] >= 0
+				? (int) $args['posts_per_page']
+				: null;
+
+			if ( $offset > 0 || null !== $limit ) {
+				$posts = array_slice( $posts, $offset, $limit );
+			}
+
+			return $posts;
+		}
+	}
+
+	if ( ! function_exists( 'get_post_meta' ) ) {
+		function get_post_meta( int $post_id, string $key = '', bool $single = false ) {
+			$meta = WordPressTestState::$post_meta[ $post_id ] ?? [];
+
+			if ( '' === $key ) {
+				return $meta;
+			}
+
+			if ( ! array_key_exists( $key, $meta ) ) {
+				return $single ? '' : [];
+			}
+
+			$value = $meta[ $key ];
+
+			if ( $single ) {
+				return $value;
+			}
+
+			return is_array( $value ) ? $value : [ $value ];
 		}
 	}
 

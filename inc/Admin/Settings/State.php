@@ -94,16 +94,26 @@ final class State {
 
 		return match ( $group ) {
 			Config::GROUP_CHAT => [
-				'summary' => __( 'Required. Choose the chat path Flavor Agent should prefer.', 'flavor-agent' ),
+				'summary' => __( 'Required. Chat uses Settings > Connectors when available; direct Azure and OpenAI Native settings below remain as legacy fallback.', 'flavor-agent' ),
 				'badges'  => [
 					self::make_badge( __( 'Required', 'flavor-agent' ), 'neutral' ),
-					self::make_badge( Provider::label( (string) $state['selected_provider'] ), 'accent' ),
+					self::make_badge( self::runtime_chat_label( $state ), 'accent' ),
 				],
 				'status'  => self::make_badge(
-					! empty( $state['selected_chat']['configured'] )
-						? __( 'Ready', 'flavor-agent' )
-						: ( ! empty( $state['runtime_chat']['configured'] ) ? __( 'Partial', 'flavor-agent' ) : __( 'Needs setup', 'flavor-agent' ) ),
-					! empty( $state['selected_chat']['configured'] ) ? 'success' : 'warning'
+					empty( $state['runtime_chat']['configured'] )
+						? __( 'Needs setup', 'flavor-agent' )
+						: (
+							! empty( $state['selected_chat']['configured'] ) || self::runtime_chat_uses_connectors( $state )
+								? __( 'Ready', 'flavor-agent' )
+								: __( 'Partial', 'flavor-agent' )
+						),
+					empty( $state['runtime_chat']['configured'] )
+						? 'warning'
+						: (
+							! empty( $state['selected_chat']['configured'] ) || self::runtime_chat_uses_connectors( $state )
+								? 'success'
+								: 'warning'
+						)
 				),
 				'open'    => false,
 			],
@@ -213,26 +223,41 @@ final class State {
 			if ( empty( $state['runtime_chat']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'No chat path is ready yet. Choose a provider and complete the selected provider setup.', 'flavor-agent' ),
+					'message' => __( 'No chat path is ready yet. Configure a text-generation provider in Settings > Connectors, or complete one of the legacy direct Azure/OpenAI fallbacks below.', 'flavor-agent' ),
+				];
+			} elseif (
+				self::runtime_chat_uses_connectors( $state )
+				&& ! Provider::is_connector( (string) $state['selected_provider'] )
+			) {
+				$status_blocks[] = [
+					'tone'    => 'accent',
+					'message' => sprintf(
+						/* translators: 1: runtime chat label, 2: selected provider label */
+						__( '%1$s is currently handling chat through Settings > Connectors. The direct %2$s settings on this page remain a legacy fallback.', 'flavor-agent' ),
+						self::runtime_chat_label( $state ),
+						Provider::label( (string) $state['selected_provider'] )
+					),
 				];
 			} elseif ( empty( $state['selected_chat']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
 					'message' => sprintf(
-						/* translators: %s: provider label */
-						__( '%s is selected, but Flavor Agent is currently falling back to another configured chat path until this setup is complete.', 'flavor-agent' ),
-						Provider::label( (string) $state['selected_provider'] )
+						/* translators: 1: provider label, 2: runtime chat label */
+						__( '%1$s is selected, but Flavor Agent is currently using %2$s for chat until the selected path is available.', 'flavor-agent' ),
+						Provider::label( (string) $state['selected_provider'] ),
+						self::runtime_chat_label( $state )
 					),
 				];
 			}
 
 			if (
 				Provider::is_native( (string) $state['selected_provider'] ) &&
+				! self::runtime_chat_uses_connectors( $state ) &&
 				'' === Provider::native_effective_api_key()
 			) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'OpenAI Native is selected, but no API key source is available yet. Add a plugin key, Settings > Connectors key, or OPENAI_API_KEY.', 'flavor-agent' ),
+					'message' => __( 'OpenAI Native direct fallback is selected, but no API key source is available yet. Add a plugin key, Settings > Connectors key, or OPENAI_API_KEY.', 'flavor-agent' ),
 				];
 			}
 		}
@@ -417,6 +442,24 @@ final class State {
 		$embedding_configured = ! empty( $state['runtime_embedding']['configured'] );
 
 		return $qdrant_configured !== $embedding_configured;
+	}
+
+	private static function runtime_chat_uses_connectors( array $state ): bool {
+		$runtime_provider = is_string( $state['runtime_chat']['provider'] ?? null )
+			? $state['runtime_chat']['provider']
+			: '';
+
+		return Provider::is_connector( $runtime_provider ) || Provider::is_wordpress_ai_client( $runtime_provider );
+	}
+
+	private static function runtime_chat_label( array $state ): string {
+		$runtime_label = trim( (string) ( $state['runtime_chat']['label'] ?? '' ) );
+
+		if ( '' !== $runtime_label ) {
+			return $runtime_label;
+		}
+
+		return Provider::label( (string) $state['selected_provider'] );
 	}
 
 	private function __construct() {

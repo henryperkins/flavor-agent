@@ -171,7 +171,7 @@ Treat the gates there as additive release stops:
 - **Docs grounding lifecycle**: Prewarm and context-warm cron events (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) scheduled on activation.
 - **Activity history**: Block, template, template-part, Global Styles, and Style Book applies write structured activity entries through the server-backed activity repository; the editor hydrates by scope, keeps `sessionStorage` only as a cache/fallback, and validates live state again before undo.
 - **Admin audit UI**: `Settings > AI Activity` is powered by `src/admin/activity-log.js` and reads the same server-backed activity data used by inline editor history.
-- **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 13 abilities across block, pattern, template, navigation, docs, infra, content, and style categories. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
+- **Abilities API**: Hooks into `wp_abilities_api_categories_init` and `wp_abilities_api_init`. Registers 20 abilities across block, pattern, template, navigation, docs, infra, content, and style categories, including design inspection helpers. On WordPress 7.0 admin screens, core also hydrates those server-side abilities into the client-side `@wordpress/core-abilities` store automatically.
 
 ## External Services
 

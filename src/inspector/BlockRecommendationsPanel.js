@@ -44,6 +44,7 @@ import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
 import { shallowStructuralEqual } from '../utils/structural-equality';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
+const EMPTY_SURFACE_SUGGESTIONS = [];
 const BLOCK_COMPOSER_HELPER_TEXT =
 	'Flavor Agent keeps one-click apply limited to safe local block attribute changes.';
 const CONTENT_ONLY_COMPOSER_HELPER_TEXT =
@@ -349,7 +350,18 @@ export function BlockRecommendationsContent( {
 	const blockSuggestions = hasResult
 		? recommendations?.block ?? EMPTY_BLOCK_SUGGESTIONS
 		: EMPTY_BLOCK_SUGGESTIONS;
+	const settingsSuggestions = hasResult
+		? recommendations?.settings ?? EMPTY_SURFACE_SUGGESTIONS
+		: EMPTY_SURFACE_SUGGESTIONS;
+	const styleSuggestions =
+		hasResult && ! isContentRestricted
+			? recommendations?.styles ?? EMPTY_SURFACE_SUGGESTIONS
+			: EMPTY_SURFACE_SUGGESTIONS;
 	const hasBlockSuggestions = blockSuggestions.length > 0;
+	const hasSurfaceSuggestions =
+		hasBlockSuggestions ||
+		settingsSuggestions.length > 0 ||
+		styleSuggestions.length > 0;
 	const { statusNotice } = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
@@ -360,12 +372,12 @@ export function BlockRecommendationsContent( {
 				undoError,
 				undoStatus,
 				hasResult,
-				hasSuggestions: hasBlockSuggestions,
+				hasSuggestions: hasSurfaceSuggestions,
 				hasSuccess: hasApplySuccess,
 				hasUndoSuccess,
 				emptyMessage:
-					hasFreshResult && ! hasBlockSuggestions
-						? 'No block suggestions were returned for the current prompt.'
+					hasFreshResult && ! hasSurfaceSuggestions
+						? 'No recommendations were returned for the current prompt.'
 						: '',
 				applySuccessMessage: hasApplySuccess
 					? `Applied ${
@@ -683,6 +695,56 @@ export function BlockRecommendationsContent( {
 						clientId={ clientId }
 						suggestions={ executableBlockSuggestions }
 						label="AI block suggestions"
+						currentRequestSignature={ currentRequestSignature }
+						currentRequestInput={ currentRequestInput }
+						disabled={ isStaleResult }
+					/>
+				</RecommendationLane>
+			) }
+
+			{ settingsSuggestions.length > 0 && (
+				<RecommendationLane
+					title="Settings suggestions"
+					tone={
+						isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL
+					}
+					count={ settingsSuggestions.length }
+					countNoun="suggestion"
+					description={
+						isStaleResult
+							? 'These settings suggestions are shown for reference from the last request. Refresh before applying them.'
+							: 'Flavor Agent keeps settings changes executable here and mirrors them into native panels for context only.'
+					}
+				>
+					<SuggestionChips
+						clientId={ clientId }
+						suggestions={ settingsSuggestions }
+						label="AI settings suggestions"
+						currentRequestSignature={ currentRequestSignature }
+						currentRequestInput={ currentRequestInput }
+						disabled={ isStaleResult }
+					/>
+				</RecommendationLane>
+			) }
+
+			{ styleSuggestions.length > 0 && (
+				<RecommendationLane
+					title="Style suggestions"
+					tone={
+						isStaleResult ? STALE_STATUS_LABEL : APPLY_NOW_LABEL
+					}
+					count={ styleSuggestions.length }
+					countNoun="suggestion"
+					description={
+						isStaleResult
+							? 'These style suggestions are shown for reference from the last request. Refresh before applying them.'
+							: 'Flavor Agent keeps style changes executable here and mirrors them into native panels for context only.'
+					}
+				>
+					<SuggestionChips
+						clientId={ clientId }
+						suggestions={ styleSuggestions }
+						label="AI style suggestions"
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
 						disabled={ isStaleResult }

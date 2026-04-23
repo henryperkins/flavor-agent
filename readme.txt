@@ -18,7 +18,7 @@ Flavor Agent integrates AI-powered editorial assistance directly into the WordPr
 
 1. Upload the plugin files to the `/wp-content/plugins/flavor-agent` directory, or install the plugin through the WordPress plugins screen.
 2. Activate the plugin through the `Plugins` screen in WordPress.
-3. Open `Settings > Flavor Agent` to configure plugin-managed backends, and use `Settings > Connectors` for compatible shared chat providers when needed.
+3. Open `Settings > Connectors` to configure shared chat providers first, then use `Settings > Flavor Agent` for legacy direct Azure/OpenAI fallback, pattern embeddings/Qdrant, docs grounding, and guidelines.
 
 == Changelog ==
 

@@ -203,9 +203,15 @@ final class RegistrationTest extends TestCase {
 
 		$recommend_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-patterns'] ?? null;
 		$list_ability      = WordPressTestState::$registered_abilities['flavor-agent/list-patterns'] ?? null;
+		$get_ability       = WordPressTestState::$registered_abilities['flavor-agent/get-pattern'] ?? null;
+		$list_synced       = WordPressTestState::$registered_abilities['flavor-agent/list-synced-patterns'] ?? null;
+		$get_synced        = WordPressTestState::$registered_abilities['flavor-agent/get-synced-pattern'] ?? null;
 
 		$this->assertIsArray( $recommend_ability );
 		$this->assertIsArray( $list_ability );
+		$this->assertIsArray( $get_ability );
+		$this->assertIsArray( $list_synced );
+		$this->assertIsArray( $get_synced );
 		$this->assertSame(
 			'object',
 			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['patternOverrides']['type'] ?? null
@@ -242,6 +248,78 @@ final class RegistrationTest extends TestCase {
 			'object',
 			$list_ability['output_schema']['properties']['patterns']['items']['properties']['patternOverrides']['type'] ?? null
 		);
+		$this->assertSame(
+			'string',
+			$list_ability['input_schema']['properties']['search']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$list_ability['input_schema']['properties']['includeContent']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$list_ability['input_schema']['properties']['limit']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$list_ability['input_schema']['properties']['offset']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$list_ability['output_schema']['properties']['total']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$list_ability['output_schema']['properties']['patterns']['items']['properties']['id']['type'] ?? null
+		);
+		$this->assertSame(
+			[ 'patternId' ],
+			$get_ability['input_schema']['required'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$get_ability['output_schema']['properties']['id']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$list_synced['input_schema']['properties']['syncStatus']['type'] ?? null
+		);
+		$this->assertStringContainsString(
+			'partial',
+			(string) ( $list_synced['input_schema']['properties']['syncStatus']['description'] ?? '' )
+		);
+		$this->assertSame(
+			'string',
+			$list_synced['input_schema']['properties']['search']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$list_synced['input_schema']['properties']['includeContent']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$list_synced['input_schema']['properties']['limit']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$list_synced['input_schema']['properties']['offset']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$list_synced['output_schema']['properties']['total']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$get_synced['input_schema']['properties']['patternId']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$list_synced['output_schema']['properties']['patterns']['items']['properties']['syncStatus']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$get_synced['output_schema']['properties']['wpPatternSyncStatus']['type'] ?? null
+		);
 		$this->assertArrayNotHasKey(
 			'resolveSignatureOnly',
 			$recommend_ability['input_schema']['properties'] ?? []
@@ -250,6 +328,117 @@ final class RegistrationTest extends TestCase {
 			'editorStructure',
 			$recommend_ability['input_schema']['properties'] ?? []
 		);
+	}
+
+	public function test_register_abilities_exposes_design_helper_schemas(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$blocks_ability       = WordPressTestState::$registered_abilities['flavor-agent/list-allowed-blocks'] ?? null;
+		$active_theme_ability = WordPressTestState::$registered_abilities['flavor-agent/get-active-theme'] ?? null;
+		$presets_ability      = WordPressTestState::$registered_abilities['flavor-agent/get-theme-presets'] ?? null;
+		$styles_ability       = WordPressTestState::$registered_abilities['flavor-agent/get-theme-styles'] ?? null;
+
+		$this->assertIsArray( $blocks_ability );
+		$this->assertSame(
+			'string',
+			$blocks_ability['input_schema']['properties']['search']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$blocks_ability['input_schema']['properties']['category']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$blocks_ability['input_schema']['properties']['limit']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$blocks_ability['input_schema']['properties']['offset']['type'] ?? null
+		);
+		$this->assertSame(
+			'boolean',
+			$blocks_ability['input_schema']['properties']['includeVariations']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$blocks_ability['input_schema']['properties']['maxVariations']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$blocks_ability['output_schema']['properties']['blocks']['items']['properties']['apiVersion']['type'] ?? null
+		);
+		$this->assertSame(
+			[ 'array', 'null' ],
+			$blocks_ability['output_schema']['properties']['blocks']['items']['properties']['allowedBlocks']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$blocks_ability['output_schema']['properties']['total']['type'] ?? null
+		);
+
+		$this->assertIsArray( $active_theme_ability );
+		$this->assertSame(
+			'string',
+			$active_theme_ability['output_schema']['properties']['stylesheet']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$active_theme_ability['output_schema']['properties']['template']['type'] ?? null
+		);
+
+		$this->assertIsArray( $presets_ability );
+		$this->assertSame(
+			'array',
+			$presets_ability['output_schema']['properties']['colorPresets']['type'] ?? null
+		);
+		$this->assertSame(
+			'array',
+			$presets_ability['output_schema']['properties']['duotonePresets']['type'] ?? null
+		);
+
+		$this->assertIsArray( $styles_ability );
+		$this->assertSame(
+			'object',
+			$styles_ability['output_schema']['properties']['styles']['type'] ?? null
+		);
+		$this->assertSame(
+			'object',
+			$styles_ability['output_schema']['properties']['blockPseudoStyles']['type'] ?? null
+		);
+
+		$template_parts_ability = WordPressTestState::$registered_abilities['flavor-agent/list-template-parts'] ?? null;
+
+		$this->assertIsArray( $template_parts_ability );
+		$this->assertSame(
+			'boolean',
+			$template_parts_ability['input_schema']['properties']['includeContent']['type'] ?? null
+		);
+	}
+
+	public function test_list_template_parts_permission_callback_allows_metadata_reads_for_editors_only_without_content(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$ability             = WordPressTestState::$registered_abilities['flavor-agent/list-template-parts'] ?? null;
+		$permission_callback = $ability['permission_callback'] ?? null;
+
+		$this->assertIsCallable( $permission_callback );
+
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$this->assertTrue( $permission_callback( [] ) );
+		$this->assertTrue( $permission_callback( [ 'includeContent' => false ] ) );
+		$this->assertFalse( $permission_callback( [ 'includeContent' => true ] ) );
+
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+
+		$this->assertTrue( $permission_callback( [ 'includeContent' => true ] ) );
 	}
 
 	public function test_register_abilities_exposes_wordpress_docs_entity_key_schema(): void {

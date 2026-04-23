@@ -207,6 +207,38 @@ describe( 'SuggestionChips', () => {
 		).toBeUndefined();
 	} );
 
+	test( 'renders passive mirror chips without apply actions', () => {
+		act( () => {
+			getRoot().render(
+				<SuggestionChips
+					clientId="block-1"
+					label="AI color suggestions"
+					interactive={ false }
+					suggestions={ [
+						{
+							label: 'Use accent color',
+							panel: 'color',
+							description: 'Mirror only',
+						},
+					] }
+				/>
+			);
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'These hints mirror the latest AI Recommendations result.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Apply them from that main panel.'
+		);
+		expect(
+			getContainer().querySelector( '.flavor-agent-chip--passive' )
+				?.textContent
+		).toContain( 'Use accent color' );
+		expect( getContainer().querySelector( 'button' ) ).toBeNull();
+		expect( mockApplySuggestion ).not.toHaveBeenCalled();
+	} );
+
 	test( 'disables an applied chip while inline feedback is visible', async () => {
 		act( () => {
 			getRoot().render(

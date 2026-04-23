@@ -10,10 +10,24 @@ use PHPUnit\Framework\TestCase;
 
 final class InfraAbilitiesTest extends TestCase {
 
+	private string|false $previous_openai_api_key;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->previous_openai_api_key = getenv( 'OPENAI_API_KEY' );
+		putenv( 'OPENAI_API_KEY' );
+	}
+
+	protected function tearDown(): void {
+		if ( false === $this->previous_openai_api_key ) {
+			putenv( 'OPENAI_API_KEY' );
+		} else {
+			putenv( 'OPENAI_API_KEY=' . $this->previous_openai_api_key );
+		}
+
+		parent::tearDown();
 	}
 
 	public function test_check_status_marks_cloudflare_docs_backend_as_configured_without_marking_plugin_ready(): void {
@@ -34,6 +48,23 @@ final class InfraAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_check_status_includes_new_design_helpers_for_editors(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertContains( 'flavor-agent/get-pattern', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/list-synced-patterns', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/get-synced-pattern', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/list-template-parts', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/list-allowed-blocks', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/get-active-theme', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/get-theme-presets', $status['availableAbilities'] );
+		$this->assertContains( 'flavor-agent/get-theme-styles', $status['availableAbilities'] );
+	}
+
 	public function test_check_status_marks_wordpress_ai_client_backend_as_configured(): void {
 		WordPressTestState::$capabilities        = [
 			'edit_posts' => true,
@@ -48,6 +79,27 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'ready', $status['surfaces']['block']['reason'] );
 		$this->assertSame( 'plugin_or_core', $status['surfaces']['block']['owner'] );
 		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
+	}
+
+	public function test_check_status_prefers_the_wordpress_ai_client_model_when_direct_chat_is_also_configured(): void {
+		WordPressTestState::$capabilities        = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$options             = [
+			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'      => 'azure-key',
+			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['configured'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
+		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
+		$this->assertTrue( $status['backends']['azure_openai']['configured'] );
+		$this->assertTrue( $status['surfaces']['content']['available'] );
 	}
 
 	public function test_check_status_filters_admin_only_docs_ability_for_non_admin_users(): void {
@@ -180,6 +232,41 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['backends']['openai_native']['connectorRegistered'] );
 		$this->assertTrue( $status['backends']['openai_native']['connectorConfigured'] );
 		$this->assertSame( 'database', $status['backends']['openai_native']['connectorKeySource'] );
+	}
+
+	public function test_check_status_prefers_openai_env_key_over_connector_database(): void {
+		putenv( 'OPENAI_API_KEY=env-key' );
+
+		WordPressTestState::$capabilities = [
+			'edit_posts'         => true,
+			'edit_theme_options' => true,
+		];
+		WordPressTestState::$connectors   = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$options      = [
+			'flavor_agent_openai_provider'               => 'openai_native',
+			'connectors_ai_openai_api_key'               => 'connector-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
+			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
+			'flavor_agent_qdrant_key'                    => 'qdrant-key',
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertTrue( $status['backends']['openai_native']['configured'] );
+		$this->assertSame( 'env', $status['backends']['openai_native']['credentialSource'] );
+		$this->assertTrue( $status['backends']['openai_native']['connectorConfigured'] );
+		$this->assertSame( 'env', $status['backends']['openai_native']['connectorKeySource'] );
 	}
 
 	public function test_check_status_uses_fallback_direct_provider_when_selected_provider_is_unconfigured(): void {
