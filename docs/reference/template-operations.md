@@ -38,7 +38,7 @@ All `insert_pattern` operations require a `placement` value:
 
 Implicit template insertions are invalid. If `placement` is omitted, the suggestion stays non-executable and the client does not fall back to the editor's current insertion point.
 
-`patternSuggestions` is an advisory summary derived from validated `insert_pattern` operations. It is not a fallback path that keeps otherwise non-executable template suggestions alive.
+For executable suggestions, `patternSuggestions` is derived from validated `insert_pattern` operations. Advisory-only suggestions may still keep validated pattern names in `patternSuggestions` when the model can name a relevant registered pattern but cannot express a safe deterministic insertion anchor.
 
 ### Anchor Validation
 

@@ -975,7 +975,7 @@ final class Registration {
 									'type'  => 'array',
 									'items' => self::open_object_schema(),
 								],
-								'templateStructure'     => self::open_object_schema(),
+								'templateStructure'     => self::template_structure_schema(),
 								'templateVisibility'    => self::open_object_schema(),
 								'themeTokenDiagnostics' => self::open_object_schema(
 									[
@@ -1609,6 +1609,26 @@ final class Registration {
 			],
 			'Resolved Pattern Overrides capabilities for the current recommendation context.'
 		);
+	}
+
+	private static function template_structure_schema(): array {
+		return [
+			'type'        => 'array',
+			'description' => 'Top-level template block summary with one level of child block names.',
+			'items'       => self::open_object_schema(
+				[
+					'name'        => [ 'type' => 'string' ],
+					'innerBlocks' => [
+						'type'  => 'array',
+						'items' => self::open_object_schema(
+							[
+								'name' => [ 'type' => 'string' ],
+							]
+						),
+					],
+				]
+			),
+		];
 	}
 
 	private static function open_object_schema( array $properties = [], string $description = '' ): array {

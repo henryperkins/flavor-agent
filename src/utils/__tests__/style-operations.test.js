@@ -528,7 +528,37 @@ describe( 'style-operations', () => {
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 	} );
 
-	test( 'applyGlobalStyleSuggestionOperations updates block-scoped preset-backed style paths', () => {
+	test( 'applyGlobalStyleSuggestionOperations rejects site-level style operations for style-book scope', () => {
+		const result = applyGlobalStyleSuggestionOperations(
+			{
+				operations: [
+					{
+						type: 'set_styles',
+						path: [ 'color', 'background' ],
+						value: 'var:preset|color|accent',
+						valueType: 'preset',
+						presetSlug: 'accent',
+						presetType: 'color',
+					},
+				],
+			},
+			undefined,
+			{ surface: 'style-book', scope: { blockName: 'core/paragraph' } }
+		);
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: 'Style Book suggestions cannot apply site-level Global Styles operations.',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+		expect( currentRecord.styles.color.background ).toBe(
+			'var:preset|color|base'
+		);
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations rejects block-scoped operations for global-styles scope', () => {
 		const result = applyGlobalStyleSuggestionOperations( {
 			operations: [
 				{
@@ -542,6 +572,34 @@ describe( 'style-operations', () => {
 				},
 			],
 		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: 'Global Styles suggestions cannot apply Style Book block operations.',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
+	test( 'applyGlobalStyleSuggestionOperations updates block-scoped preset-backed style paths', () => {
+		const result = applyGlobalStyleSuggestionOperations(
+			{
+				operations: [
+					{
+						type: 'set_block_styles',
+						blockName: 'core/paragraph',
+						path: [ 'color', 'text' ],
+						value: 'var:preset|color|accent',
+						valueType: 'preset',
+						presetSlug: 'accent',
+						presetType: 'color',
+					},
+				],
+			},
+			undefined,
+			{ surface: 'style-book', scope: { blockName: 'core/paragraph' } }
+		);
 
 		expect( result.ok ).toBe( true );
 		expect(
@@ -565,6 +623,34 @@ describe( 'style-operations', () => {
 		);
 	} );
 
+	test( 'applyGlobalStyleSuggestionOperations rejects stale Style Book block targets', () => {
+		const result = applyGlobalStyleSuggestionOperations(
+			{
+				operations: [
+					{
+						type: 'set_block_styles',
+						blockName: 'core/paragraph',
+						path: [ 'color', 'text' ],
+						value: 'var:preset|color|accent',
+						valueType: 'preset',
+						presetSlug: 'accent',
+						presetType: 'color',
+					},
+				],
+			},
+			undefined,
+			{ surface: 'style-book', scope: { blockName: 'core/heading' } }
+		);
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: 'Style Book suggestion target "core/paragraph" no longer matches the active Style Book block "core/heading".',
+			} )
+		);
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
 	test( 'applyGlobalStyleSuggestionOperations rejects unsupported block-scoped style paths', () => {
 		registeredBlockTypes[ 'core/paragraph' ] = {
 			...registeredBlockTypes[ 'core/paragraph' ],
@@ -575,17 +661,21 @@ describe( 'style-operations', () => {
 			},
 		};
 
-		const result = applyGlobalStyleSuggestionOperations( {
-			operations: [
-				{
-					type: 'set_block_styles',
-					blockName: 'core/paragraph',
-					path: [ 'border', 'radius' ],
-					value: '12px',
-					valueType: 'freeform',
-				},
-			],
-		} );
+		const result = applyGlobalStyleSuggestionOperations(
+			{
+				operations: [
+					{
+						type: 'set_block_styles',
+						blockName: 'core/paragraph',
+						path: [ 'border', 'radius' ],
+						value: '12px',
+						valueType: 'freeform',
+					},
+				],
+			},
+			undefined,
+			{ surface: 'style-book', scope: { blockName: 'core/paragraph' } }
+		);
 
 		expect( result ).toEqual(
 			expect.objectContaining( {

@@ -319,9 +319,10 @@ export const EXECUTABLE_SURFACE_DEFS = Object.freeze( [
 					select.getStyleBookContextSignature?.() || null,
 			} );
 		},
-		executeSuggestion( { registry, suggestion } ) {
+		executeSuggestion( { registry, scope, suggestion } ) {
 			return applyGlobalStyleSuggestionOperations( suggestion, registry, {
 				surface: 'style-book',
+				scope,
 			} );
 		},
 		buildActivityEntry: buildStyleBookActivityEntryFromStore,

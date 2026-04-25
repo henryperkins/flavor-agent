@@ -506,6 +506,28 @@ function validateNormalizedOperations( operations = [] ) {
 	};
 }
 
+function getExpectedStyleBookBlockName( options = {} ) {
+	const candidates = [
+		options?.scope?.blockName,
+		options?.styleBookBlockName,
+		options?.blockName,
+	];
+
+	for ( const candidate of candidates ) {
+		if ( typeof candidate !== 'string' ) {
+			continue;
+		}
+
+		const normalized = candidate.trim();
+
+		if ( normalized ) {
+			return normalized;
+		}
+	}
+
+	return '';
+}
+
 function getGlobalStylesRuntime( registry ) {
 	const coreSelect = getCoreSelect( registry );
 	const globalStylesId = getCurrentGlobalStylesId( coreSelect );
@@ -774,8 +796,16 @@ function applyOperationToConfig( {
 	executionContract,
 	blockEditorSettings,
 	blocksSelect,
+	expectedStyleBookBlockName,
 } ) {
 	if ( operation?.type === 'set_styles' ) {
+		if ( surface === 'style-book' ) {
+			return {
+				ok: false,
+				error: 'Style Book suggestions cannot apply site-level Global Styles operations.',
+			};
+		}
+
 		return applyPathBasedStyleOperation( {
 			beforeConfig,
 			afterConfig,
@@ -787,6 +817,13 @@ function applyOperationToConfig( {
 	}
 
 	if ( operation?.type === 'set_block_styles' ) {
+		if ( surface !== 'style-book' ) {
+			return {
+				ok: false,
+				error: 'Global Styles suggestions cannot apply Style Book block operations.',
+			};
+		}
+
 		const blockName =
 			typeof operation?.blockName === 'string'
 				? operation.blockName.trim()
@@ -796,6 +833,20 @@ function applyOperationToConfig( {
 			return {
 				ok: false,
 				error: 'A Style Book operation is missing its target block name.',
+			};
+		}
+
+		if ( ! expectedStyleBookBlockName ) {
+			return {
+				ok: false,
+				error: 'Style Book suggestions require the active Style Book block scope before applying.',
+			};
+		}
+
+		if ( blockName !== expectedStyleBookBlockName ) {
+			return {
+				ok: false,
+				error: `Style Book suggestion target "${ blockName }" no longer matches the active Style Book block "${ expectedStyleBookBlockName }".`,
 			};
 		}
 
@@ -894,9 +945,7 @@ export function applyGlobalStyleSuggestionOperations(
 ) {
 	const runtime = getGlobalStylesRuntime( registry );
 	const surface =
-		typeof options?.surface === 'string'
-			? options.surface
-			: 'global-styles';
+		options?.surface === 'style-book' ? 'style-book' : 'global-styles';
 
 	if ( ! runtime.ok ) {
 		return runtime;
@@ -938,6 +987,10 @@ export function applyGlobalStyleSuggestionOperations(
 	const beforeConfig = runtime.userConfig;
 	let afterConfig = normalizeConfig( beforeConfig );
 	const appliedOperations = [];
+	const expectedStyleBookBlockName =
+		surface === 'style-book'
+			? getExpectedStyleBookBlockName( options )
+			: '';
 
 	for ( const operation of operations ) {
 		const nextState = applyOperationToConfig( {
@@ -949,6 +1002,7 @@ export function applyGlobalStyleSuggestionOperations(
 			executionContract: executionContractRuntime.executionContract,
 			blockEditorSettings,
 			blocksSelect,
+			expectedStyleBookBlockName,
 		} );
 
 		if ( ! nextState.ok ) {
