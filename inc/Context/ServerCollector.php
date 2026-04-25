@@ -181,6 +181,13 @@ final class ServerCollector {
 	}
 
 	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function for_indexable_synced_patterns(): array {
+		return self::synced_pattern_repository()->for_indexable_patterns();
+	}
+
+	/**
 	 * @return array<string, mixed>|null
 	 */
 	public static function for_synced_pattern( int $pattern_id ): ?array {

@@ -533,6 +533,11 @@ final class PatternAbilities {
 			$recommendations[] = [
 				'name'                 => $name,
 				'title'                => $payload['title'] ?? '',
+				'type'                 => $payload['type'] ?? 'registered',
+				'source'               => $payload['source'] ?? 'registered',
+				'syncedPatternId'      => $payload['syncedPatternId'] ?? 0,
+				'syncStatus'           => $payload['syncStatus'] ?? '',
+				'wpPatternSyncStatus'  => $payload['wpPatternSyncStatus'] ?? '',
 				'score'                => $score,
 				'reason'               => $reason,
 				'categories'           => $payload['categories'] ?? [],

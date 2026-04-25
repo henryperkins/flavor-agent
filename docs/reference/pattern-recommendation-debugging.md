@@ -27,7 +27,7 @@ When the system is healthy, all of the following should be true:
 
 - the stored pattern index state reports `status: ready`
 - `last_synced_at` is populated
-- `indexed_count` is non-zero and matches the collection point count closely
+- `indexed_count` is non-zero and matches the collection point count closely for registered patterns plus synced/user `wp_block` patterns
 - `QdrantClient::validate_configuration()` returns `true`
 - `QdrantClient::probe_health( 'readyz' )` returns HTTP `200`
 - the collection definition reports `status: green`
@@ -35,6 +35,7 @@ When the system is healthy, all of the following should be true:
 - the collection vector size matches the active embedding dimension
 - the collection payload schema includes keyword indexes for `blockTypes`, `templateTypes`, `categories`, and `traits`
 - raw Qdrant hits for a prompt include obviously relevant patterns
+- synced/user pattern hits use payload names like `core/block/{id}` with `source: synced`
 - final recommendations either preserve those hits or improve their order
 
 Small collections have one easy-to-misread detail:

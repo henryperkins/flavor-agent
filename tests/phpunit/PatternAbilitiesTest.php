@@ -159,7 +159,10 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	public function test_list_synced_patterns_can_filter_partial_and_omit_content_by_default(): void {
-		WordPressTestState::$posts     = [
+		WordPressTestState::$capabilities = [
+			'read_post' => static fn( int $post_id ): bool => in_array( $post_id, [ 21, 22 ], true ),
+		];
+		WordPressTestState::$posts        = [
 			21 => (object) [
 				'ID'                => 21,
 				'post_type'         => 'wp_block',
@@ -194,7 +197,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'post_modified_gmt' => '2026-04-19 00:00:00',
 			],
 		];
-		WordPressTestState::$post_meta = [
+		WordPressTestState::$post_meta    = [
 			21 => [
 				'wp_pattern_sync_status' => 'partial',
 			],
@@ -220,8 +223,52 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertArrayNotHasKey( 'content', $result['patterns'][0] );
 	}
 
+	public function test_list_synced_patterns_filters_unreadable_private_patterns(): void {
+		WordPressTestState::$capabilities = [
+			'read_post' => static fn( int $post_id ): bool => 31 === $post_id,
+		];
+		WordPressTestState::$posts        = [
+			31 => (object) [
+				'ID'                => 31,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Readable Shared Hero',
+				'post_name'         => 'readable-shared-hero',
+				'post_content'      => '<!-- wp:group -->Hero<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 2,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+			32 => (object) [
+				'ID'                => 32,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Private Launch Banner',
+				'post_name'         => 'private-launch-banner',
+				'post_content'      => '<!-- wp:group -->Private launch copy<!-- /wp:group -->',
+				'post_status'       => 'private',
+				'post_author'       => 3,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+
+		$result = PatternAbilities::list_synced_patterns(
+			[
+				'includeContent' => true,
+				'syncStatus'     => 'all',
+			]
+		);
+
+		$this->assertSame( 1, $result['total'] );
+		$this->assertSame( [ 31 ], array_column( $result['patterns'], 'id' ) );
+		$this->assertSame( '<!-- wp:group -->Hero<!-- /wp:group -->', $result['patterns'][0]['content'] );
+	}
+
 	public function test_get_synced_pattern_returns_wp_block_pattern_entity(): void {
-		WordPressTestState::$posts     = [
+		WordPressTestState::$capabilities = [
+			'read_post:12' => true,
+		];
+		WordPressTestState::$posts        = [
 			12 => (object) [
 				'ID'                => 12,
 				'post_type'         => 'wp_block',
@@ -234,7 +281,7 @@ final class PatternAbilitiesTest extends TestCase {
 				'post_modified_gmt' => '2026-04-19 00:00:00',
 			],
 		];
-		WordPressTestState::$post_meta = [
+		WordPressTestState::$post_meta    = [
 			12 => [
 				'wp_pattern_sync_status' => 'unsynced',
 			],
@@ -249,6 +296,34 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 12, $result['id'] );
 		$this->assertSame( 'unsynced', $result['syncStatus'] );
 		$this->assertSame( 'unsynced', $result['wpPatternSyncStatus'] );
+	}
+
+	public function test_get_synced_pattern_returns_not_found_for_unreadable_pattern(): void {
+		WordPressTestState::$capabilities = [
+			'read_post:42' => false,
+		];
+		WordPressTestState::$posts        = [
+			42 => (object) [
+				'ID'                => 42,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Private Pattern',
+				'post_name'         => 'private-pattern',
+				'post_content'      => '<!-- wp:paragraph --><p>Private</p><!-- /wp:paragraph -->',
+				'post_status'       => 'private',
+				'post_author'       => 4,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+		];
+
+		$result = PatternAbilities::get_synced_pattern(
+			[
+				'patternId' => 42,
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'pattern_not_found', $result->get_error_code() );
 	}
 
 	public function test_recommend_patterns_returns_missing_credentials_when_backends_are_not_configured(): void {

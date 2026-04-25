@@ -26,7 +26,8 @@ final class TemplateAbilities {
 	public static function list_template_parts( mixed $input ): array {
 		$input           = self::normalize_input( $input );
 		$area            = $input['area'] ?? null;
-		$include_content = filter_var(
+		$can_edit_theme  = current_user_can( 'edit_theme_options' );
+		$include_content = $can_edit_theme && filter_var(
 			$input['includeContent'] ?? false,
 			FILTER_VALIDATE_BOOLEAN
 		);

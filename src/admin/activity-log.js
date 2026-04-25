@@ -9,6 +9,7 @@ import {
 } from '@wordpress/components';
 import { createRoot, useEffect, useMemo, useState } from '@wordpress/element';
 import { DataForm, DataViews } from '@wordpress/dataviews/wp';
+import { __, sprintf } from '@wordpress/i18n';
 import { check, page, plugins, symbol, undo, warning } from '@wordpress/icons';
 import './wpds-runtime.css';
 import './dataviews-runtime.css';
@@ -25,6 +26,7 @@ import {
 } from './activity-log-utils';
 
 const ROOT_ID = 'flavor-agent-activity-log-root';
+const NOT_RECORDED = 'Not recorded';
 
 function getBootData() {
 	return window.flavorAgentActivityLog || null;
@@ -58,37 +60,37 @@ function getSummaryCards( entries ) {
 	return [
 		{
 			id: 'total',
-			label: 'Recorded actions',
+			label: __( 'Recorded actions', 'flavor-agent' ),
 			value: summary?.total || 0,
 			description: '',
 		},
 		{
 			id: 'applied',
-			label: 'Still applied',
+			label: __( 'Still applied', 'flavor-agent' ),
 			value: summary?.applied || 0,
 			description: '',
 		},
 		{
 			id: 'undone',
-			label: 'Undone',
+			label: __( 'Undone', 'flavor-agent' ),
 			value: summary?.undone || 0,
 			description: '',
 		},
 		{
 			id: 'review',
-			label: 'Review-only',
+			label: __( 'Review-only', 'flavor-agent' ),
 			value: summary?.review || 0,
 			description: '',
 		},
 		{
 			id: 'blocked',
-			label: 'Undo blocked',
+			label: __( 'Undo blocked', 'flavor-agent' ),
 			value: summary?.blocked || 0,
 			description: '',
 		},
 		{
 			id: 'failed',
-			label: 'Failed or unavailable',
+			label: __( 'Failed or unavailable', 'flavor-agent' ),
 			value: summary?.failed || 0,
 			description: '',
 		},
@@ -105,7 +107,7 @@ function buildSelectElements( entries, key, { labelKey = key } = {} ) {
 			rawValue === undefined ||
 			rawValue === null ||
 			rawValue === '' ||
-			rawValue === 'Not recorded'
+			rawValue === NOT_RECORDED
 		) {
 			return;
 		}
@@ -312,14 +314,18 @@ function getPerPageSizes( defaultPerPage, maxPerPage ) {
 
 function EmptyState( { view } ) {
 	const message = view.search
-		? `No AI actions matched “${ view.search }”.`
-		: 'No AI activity has been recorded yet.';
+		? sprintf(
+				/* translators: %s: activity search query. */
+				__( 'No AI actions matched “%s”.', 'flavor-agent' ),
+				view.search
+		  )
+		: __( 'No AI activity has been recorded yet.', 'flavor-agent' );
 
 	return (
 		<Card className="flavor-agent-activity-log__empty" size="small">
 			<CardBody>
 				<h3 className="flavor-agent-activity-log__section-title">
-					No matching activity
+					{ __( 'No matching activity', 'flavor-agent' ) }
 				</h3>
 				<p className="flavor-agent-activity-log__copy">{ message }</p>
 			</CardBody>
@@ -339,16 +345,19 @@ function ErrorState( { error, onRetry } ) {
 						<Icon icon={ warning } />
 					</span>
 					<h3 className="flavor-agent-activity-log__section-title">
-						Activity log unavailable
+						{ __( 'Activity log unavailable', 'flavor-agent' ) }
 					</h3>
 				</div>
 				<p className="flavor-agent-activity-log__copy">
 					{ error ||
-						'Flavor Agent could not load the recent AI activity log.' }
+						__(
+							'Flavor Agent could not load the recent AI activity log.',
+							'flavor-agent'
+						) }
 				</p>
 				<div className="flavor-agent-activity-log__empty-actions">
 					<Button variant="secondary" onClick={ onRetry }>
-						Retry loading activity
+						{ __( 'Retry loading activity', 'flavor-agent' ) }
 					</Button>
 				</div>
 			</CardBody>
@@ -360,7 +369,7 @@ function getDetailFields() {
 	return [
 		{
 			id: 'overviewSummary',
-			label: 'Overview summary',
+			label: __( 'Overview summary', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -371,7 +380,7 @@ function getDetailFields() {
 		},
 		{
 			id: 'diagnosticsSummary',
-			label: 'Diagnostics summary',
+			label: __( 'Diagnostics summary', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => {
@@ -379,34 +388,44 @@ function getDetailFields() {
 					item.provider,
 					item.model,
 					item.providerPath,
-				].filter( ( value ) => value && value !== 'Not recorded' );
+				].filter( ( value ) => value && value !== NOT_RECORDED );
 
-				return <span>{ parts.join( ' · ' ) || 'Not recorded' }</span>;
+				return (
+					<span>
+						{ parts.join( ' · ' ) ||
+							__( 'Not recorded', 'flavor-agent' ) }
+					</span>
+				);
 			},
 		},
 		{
 			id: 'requestSummary',
-			label: 'Request summary',
+			label: __( 'Request summary', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => {
 				const parts = [
 					item.requestAbility,
 					item.requestReference,
-				].filter( ( value ) => value && value !== 'Not recorded' );
+				].filter( ( value ) => value && value !== NOT_RECORDED );
 
-				return <span>{ parts.join( ' · ' ) || 'Not recorded' }</span>;
+				return (
+					<span>
+						{ parts.join( ' · ' ) ||
+							__( 'Not recorded', 'flavor-agent' ) }
+					</span>
+				);
 			},
 		},
 		{
 			id: 'undoSummary',
-			label: 'Undo summary',
+			label: __( 'Undo summary', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
 				<span>
 					{ item.undoStatusLabel }
-					{ item.undoReason && item.undoReason !== 'Not recorded'
+					{ item.undoReason && item.undoReason !== NOT_RECORDED
 						? ` · ${ item.undoReason }`
 						: '' }
 				</span>
@@ -414,7 +433,7 @@ function getDetailFields() {
 		},
 		{
 			id: 'statusLabel',
-			label: 'Status',
+			label: __( 'Status', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -427,169 +446,169 @@ function getDetailFields() {
 		},
 		{
 			id: 'timestampDisplay',
-			label: 'Recorded',
+			label: __( 'Recorded', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'surfaceLabel',
-			label: 'Surface',
+			label: __( 'Surface', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'operationTypeLabel',
-			label: 'Action type',
+			label: __( 'Action type', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'activityTypeLabel',
-			label: 'Recorded activity type',
+			label: __( 'Recorded activity type', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'entity',
-			label: 'Entity',
+			label: __( 'Entity', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'postType',
-			label: 'Post type',
+			label: __( 'Post type', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'entityId',
-			label: 'Entity ID',
+			label: __( 'Entity ID', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'documentLabel',
-			label: 'Document',
+			label: __( 'Document', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'documentScopeKey',
-			label: 'Document scope',
+			label: __( 'Document scope', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'blockPath',
-			label: 'Block path',
+			label: __( 'Block path', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'user',
-			label: 'User',
+			label: __( 'User', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'provider',
-			label: 'Provider',
+			label: __( 'Provider', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'model',
-			label: 'Model',
+			label: __( 'Model', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'providerPath',
-			label: 'Provider path',
+			label: __( 'Provider path', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'configurationOwner',
-			label: 'Configured in',
+			label: __( 'Configured in', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'credentialSource',
-			label: 'Credential source',
+			label: __( 'Credential source', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'selectedProvider',
-			label: 'Selected provider',
+			label: __( 'Selected provider', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'connector',
-			label: 'Connector',
+			label: __( 'Connector', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'connectorPlugin',
-			label: 'Connector plugin',
+			label: __( 'Connector plugin', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'requestFallback',
-			label: 'Fallback',
+			label: __( 'Fallback', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'tokenUsage',
-			label: 'Token usage',
+			label: __( 'Token usage', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'latency',
-			label: 'Latency',
+			label: __( 'Latency', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'transportEndpoint',
-			label: 'Endpoint',
+			label: __( 'Endpoint', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'timeout',
-			label: 'Timeout',
+			label: __( 'Timeout', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'requestPayload',
-			label: 'Payload',
+			label: __( 'Payload', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'responseSummary',
-			label: 'Response',
+			label: __( 'Response', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'providerRequestId',
-			label: 'Provider request ID',
+			label: __( 'Provider request ID', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'transportError',
-			label: 'Transport detail',
+			label: __( 'Transport detail', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -600,25 +619,25 @@ function getDetailFields() {
 		},
 		{
 			id: 'requestReference',
-			label: 'Reference',
+			label: __( 'Reference', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'requestAbility',
-			label: 'Ability',
+			label: __( 'Ability', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'requestRoute',
-			label: 'Route',
+			label: __( 'Route', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'requestPrompt',
-			label: 'Prompt',
+			label: __( 'Prompt', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -629,25 +648,25 @@ function getDetailFields() {
 		},
 		{
 			id: 'undoStatusLabel',
-			label: 'Undo state',
+			label: __( 'Undo state', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'undoError',
-			label: 'Undo error',
+			label: __( 'Undo error', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'undoReason',
-			label: 'Undo reason',
+			label: __( 'Undo reason', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 		},
 		{
 			id: 'stateDiff',
-			label: 'Structured diff',
+			label: __( 'Structured diff', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -658,7 +677,7 @@ function getDetailFields() {
 		},
 		{
 			id: 'beforeSummary',
-			label: 'Before',
+			label: __( 'Before', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -669,7 +688,7 @@ function getDetailFields() {
 		},
 		{
 			id: 'afterSummary',
-			label: 'After',
+			label: __( 'After', 'flavor-agent' ),
 			type: 'text',
 			readOnly: true,
 			render: ( { item } ) => (
@@ -686,7 +705,7 @@ function getDetailForm() {
 		fields: [
 			{
 				id: 'overview',
-				label: 'Overview',
+				label: __( 'Overview', 'flavor-agent' ),
 				children: [
 					'statusLabel',
 					'timestampDisplay',
@@ -708,7 +727,7 @@ function getDetailForm() {
 			},
 			{
 				id: 'diagnostics',
-				label: 'Diagnostics',
+				label: __( 'Diagnostics', 'flavor-agent' ),
 				children: [
 					'provider',
 					'model',
@@ -735,7 +754,7 @@ function getDetailForm() {
 			},
 			{
 				id: 'request',
-				label: 'Request',
+				label: __( 'Request', 'flavor-agent' ),
 				children: [
 					'requestAbility',
 					'requestRoute',
@@ -749,7 +768,7 @@ function getDetailForm() {
 			},
 			{
 				id: 'undo',
-				label: 'Undo',
+				label: __( 'Undo', 'flavor-agent' ),
 				children: [ 'undoStatusLabel', 'undoReason', 'undoError' ],
 				layout: {
 					type: 'details',
@@ -758,7 +777,7 @@ function getDetailForm() {
 			},
 			{
 				id: 'state',
-				label: 'State snapshots',
+				label: __( 'State snapshots', 'flavor-agent' ),
 				children: [ 'stateDiff', 'beforeSummary', 'afterSummary' ],
 				layout: {
 					type: 'details',
@@ -774,11 +793,13 @@ function ActivityEntryDetails( { entry } ) {
 			<Card className="flavor-agent-activity-log__sidebar-card">
 				<CardBody>
 					<h3 className="flavor-agent-activity-log__section-title">
-						Entry details
+						{ __( 'Entry details', 'flavor-agent' ) }
 					</h3>
 					<p className="flavor-agent-activity-log__copy">
-						Select an activity item to inspect request metadata,
-						provider ownership, undo state, and navigation links.
+						{ __(
+							'Select an activity item to inspect request metadata, provider ownership, undo state, and navigation links.',
+							'flavor-agent'
+						) }
 					</p>
 				</CardBody>
 			</Card>
@@ -957,7 +978,10 @@ export function ActivityLogApp( { bootData } ) {
 				} );
 				setError(
 					fetchError?.message ||
-						'Flavor Agent could not load the recent AI activity log.'
+						__(
+							'Flavor Agent could not load the recent AI activity log.',
+							'flavor-agent'
+						)
 				);
 			} finally {
 				if ( isCurrent ) {
@@ -1017,7 +1041,7 @@ export function ActivityLogApp( { bootData } ) {
 		return [
 			{
 				id: 'icon',
-				label: 'Icon',
+				label: __( 'Icon', 'flavor-agent' ),
 				type: 'media',
 				enableSorting: false,
 				render: ( { item } ) => (
@@ -1030,7 +1054,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'title',
-				label: 'Action',
+				label: __( 'Action', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
@@ -1046,7 +1070,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'description',
-				label: 'Description',
+				label: __( 'Description', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
@@ -1058,7 +1082,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'day',
-				label: 'Date',
+				label: __( 'Date', 'flavor-agent' ),
 				type: 'date',
 				enableSorting: false,
 				filterBy: {
@@ -1074,21 +1098,21 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'timestamp',
-				label: 'Timestamp',
+				label: __( 'Timestamp', 'flavor-agent' ),
 				type: 'datetime',
 				enableSorting: true,
 				render: ( { item } ) => <span>{ item.timestampDisplay }</span>,
 			},
 			{
 				id: 'timestampDisplay',
-				label: 'Recorded',
+				label: __( 'Recorded', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				render: ( { item } ) => <span>{ item.timestampDisplay }</span>,
 			},
 			{
 				id: 'operationType',
-				label: 'Action type',
+				label: __( 'Action type', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				elements: operationTypeElements,
@@ -1101,7 +1125,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'surface',
-				label: 'Surface',
+				label: __( 'Surface', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				elements: surfaceElements,
@@ -1112,15 +1136,24 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'status',
-				label: 'Status',
+				label: __( 'Status', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				elements: [
-					{ value: 'applied', label: 'Applied' },
-					{ value: 'review', label: 'Review' },
-					{ value: 'undone', label: 'Undone' },
-					{ value: 'blocked', label: 'Undo blocked' },
-					{ value: 'failed', label: 'Undo unavailable' },
+					{
+						value: 'applied',
+						label: __( 'Applied', 'flavor-agent' ),
+					},
+					{ value: 'review', label: __( 'Review', 'flavor-agent' ) },
+					{ value: 'undone', label: __( 'Undone', 'flavor-agent' ) },
+					{
+						value: 'blocked',
+						label: __( 'Undo blocked', 'flavor-agent' ),
+					},
+					{
+						value: 'failed',
+						label: __( 'Undo unavailable', 'flavor-agent' ),
+					},
 				],
 				filterBy: {
 					operators: [ 'is', 'isNot' ],
@@ -1135,7 +1168,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'userId',
-				label: 'User',
+				label: __( 'User', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				elements: userElements,
@@ -1146,7 +1179,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'postType',
-				label: 'Post type',
+				label: __( 'Post type', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
@@ -1157,7 +1190,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'entityId',
-				label: 'Entity ID',
+				label: __( 'Entity ID', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				filterBy: {
@@ -1166,14 +1199,14 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'entity',
-				label: 'Entity',
+				label: __( 'Entity', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
 			},
 			{
 				id: 'blockPath',
-				label: 'Block path',
+				label: __( 'Block path', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				filterBy: {
@@ -1182,7 +1215,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'provider',
-				label: 'Provider',
+				label: __( 'Provider', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: true,
 				enableGlobalSearch: true,
@@ -1193,14 +1226,14 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'model',
-				label: 'Model',
+				label: __( 'Model', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
 			},
 			{
 				id: 'providerPath',
-				label: 'Provider path',
+				label: __( 'Provider path', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: true,
 				enableGlobalSearch: true,
@@ -1211,7 +1244,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'configurationOwner',
-				label: 'Configured in',
+				label: __( 'Configured in', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: true,
 				enableGlobalSearch: true,
@@ -1222,7 +1255,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'credentialSource',
-				label: 'Credential source',
+				label: __( 'Credential source', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: true,
 				enableGlobalSearch: true,
@@ -1233,7 +1266,7 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'selectedProvider',
-				label: 'Selected provider',
+				label: __( 'Selected provider', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: true,
 				enableGlobalSearch: true,
@@ -1244,14 +1277,14 @@ export function ActivityLogApp( { bootData } ) {
 			},
 			{
 				id: 'activityTypeLabel',
-				label: 'Recorded activity type',
+				label: __( 'Recorded activity type', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
 			},
 			{
 				id: 'requestPrompt',
-				label: 'Prompt',
+				label: __( 'Prompt', 'flavor-agent' ),
 				type: 'text',
 				enableSorting: false,
 				enableGlobalSearch: true,
@@ -1315,12 +1348,14 @@ export function ActivityLogApp( { bootData } ) {
 					</p>
 					<div className="flavor-agent-activity-log__title-row">
 						<h1 className="flavor-agent-activity-log__page-title">
-							AI Activity Log
+							{ __( 'AI Activity Log', 'flavor-agent' ) }
 						</h1>
 					</div>
 					<p className="flavor-agent-activity-log__copy">
-						Review recent AI actions across editor, Site Editor, and
-						admin surfaces.
+						{ __(
+							'Review recent AI actions across editor, Site Editor, and admin surfaces.',
+							'flavor-agent'
+						) }
 					</p>
 				</div>
 				<div className="flavor-agent-activity-log__masthead-actions">
@@ -1331,13 +1366,13 @@ export function ActivityLogApp( { bootData } ) {
 						}
 						disabled={ isLoading }
 					>
-						Refresh
+						{ __( 'Refresh', 'flavor-agent' ) }
 					</Button>
 					<Button href={ bootData.settingsUrl } variant="tertiary">
-						Flavor Agent settings
+						{ __( 'Flavor Agent settings', 'flavor-agent' ) }
 					</Button>
 					<Button href={ bootData.connectorsUrl } variant="tertiary">
-						Connectors
+						{ __( 'Connectors', 'flavor-agent' ) }
 					</Button>
 				</div>
 			</div>
@@ -1387,7 +1422,12 @@ export function ActivityLogApp( { bootData } ) {
 						<div className="flavor-agent-activity-log__controls">
 							<div className="flavor-agent-activity-log__controls-main">
 								<div className="flavor-agent-activity-log__search">
-									<DataViews.Search label="Search AI activity" />
+									<DataViews.Search
+										label={ __(
+											'Search AI activity',
+											'flavor-agent'
+										) }
+									/>
 								</div>
 								{ isLoading && <Spinner /> }
 							</div>
@@ -1399,7 +1439,7 @@ export function ActivityLogApp( { bootData } ) {
 										variant="secondary"
 										onClick={ () => setView( defaultView ) }
 									>
-										Reset view
+										{ __( 'Reset view', 'flavor-agent' ) }
 									</Button>
 								) }
 							</div>

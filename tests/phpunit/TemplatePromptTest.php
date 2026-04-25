@@ -145,7 +145,7 @@ final class TemplatePromptTest extends TestCase {
 		$this->assertStringContainsString( 'do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.', $system );
 	}
 
-	public function test_parse_response_keeps_only_valid_structured_template_operations(): void {
+	public function test_parse_response_keeps_valid_structured_template_operations(): void {
 		$context = [
 			'assignedParts'            => [
 				[
@@ -203,12 +203,6 @@ final class TemplatePromptTest extends TestCase {
 								'patternName' => 'theme/hero',
 								'placement'   => 'start',
 							],
-							[
-								'type'        => 'replace_template_part',
-								'currentSlug' => 'missing',
-								'slug'        => 'footer-main',
-								'area'        => 'footer',
-							],
 						],
 					],
 				],
@@ -260,6 +254,140 @@ final class TemplatePromptTest extends TestCase {
 			],
 			$result['suggestions']
 		);
+	}
+
+	public function test_parse_response_rejects_structured_template_suggestions_with_any_invalid_operation(): void {
+		$context = [
+			'assignedParts'            => [
+				[
+					'slug' => 'header',
+					'area' => 'header',
+				],
+			],
+			'availableParts'           => [
+				[
+					'slug'  => 'header-minimal',
+					'area'  => 'header',
+					'title' => 'Header Minimal',
+				],
+			],
+			'allowedAreas'             => [ 'header' ],
+			'emptyAreas'               => [],
+			'patterns'                 => [
+				[
+					'name' => 'theme/hero',
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement' => 'start',
+					'label'     => 'Start of template',
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Do not truncate executable plans',
+						'description' => 'A malformed operation should not leave a partial executable plan.',
+						'operations'  => [
+							[
+								'type'        => 'replace_template_part',
+								'currentSlug' => 'header',
+								'slug'        => 'header-minimal',
+								'area'        => 'header',
+							],
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/missing',
+								'placement'   => 'start',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
+	}
+
+	public function test_parse_response_keeps_all_valid_explicit_template_operations(): void {
+		$context = [
+			'availableParts' => [
+				[
+					'slug' => 'header-compact',
+					'area' => 'header',
+				],
+				[
+					'slug' => 'sidebar-main',
+					'area' => 'sidebar',
+				],
+				[
+					'slug' => 'footer-main',
+					'area' => 'footer',
+				],
+				[
+					'slug' => 'aside-main',
+					'area' => 'aside',
+				],
+				[
+					'slug' => 'promo-main',
+					'area' => 'promo',
+				],
+			],
+			'allowedAreas'   => [ 'header', 'sidebar', 'footer', 'aside', 'promo' ],
+			'emptyAreas'     => [ 'header', 'sidebar', 'footer', 'aside', 'promo' ],
+			'patterns'       => [],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Fill the open structural slots',
+						'description' => 'Every explicit operation is part of the executable plan.',
+						'operations'  => [
+							[
+								'type' => 'assign_template_part',
+								'slug' => 'header-compact',
+								'area' => 'header',
+							],
+							[
+								'type' => 'assign_template_part',
+								'slug' => 'sidebar-main',
+								'area' => 'sidebar',
+							],
+							[
+								'type' => 'assign_template_part',
+								'slug' => 'footer-main',
+								'area' => 'footer',
+							],
+							[
+								'type' => 'assign_template_part',
+								'slug' => 'aside-main',
+								'area' => 'aside',
+							],
+							[
+								'type' => 'assign_template_part',
+								'slug' => 'promo-main',
+								'area' => 'promo',
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertCount( 5, $result['suggestions'][0]['operations'] ?? [] );
+		$this->assertSame( 'promo', $result['suggestions'][0]['operations'][4]['area'] ?? null );
 	}
 
 	public function test_parse_response_derives_template_part_operations_from_legacy_template_fields_without_keeping_advisory_pattern_summaries(): void {
@@ -465,31 +593,8 @@ final class TemplatePromptTest extends TestCase {
 
 		$result = TemplatePrompt::parse_response( $raw, $context );
 
-		$this->assertIsArray( $result );
-		$this->assertSame(
-			[
-				[
-					'label'              => 'Avoid destructive assigns',
-					'description'        => 'Only assign into truly empty areas.',
-					'operations'         => [
-						[
-							'type' => 'assign_template_part',
-							'slug' => 'footer-main',
-							'area' => 'footer',
-						],
-					],
-					'templateParts'      => [
-						[
-							'slug'   => 'footer-main',
-							'area'   => 'footer',
-							'reason' => '',
-						],
-					],
-					'patternSuggestions' => [],
-				],
-			],
-			$result['suggestions']
-		);
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_recommendations', $result->get_error_code() );
 	}
 
 	public function test_parse_response_rejects_double_assigns_for_the_same_area(): void {

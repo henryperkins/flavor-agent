@@ -987,7 +987,8 @@
 
 /* ---------------------------------------------------------------
  * Shared: Suggestion card
- * Used in: SettingsRecommendations, TemplateRecommender
+ * Used in: RecommendationLane, RecommendationHero, block/navigation
+ * cards, template/template-part cards, and style suggestion cards
  * --------------------------------------------------------------- */
 
 .flavor-agent-card {
@@ -1238,7 +1239,7 @@
 }
 
 /* ---------------------------------------------------------------
- * Style suggestion row (StylesRecommendations overflow items)
+ * Style suggestion row (shared inline style recommendation lanes)
  * --------------------------------------------------------------- */
 
 .flavor-agent-style-row {

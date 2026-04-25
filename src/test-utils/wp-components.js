@@ -14,6 +14,7 @@ function mockWpComponents( overrides = {} ) {
 		className,
 		disabled,
 		href,
+		isPressed,
 		label,
 		onClick,
 		size,
@@ -45,6 +46,7 @@ function mockWpComponents( overrides = {} ) {
 				className,
 				disabled,
 				onClick,
+				'aria-pressed': isPressed,
 				title,
 				...props,
 			},
@@ -90,8 +92,12 @@ function mockWpComponents( overrides = {} ) {
 
 	return {
 		Button,
-		ButtonGroup: ( { children, className } ) =>
-			createElement( 'div', { className }, children ),
+		ButtonGroup: ( { children, className, ...props } ) =>
+			createElement(
+				'div',
+				{ className, role: 'group', ...props },
+				children
+			),
 		Card: ( { children, className = '' } ) =>
 			createElement( 'div', { className }, children ),
 		CardBody: ( { children, className = '' } ) =>

@@ -25,7 +25,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Surfacing Conditions
 
 - `flavor-agent/introspect-block`, `flavor-agent/list-allowed-blocks`, `flavor-agent/list-patterns`, `flavor-agent/get-pattern`, `flavor-agent/list-synced-patterns`, `flavor-agent/get-synced-pattern`, `flavor-agent/get-active-theme`, `flavor-agent/get-theme-presets`, `flavor-agent/get-theme-styles`, `flavor-agent/get-theme-tokens`, and `flavor-agent/check-status` require `edit_posts`
-- `flavor-agent/list-template-parts` allows metadata reads for users with `edit_posts`; requesting `includeContent: true` still requires `edit_theme_options`
+- `flavor-agent/list-template-parts` allows callers with either `edit_posts` or `edit_theme_options`; `includeContent: true` is silently coerced to metadata-only when the caller lacks `edit_theme_options`
 - `flavor-agent/search-wordpress-docs` requires `manage_options` and a valid docs backend; by default that is the managed public Cloudflare AI Search endpoint, with legacy Cloudflare credentials still supported for backwards compatibility
 - `flavor-agent/check-status` only reports what is currently available; it does not change configuration or retry backends
 - `flavor-agent/search-wordpress-docs` accepts a query plus optional `maxResults` and `entityKey` fields
@@ -50,9 +50,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## What This Surface Can Do
 
 - Return a block manifest for agentic inspection and capability discovery, or list the full registered block registry with each block type's allowed inner blocks
-- List registered patterns with optional search, pagination, and `includeContent` control, fetch one by name via the `patternId` or `name` alias, and inspect synced `wp_block` patterns separately from registry-backed block patterns
+- List registered patterns with optional search, pagination, and `includeContent` control, fetch one by name via the `patternId` or `name` alias, and inspect caller-readable synced `wp_block` patterns separately from registry-backed block patterns
 - Return the active theme plus current theme presets, applied theme styles, and the broader theme token snapshot for style and layout reasoning
-- Read template-part metadata with editor capability, or include template-part markup when the caller also has `edit_theme_options`
+- List template parts with either editor or theme capability, while returning markup only to theme-capable callers
 - Return backend and surface-readiness diagnostics for editor and admin tooling
 - Search trusted WordPress developer docs for grounded guidance, with cache warming for repeated queries
 
@@ -68,12 +68,12 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `flavor-agent/get-pattern` resolves by registered pattern name only. The returned `id` is the same string as `name`, and the request-side `patternId` field is an alias for that same string value rather than a separate numeric identifier.
 - `flavor-agent/list-patterns` supports `search`, `limit`, `offset`, and `includeContent`, returns a `total` count, and omits `content` by default for lighter payloads.
-- `flavor-agent/list-synced-patterns` queries `wp_block` posts with `post_status = any`, accepts `synced`, `partial`, `unsynced`, or `all` for the `syncStatus` filter, supports `search`, `limit`, `offset`, and `includeContent`, returns a `total` count, and omits `content` by default.
+- `flavor-agent/list-synced-patterns` queries `wp_block` posts with `post_status = any`, filters each result through post read access, accepts `synced`, `partial`, `unsynced`, or `all` for the `syncStatus` filter, supports `search`, `limit`, `offset`, and `includeContent`, returns a caller-readable `total` count, and omits `content` by default.
 - `flavor-agent/list-allowed-blocks` returns the full registered block registry, sorted by title and then name. It is not filtered by the current inserter root, post type, or other editor context, but it now supports `search`, `category`, `limit`, `offset`, `includeVariations`, and `maxVariations`, plus a `total` count.
 - `flavor-agent/introspect-block` still returns up to 10 variations. `flavor-agent/list-allowed-blocks` now omits `variations` by default and truncates them only when `includeVariations: true`, using `maxVariations` with a default cap of 10.
 - `flavor-agent/get-theme-styles` returns both raw `styles` and extracted summaries. `elementStyles.base`, `hover`, and `focus` contain only color maps, while `focusVisible` preserves the full `:focus-visible` object.
 - `flavor-agent/check-status` returns backend inventory, `availableAbilities`, and a `surfaces` map keyed by `block`, `pattern`, `content`, `template`, `templatePart`, `navigation`, `globalStyles`, and `styleBook`.
-- Helper permissions are intentionally asymmetric: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, and `get-theme-tokens` require `edit_posts`; `list-template-parts` now follows the same editor-capability baseline for metadata reads but still requires `edit_theme_options` when `includeContent: true`; the theme-oriented recommendation surfaces remain `edit_theme_options` only.
+- Helper permissions are intentionally asymmetric: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, and `get-theme-tokens` require `edit_posts`; `list-template-parts` allows either editor or theme capability at the outer boundary but only returns markup to theme-capable callers; the theme-oriented recommendation surfaces remain `edit_theme_options` only.
 
 ## Primary Functions And Handlers
 
@@ -84,8 +84,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 | Block listing | `BlockAbilities::list_allowed_blocks()` | Returns the full registered block registry plus per-block `allowedBlocks` contracts |
 | Pattern listing | `PatternAbilities::list_patterns()` | Returns registered patterns with optional filters |
 | Pattern lookup | `PatternAbilities::get_pattern()` | Returns one registered pattern by name; `patternId` is an alias for the same string ID |
-| Synced pattern listing | `PatternAbilities::list_synced_patterns()` | Returns `wp_block` patterns filtered by sync status |
-| Synced pattern lookup | `PatternAbilities::get_synced_pattern()` | Returns one `wp_block` pattern by numeric post ID |
+| Synced pattern listing | `PatternAbilities::list_synced_patterns()` | Returns caller-readable `wp_block` patterns filtered by sync status |
+| Synced pattern lookup | `PatternAbilities::get_synced_pattern()` | Returns one caller-readable `wp_block` pattern by numeric post ID |
 | Template-part listing | `TemplateAbilities::list_template_parts()` | Returns registered template parts with optional area filtering and optional content for theme-capable callers |
 | Active theme | `InfraAbilities::get_active_theme()` | Returns the active theme name, stylesheet, template, and version |
 | Theme presets | `InfraAbilities::get_theme_presets()` | Returns palette, typography, spacing, shadow, gradient, and duotone presets |

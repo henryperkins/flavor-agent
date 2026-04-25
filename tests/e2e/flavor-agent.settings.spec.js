@@ -1,21 +1,5 @@
 const { test, expect } = require( '@playwright/test' );
-
-async function waitForWordPressReady( page ) {
-	for ( let attempt = 0; attempt < 30; attempt++ ) {
-		const loadingText = page.getByText( 'WordPress is not ready yet' );
-
-		if ( ! ( await loadingText.count() ) ) {
-			return;
-		}
-
-		await page.waitForTimeout( 2000 );
-		await page.reload( { waitUntil: 'domcontentloaded' } );
-	}
-
-	await expect( page.getByText( 'WordPress is not ready yet' ) ).toHaveCount(
-		0
-	);
-}
+const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 
 test( 'settings page keeps compact help-first IA without changing accordion behavior', async ( {
 	page,

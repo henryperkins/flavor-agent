@@ -679,6 +679,64 @@ describe( 'template-actions', () => {
 		] );
 	} );
 
+	test( 'applyTemplateSuggestionOperations rolls back earlier template-part changes when a later insert fails', () => {
+		const { state, blockEditorDispatch } = setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'tp-1',
+					name: 'core/template-part',
+					attributes: {
+						slug: 'header',
+						area: 'header',
+					},
+					innerBlocks: [],
+				},
+			],
+			patterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero Banner',
+					content: '<!-- wp:paragraph {"content":"Inserted"} /-->',
+				},
+			],
+		} );
+		blockEditorDispatch.insertBlocks.mockImplementation( () => {} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Inserted' ),
+		] );
+
+		const result = applyTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'replace_template_part',
+					currentSlug: 'header',
+					slug: 'header-minimal',
+					area: 'header',
+				},
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					placement: 'end',
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'Pattern “Hero Banner” could not be inserted into this template.',
+		} );
+		expect( state.blocks[ 0 ].attributes ).toEqual( {
+			slug: 'header',
+			area: 'header',
+		} );
+		expect(
+			blockEditorDispatch.updateBlockAttributes
+		).toHaveBeenLastCalledWith( 'tp-1', {
+			slug: 'header',
+			area: 'header',
+		} );
+	} );
+
 	test( 'normalizeBlockSnapshot serializes rich text attribute values to stable HTML strings', () => {
 		const snapshot = normalizeBlockSnapshot( {
 			clientId: 'rich-1',

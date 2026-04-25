@@ -416,7 +416,7 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
-	public function test_list_template_parts_permission_callback_allows_metadata_reads_for_editors_only_without_content(): void {
+	public function test_list_template_parts_permission_callback_is_not_request_sensitive(): void {
 		Registration::register_category();
 		Registration::register_abilities();
 
@@ -431,13 +431,19 @@ final class RegistrationTest extends TestCase {
 
 		$this->assertTrue( $permission_callback( [] ) );
 		$this->assertTrue( $permission_callback( [ 'includeContent' => false ] ) );
+		$this->assertTrue( $permission_callback( [ 'includeContent' => true ] ) );
+
+		WordPressTestState::$capabilities = [
+			'edit_posts' => false,
+		];
+
 		$this->assertFalse( $permission_callback( [ 'includeContent' => true ] ) );
 
 		WordPressTestState::$capabilities = [
-			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
 
+		$this->assertTrue( $permission_callback( [] ) );
 		$this->assertTrue( $permission_callback( [ 'includeContent' => true ] ) );
 	}
 

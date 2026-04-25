@@ -67,6 +67,10 @@ add_action( 'after_switch_theme', [ FlavorAgent\Patterns\PatternIndex::class, 'h
 add_action( 'activated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 add_action( 'deactivated_plugin', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
 add_action( 'upgrader_process_complete', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_registry_change' ] );
+add_action( 'save_post_wp_block', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_synced_pattern_change' ], 10, 3 );
+add_action( 'before_delete_post', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_synced_pattern_change' ], 10, 2 );
+add_action( 'trashed_post', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_synced_pattern_change' ], 10, 1 );
+add_action( 'untrashed_post', [ FlavorAgent\Patterns\PatternIndex::class, 'handle_synced_pattern_change' ], 10, 1 );
 
 foreach ( [
 	'flavor_agent_openai_provider',

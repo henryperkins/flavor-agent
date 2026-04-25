@@ -279,11 +279,23 @@ final class Repository {
 	 * }
 	 */
 	public static function query_admin( array $filters ): array {
-		$page              = self::normalize_page( $filters['page'] ?? 1 );
-		$per_page          = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
-		$sort_field        = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
-		$sort_direction    = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
-		$timezone          = self::resolve_activity_timezone();
+		$page           = self::normalize_page( $filters['page'] ?? 1 );
+		$per_page       = self::normalize_per_page( $filters['perPage'] ?? self::DEFAULT_PER_PAGE );
+		$sort_field     = self::normalize_sort_field( $filters['sortField'] ?? 'timestamp' );
+		$sort_direction = self::normalize_sort_direction( $filters['sortDirection'] ?? 'desc' );
+		$timezone       = self::resolve_activity_timezone();
+
+		if ( ! self::admin_projection_backfill_pending() ) {
+			return self::query_admin_projected(
+				$filters,
+				$page,
+				$per_page,
+				$sort_field,
+				$sort_direction,
+				$timezone
+			);
+		}
+
 		$candidate_rows    = self::query_candidate_rows( $filters );
 		$history_rows      = self::requires_full_history_resolution( $filters )
 			? self::query_admin_history_rows( $candidate_rows )
@@ -982,6 +994,593 @@ final class Repository {
 
 	private static function should_select_full_admin_candidate_rows(): bool {
 		return self::admin_projection_backfill_pending();
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array{
+	 *   entries: array<int, array<string, mixed>>,
+	 *   paginationInfo: array{page: int, perPage: int, totalItems: int, totalPages: int},
+	 *   summary: array{total: int, applied: int, undone: int, review: int, blocked: int, failed: int},
+	 *   filterOptions: array<string, array<int, array{value: string, label: string}>>
+	 * }
+	 */
+	private static function query_admin_projected(
+		array $filters,
+		int $page,
+		int $per_page,
+		string $sort_field,
+		string $sort_direction,
+		\DateTimeZone $timezone
+	): array {
+		$filter_context = self::build_admin_filter_context( $filters, $timezone );
+		$where          = self::build_admin_sql_filter_clauses( $filter_context );
+		$total_items    = self::query_admin_sql_total_items( $where );
+		$total_pages    = $total_items > 0
+			? (int) ceil( $total_items / $per_page )
+			: 0;
+		$page           = min( $page, $total_pages > 0 ? $total_pages : 1 );
+		$offset         = ( $page - 1 ) * $per_page;
+		$page_rows      = self::query_admin_sql_page_rows(
+			$where,
+			$sort_field,
+			$sort_direction,
+			$per_page,
+			$offset
+		);
+		$history_rows   = self::query_admin_history_rows( $page_rows );
+		$status_map     = self::resolve_admin_row_statuses( $history_rows );
+		$page_records   = self::resolve_admin_records(
+			$page_rows,
+			$status_map,
+			$timezone
+		);
+
+		return [
+			'entries'        => self::load_admin_page_entries( $page_records ),
+			'paginationInfo' => [
+				'page'       => $page,
+				'perPage'    => $per_page,
+				'totalItems' => $total_items,
+				'totalPages' => $total_pages,
+			],
+			'summary'        => self::query_admin_sql_summary( $where ),
+			'filterOptions'  => self::query_admin_sql_filter_options(
+				$filter_context
+			),
+		];
+	}
+
+	/**
+	 * @param array{clauses: array<int, string>, args: array<int, mixed>} $where
+	 */
+	private static function query_admin_sql_total_items( array $where ): int {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return 0;
+		}
+
+		$sql = 'SELECT COUNT(*) FROM ' . self::table_name() . ' AS t';
+		$sql = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
+		$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Counts rows in the plugin-owned activity table for the admin activity page.
+		return max( 0, (int) $wpdb->get_var( $sql ) );
+	}
+
+	/**
+	 * @param array{clauses: array<int, string>, args: array<int, mixed>} $where
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function query_admin_sql_page_rows(
+		array $where,
+		string $sort_field,
+		string $sort_direction,
+		int $per_page,
+		int $offset
+	): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$args = array_merge( $where['args'], [ $per_page, $offset ] );
+		$sql  = 'SELECT ' . self::ADMIN_PROJECTION_SELECT_SQL . ' FROM ' . self::table_name() . ' AS t';
+		$sql  = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
+		$sql .= ' ORDER BY ' . self::get_admin_sql_order_clause( $sort_field, $sort_direction );
+		$sql .= ' LIMIT %d OFFSET %d';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql uses allow-listed columns and placeholders.
+		$sql = $wpdb->prepare( $sql, $args );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads one bounded page from the plugin-owned activity table.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		return array_values( is_array( $rows ) ? $rows : [] );
+	}
+
+	/**
+	 * @param array{clauses: array<int, string>, args: array<int, mixed>} $where
+	 * @return array{total: int, applied: int, undone: int, review: int, blocked: int, failed: int}
+	 */
+	private static function query_admin_sql_summary( array $where ): array {
+		global $wpdb;
+
+		$summary = [
+			'total'   => 0,
+			'applied' => 0,
+			'undone'  => 0,
+			'review'  => 0,
+			'blocked' => 0,
+			'failed'  => 0,
+		];
+
+		if ( ! is_object( $wpdb ) ) {
+			return $summary;
+		}
+
+		$sql = 'SELECT ' . self::get_admin_sql_status_case() . ' AS admin_status, COUNT(*) AS total FROM ' . self::table_name() . ' AS t';
+		$sql = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
+		$sql = $sql . ' GROUP BY admin_status';
+		$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Aggregates status counts from the plugin-owned activity table.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$status = trim( (string) ( $row['admin_status'] ?? '' ) );
+			$total  = max( 0, (int) ( $row['total'] ?? 0 ) );
+
+			if ( array_key_exists( $status, $summary ) ) {
+				$summary[ $status ] = $total;
+				$summary['total']  += $total;
+			}
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * @param array<string, mixed> $filter_context
+	 * @return array<string, array<int, array{value: string, label: string}>>
+	 */
+	private static function query_admin_sql_filter_options( array $filter_context ): array {
+		global $wpdb;
+
+		$definitions = [
+			'surface'            => [
+				'column' => 't.surface',
+				'type'   => 'surface',
+			],
+			'operationType'      => [
+				'column'       => 't.admin_operation_type',
+				'label_column' => 't.admin_operation_label',
+				'type'         => 'operation',
+			],
+			'postType'           => [
+				'column' => 't.admin_post_type',
+				'type'   => 'value',
+			],
+			'userId'             => [
+				'column' => 't.user_id',
+				'type'   => 'user',
+			],
+			'provider'           => [
+				'column' => 't.admin_provider',
+				'type'   => 'value',
+			],
+			'providerPath'       => [
+				'column' => 't.admin_provider_path',
+				'type'   => 'value',
+			],
+			'configurationOwner' => [
+				'column' => 't.admin_configuration_owner',
+				'type'   => 'value',
+			],
+			'credentialSource'   => [
+				'column' => 't.admin_credential_source',
+				'type'   => 'value',
+			],
+			'selectedProvider'   => [
+				'column' => 't.admin_selected_provider',
+				'type'   => 'value',
+			],
+		];
+		$options     = array_fill_keys( array_keys( $definitions ), [] );
+
+		if ( ! is_object( $wpdb ) ) {
+			return $options;
+		}
+
+		foreach ( $definitions as $option_key => $definition ) {
+			$where        = self::build_admin_sql_filter_clauses(
+				$filter_context,
+				$option_key
+			);
+			$value_column = $definition['column'];
+			$label_column = $definition['label_column'] ?? null;
+			$clauses      = $where['clauses'];
+
+			$clauses[] = 'userId' === $option_key
+				? $value_column . ' > 0'
+				: $value_column . " <> ''";
+
+			$sql = 'SELECT ' . $value_column . ' AS value';
+
+			if ( is_string( $label_column ) && '' !== $label_column ) {
+				$sql .= ', ' . $label_column . ' AS label';
+			}
+
+			$sql .= ' FROM ' . self::table_name() . ' AS t';
+			$sql  = self::append_admin_sql_where_clause( $sql, $clauses );
+			$sql .= ' GROUP BY ' . $value_column;
+
+			if ( is_string( $label_column ) && '' !== $label_column ) {
+				$sql .= ', ' . $label_column;
+				$sql .= ' ORDER BY ' . $label_column . ' ASC, ' . $value_column . ' ASC';
+			} else {
+				$sql .= ' ORDER BY ' . $value_column . ' ASC';
+			}
+
+			$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads distinct filter values from the plugin-owned activity table.
+			$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+			foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+				$value = trim( (string) ( $row['value'] ?? '' ) );
+
+				if ( '' === $value ) {
+					continue;
+				}
+
+				$label = trim( (string) ( $row['label'] ?? '' ) );
+				$label = self::resolve_admin_sql_filter_option_label(
+					$value,
+					$label,
+					(string) $definition['type']
+				);
+
+				if ( '' === $label ) {
+					continue;
+				}
+
+				$options[ $option_key ][] = [
+					'value' => $value,
+					'label' => $label,
+				];
+			}
+		}
+
+		return $options;
+	}
+
+	/**
+	 * @param array<string, mixed> $filter_context
+	 * @return array{clauses: array<int, string>, args: array<int, mixed>}
+	 */
+	private static function build_admin_sql_filter_clauses(
+		array $filter_context,
+		?string $excluded_filter = null
+	): array {
+		global $wpdb;
+
+		$filters     = is_array( $filter_context['filters'] ?? null ) ? $filter_context['filters'] : [];
+		$timezone    = $filter_context['timezone'] instanceof \DateTimeZone
+			? $filter_context['timezone']
+			: self::resolve_activity_timezone();
+		$clauses     = [];
+		$args        = [];
+		$scope_key   = trim( (string) ( $filters['scopeKey'] ?? '' ) );
+		$entity_type = trim( (string) ( $filters['entityType'] ?? '' ) );
+		$entity_ref  = trim( (string) ( $filters['entityRef'] ?? '' ) );
+
+		if ( '' !== $scope_key ) {
+			$clauses[] = 't.document_scope_key = %s';
+			$args[]    = $scope_key;
+		}
+
+		if ( '' !== $entity_type ) {
+			$clauses[] = 't.entity_type = %s';
+			$args[]    = $entity_type;
+		}
+
+		if ( '' !== $entity_ref ) {
+			$clauses[] = 't.entity_ref = %s';
+			$args[]    = $entity_ref;
+		}
+
+		if ( 'search' !== $excluded_filter && '' !== (string) ( $filter_context['search'] ?? '' ) && is_object( $wpdb ) ) {
+			$search    = '%' . $wpdb->esc_like( (string) $filter_context['search'] ) . '%';
+			$clauses[] = '('
+				. 'LOWER(t.admin_search_text) LIKE %s'
+				. ' OR LOWER(t.surface) LIKE %s'
+				. ' OR LOWER(t.admin_post_type) LIKE %s'
+				. ' OR LOWER(t.admin_entity_id) LIKE %s'
+				. ' OR LOWER(t.admin_provider) LIKE %s'
+				. ' OR LOWER(t.admin_provider_path) LIKE %s'
+				. ' OR LOWER(t.admin_configuration_owner) LIKE %s'
+				. ' OR LOWER(t.admin_credential_source) LIKE %s'
+				. ' OR LOWER(t.admin_selected_provider) LIKE %s'
+				. ' OR LOWER(' . self::get_admin_sql_status_case() . ') LIKE %s'
+				. ')';
+			$args      = array_merge( $args, array_fill( 0, 10, $search ) );
+		}
+
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'surface',
+			't.surface',
+			(string) ( $filter_context['surface'] ?? '' ),
+			(string) ( $filter_context['surfaceOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'postType',
+			't.admin_post_type',
+			(string) ( $filter_context['postType'] ?? '' ),
+			(string) ( $filter_context['postTypeOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'userId',
+			't.user_id',
+			null === ( $filter_context['userId'] ?? null ) ? '' : (string) (int) $filter_context['userId'],
+			(string) ( $filter_context['userIdOperator'] ?? 'is' ),
+			$excluded_filter,
+			'%d'
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'operationType',
+			't.admin_operation_type',
+			(string) ( $filter_context['operationType'] ?? '' ),
+			(string) ( $filter_context['operationTypeOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'provider',
+			't.admin_provider',
+			(string) ( $filter_context['provider'] ?? '' ),
+			(string) ( $filter_context['providerOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'providerPath',
+			't.admin_provider_path',
+			(string) ( $filter_context['providerPath'] ?? '' ),
+			(string) ( $filter_context['providerPathOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'configurationOwner',
+			't.admin_configuration_owner',
+			(string) ( $filter_context['configurationOwner'] ?? '' ),
+			(string) ( $filter_context['configurationOwnerOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'credentialSource',
+			't.admin_credential_source',
+			(string) ( $filter_context['credentialSource'] ?? '' ),
+			(string) ( $filter_context['credentialSourceOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'selectedProvider',
+			't.admin_selected_provider',
+			(string) ( $filter_context['selectedProvider'] ?? '' ),
+			(string) ( $filter_context['selectedProviderOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_explicit_filter(
+			$clauses,
+			$args,
+			'status',
+			self::get_admin_sql_status_case(),
+			(string) ( $filter_context['status'] ?? '' ),
+			(string) ( $filter_context['statusOperator'] ?? 'is' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_text_filter(
+			$clauses,
+			$args,
+			'entityId',
+			't.admin_entity_id',
+			(string) ( $filter_context['entityId'] ?? '' ),
+			(string) ( $filter_context['entityIdOperator'] ?? 'contains' ),
+			$excluded_filter
+		);
+		self::append_admin_sql_text_filter(
+			$clauses,
+			$args,
+			'blockPath',
+			't.admin_block_path',
+			(string) ( $filter_context['blockPath'] ?? '' ),
+			(string) ( $filter_context['blockPathOperator'] ?? 'contains' ),
+			$excluded_filter
+		);
+
+		if ( 'day' !== $excluded_filter ) {
+			foreach ( self::build_admin_day_sql_filters( $filters, $timezone ) as $filter ) {
+				$clauses[] = self::qualify_admin_sql_clause( $filter['clause'] );
+				$args      = array_merge( $args, $filter['args'] );
+			}
+		}
+
+		return [
+			'clauses' => $clauses,
+			'args'    => $args,
+		];
+	}
+
+	/**
+	 * @param array<int, string> $clauses
+	 * @param array<int, mixed> $args
+	 */
+	private static function append_admin_sql_explicit_filter(
+		array &$clauses,
+		array &$args,
+		string $filter_key,
+		string $column_sql,
+		string $value,
+		string $operator,
+		?string $excluded_filter,
+		string $placeholder = '%s'
+	): void {
+		if ( $filter_key === $excluded_filter || '' === $value ) {
+			return;
+		}
+
+		$clauses[] = $column_sql . ( 'isNot' === $operator ? ' <> ' : ' = ' ) . $placeholder;
+		$args[]    = '%d' === $placeholder ? (int) $value : $value;
+	}
+
+	/**
+	 * @param array<int, string> $clauses
+	 * @param array<int, mixed> $args
+	 */
+	private static function append_admin_sql_text_filter(
+		array &$clauses,
+		array &$args,
+		string $filter_key,
+		string $column_sql,
+		string $value,
+		string $operator,
+		?string $excluded_filter
+	): void {
+		global $wpdb;
+
+		if ( $filter_key === $excluded_filter || '' === trim( $value ) || ! is_object( $wpdb ) ) {
+			return;
+		}
+
+		$normalized = strtolower( trim( $value ) );
+
+		if ( 'startsWith' === $operator ) {
+			$clauses[] = 'LOWER(' . $column_sql . ') LIKE %s';
+			$args[]    = $wpdb->esc_like( $normalized ) . '%';
+			return;
+		}
+
+		$clauses[] = 'LOWER(' . $column_sql . ')' . ( 'notContains' === $operator ? ' NOT' : '' ) . ' LIKE %s';
+		$args[]    = '%' . $wpdb->esc_like( $normalized ) . '%';
+	}
+
+	/**
+	 * @param array<int, string> $clauses
+	 */
+	private static function append_admin_sql_where_clause( string $sql, array $clauses ): string {
+		if ( [] === $clauses ) {
+			return $sql;
+		}
+
+		return $sql . ' WHERE ' . implode( ' AND ', $clauses );
+	}
+
+	/**
+	 * @param array<int, mixed> $args
+	 */
+	private static function prepare_admin_sql( \wpdb $wpdb, string $sql, array $args ): string {
+		if ( [] === $args ) {
+			return $sql;
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is assembled from fixed clauses with placeholders.
+		return $wpdb->prepare( $sql, $args );
+	}
+
+	private static function qualify_admin_sql_clause( string $clause ): string {
+		return preg_replace( '/\bcreated_at\b/', 't.created_at', $clause ) ?? $clause;
+	}
+
+	private static function get_admin_sql_order_clause( string $sort_field, string $sort_direction ): string {
+		$direction = 'asc' === $sort_direction ? 'ASC' : 'DESC';
+		$column    = match ( $sort_field ) {
+			'status'             => self::get_admin_sql_status_case(),
+			'surface'            => 't.surface',
+			'postType'           => 't.admin_post_type',
+			'userId'             => 't.user_id',
+			'operationType'      => 't.admin_operation_type',
+			'provider'           => 't.admin_provider',
+			'providerPath'       => 't.admin_provider_path',
+			'configurationOwner' => 't.admin_configuration_owner',
+			'credentialSource'   => 't.admin_credential_source',
+			'selectedProvider'   => 't.admin_selected_provider',
+			default              => 't.created_at',
+		};
+
+		return $column . ' ' . $direction . ', t.id ' . $direction;
+	}
+
+	private static function get_admin_sql_status_case(): string {
+		$review_condition       = self::get_admin_sql_review_condition( 't' );
+		$failed_condition       = self::get_admin_sql_undo_status_condition( 't.undo_state', 'failed' );
+		$undone_condition       = self::get_admin_sql_undo_status_condition( 't.undo_state', 'undone' );
+		$newer_active_condition = self::get_admin_sql_newer_active_exists();
+
+		return '(CASE'
+			. ' WHEN ' . $review_condition . ' THEN CASE WHEN ' . $failed_condition . " THEN 'failed' ELSE 'review' END"
+			. ' WHEN ' . $undone_condition . " THEN 'undone'"
+			. ' WHEN ' . $newer_active_condition . " THEN 'blocked'"
+			. ' WHEN ' . $failed_condition . " THEN 'failed'"
+			. " ELSE 'applied' END)";
+	}
+
+	private static function get_admin_sql_newer_active_exists(): string {
+		return 'EXISTS (SELECT 1 FROM ' . self::table_name() . ' AS newer'
+			. ' WHERE newer.entity_type = t.entity_type'
+			. ' AND newer.entity_ref = t.entity_ref'
+			. " AND (t.entity_type <> '' OR t.entity_ref <> '')"
+			. ' AND (newer.created_at > t.created_at OR (newer.created_at = t.created_at AND newer.id > t.id))'
+			. ' AND NOT ' . self::get_admin_sql_review_condition( 'newer' )
+			. ' AND NOT ' . self::get_admin_sql_undo_status_condition( 'newer.undo_state', 'undone' )
+			. ')';
+	}
+
+	private static function get_admin_sql_review_condition( string $alias ): string {
+		return '(' . $alias . ".activity_type = 'request_diagnostic' OR " . $alias . ".execution_result = 'review')";
+	}
+
+	private static function get_admin_sql_undo_status_condition( string $column_sql, string $status ): string {
+		return $column_sql . " LIKE '%\"status\":\"" . $status . "\"%'";
+	}
+
+	private static function resolve_admin_sql_filter_option_label(
+		string $value,
+		string $label,
+		string $type
+	): string {
+		if ( 'surface' === $type ) {
+			return self::format_surface_label( $value );
+		}
+
+		if ( 'operation' === $type ) {
+			return '' !== $label ? $label : self::format_admin_operation_filter_label( $value );
+		}
+
+		if ( 'user' === $type ) {
+			return self::resolve_admin_user_label( (int) $value );
+		}
+
+		return '' !== $label ? $label : $value;
 	}
 
 	/**

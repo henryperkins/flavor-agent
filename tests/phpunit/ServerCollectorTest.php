@@ -501,7 +501,10 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	public function test_for_synced_patterns_filters_wp_block_posts_by_sync_status(): void {
-		WordPressTestState::$posts     = [
+		WordPressTestState::$capabilities = [
+			'read_post:102' => true,
+		];
+		WordPressTestState::$posts        = [
 			101 => (object) [
 				'ID'                => 101,
 				'post_type'         => 'wp_block',
@@ -525,7 +528,7 @@ final class ServerCollectorTest extends TestCase {
 				'post_modified_gmt' => '2026-04-19 00:00:00',
 			],
 		];
-		WordPressTestState::$post_meta = [
+		WordPressTestState::$post_meta    = [
 			102 => [
 				'wp_pattern_sync_status' => 'unsynced',
 			],
@@ -542,7 +545,10 @@ final class ServerCollectorTest extends TestCase {
 	}
 
 	public function test_for_synced_patterns_supports_partial_search_pagination_and_lightweight_results(): void {
-		WordPressTestState::$posts     = [
+		WordPressTestState::$capabilities = [
+			'read_post' => static fn( int $post_id ): bool => in_array( $post_id, [ 201, 202 ], true ),
+		];
+		WordPressTestState::$posts        = [
 			201 => (object) [
 				'ID'                => 201,
 				'post_type'         => 'wp_block',
@@ -577,7 +583,7 @@ final class ServerCollectorTest extends TestCase {
 				'post_modified_gmt' => '2026-04-19 00:00:00',
 			],
 		];
-		WordPressTestState::$post_meta = [
+		WordPressTestState::$post_meta    = [
 			201 => [
 				'wp_pattern_sync_status' => 'partial',
 			],
@@ -593,6 +599,85 @@ final class ServerCollectorTest extends TestCase {
 		$this->assertSame( 202, $patterns[0]['id'] );
 		$this->assertSame( 'partial', $patterns[0]['syncStatus'] );
 		$this->assertArrayNotHasKey( 'content', $patterns[0] );
+	}
+
+	public function test_for_synced_patterns_keeps_synced_lists_paginated_without_capping_total(): void {
+		WordPressTestState::$capabilities = [
+			'read_post' => static fn( int $post_id ): bool => in_array( $post_id, [ 301, 302 ], true ),
+		];
+		WordPressTestState::$posts        = [
+			301 => (object) [
+				'ID'                => 301,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Alpha Synced',
+				'post_name'         => 'alpha-synced',
+				'post_content'      => '<!-- wp:group -->Alpha<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 3,
+				'post_date_gmt'     => '2026-04-20 00:00:00',
+				'post_modified_gmt' => '2026-04-21 00:00:00',
+			],
+			302 => (object) [
+				'ID'                => 302,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Beta Synced',
+				'post_name'         => 'beta-synced',
+				'post_content'      => '<!-- wp:group -->Beta<!-- /wp:group -->',
+				'post_status'       => 'draft',
+				'post_author'       => 5,
+				'post_date_gmt'     => '2026-04-18 00:00:00',
+				'post_modified_gmt' => '2026-04-19 00:00:00',
+			],
+			303 => (object) [
+				'ID'                => 303,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Gamma Unsynced',
+				'post_name'         => 'gamma-unsynced',
+				'post_content'      => '<!-- wp:paragraph --><p>Gamma</p><!-- /wp:paragraph -->',
+				'post_status'       => 'publish',
+				'post_author'       => 6,
+				'post_date_gmt'     => '2026-04-17 00:00:00',
+				'post_modified_gmt' => '2026-04-18 00:00:00',
+			],
+		];
+		WordPressTestState::$post_meta    = [
+			303 => [
+				'wp_pattern_sync_status' => 'unsynced',
+			],
+		];
+
+		$patterns = ServerCollector::for_synced_patterns( 'synced', false, 1, 1, 'synced' );
+
+		$this->assertSame( 2, ServerCollector::count_synced_patterns( 'synced', 'synced' ) );
+		$this->assertCount( 1, $patterns );
+		$this->assertSame( 302, $patterns[0]['id'] );
+		$this->assertSame( 'synced', $patterns[0]['syncStatus'] );
+		$this->assertSame( '', $patterns[0]['wpPatternSyncStatus'] );
+	}
+
+	public function test_for_synced_patterns_preserves_slug_search_without_query_level_search(): void {
+		WordPressTestState::$posts = [
+			401 => (object) [
+				'ID'                => 401,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Reusable Section',
+				'post_name'         => 'hero-synced',
+				'post_content'      => '<!-- wp:group -->Intro<!-- /wp:group -->',
+				'post_status'       => 'publish',
+				'post_author'       => 3,
+				'post_date_gmt'     => '2026-04-20 00:00:00',
+				'post_modified_gmt' => '2026-04-21 00:00:00',
+			],
+		];
+
+		$patterns = ServerCollector::for_synced_patterns( 'synced', false, null, 0, 'hero' );
+
+		$this->assertSame( [ 401 ], array_column( $patterns, 'id' ) );
+		$this->assertSame( 1, ServerCollector::count_synced_patterns( 'synced', 'hero' ) );
+		$this->assertNotEmpty( WordPressTestState::$get_posts_calls );
+		foreach ( WordPressTestState::$get_posts_calls as $call ) {
+			$this->assertArrayNotHasKey( 's', $call );
+		}
 	}
 
 	public function test_for_registered_blocks_returns_sorted_block_manifests(): void {

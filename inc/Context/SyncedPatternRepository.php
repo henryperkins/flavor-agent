@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Context;
 
 final class SyncedPatternRepository {
+	private const QUERY_BATCH_SIZE = 100;
 
 	/**
 	 * @return array<int, array<string, mixed>>
@@ -14,29 +15,118 @@ final class SyncedPatternRepository {
 		bool $include_content = false,
 		?int $limit = null,
 		int $offset = 0,
-		?string $search = null
+		?string $search = null,
+		bool $enforce_access = true
 	): array {
-		$patterns = $this->collect_patterns( $sync_status, $include_content, $search );
+		if ( 0 === $limit ) {
+			return [];
+		}
 
-		if ( $offset > 0 || null !== $limit ) {
-			$patterns = array_slice(
-				$patterns,
-				max( 0, $offset ),
-				null !== $limit ? max( 0, $limit ) : null
-			);
+		$requested_status = $this->normalize_requested_sync_status( $sync_status );
+		$search_term      = $this->normalize_search_term( $search );
+		$batch_size       = $this->resolve_batch_size( $limit, $offset );
+		$query_offset     = 0;
+		$remaining_offset = max( 0, $offset );
+		$patterns         = [];
+
+		while ( true ) {
+			$posts = $this->query_posts( $batch_size, $query_offset );
+
+			if ( [] === $posts ) {
+				break;
+			}
+
+			$query_offset += count( $posts );
+
+			foreach ( $posts as $post ) {
+				if ( ! is_object( $post ) ) {
+					continue;
+				}
+
+				if ( $enforce_access && ! $this->can_read_pattern( $post ) ) {
+					continue;
+				}
+
+				$pattern = $this->normalize_pattern( $post, $include_content );
+
+				if ( [] === $pattern || ! $this->matches_requested_sync_status( $pattern, $requested_status ) ) {
+					continue;
+				}
+
+				if ( '' !== $search_term && ! $this->matches_search_filter( $pattern, $search_term ) ) {
+					continue;
+				}
+
+				if ( $remaining_offset > 0 ) {
+					--$remaining_offset;
+					continue;
+				}
+
+				$patterns[] = $pattern;
+
+				if ( null !== $limit && count( $patterns ) >= $limit ) {
+					return $patterns;
+				}
+			}
+
+			if ( count( $posts ) < $batch_size ) {
+				break;
+			}
 		}
 
 		return $patterns;
 	}
 
-	public function count_patterns( ?string $sync_status = 'synced', ?string $search = null ): int {
-		return count( $this->collect_patterns( $sync_status, false, $search ) );
+	public function count_patterns( ?string $sync_status = 'synced', ?string $search = null, bool $enforce_access = true ): int {
+		$requested_status = $this->normalize_requested_sync_status( $sync_status );
+		$search_term      = $this->normalize_search_term( $search );
+		$batch_size       = self::QUERY_BATCH_SIZE;
+		$query_offset     = 0;
+		$total            = 0;
+
+		while ( true ) {
+			$posts = $this->query_posts( $batch_size, $query_offset );
+
+			if ( [] === $posts ) {
+				break;
+			}
+
+			$query_offset += count( $posts );
+
+			foreach ( $posts as $post ) {
+				if ( ! is_object( $post ) ) {
+					continue;
+				}
+
+				if ( $enforce_access && ! $this->can_read_pattern( $post ) ) {
+					continue;
+				}
+
+				$pattern = $this->normalize_pattern( $post, false );
+
+				if ( [] === $pattern || ! $this->matches_requested_sync_status( $pattern, $requested_status ) ) {
+					continue;
+				}
+
+				if ( '' !== $search_term && ! $this->matches_search_filter( $pattern, $search_term ) ) {
+					continue;
+				}
+
+				++$total;
+			}
+
+			if ( count( $posts ) < $batch_size ) {
+				break;
+			}
+		}
+
+		return $total;
 	}
 
 	/**
 	 * @return array<string, mixed>|null
 	 */
-	public function get_pattern( int $pattern_id ): ?array {
+	public function get_pattern( int $pattern_id, bool $enforce_access = true ): ?array {
 		if ( $pattern_id <= 0 || ! function_exists( 'get_post' ) ) {
 			return null;
 		}
@@ -47,9 +137,20 @@ final class SyncedPatternRepository {
 			return null;
 		}
 
+		if ( $enforce_access && ! $this->can_read_pattern( $post ) ) {
+			return null;
+		}
+
 		$pattern = $this->normalize_pattern( $post, true );
 
 		return [] === $pattern ? null : $pattern;
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function for_indexable_patterns(): array {
+		return $this->for_patterns( 'all', true, null, 0, null, false );
 	}
 
 	private function normalize_requested_sync_status( ?string $sync_status ): string {
@@ -62,50 +163,6 @@ final class SyncedPatternRepository {
 		}
 
 		return 'synced';
-	}
-
-	/**
-	 * @return array<int, array<string, mixed>>
-	 */
-	private function collect_patterns( ?string $sync_status, bool $include_content, ?string $search ): array {
-		$requested_status = $this->normalize_requested_sync_status( $sync_status );
-		$posts            = function_exists( 'get_posts' )
-			? get_posts(
-				[
-					'post_type'      => 'wp_block',
-					'post_status'    => 'any',
-					'posts_per_page' => -1,
-					'orderby'        => 'title',
-					'order'          => 'ASC',
-				]
-			)
-			: [];
-		$patterns         = [];
-		$search_term      = is_string( $search ) ? strtolower( sanitize_text_field( $search ) ) : '';
-
-		foreach ( $posts as $post ) {
-			if ( ! is_object( $post ) ) {
-				continue;
-			}
-
-			$pattern = $this->normalize_pattern( $post, $include_content );
-
-			if ( [] === $pattern ) {
-				continue;
-			}
-
-			if ( 'all' !== $requested_status && ( $pattern['syncStatus'] ?? '' ) !== $requested_status ) {
-				continue;
-			}
-
-			if ( '' !== $search_term && ! $this->matches_search_filter( $pattern, $search_term ) ) {
-				continue;
-			}
-
-			$patterns[] = $pattern;
-		}
-
-		return $patterns;
 	}
 
 	/**
@@ -160,6 +217,58 @@ final class SyncedPatternRepository {
 		}
 
 		return 'synced';
+	}
+
+	private function can_read_pattern( object $post ): bool {
+		$post_id = absint( $post->ID ?? 0 );
+
+		if ( $post_id <= 0 ) {
+			return false;
+		}
+
+		if ( function_exists( 'current_user_can' ) && current_user_can( 'read_post', $post_id ) ) {
+			return true;
+		}
+
+		return 'publish' === sanitize_key( (string) ( $post->post_status ?? '' ) );
+	}
+
+	/**
+	 * @return array<int, object>
+	 */
+	private function query_posts( int $limit, int $offset ): array {
+		if ( ! function_exists( 'get_posts' ) ) {
+			return [];
+		}
+
+		$args = [
+			'post_type'      => 'wp_block',
+			'post_status'    => 'any',
+			'posts_per_page' => max( 1, $limit ),
+			'offset'         => max( 0, $offset ),
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+		];
+
+		return get_posts( $args );
+	}
+
+	private function normalize_search_term( ?string $search ): string {
+		return is_string( $search ) ? strtolower( sanitize_text_field( $search ) ) : '';
+	}
+
+	private function resolve_batch_size( ?int $limit, int $offset ): int {
+		$requested_window = max( 0, $offset );
+
+		if ( null !== $limit ) {
+			$requested_window += max( 0, $limit );
+		}
+
+		return max( self::QUERY_BATCH_SIZE, $requested_window, 1 );
+	}
+
+	private function matches_requested_sync_status( array $pattern, string $requested_status ): bool {
+		return 'all' === $requested_status || ( $pattern['syncStatus'] ?? '' ) === $requested_status;
 	}
 
 	private function matches_search_filter( array $pattern, string $search_term ): bool {

@@ -19,6 +19,7 @@ final class PatternIndex {
 	private const LOCK_TTL                    = 300;
 	private const COOLDOWN                    = 300;
 	private const BATCH_SIZE                  = 100;
+	private const SYNCED_PATTERN_NAME_PREFIX  = 'core/block/';
 	private const COMPATIBILITY_STALE_REASONS = [
 		'embedding_signature_changed',
 		'qdrant_url_changed',
@@ -107,8 +108,13 @@ final class PatternIndex {
 		);
 	}
 
-	public static function mark_dirty(): void {
-		$state = self::get_state();
+	public static function mark_dirty( string $reason = 'pattern_registry_changed' ): void {
+		$state        = self::get_state();
+		$stale_reason = sanitize_key( $reason );
+
+		if ( '' === $stale_reason ) {
+			$stale_reason = 'pattern_registry_changed';
+		}
 
 		if ( $state['status'] === 'indexing' ) {
 			return;
@@ -116,8 +122,8 @@ final class PatternIndex {
 
 		if ( self::has_usable_index( $state ) ) {
 			$state['status']        = 'stale';
-			$state['stale_reason']  = 'pattern_registry_changed';
-			$state['stale_reasons'] = [ 'pattern_registry_changed' ];
+			$state['stale_reason']  = $stale_reason;
+			$state['stale_reasons'] = [ $stale_reason ];
 		} else {
 			$state['status']        = 'uninitialized';
 			$state['stale_reason']  = '';
@@ -164,6 +170,17 @@ final class PatternIndex {
 
 	public static function handle_registry_change( ...$args ): void {
 		self::mark_dirty();
+		self::schedule_sync( true );
+	}
+
+	public static function handle_synced_pattern_change( mixed $post_id = 0, mixed $post = null, mixed $update = null ): void {
+		unset( $update );
+
+		if ( ! self::is_synced_pattern_post( $post_id, $post ) ) {
+			return;
+		}
+
+		self::mark_dirty( 'synced_pattern_changed' );
 		self::schedule_sync( true );
 	}
 
@@ -418,9 +435,73 @@ final class PatternIndex {
 		delete_transient( self::LOCK_TRANSIENT );
 	}
 
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function collect_indexable_patterns(): array {
+		$patterns = ServerCollector::for_patterns();
+
+		foreach ( ServerCollector::for_indexable_synced_patterns() as $synced_pattern ) {
+			$normalized = self::normalize_synced_pattern_for_index( $synced_pattern );
+
+			if ( [] !== $normalized ) {
+				$patterns[] = $normalized;
+			}
+		}
+
+		return $patterns;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_synced_pattern_for_index( array $pattern ): array {
+		$pattern_id = absint( $pattern['id'] ?? 0 );
+
+		if ( $pattern_id <= 0 ) {
+			return [];
+		}
+
+		$name = self::SYNCED_PATTERN_NAME_PREFIX . $pattern_id;
+
+		return [
+			'id'                  => $name,
+			'name'                => $name,
+			'title'               => (string) ( $pattern['title'] ?? '' ),
+			'description'         => '',
+			'categories'          => [ 'reusable' ],
+			'blockTypes'          => [],
+			'templateTypes'       => [],
+			'patternOverrides'    => [],
+			'type'                => 'user',
+			'source'              => 'synced',
+			'syncedPatternId'     => $pattern_id,
+			'syncStatus'          => (string) ( $pattern['syncStatus'] ?? '' ),
+			'wpPatternSyncStatus' => (string) ( $pattern['wpPatternSyncStatus'] ?? '' ),
+			'content'             => (string) ( $pattern['content'] ?? '' ),
+		];
+	}
+
+	private static function is_synced_pattern_post( mixed $post_id, mixed $post = null ): bool {
+		if ( is_object( $post ) ) {
+			return 'wp_block' === sanitize_key( (string) ( $post->post_type ?? '' ) );
+		}
+
+		$resolved_id = absint( is_object( $post_id ) ? ( $post_id->ID ?? 0 ) : $post_id );
+
+		if ( $resolved_id <= 0 || ! function_exists( 'get_post' ) ) {
+			return false;
+		}
+
+		$resolved_post = get_post( $resolved_id );
+
+		return is_object( $resolved_post )
+			&& 'wp_block' === sanitize_key( (string) ( $resolved_post->post_type ?? '' ) );
+	}
+
 	private static function do_sync(): array|\WP_Error {
-		// Step 3: Read all registered patterns.
-		$patterns    = ServerCollector::for_patterns();
+		// Step 3: Read registered and synced-user patterns.
+		$patterns    = self::collect_indexable_patterns();
 		$fingerprint = self::compute_fingerprint( $patterns );
 		$state       = self::clear_error_metadata( self::get_state() );
 
@@ -650,15 +731,21 @@ final class PatternIndex {
 				'id'      => $uuid,
 				'vector'  => $vectors[ $i ],
 				'payload' => [
-					'name'             => $p['name'],
-					'title'            => $p['title'],
-					'description'      => $p['description'] ?? '',
-					'categories'       => $p['categories'] ?? [],
-					'blockTypes'       => $p['blockTypes'] ?? [],
-					'templateTypes'    => $p['templateTypes'] ?? [],
-					'patternOverrides' => $p['patternOverrides'] ?? [],
-					'traits'           => self::infer_layout_traits( $p ),
-					'content'          => $p['content'] ?? '',
+					'name'                => $p['name'],
+					'id'                  => $p['id'] ?? $p['name'],
+					'title'               => $p['title'],
+					'description'         => $p['description'] ?? '',
+					'categories'          => $p['categories'] ?? [],
+					'blockTypes'          => $p['blockTypes'] ?? [],
+					'templateTypes'       => $p['templateTypes'] ?? [],
+					'patternOverrides'    => $p['patternOverrides'] ?? [],
+					'traits'              => self::infer_layout_traits( $p ),
+					'type'                => $p['type'] ?? 'registered',
+					'source'              => $p['source'] ?? 'registered',
+					'syncedPatternId'     => $p['syncedPatternId'] ?? 0,
+					'syncStatus'          => $p['syncStatus'] ?? '',
+					'wpPatternSyncStatus' => $p['wpPatternSyncStatus'] ?? '',
+					'content'             => $p['content'] ?? '',
 				],
 			];
 		}
@@ -821,6 +908,9 @@ final class PatternIndex {
 			self::normalize_list( $pattern['blockTypes'] ?? [] ),
 			self::normalize_list( $pattern['templateTypes'] ?? [] ),
 			self::normalize_pattern_overrides( $pattern['patternOverrides'] ?? [] ),
+			(string) ( $pattern['syncedPatternId'] ?? 0 ),
+			$pattern['syncStatus'] ?? '',
+			$pattern['wpPatternSyncStatus'] ?? '',
 			md5( $pattern['content'] ?? '' ),
 			(string) self::EMBEDDING_RECIPE_VERSION,
 		];

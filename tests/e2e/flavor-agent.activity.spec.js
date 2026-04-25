@@ -1,4 +1,5 @@
 const { test, expect } = require( '@playwright/test' );
+const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 
 const ACTIVITY_ENTRIES = [
 	{
@@ -64,25 +65,6 @@ const ACTIVITY_ENTRIES = [
 	},
 ];
 
-function waitForWordPressReady( page ) {
-	return ( async () => {
-		for ( let attempt = 0; attempt < 30; attempt++ ) {
-			const loadingText = page.getByText( 'WordPress is not ready yet' );
-
-			if ( ! ( await loadingText.count() ) ) {
-				return;
-			}
-
-			await page.waitForTimeout( 2000 );
-			await page.reload( { waitUntil: 'domcontentloaded' } );
-		}
-
-		await expect(
-			page.getByText( 'WordPress is not ready yet' )
-		).toHaveCount( 0 );
-	} )();
-}
-
 function buildActivityResponse( requestUrl ) {
 	const url = new URL( requestUrl );
 	const search = ( url.searchParams.get( 'search' ) || '' )
@@ -139,17 +121,25 @@ function buildActivityResponse( requestUrl ) {
 test( 'AI Activity page loads entries, updates selection, and exposes the filters UI', async ( {
 	page,
 } ) => {
-	await page.route( '**/wp-json/flavor-agent/v1/activity**', async ( route ) => {
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( buildActivityResponse( route.request().url() ) ),
-		} );
-	} );
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					buildActivityResponse( route.request().url() )
+				),
+			} );
+		}
+	);
 
-	await page.goto( '/wp-admin/options-general.php?page=flavor-agent-activity', {
-		waitUntil: 'domcontentloaded',
-	} );
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
 	await waitForWordPressReady( page );
 
 	await expect(
@@ -158,12 +148,12 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	await expect(
 		page.locator( '.flavor-agent-activity-log__summary-item' )
 	).toHaveCount( 6 );
-	await expect( page.locator( '.flavor-agent-activity-log__feed' ) ).toContainText(
-		'Refresh template hierarchy'
-	);
-	await expect( page.locator( '.flavor-agent-activity-log__feed' ) ).toContainText(
-		'Rewrite hero heading'
-	);
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Refresh template hierarchy' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Rewrite hero heading' );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__sidebar' )
 	).toContainText( 'Rewrite hero heading' );
@@ -177,9 +167,9 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	).toContainText( 'Refresh template hierarchy' );
 
 	await page.getByLabel( 'Search AI activity' ).fill( 'template' );
-	await expect( page.locator( '.flavor-agent-activity-log__feed' ) ).toContainText(
-		'Refresh template hierarchy'
-	);
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Refresh template hierarchy' );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__feed' )
 	).not.toContainText( 'Rewrite hero heading' );
@@ -195,24 +185,32 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 test( 'AI Activity page renders an inline load error instead of the empty activity copy', async ( {
 	page,
 } ) => {
-	await page.route( '**/wp-json/flavor-agent/v1/activity**', async ( route ) => {
-		await route.fulfill( {
-			status: 500,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				code: 'rest_internal_error',
-				message: 'Activity endpoint exploded.',
-			} ),
-		} );
-	} );
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					code: 'rest_internal_error',
+					message: 'Activity endpoint exploded.',
+				} ),
+			} );
+		}
+	);
 
-	await page.goto( '/wp-admin/options-general.php?page=flavor-agent-activity', {
-		waitUntil: 'domcontentloaded',
-	} );
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
 	await waitForWordPressReady( page );
 
 	await expect( page.getByText( 'Activity log unavailable' ) ).toBeVisible();
-	await expect( page.getByText( 'Activity endpoint exploded.' ) ).toBeVisible();
+	await expect(
+		page.getByText( 'Activity endpoint exploded.' )
+	).toBeVisible();
 	await expect(
 		page.getByText( 'No AI activity has been recorded yet.' )
 	).toHaveCount( 0 );

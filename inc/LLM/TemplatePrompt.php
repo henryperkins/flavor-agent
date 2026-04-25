@@ -1041,6 +1041,16 @@ EXAMPLE
 	}
 
 	/**
+	 * @return array{operations: array<int, array<string, mixed>>, invalid: bool}
+	 */
+	private static function invalid_template_operations_result(): array {
+		return [
+			'operations' => [],
+			'invalid'    => true,
+		];
+	}
+
+	/**
 	 * @param array $operations Raw operations from the LLM.
 	 * @param array $unused_part_lookup Unused template-part lookup.
 	 * @param array $assigned_part_lookup Assigned template-part lookup.
@@ -1066,7 +1076,7 @@ EXAMPLE
 
 		foreach ( $operations as $operation ) {
 			if ( ! is_array( $operation ) ) {
-				continue;
+				return self::invalid_template_operations_result();
 			}
 
 			$type = sanitize_key( (string) ( $operation['type'] ?? '' ) );
@@ -1077,10 +1087,7 @@ EXAMPLE
 					$area = sanitize_key( (string) ( $operation['area'] ?? '' ) );
 
 					if ( isset( $state['mutatedAreas'][ $area ] ) ) {
-						return [
-							'operations' => [],
-							'invalid'    => true,
-						];
+						return self::invalid_template_operations_result();
 					}
 
 					if (
@@ -1088,7 +1095,7 @@ EXAMPLE
 						|| ! isset( $state['emptyAreas'][ $area ] )
 						|| isset( $state['byArea'][ $area ] )
 					) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					$valid[]                        = [
@@ -1120,7 +1127,7 @@ EXAMPLE
 					}
 
 					if ( ! is_array( $assigned_part ) || $current_slug === '' ) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if ( $area === '' ) {
@@ -1128,29 +1135,26 @@ EXAMPLE
 					}
 
 					if ( $area === '' ) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if ( isset( $state['mutatedAreas'][ $area ] ) ) {
-						return [
-							'operations' => [],
-							'invalid'    => true,
-						];
+						return self::invalid_template_operations_result();
 					}
 
 					if ( ! self::is_valid_unused_template_part( $slug, $area, $unused_part_lookup, $allowed_area_lookup ) ) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if (
 						sanitize_key( (string) ( $assigned_part['area'] ?? '' ) ) !== ''
 						&& sanitize_key( (string) ( $assigned_part['area'] ?? '' ) ) !== $area
 					) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if ( $current_slug === $slug ) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					$valid[] = [
@@ -1182,7 +1186,7 @@ EXAMPLE
 						|| $placement === ''
 						|| ! isset( $pattern_lookup[ $pattern_name ] )
 					) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					$allowed_placements = [
@@ -1193,11 +1197,11 @@ EXAMPLE
 					];
 
 					if ( $placement !== '' && ! isset( $allowed_placements[ $placement ] ) ) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if ( $has_target_path && $target_path === null ) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if (
@@ -1207,21 +1211,18 @@ EXAMPLE
 							! isset( $template_block_lookup[ self::block_path_key( $target_path ) ] )
 						)
 					) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if (
 						in_array( $placement, [ self::TEMPLATE_PLACEMENT_START, self::TEMPLATE_PLACEMENT_END ], true ) &&
 						! isset( $insertion_anchor_lookup[ $placement ] )
 					) {
-						continue 2;
+						return self::invalid_template_operations_result();
 					}
 
 					if ( $state['patternInsertCount'] > 0 ) {
-						return [
-							'operations' => [],
-							'invalid'    => true,
-						];
+						return self::invalid_template_operations_result();
 					}
 
 					$normalized = [
@@ -1246,11 +1247,14 @@ EXAMPLE
 					$valid[] = $normalized;
 					++$state['patternInsertCount'];
 					break;
+
+				default:
+					return self::invalid_template_operations_result();
 			}
 		}
 
 		return [
-			'operations' => array_slice( $valid, 0, 4 ),
+			'operations' => $valid,
 			'invalid'    => false,
 		];
 	}

@@ -225,7 +225,7 @@ final class Registration {
 			'flavor-agent/recommend-patterns',
 			[
 				'label'               => __( 'Recommend patterns', 'flavor-agent' ),
-				'description'         => __( 'Rank existing block patterns for the current editing context using LLM.', 'flavor-agent' ),
+				'description'         => __( 'Rank registered and synced block patterns for the current editing context using LLM.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ PatternAbilities::class, 'recommend_patterns' ],
 				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
@@ -263,6 +263,11 @@ final class Registration {
 								'properties' => [
 									'name'                 => [ 'type' => 'string' ],
 									'title'                => [ 'type' => 'string' ],
+									'type'                 => [ 'type' => 'string' ],
+									'source'               => [ 'type' => 'string' ],
+									'syncedPatternId'      => [ 'type' => 'integer' ],
+									'syncStatus'           => [ 'type' => 'string' ],
+									'wpPatternSyncStatus'  => [ 'type' => 'string' ],
 									'score'                => [ 'type' => 'number' ],
 									'reason'               => [ 'type' => 'string' ],
 									'categories'           => [ 'type' => 'array' ],
@@ -840,7 +845,7 @@ final class Registration {
 						],
 						'includeContent' => [
 							'type'        => 'boolean',
-							'description' => 'When true, include template-part markup. This requires the edit_theme_options capability.',
+							'description' => 'When true, request template-part markup. Callers without the edit_theme_options capability receive metadata-only results.',
 						],
 					],
 				],
@@ -1238,26 +1243,8 @@ final class Registration {
 		);
 	}
 
-	public static function can_list_template_parts( mixed $input = null ): bool {
-		$can_edit_theme = current_user_can( 'edit_theme_options' );
-
-		if ( $can_edit_theme ) {
-			return true;
-		}
-
-		if ( ! current_user_can( 'edit_posts' ) ) {
-			return false;
-		}
-
-		$normalized_input = is_array( $input )
-			? $input
-			: ( is_object( $input ) ? get_object_vars( $input ) : [] );
-		$include_content  = filter_var(
-			$normalized_input['includeContent'] ?? false,
-			FILTER_VALIDATE_BOOLEAN
-		);
-
-		return ! $include_content;
+	public static function can_list_template_parts( mixed $_input = null ): bool {
+		return current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' );
 	}
 
 	private static function public_recommendation_meta(): array {

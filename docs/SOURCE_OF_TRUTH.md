@@ -395,8 +395,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### Pattern Index Lifecycle
 
-- **Sync:** Diffs current registered patterns against Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
-- **Triggers:** Plugin activation, theme switch, plugin activate/deactivate, upgrades, settings changes.
+- **Sync:** Diffs current registered patterns plus synced `wp_block` patterns normalized as `core/block/{id}` against the Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
+- **Triggers:** Plugin activation, theme switch, plugin activate/deactivate, upgrades, settings changes, and synced-pattern save/delete/trash/untrash events.
 - **Scheduling:** WP cron with 300s cooldown and transient lock.
 - **Admin UI:** Manual sync button on settings page with status display.
 
@@ -419,7 +419,7 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 | `flavor-agent/recommend-template-part` | `TemplateAbilities`      | `edit_theme_options` | Working            |
 | `flavor-agent/recommend-style`         | `StyleAbilities`         | `edit_theme_options` | Working            |
 | `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | `edit_theme_options` | Working            |
-| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | `edit_posts` metadata; `edit_theme_options` content | Working (readonly) |
+| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | `edit_posts` or `edit_theme_options`; content only for theme-capable callers | Working (readonly) |
 | `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | `manage_options`     | Working (readonly) |
 | `flavor-agent/get-active-theme`        | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
 | `flavor-agent/get-theme-presets`       | `InfraAbilities`         | `edit_posts`         | Working (readonly) |
@@ -542,6 +542,7 @@ Editor loads (or inserter search changes)
      -> POST /flavor-agent/v1/recommend-patterns
         -> Agent_Controller -> PatternAbilities::recommend_patterns()
            -> PatternIndex: check state (ready/stale/error)
+           -> Qdrant corpus: registered patterns + synced wp_block patterns as core/block/{id}
            -> EmbeddingClient::embed(query)
            -> QdrantClient::search() x2 (semantic + structural)
            -> Dedupe, take top 12 candidates
@@ -722,7 +723,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Global Styles recommendations panel with review-confirm-apply for bounded site-level style changes
 - [x] Style Book recommendations panel with review-confirm-apply for per-block style changes
 - [x] Undoable block/template/template-part/Global Styles/Style Book AI actions with server-backed activity persistence plus editor-scoped hydration/cache fallback
-- [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates)
+- [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates for registered and synced patterns)
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
 - [x] Admin settings page with backend configuration

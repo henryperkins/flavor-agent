@@ -231,6 +231,58 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'activity-1', $page_three['entries'][49]['id'] ?? null );
 	}
 
+	public function test_query_admin_default_page_uses_a_bounded_projection_query(): void {
+		Repository::install();
+
+		for ( $index = 1; $index <= 125; ++$index ) {
+			Repository::create(
+				$this->build_block_entry(
+					'activity-' . $index,
+					sprintf(
+						'2026-03-24T10:%02d:%02dZ',
+						intdiv( $index - 1, 60 ),
+						( $index - 1 ) % 60
+					)
+				)
+			);
+		}
+
+		WordPressTestState::$db_queries = [];
+
+		$result = Repository::query_admin(
+			[
+				'page'    => 3,
+				'perPage' => 25,
+			]
+		);
+
+		$this->assertSame( 125, $result['paginationInfo']['totalItems'] ?? null );
+		$this->assertCount( 25, $result['entries'] ?? [] );
+		$this->assertSame( 'activity-75', $result['entries'][0]['id'] ?? null );
+		$this->assertSame( 'activity-51', $result['entries'][24]['id'] ?? null );
+
+		$bounded_page_queries        = array_values(
+			array_filter(
+				WordPressTestState::$db_queries,
+				static fn ( string $query ): bool => str_contains( $query, 'FROM ' . Repository::table_name() . ' AS t' )
+					&& str_contains( $query, 'ORDER BY t.created_at DESC, t.id DESC' )
+					&& str_contains( $query, 'LIMIT 25 OFFSET 50' )
+			)
+		);
+		$unbounded_candidate_queries = array_values(
+			array_filter(
+				WordPressTestState::$db_queries,
+				static fn ( string $query ): bool => str_contains( $query, 'SELECT id, activity_id' )
+					&& str_contains( $query, 'ORDER BY created_at ASC, id ASC' )
+					&& ! str_contains( $query, 'WHERE FIND_IN_SET' )
+					&& ! str_contains( $query, 'LIMIT' )
+			)
+		);
+
+		$this->assertNotEmpty( $bounded_page_queries );
+		$this->assertSame( [], $unbounded_candidate_queries );
+	}
+
 	public function test_query_admin_summary_counts_the_full_filtered_result_set(): void {
 		Repository::install();
 
@@ -887,8 +939,12 @@ final class ActivityRepositoryTest extends TestCase {
 		$counting_wpdb = new class() extends \wpdb {
 			public int $get_results_calls = 0;
 
+			/** @var array<int, string> */
+			public array $get_results_queries = [];
+
 			public function get_results( string $query, string $output = OBJECT ): array {
 				++$this->get_results_calls;
+				$this->get_results_queries[] = $query;
 
 				return parent::get_results( $query, $output );
 			}
@@ -926,7 +982,13 @@ final class ActivityRepositoryTest extends TestCase {
 			);
 
 			$this->assertCount( 3, $result['entries'] ?? [] );
-			$this->assertSame( 3, $counting_wpdb->get_results_calls );
+			$history_queries = array_values(
+				array_filter(
+					$counting_wpdb->get_results_queries,
+					static fn ( string $query ): bool => str_contains( $query, 'FIND_IN_SET(CONCAT(entity_type' )
+				)
+			);
+			$this->assertCount( 1, $history_queries );
 		} finally {
 			$GLOBALS['wpdb'] = $original_wpdb;
 		}

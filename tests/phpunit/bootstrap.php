@@ -70,6 +70,9 @@ namespace FlavorAgent\Tests\Support {
 		public static array $posts = [];
 
 		/** @var array<int, array<string, mixed>> */
+		public static array $get_posts_calls = [];
+
+		/** @var array<int, array<string, mixed>> */
 		public static array $post_meta = [];
 
 		/** @var array<string, array<int, array<string, mixed>>> */
@@ -133,6 +136,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$updated_options              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$get_posts_calls             = [];
 			self::$post_meta                   = [];
 			self::$db_tables                   = [];
 			self::$db_queries                  = [];
@@ -536,19 +540,30 @@ namespace {
 				return $results[0] ?? null;
 			}
 
-			public function get_var( string $query ) {
-				WordPressTestState::$db_queries[] = $query;
+				public function get_var( string $query ) {
+					WordPressTestState::$db_queries[] = $query;
 
-				if ( preg_match( "/SHOW TABLES LIKE '([^']+)'/i", $query, $matches ) ) {
+					if ( preg_match( "/SHOW TABLES LIKE '([^']+)'/i", $query, $matches ) ) {
 					$table = stripslashes( (string) ( $matches[1] ?? '' ) );
 
-					return array_key_exists( $table, WordPressTestState::$db_tables )
-						? $table
-						: null;
-				}
+						return array_key_exists( $table, WordPressTestState::$db_tables )
+							? $table
+							: null;
+					}
 
-				return null;
-			}
+					if ( preg_match( '/SELECT\s+COUNT\(\*\)\s+FROM\s+/i', $query ) ) {
+						$select_all_query = preg_replace(
+							'/SELECT\s+COUNT\(\*\)/i',
+							'SELECT *',
+							$query,
+							1
+						) ?? $query;
+
+						return count( $this->get_results( $select_all_query, ARRAY_A ) );
+					}
+
+					return null;
+				}
 
 			public function get_results( string $query, string $output = OBJECT ): array {
 				WordPressTestState::$db_queries[] = $query;
@@ -557,9 +572,10 @@ namespace {
 					return [];
 				}
 
-				$table = (string) ( $matches[1] ?? '' );
-				$rows  = array_values( WordPressTestState::$db_tables[ $table ] ?? [] );
-				$has_entity_pairs = false;
+					$table = (string) ( $matches[1] ?? '' );
+					$rows  = array_values( WordPressTestState::$db_tables[ $table ] ?? [] );
+					$all_rows = $rows;
+					$has_entity_pairs = false;
 
 				if ( preg_match( "/document_scope_key\s*=\s*'([^']*)'/i", $query, $matches ) ) {
 					$scope_key = stripslashes( (string) ( $matches[1] ?? '' ) );
@@ -571,10 +587,10 @@ namespace {
 					);
 				}
 
-				if ( preg_match( "/surface\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-					$surface = stripslashes( (string) ( $matches[1] ?? '' ) );
-					$rows    = array_values(
-						array_filter(
+					if ( preg_match( "/surface\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+						$surface = stripslashes( (string) ( $matches[1] ?? '' ) );
+						$rows    = array_values(
+							array_filter(
 							$rows,
 							static fn ( array $row ): bool => (string) ( $row['surface'] ?? '' ) === $surface
 						)
@@ -632,6 +648,68 @@ namespace {
 						);
 					}
 
+					if ( preg_match( "/surface\s*<>\s*'([^']*)'/i", $query, $matches ) ) {
+						$surface = stripslashes( (string) ( $matches[1] ?? '' ) );
+						$rows    = array_values(
+							array_filter(
+								$rows,
+								static fn ( array $row ): bool => (string) ( $row['surface'] ?? '' ) !== $surface
+							)
+						);
+					}
+
+					foreach (
+						[
+							'admin_post_type',
+							'admin_operation_type',
+							'admin_provider',
+							'admin_provider_path',
+							'admin_configuration_owner',
+							'admin_credential_source',
+							'admin_selected_provider',
+						] as $column
+					) {
+						if ( preg_match( "/(?:\\w+\\.)?{$column}\\s*=\\s*'([^']*)'/i", $query, $matches ) ) {
+							$value = stripslashes( (string) ( $matches[1] ?? '' ) );
+							$rows  = array_values(
+								array_filter(
+									$rows,
+									static fn ( array $row ): bool => (string) ( $row[ $column ] ?? '' ) === $value
+								)
+							);
+						}
+
+						if ( preg_match( "/(?:\\w+\\.)?{$column}\\s*<>\\s*'([^']*)'/i", $query, $matches ) ) {
+							$value = stripslashes( (string) ( $matches[1] ?? '' ) );
+							$rows  = array_values(
+								array_filter(
+									$rows,
+									static fn ( array $row ): bool => (string) ( $row[ $column ] ?? '' ) !== $value
+								)
+							);
+						}
+					}
+
+					if ( preg_match( '/(?:\w+\.)?user_id\s*=\s*(\d+)/i', $query, $matches ) ) {
+						$user_id = (int) ( $matches[1] ?? 0 );
+						$rows    = array_values(
+							array_filter(
+								$rows,
+								static fn ( array $row ): bool => (int) ( $row['user_id'] ?? 0 ) === $user_id
+							)
+						);
+					}
+
+					if ( preg_match( '/(?:\w+\.)?user_id\s*<>\s*(\d+)/i', $query, $matches ) ) {
+						$user_id = (int) ( $matches[1] ?? 0 );
+						$rows    = array_values(
+							array_filter(
+								$rows,
+								static fn ( array $row ): bool => (int) ( $row['user_id'] ?? 0 ) !== $user_id
+							)
+						);
+					}
+
 					if ( preg_match( "/entity_ref\s*=\s*'([^']*)'/i", $query, $matches ) ) {
 						$entity_ref = stripslashes( (string) ( $matches[1] ?? '' ) );
 						$rows       = array_values(
@@ -643,15 +721,71 @@ namespace {
 					}
 				}
 
-				if ( preg_match( "/activity_id\s*=\s*'([^']*)'/i", $query, $matches ) ) {
-					$activity_id = stripslashes( (string) ( $matches[1] ?? '' ) );
-					$rows        = array_values(
-						array_filter(
+					if ( preg_match( "/activity_id\s*=\s*'([^']*)'/i", $query, $matches ) ) {
+						$activity_id = stripslashes( (string) ( $matches[1] ?? '' ) );
+						$rows        = array_values(
+							array_filter(
 							$rows,
 							static fn ( array $row ): bool => (string) ( $row['activity_id'] ?? '' ) === $activity_id
-						)
-					);
-				}
+							)
+						);
+					}
+
+					if ( preg_match_all( "/(?:\\w+\\.)?created_at\\s*(>=|<=|<|>)\\s*'([^']+)'/i", $query, $matches, PREG_SET_ORDER ) ) {
+						foreach ( $matches as $match ) {
+							$operator = (string) ( $match[1] ?? '>=' );
+							$value    = stripslashes( (string) ( $match[2] ?? '' ) );
+							$rows     = array_values(
+								array_filter(
+									$rows,
+									static function ( array $row ) use ( $operator, $value ): bool {
+										$created_at = (string) ( $row['created_at'] ?? '' );
+
+										return match ( $operator ) {
+											'>'     => $created_at > $value,
+											'<='    => $created_at <= $value,
+											'<'     => $created_at < $value,
+											default => $created_at >= $value,
+										};
+									}
+								)
+							);
+						}
+					}
+
+					if ( preg_match( "/LOWER\\(t\\.admin_search_text\\)\\s+LIKE\\s+'([^']*)'/i", $query, $matches ) ) {
+						$needle = strtolower( trim( stripslashes( (string) ( $matches[1] ?? '' ) ), '%' ) );
+						$rows   = array_values(
+							array_filter(
+								$rows,
+								static function ( array $row ) use ( $needle ): bool {
+									if ( '' === $needle ) {
+										return true;
+									}
+
+									foreach (
+										[
+											'admin_search_text',
+											'surface',
+											'admin_post_type',
+											'admin_entity_id',
+											'admin_provider',
+											'admin_provider_path',
+											'admin_configuration_owner',
+											'admin_credential_source',
+											'admin_selected_provider',
+										] as $column
+									) {
+										if ( str_contains( strtolower( (string) ( $row[ $column ] ?? '' ) ), $needle ) ) {
+											return true;
+										}
+									}
+
+									return false;
+								}
+							)
+						);
+					}
 
 				if ( preg_match( "/activity_id\s+IN\s*\\(([^\\)]+)\\)/i", $query, $matches ) ) {
 					$activity_ids = array_values(
@@ -695,27 +829,95 @@ namespace {
 					);
 				}
 
-				usort(
-					$rows,
-					static function ( array $left, array $right ): int {
-						$left_created  = (string) ( $left['created_at'] ?? '' );
-						$right_created = (string) ( $right['created_at'] ?? '' );
+					if ( preg_match( '/COUNT\(\*\)\s+AS\s+total/i', $query ) && str_contains( $query, 'AS admin_status' ) ) {
+						$grouped = [];
 
-						if ( $left_created === $right_created ) {
-							return (int) ( $left['id'] ?? 0 ) <=> (int) ( $right['id'] ?? 0 );
+						foreach ( $rows as $row ) {
+							$status = $this->resolve_activity_admin_status( $row, $all_rows );
+
+							if ( ! isset( $grouped[ $status ] ) ) {
+								$grouped[ $status ] = 0;
+							}
+
+							++$grouped[ $status ];
 						}
 
-						return $left_created <=> $right_created;
+						ksort( $grouped );
+
+						return array_map(
+							static fn ( string $status, int $total ): array => [
+								'admin_status' => $status,
+								'total'        => $total,
+							],
+							array_keys( $grouped ),
+							array_values( $grouped )
+						);
 					}
-				);
 
-				if ( preg_match( '/ORDER BY\s+created_at\s+DESC/i', $query ) ) {
-					$rows = array_reverse( $rows );
-				}
+					if ( preg_match( '/SELECT\s+(.+?)\s+AS\s+value(?:,\s+(.+?)\s+AS\s+label)?\s+FROM\s+/is', $query, $matches ) ) {
+						$value_column = $this->normalize_select_column( (string) ( $matches[1] ?? '' ) );
+						$label_column = isset( $matches[2] ) ? $this->normalize_select_column( (string) $matches[2] ) : '';
+						$grouped      = [];
 
-				if ( preg_match( '/LIMIT\s+(\d+)/i', $query, $matches ) ) {
-					$rows = array_slice( $rows, 0, (int) ( $matches[1] ?? 0 ) );
-				}
+						foreach ( $rows as $row ) {
+							$value = (string) ( $row[ $value_column ] ?? '' );
+							$label = '' !== $label_column ? (string) ( $row[ $label_column ] ?? '' ) : '';
+
+							if ( '' === $value || isset( $grouped[ $value . "\0" . $label ] ) ) {
+								continue;
+							}
+
+							$grouped[ $value . "\0" . $label ] = [
+								'value' => $value,
+								'label' => $label,
+							];
+						}
+
+						usort(
+							$grouped,
+							static fn ( array $left, array $right ): int => strnatcasecmp(
+								(string) ( $left['label'] ?: $left['value'] ),
+								(string) ( $right['label'] ?: $right['value'] )
+							)
+						);
+
+						return array_values( $grouped );
+					}
+
+					$order_column    = 'created_at';
+					$order_direction = 'ASC';
+
+					if ( preg_match( '/ORDER BY\s+(?:\w+\.)?([a-z_]+)\s+(ASC|DESC)/i', $query, $matches ) ) {
+						$order_column    = strtolower( (string) ( $matches[1] ?? 'created_at' ) );
+						$order_direction = strtoupper( (string) ( $matches[2] ?? 'ASC' ) );
+					}
+
+					usort(
+						$rows,
+						static function ( array $left, array $right ) use ( $order_column, $order_direction ): int {
+							if ( in_array( $order_column, [ 'id', 'user_id' ], true ) ) {
+								$result = (int) ( $left[ $order_column ] ?? 0 ) <=> (int) ( $right[ $order_column ] ?? 0 );
+							} else {
+								$left_value  = (string) ( $left[ $order_column ] ?? '' );
+								$right_value = (string) ( $right[ $order_column ] ?? '' );
+								$result      = strcmp( $left_value, $right_value );
+							}
+
+							if ( 0 === $result ) {
+								$result = (int) ( $left['id'] ?? 0 ) <=> (int) ( $right['id'] ?? 0 );
+							}
+
+							return 'DESC' === $order_direction ? -1 * $result : $result;
+						}
+					);
+
+					if ( preg_match( '/LIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?/i', $query, $matches ) ) {
+						$rows = array_slice(
+							$rows,
+							(int) ( $matches[2] ?? 0 ),
+							(int) ( $matches[1] ?? 0 )
+						);
+					}
 
 				if ( preg_match( '/SELECT\s+(.+?)\s+FROM\s+/is', $query, $matches ) ) {
 					$select_clause = trim( (string) ( $matches[1] ?? '*' ) );
@@ -752,17 +954,81 @@ namespace {
 				);
 			}
 
-			private function row_matches( array $row, array $where ): bool {
-				foreach ( $where as $column => $value ) {
-					if ( (string) ( $row[ $column ] ?? '' ) !== (string) $value ) {
-						return false;
+				private function row_matches( array $row, array $where ): bool {
+					foreach ( $where as $column => $value ) {
+						if ( (string) ( $row[ $column ] ?? '' ) !== (string) $value ) {
+							return false;
 					}
 				}
 
-				return true;
+					return true;
+				}
+
+				private function normalize_select_column( string $column ): string {
+					$column = trim( $column );
+
+					if ( str_contains( $column, '.' ) ) {
+						$parts  = explode( '.', $column );
+						$column = (string) end( $parts );
+					}
+
+					return trim( str_replace( '`', '', $column ) );
+				}
+
+				/**
+				 * @param array<string, mixed> $row
+				 * @param array<int, array<string, mixed>> $all_rows
+				 */
+				private function resolve_activity_admin_status( array $row, array $all_rows ): string {
+					$undo = json_decode( (string) ( $row['undo_state'] ?? '' ), true );
+					$undo_status = is_array( $undo ) ? (string) ( $undo['status'] ?? 'available' ) : 'available';
+					$is_review = 'request_diagnostic' === (string) ( $row['activity_type'] ?? '' )
+						|| 'review' === (string) ( $row['execution_result'] ?? '' );
+
+					if ( $is_review ) {
+						return 'failed' === $undo_status ? 'failed' : 'review';
+					}
+
+					if ( 'undone' === $undo_status ) {
+						return 'undone';
+					}
+
+					foreach ( $all_rows as $candidate ) {
+						if (
+							(string) ( $candidate['entity_type'] ?? '' ) !== (string) ( $row['entity_type'] ?? '' )
+							|| (string) ( $candidate['entity_ref'] ?? '' ) !== (string) ( $row['entity_ref'] ?? '' )
+							|| (
+								'' === (string) ( $row['entity_type'] ?? '' )
+								&& '' === (string) ( $row['entity_ref'] ?? '' )
+							)
+						) {
+							continue;
+						}
+
+						$is_newer = (string) ( $candidate['created_at'] ?? '' ) > (string) ( $row['created_at'] ?? '' )
+							|| (
+								(string) ( $candidate['created_at'] ?? '' ) === (string) ( $row['created_at'] ?? '' )
+								&& (int) ( $candidate['id'] ?? 0 ) > (int) ( $row['id'] ?? 0 )
+							);
+
+						if ( ! $is_newer ) {
+							continue;
+						}
+
+						$candidate_undo = json_decode( (string) ( $candidate['undo_state'] ?? '' ), true );
+						$candidate_status = is_array( $candidate_undo ) ? (string) ( $candidate_undo['status'] ?? 'available' ) : 'available';
+						$candidate_review = 'request_diagnostic' === (string) ( $candidate['activity_type'] ?? '' )
+							|| 'review' === (string) ( $candidate['execution_result'] ?? '' );
+
+						if ( ! $candidate_review && 'undone' !== $candidate_status ) {
+							return 'blocked';
+						}
+					}
+
+					return 'failed' === $undo_status ? 'failed' : 'applied';
+				}
 			}
 		}
-	}
 
 	if ( ! class_exists( 'WP_Block_Type_Registry' ) ) {
 		class WP_Block_Type_Registry {
@@ -1345,6 +1611,8 @@ namespace {
 
 	if ( ! function_exists( 'get_posts' ) ) {
 		function get_posts( array $args = [] ): array {
+			WordPressTestState::$get_posts_calls[] = $args;
+
 			$posts     = array_values( WordPressTestState::$posts );
 			$post_type = isset( $args['post_type'] ) ? (string) $args['post_type'] : '';
 			$post_status = isset( $args['post_status'] ) ? $args['post_status'] : 'publish';

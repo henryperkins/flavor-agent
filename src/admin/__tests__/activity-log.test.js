@@ -1,5 +1,21 @@
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
+const fs = require( 'fs' );
+const path = require( 'path' );
+
+const mockTranslate = jest.fn( ( value ) => value );
+const mockSprintf = jest.fn( ( template, ...values ) =>
+	values.reduce(
+		( result, value ) => result.replace( '%s', String( value ) ),
+		template
+	)
+);
+
+jest.mock( '@wordpress/i18n', () => ( {
+	__: ( ...args ) => mockTranslate( ...args ),
+	sprintf: ( ...args ) => mockSprintf( ...args ),
+} ) );
+
 function getDataViewsMockState() {
 	return global.__flavorAgentActivityLogDataViewsState;
 }
@@ -196,6 +212,10 @@ const BOOT_DATA = {
 		'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 	timeZone: 'UTC',
 };
+const ACTIVITY_LOG_CSS = fs.readFileSync(
+	path.join( __dirname, '../activity-log.css' ),
+	'utf8'
+);
 
 function createEntry( overrides = {} ) {
 	return {
@@ -297,6 +317,8 @@ function getSidebarTitle() {
 beforeEach( () => {
 	getDataViewsMockState().latestProps = null;
 	apiFetch.mockReset();
+	mockTranslate.mockClear();
+	mockSprintf.mockClear();
 	window.localStorage.clear();
 } );
 
@@ -318,6 +340,9 @@ describe( 'ActivityLogApp', () => {
 			} )
 		);
 		expect( getVisibleTitles() ).toEqual( [ 'First activity entry' ] );
+		expect( getDataViewsMockState().latestProps.view.layout.density ).toBe(
+			'comfortable'
+		);
 		expect( getContainer().textContent ).not.toContain(
 			'No matching activity'
 		);
@@ -351,6 +376,24 @@ describe( 'ActivityLogApp', () => {
 		expect( getSummaryCardValue( 'Review-only' ) ).toBe( '2' );
 		expect( getSummaryCardValue( 'Undo blocked' ) ).toBe( '1' );
 		expect( getSummaryCardValue( 'Failed or unavailable' ) ).toBe( '2' );
+	} );
+
+	test( 'styles the six summary metrics as one desktop grid row', () => {
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/
+		);
+	} );
+
+	test( 'declares distinct review and blocked activity status styles', () => {
+		expect( ACTIVITY_LOG_CSS ).toContain(
+			'.flavor-agent-activity-log__status.is-review'
+		);
+		expect( ACTIVITY_LOG_CSS ).toContain(
+			'.flavor-agent-activity-log__icon.is-review'
+		);
+		expect( ACTIVITY_LOG_CSS ).toMatch(
+			/\.flavor-agent-activity-log__icon\.is-blocked\s*\{[^}]*warning/s
+		);
 	} );
 
 	test( 'clamps stale saved pages back into range before rendering the feed', async () => {
@@ -560,6 +603,31 @@ describe( 'ActivityLogApp', () => {
 		expect( connectorsLink ).not.toBeNull();
 		expect( connectorsLink.getAttribute( 'href' ) ).toBe(
 			BOOT_DATA.connectorsUrl
+		);
+	} );
+
+	test( 'localizes the interactive page chrome and feed labels', async () => {
+		await renderApp( [ createEntry() ] );
+
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'AI Activity Log',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Search AI activity',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Refresh',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Status',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Undo unavailable',
+			'flavor-agent'
 		);
 	} );
 

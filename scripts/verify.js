@@ -37,23 +37,23 @@ const STEPS = [
 	{
 		name: 'build',
 		command: 'npm run build',
-		requires: 'node',
+		requires: [ 'node', 'npm' ],
 	},
 	{
 		name: 'lint-js',
 		command: 'npm run lint:js',
-		requires: 'node',
+		requires: [ 'node', 'npm' ],
 	},
 	{
 		name: 'lint-plugin',
 		command: 'npm run lint:plugin',
-		requires: 'node',
+		requires: [ 'node', 'npm' ],
 		checkAvailability: getLintPluginAvailability,
 	},
 	{
 		name: 'unit',
 		command: 'npm run test:unit -- --runInBand',
-		requires: 'node',
+		requires: [ 'node', 'npm' ],
 	},
 	{
 		name: 'lint-php',
@@ -68,13 +68,13 @@ const STEPS = [
 	{
 		name: 'e2e-playground',
 		command: 'npm run test:e2e:playground',
-		requires: 'node',
+		requires: [ 'node', 'npm' ],
 		tag: 'e2e',
 	},
 	{
 		name: 'e2e-wp70',
 		command: 'npm run test:e2e:wp70',
-		requires: 'node',
+		requires: [ 'node', 'npm' ],
 		tag: 'e2e',
 	},
 ];
@@ -148,6 +148,9 @@ function parseArgs( argv ) {
 			throw new Error( `Unknown argument: ${ arg }` );
 		}
 	}
+	if ( opts.only && opts.only.length === 0 ) {
+		throw new Error( 'No steps specified in --only' );
+	}
 	const known = new Set( STEPS.map( ( s ) => s.name ) );
 	for ( const name of opts.only || [] ) {
 		if ( ! known.has( name ) ) {
@@ -218,8 +221,8 @@ function resolveStepAvailability(
 	const requiredCommands = Array.isArray( step.requires )
 		? step.requires
 		: step.requires
-			? [ step.requires ]
-			: [];
+		? [ step.requires ]
+		: [];
 
 	for ( const command of requiredCommands ) {
 		if ( ! commandExists( command ) ) {
@@ -328,12 +331,9 @@ function collectEnvironment() {
 		platform: process.platform,
 		arch: process.arch,
 	};
-	const stripAnsi = ( str ) =>
-		str.replace( /\u001b\[[0-9;]*m/g, '' );
+	const stripAnsi = ( str ) => str.replace( /\u001b\[[0-9;]*m/g, '' );
 	const capture = ( bin, args ) => {
-		const invocation = buildShellInvocation(
-			[ bin, ...args ].join( ' ' )
-		);
+		const invocation = buildShellInvocation( [ bin, ...args ].join( ' ' ) );
 		const res = spawnSync( invocation.file, invocation.args, {
 			encoding: 'utf8',
 			stdio: [ 'ignore', 'pipe', 'pipe' ],
@@ -444,17 +444,24 @@ function collectDiscoveredArtifacts(
 function computeStatus( results ) {
 	let failed = 0;
 	let incomplete = false;
+	let completed = 0;
 	for ( const r of results ) {
 		if ( r.status === 'fail' ) {
 			failed++;
+			completed++;
 		} else if ( r.incomplete ) {
 			incomplete = true;
+		} else if ( r.status === 'pass' ) {
+			completed++;
 		}
 	}
 	if ( failed > 0 ) {
 		return 'fail';
 	}
 	if ( incomplete ) {
+		return 'incomplete';
+	}
+	if ( completed === 0 ) {
 		return 'incomplete';
 	}
 	return 'pass';
@@ -522,7 +529,12 @@ async function main() {
 			} ) );
 		process.stdout.write(
 			JSON.stringify(
-				{ dryRun: true, outputDir: path.relative( REPO_ROOT, outputDirAbs ), steps: planned, skipped },
+				{
+					dryRun: true,
+					outputDir: path.relative( REPO_ROOT, outputDirAbs ),
+					steps: planned,
+					skipped,
+				},
 				null,
 				2
 			) + '\n'
@@ -552,7 +564,7 @@ async function main() {
 				name: step.name,
 				command: step.command,
 				status: 'skipped',
-				reason: 'bailed after prior failure',
+				reason: 'bailed after prior non-pass',
 				durationMs: 0,
 			} );
 			continue;
@@ -567,6 +579,9 @@ async function main() {
 				incomplete: true,
 				durationMs: 0,
 			} );
+			if ( opts.bail ) {
+				bailed = true;
+			}
 			continue;
 		}
 		if ( ! opts.json ) {
@@ -634,7 +649,9 @@ async function main() {
 
 if ( require.main === module ) {
 	main().catch( ( err ) => {
-		process.stderr.write( `verify crashed: ${ err.stack || err.message }\n` );
+		process.stderr.write(
+			`verify crashed: ${ err.stack || err.message }\n`
+		);
 		process.exit( 2 );
 	} );
 }

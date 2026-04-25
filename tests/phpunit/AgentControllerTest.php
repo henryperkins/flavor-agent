@@ -211,6 +211,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_limits_patterns_to_live_template_editor_visibility(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -458,6 +460,7 @@ final class AgentControllerTest extends TestCase {
 	public function test_handle_recommend_patterns_appends_matching_request_meta(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_posts'] = true;
+		$this->disable_wordpress_ai_client_runtime();
 		$this->configure_pattern_recommendation_backends();
 		$this->save_ready_pattern_index_state();
 
@@ -515,6 +518,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_patterns_passes_insertion_context_through_to_ranking(): void {
+		$this->disable_wordpress_ai_client_runtime();
 		$this->configure_pattern_recommendation_backends();
 		$this->save_ready_pattern_index_state();
 
@@ -615,6 +619,8 @@ final class AgentControllerTest extends TestCase {
 
 
 	public function test_handle_recommend_template_visible_filter_applies_before_candidate_cap(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		// Register 31 typed patterns so the 31st falls outside the
 		// TEMPLATE_PATTERN_CANDIDATE_CAP of 30 when unfiltered.
 		for ( $i = 1; $i <= 31; $i++ ) {
@@ -665,7 +671,8 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_style_forwards_global_styles_context(): void {
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
-		WordPressTestState::$remote_post_response               = [
+		$this->disable_wordpress_ai_client_runtime();
+		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
@@ -834,6 +841,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_preserves_explicit_empty_visible_pattern_filter(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
@@ -872,7 +881,8 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_style_forwards_style_book_context(): void {
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
-		WordPressTestState::$remote_post_response               = [
+		$this->disable_wordpress_ai_client_runtime();
+		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
@@ -960,6 +970,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_prefers_live_editor_slots_over_saved_template_slots(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$block_templates['wp_template'][0]->content =
 			'<!-- wp:template-part {"area":"header"} /-->';
 		WordPressTestState::$remote_post_response                       = [
@@ -1032,6 +1044,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_prefers_live_editor_structure_over_saved_template_structure(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$block_templates['wp_template'][0]->content =
 			'<!-- wp:paragraph --><p>Saved intro</p><!-- /wp:paragraph -->'
 			. '<!-- wp:template-part {"slug":"header","area":"header"} /-->';
@@ -1140,6 +1154,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_treats_empty_live_structure_as_authoritative(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$block_templates['wp_template'][0]->content =
 			'<!-- wp:paragraph --><p>Saved intro</p><!-- /wp:paragraph -->'
 			. '<!-- wp:template-part {"slug":"site-header","area":"header"} /-->';
@@ -1239,6 +1255,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_keeps_unsaved_live_areas_executable(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$block_templates['wp_template_part'][] = (object) [
 			'id'      => 'theme//footer-main',
 			'slug'    => 'footer-main',
@@ -1313,6 +1331,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_part_keeps_requests_part_scoped(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -1452,6 +1472,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_part_preserves_explicit_empty_visible_pattern_filter(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
@@ -1488,6 +1510,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_part_prefers_full_live_editor_structure_over_saved_structure(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:paragraph --><p>Saved Header</p><!-- /wp:paragraph -->';
 		WordPressTestState::$remote_post_response                            = [
@@ -1693,6 +1717,8 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_part_treats_empty_live_structure_as_authoritative(): void {
+		$this->disable_wordpress_ai_client_runtime();
+
 		WordPressTestState::$block_templates['wp_template_part'][0]->content =
 			'<!-- wp:group --><!-- wp:navigation /--><!-- /wp:group -->';
 		WordPressTestState::$remote_post_response                            = [
@@ -1786,7 +1812,8 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_navigation_forwards_selected_navigation_context(): void {
 		ActivityRepository::install();
-		WordPressTestState::$capabilities['edit_theme_options']              = true;
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+		$this->disable_wordpress_ai_client_runtime();
 		WordPressTestState::$posts[42]                                       = (object) [
 			'ID'           => 42,
 			'post_type'    => 'wp_navigation',
@@ -2289,6 +2316,12 @@ final class AgentControllerTest extends TestCase {
 	private function assertResponseRequestMeta( array $response_data, string $ability, string $route ): void {
 		$this->assertSame( $ability, $response_data['requestMeta']['ability'] ?? null );
 		$this->assertSame( $route, $response_data['requestMeta']['route'] ?? null );
+	}
+
+	private function disable_wordpress_ai_client_runtime(): void {
+		WordPressTestState::$ai_client_supported            = false;
+		WordPressTestState::$ai_client_provider_support     = [];
+		WordPressTestState::$ai_client_generate_text_result = '';
 	}
 
 	private function configure_pattern_recommendation_backends(): void {

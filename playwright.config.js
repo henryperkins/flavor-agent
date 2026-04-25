@@ -9,7 +9,9 @@ const muPluginDir = path.join( rootDir, 'tests/e2e/playground-mu-plugin' );
 module.exports = defineConfig( {
 	testDir: path.join( rootDir, 'tests/e2e' ),
 	testIgnore: /.*\.wp70\.setup\.js/,
-	timeout: 60_000,
+	// Playground can take close to a minute to finish a cold WordPress boot on
+	// this host before the first admin request becomes usable.
+	timeout: 120_000,
 	workers: 1,
 	retries: 0,
 	grepInvert: /@wp70-site-editor/,

@@ -65,6 +65,17 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/get-theme-styles', $status['availableAbilities'] );
 	}
 
+	public function test_check_status_keeps_list_template_parts_available_for_theme_only_users(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertContains( 'flavor-agent/list-template-parts', $status['availableAbilities'] );
+		$this->assertNotContains( 'flavor-agent/get-pattern', $status['availableAbilities'] );
+	}
+
 	public function test_check_status_marks_wordpress_ai_client_backend_as_configured(): void {
 		WordPressTestState::$capabilities        = [
 			'edit_posts' => true,

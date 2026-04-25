@@ -2079,6 +2079,27 @@ export function prepareTemplatePartSuggestionOperations( suggestion ) {
 	return { ok: true, operations: preparedOperations };
 }
 
+function failTemplateApplyAndRollback( error, appliedOperations = [] ) {
+	if ( appliedOperations.length === 0 ) {
+		return {
+			ok: false,
+			error,
+		};
+	}
+
+	const rollback = undoTemplateSuggestionOperations( {
+		operations: appliedOperations,
+	} );
+
+	return {
+		ok: false,
+		error: rollback.ok
+			? error
+			: rollback.error ||
+			  `${ error } Flavor Agent could not restore the previous state automatically.`,
+	};
+}
+
 export function applyTemplateSuggestionOperations( suggestion ) {
 	const prepared = prepareTemplateSuggestionOperations( suggestion );
 
@@ -2132,14 +2153,14 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 					) || null;
 
 				if ( ! insertedSlice?.blocks?.length ) {
-					return {
-						ok: false,
-						error: `Pattern “${
+					return failTemplateApplyAndRollback(
+						`Pattern “${
 							operation.patternTitle ||
 							operation.patternName ||
 							'unknown'
 						}” could not be inserted into this template.`,
-					};
+						appliedOperations
+					);
 				}
 
 				appliedOperations.push( {
@@ -2169,17 +2190,10 @@ export function applyTemplateSuggestionOperations( suggestion ) {
 	);
 
 	if ( ! templateValidity.ok ) {
-		const rollback = undoTemplateSuggestionOperations( {
-			operations: appliedOperations,
-		} );
-
-		return {
-			ok: false,
-			error: rollback.ok
-				? templateValidity.error
-				: rollback.error ||
-				  `${ templateValidity.error } Flavor Agent could not restore the previous state automatically.`,
-		};
+		return failTemplateApplyAndRollback(
+			templateValidity.error,
+			appliedOperations
+		);
 	}
 
 	return {

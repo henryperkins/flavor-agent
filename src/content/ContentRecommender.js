@@ -1,7 +1,4 @@
-import {
-	ToggleGroupControl,
-	ToggleGroupControlOption,
-} from '@wordpress/components';
+import { Button, ButtonGroup } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import { useCallback, useState } from '@wordpress/element';
@@ -254,28 +251,24 @@ export default function ContentRecommender() {
 						<SurfaceComposer
 							title={ activeMode.title }
 							meta={
-								<ToggleGroupControl
+								<ButtonGroup
 									className="flavor-agent-content-recommender__modes"
-									label="Content mode"
-									hideLabelFromVision
-									value={ contentMode }
-									onChange={ ( nextMode ) => {
-										if (
-											CONTENT_MODES.includes( nextMode )
-										) {
-											setContentMode( nextMode );
-										}
-									} }
+									aria-label="Content mode"
 								>
 									{ CONTENT_MODES.map( ( mode ) => (
-										<ToggleGroupControlOption
+										<Button
 											key={ mode }
 											className="flavor-agent-content-recommender__mode-option"
-											value={ mode }
-											label={ formatModeLabel( mode ) }
-										/>
+											variant="tertiary"
+											isPressed={ mode === contentMode }
+											onClick={ () =>
+												setContentMode( mode )
+											}
+										>
+											{ formatModeLabel( mode ) }
+										</Button>
 									) ) }
-								</ToggleGroupControl>
+								</ButtonGroup>
 							}
 							prompt={ prompt }
 							onPromptChange={ setPrompt }

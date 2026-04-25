@@ -17,7 +17,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open
-- Results are scoped by `visiblePatternNames`, derived from the current inserter root so nested insertion contexts only see patterns WordPress already allows there
+- Results are scoped by `visiblePatternNames`, derived from the current inserter root so nested insertion contexts only see patterns WordPress already allows there; registered pattern names and synced/user pattern names such as `core/block/{id}` use the same matching path
 - Recommended items only render when the current Gutenberg allowed-pattern selector exposes a matching pattern for this insertion point; otherwise the inserter shows an explicit “not currently exposing those patterns” message instead of patching core registry data
 - When `window.flavorAgentData.canRecommendPatterns` is false, no fetch runs and opening the inserter shows the shared unavailable-state notice instead of a silent no-op
 
@@ -28,15 +28,17 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 3. The store posts the request to `POST /flavor-agent/v1/recommend-patterns`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates backend configuration and pattern-index runtime state
-6. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()`, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
-7. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
-8. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
-9. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
-10. The user inserts a recommended pattern directly from the Flavor Agent shelf, which dispatches the same core block insertion flow Gutenberg uses for pattern insertion
+6. `PatternIndex::sync()` maintains a Qdrant corpus made from registered block patterns plus indexable synced `wp_block` patterns normalized to Gutenberg's user-pattern name format, `core/block/{id}`
+7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()`, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
+8. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
+9. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
+10. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
+11. The user inserts a recommended pattern directly from the Flavor Agent shelf, which dispatches the same core block insertion flow Gutenberg uses for pattern insertion
 
 ## What This Surface Can Do
 
 - Surface ranked patterns in a local inserter shelf without rewriting Gutenberg's pattern registry
+- Rank both registered patterns and synced/user patterns that Gutenberg exposes to the current insertion root
 - Insert matched allowed patterns directly from that shelf while still respecting the current allowed insertion root
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
@@ -46,6 +48,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 ## Guardrails And Failure Modes
 
 - If `visiblePatternNames` is present but empty, the backend returns no recommendations instead of suggesting invalid patterns
+- Synced/user pattern candidates keep their `core/block/{id}` names through indexing and recommendation output so the frontend can match them to Gutenberg's allowed-pattern data before insertion
 - If the pattern backends are unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
@@ -65,6 +68,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state |
 | REST handler | `Agent_Controller::handle_recommend_patterns()` | Adapts the REST request to the backend ability |
 | Backend ability | `PatternAbilities::recommend_patterns()` | Runs validation, retrieval, reranking, and filtering |
+| Pattern corpus | `PatternIndex::sync()` + `SyncedPatternRepository` | Indexes registered patterns plus synced `wp_block` patterns as `core/block/{id}` candidates |
 | Docs grounding | `AISearchClient::maybe_search_with_cache_fallbacks()` | Supplies cache-backed WordPress developer guidance for the ranking prompt |
 | Embeddings | `EmbeddingClient::embed()` | Turns the query into a vector |
 | Vector search | `QdrantClient::search()` | Retrieves semantic and structural candidates |
@@ -75,6 +79,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 - REST: `POST /flavor-agent/v1/recommend-patterns`
 - Ability: `flavor-agent/recommend-patterns`
 - Helper ability: `flavor-agent/list-patterns`
+- Helper abilities: `flavor-agent/list-synced-patterns`, `flavor-agent/get-synced-pattern`
 
 ## Key Implementation Files
 
@@ -92,3 +97,4 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/PatternAbilities.php`
 - `inc/Patterns/PatternIndex.php`
+- `inc/Context/SyncedPatternRepository.php`

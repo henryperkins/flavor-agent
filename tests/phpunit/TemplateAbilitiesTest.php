@@ -99,7 +99,11 @@ final class TemplateAbilitiesTest extends TestCase {
 		parent::tearDown();
 	}
 
-	public function test_list_template_parts_can_omit_or_include_content(): void {
+	public function test_list_template_parts_can_omit_or_include_content_for_theme_editors(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+		];
+
 		$metadata_only = TemplateAbilities::list_template_parts( [] );
 		$with_content  = TemplateAbilities::list_template_parts(
 			[
@@ -114,6 +118,22 @@ final class TemplateAbilitiesTest extends TestCase {
 			'<!-- wp:group {"tagName":"header"} --><div>Header</div><!-- /wp:group -->',
 			$with_content['templateParts'][0]['content']
 		);
+	}
+
+	public function test_list_template_parts_coerces_include_content_to_metadata_for_editors_without_theme_access(): void {
+		WordPressTestState::$capabilities = [
+			'edit_posts' => true,
+		];
+
+		$result = TemplateAbilities::list_template_parts(
+			[
+				'includeContent' => true,
+			]
+		);
+
+		$this->assertCount( 1, $result['templateParts'] );
+		$this->assertSame( 'header', $result['templateParts'][0]['slug'] );
+		$this->assertArrayNotHasKey( 'content', $result['templateParts'][0] );
 	}
 
 	public function test_recommend_template_resolve_signature_only_returns_review_and_resolved_signatures(): void {

@@ -1,4 +1,5 @@
 const { test, expect } = require( '@playwright/test' );
+const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 
 const BLOCK_RESPONSE = {
 	payload: {
@@ -391,23 +392,6 @@ async function injectStyleBookExample( page, { blockName, blockTitle } ) {
 			nextBlockName: blockName,
 			nextBlockTitle: blockTitle,
 		}
-	);
-}
-
-async function waitForWordPressReady( page ) {
-	for ( let attempt = 0; attempt < 30; attempt++ ) {
-		const loadingText = page.getByText( 'WordPress is not ready yet' );
-
-		if ( ! ( await loadingText.count() ) ) {
-			return;
-		}
-
-		await page.waitForTimeout( 2000 );
-		await page.reload( { waitUntil: 'domcontentloaded' } );
-	}
-
-	await expect( page.getByText( 'WordPress is not ready yet' ) ).toHaveCount(
-		0
 	);
 }
 
@@ -1017,10 +1001,7 @@ async function registerTemplatePattern(
 					...existingAdditionalPatterns,
 					newEntry,
 				],
-				__experimentalBlockPatterns: [
-					...existingPatterns,
-					newEntry,
-				],
+				__experimentalBlockPatterns: [ ...existingPatterns, newEntry ],
 			} );
 		},
 		{
@@ -1426,192 +1407,200 @@ async function selectFirstNavigationBlock( page ) {
 // the editor store, even though the server repository has the entry. Needs product-side
 // investigation of activity session scope + reload hydration path. Tracked in STATUS.md
 // 2026-04-18 phase-0-closeout.
-test.fixme( 'block inspector smoke applies, persists, and undoes AI recommendations', async ( {
-	page,
-} ) => {
-	test.setTimeout( 120_000 );
+test.fixme(
+	'block inspector smoke applies, persists, and undoes AI recommendations',
+	async ( { page } ) => {
+		test.setTimeout( 120_000 );
 
-	const TEST_RESOLVED_SIGNATURE = 'test-resolved-signature-block-inspector';
-	const capturedRequests = [];
+		const TEST_RESOLVED_SIGNATURE =
+			'test-resolved-signature-block-inspector';
+		const capturedRequests = [];
 
-	await page.route( '**/*recommend-block*', async ( route ) => {
-		const request = route.request();
-		let body = {};
-		try {
-			body = request.postDataJSON() || {};
-		} catch ( err ) {
-			body = {};
-		}
-		capturedRequests.push( {
-			url: request.url(),
-			resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
-		} );
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				payload: {
-					...BLOCK_RESPONSE.payload,
+		await page.route( '**/*recommend-block*', async ( route ) => {
+			const request = route.request();
+			let body = {};
+			try {
+				body = request.postDataJSON() || {};
+			} catch ( err ) {
+				body = {};
+			}
+			capturedRequests.push( {
+				url: request.url(),
+				resolveSignatureOnly: Boolean( body?.resolveSignatureOnly ),
+			} );
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					payload: {
+						...BLOCK_RESPONSE.payload,
+						resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
+					},
 					resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-				},
-				resolvedContextSignature: TEST_RESOLVED_SIGNATURE,
-			} ),
-		} );
-	} );
-
-	await page.goto( '/wp-admin/post-new.php', {
-		waitUntil: 'domcontentloaded',
-	} );
-	await waitForWordPressReady( page );
-	await waitForFlavorAgent( page );
-	await dismissWelcomeGuide( page );
-
-	const clientId = await seedParagraphBlock( page );
-	await ensureSettingsSidebarOpen( page );
-
-	const promptInput = page.getByPlaceholder(
-		'Describe the outcome you want for this block.'
-	);
-
-	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
-	await expect(
-		page.getByRole( 'button', { name: 'Get Suggestions' } )
-	).toBeVisible();
-
-	// Click "Get Suggestions" so the real fetch thunk runs against the mocked
-	// route. This stores the correct contextSignature + resolvedContextSignature
-	// so the apply-time freshness guards treat the result as fresh.
-	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
-
-	await expect
-		.poll( () => capturedRequests.length, { timeout: 15_000 } )
-		.toBeGreaterThanOrEqual( 1 );
-
-	await expect(
-		page.getByText( BLOCK_RESPONSE.payload.explanation, {
-			exact: true,
-		} )
-	).toBeVisible( { timeout: 15_000 } );
-
-	const suggestionButton = page.getByRole( 'button', {
-		name: 'Update content',
-		exact: true,
-	} );
-
-	await expect( suggestionButton ).toBeVisible();
-	await expect( suggestionButton ).toBeEnabled();
-	await suggestionButton.click();
-
-	// Poll apply state and block content together so we can surface the
-	// real failure reason if the suggestion doesn't apply.
-	await expect
-		.poll( () =>
-			page.evaluate(
-				( { selectedClientId } ) => {
-					const flavorAgent = window.wp.data.select( 'flavor-agent' );
-					const content =
-						window.wp.data
-							.select( 'core/block-editor' )
-							.getBlockAttributes?.( selectedClientId )
-							?.content || '';
-
-					return {
-						content,
-						applyStatus:
-							flavorAgent.getBlockApplyStatus?.(
-								selectedClientId
-							) || '',
-						applyError:
-							flavorAgent.getBlockApplyError?.(
-								selectedClientId
-							) || '',
-					};
-				},
-				{ selectedClientId: clientId }
-			)
-		)
-		.toEqual( {
-			content: 'Hello from Flavor Agent',
-			applyStatus: 'success',
-			applyError: '',
+				} ),
+			} );
 		} );
 
-	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
-	await expect
-		.poll( () =>
-			page.evaluate(
-				() =>
-					window.wp?.data
-						?.select( 'core/editor' )
-						?.getCurrentPostId?.() || null
-			)
-		)
-		.toBeTruthy();
-	await saveCurrentPost( page );
+		await page.goto( '/wp-admin/post-new.php', {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
+		await waitForFlavorAgent( page );
+		await dismissWelcomeGuide( page );
 
-	const editUrl = await getCurrentPostEditUrl( page );
+		const clientId = await seedParagraphBlock( page );
+		await ensureSettingsSidebarOpen( page );
 
-	await page.goto( editUrl, {
-		waitUntil: 'domcontentloaded',
-	} );
-	await waitForWordPressReady( page );
-	await waitForFlavorAgent( page );
-	await dismissWelcomeGuide( page );
-	await ensureSettingsSidebarOpen( page );
-	await page.waitForFunction(
-		() =>
-			(
-				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.() ||
-				[]
-			).length > 0
-	);
-	await page.evaluate( () => {
-		const blockEditor = window.wp.data.select( 'core/block-editor' );
-		const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
-			( block ) => block?.name === 'core/paragraph'
+		const promptInput = page.getByPlaceholder(
+			'Describe the outcome you want for this block.'
 		);
 
-		if ( paragraph?.clientId ) {
-			window.wp.data
-				.dispatch( 'core/block-editor' )
-				.selectBlock( paragraph.clientId );
-		}
-	} );
+		await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+		await expect(
+			page.getByRole( 'button', { name: 'Get Suggestions' } )
+		).toBeVisible();
 
-	const refreshedPromptInput = page.getByPlaceholder(
-		'Describe the outcome you want for this block.'
-	);
+		// Click "Get Suggestions" so the real fetch thunk runs against the mocked
+		// route. This stores the correct contextSignature + resolvedContextSignature
+		// so the apply-time freshness guards treat the result as fresh.
+		await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 
-	await ensurePanelOpen( page, 'AI Recommendations', refreshedPromptInput );
-	await page
-		.locator( '.flavor-agent-activity-row' )
-		.getByRole( 'button', { name: 'Undo', exact: true } )
-		.click();
+		await expect
+			.poll( () => capturedRequests.length, { timeout: 15_000 } )
+			.toBeGreaterThanOrEqual( 1 );
 
-	await expect
-		.poll( () =>
-			page.evaluate( () => {
-				const flavorAgent = window.wp.data.select( 'flavor-agent' );
-				const blockEditor =
-					window.wp.data.select( 'core/block-editor' );
-				const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
-					( block ) => block?.name === 'core/paragraph'
-				);
-				const activityLog = flavorAgent.getActivityLog?.() || [];
-				const lastActivity =
-					activityLog[ activityLog.length - 1 ] || null;
-
-				return {
-					content: paragraph?.attributes?.content || '',
-					undoStatus: lastActivity?.undo?.status || '',
-				};
+		await expect(
+			page.getByText( BLOCK_RESPONSE.payload.explanation, {
+				exact: true,
 			} )
-		)
-		.toEqual( {
-			content: 'Hello world',
-			undoStatus: 'undone',
+		).toBeVisible( { timeout: 15_000 } );
+
+		const suggestionButton = page.getByRole( 'button', {
+			name: 'Update content',
+			exact: true,
 		} );
-} );
+
+		await expect( suggestionButton ).toBeVisible();
+		await expect( suggestionButton ).toBeEnabled();
+		await suggestionButton.click();
+
+		// Poll apply state and block content together so we can surface the
+		// real failure reason if the suggestion doesn't apply.
+		await expect
+			.poll( () =>
+				page.evaluate(
+					( { selectedClientId } ) => {
+						const flavorAgent =
+							window.wp.data.select( 'flavor-agent' );
+						const content =
+							window.wp.data
+								.select( 'core/block-editor' )
+								.getBlockAttributes?.( selectedClientId )
+								?.content || '';
+
+						return {
+							content,
+							applyStatus:
+								flavorAgent.getBlockApplyStatus?.(
+									selectedClientId
+								) || '',
+							applyError:
+								flavorAgent.getBlockApplyError?.(
+									selectedClientId
+								) || '',
+						};
+					},
+					{ selectedClientId: clientId }
+				)
+			)
+			.toEqual( {
+				content: 'Hello from Flavor Agent',
+				applyStatus: 'success',
+				applyError: '',
+			} );
+
+		await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
+		await expect
+			.poll( () =>
+				page.evaluate(
+					() =>
+						window.wp?.data
+							?.select( 'core/editor' )
+							?.getCurrentPostId?.() || null
+				)
+			)
+			.toBeTruthy();
+		await saveCurrentPost( page );
+
+		const editUrl = await getCurrentPostEditUrl( page );
+
+		await page.goto( editUrl, {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
+		await waitForFlavorAgent( page );
+		await dismissWelcomeGuide( page );
+		await ensureSettingsSidebarOpen( page );
+		await page.waitForFunction(
+			() =>
+				(
+					window.wp?.data
+						?.select( 'core/block-editor' )
+						?.getBlocks?.() || []
+				).length > 0
+		);
+		await page.evaluate( () => {
+			const blockEditor = window.wp.data.select( 'core/block-editor' );
+			const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
+				( block ) => block?.name === 'core/paragraph'
+			);
+
+			if ( paragraph?.clientId ) {
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.selectBlock( paragraph.clientId );
+			}
+		} );
+
+		const refreshedPromptInput = page.getByPlaceholder(
+			'Describe the outcome you want for this block.'
+		);
+
+		await ensurePanelOpen(
+			page,
+			'AI Recommendations',
+			refreshedPromptInput
+		);
+		await page
+			.locator( '.flavor-agent-activity-row' )
+			.getByRole( 'button', { name: 'Undo', exact: true } )
+			.click();
+
+		await expect
+			.poll( () =>
+				page.evaluate( () => {
+					const flavorAgent = window.wp.data.select( 'flavor-agent' );
+					const blockEditor =
+						window.wp.data.select( 'core/block-editor' );
+					const paragraph = ( blockEditor.getBlocks?.() || [] ).find(
+						( block ) => block?.name === 'core/paragraph'
+					);
+					const activityLog = flavorAgent.getActivityLog?.() || [];
+					const lastActivity =
+						activityLog[ activityLog.length - 1 ] || null;
+
+					return {
+						content: paragraph?.attributes?.content || '',
+						undoStatus: lastActivity?.undo?.status || '',
+					};
+				} )
+			)
+			.toEqual( {
+				content: 'Hello world',
+				undoStatus: 'undone',
+			} );
+	}
+);
 
 test( 'block and pattern surfaces explain unavailable providers in native UI', async ( {
 	page,
@@ -2239,141 +2228,148 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 // canInsertBlockType-based prep check passes but the dispatch is rejected. Product-side fix
 // should either use canInsertBlocks (plural) in prep, or placement='end' should resolve to a
 // non-root container when the root disallows insertion. Tracked in STATUS.md 2026-04-18.
-test.fixme( 'template surface smoke previews and applies executable template recommendations', async ( {
-	page,
-} ) => {
-	let templateTarget = null;
-	const templateRequests = [];
+test.fixme(
+	'template surface smoke previews and applies executable template recommendations',
+	async ( { page } ) => {
+		let templateTarget = null;
+		const templateRequests = [];
 
-	await page.route( '**/*recommend-template*', async ( route ) => {
-		templateRequests.push( route.request().postDataJSON() );
+		await page.route( '**/*recommend-template*', async ( route ) => {
+			templateRequests.push( route.request().postDataJSON() );
 
-		await route.fulfill( {
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify( {
-				resolvedContextSignature: TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
-				explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-				suggestions: [
-					{
-						label: 'Clarify template hierarchy',
-						description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
-						operations: [
-							{
-								type: 'insert_pattern',
-								patternName: TEMPLATE_PATTERN_NAME,
-								placement: 'end',
-							},
-						],
-						templateParts: [],
-						patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
-					},
-				],
-			} ),
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					resolvedContextSignature:
+						TEMPLATE_RESOLVED_CONTEXT_SIGNATURE,
+					explanation: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+					suggestions: [
+						{
+							label: 'Clarify template hierarchy',
+							description: `Insert ${ TEMPLATE_PATTERN_TITLE } into the template flow.`,
+							operations: [
+								{
+									type: 'insert_pattern',
+									patternName: TEMPLATE_PATTERN_NAME,
+									placement: 'end',
+								},
+							],
+							templateParts: [],
+							patternSuggestions: [ TEMPLATE_PATTERN_NAME ],
+						},
+					],
+				} ),
+			} );
 		} );
-	} );
 
-	await page.goto( '/wp-admin/site-editor.php', {
-		waitUntil: 'domcontentloaded',
-	} );
-	await waitForWordPressReady( page );
-	await waitForFlavorAgent( page );
-	await dismissWelcomeGuide( page );
-	await openFirstTemplateEditor( page );
-	await dismissSiteEditorWelcomeGuide( page );
+		await page.goto( '/wp-admin/site-editor.php', {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
+		await waitForFlavorAgent( page );
+		await dismissWelcomeGuide( page );
+		await openFirstTemplateEditor( page );
+		await dismissSiteEditorWelcomeGuide( page );
 
-	await page.waitForFunction(
-		() =>
-			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
-			window.wp?.data
-				?.select( 'core/edit-site' )
-				?.getEditedPostType?.() === 'wp_template'
-	);
-	await page.waitForFunction( () => {
-		return (
-			window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.()
-				.length > 0
+		await page.waitForFunction(
+			() =>
+				Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
+				window.wp?.data
+					?.select( 'core/edit-site' )
+					?.getEditedPostType?.() === 'wp_template'
 		);
-	} );
-
-	templateTarget = await getTemplateTarget( page );
-	expect( templateTarget ).toBeTruthy();
-
-	await enableTemplateDocumentSidebar( page );
-	await registerTemplatePattern( page, {
-		insertedContent: TEMPLATE_INSERTED_CONTENT,
-		patternName: TEMPLATE_PATTERN_NAME,
-		patternTitle: TEMPLATE_PATTERN_TITLE,
-	} );
-
-	const promptInput = await openTemplateRecommendationsPanel( page );
-	await promptInput.fill( TEMPLATE_PROMPT );
-	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
-
-	await expect.poll( () => templateRequests.length ).toBe( 1 );
-	expect( templateRequests[ 0 ].templateRef ).toBe(
-		templateTarget.templateRef
-	);
-	expect( templateRequests[ 0 ].prompt ).toBe( TEMPLATE_PROMPT );
-	expect( templateRequests[ 0 ] ).toHaveProperty( 'visiblePatternNames' );
-	expect( templateRequests[ 0 ].visiblePatternNames ).toContain(
-		TEMPLATE_PATTERN_NAME
-	);
-
-	await expect(
-		page.getByText( TEMPLATE_SUGGESTION_LABEL ).first()
-	).toBeVisible();
-	await page.getByRole( 'button', { name: 'Review' } ).click();
-	await expect(
-		page
-			.locator( '.flavor-agent-review-section' )
-			.getByText( 'Review Before Apply', { exact: true } )
-	).toBeVisible();
-	await page.getByRole( 'button', { name: 'Confirm Apply' } ).click();
-
-	await expect
-		.poll( () =>
-			page.evaluate(
-				( { patternName } ) => {
-					const flavorAgent = window.wp.data.select( 'flavor-agent' );
-					const operations =
-						flavorAgent.getTemplateLastAppliedOperations?.() || [];
-					const activityLog = flavorAgent.getActivityLog?.() || [];
-					const lastActivity =
-						activityLog[ activityLog.length - 1 ] || null;
-
-					return {
-						applyStatus:
-							flavorAgent.getTemplateApplyStatus?.() || '',
-						applyError:
-							flavorAgent.getTemplateApplyError?.() || '',
-						hasInsertOperation: operations.some(
-							( operation ) =>
-								operation?.type === 'insert_pattern' &&
-								operation?.patternName === patternName
-						),
-						lastActivityType: lastActivity?.type || '',
-					};
-				},
-				{
-					patternName: TEMPLATE_PATTERN_NAME,
-				}
-			)
-		)
-		.toEqual( {
-			applyStatus: 'success',
-			applyError: '',
-			hasInsertOperation: true,
-			lastActivityType: 'apply_template_suggestion',
+		await page.waitForFunction( () => {
+			return (
+				window.wp?.data?.select( 'core/block-editor' )?.getBlocks?.()
+					.length > 0
+			);
 		} );
 
-	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
-	await openTemplateRecommendationsPanel( page );
-	await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
-	await expect( page.locator( '.flavor-agent-activity-row' ) ).toContainText(
-		'Clarify template hierarchy'
-	);
-} );
+		templateTarget = await getTemplateTarget( page );
+		expect( templateTarget ).toBeTruthy();
+
+		await enableTemplateDocumentSidebar( page );
+		await registerTemplatePattern( page, {
+			insertedContent: TEMPLATE_INSERTED_CONTENT,
+			patternName: TEMPLATE_PATTERN_NAME,
+			patternTitle: TEMPLATE_PATTERN_TITLE,
+		} );
+
+		const promptInput = await openTemplateRecommendationsPanel( page );
+		await promptInput.fill( TEMPLATE_PROMPT );
+		await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
+
+		await expect.poll( () => templateRequests.length ).toBe( 1 );
+		expect( templateRequests[ 0 ].templateRef ).toBe(
+			templateTarget.templateRef
+		);
+		expect( templateRequests[ 0 ].prompt ).toBe( TEMPLATE_PROMPT );
+		expect( templateRequests[ 0 ] ).toHaveProperty( 'visiblePatternNames' );
+		expect( templateRequests[ 0 ].visiblePatternNames ).toContain(
+			TEMPLATE_PATTERN_NAME
+		);
+
+		await expect(
+			page.getByText( TEMPLATE_SUGGESTION_LABEL ).first()
+		).toBeVisible();
+		await page.getByRole( 'button', { name: 'Review' } ).click();
+		await expect(
+			page
+				.locator( '.flavor-agent-review-section' )
+				.getByText( 'Review Before Apply', { exact: true } )
+		).toBeVisible();
+		await page.getByRole( 'button', { name: 'Confirm Apply' } ).click();
+
+		await expect
+			.poll( () =>
+				page.evaluate(
+					( { patternName } ) => {
+						const flavorAgent =
+							window.wp.data.select( 'flavor-agent' );
+						const operations =
+							flavorAgent.getTemplateLastAppliedOperations?.() ||
+							[];
+						const activityLog =
+							flavorAgent.getActivityLog?.() || [];
+						const lastActivity =
+							activityLog[ activityLog.length - 1 ] || null;
+
+						return {
+							applyStatus:
+								flavorAgent.getTemplateApplyStatus?.() || '',
+							applyError:
+								flavorAgent.getTemplateApplyError?.() || '',
+							hasInsertOperation: operations.some(
+								( operation ) =>
+									operation?.type === 'insert_pattern' &&
+									operation?.patternName === patternName
+							),
+							lastActivityType: lastActivity?.type || '',
+						};
+					},
+					{
+						patternName: TEMPLATE_PATTERN_NAME,
+					}
+				)
+			)
+			.toEqual( {
+				applyStatus: 'success',
+				applyError: '',
+				hasInsertOperation: true,
+				lastActivityType: 'apply_template_suggestion',
+			} );
+
+		await page
+			.getByRole( 'tab', { name: 'Template', exact: true } )
+			.click();
+		await openTemplateRecommendationsPanel( page );
+		await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
+		await expect(
+			page.locator( '.flavor-agent-activity-row' )
+		).toContainText( 'Clarify template hierarchy' );
+	}
+);
 
 test( 'template surface keeps stale results visible but disables review and apply until refresh', async ( {
 	page,

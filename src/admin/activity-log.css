@@ -128,7 +128,7 @@
 
 .flavor-agent-activity-log__summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   border-bottom: 1px solid var(--flavor-agent-activity-log-border);
 }
 
@@ -332,8 +332,13 @@
 }
 
 .flavor-agent-activity-log__status.is-undone {
-	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
-	color: var(--wpds-color-fg-content-neutral-weak, #6d6d6d);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+  color: var(--wpds-color-fg-content-neutral-weak, #6d6d6d);
+}
+
+.flavor-agent-activity-log__status.is-review {
+  background: var(--wpds-color-bg-surface-info-weak, #eff6fc);
+  color: var(--wpds-color-fg-content-info-weak, #135e96);
 }
 
 .flavor-agent-activity-log__status.is-blocked {
@@ -354,15 +359,24 @@
   color: var(--flavor-agent-activity-log-accent);
 }
 
-.flavor-agent-activity-log__icon.is-blocked,
 .flavor-agent-activity-log__icon.is-failed {
   background: var(--wpds-color-bg-surface-error-weak, #fff6f4);
   color: var(--wpds-color-fg-content-error-weak, #cc1818);
 }
 
+.flavor-agent-activity-log__icon.is-blocked {
+  background: var(--wpds-color-bg-surface-warning-weak, #fff7e0);
+  color: var(--wpds-color-fg-content-warning-weak, #926300);
+}
+
+.flavor-agent-activity-log__icon.is-review {
+  background: var(--wpds-color-bg-surface-info-weak, #eff6fc);
+  color: var(--wpds-color-fg-content-info-weak, #135e96);
+}
+
 .flavor-agent-activity-log__icon.is-undone {
-	background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
-	color: var(--wpds-color-fg-content-neutral-weak, #6d6d6d);
+  background: var(--wpds-color-bg-surface-neutral, #f8f8f8);
+  color: var(--wpds-color-fg-content-neutral-weak, #6d6d6d);
 }
 
 .flavor-agent-activity-log__code {
@@ -548,9 +562,28 @@
   }
 }
 
+@media (max-width: 1200px) {
+  .flavor-agent-activity-log__summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .flavor-agent-activity-log__summary-item:nth-child(3n + 1) {
+    border-inline-start: 0;
+  }
+
+  .flavor-agent-activity-log__summary-item:nth-child(n + 4) {
+    border-top: 1px solid var(--flavor-agent-activity-log-border);
+  }
+}
+
 @media (max-width: 782px) {
   .flavor-agent-activity-log__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flavor-agent-activity-log__summary-item {
+    border-top: 0;
+    border-inline-start: 1px solid var(--flavor-agent-activity-log-border);
   }
 
   .flavor-agent-activity-log__summary-item:nth-child(odd) {

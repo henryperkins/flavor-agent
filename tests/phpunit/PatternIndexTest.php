@@ -125,6 +125,44 @@ final class PatternIndexTest extends TestCase {
 		$this->assertSame( 'uninitialized', PatternIndex::get_state()['status'] );
 	}
 
+	public function test_synced_pattern_changes_mark_index_dirty_and_schedule_sync(): void {
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+		$this->save_ready_state_for_patterns( $this->current_patterns() );
+		WordPressTestState::$scheduled_events = [];
+
+		PatternIndex::handle_synced_pattern_change(
+			51,
+			(object) [
+				'ID'        => 51,
+				'post_type' => 'wp_block',
+			],
+			true
+		);
+
+		$state = PatternIndex::get_state();
+
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertSame( 'synced_pattern_changed', $state['stale_reason'] );
+		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$this->save_ready_state_for_patterns( $this->current_patterns() );
+		WordPressTestState::$scheduled_events = [];
+
+		PatternIndex::handle_synced_pattern_change(
+			52,
+			(object) [
+				'ID'        => 52,
+				'post_type' => 'post',
+			],
+			true
+		);
+
+		$this->assertSame( 'ready', PatternIndex::get_state()['status'] );
+		$this->assertSame( [], WordPressTestState::$scheduled_events );
+	}
+
 	public function test_runtime_state_marks_legacy_collection_names_stale_with_a_compatibility_reason(): void {
 		PatternIndex::save_state(
 			array_merge(
@@ -294,6 +332,59 @@ final class PatternIndexTest extends TestCase {
 			$this->collection_url(),
 			WordPressTestState::$remote_get_calls[0]['url'] ?? null
 		);
+	}
+
+	public function test_sync_indexes_registered_and_synced_patterns(): void {
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+		WordPressTestState::$posts = [
+			51 => (object) [
+				'ID'                => 51,
+				'post_type'         => 'wp_block',
+				'post_title'        => 'Synced Hero',
+				'post_name'         => 'synced-hero',
+				'post_content'      => '<!-- wp:cover --><div class="wp-block-cover">Synced hero</div><!-- /wp:cover -->',
+				'post_status'       => 'publish',
+				'post_author'       => 7,
+				'post_date_gmt'     => '2026-04-20 00:00:00',
+				'post_modified_gmt' => '2026-04-21 00:00:00',
+			],
+		];
+
+		$this->queue_signature_probe();
+		$this->queue_ensure_collection( false );
+		$this->queue_scroll( [] );
+		$this->queue_embeddings(
+			[
+				[ 0.11, 0.22 ],
+				[ 0.33, 0.44 ],
+			]
+		);
+		$this->queue_qdrant_success( '/points', 'PUT' );
+
+		$result = PatternIndex::sync();
+		$state  = PatternIndex::get_state();
+
+		$this->assertSame( 2, $result['indexed'] );
+		$this->assertSame( 2, $state['indexed_count'] );
+		$this->assertCount( 2, $state['pattern_fingerprints'] );
+
+		$upsert_call      = $this->find_remote_post_call( '/points', 'PUT' );
+		$upsert_body      = $this->decode_request_body( $upsert_call );
+		$payloads_by_name = [];
+
+		foreach ( $upsert_body['points'] ?? [] as $point ) {
+			$payload                                       = is_array( $point['payload'] ?? null ) ? $point['payload'] : [];
+			$payloads_by_name[ (string) $payload['name'] ] = $payload;
+		}
+
+		$this->assertArrayHasKey( 'theme/hero', $payloads_by_name );
+		$this->assertArrayHasKey( 'core/block/51', $payloads_by_name );
+		$this->assertSame( 'registered', $payloads_by_name['theme/hero']['source'] ?? '' );
+		$this->assertSame( 'user', $payloads_by_name['core/block/51']['type'] ?? '' );
+		$this->assertSame( 'synced', $payloads_by_name['core/block/51']['source'] ?? '' );
+		$this->assertSame( 51, $payloads_by_name['core/block/51']['syncedPatternId'] ?? 0 );
+		$this->assertSame( 'synced', $payloads_by_name['core/block/51']['syncStatus'] ?? '' );
+		$this->assertStringContainsString( 'Synced hero', $payloads_by_name['core/block/51']['content'] ?? '' );
 	}
 
 	public function test_sync_performs_incremental_reindex_and_deletes_removed_patterns(): void {
@@ -814,6 +905,9 @@ final class PatternIndexTest extends TestCase {
 					implode( ',', $block_types ),
 					implode( ',', $template_types ),
 					$this->expected_pattern_override_fingerprint( $pattern['patternOverrides'] ?? [] ),
+					(string) ( $pattern['syncedPatternId'] ?? 0 ),
+					$pattern['syncStatus'] ?? '',
+					$pattern['wpPatternSyncStatus'] ?? '',
 					md5( $pattern['content'] ?? '' ),
 					(string) PatternIndex::EMBEDDING_RECIPE_VERSION,
 				]
