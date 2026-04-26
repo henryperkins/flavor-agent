@@ -357,6 +357,76 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'anthropic', Settings::sanitize_openai_provider( 'anthropic' ) );
 	}
 
+	public function test_sanitize_azure_settings_validate_complete_values_when_connector_provider_is_selected(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME                     => 'anthropic',
+			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'old-key',
+			'flavor_agent_azure_embedding_deployment' => 'old-embed',
+			'flavor_agent_azure_chat_deployment'      => 'old-chat',
+		];
+		WordPressTestState::$connectors                 = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		$_POST = [
+			'option_page'                             => 'flavor_agent_settings',
+			Provider::OPTION_NAME                     => 'anthropic',
+			'flavor_agent_azure_openai_endpoint'      => 'https://new.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'new-key',
+			'flavor_agent_azure_embedding_deployment' => 'new-embed',
+			'flavor_agent_azure_chat_deployment'      => 'new-chat',
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'data' => [
+							[
+								'embedding' => [ 0.1, 0.2 ],
+							],
+						],
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'output_text' => 'ok',
+					]
+				),
+			],
+		];
+
+		$this->assertSame( 'anthropic', Settings::sanitize_openai_provider( 'anthropic' ) );
+		$this->assertSame(
+			'https://new.openai.azure.com/',
+			Settings::sanitize_azure_openai_endpoint( 'https://new.openai.azure.com/' )
+		);
+		$this->assertSame( 'new-key', Settings::sanitize_azure_openai_key( 'new-key' ) );
+		$this->assertSame( 'new-embed', Settings::sanitize_azure_embedding_deployment( 'new-embed' ) );
+		$this->assertSame( 'new-chat', Settings::sanitize_azure_chat_deployment( 'new-chat' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_sanitize_openai_native_settings_accept_verified_values_and_validate_once_per_save(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_openai_provider'               => 'azure_openai',
@@ -528,6 +598,73 @@ final class SettingsTest extends TestCase {
 			'Bearer connector-key',
 			WordPressTestState::$remote_post_calls[1]['args']['headers']['Authorization'] ?? null
 		);
+	}
+
+	public function test_sanitize_openai_native_settings_validate_complete_values_when_connector_provider_is_selected(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME                        => 'anthropic',
+			'flavor_agent_openai_native_api_key'         => 'old-key',
+			'flavor_agent_openai_native_embedding_model' => 'old-embed',
+			'flavor_agent_openai_native_chat_model'      => 'old-chat',
+		];
+		WordPressTestState::$connectors                 = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+		$_POST = [
+			'option_page'                                => 'flavor_agent_settings',
+			Provider::OPTION_NAME                        => 'anthropic',
+			'flavor_agent_openai_native_api_key'         => 'new-key',
+			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
+			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'data' => [
+							[
+								'embedding' => [ 0.1, 0.2 ],
+							],
+						],
+					]
+				),
+			],
+			[
+				'response' => [
+					'code' => 200,
+				],
+				'body'     => wp_json_encode(
+					[
+						'output_text' => 'ok',
+					]
+				),
+			],
+		];
+
+		$this->assertSame( 'anthropic', Settings::sanitize_openai_provider( 'anthropic' ) );
+		$this->assertSame( 'new-key', Settings::sanitize_openai_native_api_key( 'new-key' ) );
+		$this->assertSame(
+			'text-embedding-3-large',
+			Settings::sanitize_openai_native_embedding_model( 'text-embedding-3-large' )
+		);
+		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sanitize_qdrant_settings_skip_remote_validation_when_credentials_are_unchanged(): void {
@@ -1004,6 +1141,38 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Anthropic (Settings &gt; Connectors)', $output );
 		$this->assertStringContainsString( 'value="anthropic" selected=', $output );
 		$this->assertStringNotContainsString( 'Google (Settings &gt; Connectors)', $output );
+	}
+
+	public function test_render_page_keeps_direct_provider_controls_available_for_connector_provider(): void {
+		WordPressTestState::$options = [
+			Provider::OPTION_NAME => 'anthropic',
+		];
+
+		WordPressTestState::$connectors = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+
+		WordPressTestState::$ai_client_provider_support = [
+			'anthropic' => true,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Anthropic is connector-backed', $output );
+		$this->assertStringContainsString( 'name="flavor_agent_azure_embedding_deployment"', $output );
+		$this->assertStringContainsString( 'name="flavor_agent_openai_native_embedding_model"', $output );
+		$this->assertStringContainsString( 'Legacy Direct Azure Settings', $output );
+		$this->assertStringContainsString( 'Legacy Direct OpenAI Settings', $output );
 	}
 
 	public function test_render_text_field_outputs_numeric_constraints(): void {

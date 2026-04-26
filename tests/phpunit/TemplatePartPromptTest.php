@@ -433,6 +433,11 @@ final class TemplatePartPromptTest extends TestCase {
 					'name'              => 'core/site-logo',
 					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
 				],
+				[
+					'path'              => [ 0, 1 ],
+					'name'              => 'core/navigation',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
 			],
 			'structuralConstraints' => [
 				'contentOnlyPaths' => [],
@@ -447,8 +452,118 @@ final class TemplatePartPromptTest extends TestCase {
 				'suggestions' => [
 					[
 						'label'              => 'Reshape the header cluster',
-						'description'        => 'Replace the wrapper and remove the redundant logo.',
+						'description'        => 'Replace the navigation and remove the redundant logo.',
 						'patternSuggestions' => [],
+						'operations'         => [
+							[
+								'type'              => 'replace_block_with_pattern',
+								'patternName'       => 'theme/header-utility',
+								'expectedBlockName' => 'core/navigation',
+								'targetPath'        => [ 0, 1 ],
+							],
+							[
+								'type'              => 'remove_block',
+								'expectedBlockName' => 'core/site-logo',
+								'targetPath'        => [ 0, 0 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				[
+					'label'              => 'Reshape the header cluster',
+					'description'        => 'Replace the navigation and remove the redundant logo.',
+					'blockHints'         => [],
+					'patternSuggestions' => [ 'theme/header-utility' ],
+					'operations'         => [
+						[
+							'type'              => 'replace_block_with_pattern',
+							'patternName'       => 'theme/header-utility',
+							'expectedBlockName' => 'core/navigation',
+							'expectedTarget'    => [
+								'name'       => 'core/navigation',
+								'label'      => '',
+								'attributes' => [],
+								'childCount' => 0,
+							],
+							'targetPath'        => [ 0, 1 ],
+						],
+						[
+							'type'              => 'remove_block',
+							'expectedBlockName' => 'core/site-logo',
+							'expectedTarget'    => [
+								'name'       => 'core/site-logo',
+								'label'      => '',
+								'attributes' => [],
+								'childCount' => 0,
+							],
+							'targetPath'        => [ 0, 0 ],
+						],
+					],
+				],
+			],
+			$result['suggestions']
+		);
+	}
+
+	public function test_parse_response_drops_overlapping_template_part_operations(): void {
+		$context = [
+			'blockTree'             => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'attributes' => [],
+					'childCount' => 1,
+					'children'   => [
+						[
+							'path'       => [ 0, 0 ],
+							'name'       => 'core/site-logo',
+							'attributes' => [],
+							'childCount' => 0,
+							'children'   => [],
+						],
+					],
+				],
+			],
+			'patterns'              => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'operationTargets'      => [
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+				[
+					'path'              => [ 0, 0 ],
+					'name'              => 'core/site-logo',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+			],
+			'structuralConstraints' => [
+				'contentOnlyPaths' => [],
+				'lockedPaths'      => [],
+				'hasContentOnly'   => false,
+				'hasLockedBlocks'  => false,
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Reshape the header cluster',
+						'description'        => 'Replace the wrapper and remove the logo.',
+						'patternSuggestions' => [ 'theme/header-utility' ],
 						'operations'         => [
 							[
 								'type'              => 'replace_block_with_pattern',
@@ -474,34 +589,10 @@ final class TemplatePartPromptTest extends TestCase {
 			[
 				[
 					'label'              => 'Reshape the header cluster',
-					'description'        => 'Replace the wrapper and remove the redundant logo.',
+					'description'        => 'Replace the wrapper and remove the logo.',
 					'blockHints'         => [],
 					'patternSuggestions' => [ 'theme/header-utility' ],
-					'operations'         => [
-						[
-							'type'              => 'replace_block_with_pattern',
-							'patternName'       => 'theme/header-utility',
-							'expectedBlockName' => 'core/group',
-							'expectedTarget'    => [
-								'name'       => 'core/group',
-								'label'      => '',
-								'attributes' => [],
-								'childCount' => 2,
-							],
-							'targetPath'        => [ 0 ],
-						],
-						[
-							'type'              => 'remove_block',
-							'expectedBlockName' => 'core/site-logo',
-							'expectedTarget'    => [
-								'name'       => 'core/site-logo',
-								'label'      => '',
-								'attributes' => [],
-								'childCount' => 0,
-							],
-							'targetPath'        => [ 0, 0 ],
-						],
-					],
+					'operations'         => [],
 				],
 			],
 			$result['suggestions']

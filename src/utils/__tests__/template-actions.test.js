@@ -1761,6 +1761,60 @@ describe( 'template-actions', () => {
 		);
 	} );
 
+	test( 'applyTemplatePartSuggestionOperations rolls back earlier operations when a later operation fails', () => {
+		const { blockEditorDispatch, state } = setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'existing-1', 'Existing' ) ],
+			patterns: [
+				{
+					name: 'theme/header-utility',
+					title: 'Header Utility',
+					content: '<!-- wp:paragraph {"content":"Utility"} /-->',
+				},
+			],
+		} );
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern-1', 'Utility' ),
+		] );
+		blockEditorDispatch.removeBlocks.mockImplementation( ( clientIds ) => {
+			if ( clientIds.includes( 'existing-1' ) ) {
+				return;
+			}
+
+			removeBlocksByClientIds( state.blocks, clientIds );
+		} );
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/header-utility',
+					placement: 'end',
+				},
+				{
+					type: 'remove_block',
+					expectedBlockName: 'core/paragraph',
+					targetPath: [ 0 ],
+					expectedTarget: {
+						name: 'core/paragraph',
+						label: 'Paragraph',
+						attributes: {
+							content: 'Existing',
+						},
+						childCount: 0,
+					},
+				},
+			],
+		} );
+
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'The target block at path 0 could not be removed automatically.',
+		} );
+		expect( state.blocks ).toEqual( [
+			createParagraphBlock( 'existing-1', 'Existing' ),
+		] );
+	} );
+
 	test( 'applyTemplatePartSuggestionOperations records the intended snapshot when the inserted slice is not readable immediately', () => {
 		const { blockEditorDispatch } = setupBlockEditor( {
 			blocks: [ createParagraphBlock( 'existing-1', 'Existing' ) ],

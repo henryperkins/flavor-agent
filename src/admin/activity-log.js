@@ -1152,7 +1152,7 @@ export function ActivityLogApp( { bootData } ) {
 					},
 					{
 						value: 'failed',
-						label: __( 'Undo unavailable', 'flavor-agent' ),
+						label: __( 'Failed or unavailable', 'flavor-agent' ),
 					},
 				],
 				filterBy: {

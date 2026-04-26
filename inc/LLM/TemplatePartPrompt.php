@@ -804,6 +804,7 @@ EXAMPLE
 		}
 
 		$valid              = [];
+		$targeted_paths     = [];
 		$allowed_placements = [
 			'start'             => true,
 			'end'               => true,
@@ -847,9 +848,9 @@ EXAMPLE
 					}
 
 					if (
-						in_array( $placement, [ 'start', 'end' ], true )
-						&& ! isset( $insertion_anchor_lookup[ $placement ] )
-					) {
+							in_array( $placement, [ 'start', 'end' ], true )
+							&& ! isset( $insertion_anchor_lookup[ $placement ] )
+						) {
 						continue 2;
 					}
 
@@ -860,6 +861,11 @@ EXAMPLE
 						];
 
 						if ( null !== $target_path ) {
+							if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
+								return [];
+							}
+
+							$targeted_paths[]         = $target_path;
 							$normalized['targetPath'] = $target_path;
 
 							$target_node = $block_lookup[ self::block_path_key( $target_path ) ] ?? null;
@@ -879,11 +885,11 @@ EXAMPLE
 					$target_path         = self::sanitize_block_path( $operation['targetPath'] ?? null );
 
 					if (
-						'' === $pattern_name ||
-						'' === $expected_block_name ||
-						null === $target_path ||
-						! isset( $pattern_lookup[ $pattern_name ] )
-					) {
+							'' === $pattern_name ||
+							'' === $expected_block_name ||
+							null === $target_path ||
+							! isset( $pattern_lookup[ $pattern_name ] )
+						) {
 						continue 2;
 					}
 
@@ -900,13 +906,19 @@ EXAMPLE
 						continue 2;
 					}
 
-						$valid[] = [
-							'type'              => 'replace_block_with_pattern',
-							'patternName'       => $pattern_name,
-							'expectedBlockName' => $expected_block_name,
-							'expectedTarget'    => self::build_expected_target( $target_node ),
-							'targetPath'        => $target_path,
-						];
+					if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
+						return [];
+					}
+
+					$targeted_paths[] = $target_path;
+
+					$valid[] = [
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => $pattern_name,
+						'expectedBlockName' => $expected_block_name,
+						'expectedTarget'    => self::build_expected_target( $target_node ),
+						'targetPath'        => $target_path,
+					];
 					break;
 
 				case 'remove_block':
@@ -922,20 +934,26 @@ EXAMPLE
 					$target_meta = $operation_target_lookup[ $path_key ] ?? null;
 
 					if (
-						! is_array( $target_node ) ||
-						! is_array( $target_meta ) ||
-						! in_array( 'remove_block', $target_meta['allowedOperations'] ?? [], true ) ||
-						sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
-					) {
+							! is_array( $target_node ) ||
+							! is_array( $target_meta ) ||
+							! in_array( 'remove_block', $target_meta['allowedOperations'] ?? [], true ) ||
+							sanitize_text_field( (string) ( $target_node['name'] ?? '' ) ) !== $expected_block_name
+						) {
 						continue 2;
 					}
 
-						$valid[] = [
-							'type'              => 'remove_block',
-							'expectedBlockName' => $expected_block_name,
-							'expectedTarget'    => self::build_expected_target( $target_node ),
-							'targetPath'        => $target_path,
-						];
+					if ( self::has_overlapping_template_part_operation_path( $targeted_paths, $target_path ) ) {
+						return [];
+					}
+
+					$targeted_paths[] = $target_path;
+
+					$valid[] = [
+						'type'              => 'remove_block',
+						'expectedBlockName' => $expected_block_name,
+						'expectedTarget'    => self::build_expected_target( $target_node ),
+						'targetPath'        => $target_path,
+					];
 					break;
 			}
 		}
@@ -1043,6 +1061,48 @@ EXAMPLE
 		}
 
 		return $normalized;
+	}
+
+	/**
+	 * @param array<int, int[]> $targeted_paths
+	 * @param int[]            $target_path
+	 */
+	private static function has_overlapping_template_part_operation_path( array $targeted_paths, array $target_path ): bool {
+		foreach ( $targeted_paths as $candidate ) {
+			if ( self::block_paths_overlap( $candidate, $target_path ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * @param int[] $left
+	 * @param int[] $right
+	 */
+	private static function block_paths_overlap( array $left, array $right ): bool {
+		return self::block_path_key( $left ) === self::block_path_key( $right )
+			|| self::is_block_path_ancestor( $left, $right )
+			|| self::is_block_path_ancestor( $right, $left );
+	}
+
+	/**
+	 * @param int[] $ancestor
+	 * @param int[] $path
+	 */
+	private static function is_block_path_ancestor( array $ancestor, array $path ): bool {
+		if ( count( $ancestor ) >= count( $path ) ) {
+			return false;
+		}
+
+		foreach ( $ancestor as $index => $segment ) {
+			if ( ! array_key_exists( $index, $path ) || $path[ $index ] !== $segment ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

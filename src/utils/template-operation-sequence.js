@@ -105,6 +105,54 @@ function normalizeExpectedTarget( value ) {
 	return expectedTarget;
 }
 
+function isSameBlockPath( left = [], right = [] ) {
+	return (
+		Array.isArray( left ) &&
+		Array.isArray( right ) &&
+		left.length === right.length &&
+		left.every( ( segment, index ) => segment === right[ index ] )
+	);
+}
+
+function isAncestorBlockPath( ancestor = [], path = [] ) {
+	return (
+		Array.isArray( ancestor ) &&
+		Array.isArray( path ) &&
+		ancestor.length < path.length &&
+		ancestor.every( ( segment, index ) => segment === path[ index ] )
+	);
+}
+
+function overlapsBlockPath( left = [], right = [] ) {
+	return (
+		isSameBlockPath( left, right ) ||
+		isAncestorBlockPath( left, right ) ||
+		isAncestorBlockPath( right, left )
+	);
+}
+
+function getTemplatePartTargetPathConflict(
+	targetPaths = [],
+	targetPath = null
+) {
+	if ( ! Array.isArray( targetPath ) ) {
+		return null;
+	}
+
+	if (
+		targetPaths.some( ( candidate ) =>
+			overlapsBlockPath( candidate, targetPath )
+		)
+	) {
+		return {
+			ok: false,
+			error: 'This suggestion targets overlapping template-part block paths and cannot be applied automatically.',
+		};
+	}
+
+	return null;
+}
+
 export function validateTemplateOperationSequence( operations = [] ) {
 	if ( ! Array.isArray( operations ) || operations.length === 0 ) {
 		return {
@@ -305,6 +353,7 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 		TEMPLATE_PART_PLACEMENT_BEFORE_BLOCK_PATH,
 		TEMPLATE_PART_PLACEMENT_AFTER_BLOCK_PATH,
 	] );
+	const targetedPaths = [];
 
 	for ( const rawOperation of operations ) {
 		const type = toNonEmptyString( rawOperation?.type );
@@ -362,6 +411,19 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					normalizedOperation.expectedTarget = expectedTarget;
 				}
 
+				const conflict = getTemplatePartTargetPathConflict(
+					targetedPaths,
+					normalizedOperation.targetPath
+				);
+
+				if ( conflict ) {
+					return conflict;
+				}
+
+				if ( normalizedOperation.targetPath ) {
+					targetedPaths.push( normalizedOperation.targetPath );
+				}
+
 				normalizedOperations.push( normalizedOperation );
 				break;
 			}
@@ -397,6 +459,16 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					};
 				}
 
+				const conflict = getTemplatePartTargetPathConflict(
+					targetedPaths,
+					targetPath
+				);
+
+				if ( conflict ) {
+					return conflict;
+				}
+
+				targetedPaths.push( targetPath );
 				normalizedOperations.push( {
 					type,
 					patternName,
@@ -435,6 +507,16 @@ export function validateTemplatePartOperationSequence( operations = [] ) {
 					};
 				}
 
+				const conflict = getTemplatePartTargetPathConflict(
+					targetedPaths,
+					targetPath
+				);
+
+				if ( conflict ) {
+					return conflict;
+				}
+
+				targetedPaths.push( targetPath );
 				normalizedOperations.push( {
 					type,
 					expectedBlockName: expectedTarget.name,

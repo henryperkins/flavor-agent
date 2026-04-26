@@ -1050,6 +1050,41 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertSame( 'undone', $older['undo']['status'] ?? null );
 	}
 
+	public function test_update_undo_status_ignores_newer_review_only_rows_for_ordered_tail(): void {
+		Repository::install();
+
+		Repository::create( $this->build_template_entry( 'activity-older', '2026-03-24T10:00:00Z' ) );
+		Repository::create(
+			array_merge(
+				$this->build_template_entry( 'activity-review', '2026-03-24T10:00:01Z' ),
+				[
+					'type'            => 'request_diagnostic',
+					'suggestion'      => 'Template recommendation request',
+					'before'          => [],
+					'after'           => [],
+					'executionResult' => 'review',
+					'undo'            => [
+						'status' => 'review',
+					],
+				]
+			)
+		);
+
+		$admin_result = Repository::query_admin( [] );
+
+		$this->assertSame(
+			[ 'activity-review', 'activity-older' ],
+			array_column( $admin_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame( 'review', $admin_result['entries'][0]['status'] ?? null );
+		$this->assertSame( 'applied', $admin_result['entries'][1]['status'] ?? null );
+
+		$older = Repository::update_undo_status( 'activity-older', 'undone' );
+
+		$this->assertIsArray( $older );
+		$this->assertSame( 'undone', $older['undo']['status'] ?? null );
+	}
+
 	public function test_update_undo_status_rejects_terminal_state_rewrites(): void {
 		Repository::install();
 

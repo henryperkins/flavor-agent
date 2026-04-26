@@ -466,29 +466,41 @@ final class Page {
 				</a>
 			</p>
 			<?php
+			self::render_azure_direct_settings_fields();
+			self::render_openai_native_direct_settings_fields();
 			return;
 		}
 
 		if ( Provider::is_azure( (string) $state['selected_provider'] ) ) {
-			self::render_subsection_heading(
-				__( 'Legacy Direct Azure Settings', 'flavor-agent' )
-			);
-			self::render_registered_section_callback( 'flavor_agent_azure' );
-			self::render_registered_fields_table(
-				'flavor_agent_azure',
-				[
-					'flavor_agent_azure_openai_endpoint',
-					'flavor_agent_azure_openai_key',
-					'flavor_agent_azure_embedding_deployment',
-					'flavor_agent_azure_chat_deployment',
-					'flavor_agent_azure_reasoning_effort',
-				]
-			);
+			self::render_azure_direct_settings_fields();
 			return;
 		}
 
+		self::render_openai_native_direct_settings_fields();
+	}
+
+	private static function render_azure_direct_settings_fields(): void {
 		self::render_subsection_heading(
-			__( 'Legacy Direct OpenAI Settings', 'flavor-agent' )
+			__( 'Legacy Direct Azure Settings', 'flavor-agent' ),
+			__( 'Use these plugin-owned fields for direct Azure chat fallback or pattern embeddings.', 'flavor-agent' )
+		);
+		self::render_registered_section_callback( 'flavor_agent_azure' );
+		self::render_registered_fields_table(
+			'flavor_agent_azure',
+			[
+				'flavor_agent_azure_openai_endpoint',
+				'flavor_agent_azure_openai_key',
+				'flavor_agent_azure_embedding_deployment',
+				'flavor_agent_azure_chat_deployment',
+				'flavor_agent_azure_reasoning_effort',
+			]
+		);
+	}
+
+	private static function render_openai_native_direct_settings_fields(): void {
+		self::render_subsection_heading(
+			__( 'Legacy Direct OpenAI Settings', 'flavor-agent' ),
+			__( 'Use these plugin-owned fields for direct OpenAI chat fallback or pattern embeddings.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_openai_native' );
 		self::render_registered_fields_table(

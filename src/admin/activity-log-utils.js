@@ -1,3 +1,5 @@
+import { __, sprintf } from '@wordpress/i18n';
+
 import {
 	getResolvedActivityUndoState,
 	ORDERED_UNDO_BLOCKED_ERROR,
@@ -177,7 +179,7 @@ function buildAdminUrl( adminBaseUrl, path, query = {} ) {
 
 function formatBlockName( blockName = '' ) {
 	if ( typeof blockName !== 'string' || ! blockName ) {
-		return 'Block';
+		return __( 'Block', 'flavor-agent' );
 	}
 
 	return blockName
@@ -252,23 +254,45 @@ function formatDocumentLabel( postType = '', entityId = '' ) {
 	}
 
 	if ( postType === 'wp_template' ) {
-		return `Template ${ entityId || EMPTY_VALUE }`;
+		return sprintf(
+			/* translators: %s: template identifier. */
+			__( 'Template %s', 'flavor-agent' ),
+			entityId || EMPTY_VALUE
+		);
 	}
 
 	if ( postType === 'wp_template_part' ) {
-		return `Template part ${ entityId || EMPTY_VALUE }`;
+		return sprintf(
+			/* translators: %s: template part identifier. */
+			__( 'Template part %s', 'flavor-agent' ),
+			entityId || EMPTY_VALUE
+		);
 	}
 
 	if ( postType === 'global_styles' ) {
-		return `Global Styles ${ entityId || EMPTY_VALUE }`;
+		return sprintf(
+			/* translators: %s: Global Styles entity identifier. */
+			__( 'Global Styles %s', 'flavor-agent' ),
+			entityId || EMPTY_VALUE
+		);
 	}
 
 	if ( /^\d+$/.test( entityId ) ) {
-		return `${ postType || 'Post' } #${ entityId }`;
+		return sprintf(
+			/* translators: 1: post type, 2: numeric post ID. */
+			__( '%1$s #%2$s', 'flavor-agent' ),
+			postType || __( 'Post', 'flavor-agent' ),
+			entityId
+		);
 	}
 
 	if ( entityId ) {
-		return `${ postType || 'Document' } ${ entityId }`;
+		return sprintf(
+			/* translators: 1: document type, 2: document identifier. */
+			__( '%1$s %2$s', 'flavor-agent' ),
+			postType || __( 'Document', 'flavor-agent' ),
+			entityId
+		);
 	}
 
 	return postType || '';
@@ -277,15 +301,15 @@ function formatDocumentLabel( postType = '', entityId = '' ) {
 function formatActivityTypeLabel( activityType = '' ) {
 	switch ( activityType ) {
 		case 'request_diagnostic':
-			return 'Record request';
+			return __( 'Record request', 'flavor-agent' );
 		case 'apply_suggestion':
-			return 'Apply block suggestion';
+			return __( 'Apply block suggestion', 'flavor-agent' );
 		case 'apply_template_suggestion':
-			return 'Apply template suggestion';
+			return __( 'Apply template suggestion', 'flavor-agent' );
 		case 'apply_template_part_suggestion':
-			return 'Apply template-part suggestion';
+			return __( 'Apply template-part suggestion', 'flavor-agent' );
 		case 'apply_global_styles_suggestion':
-			return 'Apply Global Styles suggestion';
+			return __( 'Apply Global Styles suggestion', 'flavor-agent' );
 		default:
 			return humanizeValueLabel( activityType ) || EMPTY_VALUE;
 	}
@@ -528,7 +552,7 @@ function deriveOperationType( entry ) {
 	if ( entry?.type === 'request_diagnostic' ) {
 		return {
 			value: 'request-diagnostic',
-			label: 'Request diagnostic',
+			label: __( 'Request diagnostic', 'flavor-agent' ),
 		};
 	}
 
@@ -543,8 +567,8 @@ function deriveOperationType( entry ) {
 			value: 'insert',
 			label:
 				operationType === 'insert_pattern'
-					? 'Insert pattern'
-					: 'Insert block',
+					? __( 'Insert pattern', 'flavor-agent' )
+					: __( 'Insert block', 'flavor-agent' ),
 		};
 	}
 
@@ -556,22 +580,22 @@ function deriveOperationType( entry ) {
 			value: 'replace',
 			label:
 				operationType === 'replace_template_part'
-					? 'Replace template part'
-					: 'Assign template part',
+					? __( 'Replace template part', 'flavor-agent' )
+					: __( 'Assign template part', 'flavor-agent' ),
 		};
 	}
 
 	if ( hasStyleMutation( entry ) ) {
 		return {
 			value: 'apply-style',
-			label: 'Apply style',
+			label: __( 'Apply style', 'flavor-agent' ),
 		};
 	}
 
 	if ( entry?.surface === 'block' ) {
 		return {
 			value: 'modify-attributes',
-			label: 'Modify attributes',
+			label: __( 'Modify attributes', 'flavor-agent' ),
 		};
 	}
 
@@ -599,23 +623,23 @@ function getBlockPathLabel( entry ) {
 export function formatSurfaceLabel( surface = '' ) {
 	switch ( surface ) {
 		case 'content':
-			return 'Content';
+			return __( 'Content', 'flavor-agent' );
 		case 'navigation':
-			return 'Navigation';
+			return __( 'Navigation', 'flavor-agent' );
 		case 'pattern':
-			return 'Pattern';
+			return __( 'Pattern', 'flavor-agent' );
 		case 'template':
-			return 'Template';
+			return __( 'Template', 'flavor-agent' );
 		case 'template-part':
-			return 'Template part';
+			return __( 'Template part', 'flavor-agent' );
 		case 'global-styles':
-			return 'Global Styles';
+			return __( 'Global Styles', 'flavor-agent' );
 		case 'style-book':
-			return 'Style Book';
+			return __( 'Style Book', 'flavor-agent' );
 		case 'block':
-			return 'Block';
+			return __( 'Block', 'flavor-agent' );
 		default:
-			return 'Activity';
+			return __( 'Activity', 'flavor-agent' );
 	}
 }
 
@@ -634,7 +658,11 @@ export function summarizeActivityState( state ) {
 		const attributeKeys = Object.keys( state.attributes );
 
 		return attributeKeys.length
-			? `Attributes: ${ attributeKeys.join( ', ' ) }`
+			? sprintf(
+					/* translators: %s: comma-separated attribute keys. */
+					__( 'Attributes: %s', 'flavor-agent' ),
+					attributeKeys.join( ', ' )
+			  )
 			: EMPTY_VALUE;
 	}
 
@@ -869,7 +897,10 @@ function getRequestDiagnostics( request = {} ) {
 
 function getUndoReason( status, resolvedUndo = null, entry = null ) {
 	if ( status === 'applied' && resolvedUndo?.status === 'available' ) {
-		return 'This is the newest still-applied AI action for this entity.';
+		return __(
+			'This is the newest still-applied AI action for this entity.',
+			'flavor-agent'
+		);
 	}
 
 	if ( typeof entry?.undo?.error === 'string' && entry.undo.error.trim() ) {
@@ -884,11 +915,11 @@ function getUndoReason( status, resolvedUndo = null, entry = null ) {
 	}
 
 	if ( status === 'undone' ) {
-		return 'Undo already completed.';
+		return __( 'Undo already completed.', 'flavor-agent' );
 	}
 
 	if ( status === 'failed' ) {
-		return 'Undo is unavailable.';
+		return __( 'Undo is unavailable.', 'flavor-agent' );
 	}
 
 	return EMPTY_VALUE;
@@ -906,68 +937,86 @@ function getActivityTitle( entry ) {
 	}
 
 	if ( entry?.surface === 'template' ) {
-		return 'Template suggestion applied';
+		return __( 'Template suggestion applied', 'flavor-agent' );
 	}
 
 	if ( entry?.surface === 'template-part' ) {
-		return 'Template-part suggestion applied';
+		return __( 'Template-part suggestion applied', 'flavor-agent' );
 	}
 
 	if ( entry?.surface === 'global-styles' ) {
-		return 'Global Styles suggestion applied';
+		return __( 'Global Styles suggestion applied', 'flavor-agent' );
 	}
 
 	if ( entry?.surface === 'style-book' ) {
-		return 'Style Book suggestion applied';
+		return __( 'Style Book suggestion applied', 'flavor-agent' );
 	}
 
 	if ( entry?.target?.blockName ) {
-		return `${ formatBlockName(
-			entry.target.blockName
-		) } suggestion applied`;
+		return sprintf(
+			/* translators: %s: block name. */
+			__( '%s suggestion applied', 'flavor-agent' ),
+			formatBlockName( entry.target.blockName )
+		);
 	}
 
-	return 'AI action recorded';
+	return __( 'AI action recorded', 'flavor-agent' );
 }
 
 function getActivityEntityLabel( entry ) {
 	if ( entry?.surface === 'template' ) {
-		return `Template ${ entry?.target?.templateRef || EMPTY_VALUE }`;
+		return sprintf(
+			/* translators: %s: template identifier. */
+			__( 'Template %s', 'flavor-agent' ),
+			entry?.target?.templateRef || EMPTY_VALUE
+		);
 	}
 
 	if ( entry?.surface === 'content' ) {
-		return 'Content';
+		return __( 'Content', 'flavor-agent' );
 	}
 
 	if ( entry?.surface === 'navigation' ) {
-		return 'Navigation';
+		return __( 'Navigation', 'flavor-agent' );
 	}
 
 	if ( entry?.surface === 'pattern' ) {
-		return 'Pattern';
+		return __( 'Pattern', 'flavor-agent' );
 	}
 
 	if ( entry?.surface === 'template-part' ) {
-		return `Template part ${
+		return sprintf(
+			/* translators: %s: template part identifier. */
+			__( 'Template part %s', 'flavor-agent' ),
 			entry?.target?.templatePartRef || EMPTY_VALUE
-		}`;
+		);
 	}
 
 	if ( entry?.surface === 'global-styles' ) {
-		return `Global Styles ${
+		return sprintf(
+			/* translators: %s: Global Styles entity identifier. */
+			__( 'Global Styles %s', 'flavor-agent' ),
 			entry?.target?.globalStylesId || EMPTY_VALUE
-		}`;
+		);
 	}
 
 	if ( entry?.surface === 'style-book' ) {
 		const blockTitle =
 			String( entry?.target?.blockTitle || '' ) || EMPTY_VALUE;
 
-		return `Style Book ${ blockTitle }`;
+		return sprintf(
+			/* translators: %s: block title. */
+			__( 'Style Book %s', 'flavor-agent' ),
+			blockTitle
+		);
 	}
 
 	if ( entry?.target?.blockName ) {
-		return `${ formatBlockName( entry.target.blockName ) } block`;
+		return sprintf(
+			/* translators: %s: block name. */
+			__( '%s block', 'flavor-agent' ),
+			formatBlockName( entry.target.blockName )
+		);
 	}
 
 	return formatSurfaceLabel( entry?.surface );
@@ -1039,17 +1088,17 @@ export function getActivityStatusLabel( entry, allEntries = [] ) {
 
 	switch ( status ) {
 		case 'review':
-			return 'Review';
+			return __( 'Review', 'flavor-agent' );
 		case 'failed':
 			return isFailedRequestDiagnostic
-				? 'Request failed'
-				: 'Undo unavailable';
+				? __( 'Request failed', 'flavor-agent' )
+				: __( 'Undo unavailable', 'flavor-agent' );
 		case 'undone':
-			return 'Undone';
+			return __( 'Undone', 'flavor-agent' );
 		case 'blocked':
-			return 'Undo blocked';
+			return __( 'Undo blocked', 'flavor-agent' );
 		default:
-			return 'Applied';
+			return __( 'Applied', 'flavor-agent' );
 	}
 }
 
@@ -1062,7 +1111,7 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 				postType: 'wp_template',
 				postId: entry?.target?.templateRef || entityId,
 			} ),
-			label: 'Open template',
+			label: __( 'Open template', 'flavor-agent' ),
 		};
 	}
 
@@ -1075,7 +1124,7 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 				postType: 'wp_template_part',
 				postId: entry?.target?.templatePartRef || entityId,
 			} ),
-			label: 'Open template part',
+			label: __( 'Open template part', 'flavor-agent' ),
 		};
 	}
 
@@ -1085,7 +1134,7 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 				canvas: 'edit',
 				path: '/wp_global_styles',
 			} ),
-			label: 'Open Styles',
+			label: __( 'Open Styles', 'flavor-agent' ),
 		};
 	}
 
@@ -1095,7 +1144,7 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 				canvas: 'edit',
 				path: '/wp_global_styles',
 			} ),
-			label: 'Open Styles',
+			label: __( 'Open Styles', 'flavor-agent' ),
 		};
 	}
 
@@ -1105,13 +1154,13 @@ export function buildActivityTargetLink( entry, adminBaseUrl = '' ) {
 				post: entityId,
 				action: 'edit',
 			} ),
-			label: 'Open post',
+			label: __( 'Open post', 'flavor-agent' ),
 		};
 	}
 
 	return {
 		url: '',
-		label: 'Not available',
+		label: __( 'Not available', 'flavor-agent' ),
 	};
 }
 
@@ -1345,7 +1394,11 @@ export function normalizeActivityEntry(
 	if ( typeof entry?.userLabel === 'string' && entry.userLabel.trim() ) {
 		userLabel = entry.userLabel.trim();
 	} else if ( entry?.userId ) {
-		userLabel = `User #${ entry.userId }`;
+		userLabel = sprintf(
+			/* translators: %s: user ID. */
+			__( 'User #%s', 'flavor-agent' ),
+			entry.userId
+		);
 	}
 
 	if ( typeof entry?.undo?.error === 'string' && entry.undo.error.trim() ) {
@@ -1420,7 +1473,7 @@ export function normalizeActivityEntry(
 		stateDiff: buildStructuredStateDiff( entry?.before, entry?.after ),
 		undoStatusLabel:
 			status === 'applied' && resolvedUndo?.status === 'available'
-				? 'Undo available'
+				? __( 'Undo available', 'flavor-agent' )
 				: getActivityStatusLabel( status ),
 		undoError,
 		undoReason: getUndoReason( status, resolvedUndo, entry ),
@@ -1431,7 +1484,11 @@ export function normalizeActivityEntry(
 		requestFallback:
 			diagnostics.usedFallback &&
 			diagnostics.selectedProvider !== EMPTY_VALUE
-				? `Fallback from selected ${ diagnostics.selectedProvider }.`
+				? sprintf(
+						/* translators: %s: selected provider name. */
+						__( 'Fallback from selected %s.', 'flavor-agent' ),
+						diagnostics.selectedProvider
+				  )
 				: EMPTY_VALUE,
 		targetUrl: targetLink.url,
 		targetLinkLabel: targetLink.label,

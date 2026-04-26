@@ -4,12 +4,13 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 
 const mockTranslate = jest.fn( ( value ) => value );
-const mockSprintf = jest.fn( ( template, ...values ) =>
-	values.reduce(
-		( result, value ) => result.replace( '%s', String( value ) ),
-		template
-	)
-);
+const mockSprintf = jest.fn( ( template, ...values ) => {
+	return values.reduce( ( result, value, index ) => {
+		return result
+			.replaceAll( `%${ index + 1 }$s`, String( value ) )
+			.replace( '%s', String( value ) );
+	}, template );
+} );
 
 jest.mock( '@wordpress/i18n', () => ( {
 	__: ( ...args ) => mockTranslate( ...args ),
@@ -626,7 +627,12 @@ describe( 'ActivityLogApp', () => {
 			'flavor-agent'
 		);
 		expect( mockTranslate ).toHaveBeenCalledWith(
-			'Undo unavailable',
+			'Failed or unavailable',
+			'flavor-agent'
+		);
+		expect( mockTranslate ).toHaveBeenCalledWith( 'Block', 'flavor-agent' );
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Open post',
 			'flavor-agent'
 		);
 	} );
@@ -731,6 +737,24 @@ describe( 'ActivityLogApp', () => {
 		] );
 	} );
 
+	test( 'labels the failed status filter for both request and undo failures', async () => {
+		await renderApp( [ createEntry() ] );
+
+		const statusField = getDataViewsMockState().latestProps.fields.find(
+			( field ) => field.id === 'status'
+		);
+
+		expect(
+			statusField.elements.find(
+				( element ) => element.value === 'failed'
+			).label
+		).toBe( 'Failed or unavailable' );
+		expect( mockTranslate ).toHaveBeenCalledWith(
+			'Failed or unavailable',
+			'flavor-agent'
+		);
+	} );
+
 	test( 'adds provenance filters to the activity request URL', async () => {
 		await renderApp( [ createEntry() ] );
 
@@ -764,6 +788,61 @@ describe( 'ActivityLogApp', () => {
 		);
 		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
 			'configurationOwnerOperator=is'
+		);
+	} );
+
+	test( 'adds day filters to the activity request URL', async () => {
+		await renderApp( [ createEntry() ] );
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onChangeView( {
+				...getDataViewsMockState().latestProps.view,
+				filters: [
+					{
+						field: 'day',
+						operator: 'between',
+						value: [ '2026-03-01', '2026-03-31' ],
+					},
+				],
+			} );
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'dayOperator=between'
+		);
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'day=2026-03-01'
+		);
+		expect( apiFetch.mock.calls[ 1 ][ 0 ].url ).toContain(
+			'dayEnd=2026-03-31'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onChangeView( {
+				...getDataViewsMockState().latestProps.view,
+				filters: [
+					{
+						field: 'day',
+						operator: 'inThePast',
+						value: {
+							value: 7,
+							unit: 'days',
+						},
+					},
+				],
+			} );
+		} );
+		await flushEffects();
+
+		expect( apiFetch.mock.calls[ 2 ][ 0 ].url ).toContain(
+			'dayOperator=inThePast'
+		);
+		expect( apiFetch.mock.calls[ 2 ][ 0 ].url ).toContain(
+			'dayRelativeValue=7'
+		);
+		expect( apiFetch.mock.calls[ 2 ][ 0 ].url ).toContain(
+			'dayRelativeUnit=days'
 		);
 	} );
 

@@ -40,7 +40,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		'Required'
 	);
 	await expect( chatSection.locator( sectionSummarySelector ) ).toContainText(
-		'Choose the chat path Flavor Agent should prefer.'
+		'Chat uses Settings > Connectors when available; direct Azure and OpenAI Native settings below remain as legacy fallback.'
 	);
 	await expect(
 		patternSection.locator( sectionSummarySelector )
@@ -96,7 +96,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 
 	await expect( overviewPanel ).toBeVisible();
 	await expect( overviewPanel ).toContainText(
-		'Configure Chat Provider first. It is the only required section.'
+		'Configure chat first. Settings > Connectors is the primary path and the only required section.'
 	);
 
 	await page

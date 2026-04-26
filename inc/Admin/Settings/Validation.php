@@ -278,7 +278,12 @@ final class Validation {
 			return $values;
 		}
 
-		if ( self::get_submitted_openai_provider() !== Provider::AZURE ) {
+		if (
+			! self::should_validate_direct_provider_submission(
+				Provider::AZURE,
+				array_keys( $current_values )
+			)
+		) {
 			return $values;
 		}
 
@@ -368,7 +373,12 @@ final class Validation {
 			return $values;
 		}
 
-		if ( self::get_submitted_openai_provider() !== Provider::NATIVE ) {
+		if (
+			! self::should_validate_direct_provider_submission(
+				Provider::NATIVE,
+				array_keys( $current_values )
+			)
+		) {
 			return $values;
 		}
 
@@ -776,6 +786,38 @@ final class Validation {
 		}
 
 		return Provider::normalize_provider( is_string( $provider ) ? $provider : Provider::AZURE );
+	}
+
+	/**
+	 * @param array<int, string> $option_names
+	 */
+	private static function should_validate_direct_provider_submission( string $provider, array $option_names ): bool {
+		$submitted_provider = self::get_submitted_openai_provider();
+
+		if ( $submitted_provider === $provider ) {
+			return true;
+		}
+
+		if ( ! Provider::is_connector( $submitted_provider ) ) {
+			return false;
+		}
+
+		foreach ( $option_names as $option_name ) {
+			if ( self::has_posted_option( $option_name ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static function has_posted_option( string $option_name ): bool {
+		if ( ! self::has_valid_submission_nonce() ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is validated above; this checks presence only before sanitized reads happen elsewhere.
+		return array_key_exists( $option_name, $_POST );
 	}
 
 	private static function read_posted_cloudflare_value( string $option_name, string $fallback ): string {

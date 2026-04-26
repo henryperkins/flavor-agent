@@ -453,13 +453,13 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 
 Settings page at Settings > Flavor Agent with five sections:
 
-- OpenAI Provider (select Azure OpenAI or OpenAI Native for pattern/template/navigation recommendations)
-- Azure OpenAI (endpoint, key, embedding deployment, chat deployment)
-- OpenAI Native (optional API key override, chat model, embedding model, effective key source, connector status)
+- OpenAI Provider (select Azure OpenAI, OpenAI Native, or a configured connector-backed chat provider)
+- Azure OpenAI (endpoint, key, embedding deployment, chat deployment; remains visible for direct fallback and pattern embeddings when connector chat is selected)
+- OpenAI Native (optional API key override, chat model, embedding model, effective key source, connector status; remains visible for direct fallback and pattern embeddings when connector chat is selected)
 - Qdrant (URL, key)
 - Cloudflare AI Search (managed public endpoint, max results)
 
-Block recommendations can use the direct plugin-managed chat backend configured here or the core `Settings > Connectors` path when the direct backend is not configured.
+Block recommendations can use the selected connector-backed chat path, the generic core `Settings > Connectors` path, or the direct plugin-managed chat backend configured here.
 When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
 
 Plus pattern sync status panel with manual trigger.

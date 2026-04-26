@@ -2100,6 +2100,27 @@ function failTemplateApplyAndRollback( error, appliedOperations = [] ) {
 	};
 }
 
+function failTemplatePartApplyAndRollback( error, appliedOperations = [] ) {
+	if ( appliedOperations.length === 0 ) {
+		return {
+			ok: false,
+			error,
+		};
+	}
+
+	const rollback = undoTemplatePartSuggestionOperations( {
+		operations: appliedOperations,
+	} );
+
+	return {
+		ok: false,
+		error: rollback.ok
+			? error
+			: rollback.error ||
+			  `${ error } Flavor Agent could not restore the previous state automatically.`,
+	};
+}
+
 export function applyTemplateSuggestionOperations( suggestion ) {
 	const prepared = prepareTemplateSuggestionOperations( suggestion );
 
@@ -2240,12 +2261,12 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 							operation.expectedTarget.name ||
 							'target block';
 
-						return {
-							ok: false,
-							error: `The anchored insertion target at path ${ operation.targetPath.join(
+						return failTemplatePartApplyAndRollback(
+							`The anchored insertion target at path ${ operation.targetPath.join(
 								' > '
 							) } no longer matches the expected ${ expectedLabel }. Regenerate recommendations and try again.`,
-						};
+							appliedOperations
+						);
 					}
 				}
 
@@ -2258,10 +2279,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				} );
 
 				if ( insertionLockError ) {
-					return {
-						ok: false,
-						error: insertionLockError,
-					};
+					return failTemplatePartApplyAndRollback(
+						insertionLockError,
+						appliedOperations
+					);
 				}
 
 				const resolvedRoot = resolveInsertionRootClientId(
@@ -2270,10 +2291,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				);
 
 				if ( ! resolvedRoot.ok ) {
-					return {
-						ok: false,
-						error: resolvedRoot.error,
-					};
+					return failTemplatePartApplyAndRollback(
+						resolvedRoot.error,
+						appliedOperations
+					);
 				}
 
 				const editorDispatch = getBlockEditorDispatch();
@@ -2301,14 +2322,14 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 					);
 
 				if ( ! insertedSlice?.blocks?.length ) {
-					return {
-						ok: false,
-						error: `Pattern “${
+					return failTemplatePartApplyAndRollback(
+						`Pattern “${
 							operation.patternTitle ||
 							operation.patternName ||
 							'unknown'
 						}” could not be inserted into this template part.`,
-					};
+						appliedOperations
+					);
 				}
 				appliedOperations.push( {
 					type: operation.type,
@@ -2336,21 +2357,21 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				);
 
 				if ( ! targetBlock?.clientId ) {
-					return {
-						ok: false,
-						error: 'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
-					};
+					return failTemplatePartApplyAndRollback(
+						'The targeted block is no longer available for replacement. Regenerate recommendations and try again.',
+						appliedOperations
+					);
 				}
 
 				if ( targetBlock.name !== operation.expectedBlockName ) {
-					return {
-						ok: false,
-						error: `The target block at path ${ operation.targetPath.join(
+					return failTemplatePartApplyAndRollback(
+						`The target block at path ${ operation.targetPath.join(
 							' > '
 						) } is no longer a “${
 							operation.expectedBlockName
 						}” block.`,
-					};
+						appliedOperations
+					);
 				}
 
 				if (
@@ -2365,19 +2386,19 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 						operation.expectedTarget.name ||
 						operation.expectedBlockName;
 
-					return {
-						ok: false,
-						error: `The target block at path ${ operation.targetPath.join(
+					return failTemplatePartApplyAndRollback(
+						`The target block at path ${ operation.targetPath.join(
 							' > '
 						) } no longer matches the expected ${ expectedLabel }.`,
-					};
+						appliedOperations
+					);
 				}
 
 				if ( ! resolvedRoot.ok ) {
-					return {
-						ok: false,
-						error: resolvedRoot.error,
-					};
+					return failTemplatePartApplyAndRollback(
+						resolvedRoot.error,
+						appliedOperations
+					);
 				}
 
 				const removedBlocksSnapshot = normalizeBlockSnapshots( [
@@ -2395,10 +2416,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				} );
 
 				if ( lockError ) {
-					return {
-						ok: false,
-						error: lockError,
-					};
+					return failTemplatePartApplyAndRollback(
+						lockError,
+						appliedOperations
+					);
 				}
 
 				editorDispatch.removeBlocks( [ targetBlock.clientId ], false );
@@ -2406,12 +2427,12 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				if (
 					isBlockPresent( targetBlock.clientId, blockEditorSelect )
 				) {
-					return {
-						ok: false,
-						error: `The target block at path ${ operation.targetPath.join(
+					return failTemplatePartApplyAndRollback(
+						`The target block at path ${ operation.targetPath.join(
 							' > '
 						) } could not be removed automatically.`,
-					};
+						appliedOperations
+					);
 				}
 
 				editorDispatch.insertBlocks(
@@ -2442,23 +2463,24 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 						editorDispatch,
 						blockEditorSelect
 					);
+					const replacementError = restoreResult.ok
+						? `Pattern “${
+								operation.patternTitle ||
+								operation.patternName ||
+								'unknown'
+						  }” could not replace the targeted block in this template part.`
+						: `Pattern “${
+								operation.patternTitle ||
+								operation.patternName ||
+								'unknown'
+						  }” could not replace the targeted block in this template part. ${
+								restoreResult.error
+						  }`;
 
-					return {
-						ok: false,
-						error: restoreResult.ok
-							? `Pattern “${
-									operation.patternTitle ||
-									operation.patternName ||
-									'unknown'
-							  }” could not replace the targeted block in this template part.`
-							: `Pattern “${
-									operation.patternTitle ||
-									operation.patternName ||
-									'unknown'
-							  }” could not replace the targeted block in this template part. ${
-									restoreResult.error
-							  }`,
-					};
+					return failTemplatePartApplyAndRollback(
+						replacementError,
+						appliedOperations
+					);
 				}
 
 				appliedOperations.push( {
@@ -2487,21 +2509,21 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				);
 
 				if ( ! targetBlock?.clientId ) {
-					return {
-						ok: false,
-						error: 'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
-					};
+					return failTemplatePartApplyAndRollback(
+						'The targeted block is no longer available for removal. Regenerate recommendations and try again.',
+						appliedOperations
+					);
 				}
 
 				if ( targetBlock.name !== operation.expectedBlockName ) {
-					return {
-						ok: false,
-						error: `The target block at path ${ operation.targetPath.join(
+					return failTemplatePartApplyAndRollback(
+						`The target block at path ${ operation.targetPath.join(
 							' > '
 						) } is no longer a “${
 							operation.expectedBlockName
 						}” block.`,
-					};
+						appliedOperations
+					);
 				}
 
 				if (
@@ -2516,12 +2538,12 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 						operation.expectedTarget.name ||
 						operation.expectedBlockName;
 
-					return {
-						ok: false,
-						error: `The target block at path ${ operation.targetPath.join(
+					return failTemplatePartApplyAndRollback(
+						`The target block at path ${ operation.targetPath.join(
 							' > '
 						) } no longer matches the expected ${ expectedLabel }.`,
-					};
+						appliedOperations
+					);
 				}
 
 				const lockError = getStructuralMutationLockError( {
@@ -2535,10 +2557,10 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				} );
 
 				if ( lockError ) {
-					return {
-						ok: false,
-						error: lockError,
-					};
+					return failTemplatePartApplyAndRollback(
+						lockError,
+						appliedOperations
+					);
 				}
 
 				getBlockEditorDispatch().removeBlocks(
@@ -2549,12 +2571,12 @@ export function applyTemplatePartSuggestionOperations( suggestion ) {
 				if (
 					isBlockPresent( targetBlock.clientId, blockEditorSelect )
 				) {
-					return {
-						ok: false,
-						error: `The target block at path ${ operation.targetPath.join(
+					return failTemplatePartApplyAndRollback(
+						`The target block at path ${ operation.targetPath.join(
 							' > '
 						) } could not be removed automatically.`,
-					};
+						appliedOperations
+					);
 				}
 
 				appliedOperations.push( {

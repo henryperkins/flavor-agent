@@ -41,7 +41,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 1. The user changes settings on `Settings > Flavor Agent`
 2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
-3. Flavor Agent validates Azure, OpenAI Native, and Qdrant settings when those credential sets changed and enough data is present to run the validation. Cloudflare override credentials are only revalidated when those override fields are still being used.
+3. Flavor Agent validates Azure, OpenAI Native, and Qdrant settings when those credential sets changed and enough data is present to run the validation, including direct-provider fields submitted while a connector-backed chat provider is selected. Cloudflare override credentials are only revalidated when those override fields are still being used.
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
 5. If OpenAI Native is selected, the page also reports the current effective API key source and whether the core OpenAI connector is registered/configured
 6. Connector-backed providers appear in the dropdown only when the WordPress AI Client reports that they currently support text generation

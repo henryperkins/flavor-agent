@@ -822,7 +822,7 @@ final class Repository {
 
 		$table_name = self::table_name();
 		$sql        = $wpdb->prepare(
-			'SELECT activity_id, undo_state FROM %i WHERE entity_type = %s AND entity_ref = %s ORDER BY created_at ASC, id ASC',
+			'SELECT activity_id, activity_type, execution_result, undo_state FROM %i WHERE entity_type = %s AND entity_ref = %s ORDER BY created_at ASC, id ASC',
 			$table_name,
 			(string) ( $row['entity_type'] ?? '' ),
 			(string) ( $row['entity_ref'] ?? '' )
@@ -844,6 +844,10 @@ final class Repository {
 			$undo = Serializer::decode_json(
 				isset( $rows[ $index ]['undo_state'] ) ? (string) $rows[ $index ]['undo_state'] : ''
 			);
+
+			if ( self::is_review_only_row( $rows[ $index ] ) ) {
+				continue;
+			}
 
 			if ( 'undone' !== (string) ( $undo['status'] ?? '' ) ) {
 				return false;
