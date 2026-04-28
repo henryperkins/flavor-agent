@@ -2053,7 +2053,7 @@ describe( 'store action thunks', () => {
 		).toHaveLength( 20 );
 	} );
 
-		test( 'applyTemplateSuggestion makes activity undoable before the server audit write returns', async () => {
+	test( 'applyTemplateSuggestion makes activity undoable before the server audit write returns', async () => {
 		applyTemplateSuggestionOperations.mockReturnValue( {
 			ok: true,
 			operations: [
@@ -2090,9 +2090,13 @@ describe( 'store action thunks', () => {
 			}
 		} );
 		const select = {
-			getActivityScopeKey: jest.fn().mockReturnValue( 'wp_template:home' ),
+			getActivityScopeKey: jest
+				.fn()
+				.mockReturnValue( 'wp_template:home' ),
 			getActivityLog: jest.fn( () => currentActivityLog ),
-			getTemplateRequestPrompt: jest.fn().mockReturnValue( TEMPLATE_PROMPT ),
+			getTemplateRequestPrompt: jest
+				.fn()
+				.mockReturnValue( TEMPLATE_PROMPT ),
 			getTemplateContextSignature: jest.fn().mockReturnValue( null ),
 			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
 			getTemplateResultToken: jest.fn().mockReturnValue( 3 ),
