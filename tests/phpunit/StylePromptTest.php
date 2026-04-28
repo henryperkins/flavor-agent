@@ -4,10 +4,18 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Guidelines;
 use FlavorAgent\LLM\StylePrompt;
+use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
 final class StylePromptTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		WordPressTestState::reset();
+	}
 
 	/**
 	 * @return array<string, mixed>
@@ -169,6 +177,25 @@ final class StylePromptTest extends TestCase {
 				],
 			],
 		];
+	}
+
+	public function test_build_user_includes_site_guidelines(): void {
+		WordPressTestState::$options = [
+			Guidelines::OPTION_SITE   => 'Use a restrained operational tone.',
+			Guidelines::OPTION_BLOCKS => [
+				'core/paragraph' => 'Keep body text compact.',
+			],
+		];
+
+		$context                       = $this->build_context();
+		$context['scope']['surface']   = 'style-book';
+		$context['scope']['blockName'] = 'core/paragraph';
+
+		$prompt = StylePrompt::build_user( $context );
+
+		$this->assertStringContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringContainsString( 'Site: Use a restrained operational tone.', $prompt );
+		$this->assertStringContainsString( 'Block core/paragraph: Keep body text compact.', $prompt );
 	}
 
 	public function test_build_user_includes_scope_diagnostics_and_variations(): void {

@@ -92,27 +92,6 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
 	}
 
-	public function test_check_status_prefers_the_wordpress_ai_client_model_when_direct_chat_is_also_configured(): void {
-		WordPressTestState::$capabilities        = [
-			'edit_posts'         => true,
-			'edit_theme_options' => true,
-		];
-		WordPressTestState::$options             = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
-		];
-		WordPressTestState::$ai_client_supported = true;
-
-		$status = InfraAbilities::check_status( [] );
-
-		$this->assertTrue( $status['configured'] );
-		$this->assertSame( 'provider-managed', $status['model'] );
-		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
-		$this->assertTrue( $status['backends']['azure_openai']['configured'] );
-		$this->assertTrue( $status['surfaces']['content']['available'] );
-	}
-
 	public function test_check_status_filters_admin_only_docs_ability_for_non_admin_users(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
@@ -125,85 +104,12 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertTrue( $status['backends']['cloudflare_ai_search']['configured'] );
 	}
 
-	public function test_check_status_uses_azure_chat_deployment_as_primary_model_when_anthropic_is_missing(): void {
-		WordPressTestState::$capabilities = [
-			'edit_posts'         => true,
-			'edit_theme_options' => true,
-		];
-		WordPressTestState::$options      = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
-		];
-
-		$status = InfraAbilities::check_status( [] );
-
-		$this->assertTrue( $status['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['model'] );
-		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-content', $status['availableAbilities'] );
-		$this->assertSame( 'plugin_or_core', $status['surfaces']['block']['owner'] );
-		$this->assertTrue( $status['surfaces']['content']['available'] );
-		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
-		$this->assertTrue( $status['surfaces']['navigation']['available'] );
-		$this->assertTrue( $status['surfaces']['globalStyles']['available'] );
-		$this->assertSame( 'ready', $status['surfaces']['navigation']['reason'] );
-		$this->assertSame( 'ready', $status['surfaces']['globalStyles']['reason'] );
-		$this->assertTrue( $status['backends']['azure_openai']['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['backends']['azure_openai']['chatDeployment'] );
-		$this->assertNull( $status['backends']['azure_openai']['embeddingDeployment'] );
-	}
-
-	public function test_check_status_uses_openai_native_model_for_active_provider(): void {
-		WordPressTestState::$capabilities = [
-			'edit_posts'         => true,
-			'edit_theme_options' => true,
-		];
-		WordPressTestState::$options      = [
-			'flavor_agent_openai_provider'               => 'openai_native',
-			'flavor_agent_openai_native_api_key'         => 'native-key',
-			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
-			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                    => 'qdrant-key',
-		];
-
-		$status = InfraAbilities::check_status( [] );
-
-		$this->assertTrue( $status['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['model'] );
-		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-content', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
-		$this->assertTrue( $status['surfaces']['template']['available'] );
-		$this->assertTrue( $status['surfaces']['content']['available'] );
-		$this->assertTrue( $status['surfaces']['navigation']['available'] );
-		$this->assertTrue( $status['surfaces']['globalStyles']['available'] );
-		$this->assertTrue( $status['backends']['openai_native']['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['backends']['openai_native']['chatModel'] );
-		$this->assertSame(
-			'text-embedding-3-large',
-			$status['backends']['openai_native']['embeddingModel']
-		);
-		$this->assertSame( 'plugin_override', $status['backends']['openai_native']['credentialSource'] );
-		$this->assertFalse( $status['backends']['openai_native']['connectorRegistered'] );
-		$this->assertFalse( $status['backends']['openai_native']['connectorConfigured'] );
-		$this->assertNull( $status['backends']['openai_native']['connectorKeySource'] );
-	}
-
 	public function test_check_status_uses_connector_key_for_openai_native_backend(): void {
-		WordPressTestState::$capabilities = [
+		WordPressTestState::$capabilities        = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$connectors   = [
+		WordPressTestState::$connectors          = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -214,19 +120,19 @@ final class InfraAbilitiesTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$options      = [
+		WordPressTestState::$options             = [
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'connectors_ai_openai_api_key'               => 'connector-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
+		WordPressTestState::$ai_client_supported = true;
 
 		$status = InfraAbilities::check_status( [] );
 
 		$this->assertTrue( $status['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['model'] );
+		$this->assertSame( 'provider-managed', $status['model'] );
 		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
@@ -234,7 +140,6 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
 		$this->assertTrue( $status['backends']['openai_native']['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['backends']['openai_native']['chatModel'] );
 		$this->assertSame(
 			'text-embedding-3-large',
 			$status['backends']['openai_native']['embeddingModel']
@@ -248,11 +153,11 @@ final class InfraAbilitiesTest extends TestCase {
 	public function test_check_status_prefers_openai_env_key_over_connector_database(): void {
 		putenv( 'OPENAI_API_KEY=env-key' );
 
-		WordPressTestState::$capabilities = [
+		WordPressTestState::$capabilities        = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$connectors   = [
+		WordPressTestState::$connectors          = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -263,14 +168,14 @@ final class InfraAbilitiesTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$options      = [
+		WordPressTestState::$options             = [
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'connectors_ai_openai_api_key'               => 'connector-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
+		WordPressTestState::$ai_client_supported = true;
 
 		$status = InfraAbilities::check_status( [] );
 
@@ -278,38 +183,6 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'env', $status['backends']['openai_native']['credentialSource'] );
 		$this->assertTrue( $status['backends']['openai_native']['connectorConfigured'] );
 		$this->assertSame( 'env', $status['backends']['openai_native']['connectorKeySource'] );
-	}
-
-	public function test_check_status_uses_fallback_direct_provider_when_selected_provider_is_unconfigured(): void {
-		WordPressTestState::$capabilities = [
-			'edit_posts'         => true,
-			'edit_theme_options' => true,
-		];
-
-		WordPressTestState::$options = [
-			'flavor_agent_openai_provider'               => 'azure_openai',
-			'flavor_agent_openai_native_api_key'         => 'native-key',
-			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
-			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                    => 'qdrant-key',
-		];
-
-		$status = InfraAbilities::check_status( [] );
-
-		$this->assertTrue( $status['configured'] );
-		$this->assertSame( 'gpt-5.4', $status['model'] );
-		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-template-part', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-patterns', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
-		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
-		$this->assertTrue( $status['surfaces']['template']['available'] );
-		$this->assertTrue( $status['surfaces']['pattern']['available'] );
-		$this->assertTrue( $status['surfaces']['navigation']['available'] );
-		$this->assertFalse( $status['backends']['azure_openai']['configured'] );
-		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 	}
 
 	public function test_check_status_uses_connector_chat_and_direct_embeddings_for_patterns(): void {
@@ -354,7 +227,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertContains( 'flavor-agent/recommend-template', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-navigation', $status['availableAbilities'] );
 		$this->assertContains( 'flavor-agent/recommend-style', $status['availableAbilities'] );
-		$this->assertFalse( $status['backends']['openai_native']['configured'] );
+		$this->assertTrue( $status['backends']['openai_native']['configured'] );
 		$this->assertSame(
 			'text-embedding-3-large',
 			$status['backends']['openai_native']['embeddingModel']
@@ -437,15 +310,11 @@ final class InfraAbilitiesTest extends TestCase {
 	}
 
 	public function test_check_status_marks_pattern_surface_unavailable_without_plugin_backends(): void {
-		WordPressTestState::$capabilities = [
+		WordPressTestState::$capabilities        = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$options      = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
-		];
+		WordPressTestState::$ai_client_supported = true;
 
 		$status = InfraAbilities::check_status( [] );
 

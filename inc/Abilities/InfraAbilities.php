@@ -39,36 +39,32 @@ final class InfraAbilities {
 	public static function check_status( mixed $input ): array {
 		unset( $input );
 
-		$block_recommendations_configured = ChatClient::is_supported();
-		$wordpress_ai_client_configured   = WordPressAIClient::is_supported();
-		$openai_connector_status          = Provider::openai_connector_status();
-		$native_api_key_source            = Provider::native_effective_api_key_source();
-		$native_embedding_config          = Provider::embedding_configuration( Provider::NATIVE );
-		$native_chat_config               = Provider::chat_configuration( Provider::NATIVE );
-		$azure_endpoint                   = get_option( 'flavor_agent_azure_openai_endpoint', '' );
-		$azure_key                        = get_option( 'flavor_agent_azure_openai_key', '' );
-		$azure_embedding                  = get_option( 'flavor_agent_azure_embedding_deployment', '' );
-		$azure_chat                       = get_option( 'flavor_agent_azure_chat_deployment', '' );
-		$qdrant_url                       = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_key                       = get_option( 'flavor_agent_qdrant_key', '' );
-		$cloudflare_ai_search_id          = AISearchClient::configured_instance_id();
+		$wordpress_ai_client_configured = WordPressAIClient::is_supported();
+		$openai_connector_status        = Provider::openai_connector_status();
+		$native_api_key_source          = Provider::native_effective_api_key_source();
+		$native_embedding_config        = Provider::embedding_configuration( Provider::NATIVE );
+		$azure_endpoint                 = get_option( 'flavor_agent_azure_openai_endpoint', '' );
+		$azure_key                      = get_option( 'flavor_agent_azure_openai_key', '' );
+		$azure_embedding                = get_option( 'flavor_agent_azure_embedding_deployment', '' );
+		$qdrant_url                     = get_option( 'flavor_agent_qdrant_url', '' );
+		$qdrant_key                     = get_option( 'flavor_agent_qdrant_key', '' );
+		$cloudflare_ai_search_id        = AISearchClient::configured_instance_id();
 
-		$azure_chat_configured         = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_chat );
-		$openai_native_chat_configured = $native_chat_config['configured'];
-		$qdrant_configured             = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
-		$cloudflare_configured         = AISearchClient::is_configured();
-		$active_chat_configured        = Provider::chat_configured();
-		$active_pattern_provider       = Provider::embedding_configured() && $active_chat_configured;
-		$navigation_configured         = $active_chat_configured && current_user_can( 'edit_theme_options' );
-		$settings_url                  = function_exists( 'admin_url' )
+		$azure_embedding_configured  = ! empty( $azure_endpoint ) && ! empty( $azure_key ) && ! empty( $azure_embedding );
+		$native_embedding_configured = $native_embedding_config['configured'];
+		$qdrant_configured           = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
+		$cloudflare_configured       = AISearchClient::is_configured();
+		$active_chat_configured      = ChatClient::is_supported();
+		$active_pattern_provider     = Provider::embedding_configured() && $active_chat_configured;
+		$settings_url                = function_exists( 'admin_url' )
 			? admin_url( 'options-general.php?page=flavor-agent' )
 			: '';
-		$connectors_url                = function_exists( 'admin_url' )
+		$connectors_url              = function_exists( 'admin_url' )
 			? admin_url( 'options-connectors.php' )
 			: '';
 
 		$abilities = self::available_abilities(
-			$block_recommendations_configured,
+			$active_chat_configured,
 			$active_chat_configured,
 			$active_pattern_provider,
 			$qdrant_configured,
@@ -76,8 +72,8 @@ final class InfraAbilities {
 		);
 
 		return [
-			'configured'         => $block_recommendations_configured || $active_chat_configured || ( $active_pattern_provider && $qdrant_configured ),
-			'model'              => self::resolve_primary_model( $block_recommendations_configured, $active_chat_configured ),
+			'configured'         => $active_chat_configured || ( $active_pattern_provider && $qdrant_configured ),
+			'model'              => $active_chat_configured ? Provider::active_chat_model() : null,
 			'availableAbilities' => $abilities,
 			'surfaces'           => SurfaceCapabilities::build(
 				$settings_url,
@@ -88,13 +84,11 @@ final class InfraAbilities {
 					'configured' => $wordpress_ai_client_configured,
 				],
 				'azure_openai'         => [
-					'configured'          => $azure_chat_configured,
-					'chatDeployment'      => $azure_chat_configured ? $azure_chat : null,
+					'configured'          => $azure_embedding_configured,
 					'embeddingDeployment' => ! empty( $azure_embedding ) ? $azure_embedding : null,
 				],
 				'openai_native'        => [
-					'configured'          => $openai_native_chat_configured,
-					'chatModel'           => $openai_native_chat_configured ? $native_chat_config['model'] : null,
+					'configured'          => $native_embedding_configured,
 					'embeddingModel'      => ! empty( $native_embedding_config['model'] ) ? $native_embedding_config['model'] : null,
 					'credentialSource'    => 'none' !== $native_api_key_source ? $native_api_key_source : null,
 					'connectorRegistered' => $openai_connector_status['registered'],
@@ -112,21 +106,6 @@ final class InfraAbilities {
 				],
 			],
 		];
-	}
-
-	private static function resolve_primary_model(
-		bool $block_recommendations_configured,
-		bool $active_chat_configured
-	): ?string {
-		if ( $active_chat_configured ) {
-			return Provider::active_chat_model();
-		}
-
-		if ( $block_recommendations_configured ) {
-			return 'provider-managed';
-		}
-
-		return null;
 	}
 
 	/**

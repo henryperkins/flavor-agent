@@ -445,7 +445,7 @@ final class Page {
 		);
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Shared chat credentials live in Settings > Connectors. The Azure and OpenAI fields below stay available as legacy direct fallback for chat and as plugin-owned embeddings configuration for pattern sync.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Shared chat credentials live in Settings > Connectors. The Azure and OpenAI fields below configure plugin-owned embeddings for pattern sync.', 'flavor-agent' ); ?>
 		</p>
 		<?php
 
@@ -482,7 +482,7 @@ final class Page {
 	private static function render_azure_direct_settings_fields(): void {
 		self::render_subsection_heading(
 			__( 'Legacy Direct Azure Settings', 'flavor-agent' ),
-			__( 'Use these plugin-owned fields for direct Azure chat fallback or pattern embeddings.', 'flavor-agent' )
+			__( 'Plugin-owned credentials used for pattern embeddings. Chat is handled by Settings > Connectors.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_azure' );
 		self::render_registered_fields_table(
@@ -491,7 +491,6 @@ final class Page {
 				'flavor_agent_azure_openai_endpoint',
 				'flavor_agent_azure_openai_key',
 				'flavor_agent_azure_embedding_deployment',
-				'flavor_agent_azure_chat_deployment',
 				'flavor_agent_azure_reasoning_effort',
 			]
 		);
@@ -499,8 +498,8 @@ final class Page {
 
 	private static function render_openai_native_direct_settings_fields(): void {
 		self::render_subsection_heading(
-			__( 'Legacy Direct OpenAI Settings', 'flavor-agent' ),
-			__( 'Use these plugin-owned fields for direct OpenAI chat fallback or pattern embeddings.', 'flavor-agent' )
+			__( 'OpenAI Embeddings', 'flavor-agent' ),
+			__( 'Plugin-owned credentials used for pattern embeddings. Chat is handled by Settings > Connectors.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_openai_native' );
 		self::render_registered_fields_table(
@@ -508,7 +507,6 @@ final class Page {
 			[
 				'flavor_agent_openai_native_api_key',
 				'flavor_agent_openai_native_embedding_model',
-				'flavor_agent_openai_native_chat_model',
 			]
 		);
 	}
@@ -573,6 +571,13 @@ final class Page {
 		?>
 		<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root>
 			<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
+			<?php if ( ! empty( $state['guidelines_storage']['core_available'] ) ) : ?>
+				<div class="flavor-agent-settings-status flavor-agent-settings-status--accent">
+					<p>
+						<?php echo esc_html__( 'Core Guidelines storage detected. Runtime recommendations read from the core Guidelines store first; the fields below remain as legacy migration tooling, JSON import/export, and rollback support.', 'flavor-agent' ); ?>
+					</p>
+				</div>
+			<?php endif; ?>
 			<?php
 			self::render_registered_fields_table(
 				'flavor_agent_guidelines',

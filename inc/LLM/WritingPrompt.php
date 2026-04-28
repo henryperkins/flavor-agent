@@ -214,6 +214,12 @@ SYSTEM;
 			$sections[] = (string) $post_context['content'];
 		}
 
+		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
+		if ( '' !== $guidelines_context ) {
+			$sections[] = '';
+			$sections[] = $guidelines_context;
+		}
+
 		$sections[] = '';
 		$sections[] = '## User instruction';
 		$sections[] = '' !== trim( $prompt )

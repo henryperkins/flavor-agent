@@ -346,9 +346,7 @@ final class Feedback {
 	private static function get_feedback_groups_for_option( string $option_name ): array {
 		return match ( $option_name ) {
 			Provider::OPTION_NAME,
-			'flavor_agent_azure_chat_deployment',
-			'flavor_agent_azure_reasoning_effort',
-			'flavor_agent_openai_native_chat_model' => [ Config::GROUP_CHAT ],
+			'flavor_agent_azure_reasoning_effort' => [ Config::GROUP_CHAT ],
 			'flavor_agent_pattern_recommendation_threshold',
 			'flavor_agent_pattern_max_recommendations',
 			'flavor_agent_qdrant_url',

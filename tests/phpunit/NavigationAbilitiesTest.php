@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Abilities\NavigationAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\Guidelines;
 use FlavorAgent\LLM\NavigationPrompt;
 use PHPUnit\Framework\TestCase;
 use FlavorAgent\Tests\Support\WordPressTestState;
@@ -523,6 +524,29 @@ final class NavigationAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'No menu items found', $prompt );
 		$this->assertStringNotContainsString( '## Navigation Overlay', $prompt );
 		$this->assertStringNotContainsString( '## User Instruction', $prompt );
+	}
+
+	public function test_prompt_build_user_includes_site_guidelines(): void {
+		WordPressTestState::$options = [
+			Guidelines::OPTION_SITE   => 'Keep navigation labels short and task oriented.',
+			Guidelines::OPTION_BLOCKS => [
+				'core/navigation' => 'Prefer shallow menus for primary navigation.',
+			],
+		];
+
+		$context = [
+			'location'             => 'header',
+			'attributes'           => [],
+			'menuItems'            => [],
+			'overlayTemplateParts' => [],
+			'themeTokens'          => [],
+		];
+
+		$prompt = NavigationPrompt::build_user( $context );
+
+		$this->assertStringContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringContainsString( 'Site: Keep navigation labels short and task oriented.', $prompt );
+		$this->assertStringContainsString( 'Block core/navigation: Prefer shallow menus for primary navigation.', $prompt );
 	}
 
 	public function test_prompt_build_user_includes_docs_guidance(): void {

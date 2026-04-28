@@ -278,6 +278,12 @@ SYSTEM;
 			$parts[] = 'Block visibility: ' . wp_json_encode( $block['blockVisibility'] );
 		}
 
+		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context( (string) ( $block['name'] ?? '' ) );
+		if ( '' !== $guidelines_context ) {
+			$parts[] = '';
+			$parts[] = $guidelines_context;
+		}
+
 		$parts[] = '';
 		$parts[] = '## Theme Tokens';
 

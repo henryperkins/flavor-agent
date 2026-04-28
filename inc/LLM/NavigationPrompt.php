@@ -95,6 +95,11 @@ SYSTEM;
 
 		$budget->add_section( 'identity', implode( "\n", $identity_lines ), 100 );
 
+		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
+		if ( '' !== $guidelines_context ) {
+			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
+		}
+
 		// ── Priority 60: Location context ──
 		$location_details = is_array( $context['locationDetails'] ?? null ) ? $context['locationDetails'] : [];
 		if ( count( $location_details ) > 0 ) {

@@ -177,9 +177,8 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent now resolves chat through a Connectors-first runtime. If a selected connector-backed provider is available, it is used directly through the WordPress AI Client. Otherwise Flavor Agent prefers the generic `Settings > Connectors` text-generation path before falling back to direct Azure OpenAI or OpenAI Native settings saved on this screen.
-The Azure OpenAI and OpenAI Native chat fields remain available as legacy direct fallback for chat, and the embeddings fields remain plugin-owned for pattern sync.
-When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for block/pattern/template/template-part/Global Styles/Style Book/navigation work, but credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI and OpenAI Native fields on this screen now configure plugin-owned embeddings for pattern sync; they no longer provide a direct chat fallback.
+When OpenAI Native is selected for embeddings, credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
 
 Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
 

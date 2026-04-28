@@ -175,11 +175,9 @@ Treat the gates there as additive release stops:
 
 | Service                       | Options (Settings page)                                                                                                                                                                         |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Provider selection            | `flavor_agent_openai_provider` (`azure_openai` or `openai_native`)                                                                                                                              |
-| WordPress AI Client providers | Core `Settings > Connectors` screen                                                                                                                                                             |
-| Azure OpenAI (chat)           | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_chat_deployment`                                                                                     |
+| Embeddings provider selection | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a connector ID that pins chat to that connector)                                                                            |
+| Chat (all surfaces)           | Owned by core `Settings > Connectors` via the WordPress AI Client. No plugin-managed chat credentials.                                                                                          |
 | Azure OpenAI (embeddings)     | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_embedding_deployment`                                                                                |
-| OpenAI Native (chat)          | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_chat_model`                                                                                                                   |
 | OpenAI Native (embeddings)    | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_embedding_model`                                                                                                              |
 | Qdrant vector DB              | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key`                                                                                                                                            |
 | Cloudflare AI Search          | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
@@ -206,6 +204,7 @@ Each recommendation surface disables independently when its required backend is 
 - `docs/SOURCE_OF_TRUTH.md` — definitive project reference: scope, architecture, inventory, roadmap, definition of done
 - `docs/FEATURE_SURFACE_MATRIX.md` — fastest map of every shipped surface, gate, and apply/undo path
 - `docs/reference/cross-surface-validation-gates.md` — additive release gates and required evidence for multi-surface or shared-subsystem changes
+- `docs/reference/wordpress-ai-roadmap-tracking.md` — active conflicts between WordPress org project 240 (the AI Planning & Roadmap board) and Flavor Agent surfaces, with a refresh procedure
 - `docs/features/README.md` — entry point for detailed per-surface docs
 - `docs/reference/abilities-and-routes.md` — canonical REST and Abilities contract map
 - `docs/reference/shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers

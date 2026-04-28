@@ -6,7 +6,6 @@ namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\QdrantClient;
-use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
@@ -127,13 +126,6 @@ final class Validation {
 		);
 	}
 
-	public static function sanitize_azure_chat_deployment( mixed $value ): string {
-		return self::sanitize_azure_text_option(
-			$value,
-			'flavor_agent_azure_chat_deployment'
-		);
-	}
-
 	public static function sanitize_openai_native_api_key( mixed $value ): string {
 		return self::sanitize_openai_native_text_option(
 			$value,
@@ -145,13 +137,6 @@ final class Validation {
 		return self::sanitize_openai_native_text_option(
 			$value,
 			'flavor_agent_openai_native_embedding_model'
-		);
-	}
-
-	public static function sanitize_openai_native_chat_model( mixed $value ): string {
-		return self::sanitize_openai_native_text_option(
-			$value,
-			'flavor_agent_openai_native_chat_model'
 		);
 	}
 
@@ -260,10 +245,6 @@ final class Validation {
 						'flavor_agent_azure_embedding_deployment',
 						$current_values['flavor_agent_azure_embedding_deployment']
 					),
-					'flavor_agent_azure_chat_deployment' => self::read_posted_text_value(
-						'flavor_agent_azure_chat_deployment',
-						$current_values['flavor_agent_azure_chat_deployment']
-					),
 				];
 			}
 		);
@@ -290,8 +271,7 @@ final class Validation {
 		if (
 			'' === $values['flavor_agent_azure_openai_endpoint'] ||
 			'' === $values['flavor_agent_azure_openai_key'] ||
-			'' === $values['flavor_agent_azure_embedding_deployment'] ||
-			'' === $values['flavor_agent_azure_chat_deployment']
+			'' === $values['flavor_agent_azure_embedding_deployment']
 		) {
 			return $values;
 		}
@@ -317,15 +297,6 @@ final class Validation {
 			$values['flavor_agent_azure_embedding_deployment'],
 			Provider::AZURE
 		);
-
-		if ( ! is_wp_error( $validation ) ) {
-			$validation = ResponsesClient::validate_configuration(
-				$values['flavor_agent_azure_openai_endpoint'],
-				$values['flavor_agent_azure_openai_key'],
-				$values['flavor_agent_azure_chat_deployment'],
-				Provider::AZURE
-			);
-		}
 
 		self::$azure_validation_state = [
 			'fingerprint' => $fingerprint,
@@ -354,10 +325,6 @@ final class Validation {
 						'flavor_agent_openai_native_embedding_model',
 						$current_values['flavor_agent_openai_native_embedding_model']
 					),
-					'flavor_agent_openai_native_chat_model' => self::read_posted_text_value(
-						'flavor_agent_openai_native_chat_model',
-						$current_values['flavor_agent_openai_native_chat_model']
-					),
 				];
 			}
 		);
@@ -384,8 +351,7 @@ final class Validation {
 
 		if (
 			'' === $effective_api_key ||
-			'' === $values['flavor_agent_openai_native_embedding_model'] ||
-			'' === $values['flavor_agent_openai_native_chat_model']
+			'' === $values['flavor_agent_openai_native_embedding_model']
 		) {
 			return $values;
 		}
@@ -417,15 +383,6 @@ final class Validation {
 			$values['flavor_agent_openai_native_embedding_model'],
 			Provider::NATIVE
 		);
-
-		if ( ! is_wp_error( $validation ) ) {
-			$validation = ResponsesClient::validate_configuration(
-				null,
-				$effective_api_key,
-				$values['flavor_agent_openai_native_chat_model'],
-				Provider::NATIVE
-			);
-		}
 
 		self::$native_openai_validation_state = [
 			'fingerprint' => $fingerprint,
@@ -716,7 +673,6 @@ final class Validation {
 				'flavor_agent_azure_openai_endpoint'      => [ Utils::class, 'sanitize_url_value' ],
 				'flavor_agent_azure_openai_key'           => 'sanitize_text_field',
 				'flavor_agent_azure_embedding_deployment' => 'sanitize_text_field',
-				'flavor_agent_azure_chat_deployment'      => 'sanitize_text_field',
 			]
 		);
 	}
@@ -727,9 +683,8 @@ final class Validation {
 	private static function get_current_openai_native_values(): array {
 		return self::get_current_option_values(
 			[
-				'flavor_agent_openai_native_api_key'    => 'sanitize_text_field',
+				'flavor_agent_openai_native_api_key' => 'sanitize_text_field',
 				'flavor_agent_openai_native_embedding_model' => 'sanitize_text_field',
-				'flavor_agent_openai_native_chat_model' => 'sanitize_text_field',
 			]
 		);
 	}

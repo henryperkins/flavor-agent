@@ -133,6 +133,14 @@ SYSTEM;
 		}
 
 		$budget->add_section( 'scope', implode( "\n", $scope_lines ), 100 );
+
+		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context(
+			'style-book' === $surface ? (string) ( $scope['blockName'] ?? '' ) : ''
+		);
+		if ( '' !== $guidelines_context ) {
+			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
+		}
+
 		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( $style_context['currentConfig'] ?? [] ), 90 );
 		$budget->add_section( 'merged_config', "## Current merged style config\n" . wp_json_encode( $style_context['mergedConfig'] ?? [] ), 85 );
 

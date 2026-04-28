@@ -32,6 +32,7 @@ final class State {
 		$prewarm_state           = AISearchClient::get_prewarm_state();
 		$runtime_docs_grounding  = AISearchClient::get_runtime_state();
 		$guidelines_enabled      = Guidelines::has_any();
+		$guidelines_storage      = Guidelines::storage_status();
 
 		return [
 			'selected_provider'      => $selected_provider,
@@ -46,6 +47,7 @@ final class State {
 			'prewarm_state'          => $prewarm_state,
 			'runtime_docs_grounding' => $runtime_docs_grounding,
 			'guidelines_enabled'     => $guidelines_enabled,
+			'guidelines_storage'     => $guidelines_storage,
 		];
 	}
 
@@ -94,7 +96,7 @@ final class State {
 
 		return match ( $group ) {
 			Config::GROUP_CHAT => [
-				'summary' => __( 'Required. Chat uses Settings > Connectors when available; direct Azure and OpenAI Native settings below remain as legacy fallback.', 'flavor-agent' ),
+				'summary' => __( 'Required. Chat is handled by Settings > Connectors; this screen configures embeddings and supporting services.', 'flavor-agent' ),
 				'badges'  => [
 					self::make_badge( __( 'Required', 'flavor-agent' ), 'neutral' ),
 					self::make_badge( self::runtime_chat_label( $state ), 'accent' ),
@@ -134,10 +136,19 @@ final class State {
 				'open'    => false,
 			],
 			Config::GROUP_GUIDELINES => [
-				'summary' => __( 'Optional. Store plugin-owned site, writing, image, and block guidance.', 'flavor-agent' ),
-				'badges'  => [
-					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
-				],
+				'summary' => ! empty( $state['guidelines_storage']['core_available'] )
+					? __( 'Optional. Read from core Guidelines when available; legacy fields remain migration tooling.', 'flavor-agent' )
+					: __( 'Optional. Store plugin-owned site, writing, image, and block guidance.', 'flavor-agent' ),
+				'badges'  => array_values(
+					array_filter(
+						[
+							self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
+							! empty( $state['guidelines_storage']['core_available'] )
+								? self::make_badge( __( 'Core bridge', 'flavor-agent' ), 'accent' )
+								: null,
+						]
+					)
+				),
 				'status'  => $guidelines_status,
 				'open'    => false,
 			],
@@ -223,7 +234,7 @@ final class State {
 			if ( empty( $state['runtime_chat']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'No chat path is ready yet. Configure a text-generation provider in Settings > Connectors, or complete one of the legacy direct Azure/OpenAI fallbacks below.', 'flavor-agent' ),
+					'message' => __( 'No chat path is ready yet. Configure a text-generation provider in Settings > Connectors.', 'flavor-agent' ),
 				];
 			} elseif (
 				self::runtime_chat_uses_connectors( $state )
@@ -233,7 +244,7 @@ final class State {
 					'tone'    => 'accent',
 					'message' => sprintf(
 						/* translators: 1: runtime chat label, 2: selected provider label */
-						__( '%1$s is currently handling chat through Settings > Connectors. The direct %2$s settings on this page remain a legacy fallback.', 'flavor-agent' ),
+						__( '%1$s is currently handling chat through Settings > Connectors. The %2$s settings on this page only configure embeddings.', 'flavor-agent' ),
 						self::runtime_chat_label( $state ),
 						Provider::label( (string) $state['selected_provider'] )
 					),
@@ -252,12 +263,11 @@ final class State {
 
 			if (
 				Provider::is_native( (string) $state['selected_provider'] ) &&
-				! self::runtime_chat_uses_connectors( $state ) &&
 				'' === Provider::native_effective_api_key()
 			) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'OpenAI Native direct fallback is selected, but no API key source is available yet. Add a plugin key, Settings > Connectors key, or OPENAI_API_KEY.', 'flavor-agent' ),
+					'message' => __( 'OpenAI Native embeddings are selected, but no API key source is available yet. Add a plugin key, Settings > Connectors key, or OPENAI_API_KEY.', 'flavor-agent' ),
 				];
 			}
 		}

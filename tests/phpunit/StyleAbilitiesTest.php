@@ -19,17 +19,13 @@ final class StyleAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter    = static fn(): string => '';
+		$this->disable_public_docs_filter        = static fn(): string => '';
 		\add_filter(
 			'flavor_agent_cloudflare_ai_search_public_search_url',
 			$this->disable_public_docs_filter
 		);
-		WordPressTestState::$options         = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
-		];
-		WordPressTestState::$global_settings = [
+		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$global_settings     = [
 			'color' => [
 				'palette' => [
 					[

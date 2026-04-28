@@ -16,36 +16,19 @@ final class ChatClientTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
-	public function test_is_supported_when_active_flavor_agent_chat_backend_is_configured(): void {
-		WordPressTestState::$options = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
-		];
+	public function test_is_supported_when_wordpress_ai_client_has_a_text_generation_provider(): void {
+		WordPressTestState::$ai_client_supported = true;
 
 		$this->assertTrue( ChatClient::is_supported() );
 	}
 
-	public function test_chat_prefers_the_wordpress_ai_client_when_connectors_are_available(): void {
-		WordPressTestState::$options                        = [
-			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
-			'flavor_agent_azure_openai_key'      => 'azure-key',
-			'flavor_agent_azure_chat_deployment' => 'gpt-5.4',
-		];
-		WordPressTestState::$ai_client_supported            = true;
-		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+	public function test_is_not_supported_when_wordpress_ai_client_has_no_text_generation_provider(): void {
+		WordPressTestState::$ai_client_supported = false;
 
-		$result = ChatClient::chat( 'system prompt', 'user prompt' );
-
-		$this->assertSame(
-			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
-			$result
-		);
-		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
-		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertFalse( ChatClient::is_supported() );
 	}
 
-	public function test_chat_falls_back_to_wordpress_ai_client_when_plugin_chat_backend_is_not_configured(): void {
+	public function test_chat_routes_through_the_wordpress_ai_client(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
@@ -67,7 +50,7 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( ChatClient::get_setup_message(), $result->get_error_message() );
 	}
 
-	public function test_selected_connector_provider_routes_block_recommendations_through_the_wordpress_ai_client(): void {
+	public function test_selected_connector_provider_pins_chat_to_that_connector(): void {
 		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];

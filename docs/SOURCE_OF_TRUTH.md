@@ -454,14 +454,14 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 
 Settings page at Settings > Flavor Agent with five sections:
 
-- OpenAI Provider (select Azure OpenAI, OpenAI Native, or a configured connector-backed chat provider)
-- Azure OpenAI (endpoint, key, embedding deployment, chat deployment; remains visible for direct fallback and pattern embeddings when connector chat is selected)
-- OpenAI Native (optional API key override, chat model, embedding model, effective key source, connector status; remains visible for direct fallback and pattern embeddings when connector chat is selected)
+- Embeddings Provider (select Azure OpenAI, OpenAI Native, or a configured connector-backed provider that pins chat to that connector)
+- Azure OpenAI (endpoint, key, embedding deployment, and default reasoning effort for Connectors-routed chat)
+- OpenAI Native (optional API key override, embedding model, effective key source, connector status)
 - Qdrant (URL, key)
 - Cloudflare AI Search (managed public endpoint, max results)
 
-Block recommendations can use the selected connector-backed chat path, the generic core `Settings > Connectors` path, or the direct plugin-managed chat backend configured here.
-When OpenAI Native is selected, Flavor Agent still owns the chat and embedding model IDs for pattern/template/navigation work, but the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
+Block recommendations use the WordPress AI Client and `Settings > Connectors` for chat. Pattern embeddings remain plugin-owned until core exposes an embeddings provider path.
+When OpenAI Native is selected for embeddings, the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
 
 Plus pattern sync status panel with manual trigger.
 
@@ -522,7 +522,7 @@ User selects block -> InspectorInjector renders AI panel
            -> ServerCollector::introspect_block_type() (server enrichment)
            -> AISearchClient::maybe_search_with_cache_fallbacks() (docs grounding)
            -> Prompt::build_system() + Prompt::build_user()
-           -> ChatClient::chat() (Connectors-first, then legacy direct fallback)
+           -> ChatClient::chat() (WordPress AI Client / Settings > Connectors)
            -> Prompt::parse_response()
            -> Prompt::enforce_block_context_rules()
         <- JSON response: { settings, styles, block, explanation }

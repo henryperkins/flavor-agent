@@ -9,7 +9,7 @@ use FlavorAgent\OpenAI\Provider;
 
 final class ChatClient {
 
-	private const SETUP_MESSAGE = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations. Direct Azure OpenAI and OpenAI Native settings in Settings > Flavor Agent remain available as legacy fallback.';
+	private const SETUP_MESSAGE = 'Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations.';
 
 	public static function is_supported(): bool {
 		return Provider::chat_configured();
@@ -21,9 +21,7 @@ final class ChatClient {
 		?array $schema = null,
 		?string $schema_name = null
 	): string|\WP_Error {
-		$result = Provider::chat_configured()
-			? ResponsesClient::rank( $system_prompt, $user_prompt, null, $schema, $schema_name )
-			: WordPressAIClient::chat( $system_prompt, $user_prompt, null, null, $schema );
+		$result = ResponsesClient::rank( $system_prompt, $user_prompt, null, $schema, $schema_name );
 
 		if (
 			is_wp_error( $result )

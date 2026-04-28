@@ -4,34 +4,33 @@ declare(strict_types=1);
 
 namespace FlavorAgent;
 
+use FlavorAgent\Guidelines\LegacyGuidelinesRepository;
+use FlavorAgent\Guidelines\PromptGuidelinesFormatter;
+use FlavorAgent\Guidelines\RepositoryResolver;
+
 final class Guidelines {
 
-	public const OPTION_SITE       = 'flavor_agent_guideline_site';
-	public const OPTION_COPY       = 'flavor_agent_guideline_copy';
-	public const OPTION_IMAGES     = 'flavor_agent_guideline_images';
-	public const OPTION_ADDITIONAL = 'flavor_agent_guideline_additional';
-	public const OPTION_BLOCKS     = 'flavor_agent_guideline_blocks';
-	public const MAX_LENGTH        = 5000;
+	public const OPTION_SITE                  = 'flavor_agent_guideline_site';
+	public const OPTION_COPY                  = 'flavor_agent_guideline_copy';
+	public const OPTION_IMAGES                = 'flavor_agent_guideline_images';
+	public const OPTION_ADDITIONAL            = 'flavor_agent_guideline_additional';
+	public const OPTION_BLOCKS                = 'flavor_agent_guideline_blocks';
+	public const OPTION_MIGRATION_STATUS      = 'flavor_agent_guidelines_migration_status';
+	public const MAX_LENGTH                   = 5000;
+	public const MIGRATION_STATUS_NOT_STARTED = 'not_started';
 
 	/**
 	 * @return array{site: string, copy: string, images: string, additional: string, blocks: array<string, string>}
 	 */
 	public static function get_all(): array {
-		return [
-			'site'       => self::get_guideline( 'site' ),
-			'copy'       => self::get_guideline( 'copy' ),
-			'images'     => self::get_guideline( 'images' ),
-			'additional' => self::get_guideline( 'additional' ),
-			'blocks'     => self::get_block_guidelines(),
-		];
+		return RepositoryResolver::resolve()->get_all();
 	}
 
 	public static function get_guideline( string $category ): string {
+		$guidelines = self::get_all();
+
 		return match ( $category ) {
-			'site' => self::get_text_option( self::OPTION_SITE ),
-			'copy' => self::get_text_option( self::OPTION_COPY ),
-			'images' => self::get_text_option( self::OPTION_IMAGES ),
-			'additional' => self::get_text_option( self::OPTION_ADDITIONAL ),
+			'site', 'copy', 'images', 'additional' => $guidelines[ $category ],
 			default => '',
 		};
 	}
@@ -40,7 +39,7 @@ final class Guidelines {
 	 * @return array<string, string>
 	 */
 	public static function get_block_guidelines(): array {
-		return self::normalize_block_guidelines( get_option( self::OPTION_BLOCKS, [] ) );
+		return self::get_all()['blocks'];
 	}
 
 	public static function get_block_guideline( string $block_name ): string {
@@ -50,15 +49,63 @@ final class Guidelines {
 	}
 
 	public static function has_any(): bool {
-		$guidelines = self::get_all();
+		return RepositoryResolver::has_any( self::get_all() );
+	}
 
-		foreach ( [ 'site', 'copy', 'images', 'additional' ] as $category ) {
-			if ( '' !== $guidelines[ $category ] ) {
-				return true;
-			}
+	/**
+	 * @return array{source: string, core_available: bool, legacy_has_data: bool, migration_status: string, migration_completed: bool}
+	 */
+	public static function storage_status(): array {
+		$migration = self::get_migration_status();
+
+		return [
+			'source'              => RepositoryResolver::resolve()->source(),
+			'core_available'      => RepositoryResolver::core_available(),
+			'legacy_has_data'     => RepositoryResolver::has_any( ( new LegacyGuidelinesRepository() )->get_all() ),
+			'migration_status'    => $migration['status'],
+			'migration_completed' => 'completed' === $migration['status'],
+		];
+	}
+
+	public static function uses_core_storage(): bool {
+		return 'legacy_options' !== self::storage_status()['source'];
+	}
+
+	public static function format_prompt_context( string $block_name = '' ): string {
+		return PromptGuidelinesFormatter::format( self::get_all(), $block_name );
+	}
+
+	/**
+	 * @return array{status: string, message: string}
+	 */
+	public static function get_migration_status(): array {
+		$raw = get_option( self::OPTION_MIGRATION_STATUS, [] );
+
+		if ( ! is_array( $raw ) ) {
+			$raw = [];
 		}
 
-		return [] !== $guidelines['blocks'];
+		$status = sanitize_key( (string) ( $raw['status'] ?? self::MIGRATION_STATUS_NOT_STARTED ) );
+
+		if ( '' === $status ) {
+			$status = self::MIGRATION_STATUS_NOT_STARTED;
+		}
+
+		return [
+			'status'  => $status,
+			'message' => sanitize_text_field( (string) ( $raw['message'] ?? '' ) ),
+		];
+	}
+
+	public static function record_migration_status( string $status, string $message = '' ): void {
+		update_option(
+			self::OPTION_MIGRATION_STATUS,
+			[
+				'status'  => sanitize_key( $status ),
+				'message' => sanitize_text_field( $message ),
+			],
+			false
+		);
 	}
 
 	/**
@@ -171,10 +218,6 @@ final class Guidelines {
 		);
 
 		return $options;
-	}
-
-	private static function get_text_option( string $option_name ): string {
-		return self::sanitize_guideline_text( get_option( $option_name, '' ) );
 	}
 
 	private static function block_has_content_role( mixed $block_type ): bool {

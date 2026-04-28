@@ -126,20 +126,12 @@ final class Settings {
 		return Validation::sanitize_azure_embedding_deployment( $value );
 	}
 
-	public static function sanitize_azure_chat_deployment( mixed $value ): string {
-		return Validation::sanitize_azure_chat_deployment( $value );
-	}
-
 	public static function sanitize_openai_native_api_key( mixed $value ): string {
 		return Validation::sanitize_openai_native_api_key( $value );
 	}
 
 	public static function sanitize_openai_native_embedding_model( mixed $value ): string {
 		return Validation::sanitize_openai_native_embedding_model( $value );
-	}
-
-	public static function sanitize_openai_native_chat_model( mixed $value ): string {
-		return Validation::sanitize_openai_native_chat_model( $value );
 	}
 
 	public static function sanitize_qdrant_url( mixed $value ): string {

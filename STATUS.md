@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-23
+> Last updated: 2026-04-28
 
 ## Working
 
@@ -53,10 +53,11 @@
 - Block, template, and template-part apply flows now capture structured AI activity records, expose inline `Undo`, and render a minimal editor-scoped `Recent AI Actions` history in the active panel, while Global Styles and Style Book render the same shared history model as `Recent AI Style Actions` and `Recent AI Style Book Actions`; all surfaces include backend/model execution summaries, provider-path ownership labels, and selected-provider fallback notes when the runtime backend differs from the configured provider
 - AI activity now persists through the server-backed activity repository and is hydrated back into editor-scoped history, while template, template-part, Global Styles, and Style Book undo still rely on stable locators or recorded post-apply snapshots; legacy clientId-only template entries load as undo unavailable, and refresh-safe scope hydration now retries once with explicit scope metadata when Site Editor selectors lag after reload
 - A shape-only `src/review/notes-adapter.js` now exists for future Notes/comment projection without taking a runtime dependency on unstable editor APIs
-- Admin settings screen with Connectors-first chat routing, provider selection, legacy direct Azure OpenAI / OpenAI Native fallback controls, Qdrant, managed Cloudflare AI Search docs-grounding controls, and pattern sync controls; the page copy now makes the core-managed `Settings > Connectors` vs plugin-managed `Settings > Flavor Agent` ownership boundary explicit, and the OpenAI Native section reports the effective credential source plus core OpenAI connector registration/configuration state
+- Admin settings screen with Connectors-only chat ownership: chat is fully owned by `Settings > Connectors` via the WordPress AI Client. Plugin settings retain Azure OpenAI and OpenAI Native credentials only for embeddings (Connectors does not yet expose embeddings), plus Qdrant and managed Cloudflare AI Search docs-grounding controls and pattern sync controls. The OpenAI Native section reports the effective credential source plus core OpenAI connector registration/configuration state.
+- Guidelines now read through a core-first repository bridge. When the emerging core/Gutenberg `wp_guideline` storage model is present, recommendation prompts read those values first; legacy Flavor Agent guideline options remain available for fallback, migration/import-export tooling, and rollback while the public Guidelines API settles.
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, Qdrant, and Cloudflare validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
-- Azure OpenAI credentials are revalidated only when the endpoint, key, or deployments change and all four fields are present, including direct-field submissions while connector chat is selected; both the embeddings and responses deployments must validate before new values are saved
+- Azure OpenAI credentials are revalidated only when the endpoint, key, or embedding deployment change and all three fields are present; the embedding deployment must validate before new values are saved. Azure chat deployment fields no longer exist on this screen (chat is owned by `Settings > Connectors`).
 - Qdrant credentials are revalidated only when the URL or key changes and both fields are present; the configured `/collections` endpoint must return the expected payload before new values are saved
 - Legacy Cloudflare AI Search credentials are revalidated only when the account ID, instance ID, or token changes; the new credentials must pass a lightweight probe search returning trusted `developer.wordpress.org` guidance before they are saved, which keeps the settings flow compatible with documented AI Search Run tokens
 - Recommendation-time WordPress docs grounding remains cache-only and non-blocking; exact-query cache is authoritative and warmed block/template entity cache is only a fallback

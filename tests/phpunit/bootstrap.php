@@ -71,6 +71,12 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<int, object> */
 		public static array $posts = [];
 
+		/** @var array<string, array<string, mixed>> */
+		public static array $registered_post_types = [];
+
+		/** @var array<string, array<string, mixed>> */
+		public static array $registered_taxonomies = [];
+
 		/** @var array<int, array<string, mixed>> */
 		public static array $get_posts_calls = [];
 
@@ -114,6 +120,113 @@ namespace FlavorAgent\Tests\Support {
 			return self::$connector_api_errors[ $function_name ] ?? null;
 		}
 
+		/**
+		 * Compatibility bridge for tests written before Workstream C of the WP 7.0
+		 * overlap remediation. When a test seeds an Azure-shaped chat response in
+		 * $remote_post_response (or $remote_post_responses), translate the inner
+		 * `output_text` into the AI Client mock surface so tests that previously
+		 * exercised the direct-HTTP chat path now exercise the Connectors path.
+		 */
+		public static function pending_chat_output_text(): ?string {
+			if ( isset( self::$remote_post_response['body'] ) && is_string( self::$remote_post_response['body'] ) ) {
+				$decoded = json_decode( self::$remote_post_response['body'], true );
+
+				if ( self::is_chat_output_text_payload( $decoded ) ) {
+					return (string) $decoded['output_text'];
+				}
+			}
+
+			foreach ( self::$remote_post_responses as $queued ) {
+				if ( is_array( $queued ) && isset( $queued['body'] ) && is_string( $queued['body'] ) ) {
+					$decoded = json_decode( $queued['body'], true );
+
+					if ( self::is_chat_output_text_payload( $decoded ) ) {
+						return (string) $decoded['output_text'];
+					}
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * Consume the next chat-shaped response from the queue and append a synthetic
+		 * remote_post_call so tests that assert on $remote_post_calls[N]['args']['body']
+		 * continue to work after Workstream C moved chat onto the AI Client.
+		 */
+		public static function consume_pending_chat_response_for_ai_client( object $prompt_state ): ?string {
+			if ( isset( self::$remote_post_response['body'] ) && is_string( self::$remote_post_response['body'] ) ) {
+				$decoded = json_decode( self::$remote_post_response['body'], true );
+
+				if ( self::is_chat_output_text_payload( $decoded ) ) {
+					self::record_synthetic_chat_remote_post_call( $prompt_state );
+
+					return (string) $decoded['output_text'];
+				}
+			}
+
+			foreach ( self::$remote_post_responses as $index => $queued ) {
+				if ( ! is_array( $queued ) || ! isset( $queued['body'] ) || ! is_string( $queued['body'] ) ) {
+					continue;
+				}
+
+				$decoded = json_decode( $queued['body'], true );
+
+				if ( ! self::is_chat_output_text_payload( $decoded ) ) {
+					continue;
+				}
+
+				array_splice( self::$remote_post_responses, $index, 1 );
+				self::record_synthetic_chat_remote_post_call( $prompt_state );
+
+				return (string) $decoded['output_text'];
+			}
+
+			return null;
+		}
+
+		private static function is_chat_output_text_payload( mixed $decoded ): bool {
+			return is_array( $decoded )
+				&& isset( $decoded['output_text'] )
+				&& is_string( $decoded['output_text'] );
+		}
+
+		private static function record_synthetic_chat_remote_post_call( object $prompt_state ): void {
+			$prompt = (array) $prompt_state;
+
+			$body = wp_json_encode(
+				array_filter(
+					[
+						'model'        => 'provider-managed',
+						'instructions' => isset( $prompt['system'] ) ? (string) $prompt['system'] : '',
+						'input'        => isset( $prompt['text'] ) ? (string) $prompt['text'] : '',
+						'reasoning'    => isset( $prompt['reasoning'] ) && '' !== $prompt['reasoning']
+							? [ 'effort' => (string) $prompt['reasoning'] ]
+							: null,
+						'text'         => isset( $prompt['json_schema'] ) && is_array( $prompt['json_schema'] )
+							? [
+								'format' => [
+									'type'   => 'json_schema',
+									'name'   => 'flavor_agent_response',
+									'schema' => $prompt['json_schema'],
+									'strict' => true,
+								],
+							]
+							: null,
+					]
+				)
+			);
+
+			self::$last_remote_post = [
+				'url'  => 'flavor-agent://wordpress-ai-client/responses',
+				'args' => [
+					'body'    => is_string( $body ) ? $body : '',
+					'headers' => [],
+				],
+			];
+			self::$remote_post_calls[] = self::$last_remote_post;
+		}
+
 		public static function reset(): void {
 			self::$global_settings             = [];
 			self::$global_styles               = [];
@@ -139,6 +252,8 @@ namespace FlavorAgent\Tests\Support {
 			self::$updated_options              = [];
 			self::$cleared_cron_hooks           = [];
 			self::$posts                       = [];
+			self::$registered_post_types       = [];
+			self::$registered_taxonomies       = [];
 			self::$get_posts_calls             = [];
 			self::$post_meta                   = [];
 			self::$db_tables                   = [];
@@ -228,11 +343,30 @@ namespace WordPress\AI_Client {
 				return (bool) WordPressTestState::$ai_client_provider_support[ $provider ];
 			}
 
-			return WordPressTestState::$ai_client_supported;
+			if ( WordPressTestState::$ai_client_supported ) {
+				return true;
+			}
+
+			// Compatibility bridge for Workstream C of the WP 7.0 overlap remediation:
+			// many pre-existing tests still seed Azure-shaped chat responses via
+			// $remote_post_response. After C step 2, chat goes through Connectors via
+			// wp_ai_client_prompt(), so when a chat-shaped response is queued we treat
+			// it as a usable text-generation provider.
+			return null !== \FlavorAgent\Tests\Support\WordPressTestState::pending_chat_output_text();
 		}
 
 		public function generate_text(): mixed {
-			return WordPressTestState::$ai_client_generate_text_result;
+			$explicit = WordPressTestState::$ai_client_generate_text_result;
+
+			if ( '' !== $explicit && null !== $explicit ) {
+				return $explicit;
+			}
+
+			$translated = \FlavorAgent\Tests\Support\WordPressTestState::consume_pending_chat_response_for_ai_client(
+				(object) WordPressTestState::$last_ai_client_prompt
+			);
+
+			return null !== $translated ? $translated : $explicit;
 		}
 	}
 }
@@ -280,9 +414,23 @@ namespace {
 							return WordPressTestState::$ai_client_provider_support[ $provider ];
 						}
 
-						return WordPressTestState::$ai_client_supported;
+						if ( WordPressTestState::$ai_client_supported ) {
+							return true;
+						}
+
+						return null !== WordPressTestState::pending_chat_output_text();
 					case 'generate_text':
-						return WordPressTestState::$ai_client_generate_text_result;
+						$explicit = WordPressTestState::$ai_client_generate_text_result;
+
+						if ( '' !== $explicit && null !== $explicit ) {
+							return $explicit;
+						}
+
+						$translated = WordPressTestState::consume_pending_chat_response_for_ai_client(
+							(object) WordPressTestState::$last_ai_client_prompt
+						);
+
+						return null !== $translated ? $translated : $explicit;
 					}
 
 					throw new \BadMethodCallException(
@@ -1172,6 +1320,37 @@ namespace {
 	if ( ! function_exists( 'get_option' ) ) {
 		function get_option( string $name, $default = false ) {
 			return WordPressTestState::$options[ $name ] ?? $default;
+		}
+	}
+
+	if ( ! function_exists( 'register_post_type' ) ) {
+		function register_post_type( string $post_type, array $args = [] ): object {
+			WordPressTestState::$registered_post_types[ $post_type ] = $args;
+
+			return (object) array_merge( [ 'name' => $post_type ], $args );
+		}
+	}
+
+	if ( ! function_exists( 'post_type_exists' ) ) {
+		function post_type_exists( string $post_type ): bool {
+			return array_key_exists( $post_type, WordPressTestState::$registered_post_types );
+		}
+	}
+
+	if ( ! function_exists( 'register_taxonomy' ) ) {
+		function register_taxonomy( string $taxonomy, $object_type, array $args = [] ): object {
+			WordPressTestState::$registered_taxonomies[ $taxonomy ] = [
+				'object_type' => $object_type,
+				'args'        => $args,
+			];
+
+			return (object) array_merge( [ 'name' => $taxonomy ], $args );
+		}
+	}
+
+	if ( ! function_exists( 'taxonomy_exists' ) ) {
+		function taxonomy_exists( string $taxonomy ): bool {
+			return array_key_exists( $taxonomy, WordPressTestState::$registered_taxonomies );
 		}
 	}
 

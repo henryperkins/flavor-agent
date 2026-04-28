@@ -2370,14 +2370,14 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	private function configure_pattern_recommendation_backends(): void {
-		WordPressTestState::$options = [
+		WordPressTestState::$options             = [
 			Provider::OPTION_NAME                        => Provider::NATIVE,
 			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
+		WordPressTestState::$ai_client_supported = true;
 	}
 
 	private function save_ready_pattern_index_state(): void {

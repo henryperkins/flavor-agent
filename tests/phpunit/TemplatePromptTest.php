@@ -4,10 +4,41 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Guidelines;
 use FlavorAgent\LLM\TemplatePrompt;
+use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
 final class TemplatePromptTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		WordPressTestState::reset();
+	}
+
+	public function test_build_user_includes_site_guidelines(): void {
+		WordPressTestState::$options = [
+			Guidelines::OPTION_SITE       => 'Homepage for enterprise buyers.',
+			Guidelines::OPTION_ADDITIONAL => 'Keep accessibility requirements visible.',
+		];
+
+		$prompt = TemplatePrompt::build_user(
+			[
+				'templateType'   => 'home',
+				'title'          => 'Home',
+				'assignedParts'  => [],
+				'emptyAreas'     => [],
+				'availableParts' => [],
+				'patterns'       => [],
+				'themeTokens'    => [],
+			]
+		);
+
+		$this->assertStringContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringContainsString( 'Site: Homepage for enterprise buyers.', $prompt );
+		$this->assertStringContainsString( 'Additional: Keep accessibility requirements visible.', $prompt );
+	}
 
 	public function test_build_user_includes_structure_summary(): void {
 		$prompt = TemplatePrompt::build_user(

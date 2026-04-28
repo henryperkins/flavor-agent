@@ -4,10 +4,41 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Guidelines;
 use FlavorAgent\LLM\TemplatePartPrompt;
+use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
 final class TemplatePartPromptTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		WordPressTestState::reset();
+	}
+
+	public function test_build_user_includes_site_guidelines(): void {
+		WordPressTestState::$options = [
+			Guidelines::OPTION_SITE   => 'Header should support product discovery.',
+			Guidelines::OPTION_IMAGES => 'Prefer real interface screenshots.',
+		];
+
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef' => 'theme//header',
+				'slug'            => 'header',
+				'title'           => 'Header',
+				'area'            => 'header',
+				'blockTree'       => [],
+				'patterns'        => [],
+				'themeTokens'     => [],
+			]
+		);
+
+		$this->assertStringContainsString( '## Site Guidelines', $prompt );
+		$this->assertStringContainsString( 'Site: Header should support product discovery.', $prompt );
+		$this->assertStringContainsString( 'Images: Prefer real interface screenshots.', $prompt );
+	}
 
 	public function test_build_user_includes_structural_presence_flags(): void {
 		$prompt = TemplatePartPrompt::build_user(

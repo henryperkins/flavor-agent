@@ -54,15 +54,6 @@ final class Registrar {
 		);
 		register_setting(
 			Config::OPTION_GROUP,
-			'flavor_agent_azure_chat_deployment',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_azure_chat_deployment' ],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
 			'flavor_agent_azure_reasoning_effort',
 			[
 				'type'              => 'string',
@@ -85,15 +76,6 @@ final class Registrar {
 			[
 				'type'              => 'string',
 				'sanitize_callback' => [ Settings::class, 'sanitize_openai_native_embedding_model' ],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_openai_native_chat_model',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_openai_native_chat_model' ],
 				'default'           => '',
 			]
 		);
@@ -217,19 +199,19 @@ final class Registrar {
 
 		add_settings_section(
 			'flavor_agent_openai_provider',
-			'AI Provider',
+			'Embeddings Provider',
 			[ Settings::class, 'render_openai_provider_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_azure',
-			'Azure OpenAI',
+			'Azure OpenAI (embeddings)',
 			[ Settings::class, 'render_azure_section' ],
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
 			'flavor_agent_openai_native',
-			'OpenAI Native',
+			'OpenAI Native (embeddings)',
 			[ Settings::class, 'render_openai_native_section' ],
 			Config::PAGE_SLUG
 		);
@@ -260,7 +242,7 @@ final class Registrar {
 
 		add_settings_field(
 			Provider::OPTION_NAME,
-			'Chat Provider',
+			'Embeddings Backend',
 			[ Settings::class, 'render_select_field' ],
 			Config::PAGE_SLUG,
 			'flavor_agent_openai_provider',
@@ -268,7 +250,7 @@ final class Registrar {
 				'option'      => Provider::OPTION_NAME,
 				'label_for'   => Provider::OPTION_NAME,
 				'choices'     => Provider::choices( Provider::get() ),
-				'description' => 'Choose the preferred chat path. Settings > Connectors is used first when available; direct Azure/OpenAI settings below remain as legacy fallback.',
+				'description' => 'Pattern recommendations need vector embeddings. Choose which direct backend serves them. Chat now goes through Settings > Connectors automatically. Selecting a connector here pins chat to that connector.',
 				'class'       => 'flavor-agent-settings-row--critical',
 			]
 		);
@@ -283,7 +265,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_azure_openai_endpoint',
 				'type'         => 'url',
 				'placeholder'  => 'https://my-resource.openai.azure.com/',
-				'description'  => 'Legacy direct Azure OpenAI resource URL.',
+				'description'  => 'Azure OpenAI resource URL used for embeddings.',
 				'autocomplete' => 'url',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -299,7 +281,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_azure_openai_key',
 				'type'         => 'password',
 				'placeholder'  => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-				'description'  => 'Legacy direct Azure API key.',
+				'description'  => 'Azure API key used for embeddings.',
 				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -314,22 +296,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_azure_embedding_deployment',
 				'label_for'    => 'flavor_agent_azure_embedding_deployment',
 				'placeholder'  => 'text-embedding-3-large',
-				'description'  => 'Embedding deployment name for the legacy direct Azure fallback.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_azure_chat_deployment',
-			'Responses Deployment',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_azure',
-			[
-				'option'       => 'flavor_agent_azure_chat_deployment',
-				'label_for'    => 'flavor_agent_azure_chat_deployment',
-				'placeholder'  => 'gpt-5.4',
-				'description'  => 'Responses deployment name for the legacy direct Azure fallback.',
+				'description'  => 'Azure embedding deployment name for pattern recommendations.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -350,7 +317,7 @@ final class Registrar {
 					'high'   => 'High',
 					'xhigh'  => 'XHigh',
 				],
-				'description' => 'Default reasoning effort for Connectors-first chat requests and legacy Azure ranking calls.',
+				'description' => 'Default reasoning effort applied to Connectors-routed chat requests.',
 			]
 		);
 		add_settings_field(
@@ -364,7 +331,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_openai_native_api_key',
 				'type'         => 'password',
 				'placeholder'  => 'sk-...',
-				'description'  => 'Legacy direct override. Leave blank to use Settings > Connectors or OPENAI_API_KEY.',
+				'description'  => 'OpenAI API key used for embeddings. Leave blank to use Settings > Connectors or OPENAI_API_KEY.',
 				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -379,22 +346,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_openai_native_embedding_model',
 				'label_for'    => 'flavor_agent_openai_native_embedding_model',
 				'placeholder'  => 'text-embedding-3-large',
-				'description'  => 'Embedding model ID for the legacy direct OpenAI fallback.',
-				'autocomplete' => 'off',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_openai_native_chat_model',
-			'Responses Model',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_openai_native',
-			[
-				'option'       => 'flavor_agent_openai_native_chat_model',
-				'label_for'    => 'flavor_agent_openai_native_chat_model',
-				'placeholder'  => 'gpt-5.4',
-				'description'  => 'Responses model ID for the legacy direct OpenAI fallback.',
+				'description'  => 'OpenAI embedding model ID for pattern recommendations.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]

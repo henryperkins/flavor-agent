@@ -108,6 +108,11 @@ SYSTEM;
 
 		$budget->add_section( 'identity', "## Template Part\nRef: {$ref}\nSlug: {$slug}\nTitle: {$title}\nArea: {$area}", 100 );
 
+		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
+		if ( '' !== $guidelines_context ) {
+			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
+		}
+
 		$top_level_blocks = is_array( $context['topLevelBlocks'] ?? null ) ? $context['topLevelBlocks'] : [];
 		if ( count( $top_level_blocks ) > 0 ) {
 			$budget->add_section( 'top_level_blocks', '## Top-Level Blocks' . "\n" . implode( ', ', $top_level_blocks ), 90 );

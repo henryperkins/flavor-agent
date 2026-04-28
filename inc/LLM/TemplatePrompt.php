@@ -139,6 +139,11 @@ SYSTEM;
 			88
 		);
 
+		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
+		if ( '' !== $guidelines_context ) {
+			$budget->add_section( 'site_guidelines', $guidelines_context, 86 );
+		}
+
 		$assigned_slugs = array_column( $assigned, 'slug' );
 		$available      = array_values(
 			array_filter(

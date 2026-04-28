@@ -211,65 +211,32 @@ final class Provider {
 	}
 
 	/**
-	 * @param array<string, string> $overrides
+	 * Chat is owned by Settings > Connectors via the WordPress AI Client. Direct
+	 * Azure and OpenAI Native paths no longer carry chat traffic, so this method
+	 * either resolves to the WordPress AI Client runtime or reports the chat
+	 * surface as unconfigured.
+	 *
+	 * @param array<string, string> $overrides Reserved for parity with embedding_configuration().
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	public static function chat_configuration( ?string $provider = null, array $overrides = [] ): array {
+		unset( $overrides );
+
 		if ( null === $provider ) {
-			$config                                     = self::runtime_chat_configuration( $overrides );
+			$config                                     = self::runtime_chat_configuration();
 			self::$last_runtime_chat_configuration      = $config;
 			self::$has_fresh_runtime_chat_configuration = true;
 
 			return $config;
 		}
 
-		$provider = self::normalize_provider( $provider ?? self::get() );
+		$provider = self::normalize_provider( $provider );
 
 		if ( self::is_connector( $provider ) ) {
-			$configured = WordPressAIClient::is_supported( $provider );
-
-			return [
-				'provider'   => $provider,
-				'endpoint'   => '',
-				'api_key'    => '',
-				'model'      => $configured ? 'provider-managed' : '',
-				'configured' => $configured,
-				'headers'    => [],
-				'url'        => '',
-				'label'      => self::label( $provider ),
-			];
+			return self::connector_chat_configuration( $provider );
 		}
 
-		if ( self::is_native( $provider ) ) {
-			$api_key = self::native_effective_api_key( $overrides );
-			$model   = self::option_value( $overrides, 'flavor_agent_openai_native_chat_model' );
-
-			return [
-				'provider'   => $provider,
-				'endpoint'   => self::NATIVE_BASE_URL,
-				'api_key'    => $api_key,
-				'model'      => $model,
-				'configured' => $api_key !== '' && $model !== '',
-				'headers'    => self::native_headers( $api_key ),
-				'url'        => self::NATIVE_BASE_URL . '/v1/responses',
-				'label'      => 'OpenAI responses',
-			];
-		}
-
-		$endpoint = self::option_value( $overrides, 'flavor_agent_azure_openai_endpoint' );
-		$api_key  = self::option_value( $overrides, 'flavor_agent_azure_openai_key' );
-		$model    = self::option_value( $overrides, 'flavor_agent_azure_chat_deployment' );
-
-		return [
-			'provider'   => $provider,
-			'endpoint'   => $endpoint,
-			'api_key'    => $api_key,
-			'model'      => $model,
-			'configured' => $endpoint !== '' && $api_key !== '' && $model !== '',
-			'headers'    => self::azure_headers( $api_key ),
-			'url'        => rtrim( $endpoint, '/' ) . '/openai/v1/responses',
-			'label'      => 'Azure OpenAI responses',
-		];
+		return self::missing_chat_configuration( $provider );
 	}
 
 	/**
@@ -390,52 +357,18 @@ final class Provider {
 		$credential_source                          = 'plugin_settings';
 		$credential_label                           = 'Settings > Flavor Agent';
 
-		if ( self::is_wordpress_ai_client( $provider ) ) {
-			$owner             = 'connectors';
-			$owner_label       = 'Settings > Connectors';
-			$path_label        = 'WordPress AI Client via Settings > Connectors';
-			$credential_source = 'provider_managed';
-			$credential_label  = 'Provider-managed';
-		} elseif ( self::is_connector( $provider ) ) {
+		if ( self::is_connector( $provider ) ) {
 			$owner             = 'connectors';
 			$owner_label       = 'Settings > Connectors';
 			$path_label        = sprintf( '%s via Settings > Connectors', $provider_label );
 			$credential_source = 'provider_managed';
 			$credential_label  = 'Provider-managed';
-		} elseif ( self::is_native( $provider ) ) {
-			$credential_source = self::native_effective_api_key_source();
-			$credential_label  = self::credential_source_label_for_request_meta( $credential_source );
-
-			switch ( $credential_source ) {
-				case 'connector_database':
-					$owner       = 'flavor_agent_and_connectors';
-					$owner_label = 'Settings > Flavor Agent + Settings > Connectors';
-					$path_label  = 'OpenAI Native model in Settings > Flavor Agent, API key in Settings > Connectors';
-					break;
-				case 'env':
-					$owner       = 'environment';
-					$owner_label = 'Environment';
-					$path_label  = 'OpenAI Native model in Settings > Flavor Agent, API key from OPENAI_API_KEY';
-					break;
-				case 'constant':
-					$owner       = 'environment';
-					$owner_label = 'wp-config.php / PHP constant';
-					$path_label  = 'OpenAI Native model in Settings > Flavor Agent, API key from OPENAI_API_KEY constant';
-					break;
-				case 'plugin_override':
-				case 'none':
-				default:
-					$owner       = 'flavor_agent';
-					$owner_label = 'Settings > Flavor Agent';
-					$path_label  = 'OpenAI Native via Settings > Flavor Agent';
-					break;
-			}
 		} else {
-			$owner             = 'flavor_agent';
-			$owner_label       = 'Settings > Flavor Agent';
-			$path_label        = 'Azure OpenAI via Settings > Flavor Agent';
-			$credential_source = 'plugin_settings';
-			$credential_label  = 'Settings > Flavor Agent';
+			$owner             = 'connectors';
+			$owner_label       = 'Settings > Connectors';
+			$path_label        = 'WordPress AI Client via Settings > Connectors';
+			$credential_source = 'provider_managed';
+			$credential_label  = 'Provider-managed';
 		}
 
 		$meta = [
@@ -562,17 +495,6 @@ final class Provider {
 		];
 	}
 
-	private static function credential_source_label_for_request_meta( string $source ): string {
-		return match ( $source ) {
-			'plugin_override' => 'Settings > Flavor Agent',
-			'connector_database' => 'Settings > Connectors',
-			'env' => 'OPENAI_API_KEY environment variable',
-			'constant' => 'OPENAI_API_KEY PHP constant',
-			'provider_managed' => 'Provider-managed',
-			default => 'Not recorded',
-		};
-	}
-
 	/**
 	 * @return array{tokenUsage: array<string, int>, latencyMs: int}|array{tokenUsage: array<string, int>, latencyMs: null}
 	 */
@@ -686,38 +608,58 @@ final class Provider {
 	}
 
 	/**
-	 * @param array<string, string> $overrides
+	 * Resolve the active chat runtime. The selected option may pin chat to a
+	 * specific connector; otherwise the generic WordPress AI Client runtime
+	 * picks whichever Connectors-backed provider is currently usable.
+	 *
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
-	private static function runtime_chat_configuration( array $overrides = [] ): array {
+	private static function runtime_chat_configuration(): array {
 		$selected_provider = self::get();
-		$selected_config   = self::chat_configuration( $selected_provider, $overrides );
 
-		if ( self::is_connector( $selected_provider ) && $selected_config['configured'] ) {
-			return $selected_config;
+		if ( self::is_connector( $selected_provider ) && WordPressAIClient::is_supported( $selected_provider ) ) {
+			return self::connector_chat_configuration( $selected_provider );
 		}
 
 		if ( WordPressAIClient::is_supported() ) {
 			return self::wordpress_ai_client_configuration();
 		}
 
-		if ( $selected_config['configured'] ) {
-			return $selected_config;
-		}
+		return self::missing_chat_configuration( $selected_provider );
+	}
 
-		foreach ( array_keys( self::direct_choices() ) as $candidate ) {
-			if ( $candidate === $selected_provider ) {
-				continue;
-			}
+	/**
+	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
+	 */
+	private static function connector_chat_configuration( string $provider ): array {
+		$configured = WordPressAIClient::is_supported( $provider );
 
-			$candidate_config = self::chat_configuration( $candidate, $overrides );
+		return [
+			'provider'   => $provider,
+			'endpoint'   => '',
+			'api_key'    => '',
+			'model'      => $configured ? 'provider-managed' : '',
+			'configured' => $configured,
+			'headers'    => [],
+			'url'        => '',
+			'label'      => self::label( $provider ),
+		];
+	}
 
-			if ( $candidate_config['configured'] ) {
-				return $candidate_config;
-			}
-		}
-
-		return $selected_config;
+	/**
+	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
+	 */
+	private static function missing_chat_configuration( string $provider ): array {
+		return [
+			'provider'   => $provider,
+			'endpoint'   => '',
+			'api_key'    => '',
+			'model'      => '',
+			'configured' => false,
+			'headers'    => [],
+			'url'        => '',
+			'label'      => self::label( $provider ),
+		];
 	}
 
 	/**

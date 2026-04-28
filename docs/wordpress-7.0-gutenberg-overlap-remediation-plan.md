@@ -4,6 +4,7 @@
 > Scope: active remediation plan for current repo findings where Flavor Agent duplicates Gutenberg or WordPress 7.0 functionality, or owns the right surface but in the wrong way
 > Status: active plan, with workstreams 1 and 2 now implemented in the current repo state
 > Supersedes: relevant forward-looking overlap items in `docs/wp7-migration-opportunities.md` where the two documents conflict
+> Upstream pressure source: see `docs/reference/wordpress-ai-roadmap-tracking.md` for the live snapshot of WordPress org project 240 board items that motivate workstreams C, D, and E. New upstream pressures without a workstream yet are listed there under **Action Implications** with a "not yet covered" marker.
 
 ## Objective
 
@@ -24,10 +25,16 @@ Completed on 2026-04-23:
 - Workstream 1: pattern recommendations no longer patch Gutenberg's native registry; the inserter now uses a Flavor Agent-owned local shelf plus the existing badge
 - Workstream 2: the main block panel is now the only executable block recommendation surface; delegated native Inspector sub-panels are passive mirrors only
 
+Completed on 2026-04-28:
+
+- Workstream 3: chat is now owned by Settings > Connectors via the WordPress AI Client. Direct Azure and OpenAI Native chat fields (`flavor_agent_azure_chat_deployment`, `flavor_agent_openai_native_chat_model`) and the corresponding sanitizers, validators, settings UI rows, and runtime fallback paths are removed. `ChatClient::chat()` and `ResponsesClient::rank()` now route every chat call through `WordPressAIClient::chat()`. Plugin settings retain Azure and OpenAI Native credentials only for embeddings, which Connectors does not yet provide.
+
+In progress as of 2026-04-28:
+
+- Workstream 4: Guidelines bridge to core storage. The first bridge slice adds storage-agnostic reads, core/Gutenberg feature detection for the emerging `wp_guideline` / `wp_guideline_type` model, legacy option fallback, migration status scaffolding, prompt consumption, and settings copy that frames current fields as migration tooling when core Guidelines storage is present. A write migration into core storage remains intentionally deferred until the public API and final data model settle.
+
 Still pending:
 
-- Workstream 3: Connectors and WordPress AI Client ownership cleanup
-- Workstream 4: Guidelines bridge to core storage
 - Workstream 5: `DataForm`-based settings screen rebuild
 
 ## Final Product Decisions
@@ -263,18 +270,21 @@ Use a two-step migration:
 
 1. Introduce a guidelines repository abstraction.
 2. Add:
-   - `CoreGuidelinesRepository` for hosts exposing the core Guidelines model
+   - `CoreGuidelinesRepository` for hosts exposing the core Guidelines model, currently feature-detected through `wp_guideline` and `wp_guideline_type`
    - `LegacyGuidelinesRepository` for current plugin options
-3. Resolve the active repository through feature detection.
-4. Add a one-time migration path from legacy options into the core store when the core model is available.
-5. Downgrade JSON import/export and block-guideline editing from primary UI to migration/admin tooling.
+3. Resolve the active repository through feature detection, with a filter override for tests and future integrations.
+4. Add migration status scaffolding now, then add a one-time migration write path from legacy options into the core store once core exposes a stable public write API.
+5. Downgrade JSON import/export and block-guideline editing from primary UI to migration/admin tooling when core Guidelines storage is detected.
 6. Update all prompt and context consumers to read from the repository abstraction instead of direct option helpers.
+7. Treat future `wp_register_guideline()` support as a feature-detected enhancement, not a current dependency.
+8. Leave theme file defaults to core's eventual `wp_template`-style design rather than inventing a plugin-specific format.
 
 ### Migration notes
 
 - preserve current options until migration succeeds
 - record migration status so repeated imports are avoided
 - keep rollback possible while the core Guidelines surface remains partially deployed across environments
+- do not delete legacy option data during the bridge release, even after a successful migration
 
 ### Exit criteria
 

@@ -59,6 +59,7 @@ Read these documents in this order:
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `template-operations.md` — operation types, placements, and validation rules per surface.
    - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
+   - `wordpress-ai-roadmap-tracking.md` — snapshot of WordPress org project 240 and the active overlap between upstream AI work and Flavor Agent surfaces, plus a refresh procedure.
 7. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.

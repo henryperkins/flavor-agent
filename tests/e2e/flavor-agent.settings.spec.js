@@ -40,7 +40,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		'Required'
 	);
 	await expect( chatSection.locator( sectionSummarySelector ) ).toContainText(
-		'Chat uses Settings > Connectors when available; direct Azure and OpenAI Native settings below remain as legacy fallback.'
+		'Chat is handled by Settings > Connectors; this screen configures embeddings and supporting services.'
 	);
 	await expect(
 		patternSection.locator( sectionSummarySelector )
@@ -63,13 +63,27 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 		'Store plugin-owned site, writing, image, and block guidance.'
 	);
 
-	await chatSection.locator( sectionSummarySelector ).click();
-	await expect( chatSection ).toHaveJSProperty( 'open', true );
-	await expect( patternSection ).toHaveJSProperty( 'open', false );
+	const chatInitiallyOpen = await chatSection.evaluate(
+		( section ) => section.open
+	);
 
-	await docsSection.locator( sectionSummarySelector ).click();
-	await expect( docsSection ).toHaveJSProperty( 'open', true );
-	await expect( chatSection ).toHaveJSProperty( 'open', false );
+	if ( chatInitiallyOpen ) {
+		await docsSection.locator( sectionSummarySelector ).click();
+		await expect( docsSection ).toHaveJSProperty( 'open', true );
+		await expect( chatSection ).toHaveJSProperty( 'open', false );
+
+		await chatSection.locator( sectionSummarySelector ).click();
+		await expect( chatSection ).toHaveJSProperty( 'open', true );
+		await expect( patternSection ).toHaveJSProperty( 'open', false );
+	} else {
+		await chatSection.locator( sectionSummarySelector ).click();
+		await expect( chatSection ).toHaveJSProperty( 'open', true );
+		await expect( patternSection ).toHaveJSProperty( 'open', false );
+
+		await docsSection.locator( sectionSummarySelector ).click();
+		await expect( docsSection ).toHaveJSProperty( 'open', true );
+		await expect( chatSection ).toHaveJSProperty( 'open', false );
+	}
 
 	const legacyOverridePanel = page
 		.locator( '.flavor-agent-settings-subpanel' )
@@ -123,7 +137,7 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	).toBeVisible();
 	await expect(
 		page.locator( '#tab-panel-flavor-agent-troubleshooting' )
-	).toContainText( 'Guidelines import fills the form first.' );
+	).toContainText( 'Guidelines import fills the legacy form first.' );
 
 	await expect(
 		page.locator( '#contextual-help-wrap .contextual-help-sidebar' )

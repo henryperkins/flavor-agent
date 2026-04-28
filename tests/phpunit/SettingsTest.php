@@ -73,14 +73,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
-			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 		$_POST                       = [
 			'option_page'                             => 'flavor_agent_settings',
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
-			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 
 		$this->assertSame(
@@ -92,10 +90,6 @@ final class SettingsTest extends TestCase {
 			'embed-deployment',
 			Settings::sanitize_azure_embedding_deployment( 'embed-deployment' )
 		);
-		$this->assertSame(
-			'chat-deployment',
-			Settings::sanitize_azure_chat_deployment( 'chat-deployment' )
-		);
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
@@ -105,14 +99,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'old-key',
 			'flavor_agent_azure_embedding_deployment' => 'old-embed',
-			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                             => 'flavor_agent_settings',
 			'flavor_agent_azure_openai_endpoint'      => 'https://new.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'new-key',
 			'flavor_agent_azure_embedding_deployment' => 'new-embed',
-			'flavor_agent_azure_chat_deployment'      => 'new-chat',
 		];
 
 		WordPressTestState::$remote_post_responses = [
@@ -130,24 +122,6 @@ final class SettingsTest extends TestCase {
 					]
 				),
 			],
-			[
-				'response' => [
-					'code' => 200,
-				],
-				'body'     => wp_json_encode(
-					[
-						'output' => [
-							[
-								'content' => [
-									[
-										'text' => 'ok',
-									],
-								],
-							],
-						],
-					]
-				),
-			],
 		];
 
 		$this->assertSame(
@@ -156,16 +130,11 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertSame( 'new-key', Settings::sanitize_azure_openai_key( 'new-key' ) );
 		$this->assertSame( 'new-embed', Settings::sanitize_azure_embedding_deployment( 'new-embed' ) );
-		$this->assertSame( 'new-chat', Settings::sanitize_azure_chat_deployment( 'new-chat' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 		$this->assertSame(
 			'https://new.openai.azure.com/openai/v1/embeddings',
 			WordPressTestState::$remote_post_calls[0]['url']
-		);
-		$this->assertSame(
-			'https://new.openai.azure.com/openai/v1/responses',
-			WordPressTestState::$remote_post_calls[1]['url']
 		);
 	}
 
@@ -174,14 +143,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'old-key',
 			'flavor_agent_azure_embedding_deployment' => 'old-embed',
-			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                             => 'flavor_agent_settings',
 			'flavor_agent_azure_openai_endpoint'      => 'https://bad.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'bad-key',
 			'flavor_agent_azure_embedding_deployment' => 'bad-embed',
-			'flavor_agent_azure_chat_deployment'      => 'bad-chat',
 		];
 
 		WordPressTestState::$remote_post_response = [
@@ -203,7 +170,6 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertSame( 'old-key', Settings::sanitize_azure_openai_key( 'bad-key' ) );
 		$this->assertSame( 'old-embed', Settings::sanitize_azure_embedding_deployment( 'bad-embed' ) );
-		$this->assertSame( 'old-chat', Settings::sanitize_azure_chat_deployment( 'bad-chat' ) );
 		$this->assertSame(
 			[
 				[
@@ -229,7 +195,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'old-key',
 			'flavor_agent_azure_embedding_deployment' => 'old-embed',
-			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                             => 'flavor_agent_settings',
@@ -237,7 +202,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://bad.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'bad-key',
 			'flavor_agent_azure_embedding_deployment' => 'bad-embed',
-			'flavor_agent_azure_chat_deployment'      => 'bad-chat',
 		];
 
 		WordPressTestState::$remote_post_response = [
@@ -259,7 +223,6 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertSame( 'old-key', Settings::sanitize_azure_openai_key( 'bad-key' ) );
 		$this->assertSame( 'old-embed', Settings::sanitize_azure_embedding_deployment( 'bad-embed' ) );
-		$this->assertSame( 'old-chat', Settings::sanitize_azure_chat_deployment( 'bad-chat' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 
 		$storage_key = Feedback::get_storage_key( 'azure-error-scope' );
@@ -287,14 +250,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
-			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 		$_POST                       = [
 			'option_page'                             => 'flavor_agent_settings',
 			'flavor_agent_azure_openai_endpoint'      => '',
 			'flavor_agent_azure_openai_key'           => 'azure-key',
 			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
-			'flavor_agent_azure_chat_deployment'      => 'chat-deployment',
 		];
 
 		$this->assertSame( '', Settings::sanitize_azure_openai_endpoint( '' ) );
@@ -302,10 +263,6 @@ final class SettingsTest extends TestCase {
 		$this->assertSame(
 			'embed-deployment',
 			Settings::sanitize_azure_embedding_deployment( 'embed-deployment' )
-		);
-		$this->assertSame(
-			'chat-deployment',
-			Settings::sanitize_azure_chat_deployment( 'chat-deployment' )
 		);
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
@@ -316,14 +273,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 		];
 		$_POST                       = [
 			'option_page'                                => 'flavor_agent_settings',
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => 'native-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 		];
 
 		$this->assertSame( 'openai_native', Settings::sanitize_openai_provider( 'openai_native' ) );
@@ -332,7 +287,6 @@ final class SettingsTest extends TestCase {
 			'text-embedding-3-large',
 			Settings::sanitize_openai_native_embedding_model( 'text-embedding-3-large' )
 		);
-		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
@@ -363,7 +317,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://old.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'old-key',
 			'flavor_agent_azure_embedding_deployment' => 'old-embed',
-			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		WordPressTestState::$connectors                 = [
 			'anthropic' => [
@@ -385,7 +338,6 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => 'https://new.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => 'new-key',
 			'flavor_agent_azure_embedding_deployment' => 'new-embed',
-			'flavor_agent_azure_chat_deployment'      => 'new-chat',
 		];
 
 		WordPressTestState::$remote_post_responses = [
@@ -400,16 +352,6 @@ final class SettingsTest extends TestCase {
 								'embedding' => [ 0.1, 0.2 ],
 							],
 						],
-					]
-				),
-			],
-			[
-				'response' => [
-					'code' => 200,
-				],
-				'body'     => wp_json_encode(
-					[
-						'output_text' => 'ok',
 					]
 				),
 			],
@@ -422,9 +364,8 @@ final class SettingsTest extends TestCase {
 		);
 		$this->assertSame( 'new-key', Settings::sanitize_azure_openai_key( 'new-key' ) );
 		$this->assertSame( 'new-embed', Settings::sanitize_azure_embedding_deployment( 'new-embed' ) );
-		$this->assertSame( 'new-chat', Settings::sanitize_azure_chat_deployment( 'new-chat' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sanitize_openai_native_settings_accept_verified_values_and_validate_once_per_save(): void {
@@ -432,14 +373,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_openai_provider'               => 'azure_openai',
 			'flavor_agent_openai_native_api_key'         => 'old-key',
 			'flavor_agent_openai_native_embedding_model' => 'old-embed',
-			'flavor_agent_openai_native_chat_model'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                                => 'flavor_agent_settings',
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => 'new-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 		];
 
 		WordPressTestState::$remote_post_responses = [
@@ -457,16 +396,6 @@ final class SettingsTest extends TestCase {
 					]
 				),
 			],
-			[
-				'response' => [
-					'code' => 200,
-				],
-				'body'     => wp_json_encode(
-					[
-						'output_text' => 'ok',
-					]
-				),
-			],
 		];
 
 		$this->assertSame( 'openai_native', Settings::sanitize_openai_provider( 'openai_native' ) );
@@ -475,11 +404,9 @@ final class SettingsTest extends TestCase {
 			'text-embedding-3-large',
 			Settings::sanitize_openai_native_embedding_model( 'text-embedding-3-large' )
 		);
-		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 		$this->assertSame( 'https://api.openai.com/v1/embeddings', WordPressTestState::$remote_post_calls[0]['url'] );
-		$this->assertSame( 'https://api.openai.com/v1/responses', WordPressTestState::$remote_post_calls[1]['url'] );
 		$this->assertSame(
 			'Bearer new-key',
 			WordPressTestState::$remote_post_calls[0]['args']['headers']['Authorization'] ?? null
@@ -491,14 +418,12 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => 'old-key',
 			'flavor_agent_openai_native_embedding_model' => 'old-embed',
-			'flavor_agent_openai_native_chat_model'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                                => 'flavor_agent_settings',
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => 'bad-key',
 			'flavor_agent_openai_native_embedding_model' => 'bad-embed',
-			'flavor_agent_openai_native_chat_model'      => 'bad-chat',
 		];
 
 		WordPressTestState::$remote_post_response = [
@@ -517,7 +442,6 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'openai_native', Settings::sanitize_openai_provider( 'openai_native' ) );
 		$this->assertSame( 'old-key', Settings::sanitize_openai_native_api_key( 'bad-key' ) );
 		$this->assertSame( 'old-embed', Settings::sanitize_openai_native_embedding_model( 'bad-embed' ) );
-		$this->assertSame( 'old-chat', Settings::sanitize_openai_native_chat_model( 'bad-chat' ) );
 		$this->assertSame(
 			[
 				[
@@ -544,14 +468,12 @@ final class SettingsTest extends TestCase {
 			'connectors_ai_openai_api_key'               => 'connector-key',
 			'flavor_agent_openai_native_api_key'         => '',
 			'flavor_agent_openai_native_embedding_model' => 'old-embed',
-			'flavor_agent_openai_native_chat_model'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                                => 'flavor_agent_settings',
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'flavor_agent_openai_native_api_key'         => '',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 		];
 
 		WordPressTestState::$remote_post_responses = [
@@ -569,16 +491,6 @@ final class SettingsTest extends TestCase {
 					]
 				),
 			],
-			[
-				'response' => [
-					'code' => 200,
-				],
-				'body'     => wp_json_encode(
-					[
-						'output_text' => 'ok',
-					]
-				),
-			],
 		];
 
 		$this->assertSame( 'openai_native', Settings::sanitize_openai_provider( 'openai_native' ) );
@@ -587,16 +499,11 @@ final class SettingsTest extends TestCase {
 			'text-embedding-3-large',
 			Settings::sanitize_openai_native_embedding_model( 'text-embedding-3-large' )
 		);
-		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 		$this->assertSame(
 			'Bearer connector-key',
 			WordPressTestState::$remote_post_calls[0]['args']['headers']['Authorization'] ?? null
-		);
-		$this->assertSame(
-			'Bearer connector-key',
-			WordPressTestState::$remote_post_calls[1]['args']['headers']['Authorization'] ?? null
 		);
 	}
 
@@ -605,7 +512,6 @@ final class SettingsTest extends TestCase {
 			Provider::OPTION_NAME                        => 'anthropic',
 			'flavor_agent_openai_native_api_key'         => 'old-key',
 			'flavor_agent_openai_native_embedding_model' => 'old-embed',
-			'flavor_agent_openai_native_chat_model'      => 'old-chat',
 		];
 		WordPressTestState::$connectors                 = [
 			'anthropic' => [
@@ -626,7 +532,6 @@ final class SettingsTest extends TestCase {
 			Provider::OPTION_NAME                        => 'anthropic',
 			'flavor_agent_openai_native_api_key'         => 'new-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
-			'flavor_agent_openai_native_chat_model'      => 'gpt-5.4',
 		];
 
 		WordPressTestState::$remote_post_responses = [
@@ -644,16 +549,6 @@ final class SettingsTest extends TestCase {
 					]
 				),
 			],
-			[
-				'response' => [
-					'code' => 200,
-				],
-				'body'     => wp_json_encode(
-					[
-						'output_text' => 'ok',
-					]
-				),
-			],
 		];
 
 		$this->assertSame( 'anthropic', Settings::sanitize_openai_provider( 'anthropic' ) );
@@ -662,9 +557,8 @@ final class SettingsTest extends TestCase {
 			'text-embedding-3-large',
 			Settings::sanitize_openai_native_embedding_model( 'text-embedding-3-large' )
 		);
-		$this->assertSame( 'gpt-5.4', Settings::sanitize_openai_native_chat_model( 'gpt-5.4' ) );
 		$this->assertSame( [], WordPressTestState::$settings_errors );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sanitize_qdrant_settings_skip_remote_validation_when_credentials_are_unchanged(): void {
@@ -1172,7 +1066,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'name="flavor_agent_azure_embedding_deployment"', $output );
 		$this->assertStringContainsString( 'name="flavor_agent_openai_native_embedding_model"', $output );
 		$this->assertStringContainsString( 'Legacy Direct Azure Settings', $output );
-		$this->assertStringContainsString( 'Legacy Direct OpenAI Settings', $output );
+		$this->assertStringContainsString( 'OpenAI Embeddings', $output );
 	}
 
 	public function test_render_text_field_outputs_numeric_constraints(): void {
@@ -1212,7 +1106,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'built-in public developer.wordpress.org endpoint by default', $screen->help_tabs[1]['content'] );
 		$this->assertStringContainsString( 'Cloudflare override fields are only for older installs or explicit custom-endpoint use.', $screen->help_tabs[1]['content'] );
 		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
-		$this->assertStringContainsString( 'Guidelines import fills the form first', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Guidelines import fills the legacy form first', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
 		$this->assertStringContainsString( 'options-connectors.php', $screen->help_sidebar );
 		$this->assertStringContainsString( 'flavor-agent-activity', $screen->help_sidebar );
@@ -1232,7 +1126,7 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString( 'Required', $output );
-		$this->assertStringContainsString( 'Chat uses Settings &gt; Connectors when available; direct Azure and OpenAI Native settings below remain as legacy fallback.', $output );
+		$this->assertStringContainsString( 'Chat is handled by Settings &gt; Connectors; this screen configures embeddings and supporting services.', $output );
 		$this->assertStringContainsString( 'Optional', $output );
 		$this->assertStringContainsString( 'Add vector search for pattern recommendations.', $output );
 		$this->assertStringContainsString( 'Ground responses with developer.wordpress.org docs.', $output );
@@ -1598,27 +1492,22 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_azure_openai_endpoint'      => '',
 			'flavor_agent_azure_openai_key'           => '',
 			'flavor_agent_azure_embedding_deployment' => 'old-embed',
-			'flavor_agent_azure_chat_deployment'      => 'old-chat',
 		];
 		$_POST                       = [
 			'option_page'                             => 'flavor_agent_settings',
 			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'           => '',
 			'flavor_agent_azure_embedding_deployment' => 'first-embed',
-			'flavor_agent_azure_chat_deployment'      => 'first-chat',
 		];
 
 		$first_resolution = Validation::resolve_azure_submission_values();
 
 		$_POST['flavor_agent_azure_embedding_deployment'] = 'second-embed';
-		$_POST['flavor_agent_azure_chat_deployment']      = 'second-chat';
 
 		$second_resolution = Validation::resolve_azure_submission_values();
 
 		$this->assertSame( 'first-embed', $first_resolution['flavor_agent_azure_embedding_deployment'] );
-		$this->assertSame( 'first-chat', $first_resolution['flavor_agent_azure_chat_deployment'] );
 		$this->assertSame( 'second-embed', $second_resolution['flavor_agent_azure_embedding_deployment'] );
-		$this->assertSame( 'second-chat', $second_resolution['flavor_agent_azure_chat_deployment'] );
 	}
 
 	public function test_render_page_keeps_cloudflare_override_controls_available(): void {
@@ -1718,6 +1607,22 @@ final class SettingsTest extends TestCase {
 			'Store plugin-owned guidance that Flavor Agent can rely on without coupling to Gutenberg experiments or another plugin’s data model.',
 			$output
 		);
+	}
+
+	public function test_render_page_marks_guidelines_controls_as_migration_tooling_when_core_storage_exists(): void {
+		WordPressTestState::$registered_post_types['wp_guideline'] = [
+			'show_in_rest' => true,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Core Guidelines storage detected.', $output );
+		$this->assertStringContainsString( 'legacy migration tooling', $output );
+		$this->assertStringContainsString( 'name="flavor_agent_guideline_site"', $output );
+		$this->assertStringContainsString( 'Import JSON', $output );
+		$this->assertStringContainsString( 'Export JSON', $output );
 	}
 
 	public function test_render_page_outputs_parseable_guidelines_block_options_json(): void {
