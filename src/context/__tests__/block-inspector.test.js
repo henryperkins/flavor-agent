@@ -132,12 +132,10 @@ describe( 'resolveInspectorPanels', () => {
 		blockEditorSelectors.getBlockName = jest
 			.fn()
 			.mockReturnValue( 'core/button' );
-		blockEditorSelectors.getBlockAttributes = jest
-			.fn()
-			.mockReturnValue( {
-				className:
-					'wp-block-button has-text-align-center is-style-outline-large',
-			} );
+		blockEditorSelectors.getBlockAttributes = jest.fn().mockReturnValue( {
+			className:
+				'wp-block-button has-text-align-center is-style-outline-large',
+		} );
 		blockEditorSelectors.getBlockEditingMode = jest
 			.fn()
 			.mockReturnValue( 'default' );

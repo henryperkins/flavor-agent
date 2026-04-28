@@ -160,12 +160,7 @@ describe( 'pattern status store contract', () => {
 	test( 'same-token pattern completions with mismatched signatures are ignored', () => {
 		let state = reducer(
 			undefined,
-			actions.setPatternStatus(
-				'loading',
-				null,
-				5,
-				'signature-current'
-			)
+			actions.setPatternStatus( 'loading', null, 5, 'signature-current' )
 		);
 		state = reducer(
 			state,
@@ -183,12 +178,7 @@ describe( 'pattern status store contract', () => {
 		);
 		state = reducer(
 			state,
-			actions.setPatternStatus(
-				'ready',
-				null,
-				5,
-				'signature-current'
-			)
+			actions.setPatternStatus( 'ready', null, 5, 'signature-current' )
 		);
 
 		const staleRecommendationsState = reducer(
