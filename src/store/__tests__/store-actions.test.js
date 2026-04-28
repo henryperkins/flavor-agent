@@ -38,6 +38,7 @@ import {
 	buildBlockRecommendationRequestSignature,
 	buildGlobalStylesRecommendationRequestSignature,
 	buildNavigationRecommendationRequestSignature,
+	buildPatternRecommendationRequestSignature,
 	buildStyleBookRecommendationRequestSignature,
 	buildTemplatePartRecommendationRequestSignature,
 	buildTemplateRecommendationRequestSignature,
@@ -543,6 +544,21 @@ describe( 'store action thunks', () => {
 	test( 'fetchPatternRecommendations aborts the previous request and ignores abort errors', async () => {
 		const previousAbort = jest.fn();
 		actions._patternAbort = { abort: previousAbort };
+		const input = {
+			postType: 'page',
+			prompt: 'Find cleaner pattern options.',
+		};
+		const requestSignature = buildPatternRecommendationRequestSignature( {
+			...input,
+			document: {
+				scopeKey: 'post:42',
+				postType: 'post',
+				entityId: '42',
+				entityKind: '',
+				entityName: '',
+				stylesheet: '',
+			},
+		} );
 		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
 				path === '/flavor-agent/v1/recommend-patterns' &&
@@ -558,10 +574,7 @@ describe( 'store action thunks', () => {
 
 		const dispatch = jest.fn();
 
-		await actions.fetchPatternRecommendations( {
-			postType: 'page',
-			prompt: 'Find cleaner pattern options.',
-		} )( {
+		await actions.fetchPatternRecommendations( input )( {
 			dispatch,
 			registry: {
 				select: jest.fn( ( storeName ) =>
@@ -579,9 +592,100 @@ describe( 'store action thunks', () => {
 		expect( previousAbort ).toHaveBeenCalledTimes( 1 );
 		expect( dispatch ).toHaveBeenCalledTimes( 1 );
 		expect( dispatch ).toHaveBeenCalledWith(
-			actions.setPatternStatus( 'loading' )
+			actions.setPatternStatus( 'loading', null, 1, requestSignature )
 		);
 		expect( actions._patternAbort ).toBeNull();
+	} );
+
+	test( 'fetchPatternRecommendations tags loading and success with request identity', async () => {
+		apiFetch.mockResolvedValue( {
+			recommendations: [
+				{
+					name: 'theme/hero',
+					reason: 'Matches this insertion point.',
+					score: 0.97,
+				},
+			],
+		} );
+
+		const input = {
+			postType: 'page',
+			templateType: 'front-page',
+			visiblePatternNames: [ 'theme/hero', 'theme/cards' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [ 'core/paragraph' ],
+			},
+			prompt: 'hero',
+			blockContext: {
+				blockName: 'core/heading',
+			},
+		};
+		const document = {
+			scopeKey: 'page:42',
+			postType: 'page',
+			entityId: '42',
+			entityKind: '',
+			entityName: '',
+			stylesheet: '',
+		};
+		const requestData = {
+			...input,
+			document,
+		};
+		const requestSignature =
+			buildPatternRecommendationRequestSignature( requestData );
+		const dispatch = jest.fn();
+		const select = {
+			getPatternRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+
+		await actions.fetchPatternRecommendations( input )( {
+			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'page',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
+			select,
+		} );
+
+		expect( select.getPatternRequestToken ).toHaveBeenCalled();
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/flavor-agent/v1/recommend-patterns',
+				method: 'POST',
+				data: requestData,
+			} )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			1,
+			actions.setPatternStatus( 'loading', null, 5, requestSignature )
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			2,
+			actions.setPatternRecommendations(
+				[
+					{
+						name: 'theme/hero',
+						reason: 'Matches this insertion point.',
+						score: 0.97,
+					},
+				],
+				5,
+				requestSignature
+			)
+		);
+		expect( dispatch ).toHaveBeenNthCalledWith(
+			3,
+			actions.setPatternStatus( 'ready', null, 5, requestSignature )
+		);
 	} );
 
 	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {

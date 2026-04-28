@@ -1556,24 +1556,52 @@ const actions = {
 		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_patternAbort',
-				buildRequest: ( { input: requestInput } ) => ( {
-					requestData: {
+				buildRequest: ( {
+					input: requestInput,
+					select: registrySelect,
+				} ) => {
+					const requestData = {
 						...( requestInput || {} ),
 						document: getRequestDocumentFromScope(
 							getCurrentActivityScope( registry )
 						),
-					},
-				} ),
+					};
+					const requestToken =
+						( registrySelect.getPatternRequestToken?.() || 0 ) + 1;
+					const requestSignature =
+						buildPatternRecommendationRequestSignature(
+							requestData
+						);
+
+					return {
+						requestData,
+						requestToken,
+						requestSignature,
+					};
+				},
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-patterns',
 				input,
-				onError: ( { dispatch: localDispatch, err } ) => {
-					localDispatch( actions.setPatternRecommendations( [] ) );
+				onError: ( {
+					dispatch: localDispatch,
+					err,
+					requestSignature,
+					requestToken,
+				} ) => {
+					localDispatch(
+						actions.setPatternRecommendations(
+							[],
+							requestToken,
+							requestSignature
+						)
+					);
 					localDispatch(
 						actions.setPatternStatus(
 							'error',
 							err?.message ||
-								'Pattern recommendation request failed.'
+								'Pattern recommendation request failed.',
+							requestToken,
+							requestSignature
 						)
 					);
 					return reloadStoreActivitySession(
@@ -1582,16 +1610,41 @@ const actions = {
 						select
 					);
 				},
-				onLoading: ( { dispatch: localDispatch } ) => {
-					localDispatch( actions.setPatternStatus( 'loading' ) );
-				},
-				onSuccess: ( { dispatch: localDispatch, result } ) => {
+				onLoading: ( {
+					dispatch: localDispatch,
+					requestSignature,
+					requestToken,
+				} ) => {
 					localDispatch(
-						actions.setPatternRecommendations(
-							result.recommendations || []
+						actions.setPatternStatus(
+							'loading',
+							null,
+							requestToken,
+							requestSignature
 						)
 					);
-					localDispatch( actions.setPatternStatus( 'ready' ) );
+				},
+				onSuccess: ( {
+					dispatch: localDispatch,
+					requestSignature,
+					requestToken,
+					result,
+				} ) => {
+					localDispatch(
+						actions.setPatternRecommendations(
+							result.recommendations || [],
+							requestToken,
+							requestSignature
+						)
+					);
+					localDispatch(
+						actions.setPatternStatus(
+							'ready',
+							null,
+							requestToken,
+							requestSignature
+						)
+					);
 					return reloadStoreActivitySession(
 						localDispatch,
 						registry,
