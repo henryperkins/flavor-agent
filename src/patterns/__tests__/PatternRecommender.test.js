@@ -652,8 +652,8 @@ describe( 'PatternRecommender', () => {
 			removeEventListener: jest.fn(),
 		};
 		const observerInstances = [];
+		const observerCallbacks = [];
 		let currentContainer = firstContainer;
-		let triggerObserver = null;
 
 		firstContainer.className = 'block-editor-inserter__panel-content';
 		secondContainer.className = 'block-editor-inserter__panel-content';
@@ -680,7 +680,7 @@ describe( 'PatternRecommender', () => {
 				this.observe = jest.fn();
 				this.disconnect = jest.fn();
 				observerInstances.push( this );
-				triggerObserver = callback;
+				observerCallbacks.push( callback );
 			}
 		};
 
@@ -691,14 +691,14 @@ describe( 'PatternRecommender', () => {
 				'.flavor-agent-pattern-inserter-slot'
 			)
 		).not.toBeNull();
-		expect( observerInstances ).toHaveLength( 1 );
+		expect( observerInstances ).toHaveLength( 2 );
 
 		firstContainer.remove();
 		document.body.appendChild( secondContainer );
 		currentContainer = secondContainer;
 
 		act( () => {
-			triggerObserver( [] );
+			observerCallbacks.forEach( ( callback ) => callback( [] ) );
 		} );
 
 		expect(
@@ -707,12 +707,15 @@ describe( 'PatternRecommender', () => {
 			)
 		).not.toBeNull();
 		expect( observerInstances[ 0 ].disconnect ).not.toHaveBeenCalled();
+		expect( observerInstances[ 1 ].disconnect ).not.toHaveBeenCalled();
 
 		act( () => {
 			getRoot().unmount();
 		} );
 
-		expect( observerInstances[ 0 ].disconnect ).toHaveBeenCalled();
+		observerInstances.forEach( ( observer ) => {
+			expect( observer.disconnect ).toHaveBeenCalled();
+		} );
 		secondContainer.remove();
 	} );
 
@@ -764,6 +767,84 @@ describe( 'PatternRecommender', () => {
 				nearbySiblings: [],
 			},
 			prompt: 'hero',
+			blockContext: {
+				blockName: 'core/heading',
+			},
+		} );
+	} );
+
+	test( 'reattaches the inserter search listener when Gutenberg replaces the input', () => {
+		const firstSearchInput = {
+			addEventListener: jest.fn(),
+			removeEventListener: jest.fn(),
+		};
+		const secondSearchInput = {
+			addEventListener: jest.fn(),
+			removeEventListener: jest.fn(),
+		};
+		const observerCallbacks = [];
+		let currentSearchInput = firstSearchInput;
+		let secondInputListener = null;
+
+		state.blockEditor.selectedBlockClientId = 'block-1';
+		state.blockEditor.selectedBlockName = 'core/heading';
+		mockFindInserterSearchInput.mockImplementation(
+			() => currentSearchInput
+		);
+		secondSearchInput.addEventListener.mockImplementation(
+			( event, listener ) => {
+				if ( event === 'input' ) {
+					secondInputListener = listener;
+				}
+			}
+		);
+		window.MutationObserver = class MockMutationObserver {
+			constructor( callback ) {
+				this.observe = jest.fn();
+				this.disconnect = jest.fn();
+				observerCallbacks.push( callback );
+			}
+		};
+
+		renderComponent();
+
+		expect( firstSearchInput.addEventListener ).toHaveBeenCalledWith(
+			'input',
+			expect.any( Function )
+		);
+
+		currentSearchInput = secondSearchInput;
+		act( () => {
+			observerCallbacks.forEach( ( callback ) => callback( [] ) );
+		} );
+
+		expect( firstSearchInput.removeEventListener ).toHaveBeenCalledWith(
+			'input',
+			firstSearchInput.addEventListener.mock.calls[ 0 ][ 1 ]
+		);
+		expect( secondSearchInput.addEventListener ).toHaveBeenCalledWith(
+			'input',
+			expect.any( Function )
+		);
+
+		act( () => {
+			secondInputListener( {
+				target: {
+					value: 'gallery',
+				},
+			} );
+			jest.advanceTimersByTime( 400 );
+		} );
+
+		expect( mockFetchPatternRecommendations ).toHaveBeenLastCalledWith( {
+			postType: 'page',
+			visiblePatternNames: [ 'theme/hero' ],
+			insertionContext: {
+				rootBlock: 'core/group',
+				ancestors: [ 'core/group' ],
+				nearbySiblings: [],
+			},
+			prompt: 'gallery',
 			blockContext: {
 				blockName: 'core/heading',
 			},

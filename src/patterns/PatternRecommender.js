@@ -44,7 +44,6 @@ import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
 
 const SEARCH_DEBOUNCE_MS = 400;
-const OBSERVER_TIMEOUT_MS = 3000;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
 
 function getNonEmptyString( value ) {
@@ -589,14 +588,7 @@ export default function PatternRecommender() {
 	);
 
 	useEffect( () => {
-		let searchObserverTimeout;
-
 		const cleanupBindings = () => {
-			if ( searchObserverTimeout ) {
-				clearTimeout( searchObserverTimeout );
-				searchObserverTimeout = null;
-			}
-
 			clearSearchDebounce();
 
 			if ( observerRef.current ) {
@@ -619,6 +611,10 @@ export default function PatternRecommender() {
 		}
 
 		function attachToSearch( searchInput ) {
+			if ( listenerRef.current?.el === searchInput ) {
+				return;
+			}
+
 			if ( listenerRef.current ) {
 				listenerRef.current.el.removeEventListener(
 					'input',
@@ -632,18 +628,7 @@ export default function PatternRecommender() {
 			listenerRef.current = { el: searchInput, fn };
 		}
 
-		const existing = findInserterSearchInput( document );
-
-		if ( existing ) {
-			attachToSearch( existing );
-			return cleanupBindings;
-		}
-
-		if ( ! window.MutationObserver ) {
-			return cleanupBindings;
-		}
-
-		const observer = new window.MutationObserver( () => {
+		function syncSearchInput() {
 			const input = findInserterSearchInput( document );
 
 			if ( ! input ) {
@@ -651,8 +636,16 @@ export default function PatternRecommender() {
 			}
 
 			attachToSearch( input );
-			observer.disconnect();
-			observerRef.current = null;
+		}
+
+		syncSearchInput();
+
+		if ( ! window.MutationObserver ) {
+			return cleanupBindings;
+		}
+
+		const observer = new window.MutationObserver( () => {
+			syncSearchInput();
 		} );
 
 		observer.observe( document.body, {
@@ -660,12 +653,6 @@ export default function PatternRecommender() {
 			subtree: true,
 		} );
 		observerRef.current = observer;
-		searchObserverTimeout = setTimeout( () => {
-			if ( observerRef.current ) {
-				observerRef.current.disconnect();
-				observerRef.current = null;
-			}
-		}, OBSERVER_TIMEOUT_MS );
 
 		return () => {
 			cleanupBindings();
