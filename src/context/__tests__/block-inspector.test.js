@@ -15,6 +15,7 @@ jest.mock( '@wordpress/block-editor', () => ( {
 
 const { select } = require( '@wordpress/data' );
 const {
+	introspectBlockInstance,
 	introspectBlockType,
 	resolveInspectorPanels,
 } = require( '../block-inspector' );
@@ -104,6 +105,48 @@ describe( 'resolveInspectorPanels', () => {
 
 		expect( manifest.bindableAttributes ).toEqual( [ 'content' ] );
 		expect( manifest.inspectorPanels.bindings ).toEqual( [ 'content' ] );
+	} );
+
+	test( 'matches active block styles by complete class token', () => {
+		blocksSelectors.getBlockType.mockReturnValue( {
+			title: 'Button',
+			category: 'design',
+			description: 'Button block',
+			supports: {},
+			attributes: {
+				className: {
+					type: 'string',
+				},
+			},
+		} );
+		blocksSelectors.getBlockStyles.mockReturnValue( [
+			{
+				name: 'outline',
+				label: 'Outline',
+			},
+			{
+				name: 'outline-large',
+				label: 'Outline Large',
+			},
+		] );
+		blockEditorSelectors.getBlockName = jest
+			.fn()
+			.mockReturnValue( 'core/button' );
+		blockEditorSelectors.getBlockAttributes = jest
+			.fn()
+			.mockReturnValue( {
+				className:
+					'wp-block-button has-text-align-center is-style-outline-large',
+			} );
+		blockEditorSelectors.getBlockEditingMode = jest
+			.fn()
+			.mockReturnValue( 'default' );
+		blockEditorSelectors.getBlockParents = jest.fn().mockReturnValue( [] );
+		blockEditorSelectors.getBlockCount = jest.fn().mockReturnValue( 0 );
+
+		const manifest = introspectBlockInstance( 'button-1' );
+
+		expect( manifest.activeStyle ).toBe( 'outline-large' );
 	} );
 
 	test( 'adds a general panel for meaningful config attributes when no mapped supports exist', () => {

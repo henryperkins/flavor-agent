@@ -293,15 +293,27 @@ export function introspectBlockInstance( clientId ) {
 	};
 }
 
-function extractActiveStyle( className, registeredStyles ) {
+function extractActiveStyle( className, registeredStyles = [] ) {
 	if ( ! className ) {
 		return null;
 	}
+
+	const classTokens = new Set(
+		String( className )
+			.split( /\s+/ )
+			.map( ( token ) => token.trim() )
+			.filter( Boolean )
+	);
+
 	for ( const style of registeredStyles ) {
-		if ( className.includes( `is-style-${ style.name }` ) ) {
-			return style.name;
+		const styleName =
+			typeof style?.name === 'string' ? style.name.trim() : '';
+
+		if ( styleName && classTokens.has( `is-style-${ styleName }` ) ) {
+			return styleName;
 		}
 	}
+
 	return null;
 }
 
