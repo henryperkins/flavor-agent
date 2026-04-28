@@ -119,8 +119,6 @@ Treat the gates there as additive release stops:
 | `inspector/InspectorInjector.js`            | `editor.BlockEdit` HOC — injects AI panels into all blocks                                                                    |
 | `inspector/BlockRecommendationsPanel.js`    | Main block prompt composer, grouped lanes, inline apply feedback, and recent-activity shell                                   |
 | `inspector/NavigationRecommendations.js`    | Embedded advisory panel for selected `core/navigation` blocks                                                                 |
-| `inspector/SettingsRecommendations.js`      | Settings tab suggestions                                                                                                      |
-| `inspector/StylesRecommendations.js`        | Appearance tab suggestions + style variation pills                                                                            |
 | `inspector/SuggestionChips.js`              | Reusable chip component for sub-panel suggestions                                                                             |
 | `inspector/block-recommendation-request.js` | Block request signature builder and freshness derivation used by the main panel and projections                               |
 | `inspector/group-by-panel.js`               | Panel-grouping utility for Inspector suggestions                                                                              |

@@ -1,15 +1,17 @@
 {
 	"mcpServers": {
 		"playwright": {
-			"command": "cmd",
-			"args": [ "/c", "npx", "-y", "@playwright/mcp" ],
+			"command": "npx",
+			"args": [ "-y", "@playwright/mcp" ],
 			"type": "stdio"
 		},
 		"wpds": {
-			"command": "node",
+			"command": "npx",
 			"args": [
-				"C:\\Users\\htper\\AppData\\Local\\codex-mcp\\wpds-mcp\\server.ts",
-				"--stdio"
+				"-y",
+				"--ignore-scripts",
+				"--min-release-age=2",
+				"@wordpress/design-system-mcp@latest"
 			],
 			"type": "stdio"
 		}

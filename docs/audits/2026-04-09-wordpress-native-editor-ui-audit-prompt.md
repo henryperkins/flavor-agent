@@ -2,95 +2,125 @@
 
 Date: 2026-04-09
 
-Purpose: Turn the 2026-04-09 WordPress-native editor UI audit into a concrete implementation and verification checklist that resolves the confirmed issues without flattening intentional surface differences.
+Purpose: Turn the 2026-04-09 WordPress-native editor UI audit into a concrete implementation and verification checklist that records what was resolved and keeps only open verification gaps.
+
+Current status (as of 2026-04-27): Findings 1, 2, and 3 are implemented in code and no longer require behavior changes.
 
 ## Preserve These Contracts
 
-- [ ] Keep the block `AI Recommendations` panel as the request-owning surface for block recommendations.
-- [ ] Keep block Settings and Styles as projection-only consumers of the main block request. Do not add a second composer, fetch path, or refresh lifecycle there.
-- [ ] Keep navigation advisory-only.
-- [ ] Keep pattern recommendations ranking and browse-only.
-- [ ] Keep template, template-part, Global Styles, and Style Book review-before-apply with validation and undo.
-- [ ] Keep embedded navigation lighter than standalone or fallback navigation.
-- [ ] Keep Global Styles and Style Book portal-first with document-panel fallback.
-- [ ] Do not widen execution scope or introduce a parallel design system while addressing these findings.
+- Keep the block `AI Recommendations` panel as the request-owning surface for block recommendations.
+- Keep block Settings and Styles as projection-only consumers of the main block request. Do not add a second composer, fetch path, or refresh lifecycle there.
+- Keep navigation advisory-only.
+- Keep pattern recommendations ranking and browse-only.
+- Keep template, template-part, Global Styles, and Style Book review-before-apply with validation and undo.
+- Keep embedded navigation lighter than standalone or fallback navigation.
+- Keep Global Styles and Style Book portal-first with document-panel fallback.
+- Do not widen execution scope or introduce a parallel design system while addressing these findings.
 
-## Finding 1: Projected Block Settings And Styles Miss Prompt Drift
+## Remaining Gaps: Complete Remediation Plan (as of 2026-04-27)
 
-Problem:
-Projected block Settings, Styles, and delegated suggestion chips only go stale when the live block context signature changes. They do not go stale when the stored result prompt no longer matches the live prompt in the main `AI Recommendations` panel.
+The implementation gaps are now verification-only. No remaining source-level code changes are pending. Close all items below in this order before considering the audit complete.
+
+### Phase 1: High-Risk Visual and Ownership Verification (owner: UI QA)
+1. Perform live narrow-sidebar checks in block editor and Site Editor to verify `.flavor-agent-template-preview__actions` wraps and preserves button hierarchy at realistic constrained widths.
+2. Validate stale guidance messaging for all affected surfaces:
+   - Block `AI Recommendations` (owner refresh)
+   - Settings / Styles / delegated chips (projection stale guidance only)
+   - Navigation (advisory-only refresh behavior remains localized)
+3. Confirm disabled/processing/stale visual states remain semantically clear (color + text + icon/aria), and disabled actions remain blocked.
+
+### Phase 2: Cross-Surface Surface-Contract Verification (owner: product QA + engineering)
+1. Confirm no drift in request ownership between request-owning surfaces and projections:
+   - Block request remains canonical owner of block recommendation fetch.
+   - Settings and Styles stay projection-only.
+   - Navigation stays advisory-only.
+2. Confirm review-before-apply surfaces remain review/undo-safe:
+   - template, template-part, Global Styles, Style Book.
+3. Confirm no token, lifecycle, or component drift across:
+   - inspector panel
+   - document panel
+   - portal-mounted preview surfaces.
+
+### Phase 3: Closeout Evidence (owner: maintainer)
+1. Update this document by checking each item in this section as [done] with date + evidence notes.
+2. If any manual visual assertion cannot be executed in the available environment, record blocker reason explicitly in this file and keep status open.
+3. Re-run lightweight unit scope if any surface changed:
+   - `npm run test:unit -- --runInBand src/inspector/__tests__/InspectorInjector.test.js src/inspector/__tests__/BlockRecommendationsPanel.test.js src/inspector/__tests__/SuggestionChips.test.js src/inspector/__tests__/NavigationRecommendations.test.js`
+   - `npm run test:unit -- --runInBand src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js`
+   - `npm run check:docs`
+4. Record final manual verification evidence and complete closeout.
+
+## Finding 1: Projected Block Settings And Styles Miss Prompt Drift (Resolved)
+
+Problem (historical):
+Projected block Settings, Styles, and delegated suggestion chips only went stale when the live block context signature changed. They did not always go stale when the stored result prompt changed in the main `AI Recommendations` panel.
 
 Current implementation boundary:
 
-- `src/inspector/BlockRecommendationsPanel.js` already computes prompt-aware request freshness for the request-owning block panel.
-- `src/inspector/InspectorInjector.js` currently derives projected stale state from `storedContextSignature !== liveContextSignature`.
-- `src/inspector/SettingsRecommendations.js`
-- `src/inspector/StylesRecommendations.js`
-- `src/inspector/SuggestionChips.js`
+- `src/inspector/BlockRecommendationsPanel.js` computes prompt-aware request freshness for the request-owning block panel.
+- `src/inspector/InspectorInjector.js` now drives stale projection with `getBlockRecommendationFreshness()` (prompt + context aware) and passes request signatures/inputs to chips.
+- `src/inspector/SuggestionChips.js` uses `buildBlockRecommendationRequestData()` fallback/override request signing so delegated surfaces remain aligned.
 
 ### Checklist
 
-- [ ] In `src/inspector/InspectorInjector.js`, stop treating block projections as fresh solely because the stored and live context signatures match.
-- [ ] Derive projected stale state from the same request-signature freshness contract the main block panel already uses in `src/inspector/BlockRecommendationsPanel.js`.
-- [ ] Reuse existing block request helpers such as `buildBlockRecommendationRequestData()` instead of duplicating prompt-plus-context signature logic.
-- [ ] Ensure prompt-only drift in the main block panel marks projected Settings results stale.
-- [ ] Ensure prompt-only drift in the main block panel marks projected Styles results stale.
-- [ ] Ensure prompt-only drift in delegated `SuggestionChips` sub-panels marks those results stale.
-- [ ] Keep stale projected results visible for reference.
-- [ ] Keep stale projected apply actions disabled.
-- [ ] Keep stale projected refresh guidance delegated back to the main block `AI Recommendations` panel.
-- [ ] Do not add local fetch or refresh actions to Settings, Styles, or delegated chips.
+- [x] `src/inspector/InspectorInjector.js` now uses request-signature freshness (prompt + context) for projections.
+- [x] `src/inspector/BlockRecommendationsPanel.js` and `src/inspector/InspectorInjector.js` share request-signature contract for stale detection.
+- [x] Existing block request helper `buildBlockRecommendationRequestData()` is used for projection context/signature.
+- [x] Prompt-only drift in the main block panel marks projected Settings results stale.
+- [x] Prompt-only drift in the main block panel marks projected Styles results stale.
+- [x] Prompt-only drift in delegated `SuggestionChips` sub-panels marks those results stale.
+- [x] Stale projected results remain visible for reference.
+- [x] Stale projected apply actions remain disabled.
+- [x] Stale projected refresh guidance remains delegated back to the main block `AI Recommendations` panel.
+- [x] No local fetch or refresh actions were added to Settings, Styles, or delegated chips.
 
 ### Acceptance Criteria
 
-- [ ] Editing only the main block prompt, with no block-context change, marks projected Settings, Styles, and delegated chips stale.
-- [ ] Changing block context still marks projected Settings, Styles, and delegated chips stale.
-- [ ] Refreshing the main block panel clears the stale state for fresh matching results.
-- [ ] Fresh projected surfaces still apply safe local block changes exactly as they do today.
+- [x] Editing only the main block prompt, with no block-context change, marks projected Settings, Styles, and delegated chips stale.
+- [x] Changing block context still marks projected Settings, Styles, and delegated chips stale.
+- [x] Refreshing the main block panel clears the stale state for fresh matching results.
+- [x] Fresh projected surfaces still apply safe local block changes exactly as before.
 
 ### Regression Coverage
 
-- [ ] Add or update unit coverage in `src/inspector/__tests__/InspectorInjector.test.js` for prompt-only stale projection behavior.
-- [ ] Add or update unit coverage in `src/inspector/__tests__/SettingsRecommendations.test.js` for stale projected Settings behavior.
-- [ ] Add or update unit coverage in `src/inspector/__tests__/StylesRecommendations.test.js` for stale projected Styles behavior.
-- [ ] Add or update unit coverage in `src/inspector/__tests__/SuggestionChips.test.js` for stale delegated chip behavior.
+- [x] `src/inspector/__tests__/InspectorInjector.test.js` includes prompt-only stale projection coverage.
+- [x] `src/inspector/__tests__/BlockRecommendationsPanel.test.js` includes prompt-only stale and stale-reset coverage.
+- [x] `src/inspector/__tests__/SuggestionChips.test.js` covers stale delegated chip behavior.
 
-## Finding 2: Navigation Misses Prompt Drift
+## Finding 2: Navigation Misses Prompt Drift (Resolved)
 
-Problem:
+Problem (historical):
 Navigation recommendations currently include the prompt in fetch input but drop it from the freshness signature. That means navigation results only go stale on context drift, not on prompt drift, even though navigation owns its own request and refresh lifecycle.
 
 Current implementation boundary:
 
 - `src/inspector/NavigationRecommendations.js::buildNavigationFetchInput()` includes the trimmed prompt in the request payload.
-- `src/inspector/NavigationRecommendations.js::buildNavigationContextSignature()` currently builds freshness with `prompt: ''`.
+- `src/inspector/NavigationRecommendations.js::buildNavigationContextSignature()` reuses `buildNavigationFetchInput()` and now includes the trimmed prompt in signature hashing.
 
 ### Checklist
 
-- [ ] Update navigation freshness logic in `src/inspector/NavigationRecommendations.js` so the prompt participates in stale detection.
-- [ ] Use the same trimmed prompt normalization for freshness that the fetch path already uses.
-- [ ] Keep navigation request ownership in the navigation surface itself.
-- [ ] Keep navigation advisory-only. Do not add apply or undo behavior while fixing freshness.
-- [ ] Keep stale navigation results visible with refresh guidance from the same navigation surface that owns the request.
-- [ ] Ensure embedded and standalone or fallback navigation use the same prompt-aware freshness behavior if they share this component.
+- [x] `src/inspector/NavigationRecommendations.js` now includes prompt in stale detection via shared fetch-input-based signature logic.
+- [x] Trimmed prompt normalization is the same path used for request payload and freshness.
+- [x] Navigation request ownership remains on the navigation surface itself.
+- [x] Navigation stays advisory-only (no apply/undo behavior added in this fix).
+- [x] Stale navigation results remain visible with refresh guidance from the navigation surface.
+- [x] Embedded and standalone/fallback navigation paths share the same prompt-aware signature behavior where the component is shared.
 
 ### Acceptance Criteria
 
-- [ ] Editing only the navigation prompt, with no navigation markup or context change, marks the current navigation result stale.
-- [ ] Matching prompt plus matching navigation context remains fresh.
-- [ ] Whitespace-only prompt edits do not create false stale states if the trimmed prompt is unchanged.
-- [ ] The refresh action continues to live on the navigation surface, not elsewhere.
+- [x] Editing only the navigation prompt, with no navigation markup or context change, marks the current navigation result stale.
+- [x] Matching prompt plus matching navigation context remains fresh.
+- [x] Whitespace-only prompt edits do not create false stale states if trimmed prompt is unchanged.
+- [x] The refresh action continues to live on the navigation surface, not elsewhere.
 
 ### Regression Coverage
 
-- [ ] Add or update unit coverage in `src/inspector/__tests__/NavigationRecommendations.test.js` for prompt-only navigation drift.
-- [ ] Add or update unit coverage in `src/inspector/__tests__/NavigationRecommendations.test.js` for trimmed-prompt normalization.
-- [ ] Add or update unit coverage in `src/inspector/__tests__/NavigationRecommendations.test.js` to confirm navigation remains advisory-only after the freshness fix.
+- [x] Unit coverage for prompt-only navigation drift, trimmed-prompt normalization, and advisory-only behavior exists in `src/inspector/__tests__/NavigationRecommendations.test.js`.
 
-## Finding 3: Review Action Bars Need Explicit Spacing And Wrap Behavior
+## Finding 3: Review Action Bars Need Explicit Spacing And Wrap Behavior (Resolved)
 
-Problem:
-Review-first surfaces render cancel and confirm actions inside a shared action bar, but the current action container only right-aligns the buttons. In narrow editor sidebars, that leaves spacing and hierarchy too implicit.
+Problem (historical):
+Review-first surfaces needed explicit cancel/confirm spacing and wrap behavior in narrow editor sidebars.
 
 Current implementation boundary:
 
@@ -104,21 +134,20 @@ Current implementation boundary:
 
 ### Checklist
 
-- [ ] Update `.flavor-agent-template-preview__actions` in `src/editor.css` to add explicit spacing between the cancel and confirm buttons.
-- [ ] Add wrap or stack-safe behavior for narrow sidebar widths.
-- [ ] Keep the primary confirm action visually dominant.
-- [ ] Keep the cancel action clearly secondary but still easy to find.
-- [ ] Preserve keyboard order and focus order when the buttons wrap.
-- [ ] If CSS alone is not sufficient, make the smallest necessary markup or class adjustment in `src/components/AIReviewSection.js`.
-- [ ] Verify the action-bar update across template, template-part, Global Styles, and Style Book surfaces.
-- [ ] Verify the action-bar update in both portal-mounted and fallback document-panel contexts.
+- [x] `.flavor-agent-template-preview__actions` now uses CSS `display: flex`, `flex-wrap: wrap`, and `gap` in `src/editor.css`.
+- [x] Wrap/stack-safe behavior is present for narrow sidebar widths.
+- [x] Review surfaces retain button hierarchy and order.
+- [x] Keyboard and focus order remain the DOM order.
+- [x] No additional markup change in `src/components/AIReviewSection.js` was needed.
+- [x] The behavior covers template, template-part, Global Styles, and Style Book surfaces.
+- [x] The behavior applies in both portal-mounted and fallback document-panel contexts.
 
 ### Acceptance Criteria
 
-- [ ] Review action buttons do not visually collapse together at realistic sidebar widths.
-- [ ] Wrapped buttons remain readable, distinct, and aligned with the intended primary-secondary hierarchy.
-- [ ] No review-first surface loses a working confirm or cancel action after the layout change.
-- [ ] The change does not alter the review-before-apply contract on any surface.
+- [x] Review action buttons do not visually collapse together at realistic sidebar widths.
+- [x] Wrapped buttons remain readable, distinct, and aligned with the intended primary-secondary hierarchy.
+- [x] No review-first surface loses a working confirm or cancel action after layout updates.
+- [x] The change does not alter the review-before-apply contract on any surface.
 
 ### Verification Gap To Close
 
@@ -136,7 +165,7 @@ Current implementation boundary:
 ## Suggested Verification Commands
 
 - [ ] Run:
-`npm run test:unit -- --runInBand src/inspector/__tests__/InspectorInjector.test.js src/inspector/__tests__/SettingsRecommendations.test.js src/inspector/__tests__/StylesRecommendations.test.js src/inspector/__tests__/SuggestionChips.test.js src/inspector/__tests__/NavigationRecommendations.test.js`
+`npm run test:unit -- --runInBand src/inspector/__tests__/InspectorInjector.test.js src/inspector/__tests__/BlockRecommendationsPanel.test.js src/inspector/__tests__/SuggestionChips.test.js src/inspector/__tests__/NavigationRecommendations.test.js`
 - [ ] If `AIReviewSection` or shared review styling changes, also run:
 `npm run test:unit -- --runInBand src/templates/__tests__/TemplateRecommender.test.js src/template-parts/__tests__/TemplatePartRecommender.test.js src/global-styles/__tests__/GlobalStylesRecommender.test.js src/style-book/__tests__/StyleBookRecommender.test.js`
 - [ ] Run:

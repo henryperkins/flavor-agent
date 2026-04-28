@@ -31,6 +31,7 @@ register_activation_hook(
 		FlavorAgent\Activity\Repository::ensure_prune_schedule();
 		FlavorAgent\Patterns\PatternIndex::activate();
 		FlavorAgent\Cloudflare\AISearchClient::schedule_prewarm();
+		FlavorAgent\Support\CoreRoadmapGuidance::schedule_warm();
 	}
 );
 register_deactivation_hook(
@@ -41,6 +42,7 @@ register_deactivation_hook(
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::PREWARM_CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK );
+		wp_clear_scheduled_hook( FlavorAgent\Support\CoreRoadmapGuidance::WARM_CRON_HOOK );
 	}
 );
 
@@ -48,6 +50,18 @@ add_action( 'enqueue_block_editor_assets', 'flavor_agent_enqueue_editor' );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'ensure_prune_schedule' ], 6 );
 add_action( 'init', [ FlavorAgent\Cloudflare\AISearchClient::class, 'schedule_prewarm' ], 7 );
+// Roadmap warm only needs to be scheduled in admin/REST/cron contexts;
+// front-end page loads don't consume this guidance. Function/constant
+// guards keep this safe to load from test bootstraps that don't define
+// the WP context helpers.
+if (
+	( function_exists( 'is_admin' ) && is_admin() )
+	|| ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() )
+	|| ( defined( 'REST_REQUEST' ) && REST_REQUEST )
+	|| ( defined( 'WP_CLI' ) && WP_CLI )
+) {
+	add_action( 'init', [ FlavorAgent\Support\CoreRoadmapGuidance::class, 'schedule_warm' ], 8, 0 );
+}
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'admin_enqueue_scripts', [ FlavorAgent\Admin\ActivityPage::class, 'maybe_enqueue_assets' ] );
 add_action( 'admin_enqueue_scripts', [ FlavorAgent\Settings::class, 'maybe_enqueue_admin_assets' ] );
@@ -102,6 +116,12 @@ add_action(
 add_action(
 	FlavorAgent\Cloudflare\AISearchClient::CONTEXT_WARM_CRON_HOOK,
 	[ FlavorAgent\Cloudflare\AISearchClient::class, 'process_context_warm_queue' ]
+);
+add_action(
+	FlavorAgent\Support\CoreRoadmapGuidance::WARM_CRON_HOOK,
+	[ FlavorAgent\Support\CoreRoadmapGuidance::class, 'warm' ],
+	10,
+	0
 );
 add_action(
 	FlavorAgent\Activity\Repository::PRUNE_CRON_HOOK,

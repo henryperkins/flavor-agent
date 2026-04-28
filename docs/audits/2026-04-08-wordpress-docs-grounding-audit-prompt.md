@@ -115,8 +115,8 @@ Reference docs to verify against:
 - `docs/features/template-recommendations.md`
 - `docs/features/template-part-recommendations.md`
 - `docs/features/style-and-theme-intelligence.md`
-- `docs/2026-04-08-recommendation-context-pipeline-review.md`
-- `context-retrieval-and-prompt-pipeline-prompt.md`
+- `docs/features/content-recommendations.md`
+- `docs/reference/recommendation-ui-consistency.md`
 
 Useful contract tests:
 - `tests/phpunit/DocsGroundingEntityCacheTest.php`

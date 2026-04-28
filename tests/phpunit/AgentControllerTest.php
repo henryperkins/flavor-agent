@@ -2134,6 +2134,51 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_get_activity_grouped_by_surface_keeps_executable_history_when_diagnostics_are_newer(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-template' ) );
+
+		for ( $index = 1; $index <= 25; ++$index ) {
+			$pattern_entry               = $this->build_activity_entry( 'activity-pattern-' . $index );
+			$pattern_entry['type']       = 'request_diagnostic';
+			$pattern_entry['surface']    = 'pattern';
+			$pattern_entry['target']     = [
+				'requestRef' => 'pattern:' . $index,
+			];
+			$pattern_entry['suggestion'] = 'Pattern diagnostic ' . $index;
+			$pattern_entry['timestamp']  = sprintf( '2026-03-24T10:%02d:00Z', $index );
+			$pattern_entry['undo']       = [
+				'canUndo' => false,
+				'status'  => 'review',
+			];
+
+			ActivityRepository::create( $pattern_entry );
+		}
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'scopeKey', 'wp_template:theme//home' );
+		$request->set_param( 'groupBySurface', true );
+		$request->set_param( 'surfaceLimit', 20 );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+		$entries  = $response instanceof \WP_REST_Response
+			? ( $response->get_data()['entries'] ?? [] )
+			: [];
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertContains( 'activity-template', array_column( $entries, 'id' ) );
+		$this->assertCount(
+			20,
+			array_filter(
+				$entries,
+				static fn( array $entry ): bool => 'pattern' === ( $entry['surface'] ?? '' )
+			)
+		);
+		$this->assertNotContains( 'activity-pattern-1', array_column( $entries, 'id' ) );
+	}
+
 	public function test_handle_get_activity_supports_global_admin_queries(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['manage_options'] = true;

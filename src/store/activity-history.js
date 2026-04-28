@@ -3,8 +3,16 @@ import { resolveActivityBlock } from './block-targeting';
 import { attributeSnapshotsMatch } from './update-helpers';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
-const ACTIVITY_STORAGE_VERSION = 3;
-const MAX_ACTIVITY_HISTORY = 20;
+// v4: per-surface bucketing (was a single 20-entry cap across all surfaces).
+// Bumped so any legacy v3 cache that wrote with the old aggregate semantics
+// is re-evaluated through the new bucketed limiter on read.
+const ACTIVITY_STORAGE_VERSION = 4;
+const MAX_ACTIVITY_HISTORY_PER_SURFACE = 20;
+// Aggregate cap across surfaces per scope. Each per-surface bucket holds up
+// to MAX_ACTIVITY_HISTORY_PER_SURFACE entries; this guard prevents
+// sessionStorage growth (8 surfaces × 20 = 160 entries × N scopes) from
+// exceeding browser quotas in long-running sessions.
+const MAX_ACTIVITY_HISTORY_PER_SCOPE = 80;
 const LEGACY_TEMPLATE_UNDO_ERROR =
 	'This template action was recorded before refresh-safe undo support and cannot be undone automatically.';
 
@@ -376,7 +384,28 @@ export function sortActivityEntries( entries = [] ) {
 }
 
 export function limitActivityLog( entries = [] ) {
-	return sortActivityEntries( entries ).slice( -MAX_ACTIVITY_HISTORY );
+	const entriesBySurface = new Map();
+
+	sortActivityEntries( entries ).forEach( ( entry ) => {
+		const surfaceKey = String( entry?.surface || '' );
+		const surfaceEntries = entriesBySurface.get( surfaceKey ) || [];
+
+		surfaceEntries.push( entry );
+		entriesBySurface.set(
+			surfaceKey,
+			surfaceEntries.slice( -MAX_ACTIVITY_HISTORY_PER_SURFACE )
+		);
+	} );
+
+	const bucketed = sortActivityEntries(
+		[ ...entriesBySurface.values() ].flat()
+	);
+
+	if ( bucketed.length <= MAX_ACTIVITY_HISTORY_PER_SCOPE ) {
+		return bucketed;
+	}
+
+	return bucketed.slice( -MAX_ACTIVITY_HISTORY_PER_SCOPE );
 }
 
 export function getCurrentActivityScope( registry ) {

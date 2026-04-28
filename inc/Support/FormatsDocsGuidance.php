@@ -16,6 +16,10 @@ trait FormatsDocsGuidance {
 			$prefix = sanitize_text_field( (string) ( $guidance['sourceKey'] ?? '' ) );
 		}
 
+		if ( 'core-roadmap' === sanitize_key( (string) ( $guidance['sourceType'] ?? '' ) ) ) {
+			$prefix = '' !== $prefix ? 'Core roadmap - ' . $prefix : 'Core roadmap';
+		}
+
 		$excerpt = sanitize_textarea_field( (string) ( $guidance['excerpt'] ?? '' ) );
 
 		if ( $excerpt === '' ) {

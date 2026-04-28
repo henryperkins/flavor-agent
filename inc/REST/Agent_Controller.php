@@ -573,6 +573,18 @@ final class Agent_Controller {
 							'default'           => ActivityRepository::DEFAULT_PER_PAGE,
 							'sanitize_callback' => 'absint',
 						],
+						'groupBySurface'             => [
+							'required'          => false,
+							'type'              => 'boolean',
+							'default'           => false,
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
+						'surfaceLimit'               => [
+							'required'          => false,
+							'type'              => 'integer',
+							'default'           => ActivityRepository::DEFAULT_SURFACE_LIMIT,
+							'sanitize_callback' => 'absint',
+						],
 					],
 				],
 				[
@@ -1349,16 +1361,25 @@ final class Agent_Controller {
 			return new \WP_REST_Response( $result, 200 );
 		}
 
-		$entries = ActivityRepository::query(
-			[
-				'scopeKey'   => $request->get_param( 'scopeKey' ),
-				'surface'    => $request->get_param( 'surface' ),
-				'entityType' => $request->get_param( 'entityType' ),
-				'entityRef'  => $request->get_param( 'entityRef' ),
-				'userId'     => $request->get_param( 'userId' ),
-				'limit'      => $request->get_param( 'limit' ),
-			]
-		);
+		$activity_filters = [
+			'scopeKey'   => $request->get_param( 'scopeKey' ),
+			'surface'    => $request->get_param( 'surface' ),
+			'entityType' => $request->get_param( 'entityType' ),
+			'entityRef'  => $request->get_param( 'entityRef' ),
+			'userId'     => $request->get_param( 'userId' ),
+			'limit'      => $request->get_param( 'limit' ),
+		];
+
+		$entries = true === $request->get_param( 'groupBySurface' )
+			? ActivityRepository::query_grouped_by_surface(
+				array_merge(
+					$activity_filters,
+					[
+						'surfaceLimit' => $request->get_param( 'surfaceLimit' ),
+					]
+				)
+			)
+			: ActivityRepository::query( $activity_filters );
 
 		return new \WP_REST_Response(
 			[

@@ -1,5 +1,9 @@
 # AI Activity Log Review Prompt
 
+Date: 2026-04-28
+
+Purpose: Evidence-first review of the AI Activity log surface for security, contract, and behavior regressions.
+
 ```text
 You are reviewing the Flavor Agent AI Activity Log implementation. Treat this as a review-only pass: do not modify files, do not rewrite components, and do not propose broad redesigns unless you can tie them to a concrete bug, security issue, performance issue, missing test, or documented contract drift.
 
@@ -30,6 +34,7 @@ Inspect at minimum
 - `src/utils/style-operations.js`
 - `tests/phpunit/ActivityRepositoryTest.php`
 - `tests/phpunit/ActivityPermissionsTest.php`
+- `tests/phpunit/ActivityPageTest.php`
 - `tests/phpunit/AgentControllerTest.php`
 - `tests/phpunit/bootstrap.php`
 - `src/admin/__tests__/activity-log.test.js`
@@ -89,7 +94,7 @@ Review focus areas
 - Verify all provenance fields remain consistent across create, update, undo, query, serialization, and docs.
 
 7. CSS, WordPress Design System, and responsive states
-- Review `activity-log.css`, `dataviews-runtime.css`, and `wpds-runtime.css` for fragile assumptions about generated markup, overflow, responsive layout, status styling, and summary-card density.
+- Review `src/admin/activity-log.css`, `src/admin/dataviews-runtime.css`, and `src/admin/wpds-runtime.css` for fragile assumptions about generated markup, overflow, responsive layout, status styling, and summary-card density.
 - Confirm the six-card summary grid remains readable across admin widths, long labels, long URLs, translated strings, and narrow viewports.
 - Check that review/blocked/failed/undone/applied states are visually distinguishable without relying on color alone.
 - Avoid subjective taste findings; flag measurable accessibility, overflow, contrast, responsive, or contract drift only.
@@ -101,20 +106,20 @@ Review focus areas
 - Treat cross-surface changes as requiring the additive gates described in `docs/reference/cross-surface-validation-gates.md`.
 
 Suggested verification commands
-- `composer run test:php -- --filter '(ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest)'`
+- `composer run test:php -- --filter '(ActivityRepositoryTest|ActivityPermissionsTest|ActivityPageTest|AgentControllerTest)'`
 - `npm run test:unit -- --runInBand src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/AIActivitySection.test.js src/components/__tests__/ActivitySessionBootstrap.test.js`
 - `npm run build`
 - `npm run lint:js -- --quiet`
-- `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Admin/ActivityPage.php inc/Activity/Repository.php inc/Activity/Permissions.php inc/Activity/Serializer.php inc/REST/Agent_Controller.php tests/phpunit/ActivityRepositoryTest.php tests/phpunit/ActivityPermissionsTest.php tests/phpunit/AgentControllerTest.php`
+- `vendor/bin/phpcs --standard=phpcs.xml.dist inc/Admin/ActivityPage.php inc/Activity/Repository.php inc/Activity/Permissions.php inc/Activity/Serializer.php inc/REST/Agent_Controller.php tests/phpunit/ActivityRepositoryTest.php tests/phpunit/ActivityPermissionsTest.php tests/phpunit/ActivityPageTest.php tests/phpunit/AgentControllerTest.php`
 - `npx playwright test tests/e2e/flavor-agent.activity.spec.js`
 - `npm run check:docs`
 - `git diff --check`
 
 Output format
-- Lead with findings, ordered by severity (`P0`, `P1`, `P2`, `P3`).
-- For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
-- Separate confirmed findings from open questions. Do not list an open question as a finding unless you verified a real defect.
-- Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
-- If there are no findings, say so plainly and list any remaining test or environment gaps.
-- Keep the review anchored to the current checkout. Do not rely on stale plans, old docs, or assumptions when the live code says otherwise.
+1. Start with findings first, ordered by severity (`P0`, `P1`, `P2`, `P3`).
+2. For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
+3. Keep confirmed findings and open questions separate. Add an "Open Questions / Assumptions" section only if you verified a gap.
+4. Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
+5. If there are no findings, say so plainly and list remaining test or environment gaps.
+6. Keep the review anchored to the current checkout. Confirm each issue from the live code path, not stale docs or grep-only clues.
 ```

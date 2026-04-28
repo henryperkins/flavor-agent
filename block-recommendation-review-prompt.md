@@ -1,7 +1,7 @@
 # Block Recommendation Review Prompt
 
 ```text
-Review Flavor Agent block recommendations in /home/ubuntu/flavor-agent with the same evidence-first stance as the template recommendation review.
+Review Flavor Agent block recommendations in this repository with the same evidence-first stance as the template recommendation review.
 
 Treat this as a code review, not an implementation pass. Do not edit files. Findings must lead, ordered by severity, with exact file/line references and a clear explanation of the user-visible or security impact.
 

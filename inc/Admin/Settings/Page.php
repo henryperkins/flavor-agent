@@ -611,7 +611,7 @@ final class Page {
 					data-guidelines-block-input
 					hidden
 				><?php echo esc_textarea( $guidelines_json ); ?></textarea>
-				<script type="application/json" data-guidelines-block-options><?php echo $options_json; ?></script>
+				<script type="application/json" data-guidelines-block-options><?php echo $options_json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON_HEX_TAG keeps the inline JSON script inert while preserving parseable JSON. ?></script>
 				<div class="flavor-agent-guidelines__block-list" data-guidelines-block-list></div>
 				<div class="flavor-agent-guidelines__block-editor">
 					<div class="flavor-agent-guidelines__block-editor-grid">

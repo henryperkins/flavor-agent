@@ -1,7 +1,11 @@
 # Style Recommendation Review Prompt
 
+Date: 2026-04-28
+
+Purpose: Evidence-first review of style recommendations for security, contract, and behavior regressions.
+
 ```text
-Review Flavor Agent style recommendations in /home/ubuntu/flavor-agent with the same evidence-first stance as the template recommendation review.
+Review Flavor Agent style recommendations in this repository with the same evidence-first stance as the template recommendation review.
 
 Treat this as a code review, not an implementation pass. Do not edit files. Findings must lead, ordered by severity, with exact file/line references and a clear explanation of the user-visible or security impact.
 
@@ -52,10 +56,11 @@ Focus areas:
 - missing tests for shared contracts, freshness guards, validation, scope resolution, or docs drift
 - docs that overclaim behavior not enforced by code
 
-Output format:
-1. Findings first, ordered by severity (P0, P1, P2, P3).
-2. Each finding must include exact file/line references, impact, and the smallest credible fix direction.
-3. Add "Open Questions / Assumptions" only if needed.
-4. Add a short "Verification Reviewed" section listing the tests/docs you inspected and any commands you ran.
-5. If no findings are confirmed, say that plainly and identify remaining test gaps or residual risk.
+Output format
+1. Start with findings first, ordered by severity (`P0`, `P1`, `P2`, `P3`).
+2. For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
+3. Keep confirmed findings and open questions separate. Add an "Open Questions / Assumptions" section only if you verified a gap.
+4. Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
+5. If there are no findings, say so plainly and identify remaining test or environment gaps.
+6. Keep conclusions checkout-specific and evidence-backed. Confirm behavior from live code paths and do not treat stale docs or plans as higher priority than code.
 ```

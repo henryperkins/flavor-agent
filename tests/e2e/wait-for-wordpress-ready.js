@@ -1,9 +1,23 @@
 const { expect } = require( '@playwright/test' );
 
 const READY_TEXT = 'WordPress is not ready yet';
+const INTERNAL_SERVER_ERROR_TEXT = 'Internal Server Error';
 const DEFAULT_TIMEOUT_MS = 90_000;
 const RETRY_DELAY_MS = 2_000;
 const NAVIGATION_TIMEOUT_MS = 10_000;
+
+async function isTransientReadinessPage( page, readinessNotice ) {
+	if ( await readinessNotice.count() ) {
+		return true;
+	}
+
+	const bodyText = await page
+		.locator( 'body' )
+		.innerText( { timeout: 1_000 } )
+		.catch( () => '' );
+
+	return bodyText.trim() === INTERNAL_SERVER_ERROR_TEXT;
+}
 
 /**
  * @param {import('@playwright/test').Page} page
@@ -19,7 +33,7 @@ async function waitForWordPressReady(
 	const deadline = Date.now() + timeout;
 
 	while ( Date.now() < deadline ) {
-		if ( ! ( await readinessNotice.count() ) ) {
+		if ( ! ( await isTransientReadinessPage( page, readinessNotice ) ) ) {
 			return;
 		}
 
@@ -45,6 +59,9 @@ async function waitForWordPressReady(
 	}
 
 	await expect( readinessNotice ).toHaveCount( 0 );
+	await expect( page.locator( 'body' ) ).not.toHaveText(
+		INTERNAL_SERVER_ERROR_TEXT
+	);
 }
 
 module.exports = {

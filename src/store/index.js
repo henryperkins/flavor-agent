@@ -776,7 +776,8 @@ function logStoreActivityEntry( localDispatch, select, entry ) {
 		localDispatch,
 		select,
 		entry,
-		actions.logActivity
+		actions.logActivity,
+		actions.setActivitySession
 	);
 }
 

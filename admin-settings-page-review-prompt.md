@@ -1,5 +1,9 @@
 # Admin Settings Page Review Prompt
 
+Date: 2026-04-28
+
+Purpose: Evidence-first review of the settings-page surface for security, validation, state, provider, and doc-grounding behavior.
+
 ```text
 You are reviewing the Flavor Agent admin settings page implementation. Treat this as a review-only pass: do not modify files, do not rewrite components, and do not propose broad redesigns unless you can tie them to a concrete bug, security issue, privacy leak, validation issue, runtime-contract mismatch, accessibility/responsive issue, missing test, or documented contract drift.
 
@@ -112,7 +116,7 @@ Review focus areas
 - Check prewarm status, retry/degraded/error messaging, warmed/failed counts, timestamps, and cache-first/non-blocking claims against the live implementation.
 
 9. UI, CSS, WordPress Design System, and accessibility
-- Review `settings.css`, `brand.css`, and runtime CSS shims for fragile assumptions about generated WordPress admin markup, overflow, responsive layout, status badges, accordions, subpanels, notices, forms, and sync metrics.
+- Review `src/admin/settings.css`, `src/admin/brand.css`, and runtime CSS shims for fragile assumptions about generated WordPress admin markup, overflow, responsive layout, status badges, accordions, subpanels, notices, forms, and sync metrics.
 - Confirm long labels, translated strings, URLs, secret-like placeholders, validation messages, and guideline text do not overlap or break the layout across common wp-admin widths.
 - Check that success/warning/error/accent/neutral states are distinguishable without relying on color alone.
 - Avoid subjective taste findings; flag measurable accessibility, overflow, contrast, responsive, or contract drift only.
@@ -134,10 +138,10 @@ Suggested verification commands
 - `git diff --check`
 
 Output format
-- Lead with findings, ordered by severity (`P0`, `P1`, `P2`, `P3`).
-- For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
-- Separate confirmed findings from open questions. Do not list an open question as a finding unless you verified a real defect.
-- Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
+1. Start with findings first, ordered by severity (`P0`, `P1`, `P2`, `P3`).
+2. For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
+3. Keep confirmed findings and open questions separate. Add an "Open Questions / Assumptions" section only if you verified a gap.
+4. Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
 - If there are no findings, say so plainly and list any remaining test or environment gaps.
-- Keep conclusions checkout-specific and evidence-backed. Do not flag subjective taste, do not infer behavior from docs alone, and do not treat old plans as current truth without re-reading the live files.
+6. Keep conclusions checkout-specific and evidence-backed. Confirm behavior from live code paths and do not treat stale docs or plans as higher priority than code.
 ```

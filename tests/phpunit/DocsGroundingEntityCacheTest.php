@@ -10,6 +10,7 @@ use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Abilities\TemplateAbilities;
 use FlavorAgent\Abilities\WordPressDocsAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -20,11 +21,27 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
+	}
+
+	protected function tearDown(): void {
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_true' ] );
+
+		parent::tearDown();
+	}
+
+	public static function return_false(): bool {
+		return false;
+	}
+
+	public static function return_true(): bool {
+		return true;
 	}
 
 	public function test_block_docs_guidance_uses_query_cache_before_entity_cache(): void {
@@ -76,6 +93,81 @@ final class DocsGroundingEntityCacheTest extends TestCase {
 			)
 		);
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_collect_docs_guidance_keeps_docs_in_first_prompt_window_when_roadmap_is_cached(): void {
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_true' ] );
+
+		$docs_guidance = [
+			[
+				'id'        => 'docs-chunk-1',
+				'title'     => 'Navigation block reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation/',
+				'excerpt'   => 'Use documented navigation block controls.',
+				'score'     => 0.9,
+			],
+			[
+				'id'        => 'docs-chunk-2',
+				'title'     => 'Navigation overlay reference',
+				'sourceKey' => 'developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation-overlay',
+				'url'       => 'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/navigation-overlay/',
+				'excerpt'   => 'Use documented overlay behavior.',
+				'score'     => 0.85,
+			],
+		];
+		$query         = 'navigation docs';
+		$roadmap       = [
+			[
+				'id'         => 'roadmap-1',
+				'title'      => 'WordPress AI roadmap status',
+				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+				'sourceType' => 'core-roadmap',
+				'url'        => 'https://github.com/orgs/WordPress/projects/240/views/7?layout=table&hierarchy=true',
+				'excerpt'    => 'Open roadmap milestones: 0.9.0.',
+				'score'      => 0.95,
+			],
+			[
+				'id'         => 'roadmap-2',
+				'title'      => 'Improve block bindings guidance',
+				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+				'sourceType' => 'core-roadmap',
+				'url'        => 'https://github.com/WordPress/ai/issues/123',
+				'excerpt'    => 'In-progress roadmap item.',
+				'score'      => 0.9,
+			],
+			[
+				'id'         => 'roadmap-3',
+				'title'      => 'Improve navigation guidance',
+				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+				'sourceType' => 'core-roadmap',
+				'url'        => 'https://github.com/WordPress/ai/issues/124',
+				'excerpt'    => 'Another in-progress roadmap item.',
+				'score'      => 0.88,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_cache_key( $query, 4 ) ]   = $docs_guidance;
+		WordPressTestState::$transients['flavor_agent_core_roadmap_guidance_v1'] = $roadmap;
+
+		$result = CollectsDocsGuidance::collect(
+			static fn(): string => $query,
+			static fn(): string => 'core/navigation',
+			static fn(): array => [ 'surface' => 'block' ],
+			[ 'surface' => 'block' ],
+			'Simplify navigation.'
+		);
+
+		$this->assertGreaterThanOrEqual( 2, count( $result ) );
+		$this->assertSame( 'core-roadmap', $result[0]['sourceType'] ?? '' );
+		$this->assertSame(
+			[ 'roadmap-1', 'docs-chunk-1', 'docs-chunk-2' ],
+			array_slice( array_column( $result, 'id' ), 0, 3 )
+		);
+
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_true' ] );
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', [ self::class, 'return_false' ] );
 	}
 
 	public function test_template_docs_guidance_uses_query_cache_before_entity_cache(): void {

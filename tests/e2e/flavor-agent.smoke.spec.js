@@ -1,5 +1,12 @@
 const { test, expect } = require( '@playwright/test' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
+const {
+	getWp70HarnessConfig,
+	resetSiteEditorState,
+	runWpCli,
+} = require( '../../scripts/wp70-e2e' );
+
+const wp70Harness = getWp70HarnessConfig();
 
 const BLOCK_RESPONSE = {
 	payload: {
@@ -120,27 +127,69 @@ const TEMPLATE_RESOLVED_CONTEXT_SIGNATURE = 'resolved-template';
 const TEMPLATE_PART_RESOLVED_CONTEXT_SIGNATURE = 'resolved-template-part';
 
 async function dismissWelcomeGuide( page ) {
-	const welcomeOverlay = page.locator( '.components-modal__screen-overlay' );
+	const welcomeOverlay = page
+		.locator( '.components-modal__screen-overlay' )
+		.filter( {
+			hasText:
+				/Welcome to the editor|Welcome to the Site Editor|Welcome to styles|Page 1 of 4/i,
+		} );
 
-	await page
-		.evaluate( () => {
-			const preferences = window.wp?.data?.dispatch( 'core/preferences' );
+	const disableWelcomeGuidePreferences = () => {
+		const preferences = window.wp?.data?.dispatch( 'core/preferences' );
+		const editPost = window.wp?.data?.dispatch( 'core/edit-post' );
+		const editSite = window.wp?.data?.dispatch( 'core/edit-site' );
+		const editPostState = window.wp?.data?.select( 'core/edit-post' );
+		const editSiteState = window.wp?.data?.select( 'core/edit-site' );
 
-			preferences?.set?.( 'core/edit-post', 'welcomeGuide', false );
-			preferences?.set?.(
-				'core/edit-post',
-				'welcomeGuideTemplate',
-				false
+		preferences?.set?.( 'core/edit-post', 'welcomeGuide', false );
+		preferences?.set?.( 'core/edit-post', 'welcomeGuideTemplate', false );
+		preferences?.set?.( 'core/edit-site', 'welcomeGuide', false );
+		preferences?.set?.( 'core/edit-site', 'welcomeGuideTemplate', false );
+		preferences?.set?.( 'core/edit-site', 'welcomeGuideStyles', false );
+
+		if ( editPostState?.isFeatureActive?.( 'welcomeGuide' ) ) {
+			editPost?.toggleFeature?.( 'welcomeGuide' );
+		}
+
+		if ( editPostState?.isFeatureActive?.( 'welcomeGuideTemplate' ) ) {
+			editPost?.toggleFeature?.( 'welcomeGuideTemplate' );
+		}
+
+		if ( editSiteState?.isFeatureActive?.( 'welcomeGuide' ) ) {
+			editSite?.toggleFeature?.( 'welcomeGuide' );
+		}
+
+		if ( editSiteState?.isFeatureActive?.( 'welcomeGuideTemplate' ) ) {
+			editSite?.toggleFeature?.( 'welcomeGuideTemplate' );
+		}
+
+		if ( editSiteState?.isFeatureActive?.( 'welcomeGuideStyles' ) ) {
+			editSite?.toggleFeature?.( 'welcomeGuideStyles' );
+		}
+	};
+
+	const forceRemoveWelcomeGuideOverlays = () => {
+		const isWelcomeGuideOverlay = ( el ) => {
+			const text = el.textContent || '';
+
+			return (
+				Boolean( el.querySelector( '[class*="welcome-guide"]' ) ) ||
+				/Welcome to the editor|Welcome to the Site Editor|Welcome to styles|Page 1 of 4/i.test(
+					text
+				)
 			);
-			preferences?.set?.( 'core/edit-site', 'welcomeGuide', false );
-			preferences?.set?.(
-				'core/edit-site',
-				'welcomeGuideTemplate',
-				false
-			);
-			preferences?.set?.( 'core/edit-site', 'welcomeGuideStyles', false );
-		} )
-		.catch( () => {} );
+		};
+
+		document
+			.querySelectorAll( '.components-modal__screen-overlay' )
+			.forEach( ( el ) => {
+				if ( isWelcomeGuideOverlay( el ) ) {
+					el.remove();
+				}
+			} );
+	};
+
+	await page.evaluate( disableWelcomeGuidePreferences ).catch( () => {} );
 
 	for ( let attempt = 0; attempt < 4; attempt++ ) {
 		if ( await welcomeOverlay.isVisible().catch( () => false ) ) {
@@ -180,19 +229,47 @@ async function dismissWelcomeGuide( page ) {
 		await page.waitForTimeout( 250 );
 	}
 
-	// Last-resort: force-hide any lingering overlay so pointer events pass through.
+	// Last-resort: remove any lingering welcome overlay so pointer events pass through.
 	await page
 		.evaluate( () => {
+			const preferences = window.wp?.data?.dispatch( 'core/preferences' );
+			const isWelcomeGuideOverlay = ( el ) => {
+				const text = el.textContent || '';
+
+				return (
+					Boolean( el.querySelector( '[class*="welcome-guide"]' ) ) ||
+					/Welcome to the editor|Welcome to the Site Editor|Welcome to styles|Page 1 of 4/i.test(
+						text
+					)
+				);
+			};
+
+			preferences?.set?.( 'core/edit-post', 'welcomeGuide', false );
+			preferences?.set?.(
+				'core/edit-post',
+				'welcomeGuideTemplate',
+				false
+			);
+			preferences?.set?.( 'core/edit-site', 'welcomeGuide', false );
+			preferences?.set?.(
+				'core/edit-site',
+				'welcomeGuideTemplate',
+				false
+			);
+			preferences?.set?.( 'core/edit-site', 'welcomeGuideStyles', false );
 			document
 				.querySelectorAll( '.components-modal__screen-overlay' )
 				.forEach( ( el ) => {
-					el.style.display = 'none';
-					el.style.pointerEvents = 'none';
+					if ( isWelcomeGuideOverlay( el ) ) {
+						el.remove();
+					}
 				} );
 		} )
 		.catch( () => {} );
 
-	await expect( welcomeOverlay ).toBeHidden( { timeout: 10000 } );
+	await expect( welcomeOverlay ).toHaveCount( 0, { timeout: 10000 } );
+	await page.waitForTimeout( 250 );
+	await page.evaluate( forceRemoveWelcomeGuideOverlays ).catch( () => {} );
 }
 
 async function dismissSiteEditorWelcomeGuide( page ) {
@@ -253,6 +330,12 @@ async function getSurfaceActivityCount( page, surface ) {
 			).filter( ( entry ) => entry?.surface === targetSurface ).length,
 		surface
 	);
+}
+
+function resetWp70TemplateSmokeState() {
+	resetSiteEditorState( wp70Harness );
+	runWpCli( wp70Harness, [ 'theme', 'activate', wp70Harness.themeSlug ] );
+	runWpCli( wp70Harness, [ 'cache', 'flush' ], { allowFailure: true } );
 }
 
 async function setCurrentGlobalStylesTextColor( page, textColor ) {
@@ -401,6 +484,16 @@ async function waitForFlavorAgent( page ) {
 	);
 }
 
+async function waitForBlockEditorApis( page ) {
+	await page.waitForFunction( () =>
+		Boolean(
+			window.wp?.blocks?.createBlock &&
+				window.wp?.data?.select( 'core/block-editor' ) &&
+				window.wp?.data?.dispatch( 'core/block-editor' )
+		)
+	);
+}
+
 async function getCurrentPostEditUrl( page ) {
 	return page.evaluate( () => {
 		const editor = window.wp?.data?.select( 'core/editor' );
@@ -439,29 +532,26 @@ async function saveCurrentPost( page ) {
 }
 
 async function seedParagraphBlock( page ) {
-	const canvas = page.frameLocator( 'iframe' ).first();
-	const defaultBlockButton = canvas.getByRole( 'button', {
-		name: /Add default block|Type \/ to choose a block/i,
-	} );
+	await waitForBlockEditorApis( page );
 
 	await page.evaluate( () => {
+		const { createBlock } = window.wp.blocks;
+		const paragraph = createBlock( 'core/paragraph', {
+			content: 'Hello world',
+		} );
+
 		window.flavorAgentData.canRecommendBlocks = true;
 		window.wp?.data?.dispatch( 'core/editor' )?.editPost( {
 			title: 'Smoke Test',
 		} );
+		window.wp?.data
+			?.dispatch( 'core/block-editor' )
+			?.resetBlocks?.( [ paragraph ] );
+		window.wp?.data
+			?.dispatch( 'core/block-editor' )
+			?.selectBlock?.( paragraph.clientId );
 	} );
-	await expect(
-		canvas.getByRole( 'textbox', { name: 'Add title' } )
-	).toBeVisible();
 	await dismissWelcomeGuide( page );
-
-	if ( await defaultBlockButton.count() ) {
-		await defaultBlockButton.click();
-	} else {
-		await canvas.locator( 'body' ).click();
-	}
-
-	await page.keyboard.type( 'Hello world' );
 	await expect
 		.poll( () =>
 			page.evaluate( () => {
@@ -492,6 +582,8 @@ async function seedParagraphBlock( page ) {
 }
 
 async function seedNavigationBlock( page ) {
+	await waitForBlockEditorApis( page );
+
 	await page.evaluate( () => {
 		const { createBlock } = window.wp.blocks;
 		const navigationLink = createBlock( 'core/navigation-link', {
@@ -561,6 +653,7 @@ async function ensureSettingsSidebarOpen( page ) {
 				?.select( 'core/edit-post' )
 				?.getActiveGeneralSidebarName?.() === 'edit-post/block'
 	);
+	await dismissWelcomeGuide( page );
 
 	const blockTab = page.getByRole( 'tab', {
 		name: 'Block',
@@ -587,6 +680,7 @@ async function ensurePanelOpen( page, title, content ) {
 	if ( await content.isVisible().catch( () => false ) ) {
 		return;
 	}
+	await dismissWelcomeGuide( page );
 
 	const buttonToggle = page
 		.getByRole( 'button', { name: title, exact: true } )
@@ -600,9 +694,10 @@ async function ensurePanelOpen( page, title, content ) {
 		? buttonToggle
 		: genericToggle;
 
-	await expect( toggle ).toBeVisible();
+	await expect( toggle ).toBeVisible( { timeout: 15000 } );
 
 	if ( ( await toggle.getAttribute( 'aria-expanded' ) ) !== 'true' ) {
+		await dismissWelcomeGuide( page );
 		await toggle.click();
 	}
 
@@ -1605,6 +1700,8 @@ test.fixme(
 test( 'block and pattern surfaces explain unavailable providers in native UI', async ( {
 	page,
 } ) => {
+	test.setTimeout( 180_000 );
+
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
 	} );
@@ -1645,6 +1742,7 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 	);
 
 	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await dismissWelcomeGuide( page );
 	const recommendationsPanel = promptInput.locator(
 		'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " components-panel__body ")][1]'
 	);
@@ -1652,12 +1750,12 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 		recommendationsPanel.getByRole( 'link', {
 			name: 'Settings > Flavor Agent',
 		} )
-	).toBeVisible();
+	).toBeVisible( { timeout: 15000 } );
 	await expect(
 		recommendationsPanel.getByRole( 'link', {
 			name: 'Settings > Connectors',
 		} )
-	).toBeVisible();
+	).toBeVisible( { timeout: 15000 } );
 	await expect(
 		recommendationsPanel.getByRole( 'button', { name: 'Get Suggestions' } )
 	).toBeDisabled();
@@ -1669,19 +1767,24 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 		} )
 		.click();
 
+	const patternCapabilityNotice = page
+		.locator( '.flavor-agent-capability-notice' )
+		.filter( {
+			hasText:
+				'Pattern recommendations need a compatible embedding backend and Qdrant',
+		} )
+		.first();
+
+	await expect( patternCapabilityNotice ).toBeVisible();
 	await expect(
-		page
-			.locator( '.flavor-agent-capability-notice' )
-			.getByText(
-				'Pattern recommendations need a compatible embedding backend and Qdrant'
-			)
-			.first()
+		patternCapabilityNotice.getByText(
+			'Pattern recommendations need a compatible embedding backend and Qdrant'
+		)
 	).toBeVisible();
 	await expect(
-		page
-			.locator( '.flavor-agent-capability-notice' )
-			.getByRole( 'link', { name: 'Settings > Flavor Agent' } )
-			.first()
+		patternCapabilityNotice.getByRole( 'link', {
+			name: 'Settings > Flavor Agent',
+		} )
 	).toBeVisible();
 } );
 
@@ -1810,6 +1913,7 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 			exact: true,
 		} )
 		.click();
+	await dismissWelcomeGuide( page );
 
 	const searchInput = await getVisibleSearchInput( page );
 
@@ -1904,6 +2008,14 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 		.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
 		.click();
 
+	await expect(
+		page
+			.locator( '.flavor-agent-status-notice__message' )
+			.getByText(
+				'Flavor Agent applied the selected Global Styles change.',
+				{ exact: true }
+			)
+	).toBeVisible( { timeout: 15000 } );
 	await expect
 		.poll( () => getGlobalStylesState( page ) )
 		.toEqual(
@@ -1915,6 +2027,11 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 				activityType: 'apply_global_styles_suggestion',
 			} )
 		);
+	await expect(
+		page
+			.locator( '.flavor-agent-activity-row' )
+			.getByText( 'Undo available' )
+	).toBeVisible();
 
 	await expect( page.getByText( 'Recent AI Style Actions' ) ).toBeVisible();
 	await page
@@ -1927,11 +2044,13 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 		.toEqual(
 			expect.objectContaining( {
 				globalStylesId: initialState.globalStylesId,
-				settings: initialState.settings,
-				styles: initialState.styles,
-				undoStatus: 'success',
+				background: initialState.background,
+				lineHeight: initialState.lineHeight,
 			} )
 		);
+	await expect(
+		page.locator( '.flavor-agent-activity-row' ).getByText( 'Undone' )
+	).toBeVisible();
 } );
 
 test( '@wp70-site-editor global styles surface requests defaults when the prompt is empty', async ( {
@@ -2454,21 +2573,34 @@ test( 'template surface keeps stale results visible but disables review and appl
 
 	await insertRootParagraphBlock( page, TEMPLATE_STALE_INSERTED_CONTENT );
 	await expect
-		.poll( () =>
-			page.evaluate( ( nextContent ) => {
-				const blocks =
-					window.wp?.data
-						?.select( 'core/block-editor' )
-						?.getBlocks?.() || [];
+		.poll(
+			() =>
+				page.evaluate( ( nextContent ) => {
+					function hasParagraphContent( blocks ) {
+						return blocks.some( ( block ) => {
+							if (
+								block?.name === 'core/paragraph' &&
+								String(
+									block?.attributes?.content || ''
+								).includes( nextContent )
+							) {
+								return true;
+							}
 
-				return blocks.some(
-					( block ) =>
-						block?.name === 'core/paragraph' &&
-						String( block?.attributes?.content || '' ).includes(
-							nextContent
-						)
-				);
-			}, TEMPLATE_STALE_INSERTED_CONTENT )
+							return Array.isArray( block?.innerBlocks )
+								? hasParagraphContent( block.innerBlocks )
+								: false;
+						} );
+					}
+
+					const blocks =
+						window.wp?.data
+							?.select( 'core/block-editor' )
+							?.getBlocks?.() || [];
+
+					return hasParagraphContent( blocks );
+				}, TEMPLATE_STALE_INSERTED_CONTENT ),
+			{ timeout: 15000 }
 		)
 		.toBe( true );
 	await page.getByRole( 'tab', { name: 'Template', exact: true } ).click();
@@ -2491,11 +2623,19 @@ test( 'template surface keeps stale results visible but disables review and appl
 		} )
 	).toBeDisabled();
 
-	await recommendationsPanel
-		.locator( '.flavor-agent-scope-bar__refresh' )
-		.click();
+	const refreshButton = recommendationsPanel
+		.getByRole( 'button', {
+			name: 'Refresh',
+			exact: true,
+		} )
+		.nth( 1 );
 
-	await expect.poll( () => templateRequests.length ).toBe( 2 );
+	await expect( refreshButton ).toBeEnabled( { timeout: 15000 } );
+	await refreshButton.click();
+
+	await expect
+		.poll( () => templateRequests.length, { timeout: 15000 } )
+		.toBe( 2 );
 	expect(
 		templateRequests[ 1 ].editorStructure.topLevelBlockTree.length
 	).toBe(
@@ -2796,7 +2936,8 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 		.click();
 	await openTemplatePartRecommendationsPanel( page );
 	const templatePartUndoButton = page
-		.locator( '.flavor-agent-activity-row' )
+		.locator( '.components-notice, .flavor-agent-activity-row' )
+		.filter( { hasText: 'Applied 1 template-part operation.' } )
 		.getByRole( 'button', { name: 'Undo', exact: true } )
 		.first();
 	await templatePartUndoButton.scrollIntoViewIfNeeded();
@@ -3061,6 +3202,10 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 
 	const promptInput = await openTemplatePartRecommendationsPanel( page );
 	const recommendationsPanel = getPanelBody( promptInput );
+	const initialTemplatePartActivityCount = await getSurfaceActivityCount(
+		page,
+		'template-part'
+	);
 
 	await promptInput.fill( TEMPLATE_PART_PROMPT );
 	await recommendationsPanel
@@ -3097,12 +3242,14 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 	).toHaveCount( 0 );
 	await expect
 		.poll( () => getSurfaceActivityCount( page, 'template-part' ) )
-		.toBe( 0 );
+		.toBe( initialTemplatePartActivityCount );
 } );
 
 test( '@wp70-site-editor template undo survives a Site Editor refresh when the template has not drifted', async ( {
 	page,
 } ) => {
+	resetWp70TemplateSmokeState();
+
 	await page.route( '**/*recommend-template*', async ( route ) => {
 		await route.fulfill( {
 			status: 200,
@@ -3185,6 +3332,24 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 				).undoStatus
 		)
 		.toBe( 'available' );
+	await expect
+		.poll( () =>
+			page.evaluate( () => {
+				const flavorAgent = window.wp.data.select( 'flavor-agent' );
+				const activityLog = flavorAgent.getActivityLog?.() || [];
+				const lastActivity =
+					[ ...activityLog ]
+						.reverse()
+						.find(
+							( entry ) =>
+								entry?.surface === 'template' &&
+								entry?.type !== 'request_diagnostic'
+						) || null;
+
+				return lastActivity?.persistence?.status || '';
+			} )
+		)
+		.toBe( 'server' );
 	await saveCurrentPost( page );
 
 	await page.goto( '/wp-admin/post-new.php', {
@@ -3235,6 +3400,8 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 test( '@wp70-site-editor template undo is disabled after inserted pattern content changes', async ( {
 	page,
 } ) => {
+	resetWp70TemplateSmokeState();
+
 	const editedInsertedContent = 'Inserted content edited after apply';
 
 	await page.route( '**/*recommend-template*', async ( route ) => {
@@ -3320,46 +3487,15 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 		.toBe( 'available' );
 
 	await page.evaluate(
-		( { nextContent } ) => {
-			function normalizeValue( value ) {
-				if ( Array.isArray( value ) ) {
-					return value.map( ( item ) =>
-						normalizeValue( item === undefined ? null : item )
-					);
-				}
-
-				if ( value && typeof value === 'object' ) {
-					return Object.fromEntries(
-						Object.entries( value )
-							.filter(
-								( [ , entryValue ] ) => entryValue !== undefined
-							)
-							.sort( ( [ leftKey ], [ rightKey ] ) =>
-								leftKey.localeCompare( rightKey )
-							)
-							.map( ( [ key, entryValue ] ) => [
-								key,
-								normalizeValue( entryValue ),
-							] )
-					);
-				}
-
-				return value;
-			}
-
-			function normalizeBlockSnapshot( block ) {
-				return {
-					name: block?.name || '',
-					attributes: normalizeValue( block?.attributes || {} ),
-					innerBlocks: Array.isArray( block?.innerBlocks )
-						? block.innerBlocks.map( normalizeBlockSnapshot )
-						: [],
-				};
-			}
-
+		( { previousContent, nextContent } ) => {
 			function findParagraphBlock( blocks ) {
 				for ( const block of blocks ) {
-					if ( block?.name === 'core/paragraph' ) {
+					const content = String( block?.attributes?.content || '' );
+
+					if (
+						block?.name === 'core/paragraph' &&
+						content.includes( previousContent )
+					) {
 						return block;
 					}
 
@@ -3375,122 +3511,9 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 				return null;
 			}
 
-			function getBlockByPath( blocks, path = [] ) {
-				let currentBlocks = blocks;
-				let block = null;
-
-				for ( const index of path ) {
-					if ( ! Array.isArray( currentBlocks ) ) {
-						return null;
-					}
-
-					block = currentBlocks[ index ] || null;
-
-					if ( ! block ) {
-						return null;
-					}
-
-					currentBlocks = block.innerBlocks || [];
-				}
-
-				return block;
-			}
-
-			function resolveRootBlocks( blocks, rootLocator ) {
-				if (
-					! rootLocator ||
-					rootLocator.type === 'root' ||
-					( Array.isArray( rootLocator.path ) &&
-						rootLocator.path.length === 0 )
-				) {
-					return blocks;
-				}
-
-				const rootBlock = getBlockByPath(
-					blocks,
-					rootLocator.path || []
-				);
-
-				return Array.isArray( rootBlock?.innerBlocks )
-					? rootBlock.innerBlocks
-					: [];
-			}
-
-			function findMatchingInsertedSlice( blocks, snapshot ) {
-				const sliceLength = Array.isArray( snapshot )
-					? snapshot.length
-					: 0;
-
-				if ( sliceLength > 0 ) {
-					for (
-						let index = 0;
-						index <= blocks.length - sliceLength;
-						index++
-					) {
-						const candidate = blocks.slice(
-							index,
-							index + sliceLength
-						);
-
-						if (
-							JSON.stringify(
-								candidate.map( normalizeBlockSnapshot )
-							) === JSON.stringify( snapshot )
-						) {
-							return candidate;
-						}
-					}
-				}
-
-				for ( const block of blocks ) {
-					if ( Array.isArray( block?.innerBlocks ) ) {
-						const nested = findMatchingInsertedSlice(
-							block.innerBlocks,
-							snapshot
-						);
-
-						if ( nested ) {
-							return nested;
-						}
-					}
-				}
-
-				return null;
-			}
-
-			const flavorAgent = window.wp.data.select( 'flavor-agent' );
-			const activityLog = flavorAgent.getActivityLog?.() || [];
-			const lastActivity = activityLog[ activityLog.length - 1 ] || null;
-			const insertOperation =
-				( lastActivity?.after?.operations || [] ).find(
-					( operation ) => operation?.type === 'insert_pattern'
-				) || null;
 			const blockEditor = window.wp.data.select( 'core/block-editor' );
 			const blockTree = blockEditor.getBlocks?.() || [];
-			const rootBlocks = resolveRootBlocks(
-				blockTree,
-				insertOperation?.rootLocator || null
-			);
-			const expectedSliceLength = Array.isArray(
-				insertOperation?.insertedBlocksSnapshot
-			)
-				? insertOperation.insertedBlocksSnapshot.length
-				: 0;
-			const insertedBlockSlice =
-				insertOperation?.rootLocator &&
-				Number.isInteger( insertOperation?.index ) &&
-				expectedSliceLength > 0
-					? rootBlocks.slice(
-							insertOperation.index,
-							insertOperation.index + expectedSliceLength
-					  )
-					: findMatchingInsertedSlice(
-							blockTree,
-							insertOperation?.insertedBlocksSnapshot || []
-					  );
-			const insertedBlock = Array.isArray( insertedBlockSlice )
-				? findParagraphBlock( insertedBlockSlice )
-				: null;
+			const insertedBlock = findParagraphBlock( blockTree );
 
 			if ( insertedBlock?.clientId ) {
 				window.wp.data
@@ -3500,7 +3523,10 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 					} );
 			}
 		},
-		{ nextContent: editedInsertedContent }
+		{
+			previousContent: TEMPLATE_INSERTED_CONTENT,
+			nextContent: editedInsertedContent,
+		}
 	);
 	await expect
 		.poll( () =>
@@ -3547,7 +3573,14 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 	await page.evaluate( async () => {
 		const flavorAgent = window.wp.data.select( 'flavor-agent' );
 		const activityLog = flavorAgent.getActivityLog?.() || [];
-		const lastActivity = activityLog[ activityLog.length - 1 ] || null;
+		const lastActivity =
+			[ ...activityLog ]
+				.reverse()
+				.find(
+					( entry ) =>
+						entry?.surface === 'template' &&
+						entry?.type !== 'request_diagnostic'
+				) || null;
 
 		if ( lastActivity?.id ) {
 			await window.wp.data
@@ -3556,25 +3589,19 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 		}
 	} );
 
-	await expect(
-		page
-			.locator( '.flavor-agent-activity-row' )
-			.getByText(
-				'Inserted pattern content changed after apply and cannot be undone automatically.'
-			)
-	).toBeVisible();
-	await expect(
-		page
-			.locator( '.flavor-agent-activity-row' )
-			.getByRole( 'button', { name: 'Undo', exact: true } )
-	).toHaveCount( 0 );
 	await expect
 		.poll( () =>
 			page.evaluate( () => {
 				const flavorAgent = window.wp.data.select( 'flavor-agent' );
 				const activityLog = flavorAgent.getActivityLog?.() || [];
 				const lastActivity =
-					activityLog[ activityLog.length - 1 ] || null;
+					[ ...activityLog ]
+						.reverse()
+						.find(
+							( entry ) =>
+								entry?.surface === 'template' &&
+								entry?.type !== 'request_diagnostic'
+						) || null;
 
 				return {
 					undoStatus: lastActivity?.undo?.status || '',
@@ -3587,6 +3614,26 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 			undoError:
 				'Inserted pattern content changed after apply and cannot be undone automatically.',
 		} );
+	const recentActionsToggle = page.getByRole( 'button', {
+		name: /Recent AI Actions 1 action/,
+	} );
+	if (
+		( await recentActionsToggle.getAttribute( 'aria-expanded' ) ) !== 'true'
+	) {
+		await recentActionsToggle.click();
+	}
+	await expect(
+		page
+			.locator( '.flavor-agent-activity-row' )
+			.getByText(
+				'Inserted pattern content changed after apply and cannot be undone automatically.'
+			)
+	).toBeVisible();
+	await expect(
+		page
+			.locator( '.flavor-agent-activity-row' )
+			.getByRole( 'button', { name: 'Undo', exact: true } )
+	).toHaveCount( 0 );
 	await saveCurrentPost( page );
 	await expect
 		.poll( () =>

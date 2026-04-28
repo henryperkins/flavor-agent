@@ -1,7 +1,7 @@
 # Template Recommendation Review Prompt
 
 ```text
-Review Flavor Agent template recommendations in /home/ubuntu/flavor-agent with the same evidence-first stance as the pattern recommendation review.
+Review Flavor Agent template recommendations in this repository with the same evidence-first stance as the block recommendation review.
 
 Treat this as a code review, not an implementation pass. Do not edit files. Findings must lead, ordered by severity, with exact file/line references and a clear explanation of the user-visible or security impact.
 

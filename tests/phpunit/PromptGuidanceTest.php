@@ -55,6 +55,27 @@ final class PromptGuidanceTest extends TestCase {
 		$this->assertStringContainsString( 'Template parts REST reference: Template parts expose an area field', $prompt );
 	}
 
+	public function test_block_prompt_labels_core_roadmap_guidance(): void {
+		$prompt = Prompt::build_user(
+			[
+				'block'       => [
+					'name' => 'core/group',
+				],
+				'themeTokens' => [],
+			],
+			'Align with current core work.',
+			[
+				[
+					'title'      => 'WordPress AI roadmap status',
+					'sourceType' => 'core-roadmap',
+					'excerpt'    => 'Open roadmap milestones: 0.9.0, 1.0.0.',
+				],
+			]
+		);
+
+		$this->assertStringContainsString( 'Core roadmap - WordPress AI roadmap status: Open roadmap milestones', $prompt );
+	}
+
 	public function test_block_prompt_includes_structural_identity_sections_when_available(): void {
 		$prompt = Prompt::build_user(
 			[

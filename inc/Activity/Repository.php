@@ -13,6 +13,9 @@ final class Repository {
 	public const DEFAULT_RETENTION_DAYS              = 90;
 	public const DEFAULT_PER_PAGE                    = 20;
 	public const MAX_PER_PAGE                        = 100;
+	public const DEFAULT_SURFACE_LIMIT               = 20;
+	public const MAX_SURFACE_LIMIT                   = 100;
+	public const MAX_KNOWN_SURFACES                  = 8;
 
 	private const TABLE_SUFFIX                            = 'flavor_agent_activity';
 	private const ADMIN_PROJECTION_BACKFILL_SIZE          = 250;
@@ -262,6 +265,105 @@ final class Repository {
 			static fn ( array $row ): array => Serializer::hydrate_row( $row ),
 			$rows
 		);
+	}
+
+	/**
+	 * Return a bounded latest window for each activity surface in a scope.
+	 *
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function query_grouped_by_surface( array $filters ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$scope_key = trim( (string) ( $filters['scopeKey'] ?? '' ) );
+		if ( '' === $scope_key ) {
+			return self::query( $filters );
+		}
+
+		$surface_limit = self::normalize_surface_limit( $filters['surfaceLimit'] ?? self::DEFAULT_SURFACE_LIMIT );
+		if ( '' !== trim( (string) ( $filters['surface'] ?? '' ) ) ) {
+			$query_filters = array_merge( $filters, [ 'limit' => $surface_limit ] );
+			unset( $query_filters['groupBySurface'], $query_filters['surfaceLimit'] );
+
+			return self::query( $query_filters );
+		}
+
+		// Single bounded query then PHP bucketing: fetch the most-recent
+		// rows for the scope (and any narrowing filters), then keep up to
+		// $surface_limit per surface. Replaces the prior 1+N pattern of
+		// one surface-discovery query plus one window query per surface.
+		// Bound is generous (surface_limit * MAX_KNOWN_SURFACES) so a typical
+		// scope captures every surface; if a single surface dominates the
+		// recent window beyond that bound, less-recent surfaces may be
+		// truncated — accepted given the round-trip win.
+		$fetch_filters = array_merge(
+			$filters,
+			[
+				'scopeKey' => $scope_key,
+				'limit'    => $surface_limit * self::MAX_KNOWN_SURFACES,
+			]
+		);
+		unset(
+			$fetch_filters['groupBySurface'],
+			$fetch_filters['surfaceLimit'],
+			$fetch_filters['surface']
+		);
+
+		$candidate_entries = self::query( $fetch_filters );
+
+		// Bucket by surface, preserving newest-first order then trimming.
+		$by_surface = [];
+		// query() returns oldest-first within the LIMIT, so the rightmost
+		// entries are the newest. Iterate in reverse to fill the per-surface
+		// bucket newest-first; stop adding to a bucket once it is full.
+		for ( $index = count( $candidate_entries ) - 1; $index >= 0; --$index ) {
+			$entry         = $candidate_entries[ $index ];
+			$entry_surface = (string) ( $entry['surface'] ?? '' );
+
+			if ( '' === $entry_surface ) {
+				continue;
+			}
+
+			if ( ! isset( $by_surface[ $entry_surface ] ) ) {
+				$by_surface[ $entry_surface ] = [];
+			}
+
+			if ( count( $by_surface[ $entry_surface ] ) >= $surface_limit ) {
+				continue;
+			}
+
+			$by_surface[ $entry_surface ][] = $entry;
+		}
+
+		$entries = [];
+		foreach ( $by_surface as $surface_entries ) {
+			foreach ( $surface_entries as $surface_entry ) {
+				$entries[] = $surface_entry;
+			}
+		}
+
+		usort(
+			$entries,
+			static function ( array $left, array $right ): int {
+				$left_timestamp  = strtotime( (string) ( $left['timestamp'] ?? '' ) );
+				$right_timestamp = strtotime( (string) ( $right['timestamp'] ?? '' ) );
+				$left_timestamp  = false !== $left_timestamp ? $left_timestamp : 0;
+				$right_timestamp = false !== $right_timestamp ? $right_timestamp : 0;
+
+				if ( $left_timestamp !== $right_timestamp ) {
+					return $left_timestamp <=> $right_timestamp;
+				}
+
+				return strcmp( (string) ( $left['id'] ?? '' ), (string) ( $right['id'] ?? '' ) );
+			}
+		);
+
+		return array_values( $entries );
 	}
 
 	/**
@@ -885,6 +987,75 @@ final class Repository {
 		return min( self::MAX_PER_PAGE, $normalized );
 	}
 
+	private static function normalize_surface_limit( $limit ): int {
+		$normalized = (int) $limit;
+
+		if ( $normalized <= 0 ) {
+			return self::DEFAULT_SURFACE_LIMIT;
+		}
+
+		return min( self::MAX_SURFACE_LIMIT, $normalized );
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<int, string>
+	 */
+	private static function query_scope_surfaces( string $scope_key, array $filters = [] ): array {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return [];
+		}
+
+		$entity_type = trim( (string) ( $filters['entityType'] ?? '' ) );
+		$entity_ref  = trim( (string) ( $filters['entityRef'] ?? '' ) );
+		$user_id     = (int) ( $filters['userId'] ?? 0 );
+
+		$conditions = [ 'document_scope_key = %s' ];
+		$args       = [ $scope_key ];
+
+		if ( '' !== $entity_type ) {
+			$conditions[] = 'entity_type = %s';
+			$args[]       = $entity_type;
+		}
+		if ( '' !== $entity_ref ) {
+			$conditions[] = 'entity_ref = %s';
+			$args[]       = $entity_ref;
+		}
+		if ( $user_id > 0 ) {
+			$conditions[] = 'user_id = %d';
+			$args[]       = $user_id;
+		}
+
+		// Conditions are placeholder-only ('column = %s/%d'); table name is
+		// generated from $wpdb->prefix by table_name(); $wpdb->prepare()
+		// interpolates the placeholders.
+		$sql_template = 'SELECT surface AS value, surface AS label FROM ' . self::table_name()
+			. ' WHERE ' . implode( ' AND ', $conditions )
+			. ' GROUP BY surface ORDER BY surface ASC';
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- $sql_template carries placeholder-only conditions and is prepared on the next line.
+		$sql = $wpdb->prepare( $sql_template, $args );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Reads distinct surfaces from the plugin-owned activity table; SQL is prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+
+		$surfaces = [];
+		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
+			$surface = trim( (string) ( $row['value'] ?? '' ) );
+
+			if ( '' !== $surface && ! in_array( $surface, $surfaces, true ) ) {
+				$surfaces[] = $surface;
+			}
+		}
+
+		return $surfaces;
+	}
+
 	private static function normalize_page( $page ): int {
 		$normalized = (int) $page;
 
@@ -1069,7 +1240,7 @@ final class Repository {
 		$sql = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
 		$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Counts rows in the plugin-owned activity table for the admin activity page.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Counts rows in the plugin-owned activity table for the admin activity page; $sql is prepared above from fixed clauses.
 		return max( 0, (int) $wpdb->get_var( $sql ) );
 	}
 
@@ -1098,7 +1269,7 @@ final class Repository {
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql uses allow-listed columns and placeholders.
 		$sql = $wpdb->prepare( $sql, $args );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads one bounded page from the plugin-owned activity table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Reads one bounded page from the plugin-owned activity table; $sql is prepared above from fixed clauses and allow-listed ORDER BY columns.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		return array_values( is_array( $rows ) ? $rows : [] );
@@ -1129,7 +1300,7 @@ final class Repository {
 		$sql = $sql . ' GROUP BY admin_status';
 		$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Aggregates status counts from the plugin-owned activity table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Aggregates status counts from the plugin-owned activity table; $sql is prepared above from fixed clauses.
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
@@ -1229,7 +1400,7 @@ final class Repository {
 
 			$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
 
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Reads distinct filter values from the plugin-owned activity table.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Reads distinct filter values from the plugin-owned activity table; $sql is prepared above from fixed clauses and allow-listed columns.
 			$rows = $wpdb->get_results( $sql, ARRAY_A );
 
 			foreach ( is_array( $rows ) ? $rows : [] as $row ) {

@@ -51,6 +51,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $transients = [];
 
+		public static array $transient_expirations = [];
+
 		public static array $registered_abilities = [];
 
 		public static array $registered_ability_categories = [];
@@ -129,6 +131,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$capabilities                = [];
 			self::$block_templates             = [];
 			self::$transients                  = [];
+			self::$transient_expirations       = [];
 			self::$registered_abilities        = [];
 			self::$registered_ability_categories = [];
 			self::$settings_errors             = [];
@@ -1268,7 +1271,8 @@ namespace {
 
 	if ( ! function_exists( 'set_transient' ) ) {
 		function set_transient( string $name, $value, int $expiration = 0 ): bool {
-			WordPressTestState::$transients[ $name ] = $value;
+			WordPressTestState::$transients[ $name ]            = $value;
+			WordPressTestState::$transient_expirations[ $name ] = $expiration;
 
 			return true;
 		}
@@ -1277,6 +1281,7 @@ namespace {
 	if ( ! function_exists( 'delete_transient' ) ) {
 		function delete_transient( string $name ): bool {
 			unset( WordPressTestState::$transients[ $name ] );
+			unset( WordPressTestState::$transient_expirations[ $name ] );
 
 			return true;
 		}
@@ -1476,6 +1481,16 @@ namespace {
 	if ( ! function_exists( 'sanitize_key' ) ) {
 		function sanitize_key( string $key ): string {
 			return strtolower( preg_replace( '/[^a-z0-9_-]/', '', $key ) ?? '' );
+		}
+	}
+
+	if ( ! function_exists( 'sanitize_title' ) ) {
+		function sanitize_title( string $title ): string {
+			$title = strtolower( sanitize_text_field( $title ) );
+			$title = preg_replace( '/[^a-z0-9_\s-]/', '', $title ) ?? '';
+			$title = preg_replace( '/[\s-]+/', '-', $title ) ?? '';
+
+			return trim( $title, '-' );
 		}
 	}
 

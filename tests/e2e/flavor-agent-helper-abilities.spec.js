@@ -92,23 +92,32 @@ echo wp_json_encode(
 
 async function callAbility( abilityName, input ) {
 	const url = new URL(
-		`/wp-json/wp-abilities/v1/${ abilityName }/run`,
+		`/wp-json/wp-abilities/v1/abilities/${ abilityName }/run`,
 		harness.baseURL
 	);
 	const credentials =
 		String( harness.adminUser ) + ':' + String( applicationPassword );
-
-	if ( input !== undefined ) {
-		url.searchParams.set( 'input', JSON.stringify( input ) );
-	}
-
-	const response = await fetch( url, {
+	const request = {
+		method: 'POST',
 		headers: {
 			Authorization: `Basic ${ Buffer.from( credentials ).toString(
 				'base64'
 			) }`,
+			Connection: 'close',
+			'Content-Type': 'application/json',
 		},
-	} );
+		body: JSON.stringify( {
+			input: input ?? {},
+		} ),
+	};
+	let response;
+
+	try {
+		response = await fetch( url, request );
+	} catch ( error ) {
+		response = await fetch( url, request );
+	}
+
 	const text = await response.text();
 	let body;
 

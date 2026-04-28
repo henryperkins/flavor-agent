@@ -48,6 +48,9 @@ import {
 } from '../activity-history';
 import { actions, reducer } from '../index';
 
+const TEMPLATE_PROMPT =
+	'Make this template read more like an editorial front page.';
+
 describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
@@ -181,7 +184,7 @@ describe( 'store action thunks', () => {
 
 			if (
 				path ===
-					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome' &&
+					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( { entries: [] } );
@@ -341,7 +344,7 @@ describe( 'store action thunks', () => {
 
 			if (
 				path ===
-					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome' &&
+					'/flavor-agent/v1/activity?scopeKey=wp_template%3Atheme%2F%2Fhome&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( { entries: [] } );
@@ -600,7 +603,8 @@ describe( 'store action thunks', () => {
 			}
 
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( { entries: [] } );
@@ -1218,7 +1222,8 @@ describe( 'store action thunks', () => {
 			}
 
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( {
@@ -1262,7 +1267,7 @@ describe( 'store action thunks', () => {
 		);
 		expect( apiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
-				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20',
 				method: 'GET',
 			} )
 		);
@@ -1332,7 +1337,7 @@ describe( 'store action thunks', () => {
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 		expect( apiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
-				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20',
 				method: 'GET',
 			} )
 		);
@@ -1385,14 +1390,16 @@ describe( 'store action thunks', () => {
 
 		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return firstRequest;
 			}
 
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A99' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A99&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( {
@@ -1506,7 +1513,8 @@ describe( 'store action thunks', () => {
 			}
 
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( {
@@ -1597,7 +1605,8 @@ describe( 'store action thunks', () => {
 			}
 
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( {
@@ -1693,7 +1702,8 @@ describe( 'store action thunks', () => {
 			}
 
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( {
@@ -1779,7 +1789,8 @@ describe( 'store action thunks', () => {
 
 		apiFetch.mockImplementation( ( { path, method } ) => {
 			if (
-				path === '/flavor-agent/v1/activity?scopeKey=post%3A42' &&
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
 				method === 'GET'
 			) {
 				return Promise.resolve( {
@@ -1807,7 +1818,7 @@ describe( 'store action thunks', () => {
 
 		expect( apiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
-				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20',
 				method: 'GET',
 			} )
 		);
@@ -1838,6 +1849,323 @@ describe( 'store action thunks', () => {
 				} ),
 			} ),
 		] );
+	} );
+
+	test( 'loadActivitySession preserves hydrated executable history when another surface fills the server response window', async () => {
+		const existingTemplateEntry = {
+			...createActivityEntry( {
+				type: 'apply_template_suggestion',
+				surface: 'template',
+				suggestion: 'Insert hierarchy pattern',
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+				timestamp: '2026-03-24T10:00:00Z',
+			} ),
+			id: 'activity-template-1',
+			persistence: {
+				status: 'server',
+			},
+		};
+		const serverPatternDiagnostics = Array.from(
+			{ length: 25 },
+			( _, index ) => ( {
+				...createActivityEntry( {
+					type: 'request_diagnostic',
+					surface: 'pattern',
+					suggestion: `Pattern diagnostic ${ index + 1 }`,
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+					timestamp: new Date(
+						Date.parse( '2026-03-24T10:01:00Z' ) + index * 1000
+					).toISOString(),
+				} ),
+				id: `activity-pattern-${ index + 1 }`,
+				persistence: {
+					status: 'server',
+				},
+			} )
+		);
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest
+				.fn()
+				.mockReturnValue( [ existingTemplateEntry ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: serverPatternDiagnostics,
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setActivitySession(
+				'post:42',
+				expect.arrayContaining( [
+					expect.objectContaining( {
+						id: 'activity-template-1',
+						surface: 'template',
+					} ),
+				] )
+			)
+		);
+		const setSessionAction = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_ACTIVITY_SESSION'
+		)?.[ 0 ];
+		expect(
+			setSessionAction.entries.filter(
+				( entry ) => entry?.surface === 'pattern'
+			)
+		).toHaveLength( 20 );
+	} );
+
+	test( 'loadActivitySession hydrates server-only executable history from grouped surface response', async () => {
+		const serverTemplateEntry = {
+			...createActivityEntry( {
+				type: 'apply_template_suggestion',
+				surface: 'template',
+				suggestion: 'Insert hierarchy pattern',
+				document: {
+					scopeKey: 'post:42',
+					postType: 'post',
+					entityId: '42',
+				},
+				timestamp: '2026-03-24T10:00:00Z',
+			} ),
+			id: 'activity-template-server',
+			persistence: {
+				status: 'server',
+			},
+		};
+		const serverPatternDiagnostics = Array.from(
+			{ length: 20 },
+			( _, index ) => ( {
+				...createActivityEntry( {
+					type: 'request_diagnostic',
+					surface: 'pattern',
+					suggestion: `Pattern diagnostic ${ index + 1 }`,
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+					timestamp: new Date(
+						Date.parse( '2026-03-24T10:01:00Z' ) + index * 1000
+					).toISOString(),
+				} ),
+				id: `activity-pattern-server-${ index + 1 }`,
+				persistence: {
+					status: 'server',
+				},
+			} )
+		);
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getActivityLog: jest.fn().mockReturnValue( [] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'post',
+							getCurrentPostId: () => 42,
+					  }
+					: {}
+			),
+		};
+
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if (
+				path ===
+					'/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20' &&
+				method === 'GET'
+			) {
+				return Promise.resolve( {
+					entries: [
+						serverTemplateEntry,
+						...serverPatternDiagnostics,
+					],
+				} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		await actions.loadActivitySession()( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		const setSessionActions = dispatch.mock.calls
+			.map( ( [ action ] ) => action )
+			.filter( ( action ) => action?.type === 'SET_ACTIVITY_SESSION' );
+		const setSessionAction =
+			setSessionActions[ setSessionActions.length - 1 ];
+		const hydratedEntries = setSessionAction.entries;
+
+		expect( hydratedEntries ).toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( {
+					id: 'activity-template-server',
+					surface: 'template',
+				} ),
+			] )
+		);
+		expect(
+			hydratedEntries.filter( ( entry ) => entry?.surface === 'pattern' )
+		).toHaveLength( 20 );
+	} );
+
+		test( 'applyTemplateSuggestion makes activity undoable before the server audit write returns', async () => {
+		applyTemplateSuggestionOperations.mockReturnValue( {
+			ok: true,
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+				},
+			],
+		} );
+		apiFetch.mockImplementation( ( { path, method, data } ) => {
+			if (
+				path === '/flavor-agent/v1/recommend-template' &&
+				method === 'POST' &&
+				data?.resolveSignatureOnly
+			) {
+				return Promise.resolve( {
+					resolvedContextSignature: 'resolved-template',
+				} );
+			}
+
+			if ( path === '/flavor-agent/v1/activity' && method === 'POST' ) {
+				return new Promise( () => {} );
+			}
+
+			return Promise.reject(
+				new Error( `Unexpected apiFetch: ${ path }` )
+			);
+		} );
+
+		const currentActivityLog = [];
+		const dispatch = jest.fn( ( action ) => {
+			if ( action?.type === 'LOG_ACTIVITY' ) {
+				currentActivityLog.push( action.entry );
+			}
+		} );
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'wp_template:home' ),
+			getActivityLog: jest.fn( () => currentActivityLog ),
+			getTemplateRequestPrompt: jest.fn().mockReturnValue( TEMPLATE_PROMPT ),
+			getTemplateContextSignature: jest.fn().mockReturnValue( null ),
+			getTemplateResultRef: jest.fn().mockReturnValue( 'theme//home' ),
+			getTemplateResultToken: jest.fn().mockReturnValue( 3 ),
+			getTemplateResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-template' ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/editor'
+					? {
+							getCurrentPostType: () => 'wp_template',
+							getCurrentPostId: () => 'home',
+					  }
+					: {}
+			),
+		};
+		const applyPromise = actions.applyTemplateSuggestion(
+			{
+				label: 'Clarify template hierarchy',
+				suggestionKey: 'Clarify template hierarchy-0',
+			},
+			null,
+			{
+				templateRef: 'theme//home',
+				prompt: TEMPLATE_PROMPT,
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		let logActivityAction = null;
+
+		for ( let attempt = 0; attempt < 10; attempt++ ) {
+			await Promise.resolve();
+			logActivityAction = dispatch.mock.calls.find(
+				( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+			)?.[ 0 ];
+
+			if ( logActivityAction ) {
+				break;
+			}
+		}
+
+		expect( logActivityAction ).toEqual(
+			expect.objectContaining( {
+				type: 'LOG_ACTIVITY',
+				entry: expect.objectContaining( {
+					surface: 'template',
+					undo: expect.objectContaining( {
+						status: 'available',
+						canUndo: true,
+					} ),
+					persistence: expect.objectContaining( {
+						status: 'local',
+						syncType: 'create',
+					} ),
+				} ),
+			} )
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setTemplateApplyState( 'applying' )
+		);
+		expect( dispatch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'SET_TEMPLATE_APPLY_STATE',
+				status: 'success',
+			} )
+		);
+
+		void applyPromise;
 	} );
 
 	test( 'loadActivitySession retries once when reload scope is temporarily unavailable', async () => {
@@ -4348,7 +4676,7 @@ describe( 'store action thunks', () => {
 
 		expect( apiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
-				path: '/flavor-agent/v1/activity?scopeKey=post%3A42',
+				path: '/flavor-agent/v1/activity?scopeKey=post%3A42&limit=100&groupBySurface=true&surfaceLimit=20',
 				method: 'GET',
 			} )
 		);

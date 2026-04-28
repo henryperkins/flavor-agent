@@ -589,7 +589,14 @@ export default function PatternRecommender() {
 	);
 
 	useEffect( () => {
+		let searchObserverTimeout;
+
 		const cleanupBindings = () => {
+			if ( searchObserverTimeout ) {
+				clearTimeout( searchObserverTimeout );
+				searchObserverTimeout = null;
+			}
+
 			clearSearchDebounce();
 
 			if ( observerRef.current ) {
@@ -653,8 +660,7 @@ export default function PatternRecommender() {
 			subtree: true,
 		} );
 		observerRef.current = observer;
-
-		const timeout = setTimeout( () => {
+		searchObserverTimeout = setTimeout( () => {
 			if ( observerRef.current ) {
 				observerRef.current.disconnect();
 				observerRef.current = null;
@@ -662,7 +668,6 @@ export default function PatternRecommender() {
 		}, OBSERVER_TIMEOUT_MS );
 
 		return () => {
-			clearTimeout( timeout );
 			cleanupBindings();
 		};
 	}, [

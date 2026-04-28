@@ -1720,6 +1720,22 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_render_page_outputs_parseable_guidelines_block_options_json(): void {
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertSame(
+			1,
+			preg_match(
+				'/<script type="application\/json" data-guidelines-block-options>(.*?)<\/script>/s',
+				$output,
+				$matches
+			)
+		);
+		$this->assertIsArray( json_decode( $matches[1], true ) );
+	}
+
 	public function test_sanitize_guideline_copy_marks_guidelines_feedback_and_sanitizes_text(): void {
 		$_POST = [
 			'option_page'                        => 'flavor_agent_settings',

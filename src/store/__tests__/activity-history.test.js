@@ -11,6 +11,7 @@ import {
 	getCurrentActivityScope,
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
+	limitActivityLog,
 	readPersistedActivityLog,
 	resolveActivityScope,
 	resolveGlobalStylesScope,
@@ -86,6 +87,55 @@ describe( 'activity history helpers', () => {
 
 		expect( readPersistedActivityLog( 'post:42' ) ).toEqual( [ entry ] );
 		expect( readPersistedActivityLog( 'post:99' ) ).toEqual( [] );
+	} );
+
+	test( 'activity history limits entries per surface so diagnostics do not evict executable undo history', () => {
+		const templateEntry = createActivityEntry( {
+			type: 'apply_template_suggestion',
+			surface: 'template',
+			suggestion: 'Insert hierarchy pattern',
+			document: {
+				scopeKey: 'wp_template:theme//home',
+			},
+			timestamp: '2026-03-24T10:00:00Z',
+		} );
+		const patternDiagnostics = Array.from( { length: 25 }, ( _, index ) =>
+			createActivityEntry( {
+				type: 'request_diagnostic',
+				surface: 'pattern',
+				suggestion: `Pattern diagnostic ${ index + 1 }`,
+				document: {
+					scopeKey: 'wp_template:theme//home',
+				},
+				timestamp: new Date(
+					Date.parse( '2026-03-24T10:01:00Z' ) + index * 1000
+				).toISOString(),
+			} )
+		);
+
+		const limitedEntries = limitActivityLog( [
+			templateEntry,
+			...patternDiagnostics,
+		] );
+
+		expect(
+			limitedEntries.filter( ( entry ) => entry.surface === 'pattern' )
+		).toHaveLength( 20 );
+		expect( limitedEntries ).toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( {
+					id: templateEntry.id,
+					surface: 'template',
+				} ),
+			] )
+		);
+		expect( limitedEntries ).not.toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( {
+					id: patternDiagnostics[ 0 ].id,
+				} ),
+			] )
+		);
 	} );
 
 	test( 'resolveGlobalStylesScope returns a stable explicit scope key', () => {

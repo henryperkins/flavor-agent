@@ -8,6 +8,9 @@ import {
 	writePersistedActivityLog,
 } from './activity-history';
 
+const SERVER_ACTIVITY_FETCH_LIMIT = 100;
+const SERVER_ACTIVITY_SURFACE_LIMIT = 20;
+
 export function getScopeKey( scope = null ) {
 	if ( typeof scope?.scopeKey === 'string' && scope.scopeKey.trim() ) {
 		return scope.scopeKey.trim();
@@ -154,6 +157,8 @@ export function buildActivityQueryPath( {
 	entityType = '',
 	entityRef = '',
 	limit = null,
+	groupBySurface = false,
+	surfaceLimit = null,
 } ) {
 	const params = new URLSearchParams();
 
@@ -175,6 +180,14 @@ export function buildActivityQueryPath( {
 
 	if ( Number.isInteger( limit ) && limit > 0 ) {
 		params.set( 'limit', String( limit ) );
+	}
+
+	if ( groupBySurface ) {
+		params.set( 'groupBySurface', 'true' );
+	}
+
+	if ( Number.isInteger( surfaceLimit ) && surfaceLimit > 0 ) {
+		params.set( 'surfaceLimit', String( surfaceLimit ) );
 	}
 
 	const query = params.toString();
@@ -245,6 +258,9 @@ export async function fetchServerActivityEntries( scopeKey ) {
 	const response = await apiFetch( {
 		path: buildActivityQueryPath( {
 			scopeKey,
+			limit: SERVER_ACTIVITY_FETCH_LIMIT,
+			groupBySurface: true,
+			surfaceLimit: SERVER_ACTIVITY_SURFACE_LIMIT,
 		} ),
 		method: 'GET',
 	} );
@@ -503,22 +519,52 @@ export async function recordActivityEntry(
 	localDispatch,
 	select,
 	entry,
-	logActivity
+	logActivity,
+	setActivitySession = null
 ) {
-	let nextEntry = entry;
+	localDispatch( logActivity( entry ) );
+	persistActivitySession( select );
 
 	if ( entry?.document?.scopeKey ) {
 		try {
-			nextEntry = await persistServerActivityEntry( entry );
+			const persistedEntry = await persistServerActivityEntry( entry );
+
+			if (
+				persistedEntry?.id &&
+				persistedEntry?.persistence?.status === 'server'
+			) {
+				const scopeKey = persistedEntry?.document?.scopeKey || null;
+				const currentScopeKey = select.getActivityScopeKey?.() || null;
+				const baseEntries =
+					currentScopeKey === scopeKey
+						? select.getActivityLog?.() || []
+						: readPersistedActivityLog( scopeKey );
+				const mergedEntries = mergeActivityEntries( baseEntries, [
+					persistedEntry,
+				] );
+
+				if (
+					currentScopeKey === scopeKey &&
+					typeof setActivitySession === 'function'
+				) {
+					refreshActivitySession(
+						localDispatch,
+						scopeKey,
+						mergedEntries,
+						setActivitySession
+					);
+				} else {
+					writePersistedActivityLog( scopeKey, mergedEntries );
+				}
+			}
+
+			return persistedEntry;
 		} catch {
-			nextEntry = entry;
+			return entry;
 		}
 	}
 
-	localDispatch( logActivity( nextEntry ) );
-	persistActivitySession( select );
-
-	return nextEntry;
+	return entry;
 }
 
 export function createLoadActivitySessionAction( {
@@ -579,6 +625,7 @@ export function createLoadActivitySessionAction( {
 				const serverEntries =
 					await fetchServerActivityEntries( nextScopeKey );
 				const mergedEntries = mergeActivityEntries(
+					workingEntries,
 					serverEntries,
 					persistedEntries,
 					failedEntries,

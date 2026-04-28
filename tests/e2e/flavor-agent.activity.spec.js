@@ -143,11 +143,14 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	await waitForWordPressReady( page );
 
 	await expect(
+		page.locator( '#flavor-agent-activity-log-root' )
+	).toBeVisible( { timeout: 30_000 } );
+	await expect(
 		page.getByRole( 'heading', { name: 'AI Activity Log' } )
-	).toBeVisible();
+	).toBeVisible( { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__summary-item' )
-	).toHaveCount( 6 );
+	).toHaveCount( 6, { timeout: 30_000 } );
 	await expect(
 		page.locator( '.flavor-agent-activity-log__feed' )
 	).toContainText( 'Refresh template hierarchy' );

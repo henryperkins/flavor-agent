@@ -101,7 +101,8 @@ function runCommand( command, args, options = {} ) {
 }
 
 function runDockerCompose( harness, args, options = {} ) {
-	return runCommand( 'docker', [ 'compose', ...args ], {
+	const wrapperPath = path.join( __dirname, 'docker-compose.js' );
+	return runCommand( 'node', [ wrapperPath, ...args ], {
 		...options,
 		cwd: harness.rootDir,
 		env: harness.composeEnv,

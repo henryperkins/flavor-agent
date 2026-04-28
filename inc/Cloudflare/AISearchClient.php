@@ -2074,45 +2074,7 @@ final class AISearchClient {
 	}
 
 	private static function sanitize_excerpt( string $text ): string {
-		$text = sanitize_textarea_field( $text );
-		$text = trim( preg_replace( '/\s+/u', ' ', $text ) ?? '' );
-
-		if ( self::string_length( $text ) > 360 ) {
-			$text = self::string_substr( $text, 0, 357 ) . '...';
-		}
-
-		return $text;
-	}
-
-	private static function string_length( string $value ): int {
-		if ( function_exists( 'mb_strlen' ) ) {
-			return (int) mb_strlen( $value, 'UTF-8' );
-		}
-
-		if ( preg_match( '//u', $value ) ) {
-			preg_match_all( '/./us', $value, $matches );
-			return count( $matches[0] ?? [] );
-		}
-
-		return strlen( $value );
-	}
-
-	private static function string_substr( string $value, int $start, int $length ): string {
-		if ( function_exists( 'mb_substr' ) ) {
-			return (string) mb_substr( $value, $start, $length, 'UTF-8' );
-		}
-
-		if ( preg_match( '//u', $value ) ) {
-			$characters = preg_split( '//u', $value, -1, PREG_SPLIT_NO_EMPTY );
-
-			if ( ! is_array( $characters ) ) {
-				return '';
-			}
-
-			return implode( '', array_slice( $characters, $start, $length ) );
-		}
-
-		return substr( $value, $start, $length );
+		return \FlavorAgent\Support\GuidanceExcerpt::sanitize( $text );
 	}
 
 	private static function normalize_guidance_url( mixed $metadata_url, string $frontmatter_url ): string {
