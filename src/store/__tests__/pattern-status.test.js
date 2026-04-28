@@ -89,4 +89,144 @@ describe( 'pattern status store contract', () => {
 		expect( clearedState.patternBadge ).toBeNull();
 		expect( clearedState.patternError ).toBeNull();
 	} );
+
+	test( 'stale pattern completions are ignored', () => {
+		let state = reducer(
+			undefined,
+			actions.setPatternStatus( 'loading', null, 1, 'signature-a' )
+		);
+		state = reducer(
+			state,
+			actions.setPatternStatus( 'loading', null, 2, 'signature-b' )
+		);
+		state = reducer(
+			state,
+			actions.setPatternRecommendations(
+				[
+					{
+						name: 'theme/fresh',
+						reason: 'Fresh result.',
+						score: 0.98,
+					},
+				],
+				2,
+				'signature-b'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setPatternStatus( 'ready', null, 2, 'signature-b' )
+		);
+
+		const staleRecommendationsState = reducer(
+			state,
+			actions.setPatternRecommendations(
+				[
+					{
+						name: 'theme/stale',
+						reason: 'Stale result.',
+						score: 0.99,
+					},
+				],
+				1,
+				'signature-a'
+			)
+		);
+		const staleStatusState = reducer(
+			staleRecommendationsState,
+			actions.setPatternStatus(
+				'error',
+				'Old request failed.',
+				1,
+				'signature-a'
+			)
+		);
+
+		expect( staleStatusState.patternRecommendations ).toEqual( [
+			{
+				name: 'theme/fresh',
+				reason: 'Fresh result.',
+				score: 0.98,
+			},
+		] );
+		expect( staleStatusState.patternStatus ).toBe( 'ready' );
+		expect( staleStatusState.patternError ).toBeNull();
+		expect( staleStatusState.patternRequestToken ).toBe( 2 );
+		expect( staleStatusState.patternRequestSignature ).toBe(
+			'signature-b'
+		);
+	} );
+
+	test( 'same-token pattern completions with mismatched signatures are ignored', () => {
+		let state = reducer(
+			undefined,
+			actions.setPatternStatus(
+				'loading',
+				null,
+				5,
+				'signature-current'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setPatternRecommendations(
+				[
+					{
+						name: 'theme/current',
+						reason: 'Current result.',
+						score: 0.98,
+					},
+				],
+				5,
+				'signature-current'
+			)
+		);
+		state = reducer(
+			state,
+			actions.setPatternStatus(
+				'ready',
+				null,
+				5,
+				'signature-current'
+			)
+		);
+
+		const staleRecommendationsState = reducer(
+			state,
+			actions.setPatternRecommendations(
+				[
+					{
+						name: 'theme/same-token-stale',
+						reason: 'Same token, stale signature.',
+						score: 0.99,
+					},
+				],
+				5,
+				'signature-stale'
+			)
+		);
+		const staleStatusState = reducer(
+			staleRecommendationsState,
+			actions.setPatternStatus(
+				'error',
+				'Same-token stale request failed.',
+				5,
+				'signature-stale'
+			)
+		);
+
+		expect( staleStatusState.patternRecommendations ).toEqual( [
+			{
+				name: 'theme/current',
+				reason: 'Current result.',
+				score: 0.98,
+			},
+		] );
+		expect( staleStatusState.patternStatus ).toBe( 'ready' );
+		expect( staleStatusState.patternError ).toBeNull();
+		expect( staleStatusState.patternRequestToken ).toBe( 5 );
+		expect( staleStatusState.patternRequestSignature ).toBe(
+			'signature-current'
+		);
+	} );
 } );

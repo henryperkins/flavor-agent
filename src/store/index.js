@@ -13,6 +13,7 @@ import { buildBlockRecommendationContextSignature } from '../utils/block-recomme
 import {
 	buildBlockRecommendationRequestSignature,
 	buildNavigationRecommendationRequestSignature,
+	buildPatternRecommendationRequestSignature,
 } from '../utils/recommendation-request-signature';
 import {
 	getCurrentActivityScope,
@@ -104,6 +105,9 @@ const DEFAULT_STATE = {
 	patternStatus: 'idle',
 	patternError: null,
 	patternBadge: null,
+	patternRequestToken: 0,
+	patternResultToken: 0,
+	patternRequestSignature: '',
 	...createExecutableSurfaceDefaultState(),
 };
 
@@ -693,6 +697,25 @@ function isStaleNavigationRequest( state, requestToken ) {
 	}
 
 	return requestToken < ( state.navigationRequestToken || 0 );
+}
+
+function isStalePatternRequest( state, requestToken, requestSignature = '' ) {
+	if ( requestToken === null || requestToken === undefined ) {
+		return false;
+	}
+
+	const currentToken = state.patternRequestToken || 0;
+
+	if ( requestToken < currentToken ) {
+		return true;
+	}
+
+	return (
+		requestToken === currentToken &&
+		Boolean( requestSignature ) &&
+		Boolean( state.patternRequestSignature ) &&
+		requestSignature !== state.patternRequestSignature
+	);
 }
 
 function isStaleNavigationReviewRequest( state, requestToken ) {
@@ -1439,12 +1462,32 @@ const actions = {
 		};
 	},
 
-	setPatternStatus( status, error = null ) {
-		return { type: 'SET_PATTERN_STATUS', status, error };
+	setPatternStatus(
+		status,
+		error = null,
+		requestToken = null,
+		requestSignature = ''
+	) {
+		return {
+			type: 'SET_PATTERN_STATUS',
+			status,
+			error,
+			requestToken,
+			requestSignature,
+		};
 	},
 
-	setPatternRecommendations( recommendations ) {
-		return { type: 'SET_PATTERN_RECS', recommendations };
+	setPatternRecommendations(
+		recommendations,
+		requestToken = null,
+		requestSignature = ''
+	) {
+		return {
+			type: 'SET_PATTERN_RECS',
+			recommendations,
+			requestToken,
+			requestSignature,
+		};
 	},
 
 	setNavigationStatus(
@@ -2148,10 +2191,24 @@ function reducer( state = DEFAULT_STATE, action ) {
 			};
 		}
 		case 'SET_PATTERN_STATUS':
+			if (
+				isStalePatternRequest(
+					state,
+					action.requestToken,
+					action.requestSignature
+				)
+			) {
+				return state;
+			}
+
 			return {
 				...state,
 				patternStatus: action.status,
 				patternError: action.error ?? null,
+				patternRequestToken:
+					action.requestToken ?? state.patternRequestToken,
+				patternRequestSignature:
+					action.requestSignature || state.patternRequestSignature,
 			};
 		case 'SET_CONTENT_STATUS':
 			if ( action.requestToken < ( state.contentRequestToken || 0 ) ) {
@@ -2214,11 +2271,26 @@ function reducer( state = DEFAULT_STATE, action ) {
 				contentResultToken: state.contentResultToken + 1,
 			};
 		case 'SET_PATTERN_RECS':
+			if (
+				isStalePatternRequest(
+					state,
+					action.requestToken,
+					action.requestSignature
+				)
+			) {
+				return state;
+			}
+
 			return {
 				...state,
 				patternRecommendations: action.recommendations,
 				patternBadge: getPatternBadgeReason( action.recommendations ),
 				patternError: null,
+				patternRequestToken:
+					action.requestToken ?? state.patternRequestToken,
+				patternResultToken: state.patternResultToken + 1,
+				patternRequestSignature:
+					action.requestSignature || state.patternRequestSignature,
 			};
 		case 'SET_NAVIGATION_STATUS':
 			if ( isStaleNavigationRequest( state, action.requestToken ) ) {
@@ -2383,6 +2455,9 @@ const selectors = {
 	getPatternStatus: ( state ) => state.patternStatus,
 	getPatternBadge: ( state ) => state.patternBadge,
 	getPatternError: ( state ) => state.patternError,
+	getPatternRequestToken: ( state ) => state.patternRequestToken,
+	getPatternResultToken: ( state ) => state.patternResultToken,
+	getPatternRequestSignature: ( state ) => state.patternRequestSignature,
 	isPatternLoading: ( state ) => state.patternStatus === 'loading',
 	getContentRecommendation: ( state ) => state.contentRecommendation,
 	getContentStatus: ( state ) => state.contentStatus,

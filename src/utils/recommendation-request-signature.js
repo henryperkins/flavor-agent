@@ -4,6 +4,20 @@ function normalizeStringValue( value ) {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeStringArray( value ) {
+	if ( ! Array.isArray( value ) ) {
+		return [];
+	}
+
+	return [
+		...new Set(
+			value
+				.map( ( entry ) => normalizeStringValue( entry ) )
+				.filter( Boolean )
+		),
+	].sort();
+}
+
 export function buildRecommendationRequestSignature( {
 	surface = '',
 	prompt = '',
@@ -59,6 +73,26 @@ export function buildNavigationRecommendationRequestSignature( {
 		contextSignature,
 		scopeKey: blockClientId,
 		entityRef: blockClientId,
+	} );
+}
+
+export function buildPatternRecommendationRequestSignature( input = {} ) {
+	const normalizedInput =
+		input && typeof input === 'object' && ! Array.isArray( input )
+			? input
+			: {};
+
+	return buildContextSignature( {
+		surface: 'pattern',
+		postType: normalizeStringValue( normalizedInput.postType ),
+		templateType: normalizeStringValue( normalizedInput.templateType ),
+		prompt: normalizeStringValue( normalizedInput.prompt ),
+		visiblePatternNames: normalizeStringArray(
+			normalizedInput.visiblePatternNames
+		),
+		insertionContext: normalizedInput.insertionContext || null,
+		blockContext: normalizedInput.blockContext || null,
+		document: normalizedInput.document || null,
 	} );
 }
 
