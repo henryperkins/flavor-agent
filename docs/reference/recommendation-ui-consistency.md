@@ -122,6 +122,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 
 - Block, Navigation, Template, Template-Part, Style Book, and Global Styles now preserve the previous result, mark it stale, disable execution as needed, and offer refresh from the surface that owns the request lifecycle.
 - Block settings and block styles preserve stale projected results, but they intentionally do not own refresh. They disable apply and send the user back to the main block `AI Recommendations` panel to refresh the source request.
+- Shadow block suggestions use `panel: "shadow"` in the recommendation contract and are mirrored inside Gutenberg's Border/Shadow inspector group, because Gutenberg exposes shadow controls through the border group rather than a standalone shadow group.
 - Navigation still exposes no inline activity section or undo affordance, though scoped read-only `request_diagnostic` rows now land in the admin audit surface.
 - Pattern still exposes no activity or undo affordance, which keeps it separate from the fuller recommendation surfaces even though its loading, empty, error, and success states are now explicit.
 

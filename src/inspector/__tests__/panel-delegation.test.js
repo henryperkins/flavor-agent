@@ -35,6 +35,12 @@ describe( 'panel delegation constants', () => {
 				title: 'Border',
 			},
 			{
+				group: 'border',
+				panel: 'shadow',
+				label: 'AI shadow suggestions',
+				title: 'Shadow',
+			},
+			{
 				group: 'filter',
 				panel: 'filter',
 				label: 'AI filter suggestions',
@@ -56,6 +62,7 @@ describe( 'panel delegation constants', () => {
 				'typography',
 				'dimensions',
 				'border',
+				'shadow',
 				'filter',
 				'background',
 			] )
@@ -99,13 +106,13 @@ describe( 'panel delegation constants', () => {
 
 	test( 'isDelegatedStylePanel returns true for delegated panels', () => {
 		expect( isDelegatedStylePanel( 'color' ) ).toBe( true );
+		expect( isDelegatedStylePanel( 'shadow' ) ).toBe( true );
 		expect( isDelegatedStylePanel( 'filter' ) ).toBe( true );
 		expect( isDelegatedStylePanel( 'background' ) ).toBe( true );
 	} );
 
 	test( 'isDelegatedStylePanel returns false for non-delegated panels', () => {
 		expect( isDelegatedStylePanel( 'general' ) ).toBe( false );
-		expect( isDelegatedStylePanel( 'shadow' ) ).toBe( false );
 		expect( isDelegatedStylePanel( 'effects' ) ).toBe( false );
 	} );
 

@@ -130,7 +130,10 @@ beforeEach( () => {
 				settings: [
 					{ label: 'Use larger heading', panel: 'advanced' },
 				],
-				styles: [ { label: 'Use accent color', panel: 'color' } ],
+				styles: [
+					{ label: 'Use accent color', panel: 'color' },
+					{ label: 'Use soft shadow', panel: 'shadow' },
+				],
 				block: [ { label: 'Hide on mobile' } ],
 			},
 			blockStatus: 'ready',
@@ -177,6 +180,9 @@ describe( 'InspectorInjector', () => {
 		expect( getContainer().textContent ).toContain( 'Block Panel' );
 		expect( getContainer().textContent ).toContain(
 			'AI color suggestions passive'
+		);
+		expect( getContainer().textContent ).toContain(
+			'AI shadow suggestions passive'
 		);
 		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
 

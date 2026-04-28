@@ -253,7 +253,7 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 						) ) }
 						{ STYLE_PANEL_DELEGATIONS.map( ( config ) => (
 							<SubPanelSuggestions
-								key={ `styles-${ config.group }` }
+								key={ `styles-${ config.group }-${ config.panel }` }
 								{ ...config }
 								clientId={ clientId }
 								suggestions={

@@ -41,6 +41,12 @@ export const STYLE_PANEL_DELEGATIONS = [
 		title: 'Border',
 	},
 	{
+		group: 'border',
+		panel: 'shadow',
+		label: 'AI shadow suggestions',
+		title: 'Shadow',
+	},
+	{
 		group: 'filter',
 		panel: 'filter',
 		label: 'AI filter suggestions',
