@@ -60,6 +60,18 @@ namespace FlavorAgent\Tests\Support {
 		public static array $settings_errors = [];
 
 		/** @var array<string, array<string, mixed>> */
+		public static array $rest_routes = [];
+
+		/** @var array<string, callable> */
+		public static array $activation_hooks = [];
+
+		/** @var array<string, callable> */
+		public static array $deactivation_hooks = [];
+
+		/** @var array<string, array<string, mixed>> */
+		public static array $registered_block_pattern_categories = [];
+
+		/** @var array<string, array<string, mixed>> */
 		public static array $scheduled_events = [];
 
 		/** @var array<string, mixed> */
@@ -289,6 +301,10 @@ namespace FlavorAgent\Tests\Support {
 			self::$registered_abilities        = [];
 			self::$registered_ability_categories = [];
 			self::$settings_errors             = [];
+			self::$rest_routes                 = [];
+			self::$activation_hooks            = [];
+			self::$deactivation_hooks          = [];
+			self::$registered_block_pattern_categories = [];
 			self::$scheduled_events            = [];
 			self::$updated_options              = [];
 			self::$cleared_cron_hooks           = [];
@@ -317,6 +333,13 @@ namespace FlavorAgent\Tests\Support {
 			\WP_Block_Type_Registry::get_instance()->reset();
 			\WP_Block_Patterns_Registry::get_instance()->reset();
 		}
+	}
+}
+
+namespace WordPress\AI_Client\Builders\Exception {
+
+	if ( ! class_exists( 'WordPress\\AI_Client\\Builders\\Exception\\Prompt_Prevented_Exception' ) ) {
+		final class Prompt_Prevented_Exception extends \RuntimeException {}
 	}
 }
 
@@ -448,9 +471,19 @@ namespace {
 					case 'is_supported_for_text_generation':
 						$this->sync_state();
 
+						if ( (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $this ) ) {
+							return false;
+						}
+
 						return WordPressTestState::ai_client_prompt_supports_text_generation( $this->state );
 					case 'generate_text':
 						$this->sync_state();
+
+						if ( (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $this ) ) {
+							throw new \WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception(
+								'Prompt execution was prevented by a filter.'
+							);
+						}
 
 						$explicit = WordPressTestState::$ai_client_generate_text_result;
 
@@ -543,7 +576,13 @@ namespace {
 			 */
 			private array $params = [];
 
+			private string $method;
+
+			private string $route;
+
 			public function __construct( string $method = 'GET', string $route = '/' ) {
+				$this->method = strtoupper( $method );
+				$this->route  = $route;
 			}
 
 			public function get_param( string $key ) {
@@ -556,6 +595,14 @@ namespace {
 
 			public function set_param( string $key, $value ): void {
 				$this->params[ $key ] = $value;
+			}
+
+			public function get_method(): string {
+				return $this->method;
+			}
+
+			public function get_route(): string {
+				return $this->route;
 			}
 		}
 	}
@@ -653,6 +700,13 @@ namespace {
 					if ( '' !== $table && ! isset( WordPressTestState::$db_tables[ $table ] ) ) {
 						WordPressTestState::$db_tables[ $table ] = [];
 					}
+				}
+
+				if ( preg_match( '/DROP TABLE IF EXISTS\s+([^\s]+)/i', $query, $matches ) ) {
+					$table = (string) ( $matches[1] ?? '' );
+					unset( WordPressTestState::$db_tables[ $table ] );
+
+					return 1;
 				}
 
 				if ( preg_match( '/DELETE FROM\s+([^\s]+)\s+WHERE\s+created_at\s*<\s*\'([^\']+)\'/i', $query, $matches ) ) {
@@ -1462,6 +1516,36 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'plugin_dir_path' ) ) {
+		function plugin_dir_path( string $file ): string {
+			return dirname( $file ) . '/';
+		}
+	}
+
+	if ( ! function_exists( 'plugin_dir_url' ) ) {
+		function plugin_dir_url( string $file ): string {
+			unset( $file );
+
+			return 'https://example.test/wp-content/plugins/flavor-agent/';
+		}
+	}
+
+	if ( ! function_exists( 'register_activation_hook' ) ) {
+		function register_activation_hook( string $file, $callback ): void {
+			if ( is_callable( $callback ) ) {
+				WordPressTestState::$activation_hooks[ $file ] = $callback;
+			}
+		}
+	}
+
+	if ( ! function_exists( 'register_deactivation_hook' ) ) {
+		function register_deactivation_hook( string $file, $callback ): void {
+			if ( is_callable( $callback ) ) {
+				WordPressTestState::$deactivation_hooks[ $file ] = $callback;
+			}
+		}
+	}
+
 	if ( ! function_exists( 'untrailingslashit' ) ) {
 		function untrailingslashit( string $value ): string {
 			return rtrim( $value, '/' );
@@ -1477,6 +1561,18 @@ namespace {
 	if ( ! function_exists( 'wp_get_environment_type' ) ) {
 		function wp_get_environment_type(): string {
 			return 'tests';
+		}
+	}
+
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin(): bool {
+			return false;
+		}
+	}
+
+	if ( ! function_exists( 'wp_doing_cron' ) ) {
+		function wp_doing_cron(): bool {
+			return false;
 		}
 	}
 
@@ -1597,6 +1693,18 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( '__return_true' ) ) {
+		function __return_true(): bool {
+			return true;
+		}
+	}
+
+	if ( ! function_exists( '__return_false' ) ) {
+		function __return_false(): bool {
+			return false;
+		}
+	}
+
 	if ( ! function_exists( 'add_filter' ) ) {
 		function add_filter( string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
 			if ( ! isset( WordPressTestState::$filters[ $hook_name ] ) ) {
@@ -1613,6 +1721,33 @@ namespace {
 			];
 
 			return true;
+		}
+	}
+
+	if ( ! function_exists( 'add_action' ) ) {
+		function add_action( string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+			return add_filter( $hook_name, $callback, $priority, $accepted_args );
+		}
+	}
+
+	if ( ! function_exists( 'do_action' ) ) {
+		function do_action( string $hook_name, ...$args ): void {
+			if ( empty( WordPressTestState::$filters[ $hook_name ] ) ) {
+				return;
+			}
+
+			$callbacks = WordPressTestState::$filters[ $hook_name ];
+			ksort( $callbacks );
+
+			foreach ( $callbacks as $entries ) {
+				foreach ( $entries as $entry ) {
+					$accepted_args = (int) ( $entry['accepted_args'] ?? 1 );
+					$callback_args = 0 === $accepted_args
+						? []
+						: array_slice( $args, 0, $accepted_args );
+					call_user_func_array( $entry['callback'], $callback_args );
+				}
+			}
 		}
 	}
 
@@ -1699,7 +1834,9 @@ namespace {
 
 	if ( ! function_exists( 'sanitize_key' ) ) {
 		function sanitize_key( string $key ): string {
-			return strtolower( preg_replace( '/[^a-z0-9_-]/', '', $key ) ?? '' );
+			$key = strtolower( $key );
+
+			return preg_replace( '/[^a-z0-9_-]/', '', $key ) ?? '';
 		}
 	}
 
@@ -1746,6 +1883,12 @@ namespace {
 					wp_strip_all_tags( (string) $value )
 				) ?? ''
 			);
+		}
+	}
+
+	if ( ! function_exists( 'rest_sanitize_boolean' ) ) {
+		function rest_sanitize_boolean( $value ): bool {
+			return in_array( $value, [ true, 1, '1', 'true', 'yes', 'on' ], true );
 		}
 	}
 
@@ -1969,6 +2112,35 @@ namespace {
 	if ( ! function_exists( 'wp_register_ability_category' ) ) {
 		function wp_register_ability_category( string $id, array $args ): void {
 			WordPressTestState::$registered_ability_categories[ $id ] = $args;
+		}
+	}
+
+	if ( ! function_exists( 'register_rest_route' ) ) {
+		function register_rest_route( string $namespace, string $route, array $args = [], bool $override = false ): bool {
+			unset( $override );
+
+			$route_path   = '/' . trim( $namespace, '/' ) . '/' . ltrim( $route, '/' );
+			$is_list      = [] === $args
+				|| array_keys( $args ) === range( 0, count( $args ) - 1 );
+			$route_config = [
+				'namespace' => trim( $namespace, '/' ),
+				'route'     => '/' . ltrim( $route, '/' ),
+				'path'      => $route_path,
+				'endpoints' => $is_list ? $args : [ $args ],
+				'raw'       => $args,
+			];
+
+			WordPressTestState::$rest_routes[ $route_path ] = $route_config;
+
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'register_block_pattern_category' ) ) {
+		function register_block_pattern_category( string $name, array $properties ): bool {
+			WordPressTestState::$registered_block_pattern_categories[ $name ] = $properties;
+
+			return true;
 		}
 	}
 

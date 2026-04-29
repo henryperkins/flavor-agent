@@ -1,5 +1,11 @@
 const { test, expect } = require( '@playwright/test' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
+const {
+	getWp70HarnessConfig,
+	runWpCli,
+} = require( '../../scripts/wp70-e2e' );
+
+const wp70Harness = getWp70HarnessConfig();
 
 const ACTIVITY_ENTRIES = [
 	{
@@ -220,4 +226,235 @@ test( 'AI Activity page renders an inline load error instead of the empty activi
 	await expect(
 		page.getByRole( 'button', { name: 'Retry loading activity' } )
 	).toBeVisible();
+} );
+
+test( '@wp70-site-editor AI Activity page loads real repository data in wp-admin', async ( {
+	page,
+} ) => {
+	test.setTimeout( 120_000 );
+
+	runWpCli( wp70Harness, [
+		'eval',
+		`
+\\FlavorAgent\\Activity\\Repository::install();
+$table_name = $GLOBALS['wpdb']->prefix . 'flavor_agent_activity';
+$GLOBALS['wpdb']->query( "TRUNCATE TABLE {$table_name}" );
+$entries = array(
+	array(
+		'id' => 'activity-full-stack-block',
+		'type' => 'apply_suggestion',
+		'surface' => 'block',
+		'target' => array(
+			'clientId' => 'block-1',
+			'blockName' => 'core/paragraph',
+			'blockPath' => array( 0 ),
+		),
+		'suggestion' => 'Full-stack block rewrite',
+		'before' => array(
+			'attributes' => array(
+				'content' => 'Before block copy',
+			),
+		),
+		'after' => array(
+			'attributes' => array(
+				'content' => 'After block copy',
+			),
+		),
+		'request' => array(
+			'prompt' => 'Tighten the block copy.',
+			'reference' => 'block:block-1:1',
+			'ai' => array(
+				'backendLabel' => 'WordPress AI Client',
+				'model' => 'provider-managed',
+				'pathLabel' => 'WordPress AI Client via Settings > Connectors',
+				'ownerLabel' => 'Settings > Connectors',
+				'credentialSourceLabel' => 'Provider-managed',
+				'selectedProviderLabel' => 'Azure OpenAI',
+				'ability' => 'flavor-agent/recommend-block',
+				'route' => 'POST /flavor-agent/v1/recommend-block',
+			),
+		),
+		'document' => array(
+			'scopeKey' => 'post:42',
+			'postType' => 'post',
+			'entityId' => '42',
+		),
+		'timestamp' => '2026-03-24T10:00:00Z',
+	),
+	array(
+		'id' => 'activity-full-stack-template',
+		'type' => 'apply_template_suggestion',
+		'surface' => 'template',
+		'target' => array(
+			'templateRef' => 'theme//home',
+		),
+		'suggestion' => 'Full-stack template insert',
+		'before' => array(
+			'operations' => array(),
+		),
+		'after' => array(
+			'operations' => array(
+				array(
+					'type' => 'insert_pattern',
+					'patternName' => 'theme/hero',
+				),
+			),
+		),
+		'request' => array(
+			'prompt' => 'Make the home template more editorial.',
+			'reference' => 'template:theme//home:3',
+			'ai' => array(
+				'backendLabel' => 'WordPress AI Client',
+				'model' => 'provider-managed',
+				'pathLabel' => 'WordPress AI Client via Settings > Connectors',
+				'ownerLabel' => 'Settings > Connectors',
+				'credentialSourceLabel' => 'Provider-managed',
+				'selectedProviderLabel' => 'Azure OpenAI',
+				'ability' => 'flavor-agent/recommend-template',
+				'route' => 'POST /flavor-agent/v1/recommend-template',
+			),
+		),
+		'document' => array(
+			'scopeKey' => 'wp_template:theme//home',
+			'postType' => 'wp_template',
+			'entityId' => 'theme//home',
+		),
+		'timestamp' => '2026-03-24T10:05:00Z',
+	),
+	array(
+		'id' => 'activity-full-stack-failed',
+		'type' => 'request_diagnostic',
+		'surface' => 'content',
+		'target' => array(
+			'requestRef' => 'content:post:42',
+		),
+		'suggestion' => 'Full-stack failed content request',
+		'before' => array(),
+		'after' => array(),
+		'request' => array(
+			'prompt' => 'Draft the launch note.',
+			'reference' => 'content:post:42',
+			'ai' => array(
+				'backendLabel' => 'WordPress AI Client',
+				'model' => 'provider-managed',
+				'pathLabel' => 'WordPress AI Client via Settings > Connectors',
+				'ownerLabel' => 'Settings > Connectors',
+				'credentialSourceLabel' => 'Provider-managed',
+				'selectedProviderLabel' => 'Azure OpenAI',
+				'ability' => 'flavor-agent/recommend-content',
+				'route' => 'POST /flavor-agent/v1/recommend-content',
+				'errorSummary' => array(
+					'wrappedMessage' => 'Provider timeout.',
+				),
+			),
+		),
+		'document' => array(
+			'scopeKey' => 'post:42',
+			'postType' => 'post',
+			'entityId' => '42',
+		),
+		'executionResult' => 'review',
+		'undo' => array(
+			'status' => 'failed',
+			'error' => 'Provider timeout.',
+		),
+		'timestamp' => '2026-03-24T10:10:00Z',
+	),
+	array(
+		'id' => 'activity-full-stack-undone',
+		'type' => 'apply_suggestion',
+		'surface' => 'block',
+		'target' => array(
+			'clientId' => 'block-2',
+			'blockName' => 'core/paragraph',
+			'blockPath' => array( 1 ),
+		),
+		'suggestion' => 'Full-stack undone block rewrite',
+		'before' => array(
+			'attributes' => array(
+				'content' => 'Undo before copy',
+			),
+		),
+		'after' => array(
+			'attributes' => array(
+				'content' => 'Undo after copy',
+			),
+		),
+		'request' => array(
+			'prompt' => 'Rewrite then undo.',
+			'reference' => 'block:block-2:1',
+		),
+		'document' => array(
+			'scopeKey' => 'post:42',
+			'postType' => 'post',
+			'entityId' => '42',
+		),
+		'timestamp' => '2026-03-24T10:15:00Z',
+	),
+);
+foreach ( $entries as $entry ) {
+	\\FlavorAgent\\Activity\\Repository::create( $entry );
+}
+\\FlavorAgent\\Activity\\Repository::update_undo_status( 'activity-full-stack-undone', 'undone' );
+`,
+	] );
+
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
+	await waitForWordPressReady( page );
+
+	await expect(
+		page.locator( '#flavor-agent-activity-log-root' )
+	).toBeVisible( { timeout: 30_000 } );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__summary-item' )
+	).toHaveCount( 6, { timeout: 30_000 } );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Full-stack template insert' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Full-stack block rewrite' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Full-stack failed content request' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Full-stack undone block rewrite' );
+
+	await page
+		.locator( '.flavor-agent-activity-log__feed' )
+		.getByText( 'Full-stack template insert', { exact: true } )
+		.click();
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'WordPress AI Client via Settings > Connectors' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'wp_template' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'theme//home' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'Insert pattern' );
+
+	await page.getByLabel( 'Search AI activity' ).fill( 'failed content' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).toContainText( 'Full-stack failed content request' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__feed' )
+	).not.toContainText( 'Full-stack template insert' );
+	await page
+		.locator( '.flavor-agent-activity-log__feed' )
+		.getByText( 'Full-stack failed content request', { exact: true } )
+		.click();
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'Provider timeout.' );
 } );

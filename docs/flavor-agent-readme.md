@@ -24,7 +24,7 @@ There is no separate approval sidebar in the current codebase. The eight surface
 ```text
 flavor-agent/
 ├── flavor-agent.php              # Bootstrap, lifecycle hooks, REST + Abilities registration, editor asset enqueue
-├── uninstall.php                 # Removes plugin-owned options, sync state, grounding caches, and cron hooks
+├── uninstall.php                 # Cleans legacy/provider/vector/docs options, sync lock, and selected cron hooks
 ├── composer.json                 # PSR-4 autoload + PHP tooling
 ├── package.json                  # @wordpress/scripts build, lint, unit/e2e tests
 ├── .env.example                  # Local WordPress/Docker defaults
@@ -39,11 +39,13 @@ flavor-agent/
 ├── scripts/                      # Local WordPress helper scripts
 │
 ├── inc/
-│   ├── Abilities/                # Block, pattern, template, navigation, docs, and infra ability handlers
+│   ├── Abilities/                # Block, content, pattern, template, navigation, style, docs, and infra abilities
 │   ├── Activity/                 # Server-backed AI activity repository, permissions, and serialization
+│   ├── Admin/                    # Settings page and AI Activity admin page registration/assets
 │   ├── AzureOpenAI/              # Deployment validation, embeddings, Responses API, and Qdrant clients
 │   ├── Cloudflare/               # AI Search grounding + prewarm pipeline
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
+│   ├── Guidelines/               # Core-first and legacy guideline storage adapters
 │   ├── LLM/                      # WordPress AI client wrapper + prompt/response handling
 │   ├── OpenAI/                   # Provider selection and connector-aware credential resolution
 │   ├── Patterns/                 # Pattern index state, sync, fingerprinting, scheduling
@@ -52,14 +54,20 @@ flavor-agent/
 │   └── Settings.php              # Settings API page, validation, and sync/diagnostics panels
 │
 ├── src/
-│   ├── admin/                    # Settings-screen sync button script
-│   ├── components/               # Shared activity history/session bootstrap UI
+│   ├── admin/                    # Settings screen and AI Activity admin apps
+│   ├── components/               # Shared recommendation, activity, status, and capability UI
+│   ├── content/                  # Post/page content recommendation panel
 │   ├── context/                  # Editor-side block and theme collectors
+│   ├── global-styles/            # Site Editor Global Styles recommender
 │   ├── inspector/                # InspectorControls injection, main block panel, and passive native sub-panel mirrors
-│   ├── patterns/                 # Inserter recommendation shelf, badge, and compat adapter
+│   ├── patterns/                 # Inserter recommendation shelf, badge, settings, and DOM compat adapters
+│   ├── review/                   # Shape-only future Notes/comment projection adapter
 │   ├── store/                    # @wordpress/data store, undo state, and persistence
+│   ├── style-book/               # Site Editor Style Book recommender and portal discovery
+│   ├── style-surfaces/           # Shared style-surface presentation and request helpers
 │   ├── templates/                # Site Editor template recommender + preview/apply helpers
 │   ├── template-parts/           # Site Editor template-part recommender
+│   ├── test-utils/               # JS unit-test helpers
 │   └── utils/                    # Template execution, pattern scoping, and structural helpers
 │
 ├── tests/
@@ -85,6 +93,8 @@ The request includes:
 The response is parsed into `settings`, `styles`, and `block` suggestion groups. Applying a suggestion now uses a safe nested merge path so partial `style` and `metadata` updates do not wipe unrelated state. Loading and error state are tracked per selected block, and the backend now mirrors the same `disabled` / `contentOnly` restriction matrix that the editor enforces client-side.
 
 This surface now has three deliberate layers. The main block panel keeps direct apply for safe local attribute changes, broader block ideas render through the shared advisory section, and stale results stay visible with an explicit refresh action instead of silently clearing. Delegated native Inspector sub-panels now mirror the current settings/style result passively instead of acting as separate apply surfaces, and selected `core/navigation` blocks add a nested advisory-only `Recommended Next Changes` flow. Content-only blocks suppress style execution while still allowing contract-valid advisory block ideas to remain visible.
+
+Block attribute role detection now reads the stable `role` key only. Compatibility with deprecated `__experimentalRole` is intentionally no longer preserved on the WordPress 7.0+ support floor.
 
 ### Pattern Recommendations
 
@@ -178,8 +188,8 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI and OpenAI Native fields on this screen now configure plugin-owned embeddings for pattern sync; they no longer provide a direct chat fallback.
-When OpenAI Native is selected for embeddings, credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy also tells the user which source is currently effective and whether the core OpenAI connector is registered/configured.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Azure OpenAI and OpenAI Native fields on this screen now configure plugin-owned embeddings for pattern sync; they no longer provide a direct chat fallback. Selecting a connector-backed provider pins chat to that connector while embeddings fall back to a configured direct Azure/OpenAI Native backend.
+When OpenAI Native is selected for embeddings, credential resolution prefers a plugin-saved override and otherwise inherits the core OpenAI connector lifecycle: `OPENAI_API_KEY` environment variable, `OPENAI_API_KEY` PHP constant, then the `Settings > Connectors` database value. The OpenAI Native settings copy reports which source is currently effective.
 
 Flavor Agent now uses a managed public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not need to enter Cloudflare account, instance, or token values. Legacy Cloudflare credentials remain supported internally for backwards compatibility, and the legacy validation flow still probes trusted `developer.wordpress.org` guidance before accepting changed credentials.
 
@@ -189,13 +199,26 @@ Configured options:
 - `flavor_agent_azure_openai_endpoint`
 - `flavor_agent_azure_openai_key`
 - `flavor_agent_azure_embedding_deployment`
+- `flavor_agent_azure_reasoning_effort`
 - `flavor_agent_openai_native_api_key`
 - `flavor_agent_openai_native_embedding_model`
 - `flavor_agent_qdrant_url`
 - `flavor_agent_qdrant_key`
+- `flavor_agent_pattern_recommendation_threshold`
+- `flavor_agent_pattern_max_recommendations`
+- `flavor_agent_cloudflare_ai_search_account_id`
+- `flavor_agent_cloudflare_ai_search_instance_id`
+- `flavor_agent_cloudflare_ai_search_api_token`
 - `flavor_agent_cloudflare_ai_search_max_results`
+- `flavor_agent_guideline_site`
+- `flavor_agent_guideline_copy`
+- `flavor_agent_guideline_images`
+- `flavor_agent_guideline_additional`
+- `flavor_agent_guideline_blocks`
 
 `flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native embedding model ID in its own settings either way, but chat always uses the WordPress AI Client and `Settings > Connectors`.
+
+`flavor_agent_azure_reasoning_effort` is a legacy-named setting used as the default reasoning-effort control for Connectors-routed chat requests. The optional Cloudflare account, instance, and token fields are shown only as legacy/custom-endpoint overrides; leaving them blank uses the managed public docs endpoint.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
 
@@ -206,13 +229,20 @@ Implemented abilities:
 - `flavor-agent/recommend-block`
 - `flavor-agent/recommend-content`
 - `flavor-agent/introspect-block`
+- `flavor-agent/list-allowed-blocks`
 - `flavor-agent/recommend-patterns`
 - `flavor-agent/list-patterns`
+- `flavor-agent/get-pattern`
+- `flavor-agent/list-synced-patterns`
+- `flavor-agent/get-synced-pattern`
 - `flavor-agent/recommend-template` (accepts optional `visiblePatternNames`)
 - `flavor-agent/recommend-template-part`
 - `flavor-agent/recommend-style`
 - `flavor-agent/list-template-parts`
 - `flavor-agent/search-wordpress-docs`
+- `flavor-agent/get-active-theme`
+- `flavor-agent/get-theme-presets`
+- `flavor-agent/get-theme-styles`
 - `flavor-agent/get-theme-tokens`
 - `flavor-agent/recommend-navigation`
 - `flavor-agent/check-status`
@@ -228,7 +258,7 @@ Current lifecycle behavior:
 - Activation marks the catalog dirty and schedules a sync when the vector backends are configured.
 - Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
 - Deactivation clears the scheduled reindex hook and any active sync lock.
-- Uninstall removes plugin-owned options, Cloudflare grounding options, pattern index state, and the scheduled reindex hook.
+- Uninstall removes legacy/direct provider, Qdrant, and Cloudflare grounding options, pattern index state, docs warm state/queue, the sync lock, and selected scheduled hooks.
 
 ## Development
 

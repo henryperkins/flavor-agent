@@ -581,6 +581,15 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( getContainer().textContent ).toContain( 'Apply now' );
 		expect( getContainer().textContent ).toContain( 'Manual ideas' );
 		expect( getContainer().textContent ).toContain( 'Advisory only' );
+		expect( getContainer().textContent ).toContain( 'Inline-safe' );
+		expect( getContainer().textContent ).toContain( 'Advisory' );
+		expect( getContainer().textContent ).toContain( 'Validator computed' );
+		expect( getContainer().textContent ).toContain(
+			'Eligibility blockers: Unsupported operation.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Eligibility blockers: Missing pattern context.'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Recommended Next Step'
 		);
@@ -613,6 +622,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				suggestions: [
 					expect.objectContaining( {
 						label: 'Hide on mobile',
+						eligibility: expect.objectContaining( {
+							source: 'validator',
+							tier: 'inline-safe',
+						} ),
 					} ),
 				],
 			} )
@@ -751,6 +764,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Manual ideas' );
 		expect( getContainer().textContent ).toContain( 'Advisory only' );
+		expect( getContainer().textContent ).toContain( 'Validator computed' );
+		expect( getContainer().textContent ).toContain(
+			'Eligibility blockers: Unsupported operation.'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);
@@ -815,6 +832,13 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 
 		expect( getContainer().textContent ).toContain( 'Manual ideas' );
 		expect( getContainer().textContent ).toContain( 'Advisory only' );
+		expect( getContainer().textContent ).toContain( 'Validator computed' );
+		expect( getContainer().textContent ).toContain(
+			'Eligibility blockers: Unsupported operation.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Eligibility blockers: Missing pattern context.'
+		);
 		expect( getContainer().textContent ).toContain(
 			'Wrap this block in a Group'
 		);

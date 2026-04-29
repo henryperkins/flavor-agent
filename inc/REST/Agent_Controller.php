@@ -650,7 +650,17 @@ final class Agent_Controller {
 	}
 
 	public static function validate_string_array( mixed $value ): bool {
-		return \is_array( $value );
+		if ( ! \is_array( $value ) ) {
+			return false;
+		}
+
+		foreach ( $value as $entry ) {
+			if ( ! \is_string( $entry ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	public static function validate_structured_value( mixed $value ): bool {

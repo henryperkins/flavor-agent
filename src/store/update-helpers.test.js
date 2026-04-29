@@ -5,8 +5,17 @@ import {
 	buildUndoAttributeUpdates,
 	getBlockSuggestionExecutionInfo,
 	getSuggestionAttributeUpdates,
+	recordedAttributeSnapshotMatchesCurrent,
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
+import {
+	ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT,
+	ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE,
+	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
+	ACTIONABILITY_SOURCE_VALIDATOR,
+	ACTIONABILITY_TIER_ADVISORY,
+	ACTIONABILITY_TIER_INLINE_SAFE,
+} from '../utils/recommendation-actionability';
 
 describe( 'update helpers', () => {
 	test( 'buildSafeAttributeUpdates preserves unrelated metadata and style values', () => {
@@ -149,12 +158,17 @@ describe( 'update helpers', () => {
 			settings: [],
 			styles: [],
 			block: [
-				{
+				expect.objectContaining( {
 					label: 'Tighten copy',
 					attributeUpdates: {
 						content: 'Shorter text',
 					},
-				},
+					eligibility: expect.objectContaining( {
+						blockers: [],
+						source: ACTIONABILITY_SOURCE_VALIDATOR,
+						tier: ACTIONABILITY_TIER_INLINE_SAFE,
+					} ),
+				} ),
 			],
 			explanation: 'Only content changes are allowed here.',
 		} );
@@ -322,10 +336,15 @@ describe( 'update helpers', () => {
 			settings: [],
 			styles: [],
 			block: [
-				{
+				expect.objectContaining( {
 					label: 'Update content',
 					attributeUpdates: { content: 'New text' },
-				},
+					eligibility: expect.objectContaining( {
+						blockers: [],
+						source: ACTIONABILITY_SOURCE_VALIDATOR,
+						tier: ACTIONABILITY_TIER_INLINE_SAFE,
+					} ),
+				} ),
 			],
 			explanation: 'Test',
 		} );
@@ -626,6 +645,18 @@ describe( 'update helpers', () => {
 			)
 		).toEqual( {
 			allowedUpdates: {},
+			actionability: expect.objectContaining( {
+				blockers: [ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ],
+				executableOperations: [],
+				reasons: [ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ],
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} ),
+			eligibility: expect.objectContaining( {
+				blockers: [ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ],
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} ),
 			isAdvisory: true,
 			isAdvisoryOnly: true,
 			isExecutable: false,
@@ -667,10 +698,69 @@ describe( 'update helpers', () => {
 					},
 				},
 			},
+			actionability: expect.objectContaining( {
+				blockers: [],
+				executableOperations: [
+					{
+						type: 'update_block_attributes',
+						attributeUpdates: {
+							style: {
+								spacing: {
+									blockGap: '1rem',
+								},
+							},
+						},
+					},
+				],
+				reasons: [ ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE ],
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_INLINE_SAFE,
+			} ),
+			eligibility: expect.objectContaining( {
+				blockers: [],
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_INLINE_SAFE,
+			} ),
 			isAdvisory: false,
 			isAdvisoryOnly: false,
 			isExecutable: true,
 		} );
+	} );
+
+	test( 'getBlockSuggestionExecutionInfo classifies pattern replacements as advisory when no allowed pattern context exists', () => {
+		expect(
+			getBlockSuggestionExecutionInfo(
+				{
+					type: 'pattern_replacement',
+					operations: [
+						{
+							type: 'replace_block_with_pattern',
+							patternName: 'flavor-agent/cta-with-image',
+						},
+					],
+				},
+				{}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				allowedUpdates: {},
+				isAdvisory: true,
+				isAdvisoryOnly: true,
+				isExecutable: false,
+				actionability: expect.objectContaining( {
+					advisoryOperationsRejected: [
+						{
+							type: 'replace_block_with_pattern',
+							patternName: 'flavor-agent/cta-with-image',
+						},
+					],
+					blockers: [ ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT ],
+					executableOperations: [],
+					source: ACTIONABILITY_SOURCE_VALIDATOR,
+					tier: ACTIONABILITY_TIER_ADVISORY,
+				} ),
+			} )
+		);
 	} );
 
 	test( 'sanitizeRecommendationsForContext preserves optional UI metadata for unlocked blocks', () => {
@@ -705,7 +795,10 @@ describe( 'update helpers', () => {
 			sanitizeRecommendationsForContext( recommendations, {
 				isInsideContentOnly: false,
 			} )
-		).toEqual( recommendations );
+		).toEqual( {
+			...recommendations,
+			block: [],
+		} );
 	} );
 
 	test( 'sanitizeRecommendationsForContext drops settings and styles when the execution contract declares explicit empty panels', () => {
@@ -764,13 +857,18 @@ describe( 'update helpers', () => {
 			settings: [],
 			styles: [],
 			block: [
-				{
+				expect.objectContaining( {
 					label: 'Use outline style',
 					type: 'style_variation',
 					attributeUpdates: {
 						className: 'is-style-outline',
 					},
-				},
+					eligibility: expect.objectContaining( {
+						blockers: [],
+						source: ACTIONABILITY_SOURCE_VALIDATOR,
+						tier: ACTIONABILITY_TIER_INLINE_SAFE,
+					} ),
+				} ),
 			],
 			explanation: 'Only the registered style variation is executable.',
 		} );
@@ -1211,11 +1309,18 @@ describe( 'update helpers', () => {
 			settings: [],
 			styles: [],
 			block: [
-				{
+				expect.objectContaining( {
 					label: 'Wrap this block in a Group',
 					type: 'structural_recommendation',
 					attributeUpdates: [],
-				},
+					eligibility: expect.objectContaining( {
+						blockers: [
+							ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
+						],
+						source: ACTIONABILITY_SOURCE_VALIDATOR,
+						tier: ACTIONABILITY_TIER_ADVISORY,
+					} ),
+				} ),
 			],
 			explanation:
 				'Preserve structural advice, drop locked wrapper edits.',
@@ -1259,11 +1364,18 @@ describe( 'update helpers', () => {
 			settings: [],
 			styles: [],
 			block: [
-				{
+				expect.objectContaining( {
 					label: 'Wrap this block in a Group',
 					type: 'structural_recommendation',
 					attributeUpdates: [],
-				},
+					eligibility: expect.objectContaining( {
+						blockers: [
+							ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
+						],
+						source: ACTIONABILITY_SOURCE_VALIDATOR,
+						tier: ACTIONABILITY_TIER_ADVISORY,
+					} ),
+				} ),
 			],
 			explanation: 'Only advisory structure guidance should survive.',
 		} );
@@ -1437,6 +1549,17 @@ describe( 'update helpers', () => {
 			)
 		).toEqual( {
 			allowedUpdates: {},
+			actionability: expect.objectContaining( {
+				blockers: [ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ],
+				executableOperations: [],
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} ),
+			eligibility: expect.objectContaining( {
+				blockers: [ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ],
+				source: ACTIONABILITY_SOURCE_VALIDATOR,
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} ),
 			isAdvisory: true,
 			isAdvisoryOnly: false,
 			isExecutable: false,
@@ -1524,6 +1647,33 @@ describe( 'update helpers', () => {
 			attributeSnapshotsMatch(
 				{ content: 'Same', className: 'alpha' },
 				{ content: 'Changed', className: 'alpha' }
+			)
+		).toBe( false );
+	} );
+
+	test( 'recordedAttributeSnapshotMatchesCurrent rejects empty recorded snapshots', () => {
+		expect(
+			recordedAttributeSnapshotMatchesCurrent( {}, { content: 'Live' } )
+		).toBe( false );
+		expect(
+			recordedAttributeSnapshotMatchesCurrent(
+				{ dropCap: false, metadata: {} },
+				{ content: 'Live' }
+			)
+		).toBe( true );
+	} );
+
+	test( 'attributeSnapshotsMatch unwraps only single paragraph wrappers', () => {
+		expect(
+			attributeSnapshotsMatch(
+				{ content: 'After' },
+				{ content: '<p>After</p>' }
+			)
+		).toBe( true );
+		expect(
+			attributeSnapshotsMatch(
+				{ content: 'One</p><p>Two' },
+				{ content: '<p>One</p><p>Two</p>' }
 			)
 		).toBe( false );
 	} );

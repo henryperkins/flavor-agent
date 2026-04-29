@@ -49,6 +49,7 @@ import {
 	getLatestAppliedActivity,
 	getLatestUndoableActivity,
 	getResolvedActivityEntries,
+	resolveActivityScope,
 } from '../store/activity-history';
 import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
@@ -303,6 +304,10 @@ export default function TemplateRecommender() {
 		( select ) => select( blockEditorStore ).getBlocks?.() || [],
 		[]
 	);
+	const templateScopeKey = useMemo(
+		() => resolveActivityScope( 'wp_template', templateRef )?.key || '',
+		[ templateRef ]
+	);
 	const blockEditorSelection = useMemo(
 		() => ( {
 			getBlocks: () => editorBlocks,
@@ -315,12 +320,15 @@ export default function TemplateRecommender() {
 				activityLog.filter(
 					( entry ) =>
 						entry?.surface === 'template' &&
-						entry?.target?.templateRef === templateRef
+						( entry?.target?.templateRef === templateRef ||
+							( templateScopeKey &&
+								entry?.document?.scopeKey ===
+									templateScopeKey ) )
 				),
 				( entry ) =>
 					getTemplateActivityUndoState( entry, blockEditorSelection )
 			),
-		[ activityLog, blockEditorSelection, templateRef ]
+		[ activityLog, blockEditorSelection, templateRef, templateScopeKey ]
 	);
 	const templateActivityEntries = useMemo(
 		() => [ ...resolvedTemplateActivities ].slice( -3 ).reverse(),

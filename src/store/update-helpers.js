@@ -6,6 +6,10 @@ import {
 	validateCssCustomPropertyReference,
 	validateFreeformStyleValueByKind,
 } from '../utils/style-validation';
+import {
+	classifyBlockSuggestionActionability,
+	summarizeActionability,
+} from '../utils/recommendation-actionability';
 
 const NESTED_MERGE_KEYS = new Set( [ 'metadata', 'style' ] );
 const BANNED_TOP_LEVEL_ATTRIBUTE_KEYS = new Set( [ 'customCSS' ] );
@@ -13,6 +17,18 @@ const ADVISORY_ONLY_BLOCK_SUGGESTION_TYPES = new Set( [
 	'structural_recommendation',
 	'pattern_replacement',
 ] );
+
+function withComputedActionability( suggestion, actionability ) {
+	if ( ! suggestion || typeof suggestion !== 'object' ) {
+		return suggestion;
+	}
+
+	return {
+		...suggestion,
+		eligibility: actionability,
+		actionability,
+	};
+}
 
 /**
  * @param {unknown} left  Left snapshot value.
@@ -22,6 +38,12 @@ const ADVISORY_ONLY_BLOCK_SUGGESTION_TYPES = new Set( [
 function areSnapshotValuesEqual( left, right ) {
 	if ( Object.is( left, right ) ) {
 		return true;
+	}
+
+	if ( typeof left === 'string' && typeof right === 'string' ) {
+		return (
+			normalizeSnapshotString( left ) === normalizeSnapshotString( right )
+		);
 	}
 
 	if ( Array.isArray( left ) || Array.isArray( right ) ) {
@@ -55,6 +77,42 @@ function areSnapshotValuesEqual( left, right ) {
 				Object.prototype.hasOwnProperty.call( right, key ) &&
 				areSnapshotValuesEqual( left[ key ], right[ key ] )
 		);
+	}
+
+	return false;
+}
+
+function normalizeSnapshotString( value ) {
+	const normalized = value.replace( /\r\n?/g, '\n' ).trim();
+	const paragraphMatch = normalized.match(
+		/^<p(?:\s[^>]*)?>([\s\S]*)<\/p>$/i
+	);
+
+	if ( ! paragraphMatch ) {
+		return normalized;
+	}
+
+	const innerContent = paragraphMatch[ 1 ].trim();
+
+	return /<\/?p(?:\s|>)/i.test( innerContent ) ? normalized : innerContent;
+}
+
+function isEmptyDefaultSnapshotValue( value ) {
+	if (
+		value === undefined ||
+		value === null ||
+		value === '' ||
+		value === false
+	) {
+		return true;
+	}
+
+	if ( Array.isArray( value ) ) {
+		return value.length === 0;
+	}
+
+	if ( isPlainObject( value ) ) {
+		return Object.values( value ).every( isEmptyDefaultSnapshotValue );
 	}
 
 	return false;
@@ -1241,6 +1299,40 @@ function sanitizeSuggestionGroupForExecutionContract(
 		.filter( Boolean );
 }
 
+function attachBlockSuggestionActionability(
+	suggestions,
+	blockContext,
+	executionContract
+) {
+	const resolvedExecutionContract = resolveExecutionContract(
+		blockContext,
+		executionContract
+	);
+	const restrictions = getEditingRestrictions(
+		blockContext,
+		resolvedExecutionContract
+	);
+
+	return suggestions.map( ( suggestion ) => {
+		const advisoryOnly = isAdvisoryOnlyBlockSuggestion( suggestion );
+		const allowedUpdates = advisoryOnly
+			? {}
+			: getSuggestionAttributeUpdates(
+					suggestion,
+					blockContext,
+					resolvedExecutionContract
+			  );
+		const actionability = classifyBlockSuggestionActionability( {
+			suggestion,
+			allowedUpdates,
+			isAdvisoryOnly: advisoryOnly,
+			restrictions,
+		} );
+
+		return withComputedActionability( suggestion, actionability );
+	} );
+}
+
 /**
  * @param {Object}   suggestion           Suggestion candidate.
  * @param {string[]} contentAttributeKeys Allowed content attribute keys.
@@ -1353,6 +1445,42 @@ export function attributeSnapshotsMatch(
 	currentSnapshot = {}
 ) {
 	return areSnapshotValuesEqual( previousSnapshot, currentSnapshot );
+}
+
+export function hasRecordedAttributeSnapshot( snapshot = {} ) {
+	return isPlainObject( snapshot ) && Object.keys( snapshot ).length > 0;
+}
+
+/**
+ * @param {Object} storedSnapshot  Recorded attribute snapshot.
+ * @param {Object} currentSnapshot Current live attributes.
+ * @return {boolean} Whether every recorded snapshot key still matches.
+ */
+export function recordedAttributeSnapshotMatchesCurrent(
+	storedSnapshot = {},
+	currentSnapshot = {}
+) {
+	if (
+		! isPlainObject( storedSnapshot ) ||
+		! isPlainObject( currentSnapshot )
+	) {
+		return false;
+	}
+
+	const storedKeys = Object.keys( storedSnapshot );
+
+	if ( storedKeys.length === 0 ) {
+		return false;
+	}
+
+	return storedKeys.every( ( key ) =>
+		Object.prototype.hasOwnProperty.call( currentSnapshot, key )
+			? areSnapshotValuesEqual(
+					storedSnapshot[ key ],
+					currentSnapshot[ key ]
+			  )
+			: isEmptyDefaultSnapshotValue( storedSnapshot[ key ] )
+	);
 }
 
 /**
@@ -1788,6 +1916,13 @@ export function buildBlockRecommendationDiagnostics(
 			bindingSafe: bindingSafeBlockSuggestions.length,
 			contentSafe: contentSafeBlockSuggestions.length,
 		},
+		actionabilitySummary: summarizeActionability(
+			attachBlockSuggestionActionability(
+				contentSafeBlockSuggestions,
+				blockContext,
+				resolvedExecutionContract
+			).map( ( suggestion ) => suggestion.actionability )
+		),
 		restrictions: {
 			disabled: restrictions.disabled,
 			contentOnly: restrictions.contentOnly,
@@ -1878,16 +2013,29 @@ export function sanitizeRecommendationsForContext(
 	}
 
 	if ( ! restrictions.contentOnly ) {
-		return bindingSafeRecommendations;
+		return {
+			...bindingSafeRecommendations,
+			block: attachBlockSuggestionActionability(
+				bindingSafeRecommendations.block,
+				blockContext,
+				resolvedExecutionContract
+			),
+		};
 	}
 
 	if ( usesInnerBlocksAsContent( blockContext, resolvedExecutionContract ) ) {
+		const blockSuggestions = bindingSafeRecommendations.block.filter(
+			( suggestion ) => isAdvisoryOnlyBlockSuggestion( suggestion )
+		);
+
 		return {
 			...bindingSafeRecommendations,
 			settings: [],
 			styles: [],
-			block: bindingSafeRecommendations.block.filter( ( suggestion ) =>
-				isAdvisoryOnlyBlockSuggestion( suggestion )
+			block: attachBlockSuggestionActionability(
+				blockSuggestions,
+				blockContext,
+				resolvedExecutionContract
 			),
 		};
 	}
@@ -1901,14 +2049,18 @@ export function sanitizeRecommendationsForContext(
 		...bindingSafeRecommendations,
 		settings: [],
 		styles: [],
-		block: bindingSafeRecommendations.block
-			.map( ( suggestion ) =>
-				filterSuggestionForContentOnly(
-					suggestion,
-					contentAttributeKeys
+		block: attachBlockSuggestionActionability(
+			bindingSafeRecommendations.block
+				.map( ( suggestion ) =>
+					filterSuggestionForContentOnly(
+						suggestion,
+						contentAttributeKeys
+					)
 				)
-			)
-			.filter( Boolean ),
+				.filter( Boolean ),
+			blockContext,
+			resolvedExecutionContract
+		),
 	};
 }
 
@@ -1992,7 +2144,7 @@ export function getSuggestionAttributeUpdates(
  * @param {Object}  suggestion        Suggestion candidate.
  * @param {Object}  [blockContext={}] Block context used to enforce locking rules.
  * @param {?Object} executionContract Server-normalized execution contract.
- * @return {{ allowedUpdates: Object, isAdvisory: boolean, isAdvisoryOnly: boolean, isExecutable: boolean }}
+ * @return {{ allowedUpdates: Object, actionability: Object, eligibility: Object, isAdvisory: boolean, isAdvisoryOnly: boolean, isExecutable: boolean }}
  * Block suggestion execution metadata.
  */
 export function getBlockSuggestionExecutionInfo(
@@ -2009,9 +2161,25 @@ export function getBlockSuggestionExecutionInfo(
 				executionContract
 		  );
 	const hasExecutableUpdates = Object.keys( allowedUpdates ).length > 0;
+	const resolvedExecutionContract = resolveExecutionContract(
+		blockContext,
+		executionContract
+	);
+	const restrictions = getEditingRestrictions(
+		blockContext,
+		resolvedExecutionContract
+	);
+	const actionability = classifyBlockSuggestionActionability( {
+		suggestion,
+		allowedUpdates,
+		isAdvisoryOnly: advisoryOnly,
+		restrictions,
+	} );
 
 	return {
 		allowedUpdates,
+		actionability,
+		eligibility: actionability,
 		isAdvisory: advisoryOnly || ! hasExecutableUpdates,
 		isAdvisoryOnly: advisoryOnly,
 		isExecutable: ! advisoryOnly && hasExecutableUpdates,

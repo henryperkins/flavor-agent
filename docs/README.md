@@ -61,6 +61,7 @@ Read these documents in this order:
    - `activity-state-machine.md` — undo states, transitions, ordered undo, and pruning.
    - `wordpress-ai-roadmap-tracking.md` — snapshot of WordPress org project 240 and the active overlap between upstream AI work and Flavor Agent surfaces, plus a refresh procedure.
    - `gutenberg-feature-tracking.md` — version-keyed map of Gutenberg releases, stabilized APIs, and forward-looking iteration issues mapped to Flavor Agent code paths, plus a refresh procedure.
+   - `local-environment-setup.md` — representative local WordPress nightly/trunk setup and companion-plugin activation checklist.
 7. `docs/flavor-agent-readme.md`
    - Editor-flow and architecture walkthrough.
    - Use this as the architecture-oriented companion to the feature docs.
@@ -100,6 +101,7 @@ Each top-level doc has one job:
    - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?
    - `wordpress-ai-roadmap-tracking.md` — Which upstream AI initiative collides with which Flavor Agent surface, and which board items are imminent?
    - `gutenberg-feature-tracking.md` — Which Gutenberg release stabilized an API the repo shims, and which iteration issue or forthcoming change should the repo watch?
+   - `local-environment-setup.md` — Which local WordPress, Gutenberg, connector, and plugin-check setup is representative for manual testing?
 6. `docs/flavor-agent-readme.md` answers:
    - How does the broader editor architecture fit together?
    - How do the surface docs fit into the repo-level implementation story?
@@ -130,7 +132,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, provider-precedence, template-operations, activity-state-machine, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking)
+5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, pattern-recommendation-debugging, provider-precedence, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. WordPress compatibility, migration snapshots, and overlap remediation: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, `docs/wp7-migration-opportunities.md`, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md`
 
@@ -142,5 +144,6 @@ Point-in-time artifacts that do not belong in the reading order but are preserve
 
 1. `docs/audits/` — completed or in-flight audit prompts and reports. These do not reflect live plugin state; treat them as historical analysis. Delete or supersede rather than silently updating.
 2. `docs/research/` — external research snapshots (upstream WordPress announcements, design-trend writeups). Use as inspiration or compatibility context, not as the plugin's own spec.
+3. `docs/prompts/`, `docs/validation/`, and `docs/superpowers/` — prompt templates, saved validation evidence, and execution plans. Treat them as point-in-time operational artifacts unless a backbone doc links to one for current release evidence.
 
 If an audit or research doc becomes load-bearing for a decision, promote it into the backbone (`docs/reference/` or a per-surface feature doc) rather than leaving it in these directories.

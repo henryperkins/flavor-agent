@@ -7,13 +7,16 @@ namespace FlavorAgent\LLM;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\MetricsNormalizer;
 use WordPress\AI_Client\AI_Client;
+use WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception;
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE         = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
-	private const REASONING_EFFORTS     = [ 'low', 'medium', 'high', 'xhigh' ];
-	private const ANTHROPIC_PROVIDER    = 'anthropic';
-	private const ANTHROPIC_UNION_LIMIT = 16;
+	private const SETUP_MESSAGE            = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const PROMPT_PREVENTED_CODE    = 'prompt_prevented';
+	private const PROMPT_PREVENTED_MESSAGE = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
+	private const REASONING_EFFORTS        = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const ANTHROPIC_PROVIDER       = 'anthropic';
+	private const ANTHROPIC_UNION_LIMIT    = 16;
 
 	public static function is_supported( ?string $provider = null ): bool {
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
@@ -513,6 +516,10 @@ final class WordPressAIClient {
 		}
 
 		if ( ! $supported ) {
+			if ( self::is_prompt_prevented_by_filter( $prompt ) ) {
+				return self::build_prompt_prevented_error();
+			}
+
 			return new \WP_Error(
 				'missing_text_generation_provider',
 				self::SETUP_MESSAGE,
@@ -521,6 +528,18 @@ final class WordPressAIClient {
 		}
 
 		return true;
+	}
+
+	private static function is_prompt_prevented_by_filter( object $prompt ): bool {
+		return (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $prompt );
+	}
+
+	private static function build_prompt_prevented_error(): \WP_Error {
+		return new \WP_Error(
+			self::PROMPT_PREVENTED_CODE,
+			self::PROMPT_PREVENTED_MESSAGE,
+			[ 'status' => 503 ]
+		);
 	}
 
 	private static function prompt_supports_text_generation( object $prompt ): bool {
@@ -548,6 +567,8 @@ final class WordPressAIClient {
 
 		try {
 			return $prompt->{$method}( ...$arguments );
+		} catch ( Prompt_Prevented_Exception $exception ) {
+			return self::build_prompt_prevented_error();
 		} catch ( \Throwable $throwable ) {
 			return new \WP_Error(
 				'wp_ai_client_request_failed',

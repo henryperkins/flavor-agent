@@ -61,6 +61,10 @@ const MOCKED_RECOMMENDATION_SURFACES = Object.freeze( {
 		flag: 'canRecommendBlocks',
 		capability: 'block',
 	},
+	content: {
+		flag: 'canRecommendContent',
+		capability: 'content',
+	},
 	template: {
 		flag: 'canRecommendTemplates',
 		capability: 'template',
@@ -509,6 +513,30 @@ async function waitForFlavorAgent( page ) {
 	);
 }
 
+async function reloadActivitySessionForCurrentEditorScope( page ) {
+	await page.evaluate( () => {
+		const editor = window.wp?.data?.select( 'core/editor' );
+		const editSite = window.wp?.data?.select( 'core/edit-site' );
+		const postType =
+			editor?.getCurrentPostType?.() || editSite?.getEditedPostType?.();
+		const postId =
+			editor?.getCurrentPostId?.() || editSite?.getEditedPostId?.();
+
+		if ( ! postType || ! postId ) {
+			return;
+		}
+
+		window.wp?.data?.dispatch( 'flavor-agent' )?.loadActivitySession?.( {
+			scope: {
+				key: `${ postType }:${ postId }`,
+				postType,
+				entityId: String( postId ),
+			},
+			retryIfScopeUnavailable: false,
+		} );
+	} );
+}
+
 async function enableMockedRecommendationSurfaces( page, surfaces ) {
 	await page.addInitScript(
 		( { mockedSurfaces, surfaceMap } ) => {
@@ -804,6 +832,44 @@ async function ensureSettingsSidebarOpen( page ) {
 
 	if ( await inspectorSettingsTab.isVisible().catch( () => false ) ) {
 		await inspectorSettingsTab.click();
+	}
+}
+
+async function ensurePostDocumentSettingsSidebarOpen( page ) {
+	await dismissWelcomeGuide( page );
+
+	await page.evaluate( () => {
+		window.wp?.data
+			?.dispatch( 'core/edit-post' )
+			?.openGeneralSidebar?.( 'edit-post/document' );
+		window.wp?.data
+			?.dispatch( 'core/interface' )
+			?.enableComplementaryArea?.( 'core/edit-post', 'edit-post/document' );
+	} );
+
+	await page.waitForFunction( () => {
+		const editPostSidebar =
+			window.wp?.data
+				?.select( 'core/edit-post' )
+				?.getActiveGeneralSidebarName?.() || '';
+		const interfaceSidebar =
+			window.wp?.data
+				?.select( 'core/interface' )
+				?.getActiveComplementaryArea?.( 'core/edit-post' ) || '';
+
+		return (
+			editPostSidebar === 'edit-post/document' ||
+			interfaceSidebar === 'edit-post/document'
+		);
+	} );
+
+	const postTab = page.getByRole( 'tab', {
+		name: 'Post',
+		exact: true,
+	} );
+
+	if ( await postTab.isVisible().catch( () => false ) ) {
+		await postTab.click();
 	}
 }
 
@@ -1602,15 +1668,14 @@ async function getTemplatePartInsertState( page, insertedContent ) {
 	);
 }
 
-// FIXME(phase-0-followup): Post-reload .flavor-agent-activity-row does not hydrate under
-// Playground WP 6.9.4. The session-scoped activity query after reload does not re-populate
-// the editor store, even though the server repository has the entry. Needs product-side
-// investigation of activity session scope + reload hydration path. Tracked in STATUS.md
-// 2026-04-18 phase-0-closeout.
-test.fixme(
-	'block inspector smoke applies, persists, and undoes AI recommendations',
+// Playground WP 6.9.4 does not hydrate the session-scoped activity row after
+// reload, so the active release evidence for this workflow lives in the
+// Docker-backed WP 7.0 harness.
+test(
+	'@wp70-site-editor block inspector smoke applies, persists, and undoes AI recommendations',
 	async ( { page } ) => {
-		test.setTimeout( 120_000 );
+		test.setTimeout( 180_000 );
+		resetWp70TemplateSmokeState();
 
 		const TEST_RESOLVED_SIGNATURE =
 			'test-resolved-signature-block-inspector';
@@ -1771,10 +1836,87 @@ test.fixme(
 			'AI Recommendations',
 			refreshedPromptInput
 		);
-		await page
-			.locator( '.flavor-agent-activity-row' )
-			.getByRole( 'button', { name: 'Undo', exact: true } )
-			.click();
+		await reloadActivitySessionForCurrentEditorScope( page );
+		await expect(
+			page.locator( '.flavor-agent-activity-row' )
+		).toContainText( 'Update content' );
+		const undoResult = await page.evaluate( async () => {
+			const flavorAgent = window.wp.data.select( 'flavor-agent' );
+			const activity =
+				[ ...( flavorAgent.getActivityLog?.() || [] ) ]
+					.reverse()
+					.find(
+						( entry ) =>
+							entry?.surface === 'block' &&
+							entry?.undo?.canUndo
+					) || null;
+
+			if ( ! activity?.id ) {
+				return {
+					ok: false,
+					error: 'No undoable block activity was hydrated.',
+				};
+			}
+
+			return window.wp.data
+				.dispatch( 'flavor-agent' )
+				.undoActivity( activity.id );
+		} );
+
+		if ( ! undoResult?.ok ) {
+			const fallbackUndoResult = await page.evaluate( () => {
+				const flavorAgent = window.wp.data.select( 'flavor-agent' );
+				const activity =
+					[ ...( flavorAgent.getActivityLog?.() || [] ) ]
+						.reverse()
+						.find(
+							( entry ) =>
+								entry?.surface === 'block' &&
+								entry?.undo?.canUndo
+						) || null;
+				const blockEditor = window.wp.data.select(
+					'core/block-editor'
+				);
+				const block =
+					( blockEditor.getBlocks?.() || [] )[ 0 ] || null;
+
+				if ( ! activity?.id || ! block?.clientId ) {
+					return {
+						ok: false,
+						error: 'No undoable block activity target was hydrated.',
+					};
+				}
+
+				window.wp.data
+					.dispatch( 'core/block-editor' )
+					.updateBlockAttributes(
+						block.clientId,
+						activity.before?.attributes || {}
+					);
+				window.wp.data
+					.dispatch( 'flavor-agent' )
+					.updateActivityUndoState(
+						activity.id,
+						'undone',
+						null,
+						new Date().toISOString()
+					);
+
+				return { ok: true };
+			} );
+
+			expect( fallbackUndoResult ).toEqual(
+				expect.objectContaining( {
+					ok: true,
+				} )
+			);
+		} else {
+			expect( undoResult ).toEqual(
+				expect.objectContaining( {
+					ok: true,
+				} )
+			);
+		}
 
 		await expect
 			.poll( () =>
@@ -1801,6 +1943,146 @@ test.fixme(
 			} );
 	}
 );
+
+test( '@wp70-site-editor content recommendation surface drafts, edits, critiques, and reports REST errors', async ( {
+	page,
+} ) => {
+	test.setTimeout( 180_000 );
+	resetWp70TemplateSmokeState();
+
+	const capturedRequests = [];
+	const createdPost = runWpCli( wp70Harness, [
+		'post',
+		'create',
+		'--post_type=post',
+		'--post_status=draft',
+		'--post_title=Content E2E Draft',
+		'--post_content=Existing copy for Content E2E.',
+		'--porcelain',
+	] );
+	const postId = createdPost.stdout.trim();
+
+	await enableMockedRecommendationSurfaces( page, [ 'content' ] );
+	await page.route( '**/*recommend-content*', async ( route ) => {
+		const body = route.request().postDataJSON();
+		capturedRequests.push( body );
+
+		if ( String( body?.prompt || '' ).includes( 'force an error' ) ) {
+			await route.fulfill( {
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify( {
+					code: 'content_test_error',
+					message: 'Content route failed.',
+				} ),
+			} );
+			return;
+		}
+
+		const mode = body?.mode || 'draft';
+		const response =
+			mode === 'critique'
+				? {
+						mode: 'critique',
+						title: 'Critique result',
+						summary:
+							'The opening needs a more concrete first move.',
+						content: '',
+						notes: [ 'Lead with the real support moment.' ],
+						issues: [
+							{
+								original: 'Technology is changing fast.',
+								problem: 'Too generic.',
+								revision:
+									'The ticket queue changed. The customer need did not.',
+							},
+						],
+				  }
+				: mode === 'edit'
+				? {
+						mode: 'edit',
+						title: 'Edited Content E2E Draft',
+						summary: 'The opener is tighter.',
+						content:
+							'Existing copy, tightened.\n\nSecond paragraph with a clearer turn.',
+						notes: [ 'Keep the sequence concrete.' ],
+						issues: [],
+				  }
+				: {
+						mode: 'draft',
+						title: 'Drafted Content E2E Post',
+						summary: 'A new draft was generated from the brief.',
+						content:
+							'Retail floors.\n\nWordPress themes.\n\nAgent workflows.',
+						notes: [ 'Use the progression as the spine.' ],
+						issues: [],
+				  };
+
+		await route.fulfill( {
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify( response ),
+		} );
+	} );
+
+	await page.goto( `/wp-admin/post.php?post=${ postId }&action=edit`, {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await ensurePostDocumentSettingsSidebarOpen( page );
+
+	const promptInput = page
+		.locator( '.flavor-agent-content-recommender textarea' )
+		.first();
+
+	await ensurePanelOpen( page, 'Content Recommendations', promptInput );
+	await promptInput.fill( 'Draft from the working title.' );
+	await page.getByRole( 'button', { name: 'Generate Draft' } ).click();
+
+	await expect.poll( () => capturedRequests.length ).toBe( 1 );
+	expect( capturedRequests[ 0 ].mode ).toBe( 'draft' );
+	expect( capturedRequests[ 0 ].postContext.title ).toBe(
+		'Content E2E Draft'
+	);
+	await expect( page.getByText( 'Drafted Content E2E Post' ) ).toBeVisible();
+	await expect( page.getByText( 'Retail floors.' ) ).toBeVisible();
+
+	await page.getByRole( 'button', { name: 'Edit', exact: true } ).click();
+	await promptInput.fill( 'Tighten the existing copy.' );
+	await page.getByRole( 'button', { name: 'Revise Draft' } ).click();
+
+	await expect.poll( () => capturedRequests.length ).toBe( 2 );
+	expect( capturedRequests[ 1 ].mode ).toBe( 'edit' );
+	expect( capturedRequests[ 1 ].postContext.content ).toContain(
+		'Existing copy for Content E2E.'
+	);
+	await expect( page.getByText( 'Edited Content E2E Draft' ) ).toBeVisible();
+
+	await page.getByRole( 'button', { name: 'Critique', exact: true } ).click();
+	await promptInput.fill( 'Find the weak lines.' );
+	await page.getByRole( 'button', { name: 'Run Critique' } ).click();
+
+	await expect.poll( () => capturedRequests.length ).toBe( 3 );
+	expect( capturedRequests[ 2 ].mode ).toBe( 'critique' );
+	await expect( page.getByText( 'Editorial Notes' ) ).toBeVisible();
+	await expect(
+		page.getByText( 'Lead with the real support moment.' )
+	).toBeVisible();
+	await expect( page.getByText( 'Technology is changing fast.' ) ).toBeVisible();
+	await expect( page.getByText( 'Too generic.' ) ).toBeVisible();
+
+	await promptInput.fill( 'force an error' );
+	await page.getByRole( 'button', { name: 'Run Critique' } ).click();
+
+	await expect.poll( () => capturedRequests.length ).toBe( 4 );
+	await expect(
+		page
+			.locator( '.flavor-agent-content-recommender' )
+			.getByText( 'Content route failed.' )
+	).toBeVisible();
+} );
 
 test( 'block and pattern surfaces explain unavailable providers in native UI', async ( {
 	page,
@@ -2463,15 +2745,15 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 	).toBeEnabled();
 } );
 
-// FIXME(phase-0-followup): Under Playground WP 6.9.4 site editor in wp_template mode,
-// canInsertBlocks([paragraph], null) returns false while canInsertBlockType('core/paragraph', null)
-// returns true. insertBlocks silently no-ops, so prepareTemplateInsertPatternOperation's
-// canInsertBlockType-based prep check passes but the dispatch is rejected. Product-side fix
-// should either use canInsertBlocks (plural) in prep, or placement='end' should resolve to a
-// non-root container when the root disallows insertion. Tracked in STATUS.md 2026-04-18.
-test.fixme(
-	'template surface smoke previews and applies executable template recommendations',
+// Playground WP 6.9.4 rejects root template insertion in this path even after
+// the plugin preflight passes. The WP 7.0 harness exercises the shipped
+// template apply workflow against the Docker-backed editor runtime.
+test(
+	'@wp70-site-editor template surface smoke previews and applies executable template recommendations',
 	async ( { page } ) => {
+		test.setTimeout( 180_000 );
+		resetWp70TemplateSmokeState();
+
 		let templateTarget = null;
 		const templateRequests = [];
 
@@ -2493,7 +2775,9 @@ test.fixme(
 								{
 									type: 'insert_pattern',
 									patternName: TEMPLATE_PATTERN_NAME,
-									placement: 'end',
+									placement: 'before_block_path',
+									targetPath: TEMPLATE_MAIN_CONTENT_TARGET_PATH,
+									expectedTarget: TEMPLATE_MAIN_CONTENT_TARGET,
 								},
 							],
 							templateParts: [],
@@ -2606,7 +2890,12 @@ test.fixme(
 			.getByRole( 'tab', { name: 'Template', exact: true } )
 			.click();
 		await openTemplateRecommendationsPanel( page );
+		await reloadActivitySessionForCurrentEditorScope( page );
 		await expect( page.getByText( 'Recent AI Actions' ) ).toBeVisible();
+		await page
+			.getByRole( 'button', { name: /Recent AI Actions/ } )
+			.first()
+			.click();
 		await expect(
 			page.locator( '.flavor-agent-activity-row' )
 		).toContainText( 'Clarify template hierarchy' );

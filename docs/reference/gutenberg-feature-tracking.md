@@ -74,7 +74,7 @@ These rows record APIs Flavor Agent depends on (or shims) and the version that s
 | Pattern Editing (no longer experiment-gated) | 22.5 | `src/patterns/compat.js`, `src/patterns/pattern-settings.js` | Pattern Editing surface itself is stable. Three-tier shim still required for `__experimentalRegisterBlockPattern`, `__experimentalAdditional*` keys, and inserter DOM selectors. Revisit which tier in `compat.js` can collapse. |
 | Block Visibility by viewport | 22.5 | `src/utils/structural-identity.js`, `src/inspector/BlockRecommendationsPanel.js` | New attribute key `blockVisibility.viewport`. Apply paths must not interpret a hidden block as missing/removed; CSS hide, not DOM removal. Audit advisory/executable classifiers. |
 | `Settings > Connectors` admin page | 22.7 | `inc/LLM/WordPressAIClient.php`, `inc/OpenAI/Provider.php`, `flavorAgentData.connectorsUrl` localization in `flavor-agent.php` | Connectors-first chat routing matches the now-stable surface. Verify `connectorsUrl` resolves to the new screen. |
-| WordPress AI Client (`wp_ai_client_prompt`, `is_supported_for_text_generation`) | WP 7.0 | `inc/LLM/WordPressAIClient.php` | Already routed through. Outstanding: wire `wp_ai_client_prevent_prompt` filter so site-level kill switch propagates before any provider call. |
+| WordPress AI Client (`wp_ai_client_prompt`, `is_supported_for_text_generation`, `wp_ai_client_prevent_prompt`) | WP 7.0 | `inc/LLM/WordPressAIClient.php` | Routed through. The prevent filter is honored in two places: a probe in `ensure_text_generation_supported()` differentiates "blocked by filter" from "no provider configured" (`prompt_prevented` 503 vs `missing_text_generation_provider` 400), and `call_prompt_method()` catches `Prompt_Prevented_Exception` for the race-condition path. |
 | Client-side Abilities API (`@wordpress/abilities`, `@wordpress/core-abilities`) | WP 7.0 | `inc/Abilities/Registration.php` | Server abilities hydrate into the client `core/abilities` store automatically. Outstanding: add `meta.annotations.{readonly,destructive,idempotent}` to all 20 abilities for accurate MCP/HTTP method routing. |
 
 ## Stabilized APIs Worth Adopting (Not Yet Used)
@@ -92,7 +92,6 @@ These rows record stabilized or shipped APIs that Flavor Agent does not currentl
 | `registerConnector()` / `unregisterConnector()` | 22.8 | Public extension point if Flavor Agent ever ships a self-contained connector independent of the user's default. | None today; track for future work |
 | Button pseudo-state styling in Global Styles | 22.8 | New operation type the Global Styles recommender should learn to emit. | `inc/LLM/StylePrompt.php` |
 | Revisions row for templates, template parts, patterns | 23.0 | Some apply paths can hand undo to core revisions instead of growing the activity store. Design effort, not just plumbing — the activity-state-machine has ordered undo that core revisions does not match. | `inc/Activity/Repository.php`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js` |
-| `wp_ai_client_prevent_prompt` filter | WP 7.0 | Site/admin-level kill switch for AI calls. Honor it inside `WordPressAIClient::prompt()` to short-circuit before provider routing. | `inc/LLM/WordPressAIClient.php` |
 | Ability `meta.annotations.{readonly,destructive,idempotent}` | WP 7.0 | Drives client-side method routing and MCP exposure. Read abilities should be `readonly: true`; apply abilities should declare `destructive` and `idempotent` correctly. | `inc/Abilities/Registration.php`, `inc/Abilities/*Abilities.php` |
 | DataForm/DataViews v2 (combobox, adaptiveSelect, validation) | WP 7.0 | Settings page can drop bespoke validation and combobox handling. | `src/admin/settings-page-controller.js` |
 | Real-Time Collaboration on by default | 22.7 (opt-in for 7.0 beta) | Apply paths must re-check `RecommendationResolvedSignature` immediately before mutation under RTC; consider an "another editor is active" guard. | `src/store/index.js` apply actions, `inc/Support/RecommendationResolvedSignature.php` |
@@ -155,7 +154,7 @@ These boards are checked during refresh; only those with Flavor Agent collisions
 
 Concrete tasks driven by this matrix, in priority order. Strike through completed work when shipped.
 
-1. Wire `wp_ai_client_prevent_prompt` into `inc/LLM/WordPressAIClient.php` so a site-level AI kill switch short-circuits before provider routing. Additive. **Not yet covered by an existing workstream.**
+1. ~~Wire `wp_ai_client_prevent_prompt` into `inc/LLM/WordPressAIClient.php` so a site-level AI kill switch short-circuits before provider routing.~~ **Done 2026-04-29.** `ensure_text_generation_supported()` probes the filter to return a labeled `prompt_prevented` 503 error (instead of the misleading `missing_text_generation_provider` 400) when AI is blocked while a provider is configured; `call_prompt_method()` catches `Prompt_Prevented_Exception` for the race-condition path. The error code flows naturally into the activity log via `Agent_Controller::persist_request_diagnostic_failure_activity()`.
 2. Add `meta.annotations.{readonly,destructive,idempotent}` to every ability registration in `inc/Abilities/Registration.php` and per-category ability files. Read abilities default to `readonly: true`; apply abilities declare `destructive` and `idempotent` correctly. Additive. **Not yet covered by an existing workstream.**
 3. Re-audit `src/patterns/compat.js` for tier-collapse opportunities now that Pattern Editing (22.5) is stable. Track unchanged: `__experimentalRegisterBlockPattern`, `__experimentalAdditional*` keys, inserter DOM selectors. **Not yet covered by an existing workstream.**
 4. **Watch `gutenberg#77069` (Navigation in Sidebar)**. When the new navigation sidebar surface lands in 7.1, decide whether `src/inspector/NavigationRecommendations.js` continues to embed in the block Inspector or projects into the new sidebar. **Not yet covered by an existing workstream.**
@@ -178,7 +177,7 @@ When any of these moves from "watch" to "act", add a workstream to `docs/wordpre
 | D — Guidelines Bridge and Migration (read bridge implemented 2026-04-28; write/public API migration pending) | `gutenberg#75171` Content Guidelines, 22.7 experimental REST + CPT |
 | E — Settings Screen Modernization (Pending) | DataForm/DataViews v2 in 7.0; `@wordpress/ui` (#76135) long-term |
 
-Action implications 1, 2, 3, 4, 5, 7, and 8 above describe upstream pressures with no corresponding workstream yet.
+Action implications 2, 3, 4, 5, 7, and 8 above describe upstream pressures with no corresponding workstream yet. Implication 1 (`wp_ai_client_prevent_prompt`) shipped 2026-04-29 as a small additive change in `inc/LLM/WordPressAIClient.php` (no workstream needed).
 
 ## Related References
 

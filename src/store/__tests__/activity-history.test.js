@@ -410,6 +410,8 @@ describe( 'activity history helpers', () => {
 			after: {
 				attributes: {
 					content: 'After',
+					dropCap: false,
+					metadata: {},
 				},
 			},
 			document: {
@@ -441,6 +443,99 @@ describe( 'activity history helpers', () => {
 				canUndo: true,
 				status: 'available',
 				error: null,
+			} )
+		);
+	} );
+
+	test( 'getBlockActivityUndoState tolerates extra default attributes hydrated after reload', () => {
+		const entry = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'old-client-id',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			before: {
+				attributes: {
+					content: 'Before',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'After',
+				},
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+		} );
+		const reloadedBlock = {
+			clientId: 'new-client-id',
+			name: 'core/paragraph',
+			attributes: {
+				content: '<p>After</p>',
+				className: 'hydrated-extra-class',
+			},
+		};
+		const blockEditorSelect = {
+			getBlock: () => null,
+			getBlockAttributes: () => reloadedBlock.attributes,
+			getBlocks: () => [ reloadedBlock ],
+		};
+
+		expect( getBlockActivityUndoState( entry, blockEditorSelect ) ).toEqual(
+			expect.objectContaining( {
+				canUndo: true,
+				status: 'available',
+				error: null,
+			} )
+		);
+	} );
+
+	test( 'block request diagnostics stay non-undoable without attribute snapshots', () => {
+		const diagnostic = {
+			...createActivityEntry( {
+				type: 'request_diagnostic',
+				surface: 'block',
+				target: {
+					clientId: 'block-1',
+					blockName: 'core/paragraph',
+					requestRef: 'block:block-1:7',
+				},
+				document: {
+					scopeKey: 'post:42',
+				},
+			} ),
+			executionResult: 'review',
+			undo: {
+				canUndo: false,
+				status: 'review',
+				error: null,
+				updatedAt: '2026-03-24T10:00:00Z',
+			},
+		};
+		const currentBlock = {
+			clientId: 'block-1',
+			name: 'core/paragraph',
+			attributes: {
+				content: 'Current copy',
+			},
+		};
+		const blockEditorSelect = {
+			getBlock: () => currentBlock,
+			getBlockAttributes: () => currentBlock.attributes,
+			getBlocks: () => [ currentBlock ],
+		};
+
+		expect(
+			getResolvedActivityEntries( [ diagnostic ], ( activity ) =>
+				getBlockActivityUndoState( activity, blockEditorSelect )
+			)[ 0 ].undo
+		).toEqual(
+			expect.objectContaining( {
+				canUndo: false,
+				status: 'review',
 			} )
 		);
 	} );

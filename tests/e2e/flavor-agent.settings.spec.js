@@ -1,5 +1,23 @@
 const { test, expect } = require( '@playwright/test' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
+const {
+	getWp70HarnessConfig,
+	runWpCli,
+} = require( '../../scripts/wp70-e2e' );
+
+const wp70Harness = getWp70HarnessConfig();
+
+async function setSettingsFieldValue( page, selector, value ) {
+	await page.locator( selector ).evaluate( ( element, nextValue ) => {
+		element.value = nextValue;
+		element.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		element.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}, value );
+}
+
+async function getSettingsFieldValue( page, selector ) {
+	return page.locator( selector ).evaluate( ( element ) => element.value );
+}
 
 test( 'settings page keeps compact help-first IA without changing accordion behavior', async ( {
 	page,
@@ -148,4 +166,155 @@ test( 'settings page keeps compact help-first IA without changing accordion beha
 	await expect(
 		page.locator( '#contextual-help-wrap .contextual-help-sidebar' )
 	).toContainText( 'Open Activity Log' );
+} );
+
+test( '@wp70-site-editor settings page saves, validates, and persists safe fields', async ( {
+	page,
+} ) => {
+	test.setTimeout( 120_000 );
+
+	runWpCli( wp70Harness, [
+		'option',
+		'delete',
+		'flavor_agent_pattern_recommendation_threshold',
+	], { allowFailure: true } );
+	runWpCli( wp70Harness, [
+		'option',
+		'delete',
+		'flavor_agent_pattern_max_recommendations',
+	], { allowFailure: true } );
+	runWpCli( wp70Harness, [
+		'option',
+		'delete',
+		'flavor_agent_cloudflare_ai_search_max_results',
+	], { allowFailure: true } );
+	runWpCli( wp70Harness, [
+		'option',
+		'delete',
+		'flavor_agent_guideline_site',
+	], { allowFailure: true } );
+	runWpCli( wp70Harness, [
+		'option',
+		'delete',
+		'flavor_agent_guideline_copy',
+	], { allowFailure: true } );
+
+	await page.goto( '/wp-admin/options-general.php?page=flavor-agent', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+
+	await page.locator( '.flavor-agent-settings-section__panel' ).evaluateAll(
+		( sections ) => {
+			sections.forEach( ( section ) => {
+				section.open = true;
+			} );
+		}
+	);
+
+	await setSettingsFieldValue(
+		page,
+		'#flavor_agent_pattern_recommendation_threshold',
+		'0.72'
+	);
+	await setSettingsFieldValue(
+		page,
+		'#flavor_agent_pattern_max_recommendations',
+		'20'
+	);
+	await setSettingsFieldValue(
+		page,
+		'#flavor_agent_cloudflare_ai_search_max_results',
+		'99'
+	);
+	await setSettingsFieldValue(
+		page,
+		'#flavor_agent_guideline_site',
+		'A practical WordPress implementation site.'
+	);
+	await setSettingsFieldValue(
+		page,
+		'#flavor_agent_guideline_copy',
+		'Use direct copy. Avoid inflated consultant language.'
+	);
+
+	await page.locator( 'form.flavor-agent-settings__form' ).evaluate(
+		( form ) => {
+			form.noValidate = true;
+		}
+	);
+	await page.getByRole( 'button', { name: 'Save Changes' } ).click();
+	await page.waitForLoadState( 'domcontentloaded' );
+	await waitForWordPressReady( page );
+
+	await expect(
+		page.locator( '.flavor-agent-settings-save-summary' )
+	).toContainText( 'Pattern settings saved.' );
+	await expect(
+		page.locator( '.flavor-agent-settings-save-summary' )
+	).toContainText( 'Docs grounding settings saved.' );
+	await expect(
+		page.locator( '.flavor-agent-settings-save-summary' )
+	).toContainText( 'Guidelines saved.' );
+
+	const savedValues = runWpCli( wp70Harness, [
+		'eval',
+		`
+echo wp_json_encode(
+	array(
+		'threshold' => get_option( 'flavor_agent_pattern_recommendation_threshold' ),
+		'maxRecommendations' => get_option( 'flavor_agent_pattern_max_recommendations' ),
+		'maxDocs' => get_option( 'flavor_agent_cloudflare_ai_search_max_results' ),
+		'siteGuidelines' => get_option( 'flavor_agent_guideline_site' ),
+		'copyGuidelines' => get_option( 'flavor_agent_guideline_copy' ),
+	)
+);
+`,
+	] );
+	const values = JSON.parse( savedValues.stdout.trim() );
+
+	expect( String( values.threshold ) ).toBe( '0.72' );
+	expect( Number( values.maxRecommendations ) ).toBe( 12 );
+	expect( Number( values.maxDocs ) ).toBe( 8 );
+	expect( values.siteGuidelines ).toBe(
+		'A practical WordPress implementation site.'
+	);
+	expect( values.copyGuidelines ).toBe(
+		'Use direct copy. Avoid inflated consultant language.'
+	);
+
+	await page.reload( { waitUntil: 'domcontentloaded' } );
+	await waitForWordPressReady( page );
+	await page.locator( '.flavor-agent-settings-section__panel' ).evaluateAll(
+		( sections ) => {
+			sections.forEach( ( section ) => {
+				section.open = true;
+			} );
+		}
+	);
+
+	expect(
+		await getSettingsFieldValue(
+			page,
+			'#flavor_agent_pattern_recommendation_threshold'
+		)
+	).toBe( '0.72' );
+	expect(
+		await getSettingsFieldValue(
+			page,
+			'#flavor_agent_pattern_max_recommendations'
+		)
+	).toBe( '12' );
+	expect(
+		await getSettingsFieldValue(
+			page,
+			'#flavor_agent_cloudflare_ai_search_max_results'
+		)
+	).toBe( '8' );
+	expect(
+		await getSettingsFieldValue( page, '#flavor_agent_guideline_site' )
+	).toBe( 'A practical WordPress implementation site.' );
+	expect(
+		await getSettingsFieldValue( page, '#flavor_agent_guideline_copy' )
+	).toBe( 'Use direct copy. Avoid inflated consultant language.' );
 } );

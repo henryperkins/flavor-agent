@@ -51,6 +51,46 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( WordPressAIClient::get_setup_message(), $result->get_error_message() );
 	}
 
+	public function test_chat_returns_prompt_prevented_error_when_filter_blocks_generation(): void {
+		WordPressTestState::$ai_client_supported = true;
+		add_filter( 'wp_ai_client_prevent_prompt', '__return_true' );
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'prompt_prevented', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+	}
+
+	public function test_chat_translates_prompt_prevented_exception_thrown_during_generation(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$call_count = 0;
+		add_filter(
+			'wp_ai_client_prevent_prompt',
+			static function ( bool $prevent ) use ( &$call_count ): bool {
+				++$call_count;
+
+				return $call_count > 1;
+			},
+			10,
+			2
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'prompt_prevented', $result->get_error_code() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+	}
+
 	public function test_chat_applies_system_instruction_and_returns_generated_text(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';

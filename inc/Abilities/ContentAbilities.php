@@ -86,7 +86,7 @@ final class ContentAbilities {
 			return '';
 		}
 
-		return trim( str_replace( "\r", '', $value ) );
+		return sanitize_textarea_field( str_replace( "\r", '', $value ) );
 	}
 
 	private static function normalize_map( mixed $value ): array {

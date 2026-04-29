@@ -4331,6 +4331,16 @@ describe( 'store action thunks', () => {
 								content: 'New copy',
 								className: 'is-style-contrast',
 							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'New copy',
+										className: 'is-style-contrast',
+									},
+								},
+							] ),
 					  }
 					: {}
 			),
@@ -4357,6 +4367,78 @@ describe( 'store action thunks', () => {
 			} )
 		);
 		expect( result ).toEqual( { ok: true } );
+	} );
+
+	test( 'undoActivity refuses block entries without a recorded after snapshot', async () => {
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [
+				{
+					id: 'activity-1',
+					type: 'apply_suggestion',
+					surface: 'block',
+					target: {
+						clientId: 'block-1',
+					},
+					before: {
+						attributes: {
+							content: 'Old copy',
+						},
+					},
+					after: {
+						attributes: {},
+					},
+					undo: {
+						canUndo: true,
+						status: 'available',
+					},
+				},
+			] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( {
+								clientId: 'block-1',
+								name: 'core/paragraph',
+								attributes: {
+									content: 'New copy',
+								},
+							} ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'New copy',
+							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'New copy',
+									},
+								},
+							] ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-1' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( result ).toEqual( {
+			ok: false,
+			error: 'This block action is missing its recorded after state and cannot be undone automatically.',
+		} );
 	} );
 
 	test( 'undoActivity marks applied undos as pending when the audit write fails', async () => {
@@ -4413,6 +4495,15 @@ describe( 'store action thunks', () => {
 							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'New copy',
 							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'New copy',
+									},
+								},
+							] ),
 					  }
 					: {}
 			),
@@ -4632,6 +4723,15 @@ describe( 'store action thunks', () => {
 							getBlockAttributes: jest.fn().mockReturnValue( {
 								content: 'New copy',
 							} ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-1',
+									name: 'core/paragraph',
+									attributes: {
+										content: 'New copy',
+									},
+								},
+							] ),
 					  }
 					: {}
 			),

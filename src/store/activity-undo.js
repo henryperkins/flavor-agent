@@ -10,6 +10,7 @@ import {
 } from '../utils/template-actions';
 import {
 	BLOCK_TARGET_MOVED_ERROR,
+	getBlockByPath,
 	resolveActivityBlockTarget,
 } from './block-targeting';
 import {
@@ -20,8 +21,9 @@ import {
 	getResolvedActivityEntries,
 } from './activity-history';
 import {
-	attributeSnapshotsMatch,
 	buildUndoAttributeUpdates,
+	hasRecordedAttributeSnapshot,
+	recordedAttributeSnapshotMatchesCurrent,
 } from './update-helpers';
 import {
 	buildActivityPersistenceUpdate,
@@ -390,11 +392,24 @@ export function undoBlockActivity( activity, registry ) {
 	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
 	const blockEditorDispatch =
 		registry?.dispatch?.( 'core/block-editor' ) || {};
+	const beforeAttributes = activity?.before?.attributes || {};
+	const afterAttributes = activity?.after?.attributes || {};
+
+	if (
+		activity?.type !== 'apply_suggestion' ||
+		! hasRecordedAttributeSnapshot( afterAttributes )
+	) {
+		return {
+			ok: false,
+			error: 'This block action is missing its recorded after state and cannot be undone automatically.',
+		};
+	}
+
 	const resolvedTarget = resolveActivityBlockTarget(
 		blockEditorSelect,
 		target
 	);
-	const resolvedBlock = resolvedTarget.block;
+	let resolvedBlock = resolvedTarget.block;
 
 	if ( ! resolvedBlock?.clientId ) {
 		return {
@@ -403,12 +418,10 @@ export function undoBlockActivity( activity, registry ) {
 		};
 	}
 
-	const currentAttributes =
+	let currentAttributes =
 		blockEditorSelect.getBlockAttributes?.( resolvedBlock.clientId ) ||
 		resolvedBlock.attributes ||
 		null;
-	const beforeAttributes = activity?.before?.attributes || {};
-	const afterAttributes = activity?.after?.attributes || {};
 
 	if ( target.blockName && resolvedBlock.name !== target.blockName ) {
 		return {
@@ -424,7 +437,43 @@ export function undoBlockActivity( activity, registry ) {
 		};
 	}
 
-	if ( ! attributeSnapshotsMatch( afterAttributes, currentAttributes ) ) {
+	if (
+		! recordedAttributeSnapshotMatchesCurrent(
+			afterAttributes,
+			currentAttributes
+		)
+	) {
+		const pathBlock = Array.isArray( target.blockPath )
+			? getBlockByPath(
+					blockEditorSelect.getBlocks?.() || [],
+					target.blockPath
+			  )
+			: null;
+		const pathAttributes = pathBlock?.clientId
+			? blockEditorSelect.getBlockAttributes?.( pathBlock.clientId ) ||
+			  pathBlock.attributes ||
+			  null
+			: null;
+
+		if (
+			pathBlock?.clientId &&
+			( ! target.blockName || pathBlock.name === target.blockName ) &&
+			recordedAttributeSnapshotMatchesCurrent(
+				afterAttributes,
+				pathAttributes
+			)
+		) {
+			resolvedBlock = pathBlock;
+			currentAttributes = pathAttributes;
+		}
+	}
+
+	if (
+		! recordedAttributeSnapshotMatchesCurrent(
+			afterAttributes,
+			currentAttributes
+		)
+	) {
 		return {
 			ok: false,
 			error: 'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',

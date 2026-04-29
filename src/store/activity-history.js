@@ -1,9 +1,13 @@
 import { getStyleBookUiState } from '../style-book/dom';
 import {
 	BLOCK_TARGET_MOVED_ERROR,
+	getBlockByPath,
 	resolveActivityBlockTarget,
 } from './block-targeting';
-import { attributeSnapshotsMatch } from './update-helpers';
+import {
+	hasRecordedAttributeSnapshot,
+	recordedAttributeSnapshotMatchesCurrent,
+} from './update-helpers';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
 // v4: per-surface bucketing (was a single 20-entry cap across all surfaces).
@@ -630,6 +634,22 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 		return existingUndo;
 	}
 
+	if ( entry?.type !== 'apply_suggestion' ) {
+		return existingUndo;
+	}
+
+	const beforeAttributes = entry?.before?.attributes || {};
+	const afterAttributes = entry?.after?.attributes || {};
+
+	if ( ! hasRecordedAttributeSnapshot( afterAttributes ) ) {
+		return {
+			...existingUndo,
+			canUndo: false,
+			status: 'failed',
+			error: 'This block action is missing its recorded after state and cannot be undone automatically.',
+		};
+	}
+
 	const resolvedTarget = resolveActivityBlockTarget(
 		blockEditorSelect,
 		entry?.target || {}
@@ -657,12 +677,10 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 		};
 	}
 
-	const currentAttributes =
+	let currentAttributes =
 		blockEditorSelect?.getBlockAttributes?.( resolvedBlock.clientId ) ||
 		resolvedBlock.attributes ||
 		null;
-	const beforeAttributes = entry?.before?.attributes || {};
-	const afterAttributes = entry?.after?.attributes || {};
 
 	if ( ! currentAttributes ) {
 		return {
@@ -673,7 +691,43 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 		};
 	}
 
-	if ( attributeSnapshotsMatch( afterAttributes, currentAttributes ) ) {
+	if (
+		! recordedAttributeSnapshotMatchesCurrent(
+			afterAttributes,
+			currentAttributes
+		)
+	) {
+		const pathBlock = Array.isArray( entry?.target?.blockPath )
+			? getBlockByPath(
+					blockEditorSelect?.getBlocks?.() || [],
+					entry.target.blockPath
+			  )
+			: null;
+		const pathAttributes = pathBlock?.clientId
+			? blockEditorSelect?.getBlockAttributes?.( pathBlock.clientId ) ||
+			  pathBlock.attributes ||
+			  null
+			: null;
+
+		if (
+			pathBlock?.clientId &&
+			( ! entry?.target?.blockName ||
+				pathBlock.name === entry.target.blockName ) &&
+			recordedAttributeSnapshotMatchesCurrent(
+				afterAttributes,
+				pathAttributes
+			)
+		) {
+			currentAttributes = pathAttributes;
+		}
+	}
+
+	if (
+		recordedAttributeSnapshotMatchesCurrent(
+			afterAttributes,
+			currentAttributes
+		)
+	) {
 		return {
 			...existingUndo,
 			canUndo: true,
@@ -682,7 +736,12 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 		};
 	}
 
-	if ( attributeSnapshotsMatch( beforeAttributes, currentAttributes ) ) {
+	if (
+		recordedAttributeSnapshotMatchesCurrent(
+			beforeAttributes,
+			currentAttributes
+		)
+	) {
 		return {
 			...existingUndo,
 			canUndo: false,

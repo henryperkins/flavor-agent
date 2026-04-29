@@ -73,11 +73,15 @@ export function resolveActivityBlockTarget(
 
 	if ( target?.clientId ) {
 		const directBlock = blockEditorSelect?.getBlock?.( target.clientId );
+		const directBlockPath = getBlockPathByClientId(
+			blocks,
+			target.clientId
+		);
 
-		if ( directBlock ) {
+		if ( directBlock && directBlockPath ) {
 			return {
 				block: directBlock,
-				blockPath: getBlockPathByClientId( blocks, target.clientId ),
+				blockPath: directBlockPath,
 				resolvedBy: 'clientId',
 			};
 		}

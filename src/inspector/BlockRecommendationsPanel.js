@@ -41,6 +41,10 @@ import SuggestionChips from './SuggestionChips';
 import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
+import {
+	getActionabilityLabel,
+	getActionabilityReasonLabel,
+} from '../utils/recommendation-actionability';
 import { shallowStructuralEqual } from '../utils/structural-equality';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
@@ -87,6 +91,27 @@ export function findBlockPath( blocks, clientId, path = [] ) {
 	return null;
 }
 
+function findBlockByClientId( blocks, clientId ) {
+	for ( const block of blocks ) {
+		if ( block?.clientId === clientId ) {
+			return block;
+		}
+
+		if ( Array.isArray( block?.innerBlocks ) && block.innerBlocks.length ) {
+			const nestedBlock = findBlockByClientId(
+				block.innerBlocks,
+				clientId
+			);
+
+			if ( nestedBlock ) {
+				return nestedBlock;
+			}
+		}
+	}
+
+	return null;
+}
+
 export function blockPathMatches( left, right ) {
 	return shallowStructuralEqual( left || [], right || [] );
 }
@@ -97,17 +122,20 @@ function getCanRecommendBlocks() {
 
 function useBlockRecommendationState( clientId ) {
 	const canRecommendBlocks = getCanRecommendBlocks();
-	const blockEditorSelection = useSelect( ( select ) => {
-		const blockEditor = select( blockEditorStore );
-
-		return {
-			getBlock: ( targetClientId ) =>
-				blockEditor.getBlock?.( targetClientId ) || null,
-			getBlockAttributes: ( targetClientId ) =>
-				blockEditor.getBlockAttributes?.( targetClientId ) || null,
-			getBlocks: () => blockEditor.getBlocks?.() || [],
-		};
+	const editorBlocks = useSelect( ( select ) => {
+		return select( blockEditorStore )?.getBlocks?.() || [];
 	}, [] );
+	const blockEditorSelection = useMemo(
+		() => ( {
+			getBlock: ( targetClientId ) =>
+				findBlockByClientId( editorBlocks, targetClientId ),
+			getBlockAttributes: ( targetClientId ) =>
+				findBlockByClientId( editorBlocks, targetClientId )
+					?.attributes || null,
+			getBlocks: () => editorBlocks,
+		} ),
+		[ editorBlocks ]
+	);
 
 	const {
 		recommendations,
@@ -409,11 +437,16 @@ export function BlockRecommendationsContent( {
 					blockContext,
 					executionContract
 				);
+				const viewSuggestion = {
+					...suggestion,
+					eligibility: execution.eligibility,
+					actionability: execution.actionability,
+				};
 
 				if ( execution.isExecutable ) {
-					executable.push( suggestion );
+					executable.push( viewSuggestion );
 				} else {
-					advisory.push( suggestion );
+					advisory.push( viewSuggestion );
 				}
 			}
 
@@ -688,7 +721,12 @@ export function BlockRecommendationsContent( {
 					description={
 						isStaleResult
 							? 'These suggestions are shown for reference from the last request. Refresh before applying them.'
-							: 'One-click apply remains available when Flavor Agent can safely change local block attributes.'
+							: 'Validator-computed inline-safe suggestions can change local block attributes directly.'
+					}
+					meta={
+						<EligibilitySummary
+							suggestions={ executableBlockSuggestions }
+						/>
 					}
 				>
 					<SuggestionChips
@@ -790,6 +828,12 @@ export function BlockRecommendationsContent( {
 
 function AdvisorySuggestionCard( { suggestion } ) {
 	const typeLabel = getAdvisorySuggestionTypeLabel( suggestion );
+	const eligibility =
+		suggestion?.eligibility || suggestion?.actionability || {};
+	const tierLabel = getActionabilityLabel( eligibility?.tier );
+	const reasonLabels = ( eligibility?.blockers || eligibility?.reasons || [] )
+		.map( getActionabilityReasonLabel )
+		.filter( Boolean );
 
 	return (
 		<div className="flavor-agent-card">
@@ -801,7 +845,13 @@ function AdvisorySuggestionCard( { suggestion } ) {
 					{ typeLabel && (
 						<div className="flavor-agent-card__meta">
 							<span className="flavor-agent-pill">
+								{ tierLabel }
+							</span>
+							<span className="flavor-agent-pill">
 								{ typeLabel }
+							</span>
+							<span className="flavor-agent-pill">
+								Validator computed
 							</span>
 						</div>
 					) }
@@ -813,8 +863,39 @@ function AdvisorySuggestionCard( { suggestion } ) {
 					{ suggestion.description }
 				</p>
 			) }
+
+			{ reasonLabels.length > 0 && (
+				<p className="flavor-agent-card__description">
+					{ `Eligibility blockers: ${ reasonLabels.join( ', ' ) }.` }
+				</p>
+			) }
 		</div>
 	);
+}
+
+function EligibilitySummary( { suggestions = [] } ) {
+	const tierLabels = [
+		...new Set(
+			suggestions
+				.map( ( suggestion ) =>
+					getActionabilityLabel(
+						suggestion?.eligibility?.tier ||
+							suggestion?.actionability?.tier
+					)
+				)
+				.filter( Boolean )
+		),
+	];
+
+	if ( tierLabels.length === 0 ) {
+		return null;
+	}
+
+	return tierLabels.map( ( label ) => (
+		<span key={ label } className="flavor-agent-pill">
+			{ label }
+		</span>
+	) );
 }
 
 function getAdvisorySuggestionTypeLabel( suggestion ) {
