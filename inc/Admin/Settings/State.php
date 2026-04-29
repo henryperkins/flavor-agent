@@ -276,7 +276,7 @@ final class State {
 			if ( ! empty( $state['qdrant_configured'] ) && empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [
 					'tone'    => 'warning',
-					'message' => __( 'Qdrant is configured, but pattern recommendations still need an embeddings backend from Chat Provider.', 'flavor-agent' ),
+					'message' => __( 'Qdrant is configured, but pattern recommendations still need a configured embeddings backend.', 'flavor-agent' ),
 				];
 			} elseif ( empty( $state['qdrant_configured'] ) && ! empty( $state['runtime_embedding']['configured'] ) ) {
 				$status_blocks[] = [

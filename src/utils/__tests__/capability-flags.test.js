@@ -32,7 +32,7 @@ describe( 'capability-flags', () => {
 		} );
 	} );
 
-	test( 'falls back to both block setup paths when only legacy editor flags are available', () => {
+	test( 'falls back to the connectors setup path when only legacy editor flags are available', () => {
 		window.flavorAgentData = {
 			canRecommendBlocks: false,
 			settingsUrl:
@@ -43,23 +43,15 @@ describe( 'capability-flags', () => {
 
 		expect( getCapabilityNotice( 'block' ) ).toMatchObject( {
 			status: 'warning',
-			actionLabel: 'Open Flavor Agent settings',
-			actionHref:
-				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			actionLabel: 'Open Connectors',
+			actionHref: 'https://example.test/wp-admin/options-connectors.php',
 			actions: [
-				{
-					label: 'Open Flavor Agent settings',
-					href: 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				},
 				{
 					label: 'Open Connectors',
 					href: 'https://example.test/wp-admin/options-connectors.php',
 				},
 			],
 		} );
-		expect( getCapabilityNotice( 'block' )?.message ).toContain(
-			'Settings > Flavor Agent'
-		);
 		expect( getCapabilityNotice( 'block' )?.message ).toContain(
 			'Settings > Connectors'
 		);
@@ -134,7 +126,7 @@ describe( 'capability-flags', () => {
 				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
 		} );
 		expect( getCapabilityNotice( 'template-part' )?.message ).toContain(
-			'Settings > Flavor Agent'
+			'Settings > Connectors'
 		);
 	} );
 

@@ -58,13 +58,15 @@ For any change that touches more than one recommendation surface or any shared s
 
 `flavor-agent.php` is the runtime bootstrap. It wires editor asset enqueueing, REST routes, the settings page, Abilities API registration, pattern-index lifecycle hooks, and docs-grounding cron. It localizes three JS globals: `flavorAgentData` (editor — REST URL, nonce, settings/connectors URLs, `canManageFlavorAgentSettings`, structured surface capabilities, `canRecommendBlocks`, `canRecommendPatterns`, `canRecommendContent`, `canRecommendTemplates`, `canRecommendTemplateParts`, `canRecommendNavigation`, `canRecommendGlobalStyles`, `canRecommendStyleBook`, and template-part areas), `flavorAgentAdmin` (settings page), and `flavorAgentActivityLog` (AI Activity admin page — REST URL, nonce, admin URLs, `defaultPerPage`, `maxPerPage`, `locale`, and `timeZone`).
 
-`webpack.config.js` has three entry points: `src/index.js` (editor), `src/admin/settings-page.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page). `src/index.js` is the client composition root: it self-registers the `flavor-agent` `@wordpress/data` store, installs the `editor.BlockEdit` filter, and registers `ActivitySessionBootstrap`, `BlockRecommendationsDocumentPanel`, the pattern recommender, inserter badge, template recommender, template-part recommender, Global Styles recommender, and Style Book recommender plugins.
+`webpack.config.js` has three entry points: `src/index.js` (editor), `src/admin/settings-page.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page). `src/index.js` is the client composition root: it self-registers the `flavor-agent` `@wordpress/data` store, installs the `editor.BlockEdit` filter, and registers `ActivitySessionBootstrap`, `BlockRecommendationsDocumentPanel`, the content recommender, pattern recommender, inserter badge, template recommender, template-part recommender, Global Styles recommender, and Style Book recommender plugins.
 
 ### Recommendation surfaces
 
 **Block recommendations** are a cross-layer flow. `src/context/collector.js` combines block introspection, theme token summaries, sibling context, and structural context. The store thunk posts that snapshot to `/flavor-agent/v1/recommend-block`. `inc/REST/Agent_Controller.php` is intentionally thin and delegates to ability handlers, so real backend behavior lives in `inc/Abilities/*`, `inc/Context/ServerCollector.php`, and the prompt/client classes under `inc/LLM/`.
 
-**Pattern recommendations** are a separate pipeline. `src/patterns/PatternRecommender.js` does an initial fetch plus debounced refreshes, always passing `visiblePatternNames` for the current inserter root. Server-side, patterns are embedded, searched in Qdrant, reranked with Azure Responses, then returned. The client patches `__experimentalBlockPatterns` so recommended items appear in the native inserter under the `recommended` category.
+**Content recommendations** are a first-party post/page document-panel surface. `src/content/ContentRecommender.js` calls `/flavor-agent/v1/recommend-content` for draft, edit, and critique suggestions, then renders editorial-only output without mutating post content.
+
+**Pattern recommendations** are a separate pipeline. `src/patterns/PatternRecommender.js` does an initial fetch plus debounced refreshes, always passing `visiblePatternNames` for the current inserter root. Server-side, patterns are embedded with plugin-owned Azure/OpenAI Native embeddings, searched in Qdrant, reranked through the WordPress AI Client chat path, then returned. The client renders matching allowed patterns in a Flavor Agent-owned local inserter shelf and does not rewrite Gutenberg's native pattern registry or pattern metadata.
 
 **Template recommendations** are Site Editor-only. `src/templates/TemplateRecommender.js` activates only for `wp_template` entities and is advisory rather than auto-applying. **Template-part recommendations** (`src/template-parts/TemplatePartRecommender.js`) are scoped to individual template-part blocks. **Navigation recommendations** suggest structure for navigation blocks.
 
@@ -82,7 +84,7 @@ All routes live under `flavor-agent/v1/`: `recommend-block`, `recommend-content`
 
 ### LLM provider architecture
 
-`LLM\ChatClient` prefers plugin-managed providers (Azure OpenAI or OpenAI Native, selected via `flavor_agent_openai_provider`) and falls back to the WordPress 7.0 AI Client (`wp_ai_client_prompt()`). Block text-generation providers are configured separately in core under `Settings > Connectors`. The settings page manages Azure OpenAI, OpenAI Native, Qdrant, Cloudflare AI Search, and pattern sync. Each recommendation surface disables independently when its required backend is unavailable.
+`LLM\ChatClient` routes chat through the WordPress AI Client (`wp_ai_client_prompt()`) and `Settings > Connectors`; Flavor Agent no longer owns plugin-managed chat credentials, endpoints, deployments, or chat models. The settings page manages plugin-owned Azure/OpenAI Native embeddings, Qdrant, Cloudflare AI Search, Guidelines migration tooling, and pattern sync. `flavor_agent_openai_provider` now selects the embedding backend for patterns or pins chat to a configured connector while embeddings fall back to a configured direct backend. Each recommendation surface disables independently when its required backend is unavailable.
 
 ## Key conventions
 
@@ -96,7 +98,7 @@ When suggestion application changes block attributes, preserve the nested-merge 
 
 `ServerCollector` and the client collector have different jobs. `inc/Context/ServerCollector.php` maps block supports to Inspector panels and gathers server-visible data, while `src/context/collector.js` adds editor-only structural and theme context. Keep their `SUPPORT_TO_PANEL` mappings synchronized. Changes to the recommendation payload often need coordinated edits in both layers.
 
-Pattern recommendations patch editor settings non-destructively. `src/patterns/recommendation-utils.js` preserves original pattern `description`, `keywords`, and `categories` in a module-level map so the inserter overlay can be reverted cleanly. Do not mutate the registry payload in place without preserving rollback behavior.
+Pattern recommendations stay local to the Flavor Agent inserter shelf. Do not mutate Gutenberg's native pattern registry, pattern metadata, or category payload to surface rankings; match returned recommendations against the current allowed-pattern selector and insert through core block insertion.
 
 Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`. The adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys.
 

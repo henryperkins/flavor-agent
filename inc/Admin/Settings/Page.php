@@ -72,7 +72,7 @@ final class Page {
 					Feedback::render_feedback_request_fields( $feedback_request_key );
 					self::render_settings_section_group(
 						Config::GROUP_CHAT,
-						__( '1. Chat Provider', 'flavor-agent' ),
+						__( '1. Embeddings & Connectors', 'flavor-agent' ),
 						State::get_group_card_meta( Config::GROUP_CHAT, $state ),
 						$open_group,
 						static function () use ( $state, $feedback, $connectors_url ): void {
@@ -246,7 +246,7 @@ final class Page {
 		<div class="flavor-agent-settings__glance">
 			<?php
 			self::render_setup_status_card(
-				__( 'Chat Provider', 'flavor-agent' ),
+				__( 'Embeddings & Connectors', 'flavor-agent' ),
 				$chat_status['label'],
 				$chat_status['tone'],
 				'#' . State::get_section_dom_id( Config::GROUP_CHAT )
@@ -1047,11 +1047,11 @@ final class Page {
 		}
 
 		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Finish embeddings setup in Chat Provider and add Qdrant before syncing the pattern index.', 'flavor-agent' );
+			return __( 'Choose and complete an embeddings backend, then add Qdrant before syncing the pattern index.', 'flavor-agent' );
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Finish embeddings setup in Chat Provider before syncing the pattern index.', 'flavor-agent' );
+			return __( 'Choose and complete an embeddings backend before syncing the pattern index.', 'flavor-agent' );
 		}
 
 		return __( 'Add the Qdrant URL and API key before syncing the pattern index.', 'flavor-agent' );

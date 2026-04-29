@@ -11,7 +11,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## Surfacing Conditions
 
 - The selected block must be `core/navigation`
-- The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag comes from the shared surface-capability contract and requires both `edit_theme_options` and any compatible chat provider from `Settings > Flavor Agent` or `Settings > Connectors`
+- The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag comes from the shared surface-capability contract and requires both `edit_theme_options` and a compatible text-generation provider in `Settings > Connectors`
 - The request button is only enabled when `buildNavigationFetchInput()` can derive either:
   - a menu ID from `attributes.ref`, or
   - serialized navigation block markup

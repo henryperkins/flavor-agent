@@ -88,7 +88,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertSame( 'provider-managed', $status['model'] );
 		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
 		$this->assertSame( 'ready', $status['surfaces']['block']['reason'] );
-		$this->assertSame( 'plugin_or_core', $status['surfaces']['block']['owner'] );
+		$this->assertSame( 'connectors', $status['surfaces']['block']['owner'] );
 		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
 	}
 
@@ -335,7 +335,7 @@ final class InfraAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_check_status_marks_block_surface_unavailable_without_plugin_or_core_backends(): void {
+	public function test_check_status_marks_block_surface_unavailable_without_connectors_chat(): void {
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
 		];
@@ -349,7 +349,7 @@ final class InfraAbilitiesTest extends TestCase {
 			$status['surfaces']['block']['reason']
 		);
 		$this->assertSame(
-			'plugin_or_core',
+			'connectors',
 			$status['surfaces']['block']['owner']
 		);
 		$this->assertNotContains(

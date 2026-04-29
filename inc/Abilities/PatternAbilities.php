@@ -585,7 +585,7 @@ final class PatternAbilities {
 		) {
 			return new \WP_Error(
 				'missing_credentials',
-				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable chat provider from Settings > Flavor Agent or Settings > Connectors.',
+				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 				[ 'status' => 400 ]
 			);
 		}

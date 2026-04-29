@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-28
+> Last updated: 2026-04-29
 
 ## Working
 
@@ -40,10 +40,10 @@
 ### Editor UI
 
 - Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
-- Programmatic content lane scaffold via `flavor-agent/recommend-content` and `POST /flavor-agent/v1/recommend-content` for future post-editor integration; no first-party UI ships yet
+- Content Recommendations post/page document panel via `src/content/ContentRecommender.js`, `flavor-agent/recommend-content`, and `POST /flavor-agent/v1/recommend-content`, with draft, edit, and critique modes that remain editorial-only and do not auto-apply post content
 - Content-only blocks keep the panel, limit executable changes to content-safe attributes, may still show advisory-only block ideas, suppress style projections, and disabled blocks do not render AI controls
 - Shared capability notices now keep block, navigation, template, template-part, Global Styles, and Style Book surfaces visible when they are otherwise in scope but unavailable, and the pattern inserter now prepends the same why-unavailable guidance inside the native inserter, with explicit links back to `Settings > Connectors` or `Settings > Flavor Agent`
-- Pattern inserter integration with a `Recommended` category, toolbar badge for high-confidence matches, root-aware allowed-pattern scoping, and shared `wp_block` entity-contract alignment for the patched recommended-category slug, with a safe default to `recommended` when WordPress does not expose live view metadata; this surface remains intentionally ranking/browse-only, and pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
+- Pattern inserter integration with a Flavor Agent shelf, toolbar badge for high-confidence matches, root-aware allowed-pattern scoping, and local matching against the native allowed-pattern selector without rewriting Gutenberg's pattern registry; this surface remains intentionally ranking/browse-only, and pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place
 - Pattern recommendation and indexing backends now have direct PHPUnit coverage for backend gating, runtime-state handling, Qdrant retrieval/reranking, registered plus synced-pattern indexing, fingerprinting, scheduling, full/incremental sync, deletion, lock contention, and remote failure persistence
 - Site Editor template recommendation panel for `wp_template` documents with richer top-level structural context, validated template-part assignment/replacement, bounded pattern insertion operations that can target `start`, `end`, `before_block_path`, or `after_block_path` anchors, explicit placement requirements for every executable template insert, and shared `wp_template` entity-contract gating so the surface tracks the current Site Editor document contract even when live view metadata is absent
 - Site Editor template-part recommendation panel for `wp_template_part` documents with advisory block-focus links, pattern-browse links, executable-target and structural-constraint aware prompt context, review-confirm-apply support for validated bounded operations (`insert_pattern`, `replace_block_with_pattern`, and `remove_block`), and shared `wp_template_part` entity-contract alignment for area labels and current-document resolution

@@ -21,19 +21,19 @@ Use it when you need to answer:
 | Ability | Permission | Extra gate | What it returns or does | First-party surface |
 |---|---|---|---|---|
 | `flavor-agent/recommend-block` | `edit_posts` | Meaningful output requires `ChatClient::is_supported()` | Block recommendation payload with `settings`, `styles`, `block`, and `explanation` | Block Inspector recommendations |
-| `flavor-agent/recommend-content` | `edit_posts` | Active provider chat configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and line-level rewrites | No direct first-party UI yet; programmatic scaffold for a future post-editor lane |
+| `flavor-agent/recommend-content` | `edit_posts` | Connectors text-generation provider configured | Draft, edit, or critique payload for blog posts, essays, and site copy in Henry Perkins's voice, with notes and line-level rewrites | Post/page Content Recommendations panel plus external-agent contract |
 | `flavor-agent/introspect-block` | `edit_posts` | None beyond capability | Block registry manifest: supports, Inspector panels, attributes, styles, and variations | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-allowed-blocks` | `edit_posts` | None beyond capability | Site-wide registered block manifests plus `total`, with optional search, category, pagination, and variation controls; not filtered by current inserter context | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-patterns` | `edit_posts` | Active provider embeddings + chat, Qdrant configured, usable pattern index | Ranked registered and synced/user patterns for the current editing context | Pattern inserter recommendations |
+| `flavor-agent/recommend-patterns` | `edit_posts` | Plugin-owned embeddings, Connectors text generation, Qdrant configured, usable pattern index | Ranked registered and synced/user patterns for the current editing context | Pattern inserter recommendations |
 | `flavor-agent/list-patterns` | `edit_posts` | None beyond capability | Registered block patterns with optional category, block-type, template-type, search, pagination, and `includeContent` controls, plus `total` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-pattern` | `edit_posts` | None beyond capability | One registered block pattern by name; `patternId` is an alias for the returned string `id` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/list-synced-patterns` | `edit_posts` | Per-post read access | Caller-readable `wp_block` pattern entities filtered by `syncStatus` (`synced`, `partial`, `unsynced`, or `all`), with optional search, pagination, `includeContent`, and `total` | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-synced-pattern` | `edit_posts` | Per-post read access | One caller-readable `wp_block` pattern entity by numeric post ID | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-template` | `edit_theme_options` | Active provider chat configured | Template suggestions plus validated template-part operations and bounded pattern insertions with explicit placement and optional anchor metadata | Site Editor template panel |
-| `flavor-agent/recommend-template-part` | `edit_theme_options` | Active provider chat configured | Template-part suggestions, focus blocks, patterns, and validated bounded operations constrained by executable paths and anchors | Site Editor template-part panel |
-| `flavor-agent/recommend-style` | `edit_theme_options` | Active provider chat configured | Shared style suggestions for Global Styles and Style Book, constrained to validated `theme.json` paths, theme-backed values, and Global Styles-only theme variations | Site Editor Global Styles and Style Book panels |
+| `flavor-agent/recommend-template` | `edit_theme_options` | Connectors text-generation provider configured | Template suggestions plus validated template-part operations and bounded pattern insertions with explicit placement and optional anchor metadata | Site Editor template panel |
+| `flavor-agent/recommend-template-part` | `edit_theme_options` | Connectors text-generation provider configured | Template-part suggestions, focus blocks, patterns, and validated bounded operations constrained by executable paths and anchors | Site Editor template-part panel |
+| `flavor-agent/recommend-style` | `edit_theme_options` | Connectors text-generation provider configured | Shared style suggestions for Global Styles and Style Book, constrained to validated `theme.json` paths, theme-backed values, and Global Styles-only theme variations | Site Editor Global Styles and Style Book panels |
 | `flavor-agent/list-template-parts` | `edit_posts` or `edit_theme_options` | None beyond capability | Registered template parts, optionally filtered by area, with content returned only to theme-capable callers | No direct first-party UI; helper and external-agent surface |
-| `flavor-agent/recommend-navigation` | `edit_theme_options` | Active provider chat configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
+| `flavor-agent/recommend-navigation` | `edit_theme_options` | Connectors text-generation provider configured for useful output | Advisory navigation suggestion groups plus explanation | Navigation guidance inside the block panel |
 | `flavor-agent/search-wordpress-docs` | `manage_options` | Managed public docs backend available (legacy Cloudflare credentials optional) | Trusted WordPress developer-doc guidance, optionally warming entity cache | No direct first-party editor UI; admin and external-agent surface |
 | `flavor-agent/get-active-theme` | `edit_posts` | None beyond capability | Active theme name, stylesheet, template, and version | No direct first-party UI; helper and external-agent surface |
 | `flavor-agent/get-theme-presets` | `edit_posts` | None beyond capability | Theme preset families from global settings: color, gradient, typography, spacing, shadow, and duotone | No direct first-party UI; helper and external-agent surface |
@@ -67,7 +67,7 @@ Use it when you need to answer:
 | Route | Permission | First-party caller | Backend owner | Notes |
 |---|---|---|---|---|
 | `POST /flavor-agent/v1/recommend-block` | `edit_posts` | `fetchBlockRecommendations()` | `BlockAbilities::recommend_block()` | Wraps both normal and signature-only responses as `{ payload, clientId }` |
-| `POST /flavor-agent/v1/recommend-content` | `edit_posts` | No first-party caller yet | `ContentAbilities::recommend_content()` | Thin REST adapter over the content-lane scaffold |
+| `POST /flavor-agent/v1/recommend-content` | `edit_posts` | `fetchContentRecommendations()` | `ContentAbilities::recommend_content()` | Thin REST adapter over the content recommendation ability |
 | `POST /flavor-agent/v1/recommend-patterns` | `edit_posts` | `fetchPatternRecommendations()` | `PatternAbilities::recommend_patterns()` | Thin REST adapter over the ability; no `resolveSignatureOnly` contract |
 | `POST /flavor-agent/v1/recommend-navigation` | `edit_theme_options` | `fetchNavigationRecommendations()` | `NavigationAbilities::recommend_navigation()` | Accepts `resolveSignatureOnly`; normal responses include a docs-free `reviewContextSignature` |
 | `POST /flavor-agent/v1/recommend-template` | `edit_theme_options` | `fetchTemplateRecommendations()` | `TemplateAbilities::recommend_template()` | Accepts `resolveSignatureOnly`; normal responses include docs-free `reviewContextSignature` and `resolvedContextSignature` |
@@ -102,7 +102,7 @@ Use it when you need to answer:
     "block": {
       "available": true,
       "reason": "ready",
-      "owner": "plugin_or_core",
+      "owner": "connectors",
       "actions": [],
       "configurationLabel": "",
       "configurationUrl": "",
@@ -112,7 +112,7 @@ Use it when you need to answer:
     "navigation": {
       "available": false,
       "reason": "missing_theme_capability",
-      "owner": "plugin_or_core",
+      "owner": "connectors",
       "actions": [],
       "configurationLabel": "",
       "configurationUrl": "",

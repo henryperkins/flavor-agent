@@ -26,74 +26,74 @@ final class SurfaceCapabilities {
 
 		$block_message         = $can_manage_settings
 			? __(
-				'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.',
+				'Configure a text-generation provider in Settings > Connectors to enable block recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Block recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Block recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$pattern_message       = $can_manage_settings
 			? __(
-				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent. Chat can come from Settings > Flavor Agent or Settings > Connectors, and Flavor Agent automatically reuses any configured Azure OpenAI or OpenAI Native embedding backend for pattern search.',
+				'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			)
 			: __(
-				'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent pattern backends and a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$content_message       = $can_manage_settings
 			? __(
-				'Content recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this lane.',
+				'Configure a text-generation provider in Settings > Connectors to enable content recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Content recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Content recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$template_message      = $can_manage_settings
 			? __(
-				'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
+				'Configure a text-generation provider in Settings > Connectors to enable template recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Template recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Template recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$template_part_message = $can_manage_settings
 			? __(
-				'Template-part recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
+				'Configure a text-generation provider in Settings > Connectors to enable template-part recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Template-part recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Template-part recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$navigation_message    = $can_manage_settings
 			? __(
-				'Navigation recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
+				'Configure a text-generation provider in Settings > Connectors to enable navigation recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Navigation recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$global_styles_message = $can_manage_settings
 			? __(
-				'Global Styles recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
+				'Configure a text-generation provider in Settings > Connectors to enable Global Styles recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Global Styles recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 		$style_book_message    = $can_manage_settings
 			? __(
-				'Style Book recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
+				'Configure a text-generation provider in Settings > Connectors to enable Style Book recommendations.',
 				'flavor-agent'
 			)
 			: __(
-				'Style Book recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+				'Style Book recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 				'flavor-agent'
 			);
 
@@ -101,21 +101,19 @@ final class SurfaceCapabilities {
 			'block'        => self::build_surface(
 				$block_available,
 				$block_available ? 'ready' : 'block_backend_unconfigured',
-				'plugin_or_core',
+				'connectors',
 				$block_message,
 				self::build_actions(
 					$can_manage_settings,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
-				)
+				),
+				$can_manage_settings ? 'Settings > Connectors' : '',
+				$can_manage_settings ? $connectors_url : ''
 			),
 			'pattern'      => self::build_surface(
 				$pattern_available,
@@ -141,72 +139,60 @@ final class SurfaceCapabilities {
 			'content'      => self::build_surface(
 				$chat_available,
 				$chat_available ? 'ready' : 'plugin_provider_unconfigured',
-				'plugin_or_core',
+				'connectors',
 				$content_message,
 				self::build_actions(
 					$can_manage_settings,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
 				),
-				$can_manage_settings ? 'Settings > Flavor Agent' : '',
-				$can_manage_settings ? $settings_url : ''
+				$can_manage_settings ? 'Settings > Connectors' : '',
+				$can_manage_settings ? $connectors_url : ''
 			),
 			'template'     => self::build_surface(
 				$chat_available,
 				$chat_available ? 'ready' : 'plugin_provider_unconfigured',
-				'plugin_or_core',
+				'connectors',
 				$template_message,
 				self::build_actions(
 					$can_manage_settings,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
 				),
-				$can_manage_settings ? 'Settings > Flavor Agent' : '',
-				$can_manage_settings ? $settings_url : ''
+				$can_manage_settings ? 'Settings > Connectors' : '',
+				$can_manage_settings ? $connectors_url : ''
 			),
 			'templatePart' => self::build_surface(
 				$chat_available,
 				$chat_available ? 'ready' : 'plugin_provider_unconfigured',
-				'plugin_or_core',
+				'connectors',
 				$template_part_message,
 				self::build_actions(
 					$can_manage_settings,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
 				),
-				$can_manage_settings ? 'Settings > Flavor Agent' : '',
-				$can_manage_settings ? $settings_url : ''
+				$can_manage_settings ? 'Settings > Connectors' : '',
+				$can_manage_settings ? $connectors_url : ''
 			),
 			'navigation'   => self::build_surface(
 				$chat_available && $can_edit_theme,
 				! $can_edit_theme
 					? 'missing_theme_capability'
 					: ( $chat_available ? 'ready' : 'plugin_provider_unconfigured' ),
-				'plugin_or_core',
+				'connectors',
 				! $can_edit_theme
 					? __(
 						'Navigation recommendations require the edit_theme_options capability.',
@@ -217,17 +203,13 @@ final class SurfaceCapabilities {
 					$can_manage_settings && $can_edit_theme,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
 				),
-				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Flavor Agent' : '',
-				( $can_manage_settings && $can_edit_theme ) ? $settings_url : '',
+				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Connectors' : '',
+				( $can_manage_settings && $can_edit_theme ) ? $connectors_url : '',
 				true
 			),
 			'globalStyles' => self::build_surface(
@@ -235,7 +217,7 @@ final class SurfaceCapabilities {
 				! $can_edit_theme
 					? 'missing_theme_capability'
 					: ( $chat_available ? 'ready' : 'plugin_provider_unconfigured' ),
-				'plugin_or_core',
+				'connectors',
 				! $can_edit_theme
 					? __(
 						'Global Styles recommendations require the edit_theme_options capability.',
@@ -246,24 +228,20 @@ final class SurfaceCapabilities {
 					$can_manage_settings && $can_edit_theme,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
 				),
-				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Flavor Agent' : '',
-				( $can_manage_settings && $can_edit_theme ) ? $settings_url : ''
+				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Connectors' : '',
+				( $can_manage_settings && $can_edit_theme ) ? $connectors_url : ''
 			),
 			'styleBook'    => self::build_surface(
 				$chat_available && $can_edit_theme,
 				! $can_edit_theme
 					? 'missing_theme_capability'
 					: ( $chat_available ? 'ready' : 'plugin_provider_unconfigured' ),
-				'plugin_or_core',
+				'connectors',
 				! $can_edit_theme
 					? __(
 						'Style Book recommendations require the edit_theme_options capability.',
@@ -274,17 +252,13 @@ final class SurfaceCapabilities {
 					$can_manage_settings && $can_edit_theme,
 					[
 						[
-							'label' => 'Settings > Flavor Agent',
-							'href'  => $settings_url,
-						],
-						[
 							'label' => 'Settings > Connectors',
 							'href'  => $connectors_url,
 						],
 					]
 				),
-				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Flavor Agent' : '',
-				( $can_manage_settings && $can_edit_theme ) ? $settings_url : ''
+				( $can_manage_settings && $can_edit_theme ) ? 'Settings > Connectors' : '',
+				( $can_manage_settings && $can_edit_theme ) ? $connectors_url : ''
 			),
 		];
 	}

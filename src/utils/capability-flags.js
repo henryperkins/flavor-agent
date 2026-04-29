@@ -73,18 +73,7 @@ function getDefaultActions( surface, data, reason ) {
 		return [];
 	}
 
-	if (
-		[
-			'block',
-			'pattern',
-			'content',
-			'template',
-			'template-part',
-			'navigation',
-			'global-styles',
-			'style-book',
-		].includes( surface )
-	) {
+	if ( surface === 'pattern' ) {
 		return [
 			data?.settingsUrl
 				? {
@@ -96,6 +85,33 @@ function getDefaultActions( surface, data, reason ) {
 				? {
 						label: 'Open Connectors',
 						href: data.connectorsUrl,
+				  }
+				: null,
+		].filter( Boolean );
+	}
+
+	if (
+		[
+			'block',
+			'content',
+			'template',
+			'template-part',
+			'navigation',
+			'global-styles',
+			'style-book',
+		].includes( surface )
+	) {
+		return [
+			data?.connectorsUrl
+				? {
+						label: 'Open Connectors',
+						href: data.connectorsUrl,
+				  }
+				: null,
+			data?.settingsUrl && ! data?.connectorsUrl
+				? {
+						label: 'Open Flavor Agent settings',
+						href: data.settingsUrl,
 				  }
 				: null,
 		].filter( Boolean );
@@ -113,14 +129,14 @@ function getDefaultActions( surface, data, reason ) {
 
 // ── Shared message fragments ────────────────────────────────
 const CHAT_PROVIDER_MESSAGE =
-	'use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.';
+	'need a text-generation provider configured in Settings > Connectors.';
 const THEME_CAPABILITY_MESSAGE = 'require the edit_theme_options capability.';
 
 // ── Surface-specific message configuration ──────────────────
 const SURFACE_MESSAGES = Object.freeze( {
 	block: {
 		default:
-			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent, or configure a text-generation provider in Settings > Connectors and select it here, to enable block recommendations.',
+			'Configure a text-generation provider in Settings > Connectors to enable block recommendations.',
 	},
 	content: {
 		default: `Content recommendations ${ CHAT_PROVIDER_MESSAGE }`,
@@ -147,7 +163,7 @@ const SURFACE_MESSAGES = Object.freeze( {
 	},
 	pattern: {
 		default:
-			'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable chat provider from Settings > Flavor Agent or Settings > Connectors.',
+			'Pattern recommendations need a compatible embedding backend and Qdrant in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 	},
 } );
 

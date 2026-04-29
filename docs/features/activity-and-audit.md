@@ -8,7 +8,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
-Navigation, pattern, and the programmatic content lane do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes or failures when a document scope is available, and those rows appear in the wp-admin audit page.
+Navigation, pattern, and the content recommendation panel do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes or failures when a document scope is available, and those rows appear in the wp-admin audit page.
 
 ## Surfacing Conditions
 

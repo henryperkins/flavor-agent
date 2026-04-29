@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Admin\Settings\Assets;
+use FlavorAgent\Admin\Settings\Config;
 use FlavorAgent\Admin\Settings\Feedback;
 use FlavorAgent\Admin\Settings\Page;
 use FlavorAgent\Admin\Settings\State;
@@ -1148,6 +1149,28 @@ final class SettingsTest extends TestCase {
 			'name="_wp_http_referer"',
 			$output
 		);
+	}
+
+	public function test_pattern_setup_copy_points_to_embeddings_not_chat_provider(): void {
+		$state                      = $this->build_default_open_group_state();
+		$state['qdrant_configured'] = true;
+
+		$status_blocks = State::get_section_status_blocks( Config::GROUP_PATTERNS, $state, [] );
+
+		$this->assertSame(
+			'Qdrant is configured, but pattern recommendations still need a configured embeddings backend.',
+			$status_blocks[0]['message'] ?? ''
+		);
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString(
+			'Choose and complete an embeddings backend, then add Qdrant before syncing the pattern index.',
+			$output
+		);
+		$this->assertStringNotContainsString( 'Chat Provider', $output );
 	}
 
 	public function test_should_enqueue_admin_assets_accepts_settings_and_admin_hook_variants(): void {

@@ -112,15 +112,40 @@ check_absent \
 	'Active direct provider chat + embeddings' \
 	"${repo_root}/docs/features/settings-backends-and-sync.md"
 
+check_absent \
+	'old plugin-managed chat fallback wording still appears in live docs' \
+	'prefers plugin-managed providers' \
+	"${live_docs[@]}"
+
+check_absent \
+	'old pattern registry patching wording still appears in live docs' \
+	'client patches `__experimentalBlockPatterns`' \
+	"${live_docs[@]}"
+
+check_absent \
+	'old pattern metadata patching convention still appears in live docs' \
+	'Pattern recommendations patch editor settings non-destructively' \
+	"${live_docs[@]}"
+
+check_absent \
+	'old seven-surface capability notice wording still appears in live docs' \
+	'used by all seven recommendation surfaces' \
+	"${live_docs[@]}"
+
 check_present \
 	'ability reference should still declare twenty abilities' \
 	'All twenty abilities are registered' \
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 
 check_present \
-	'flavor-agent-readme should describe the seven shipped editor experiences' \
-	'seven primary editor experiences' \
+	'flavor-agent-readme should describe the eight shipped editor experiences' \
+	'eight primary editor experiences' \
 	"${repo_root}/docs/flavor-agent-readme.md"
+
+check_present \
+	'source of truth should describe eight first-party recommendation surfaces' \
+	'Eight first-party recommendation surfaces exist today' \
+	"${repo_root}/docs/SOURCE_OF_TRUTH.md"
 
 check_present \
 	'feature surface matrix should include Style Book in the AI activity row' \

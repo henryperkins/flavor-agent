@@ -13,7 +13,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a compatible embedding backend plus Qdrant in `Settings > Flavor Agent`, and a usable chat provider from `Settings > Flavor Agent` or `Settings > Connectors`
+- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a compatible embedding backend plus Qdrant in `Settings > Flavor Agent`, and a usable text-generation provider in `Settings > Connectors`
 - A post type must be available from `core/editor`
 - Passive fetch runs when the editor loads
 - Active refresh runs when the inserter search input changes while the inserter is open

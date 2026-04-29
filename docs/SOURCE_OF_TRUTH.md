@@ -18,17 +18,18 @@ The activity system now also has a first dedicated wp-admin audit page at `Setti
 
 When a recommendation surface is in scope but unavailable, the native UI now stays visible long enough to explain whether the missing dependency belongs in core `Settings > Connectors` or plugin-owned `Settings > Flavor Agent`, including the inserter-backed pattern surface.
 
-Seven first-party recommendation surfaces exist today:
+Eight first-party recommendation surfaces exist today:
 
 1. **Block Inspector** -- Per-block setting and style suggestions injected into the native Inspector, with the main block panel owning apply and delegated native sub-panels acting as passive mirrors; selected `core/navigation` blocks also get embedded navigation guidance.
 2. **Pattern Inserter** -- Vector-similarity pattern recommendations surfaced through a Flavor Agent shelf inside the native block inserter; intentionally ranking/browse-only.
-3. **Template Recommendations** -- Review-before-apply template-part and pattern composition suggestions for Site Editor templates.
-4. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
-5. **Global Styles Recommender** -- Site Editor Global Styles suggestions bounded to native theme-supported style paths and registered style variations.
-6. **Style Book Recommender** -- Per-block style suggestions in the Style Book panel, bounded to block-scoped style paths and theme-backed values.
-7. **Navigation Recommendations** -- Advisory navigation structure, overlay, and accessibility guidance nested inside block recommendations for selected `core/navigation` blocks.
+3. **Content Recommendations** -- Post/page document panel for draft, edit, and critique suggestions; editorial-only and no auto-apply path.
+4. **Template Recommendations** -- Review-before-apply template-part and pattern composition suggestions for Site Editor templates.
+5. **Template Part Recommender** -- Template-part-scoped block and pattern suggestions in the Site Editor.
+6. **Global Styles Recommender** -- Site Editor Global Styles suggestions bounded to native theme-supported style paths and registered style variations.
+7. **Style Book Recommender** -- Per-block style suggestions in the Style Book panel, bounded to block-scoped style paths and theme-backed values.
+8. **Navigation Recommendations** -- Advisory navigation structure, overlay, and accessibility guidance nested inside block recommendations for selected `core/navigation` blocks.
 
-The plugin also ships one first-party admin audit surface at `Settings > AI Activity` and one programmatic content lane exposed through REST + Abilities, but not yet mounted in a first-party Gutenberg panel.
+The plugin also ships one first-party admin audit surface at `Settings > AI Activity`.
 
 A parallel programmatic surface -- **WordPress Abilities API** -- exposes the shipped recommendation, helper, and diagnostic contracts as structured tool definitions for external AI agents on the supported WordPress 7.0+ floor.
 
@@ -286,12 +287,10 @@ flavor-agent/
 
 | Service                          | Purpose                                                   | Required For                                                                                                    | Config Options                                                                                                                   |
 | -------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| WordPress AI Client + Connectors | Primary chat runtime and connector registry              | Block/content/template/template-part/navigation/style requests whenever a shared Connectors-backed path is available, plus connector-backed chat paths | Core-managed in `Settings > Connectors`                                                                                          |
-| Provider selection               | Chooses Azure OpenAI, OpenAI Native, or a connector path | All chat-backed recommendation lanes plus pattern ranking                                                       | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a configured connector-backed provider)                     |
+| WordPress AI Client + Connectors | Primary chat runtime and connector registry              | Block/content/template/template-part/navigation/style requests and pattern reranking                            | Core-managed in `Settings > Connectors`                                                                                          |
+| Provider selection               | Chooses Azure OpenAI, OpenAI Native, or a connector path | Embedding backend selection, connector-backed chat pinning, and pattern ranking diagnostics                     | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a configured connector-backed provider)                     |
 | Azure OpenAI Embeddings          | Pattern embedding (3072-dim)                              | Pattern index + pattern recommendations when Azure is the active embedding backend                              | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment`                                                            |
-| Azure OpenAI Responses           | Chat + ranking                                            | Direct-provider block/content/template/template-part/navigation/style requests and pattern ranking              | `flavor_agent_azure_openai_endpoint`, `_key`, `_chat_deployment`                                                                 |
 | OpenAI Native Embeddings         | Pattern embedding                                         | Pattern index + pattern recommendations when OpenAI Native is the active embedding backend                      | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
-| OpenAI Native Chat               | Chat + ranking                                            | Direct-provider block/content/template/template-part/navigation/style requests and pattern ranking              | Optional `flavor_agent_openai_native_api_key` override, `_chat_model`; otherwise inherits core OpenAI connector credentials      |
 | Qdrant                           | Vector similarity search                                  | Pattern recommendations                                                                                         | `flavor_agent_qdrant_url`, `_key`                                                                                                |
 | Cloudflare AI Search             | WordPress dev-doc grounding                               | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | Managed public search endpoint plus `flavor_agent_cloudflare_ai_search_max_results`                                              |
 
@@ -307,7 +306,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 - **Trigger:** User selects a block, types optional prompt, clicks "Get Suggestions".
 - **Context sent:** Block name, attributes, styles, supports, inspector panels, editing mode, content/config attributes, child count, structural identity (role, location, position), sibling blocks, ancestor chain, theme tokens, WordPress docs guidance (cache-only).
-- **LLM:** `ChatClient::chat()`; uses the selected connector-backed provider when available, otherwise prefers the generic WordPress AI Client / Connectors path, and only then falls back to the direct plugin-managed provider.
+- **LLM:** `ChatClient::chat()`; uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path and reports `missing_text_generation_provider` when Connectors has no usable runtime.
 - **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`.
 - **UI:** The main panel follows the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Apply now` lane, `Manual ideas` advisory section, and recent activity. Settings and style suggestions are executable only from that main panel; delegated native Inspector sub-panels mirror the same result passively. Selected `core/navigation` blocks append a nested advisory-only navigation subsection.
 - **Apply:** Safe local block updates remain one-click. Safe deep-merge for `metadata` and `style` keys preserves unrelated attributes. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
@@ -362,10 +361,10 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Apply:** Deterministic client helpers validate block-scoped style paths and preset requirements before updating the active `root/globalStyles` entity. Applied changes persist before/after config plus operation metadata for scoped undo.
 - **Guardrails:** `set_styles` is rejected on the style-book surface. `set_theme_variation` is also rejected on the style-book surface. `set_block_styles.blockName` must exactly match the target block in scope. Same raw CSS, `customCSS`, and unsupported-path guardrails as Global Styles.
 
-#### Content Recommendations (Programmatic Scaffold)
+#### Content Recommendations
 
-- **Surface:** No first-party Gutenberg panel yet. The contract exists as a stable REST + Abilities endpoint so a future post-editor UI, external agent, or admin tool can attach without inventing one later.
-- **Trigger:** A caller posts `mode` (`draft`, `edit`, or `critique`), optional `prompt`, optional `voiceProfile`, and optional `postContext` to the endpoint.
+- **Surface:** `src/content/ContentRecommender.js` mounts a post/page `PluginDocumentSettingPanel` titled `Content Recommendations`. The same contract remains available through REST and Abilities for external callers.
+- **Trigger:** The user chooses `Draft`, `Edit`, or `Critique`, enters an optional prompt, and requests a recommendation. External callers can post the same `mode`, optional `prompt`, optional `voiceProfile`, and optional `postContext` to the endpoint.
 - **LLM:** `ChatClient::chat()` using `WritingPrompt` for Henry-voice system prompt assembly and response parsing.
 - **Response:** `mode`, `title`, `summary`, `content`, `notes[]`, and `issues[]`. Editorial-only — no auto-apply path.
 - **Guards:** `edit` and `critique` modes require `postContext.content`. `draft` mode accepts a prompt, title, or other working context.
@@ -465,7 +464,7 @@ When OpenAI Native is selected for embeddings, the API key can be inherited from
 
 Plus pattern sync status panel with manual trigger.
 
-When the Azure OpenAI endpoint, key, embedding deployment, or chat deployment changes and all four fields are present, the settings save flow validates both the embeddings and responses deployments and preserves the previous values if validation fails.
+When the Azure OpenAI endpoint, key, or embedding deployment changes and all three fields are present, the settings save flow validates the embeddings deployment and preserves the previous values if validation fails.
 When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
 Flavor Agent uses a managed public Cloudflare AI Search `/search` endpoint for docs grounding, so site owners do not need to configure Cloudflare credentials. When legacy Cloudflare account/instance/token values are still present and change, the settings save flow validates them with a lightweight probe search and preserves the previous values if validation fails. This keeps backwards compatibility with documented AI Search Run tokens.
 Unchanged or partial credential submissions skip remote validation.
@@ -496,7 +495,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
 6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. WordPress `7.0` remains pre-release as of 2026-04-23, and Core's updated schedule now targets 2026-05-20 for the general release, with 2026-05-08 `RC3` treated like a new Beta 1. The harness therefore still pins `wordpress:beta-7.0-RC2-php8.2-apache` until the official stable `7.0` Docker image exists and the repo intentionally switches over.
 7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews/DataForm timeline for privileged users, but there is still no diff-oriented inspection UI, no abilities-backed row actions/discovery layer, and no broader observability workflow beyond the stored timeline.
-8. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on active provider credentials and should be rerun whenever the configured provider path changes.
+8. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on the configured Connectors chat runtime plus plugin-owned embedding credentials and should be rerun whenever those paths change.
 
 ### Current Open Backlog
 
@@ -623,7 +622,7 @@ User editing wp_template_part in Site Editor
            -> ServerCollector::for_template_part(ref, visiblePatternNames)
            -> AISearchClient::maybe_search_with_cache_fallbacks()
            -> TemplatePartPrompt::build_system() + build_user()
-           -> ResponsesClient::rank(instructions, input) via active provider
+           -> ResponsesClient::rank(instructions, input) via WordPress AI Client / Connectors
            -> TemplatePartPrompt::parse_response() (validates block hints, pattern names, placements)
         <- JSON response: { suggestions, explanation }
   -> store saves request/result state for current templatePartRef
@@ -801,7 +800,7 @@ Minimum sign-off evidence:
 
 ## Key Technical Decisions
 
-1. **Shared provider selection, split execution paths**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both ride the same `Provider` selection layer, which uses a configured connector-backed provider when selected, otherwise prefers the generic WordPress AI Client runtime, and only then falls back to Azure OpenAI or OpenAI Native direct chat settings. Pattern embeddings remain plugin-managed even when chat is connector-backed.
+1. **Connectors-owned chat, plugin-owned embeddings**: Block and content requests use `ChatClient`, while template, template-part, navigation, Global Styles, Style Book, and pattern ranking use `ResponsesClient`. Both resolve chat through the WordPress AI Client: a selected configured connector-backed provider is pinned when available, otherwise the generic WordPress AI Client runtime is used. Direct Azure OpenAI and OpenAI Native settings are embeddings-only for pattern sync until core exposes an embeddings provider path.
 2. **Narrow approval model**: Block suggestions still apply inline on click, template/template-part/Global Styles/Style Book suggestions require review first, navigation stays advisory-only, and pattern recommendations stay ranking/browse-only. There is no separate multi-stage approval workspace or diff-review pipeline.
 3. **Inspector injection over sidebar**: Recommendations appear in the native Inspector tabs (Settings, Styles, sub-panels) rather than a separate sidebar. This feels native, not bolted-on.
 4. **Vector search for patterns**: Patterns are embedded and stored in Qdrant rather than passed to the LLM as raw text. This scales to hundreds of patterns without hitting token limits.

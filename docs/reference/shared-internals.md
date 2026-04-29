@@ -126,9 +126,9 @@ Several shared components form the current recommendation-surface shell. `Capabi
 
 Renders a non-dismissible `<Notice>` with optional action links when the backend capability for a given surface is unavailable. Delegates content to `getCapabilityNotice(surface, data)` from `src/utils/capability-flags.js`. Returns `null` when the capability is satisfied.
 
-**Props:** `surface` (string key: `'block'`, `'pattern'`, `'template'`, `'templatePart'`, `'navigation'`, `'globalStyles'`, `'styleBook'`), `data` (optional override for `flavorAgentData`)
+**Props:** `surface` (string key: `'block'`, `'pattern'`, `'content'`, `'template'`, `'templatePart'`, `'navigation'`, `'globalStyles'`, `'styleBook'`), `data` (optional override for `flavorAgentData`)
 
-**Consumers:** Block Inspector, Pattern Inserter, Template, Template-Part, Navigation, Global Styles, Style Book (7 surfaces)
+**Consumers:** Block Inspector, Pattern Inserter, Content, Template, Template-Part, Navigation, Global Styles, Style Book (8 surfaces)
 
 ### `src/components/AIStatusNotice.js`
 
@@ -136,7 +136,7 @@ Renders a contextual `<Notice>` with a configurable tone (`info`, `warning`, `er
 
 **Props:** `notice` (object: `{ message, tone?, actionLabel?, actionDisabled?, isDismissible? }`), `onAction`, `onDismiss`, `className`
 
-**Consumers:** Block Inspector, Navigation, Template, Template-Part, Global Styles, Style Book (6 surfaces)
+**Consumers:** Block Inspector, Content, Navigation, Template, Template-Part, Global Styles, Style Book (7 surfaces)
 
 ### `src/components/AIAdvisorySection.js`
 

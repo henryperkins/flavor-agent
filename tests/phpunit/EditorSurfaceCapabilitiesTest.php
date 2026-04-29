@@ -30,19 +30,19 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 
 		$this->assertSame( [], $capabilities['block']['actions'] );
 		$this->assertSame(
-			'Block recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'Block recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 			$capabilities['block']['message']
 		);
 		$this->assertSame( '', $capabilities['pattern']['configurationLabel'] );
 		$this->assertSame( '', $capabilities['pattern']['configurationUrl'] );
 		$this->assertSame(
-			'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'Pattern recommendations are not configured yet. Ask an administrator to configure Flavor Agent pattern backends and a text-generation provider in Settings > Connectors.',
 			$capabilities['pattern']['message']
 		);
 		$this->assertSame( [], $capabilities['content']['actions'] );
 		$this->assertSame( '', $capabilities['content']['configurationLabel'] );
 		$this->assertSame(
-			'Content recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'Content recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 			$capabilities['content']['message']
 		);
 		$this->assertSame( '', $capabilities['template']['configurationLabel'] );
@@ -55,15 +55,15 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame( [], $capabilities['styleBook']['actions'] );
 		$this->assertSame( '', $capabilities['styleBook']['configurationLabel'] );
 		$this->assertSame(
-			'Navigation recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'Navigation recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 			$capabilities['navigation']['message']
 		);
 		$this->assertSame(
-			'Global Styles recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'Global Styles recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 			$capabilities['globalStyles']['message']
 		);
 		$this->assertSame(
-			'Style Book recommendations are not configured yet. Ask an administrator to configure Flavor Agent or Connectors for this site.',
+			'Style Book recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors.',
 			$capabilities['styleBook']['message']
 		);
 	}
@@ -82,10 +82,6 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label' => 'Settings > Flavor Agent',
-					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				],
-				[
 					'label' => 'Settings > Connectors',
 					'href'  => 'https://example.test/wp-admin/options-connectors.php',
 				],
@@ -93,11 +89,11 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			$capabilities['block']['actions']
 		);
 		$this->assertSame(
-			'Settings > Flavor Agent',
+			'Settings > Connectors',
 			$capabilities['template']['configurationLabel']
 		);
 		$this->assertSame(
-			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php',
 			$capabilities['template']['configurationUrl']
 		);
 		$this->assertSame(
@@ -107,27 +103,19 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label' => 'Settings > Flavor Agent',
-					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				],
-				[
 					'label' => 'Settings > Connectors',
 					'href'  => 'https://example.test/wp-admin/options-connectors.php',
 				],
 			],
 			$capabilities['content']['actions']
 		);
-		$this->assertSame( 'Settings > Flavor Agent', $capabilities['content']['configurationLabel'] );
+		$this->assertSame( 'Settings > Connectors', $capabilities['content']['configurationLabel'] );
 		$this->assertSame(
-			'Content recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this lane.',
+			'Configure a text-generation provider in Settings > Connectors to enable content recommendations.',
 			$capabilities['content']['message']
 		);
 		$this->assertSame(
 			[
-				[
-					'label' => 'Settings > Flavor Agent',
-					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				],
 				[
 					'label' => 'Settings > Connectors',
 					'href'  => 'https://example.test/wp-admin/options-connectors.php',
@@ -136,15 +124,11 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			$capabilities['navigation']['actions']
 		);
 		$this->assertSame(
-			'Settings > Flavor Agent',
+			'Settings > Connectors',
 			$capabilities['globalStyles']['configurationLabel']
 		);
 		$this->assertSame(
 			[
-				[
-					'label' => 'Settings > Flavor Agent',
-					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				],
 				[
 					'label' => 'Settings > Connectors',
 					'href'  => 'https://example.test/wp-admin/options-connectors.php',
@@ -156,19 +140,15 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label' => 'Settings > Flavor Agent',
-					'href'  => 'https://example.test/wp-admin/options-general.php?page=flavor-agent',
-				],
-				[
 					'label' => 'Settings > Connectors',
 					'href'  => 'https://example.test/wp-admin/options-connectors.php',
 				],
 			],
 			$capabilities['styleBook']['actions']
 		);
-		$this->assertSame( 'Settings > Flavor Agent', $capabilities['styleBook']['configurationLabel'] );
+		$this->assertSame( 'Settings > Connectors', $capabilities['styleBook']['configurationLabel'] );
 		$this->assertSame(
-			'Style Book recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors. Configure either path to enable this surface.',
+			'Configure a text-generation provider in Settings > Connectors to enable Style Book recommendations.',
 			$capabilities['styleBook']['message']
 		);
 	}

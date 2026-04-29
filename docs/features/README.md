@@ -25,6 +25,7 @@ Use these docs when you need exact answers for:
 
 - `docs/features/block-recommendations.md` - per-block Inspector recommendations, projection tabs, apply, and undo
 - `docs/features/pattern-recommendations.md` - inserter recommendations, badge state, and pattern ranking pipeline
+- `docs/features/content-recommendations.md` - post/page document panel for drafting, editing, and critique; also exposed as REST + Abilities
 - `docs/features/navigation-recommendations.md` - advisory guidance for selected `core/navigation` blocks, including embedded and fallback shells
 - `docs/features/template-recommendations.md` - Site Editor template composition suggestions and validated apply flow
 - `docs/features/template-part-recommendations.md` - Site Editor template-part suggestions, focus links, and bounded operations
@@ -34,7 +35,6 @@ Use these docs when you need exact answers for:
 
 ## Programmatic And Shared-Contract Features
 
-- `docs/features/content-recommendations.md` - programmatic content-lane scaffold for drafting, editing, and critique; no first-party post-editor panel yet
 - `docs/features/helper-abilities.md` - helper abilities, diagnostics, and trusted WordPress docs search for external agents and admin tooling
 
 ## Required Sections

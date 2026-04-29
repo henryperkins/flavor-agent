@@ -1,18 +1,29 @@
 {
 	"mcpServers": {
 		"playwright": {
-			"command": "npx",
-			"args": [ "-y", "@playwright/mcp" ],
+			"command": "node",
+			"args": [
+				"/home/ubuntu/.nvm/versions/node/v24.15.0/lib/node_modules/npm/bin/npx-cli.js",
+				"-y",
+				"@playwright/mcp"
+			],
+			"env": {
+				"PATH": "/home/ubuntu/.nvm/versions/node/v24.15.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+			},
 			"type": "stdio"
 		},
 		"wpds": {
-			"command": "npx",
+			"command": "node",
 			"args": [
+				"/home/ubuntu/.nvm/versions/node/v24.15.0/lib/node_modules/npm/bin/npx-cli.js",
 				"-y",
 				"--ignore-scripts",
 				"--min-release-age=2",
 				"@wordpress/design-system-mcp@latest"
 			],
+			"env": {
+				"PATH": "/home/ubuntu/.nvm/versions/node/v24.15.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+			},
 			"type": "stdio"
 		}
 	}

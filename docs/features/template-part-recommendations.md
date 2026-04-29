@@ -12,7 +12,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - `TemplatePartRecommender()` must resolve a current template-part reference through the shared edited-entity resolver, preferring `core/editor` and falling back to `core/edit-site`
 - The shared `wp_template_part` entity contract from `usePostTypeEntityContract()` must resolve so the panel can align its title and area labels with the current WordPress template-part contract while still falling back to built-in field and area metadata when no live view config is exposed
-- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by the shared surface-capability contract and flips on when any compatible chat provider is configured in `Settings > Flavor Agent` or `Settings > Connectors`
+- The panel stays visible with a notice when `window.flavorAgentData.canRecommendTemplateParts` is false; the localized flag is driven by the shared surface-capability contract and flips on when a compatible text-generation provider is configured in `Settings > Connectors`
 - The panel clears recommendations on hard template-part changes, but keeps same-template-part drifted results visible as stale until the user refreshes or a fresh result arrives
 
 ## Shared Interaction Model

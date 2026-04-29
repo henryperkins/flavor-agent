@@ -1186,7 +1186,7 @@ final class Registration {
 						],
 						'model'              => [
 							'type'        => [ 'string', 'null' ],
-							'description' => 'Legacy model indicator. Returns provider-managed when block recommendations are backed by the WordPress AI Client, otherwise the active OpenAI provider model or null.',
+							'description' => 'Legacy model indicator. Returns provider-managed when recommendations are backed by the WordPress AI Client, otherwise null.',
 						],
 						'availableAbilities' => [
 							'type'        => 'array',

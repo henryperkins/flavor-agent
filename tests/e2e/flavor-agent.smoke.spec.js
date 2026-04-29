@@ -43,7 +43,6 @@ const TEMPLATE_PART_INSERTED_CONTENT =
 const TEMPLATE_PART_PATTERN_NAME = 'flavor-agent/header-utility-row';
 const TEMPLATE_PART_PATTERN_TITLE = 'Header Utility Row';
 const TEMPLATE_PART_SUGGESTION_LABEL = 'Add utility row';
-const TEMPLATE_PART_STALE_INSERTED_CONTENT = 'Template part freshness check';
 const TEMPLATE_PART_STALE_NOTICE =
 	'This template-part result no longer matches the current live structure or prompt. Refresh before reviewing or applying anything from the previous result.';
 const GLOBAL_STYLES_PROMPT =
@@ -1457,46 +1456,6 @@ async function getTemplatePartInsertState( page, insertedContent ) {
 	);
 }
 
-async function selectFirstNavigationBlock( page ) {
-	return page.evaluate( () => {
-		function findNavigation( blocks ) {
-			for ( const block of blocks ) {
-				if ( block?.name === 'core/navigation' ) {
-					return block;
-				}
-
-				if ( Array.isArray( block?.innerBlocks ) ) {
-					const nested = findNavigation( block.innerBlocks );
-
-					if ( nested ) {
-						return nested;
-					}
-				}
-			}
-
-			return null;
-		}
-
-		const blockEditor = window.wp?.data?.select( 'core/block-editor' );
-		const navigationBlock = findNavigation(
-			blockEditor?.getBlocks?.() || []
-		);
-
-		if ( ! navigationBlock?.clientId ) {
-			return null;
-		}
-
-		window.wp.data
-			.dispatch( 'core/block-editor' )
-			.selectBlock( navigationBlock.clientId );
-
-		return {
-			clientId: navigationBlock.clientId,
-			menuId: navigationBlock.attributes?.ref || null,
-		};
-	} );
-}
-
 // FIXME(phase-0-followup): Post-reload .flavor-agent-activity-row does not hydrate under
 // Playground WP 6.9.4. The session-scoped activity query after reload does not re-populate
 // the editor store, even though the server repository has the entry. Needs product-side
@@ -2803,7 +2762,7 @@ test( 'template surface explains unavailable plugin backends', async ( {
 		.locator( '.flavor-agent-capability-notice .flavor-agent-panel__note' )
 		.filter( {
 			hasText:
-				'Template recommendations use any compatible chat provider already configured in Settings > Flavor Agent or Settings > Connectors.',
+				'Configure a text-generation provider in Settings > Connectors to enable template recommendations.',
 		} );
 
 	await ensurePanelOpen(
@@ -2812,7 +2771,7 @@ test( 'template surface explains unavailable plugin backends', async ( {
 		templateNotice
 	);
 	await expect(
-		page.getByRole( 'link', { name: 'Settings > Flavor Agent' } )
+		page.getByRole( 'link', { name: 'Settings > Connectors' } )
 	).toBeVisible();
 	await expect(
 		page.getByPlaceholder( 'Describe the structure or layout you want.' )
