@@ -429,6 +429,30 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'blocks persisted malformed date filters instead of fetching unfiltered activity', async () => {
+		window.localStorage.setItem(
+			VIEW_STORAGE_KEY,
+			JSON.stringify( {
+				...DEFAULT_ACTIVITY_VIEW,
+				filters: [
+					{
+						field: 'day',
+						operator: 'between',
+						value: [ '2026-03-31', '2026-03-01' ],
+					},
+				],
+			} )
+		);
+
+		await renderApp( [ createEntry() ] );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain(
+			'Complete or reset the date filter to load activity.'
+		);
+		expect( getContainer().textContent ).toContain( 'Reset view' );
+	} );
+
 	test( 'keeps the detail sidebar synced to the server-backed visible feed', async () => {
 		apiFetch
 			.mockResolvedValueOnce(
@@ -495,7 +519,7 @@ describe( 'ActivityLogApp', () => {
 						{ value: 'template', label: 'Template' },
 					],
 					operationType: [
-						{ value: 'insert', label: 'Insert pattern' },
+						{ value: 'insert', label: 'Insert' },
 						{
 							value: 'modify-attributes',
 							label: 'Modify attributes',
@@ -551,7 +575,7 @@ describe( 'ActivityLogApp', () => {
 		expect(
 			fields.find( ( field ) => field.id === 'operationType' ).elements
 		).toEqual( [
-			{ value: 'insert', label: 'Insert pattern' },
+			{ value: 'insert', label: 'Insert' },
 			{ value: 'modify-attributes', label: 'Modify attributes' },
 		] );
 		expect(
@@ -582,6 +606,30 @@ describe( 'ActivityLogApp', () => {
 				value: 'Settings > Flavor Agent',
 				label: 'Settings > Flavor Agent',
 			},
+		] );
+	} );
+
+	test( 'deduplicates duplicate server operation filter options by value', async () => {
+		await renderApp(
+			buildResponse( [ createEntry() ], {
+				filterOptions: {
+					operationType: [
+						{ value: 'insert', label: 'Insert' },
+						{ value: 'insert', label: 'Insert pattern' },
+						{ value: 'replace', label: 'Replace' },
+						{ value: 'replace', label: 'Assign template part' },
+					],
+				},
+			} )
+		);
+
+		const fields = getDataViewsMockState().latestProps.fields;
+
+		expect(
+			fields.find( ( field ) => field.id === 'operationType' ).elements
+		).toEqual( [
+			{ value: 'insert', label: 'Insert' },
+			{ value: 'replace', label: 'Replace' },
 		] );
 	} );
 
@@ -843,6 +891,44 @@ describe( 'ActivityLogApp', () => {
 		);
 		expect( apiFetch.mock.calls[ 2 ][ 0 ].url ).toContain(
 			'dayRelativeUnit=days'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onChangeView( {
+				...getDataViewsMockState().latestProps.view,
+				filters: [
+					{
+						field: 'day',
+						operator: 'between',
+						value: [ '2026-03-01' ],
+					},
+				],
+			} );
+		} );
+		await flushEffects();
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( getContainer().textContent ).toContain(
+			'Complete or reset the date filter to load activity.'
+		);
+
+		await act( async () => {
+			getDataViewsMockState().latestProps.onChangeView( {
+				...getDataViewsMockState().latestProps.view,
+				filters: [
+					{
+						field: 'day',
+						operator: 'between',
+						value: [ '2026-03-31', '2026-03-01' ],
+					},
+				],
+			} );
+		} );
+		await flushEffects();
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( getContainer().textContent ).toContain(
+			'Complete or reset the date filter to load activity.'
 		);
 	} );
 

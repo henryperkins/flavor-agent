@@ -36,7 +36,7 @@ Navigation, pattern, and the content recommendation panel do not create executab
 - Show ordered undo state: undo status values are `available`, `undone`, `blocked`, and `failed`; persistence sync states (`server`/`local` with `syncType` of `undo` or `create`) are tracked separately
 - Let the user undo the newest valid tail action directly from the editor panel
 - Let admins inspect recent server-backed AI activity across surfaces from wp-admin, including provider ownership, credential-source, ability/route, review-only request diagnostics, and undo-reason details
-- Filter audit entries by relative time using true timestamp windows for `inThePast` and `over`, including hour-based filters that cross midnight correctly
+- Filter audit entries by absolute or relative time without silently broadening malformed date filters; malformed active filters are blocked in the UI or rejected by REST, and `inThePast` and `over` use true timestamp windows, including hour-based filters that cross midnight correctly
 - Keep the executable surfaces aligned on one learned-once status model even though block supports inline apply and template/template-part require preview first
 
 This is still the first audit surface, not the final observability product. It does not yet provide diff-oriented inspection, richer operator workflows, row actions/discovery, or a broader diagnostics console.

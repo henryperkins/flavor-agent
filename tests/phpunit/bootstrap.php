@@ -764,6 +764,10 @@ namespace {
 					$all_rows = $rows;
 					$has_entity_pairs = false;
 
+				if ( preg_match( '/\b1\s*=\s*0\b/', $query ) ) {
+					$rows = [];
+				}
+
 				if ( preg_match( "/document_scope_key\s*=\s*'([^']*)'/i", $query, $matches ) ) {
 					$scope_key = stripslashes( (string) ( $matches[1] ?? '' ) );
 					$rows      = array_values(

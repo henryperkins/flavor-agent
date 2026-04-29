@@ -21,7 +21,7 @@ npm run verify -- --skip-e2e       # same pipeline without Playwright suites (fa
 npm run verify -- --only=build,unit  # run a subset of steps
 npm run verify -- --dry-run        # print planned steps as JSON and exit
 npm run check:docs     # stale-doc freshness guard
-npm run wp:start       # docker compose up (local dev)
+npm run wp:start       # docker compose up; follow docs/reference/local-environment-setup.md for nightly + companion plugins
 npm run wp:stop        # docker compose down
 npm run wp:reset       # docker compose down -v (destroys volumes)
 npm run wp:e2e:wp70:bootstrap  # provision WP 7.0 browser harness
@@ -34,6 +34,10 @@ vendor/bin/phpunit     # PHPUnit tests (direct)
 ```
 
 PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `store/update-helpers.test.js`) or in `__tests__/` directories.
+
+### Local WordPress runtime
+
+The representative local WordPress runtime is not a stock stable install. It should run WordPress nightly/trunk and have these active companion plugins before validating editor, Connectors, Abilities, or MCP behavior: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-services`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `mcp-adapter`, and `plugin-check`, plus `flavor-agent`. MCP Adapter is installed from `WordPress/mcp-adapter`, not the WordPress.org plugin directory. See `docs/reference/local-environment-setup.md` for the exact setup and Plugin Check environment exports.
 
 ### Agent-executable verification
 

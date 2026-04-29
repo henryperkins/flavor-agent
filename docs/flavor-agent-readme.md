@@ -240,6 +240,14 @@ source ~/.nvm/nvm.sh && nvm use
 npm ci
 ```
 
+Prepare the representative local WordPress runtime before manual editor or connector testing:
+
+```bash
+npm run wp:start
+```
+
+`wp:start` only starts the Docker containers. Follow `docs/reference/local-environment-setup.md` to install WordPress nightly/trunk and activate the required companion plugins: WordPress Beta Tester, Gutenberg, AI, AI Services, OpenAI and Anthropic provider connectors, MCP Adapter, Plugin Check, and Flavor Agent.
+
 Build and verify:
 
 ```bash

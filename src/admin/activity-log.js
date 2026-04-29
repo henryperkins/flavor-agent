@@ -27,9 +27,23 @@ import {
 
 const ROOT_ID = 'flavor-agent-activity-log-root';
 const NOT_RECORDED = 'Not recorded';
+const RELATIVE_DAY_UNITS = new Set( [
+	'hours',
+	'days',
+	'weeks',
+	'months',
+	'years',
+] );
 
 function getBootData() {
 	return window.flavorAgentActivityLog || null;
+}
+
+function getInvalidDayFilterError() {
+	return __(
+		'Complete or reset the date filter to load activity.',
+		'flavor-agent'
+	);
 }
 
 function getIconForEntry( entry ) {
@@ -147,8 +161,10 @@ function getServerFilterOptions( responseData, key ) {
 		return [];
 	}
 
-	return options.filter(
-		( option ) =>
+	const deduped = new Map();
+
+	options.forEach( ( option ) => {
+		if (
 			option &&
 			option.value !== undefined &&
 			option.value !== null &&
@@ -156,7 +172,19 @@ function getServerFilterOptions( responseData, key ) {
 			option.label !== undefined &&
 			option.label !== null &&
 			option.label !== ''
-	);
+		) {
+			const value = String( option.value );
+
+			if ( ! deduped.has( value ) ) {
+				deduped.set( value, {
+					value,
+					label: String( option.label ),
+				} );
+			}
+		}
+	} );
+
+	return Array.from( deduped.values() );
 }
 
 function getViewFilter( view, field ) {
@@ -185,23 +213,32 @@ function appendExplicitFilter( params, fieldName, filter ) {
 	}
 }
 
-function appendDayFilter( params, filter ) {
-	if ( ! filter || ! filter.operator || filter.value === undefined ) {
-		return;
+function getDayFilterState( filter ) {
+	if ( ! filter || ! filter.operator ) {
+		return 'inactive';
 	}
 
-	params.set( 'dayOperator', String( filter.operator ) );
+	if ( filter.value === undefined || filter.value === null ) {
+		return 'invalid';
+	}
 
 	if ( filter.operator === 'between' && Array.isArray( filter.value ) ) {
-		if ( filter.value[ 0 ] ) {
-			params.set( 'day', String( filter.value[ 0 ] ) );
+		const dayStart = String( filter.value[ 0 ] || '' );
+		const dayEnd = String( filter.value[ 1 ] || '' );
+
+		if ( ! dayStart && ! dayEnd ) {
+			return 'invalid';
 		}
 
-		if ( filter.value[ 1 ] ) {
-			params.set( 'dayEnd', String( filter.value[ 1 ] ) );
+		if (
+			isValidActivityDay( dayStart ) &&
+			isValidActivityDay( dayEnd ) &&
+			dayStart <= dayEnd
+		) {
+			return 'valid';
 		}
 
-		return;
+		return 'invalid';
 	}
 
 	if (
@@ -211,21 +248,72 @@ function appendDayFilter( params, filter ) {
 	) {
 		if (
 			Number.isInteger( filter.value.value ) &&
-			filter.value.value > 0
+			filter.value.value > 0 &&
+			RELATIVE_DAY_UNITS.has( filter.value.unit )
 		) {
-			params.set( 'dayRelativeValue', String( filter.value.value ) );
+			return 'valid';
 		}
 
-		if ( filter.value.unit ) {
-			params.set( 'dayRelativeUnit', String( filter.value.unit ) );
-		}
+		return 'invalid';
+	}
 
+	const day = String( filter.value || '' );
+
+	if ( ! day ) {
+		return [ 'on', 'before', 'after' ].includes( filter.operator )
+			? 'invalid'
+			: 'inactive';
+	}
+
+	if (
+		[ 'on', 'before', 'after' ].includes( filter.operator ) &&
+		isValidActivityDay( day )
+	) {
+		return 'valid';
+	}
+
+	return 'invalid';
+}
+
+function hasInvalidDayFilter( view ) {
+	return getDayFilterState( getViewFilter( view, 'day' ) ) === 'invalid';
+}
+
+function appendDayFilter( params, filter ) {
+	if ( getDayFilterState( filter ) !== 'valid' ) {
 		return;
 	}
 
-	if ( filter.value ) {
-		params.set( 'day', String( filter.value ) );
+	params.set( 'dayOperator', String( filter.operator ) );
+
+	if ( filter.operator === 'between' ) {
+		params.set( 'day', String( filter.value[ 0 ] ) );
+		params.set( 'dayEnd', String( filter.value[ 1 ] ) );
+		return;
 	}
+
+	if ( [ 'inThePast', 'over' ].includes( filter.operator ) ) {
+		params.set( 'dayRelativeValue', String( filter.value.value ) );
+		params.set( 'dayRelativeUnit', String( filter.value.unit ) );
+		return;
+	}
+
+	params.set( 'day', String( filter.value ) );
+}
+
+function isValidActivityDay( value ) {
+	if ( ! /^\d{4}-\d{2}-\d{2}$/.test( value ) ) {
+		return false;
+	}
+
+	const [ year, month, day ] = value.split( '-' ).map( Number );
+	const date = new Date( Date.UTC( year, month - 1, day ) );
+
+	return (
+		date.getUTCFullYear() === year &&
+		date.getUTCMonth() === month - 1 &&
+		date.getUTCDate() === day
+	);
 }
 
 function getActivityRequestUrl( bootData, view ) {
@@ -897,6 +985,7 @@ export function ActivityLogApp( { bootData } ) {
 		() => getActivityRequestUrl( bootData, requestedView ),
 		[ bootData, requestedView ]
 	);
+	const invalidDayFilter = hasInvalidDayFilter( requestedView );
 	const perPageSizes = useMemo(
 		() => getPerPageSizes( defaultView.perPage, bootData.maxPerPage ),
 		[ bootData.maxPerPage, defaultView.perPage ]
@@ -904,6 +993,33 @@ export function ActivityLogApp( { bootData } ) {
 
 	useEffect( () => {
 		let isCurrent = true;
+
+		if ( invalidDayFilter ) {
+			setResponseData( {
+				entries: [],
+				filterOptions: null,
+				paginationInfo: {
+					page: 1,
+					perPage: requestedView.perPage,
+					totalItems: 0,
+					totalPages: 0,
+				},
+				summary: {
+					total: 0,
+					applied: 0,
+					undone: 0,
+					review: 0,
+					blocked: 0,
+					failed: 0,
+				},
+			} );
+			setError( getInvalidDayFilterError() );
+			setIsLoading( false );
+
+			return () => {
+				isCurrent = false;
+			};
+		}
 
 		async function loadEntries() {
 			setIsLoading( true );
@@ -997,6 +1113,7 @@ export function ActivityLogApp( { bootData } ) {
 		};
 	}, [
 		bootData,
+		invalidDayFilter,
 		requestUrl,
 		reloadToken,
 		requestedView.page,

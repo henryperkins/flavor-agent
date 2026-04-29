@@ -45,12 +45,14 @@ npm run verify -- --only=build,unit   # run a subset
 npm run verify -- --dry-run     # list planned steps as JSON
 
 # Local Docker environment
-npm run wp:start       # docker compose up
+npm run wp:start       # docker compose up; follow docs/reference/local-environment-setup.md for nightly + companion plugins
 npm run wp:stop        # docker compose down
 npm run wp:reset       # docker compose down -v (destroys volumes)
 ```
 
 `build/` and `vendor/` are gitignored. Run `npm run build` before testing changes in WordPress.
+
+The representative local WordPress runtime is not a stock stable install. It should run WordPress nightly/trunk and have these active companion plugins before validating editor, Connectors, Abilities, or MCP behavior: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-services`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `mcp-adapter`, and `plugin-check`, plus `flavor-agent`. MCP Adapter is installed from `WordPress/mcp-adapter`, not the WordPress.org plugin directory. See `docs/reference/local-environment-setup.md` for the exact setup and Plugin Check environment exports.
 
 For any change that touches more than one recommendation surface or any shared subsystem such as REST or ability contracts, provider routing, freshness signatures, activity and undo, shared UI taxonomy, or operator and admin paths, follow `docs/reference/cross-surface-validation-gates.md`. Treat those gates as additive release stops: run the nearest targeted PHPUnit and JS suites, run `node scripts/verify.js --skip-e2e`, run `npm run check:docs` when contracts or contributor docs changed, and run the matching Playwright harnesses. If a browser harness is known-red or unavailable, record that blocker or an explicit waiver instead of silently skipping it.
 

@@ -494,7 +494,7 @@ final class ActivityRepositoryTest extends TestCase {
 			[
 				[
 					'value' => 'insert',
-					'label' => 'Insert pattern',
+					'label' => 'Insert',
 				],
 				[
 					'value' => 'modify-attributes',
@@ -694,6 +694,145 @@ final class ActivityRepositoryTest extends TestCase {
 			[ 'activity-recent' ],
 			array_column( $between_result['entries'] ?? [], 'id' )
 		);
+	}
+
+	public function test_query_admin_invalid_active_day_filters_return_no_results(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry( 'activity-matching', '2026-03-24T10:00:00Z' )
+		);
+
+		$cases = [
+			[
+				'dayOperator' => 'between',
+			],
+			[
+				'dayOperator' => 'between',
+				'day'         => '2026-03-01',
+			],
+			[
+				'dayOperator' => 'between',
+				'dayEnd'      => '2026-03-31',
+			],
+			[
+				'dayOperator' => 'between',
+				'day'         => '2026-03-31',
+				'dayEnd'      => '2026-03-01',
+			],
+			[
+				'dayOperator' => 'on',
+				'day'         => 'not-a-date',
+			],
+			[
+				'dayOperator'      => 'inThePast',
+				'dayRelativeValue' => 7,
+				'dayRelativeUnit'  => 'fortnights',
+			],
+		];
+
+		foreach ( $cases as $filters ) {
+			$result = Repository::query_admin( $filters );
+
+			$this->assertSame( [], array_column( $result['entries'] ?? [], 'id' ) );
+			$this->assertSame( 0, $result['paginationInfo']['totalItems'] ?? null );
+		}
+	}
+
+	public function test_query_admin_fallback_and_projected_paths_match_invalid_day_filters(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_block_entry( 'activity-matching', '2026-03-24T10:00:00Z' )
+		);
+
+		$filters = [
+			'dayOperator' => 'between',
+			'day'         => '2026-03-31',
+			'dayEnd'      => '2026-03-01',
+		];
+
+		$projected_result = Repository::query_admin( $filters );
+
+		WordPressTestState::$options['flavor_agent_activity_admin_projection_backfill_cursor'] = 0;
+
+		$fallback_result = Repository::query_admin( $filters );
+
+		$this->assertSame(
+			$projected_result['paginationInfo']['totalItems'] ?? null,
+			$fallback_result['paginationInfo']['totalItems'] ?? null
+		);
+		$this->assertSame(
+			array_column( $projected_result['entries'] ?? [], 'id' ),
+			array_column( $fallback_result['entries'] ?? [], 'id' )
+		);
+		$this->assertSame( 0, $fallback_result['paginationInfo']['totalItems'] ?? null );
+	}
+
+	public function test_query_admin_deduplicates_operation_filter_options_by_effective_value(): void {
+		Repository::install();
+
+		Repository::create(
+			$this->build_template_entry( 'activity-insert-pattern', '2026-03-24T10:00:00Z' )
+		);
+
+		$insert_block_entry                        = $this->build_block_entry( 'activity-insert-block', '2026-03-24T10:00:01Z' );
+		$insert_block_entry['after']['operations'] = [
+			[
+				'type'      => 'insert_block',
+				'blockName' => 'core/paragraph',
+			],
+		];
+		Repository::create( $insert_block_entry );
+
+		$replace_template_part_entry                                   = $this->build_template_part_assignment_entry( 'activity-replace', '2026-03-24T10:00:02Z' );
+		$replace_template_part_entry['after']['operations'][0]['type'] = 'replace_template_part';
+		Repository::create( $replace_template_part_entry );
+
+		Repository::create(
+			$this->build_template_part_assignment_entry( 'activity-assign', '2026-03-24T10:00:03Z' )
+		);
+
+		$result          = Repository::query_admin( [ 'perPage' => 10 ] );
+		$options         = $result['filterOptions']['operationType'] ?? [];
+		$option_by_value = [];
+
+		foreach ( $options as $option ) {
+			$option_by_value[ $option['value'] ] = $option['label'];
+		}
+
+		$this->assertSame( 1, count( array_keys( $option_by_value, 'Insert', true ) ) );
+		$this->assertSame( 'Insert', $option_by_value['insert'] ?? null );
+		$this->assertSame( 'Replace', $option_by_value['replace'] ?? null );
+		$this->assertSame(
+			1,
+			count(
+				array_filter(
+					$options,
+					static fn ( array $option ): bool => 'insert' === ( $option['value'] ?? '' )
+				)
+			)
+		);
+		$this->assertSame(
+			1,
+			count(
+				array_filter(
+					$options,
+					static fn ( array $option ): bool => 'replace' === ( $option['value'] ?? '' )
+				)
+			)
+		);
+
+		$operation_labels = [];
+
+		foreach ( WordPressTestState::$db_tables[ Repository::table_name() ] ?? [] as $row ) {
+			$operation_labels[ $row['activity_id'] ?? '' ] = $row['admin_operation_label'] ?? '';
+		}
+
+		$this->assertSame( 'Insert pattern', $operation_labels['activity-insert-pattern'] ?? null );
+		$this->assertSame( 'Insert block', $operation_labels['activity-insert-block'] ?? null );
+		$this->assertSame( 'Replace template part', $operation_labels['activity-replace'] ?? null );
+		$this->assertSame( 'Assign template part', $operation_labels['activity-assign'] ?? null );
 	}
 
 	public function test_query_admin_supports_operator_filters_and_user_sorting(): void {
