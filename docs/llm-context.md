@@ -80,7 +80,7 @@ Source is in `/home/ubuntu/flavor-agent` and mounted as plugin symlink `wp-conte
 Do not assume full WordPress internals; only assume contracts for these plugin internals:
 - flavor-agent.php, inc/, src/, tests/phpunit/, tests/e2e/.
 Build artifacts may be inspected to understand compiled output, but do not edit build/ or dist/ directly.
-Relevant active plugins include gutenberg, enable-abilities-for-mcp, ai-provider-for-openai, ai-provider-for-anthropic, ai-services, and WooCommerce.
+Relevant active plugins include gutenberg, wordpress-beta-tester, ai, ai-services, ai-provider-for-openai, ai-provider-for-anthropic, mcp-adapter, plugin-check, enable-abilities-for-mcp, and WooCommerce.
 When you need behavior in WordPress core, use stable public API references and flag assumptions.
 Focus your changes on the provided files and keep edits minimal.
 ```
