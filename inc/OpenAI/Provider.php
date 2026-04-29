@@ -486,13 +486,54 @@ final class Provider {
 		}
 
 		$connector = self::registered_connectors()[ $provider ] ?? null;
-		$plugin    = is_array( $connector['plugin'] ?? null ) ? $connector['plugin'] : [];
 
 		return [
 			'id'         => $provider,
 			'label'      => self::provider_label_for_request_meta( $provider ),
-			'pluginSlug' => is_string( $plugin['slug'] ?? null ) ? sanitize_key( $plugin['slug'] ) : '',
+			'pluginSlug' => self::connector_plugin_slug_for_request_meta( $connector['plugin'] ?? null ),
 		];
+	}
+
+	private static function connector_plugin_slug_for_request_meta( mixed $plugin ): string {
+		if ( is_string( $plugin ) ) {
+			return self::normalize_connector_plugin_slug( $plugin );
+		}
+
+		if ( ! is_array( $plugin ) ) {
+			return '';
+		}
+
+		foreach ( [ 'slug', 'pluginSlug', 'plugin_slug', 'file', 'pluginFile', 'basename', 'path' ] as $key ) {
+			$slug = self::normalize_connector_plugin_slug( $plugin[ $key ] ?? null );
+
+			if ( '' !== $slug ) {
+				return $slug;
+			}
+		}
+
+		return '';
+	}
+
+	private static function normalize_connector_plugin_slug( mixed $value ): string {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+
+		$value = trim( (string) $value );
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		$value = str_replace( '\\', '/', $value );
+		$parts = array_values( array_filter( explode( '/', $value ), 'strlen' ) );
+		$slug  = $parts[0] ?? $value;
+
+		if ( str_ends_with( $slug, '.php' ) ) {
+			$slug = substr( $slug, 0, -4 );
+		}
+
+		return sanitize_key( $slug );
 	}
 
 	/**

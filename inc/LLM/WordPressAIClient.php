@@ -78,14 +78,28 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$started_at = microtime( true );
-		$result     = self::call_prompt_method( $prompt, 'generate_text' );
+		$request_diagnostics = self::build_request_diagnostics(
+			$system_prompt,
+			$user_prompt,
+			$provider,
+			$reasoning_effort,
+			$schema
+		);
+		$started_at          = microtime( true );
+		$result              = self::call_prompt_method( $prompt, 'generate_text' );
 
 		if ( is_wp_error( $result ) ) {
+			Provider::record_runtime_chat_diagnostics(
+				self::with_error_summary( $request_diagnostics, $result )
+			);
+
 			return $result;
 		}
 
-		$parsed = self::normalize_generated_text_result( $result, $started_at );
+		$parsed = self::normalize_generated_text_result( $result, $started_at, $request_diagnostics );
+
+		Provider::record_runtime_chat_metrics( $parsed['metrics'] );
+		Provider::record_runtime_chat_diagnostics( $parsed['diagnostics'] );
 
 		if ( '' === $parsed['text'] ) {
 			return new \WP_Error(
@@ -94,8 +108,6 @@ final class WordPressAIClient {
 				[ 'status' => 502 ]
 			);
 		}
-
-		Provider::record_runtime_chat_metrics( $parsed['metrics'] );
 
 		return $parsed['text'];
 	}
@@ -547,17 +559,24 @@ final class WordPressAIClient {
 
 	/**
 	 * @param string|array<string, mixed>|object $result
-	 * @return array{text: string, metrics: array<string, mixed>|null}
+	 * @param array<string, mixed> $request_diagnostics
+	 * @return array{text: string, metrics: array<string, mixed>|null, diagnostics: array<string, mixed>|null}
 	 */
-	private static function normalize_generated_text_result( mixed $result, float $started_at ): array {
-		$metrics = [
-			'latencyMs' => max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) ),
+	private static function normalize_generated_text_result( mixed $result, float $started_at, array $request_diagnostics ): array {
+		$elapsed_ms = max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) );
+		$metrics    = [
+			'latencyMs' => $elapsed_ms,
 		];
 
 		if ( is_string( $result ) ) {
 			return [
-				'text'    => trim( $result ),
-				'metrics' => $metrics,
+				'text'        => trim( $result ),
+				'metrics'     => $metrics,
+				'diagnostics' => self::with_response_summary(
+					$request_diagnostics,
+					$result,
+					$elapsed_ms
+				),
 			];
 		}
 
@@ -567,37 +586,21 @@ final class WordPressAIClient {
 
 		if ( ! is_array( $result ) ) {
 			return [
-				'text'    => '',
-				'metrics' => $metrics,
+				'text'        => '',
+				'metrics'     => $metrics,
+				'diagnostics' => self::with_response_summary(
+					$request_diagnostics,
+					'',
+					$elapsed_ms
+				),
 			];
 		}
 
-		$text = isset( $result['text'] ) && is_string( $result['text'] )
-			? trim( $result['text'] )
-			: '';
+		$text        = self::extract_generated_text( $result );
+		$token_usage = self::normalize_token_usage( $result );
 
-		if ( is_array( $result['tokenUsage'] ?? null ) ) {
-			$token_usage = [];
-
-			$total  = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['total'] ?? null );
-			$input  = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['input'] ?? null );
-			$output = MetricsNormalizer::normalize_metric_int( $result['tokenUsage']['output'] ?? null );
-
-			if ( null !== $total ) {
-				$token_usage['total'] = $total;
-			}
-
-			if ( null !== $input ) {
-				$token_usage['input'] = $input;
-			}
-
-			if ( null !== $output ) {
-				$token_usage['output'] = $output;
-			}
-
-			if ( [] !== $token_usage ) {
-				$metrics['tokenUsage'] = $token_usage;
-			}
+		if ( [] !== $token_usage ) {
+			$metrics['tokenUsage'] = $token_usage;
 		}
 
 		$latency_ms = MetricsNormalizer::normalize_metric_int( $result['latencyMs'] ?? null );
@@ -606,8 +609,187 @@ final class WordPressAIClient {
 		}
 
 		return [
-			'text'    => $text,
-			'metrics' => $metrics,
+			'text'        => $text,
+			'metrics'     => $metrics,
+			'diagnostics' => self::with_response_summary(
+				$request_diagnostics,
+				$text,
+				(int) $metrics['latencyMs'],
+				self::extract_provider_request_id( $result )
+			),
 		];
+	}
+
+	/**
+	 * @param array<string, mixed>|null $schema
+	 * @return array<string, mixed>
+	 */
+	private static function build_request_diagnostics(
+		string $system_prompt,
+		string $user_prompt,
+		?string $provider,
+		?string $reasoning_effort,
+		?array $schema
+	): array {
+		$request_payload  = [
+			'provider'     => is_string( $provider ) ? sanitize_key( $provider ) : '',
+			'instructions' => $system_prompt,
+			'input'        => $user_prompt,
+		];
+		$reasoning_effort = self::normalize_reasoning_effort_value( $reasoning_effort );
+
+		if ( null !== $reasoning_effort ) {
+			$request_payload['reasoning'] = [ 'effort' => $reasoning_effort ];
+		}
+
+		if ( is_array( $schema ) && [] !== $schema ) {
+			$request_payload['text'] = [
+				'format' => [
+					'type'   => 'json_schema',
+					'schema' => $schema,
+				],
+			];
+		}
+
+		return [
+			'transport'      => [
+				'host' => 'wordpress-ai-client',
+				'path' => '/generate-text',
+			],
+			'requestSummary' => array_filter(
+				[
+					'bodyBytes'         => self::json_byte_length( $request_payload ),
+					'instructionsChars' => strlen( $system_prompt ),
+					'inputChars'        => strlen( $user_prompt ),
+					'reasoningEffort'   => $reasoning_effort,
+				],
+				static fn ( mixed $value ): bool => null !== $value && '' !== $value
+			),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $diagnostics
+	 * @return array<string, mixed>
+	 */
+	private static function with_response_summary(
+		array $diagnostics,
+		string $text,
+		int $processing_ms,
+		string $provider_request_id = ''
+	): array {
+		$response_summary = [
+			'bodyBytes'    => strlen( $text ),
+			'processingMs' => max( 0, $processing_ms ),
+		];
+
+		if ( '' !== $provider_request_id ) {
+			$response_summary['providerRequestId'] = $provider_request_id;
+		}
+
+		$diagnostics['responseSummary'] = $response_summary;
+
+		return $diagnostics;
+	}
+
+	/**
+	 * @param array<string, mixed> $diagnostics
+	 * @return array<string, mixed>
+	 */
+	private static function with_error_summary( array $diagnostics, \WP_Error $error ): array {
+		$diagnostics['errorSummary'] = [
+			'code'           => $error->get_error_code(),
+			'wrappedMessage' => $error->get_error_message(),
+		];
+
+		return $diagnostics;
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 */
+	private static function extract_generated_text( array $result ): string {
+		foreach ( [ 'text', 'output_text', 'outputText', 'content' ] as $key ) {
+			if ( isset( $result[ $key ] ) && is_string( $result[ $key ] ) ) {
+				return trim( $result[ $key ] );
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 * @return array<string, int>
+	 */
+	private static function normalize_token_usage( array $result ): array {
+		$usage = is_array( $result['tokenUsage'] ?? null ) ? $result['tokenUsage'] : [];
+
+		if ( [] === $usage && is_array( $result['usage'] ?? null ) ) {
+			$usage = $result['usage'];
+		}
+
+		$total  = self::first_metric_int( $usage, [ 'total', 'totalTokens', 'total_tokens' ] );
+		$input  = self::first_metric_int( $usage, [ 'input', 'inputTokens', 'input_tokens', 'prompt_tokens' ] );
+		$output = self::first_metric_int( $usage, [ 'output', 'outputTokens', 'output_tokens', 'completion_tokens' ] );
+
+		return array_filter(
+			[
+				'total'  => $total,
+				'input'  => $input,
+				'output' => $output,
+			],
+			static fn ( mixed $value ): bool => null !== $value
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $values
+	 * @param string[] $keys
+	 */
+	private static function first_metric_int( array $values, array $keys ): ?int {
+		foreach ( $keys as $key ) {
+			$normalized = MetricsNormalizer::normalize_metric_int( $values[ $key ] ?? null );
+
+			if ( null !== $normalized ) {
+				return $normalized;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * @param array<string, mixed> $result
+	 */
+	private static function extract_provider_request_id( array $result ): string {
+		foreach ( [ 'providerRequestId', 'provider_request_id', 'requestId', 'request_id' ] as $key ) {
+			if ( isset( $result[ $key ] ) && is_scalar( $result[ $key ] ) ) {
+				$value = trim( (string) $result[ $key ] );
+
+				if ( '' !== $value ) {
+					return $value;
+				}
+			}
+		}
+
+		return '';
+	}
+
+	private static function normalize_reasoning_effort_value( ?string $reasoning_effort ): ?string {
+		$reasoning_effort = is_string( $reasoning_effort ) ? sanitize_key( $reasoning_effort ) : '';
+
+		return in_array( $reasoning_effort, self::REASONING_EFFORTS, true )
+			? $reasoning_effort
+			: null;
+	}
+
+	/**
+	 * @param array<string, mixed> $value
+	 */
+	private static function json_byte_length( array $value ): int {
+		$encoded = wp_json_encode( $value );
+
+		return is_string( $encoded ) ? strlen( $encoded ) : 0;
 	}
 }

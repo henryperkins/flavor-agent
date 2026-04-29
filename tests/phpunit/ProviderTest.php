@@ -208,4 +208,26 @@ final class ProviderTest extends TestCase {
 		$this->assertSame( 'Anthropic', $meta['connectorLabel'] );
 		$this->assertSame( 'ai-services-anthropic', $meta['connectorPluginSlug'] );
 	}
+
+	public function test_active_chat_request_meta_recovers_connector_plugin_slug_from_string_metadata(): void {
+		WordPressTestState::$options             = [
+			Provider::OPTION_NAME => 'anthropic',
+		];
+		WordPressTestState::$connectors          = [
+			'anthropic' => [
+				'type'           => 'ai_provider',
+				'name'           => 'Anthropic',
+				'authentication' => [
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+				'plugin'         => 'ai-services-anthropic/ai-services-anthropic.php',
+			],
+		];
+		WordPressTestState::$ai_client_supported = true;
+
+		Provider::chat_configuration();
+		$meta = Provider::active_chat_request_meta();
+
+		$this->assertSame( 'ai-services-anthropic', $meta['connectorPluginSlug'] );
+	}
 }

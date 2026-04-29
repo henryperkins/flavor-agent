@@ -134,34 +134,47 @@ final class AgentControllerTest extends TestCase {
 			'/^[a-f0-9]{64}$/',
 			(string) ( $response_data['payload']['resolvedContextSignature'] ?? '' )
 		);
-		$this->assertSame(
-			[
-				'selectedProvider'      => 'azure_openai',
-				'selectedProviderLabel' => 'Azure OpenAI',
-				'connectorId'           => 'wordpress_ai_client',
-				'connectorLabel'        => 'WordPress AI Client',
-				'connectorPluginSlug'   => '',
-				'provider'              => 'wordpress_ai_client',
-				'providerLabel'         => 'WordPress AI Client',
-				'backendLabel'          => 'WordPress AI Client',
-				'model'                 => 'provider-managed',
-				'owner'                 => 'connectors',
-				'ownerLabel'            => 'Settings > Connectors',
-				'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
-				'credentialSource'      => 'provider_managed',
-				'credentialSourceLabel' => 'Provider-managed',
-				'tokenUsage'            => [
-					'total'  => 52,
-					'input'  => 21,
-					'output' => 31,
-				],
-				'latencyMs'             => 187,
-				'usedFallback'          => true,
-				'ability'               => 'flavor-agent/recommend-block',
-				'route'                 => 'POST /flavor-agent/v1/recommend-block',
+		$request_meta = $response_data['payload']['requestMeta'] ?? null;
+		$this->assertIsArray( $request_meta );
+		$expected_request_meta = [
+			'selectedProvider'      => 'azure_openai',
+			'selectedProviderLabel' => 'Azure OpenAI',
+			'connectorId'           => 'wordpress_ai_client',
+			'connectorLabel'        => 'WordPress AI Client',
+			'connectorPluginSlug'   => '',
+			'provider'              => 'wordpress_ai_client',
+			'providerLabel'         => 'WordPress AI Client',
+			'backendLabel'          => 'WordPress AI Client',
+			'model'                 => 'provider-managed',
+			'owner'                 => 'connectors',
+			'ownerLabel'            => 'Settings > Connectors',
+			'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+			'credentialSource'      => 'provider_managed',
+			'credentialSourceLabel' => 'Provider-managed',
+			'tokenUsage'            => [
+				'total'  => 52,
+				'input'  => 21,
+				'output' => 31,
 			],
-			$response_data['payload']['requestMeta'] ?? null
+			'latencyMs'             => 187,
+			'usedFallback'          => true,
+			'ability'               => 'flavor-agent/recommend-block',
+			'route'                 => 'POST /flavor-agent/v1/recommend-block',
+		];
+
+		$this->assertSame(
+			$expected_request_meta,
+			array_intersect_key( $request_meta, $expected_request_meta )
 		);
+		$this->assertSame( 'wordpress-ai-client', $request_meta['transport']['host'] ?? null );
+		$this->assertSame( '/generate-text', $request_meta['transport']['path'] ?? null );
+		$this->assertSame( 'medium', $request_meta['requestSummary']['reasoningEffort'] ?? null );
+		$this->assertIsInt( $request_meta['requestSummary']['bodyBytes'] ?? null );
+		$this->assertGreaterThan( 0, $request_meta['requestSummary']['bodyBytes'] ?? 0 );
+		$this->assertIsInt( $request_meta['requestSummary']['instructionsChars'] ?? null );
+		$this->assertIsInt( $request_meta['requestSummary']['inputChars'] ?? null );
+		$this->assertSame( 76, $request_meta['responseSummary']['bodyBytes'] ?? null );
+		$this->assertSame( 187, $request_meta['responseSummary']['processingMs'] ?? null );
 		$this->assertStringContainsString(
 			'core/paragraph',
 			WordPressTestState::$last_ai_client_prompt['text'] ?? ''

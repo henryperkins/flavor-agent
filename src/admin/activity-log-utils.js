@@ -728,9 +728,10 @@ function getRequestDiagnostics( request = {} ) {
 		[ 'ai', 'route' ],
 		[ 'route' ],
 	] );
-	const usedFallback = Boolean(
-		readPath( request, [ 'ai', 'usedFallback' ] ) ?? request?.usedFallback
-	);
+	const fallbackValue =
+		readPath( request, [ 'ai', 'usedFallback' ] ) ?? request?.usedFallback;
+	const hasFallbackSignal = typeof fallbackValue === 'boolean';
+	const usedFallback = Boolean( fallbackValue );
 	const totalTokens = getFirstNumber( request, [
 		[ 'ai', 'tokenUsage', 'total' ],
 		[ 'tokenUsage', 'total' ],
@@ -883,6 +884,7 @@ function getRequestDiagnostics( request = {} ) {
 		connectorPlugin: connectorPlugin || EMPTY_VALUE,
 		requestAbility: requestAbility || EMPTY_VALUE,
 		requestRoute: requestRoute || EMPTY_VALUE,
+		hasFallbackSignal,
 		usedFallback,
 		tokenUsageLabel,
 		latencyLabel: latencyMs !== null ? `${ latencyMs } ms` : EMPTY_VALUE,
@@ -1410,6 +1412,20 @@ export function normalizeActivityEntry(
 		undoError = ORDERED_UNDO_BLOCKED_ERROR;
 	}
 
+	let requestFallback = EMPTY_VALUE;
+	if ( diagnostics.hasFallbackSignal && ! diagnostics.usedFallback ) {
+		requestFallback = __( 'No fallback', 'flavor-agent' );
+	} else if (
+		diagnostics.usedFallback &&
+		diagnostics.selectedProvider !== EMPTY_VALUE
+	) {
+		requestFallback = sprintf(
+			/* translators: %s: selected provider name. */
+			__( 'Fallback from selected %s.', 'flavor-agent' ),
+			diagnostics.selectedProvider
+		);
+	}
+
 	return {
 		...entry,
 		icon: status,
@@ -1481,15 +1497,7 @@ export function normalizeActivityEntry(
 		model: diagnostics.model,
 		tokenUsage: diagnostics.tokenUsageLabel,
 		latency: diagnostics.latencyLabel,
-		requestFallback:
-			diagnostics.usedFallback &&
-			diagnostics.selectedProvider !== EMPTY_VALUE
-				? sprintf(
-						/* translators: %s: selected provider name. */
-						__( 'Fallback from selected %s.', 'flavor-agent' ),
-						diagnostics.selectedProvider
-				  )
-				: EMPTY_VALUE,
+		requestFallback,
 		targetUrl: targetLink.url,
 		targetLinkLabel: targetLink.label,
 		settingsUrl: settingsUrl || '',

@@ -207,6 +207,7 @@ describe( 'activity log utils', () => {
 			selectedProvider: 'Azure OpenAI',
 			connector: 'Not recorded',
 			connectorPlugin: 'Not recorded',
+			requestFallback: 'No fallback',
 			requestAbility: 'flavor-agent/recommend-block',
 			requestRoute: 'POST /flavor-agent/v1/recommend-block',
 			transportEndpoint: 'judas2.openai.azure.com/openai/v1/responses',
