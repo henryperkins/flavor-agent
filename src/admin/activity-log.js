@@ -211,8 +211,12 @@ function appendExplicitFilter( params, fieldName, filter ) {
 }
 
 function getDayFilterState( filter ) {
-	if ( ! filter || ! filter.operator || filter.value === undefined ) {
+	if ( ! filter || ! filter.operator ) {
 		return 'inactive';
+	}
+
+	if ( filter.value === undefined || filter.value === null ) {
+		return 'invalid';
 	}
 
 	if ( filter.operator === 'between' && Array.isArray( filter.value ) ) {
