@@ -18,6 +18,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'FLAVOR_AGENT_VERSION', '0.1.0' );
+if ( ! defined( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS' ) ) {
+	define( 'FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS', false );
+}
 define( 'FLAVOR_AGENT_FILE', __FILE__ );
 define( 'FLAVOR_AGENT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
@@ -195,37 +198,77 @@ function flavor_agent_enqueue_editor(): void {
 		);
 	}
 
-	$settings_url         = admin_url( 'options-general.php?page=flavor-agent' );
-	$connectors_url       = admin_url( 'options-connectors.php' );
+	$settings_url   = admin_url( 'options-general.php?page=flavor-agent' );
+	$connectors_url = admin_url( 'options-connectors.php' );
+
+	wp_localize_script(
+		'flavor-agent-editor',
+		'flavorAgentData',
+		flavor_agent_get_editor_bootstrap_data( $settings_url, $connectors_url )
+	);
+}
+
+function flavor_agent_block_structural_actions_enabled(): bool {
+	$enabled = flavor_agent_parse_boolean_flag( FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS );
+
+	return flavor_agent_parse_boolean_flag(
+		apply_filters( 'flavor_agent_enable_block_structural_actions', $enabled )
+	);
+}
+
+function flavor_agent_parse_boolean_flag( mixed $value ): bool {
+	if ( is_bool( $value ) ) {
+		return $value;
+	}
+
+	if ( is_int( $value ) ) {
+		return 1 === $value;
+	}
+
+	if ( is_float( $value ) ) {
+		return 1.0 === $value;
+	}
+
+	if ( is_string( $value ) ) {
+		return in_array( strtolower( trim( $value ) ), [ '1', 'true', 'yes', 'on' ], true );
+	}
+
+	return false;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function flavor_agent_get_editor_bootstrap_data(
+	string $settings_url,
+	string $connectors_url
+): array {
 	$surface_capabilities = flavor_agent_get_editor_surface_capabilities(
 		$settings_url,
 		$connectors_url
 	);
 	$can_manage_settings  = current_user_can( 'manage_options' );
 
-	wp_localize_script(
-		'flavor-agent-editor',
-		'flavorAgentData',
-		[
-			'restUrl'                      => rest_url( 'flavor-agent/v1/' ),
-			'nonce'                        => wp_create_nonce( 'wp_rest' ),
-			'settingsUrl'                  => $settings_url,
-			'connectorsUrl'                => $connectors_url,
-			'canManageFlavorAgentSettings' => $can_manage_settings,
-			'capabilities'                 => [
-				'surfaces' => $surface_capabilities,
-			],
-			'canRecommendBlocks'           => $surface_capabilities['block']['available'],
-			'canRecommendPatterns'         => $surface_capabilities['pattern']['available'],
-			'canRecommendContent'          => $surface_capabilities['content']['available'],
-			'canRecommendTemplates'        => $surface_capabilities['template']['available'],
-			'canRecommendTemplateParts'    => $surface_capabilities['templatePart']['available'],
-			'canRecommendNavigation'       => $surface_capabilities['navigation']['available'],
-			'canRecommendGlobalStyles'     => $surface_capabilities['globalStyles']['available'],
-			'canRecommendStyleBook'        => $surface_capabilities['styleBook']['available'],
-			'templatePartAreas'            => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
-		]
-	);
+	return [
+		'restUrl'                      => rest_url( 'flavor-agent/v1/' ),
+		'nonce'                        => wp_create_nonce( 'wp_rest' ),
+		'settingsUrl'                  => $settings_url,
+		'connectorsUrl'                => $connectors_url,
+		'canManageFlavorAgentSettings' => $can_manage_settings,
+		'enableBlockStructuralActions' => flavor_agent_block_structural_actions_enabled(),
+		'capabilities'                 => [
+			'surfaces' => $surface_capabilities,
+		],
+		'canRecommendBlocks'           => $surface_capabilities['block']['available'],
+		'canRecommendPatterns'         => $surface_capabilities['pattern']['available'],
+		'canRecommendContent'          => $surface_capabilities['content']['available'],
+		'canRecommendTemplates'        => $surface_capabilities['template']['available'],
+		'canRecommendTemplateParts'    => $surface_capabilities['templatePart']['available'],
+		'canRecommendNavigation'       => $surface_capabilities['navigation']['available'],
+		'canRecommendGlobalStyles'     => $surface_capabilities['globalStyles']['available'],
+		'canRecommendStyleBook'        => $surface_capabilities['styleBook']['available'],
+		'templatePartAreas'            => FlavorAgent\Context\ServerCollector::for_template_part_areas(),
+	];
 }
 
 /**

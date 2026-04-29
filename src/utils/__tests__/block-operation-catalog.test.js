@@ -14,9 +14,11 @@ import {
 	BLOCK_OPERATION_ERROR_NO_OPERATIONS,
 	BLOCK_OPERATION_ERROR_PATTERN_NOT_AVAILABLE,
 	BLOCK_OPERATION_ERROR_STALE_TARGET,
+	BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
 	BLOCK_OPERATION_ERROR_UNKNOWN_OPERATION_TYPE,
 	BLOCK_OPERATION_INSERT_PATTERN,
 	BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+	isBlockStructuralActionsEnabled,
 	normalizeAllowedPatternsForBlockOperations,
 	validateBlockOperationSequence,
 } from '../block-operation-catalog';
@@ -48,6 +50,7 @@ const baseContext = {
 	targetClientId: 'block-1',
 	targetBlockName: 'core/group',
 	targetSignature: 'sig:block-1',
+	enableBlockStructuralActions: true,
 	allowedPatterns,
 };
 
@@ -56,6 +59,10 @@ function getRejectedCodes( result ) {
 }
 
 describe( 'block operation catalog', () => {
+	afterEach( () => {
+		delete window.flavorAgentData;
+	} );
+
 	test( 'normalizes allowed pattern context for prompt inputs', () => {
 		expect(
 			normalizeAllowedPatternsForBlockOperations( [
@@ -136,6 +143,48 @@ describe( 'block operation catalog', () => {
 			proposedCount: 2,
 			rejectedOperations: [],
 		} );
+	} );
+
+	test( 'rejects structural operations unless the rollout flag is enabled', () => {
+		const operations = [
+			{
+				type: BLOCK_OPERATION_INSERT_PATTERN,
+				patternName: 'flavor-agent/cta-with-image',
+				targetClientId: 'block-1',
+				targetSignature: 'sig:block-1',
+				position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+			},
+		];
+		const disabledResult = validateBlockOperationSequence( operations, {
+			...baseContext,
+			enableBlockStructuralActions: false,
+		} );
+
+		expect( isBlockStructuralActionsEnabled( {} ) ).toBe( false );
+		expect( disabledResult.ok ).toBe( false );
+		expect( disabledResult.operations ).toEqual( [] );
+		expect( getRejectedCodes( disabledResult ) ).toEqual( [
+			BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
+		] );
+
+		window.flavorAgentData = {
+			enableBlockStructuralActions: true,
+		};
+
+		const enabledResult = validateBlockOperationSequence( operations, {
+			...baseContext,
+			enableBlockStructuralActions: undefined,
+		} );
+
+		expect( isBlockStructuralActionsEnabled() ).toBe( true );
+		expect( enabledResult.ok ).toBe( true );
+		expect( enabledResult.operations ).toEqual( [
+			expect.objectContaining( {
+				patternName: 'flavor-agent/cta-with-image',
+				position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+				type: BLOCK_OPERATION_INSERT_PATTERN,
+			} ),
+		] );
 	} );
 
 	test( 'keeps mixed recommendations partially executable with advisory rejections', () => {

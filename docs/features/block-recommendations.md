@@ -15,6 +15,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - The selected block must exist and its editing mode must not be `disabled`
 - The main panel still renders when recommendations are unavailable, but fetch is disabled when `window.flavorAgentData.canRecommendBlocks` is false
+- Block structural pattern actions are behind the default-off `window.flavorAgentData.enableBlockStructuralActions` rollout flag. When false, structural proposals remain advisory and the block surface does not expose a review/apply path for them.
 - Content-restricted blocks stay visible and show an informational notice; executable suggestions are limited to content-safe attributes, broader block ideas may remain advisory-only, and style projections are suppressed
 - A selected `core/navigation` block adds the navigation guidance section inside the same panel
 

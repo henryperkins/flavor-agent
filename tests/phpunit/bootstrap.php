@@ -1918,6 +1918,20 @@ namespace {
 		}
 	}
 
+	if ( ! function_exists( 'rest_url' ) ) {
+		function rest_url( string $path = '' ): string {
+			$normalized = ltrim( $path, '/' );
+
+			return 'https://example.test/wp-json/' . $normalized;
+		}
+	}
+
+	if ( ! function_exists( 'wp_create_nonce' ) ) {
+		function wp_create_nonce( string $action = '-1' ): string {
+			return 'nonce-' . $action;
+		}
+	}
+
 	if ( ! function_exists( 'wp_get_theme' ) ) {
 		function wp_get_theme( ?string $stylesheet = null, ?string $theme_root = null ) {
 			unset( $stylesheet, $theme_root );

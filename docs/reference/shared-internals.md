@@ -412,6 +412,12 @@ Deep and shallow structural equality helpers used for comparing block attributes
 
 **Consumers:** `src/store/update-helpers.js`, `src/utils/style-operations.js`, `src/utils/context-signature.js`
 
+### `src/utils/block-operation-catalog.js`
+
+Versioned validator for future block structural operations. It currently defines the v1 selected-block pattern operation vocabulary (`insert_pattern` and `replace_block_with_pattern`), normalizes allowed pattern context, and rejects proposed structural operations unless the localized `flavorAgentData.enableBlockStructuralActions` rollout flag is explicitly enabled.
+
+**Consumers:** Block recommendation actionability tests today; future block review/apply state will use this before exposing structural operations.
+
 ## Pattern Internals
 
 ### `src/patterns/compat.js`

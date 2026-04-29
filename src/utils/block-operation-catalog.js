@@ -30,6 +30,8 @@ export const BLOCK_OPERATION_ERROR_CONTENT_ONLY_TARGET = 'content_only_target';
 export const BLOCK_OPERATION_ERROR_INVALID_INSERTION_POSITION =
 	'invalid_insertion_position';
 export const BLOCK_OPERATION_ERROR_ACTION_NOT_ALLOWED = 'action_not_allowed';
+export const BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED =
+	'block_structural_actions_disabled';
 
 export const BLOCK_OPERATION_CATALOG = Object.freeze( {
 	version: BLOCK_OPERATION_CATALOG_VERSION,
@@ -158,6 +160,26 @@ function rejectOperation( rawOperation, code, message ) {
 		message,
 		operation: rawOperation || null,
 	};
+}
+
+export function isBlockStructuralActionsEnabled( data = null ) {
+	if ( data && typeof data === 'object' ) {
+		return data.enableBlockStructuralActions === true;
+	}
+
+	if ( typeof window !== 'undefined' ) {
+		return window.flavorAgentData?.enableBlockStructuralActions === true;
+	}
+
+	return false;
+}
+
+function contextEnablesBlockStructuralActions( context = {} ) {
+	if ( typeof context.enableBlockStructuralActions === 'boolean' ) {
+		return context.enableBlockStructuralActions === true;
+	}
+
+	return isBlockStructuralActionsEnabled();
 }
 
 function createRollbackPayload( type ) {
@@ -429,19 +451,42 @@ export function validateBlockOperationSequence(
 	context = {}
 ) {
 	const rawOperations = Array.isArray( operations ) ? operations : [];
+
+	if ( rawOperations.length === 0 ) {
+		return {
+			ok: false,
+			catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
+			operations: [],
+			rejectedOperations: [
+				rejectOperation(
+					null,
+					BLOCK_OPERATION_ERROR_NO_OPERATIONS,
+					'This recommendation does not include block operations.'
+				),
+			],
+			proposedCount: 0,
+		};
+	}
+
+	if ( ! contextEnablesBlockStructuralActions( context ) ) {
+		return {
+			ok: false,
+			catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
+			operations: [],
+			rejectedOperations: rawOperations.map( ( rawOperation ) =>
+				rejectOperation(
+					rawOperation,
+					BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
+					'Block structural actions are disabled for this environment.'
+				)
+			),
+			proposedCount: rawOperations.length,
+		};
+	}
+
 	const normalizedOperations = [];
 	const rejectedOperations = [];
 	const patternLookup = getAllowedPatternLookup( context.allowedPatterns );
-
-	if ( rawOperations.length === 0 ) {
-		rejectedOperations.push(
-			rejectOperation(
-				null,
-				BLOCK_OPERATION_ERROR_NO_OPERATIONS,
-				'This recommendation does not include block operations.'
-			)
-		);
-	}
 
 	for ( const rawOperation of rawOperations ) {
 		const result = validateBlockOperation(

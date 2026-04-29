@@ -36,6 +36,27 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookRegistered( 'update_option_home', [ PatternIndex::class, 'handle_dependency_change' ] );
 	}
 
+	public function test_block_structural_actions_rollout_flag_defaults_off_and_is_filterable(): void {
+		$this->assertFalse( FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS );
+		$this->assertFalse( flavor_agent_block_structural_actions_enabled() );
+		$this->assertFalse(
+			flavor_agent_get_editor_bootstrap_data(
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+				'https://example.test/wp-admin/options-connectors.php'
+			)['enableBlockStructuralActions']
+		);
+
+		add_filter( 'flavor_agent_enable_block_structural_actions', '__return_true' );
+
+		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
+		$this->assertTrue(
+			flavor_agent_get_editor_bootstrap_data(
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+				'https://example.test/wp-admin/options-connectors.php'
+			)['enableBlockStructuralActions']
+		);
+	}
+
 	public function test_activation_installs_activity_storage_and_schedules_background_work(): void {
 		WordPressTestState::$options = [
 			Provider::OPTION_NAME                          => Provider::AZURE,
