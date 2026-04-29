@@ -34,13 +34,16 @@ const RELATIVE_DAY_UNITS = new Set( [
 	'months',
 	'years',
 ] );
-const INVALID_DAY_FILTER_ERROR = __(
-	'Complete or reset the date filter to load activity.',
-	'flavor-agent'
-);
 
 function getBootData() {
 	return window.flavorAgentActivityLog || null;
+}
+
+function getInvalidDayFilterError() {
+	return __(
+		'Complete or reset the date filter to load activity.',
+		'flavor-agent'
+	);
 }
 
 function getIconForEntry( entry ) {
@@ -1010,7 +1013,7 @@ export function ActivityLogApp( { bootData } ) {
 					failed: 0,
 				},
 			} );
-			setError( INVALID_DAY_FILTER_ERROR );
+			setError( getInvalidDayFilterError() );
 			setIsLoading( false );
 
 			return () => {

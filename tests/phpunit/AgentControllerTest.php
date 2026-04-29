@@ -2272,6 +2272,9 @@ final class AgentControllerTest extends TestCase {
 		$cases = [
 			[
 				'dayOperator' => 'between',
+			],
+			[
+				'dayOperator' => 'between',
 				'day'         => '2026-03-01',
 			],
 			[

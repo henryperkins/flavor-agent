@@ -1797,6 +1797,7 @@ final class Repository {
 	private static function has_admin_day_filter( array $filters ): bool {
 		return '' !== trim( (string) ( $filters['day'] ?? '' ) )
 			|| '' !== trim( (string) ( $filters['dayEnd'] ?? '' ) )
+			|| 'between' === trim( (string) ( $filters['dayOperator'] ?? '' ) )
 			|| (
 				array_key_exists( 'dayRelativeValue', $filters )
 				&& '' !== trim( (string) ( $filters['dayRelativeValue'] ?? '' ) )
@@ -3313,7 +3314,7 @@ final class Repository {
 		$has_relative_value = array_key_exists( 'dayRelativeValue', $filters )
 			&& '' !== trim( (string) ( $filters['dayRelativeValue'] ?? '' ) );
 		$result             = [
-			'active'        => $has_day || $has_day_end || $has_relative_value,
+			'active'        => $has_day || $has_day_end || $has_relative_value || 'between' === $operator,
 			'valid'         => true,
 			'operator'      => $operator,
 			'start'         => null,

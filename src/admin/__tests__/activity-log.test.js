@@ -429,6 +429,30 @@ describe( 'ActivityLogApp', () => {
 		);
 	} );
 
+	test( 'blocks persisted malformed date filters instead of fetching unfiltered activity', async () => {
+		window.localStorage.setItem(
+			VIEW_STORAGE_KEY,
+			JSON.stringify( {
+				...DEFAULT_ACTIVITY_VIEW,
+				filters: [
+					{
+						field: 'day',
+						operator: 'between',
+						value: [ '2026-03-31', '2026-03-01' ],
+					},
+				],
+			} )
+		);
+
+		await renderApp( [ createEntry() ] );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain(
+			'Complete or reset the date filter to load activity.'
+		);
+		expect( getContainer().textContent ).toContain( 'Reset view' );
+	} );
+
 	test( 'keeps the detail sidebar synced to the server-backed visible feed', async () => {
 		apiFetch
 			.mockResolvedValueOnce(
@@ -883,11 +907,9 @@ describe( 'ActivityLogApp', () => {
 		} );
 		await flushEffects();
 
-		expect( apiFetch.mock.calls[ 3 ][ 0 ].url ).not.toContain(
-			'dayOperator'
-		);
-		expect( apiFetch.mock.calls[ 3 ][ 0 ].url ).not.toContain(
-			'day=2026-03-01'
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( getContainer().textContent ).toContain(
+			'Complete or reset the date filter to load activity.'
 		);
 
 		await act( async () => {
@@ -904,7 +926,10 @@ describe( 'ActivityLogApp', () => {
 		} );
 		await flushEffects();
 
-		expect( apiFetch ).toHaveBeenCalledTimes( 4 );
+		expect( apiFetch ).toHaveBeenCalledTimes( 3 );
+		expect( getContainer().textContent ).toContain(
+			'Complete or reset the date filter to load activity.'
+		);
 	} );
 
 	test( 'renders an inline error state instead of the empty activity copy when loading fails', async () => {
