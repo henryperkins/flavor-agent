@@ -56,6 +56,32 @@ const GLOBAL_STYLES_STALE_NOTICE =
 const GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE = 'resolved-global-styles';
 const GLOBAL_STYLES_SIDEBAR_SELECTOR =
 	'.editor-global-styles-sidebar__panel, .editor-global-styles-sidebar, [role="region"][aria-label="Styles"]';
+const MOCKED_RECOMMENDATION_SURFACES = Object.freeze( {
+	block: {
+		flag: 'canRecommendBlocks',
+		capability: 'block',
+	},
+	template: {
+		flag: 'canRecommendTemplates',
+		capability: 'template',
+	},
+	'template-part': {
+		flag: 'canRecommendTemplateParts',
+		capability: 'templatePart',
+	},
+	navigation: {
+		flag: 'canRecommendNavigation',
+		capability: 'navigation',
+	},
+	'global-styles': {
+		flag: 'canRecommendGlobalStyles',
+		capability: 'globalStyles',
+	},
+	'style-book': {
+		flag: 'canRecommendStyleBook',
+		capability: 'styleBook',
+	},
+} );
 const GLOBAL_STYLES_RESPONSE = {
 	resolvedContextSignature: GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE,
 	explanation:
@@ -435,10 +461,10 @@ async function setStyleBookBlockTextColor( page, { blockName, textColor } ) {
 }
 
 async function injectStyleBookExample( page, { blockName, blockTitle } ) {
+	await enableMockedRecommendationSurfaces( page, [ 'style-book' ] );
+
 	await page.evaluate(
 		( { nextBlockName, nextBlockTitle } ) => {
-			window.flavorAgentData.canRecommendStyleBook = true;
-
 			const existingIframe = document.querySelector(
 				'.editor-style-book__iframe'
 			);
@@ -480,6 +506,106 @@ async function injectStyleBookExample( page, { blockName, blockTitle } ) {
 async function waitForFlavorAgent( page ) {
 	await page.waitForFunction( () =>
 		Boolean( window.wp?.data?.select( 'flavor-agent' ) )
+	);
+}
+
+async function enableMockedRecommendationSurfaces( page, surfaces ) {
+	await page.addInitScript(
+		( { mockedSurfaces, surfaceMap } ) => {
+			const applyMockedSurfaces = ( nextData = {} ) => {
+				const data = nextData || {};
+				const nextSurfaces =
+					window.__flavorAgentMockedRecommendationSurfaces || {};
+
+				data.capabilities = data.capabilities || {};
+				data.capabilities.surfaces = data.capabilities.surfaces || {};
+
+				for ( const config of Object.values( nextSurfaces ) ) {
+					data[ config.flag ] = true;
+					data.capabilities.surfaces[ config.capability ] = {
+						...( data.capabilities.surfaces[ config.capability ] ||
+							{} ),
+						available: true,
+						reason: 'ready',
+						owner: 'connectors',
+					};
+				}
+
+				return data;
+			};
+
+			window.__flavorAgentMockedRecommendationSurfaces = {
+				...( window.__flavorAgentMockedRecommendationSurfaces || {} ),
+			};
+
+			for ( const surface of mockedSurfaces ) {
+				const config = surfaceMap[ surface ];
+
+				if ( config ) {
+					window.__flavorAgentMockedRecommendationSurfaces[
+						surface
+					] = config;
+				}
+			}
+
+			if ( ! window.__flavorAgentMockedRecommendationInstaller ) {
+				let localizedData = window.flavorAgentData;
+
+				Object.defineProperty( window, 'flavorAgentData', {
+					configurable: true,
+					get() {
+						return localizedData;
+					},
+					set( nextData ) {
+						localizedData = applyMockedSurfaces( nextData || {} );
+					},
+				} );
+
+				window.__flavorAgentApplyMockedRecommendationSurfaces = () => {
+					localizedData = applyMockedSurfaces( localizedData || {} );
+					return localizedData;
+				};
+				window.__flavorAgentMockedRecommendationInstaller = true;
+			}
+
+			window.__flavorAgentApplyMockedRecommendationSurfaces?.();
+		},
+		{
+			mockedSurfaces: surfaces,
+			surfaceMap: MOCKED_RECOMMENDATION_SURFACES,
+		}
+	);
+
+	await page.evaluate(
+		( { mockedSurfaces, surfaceMap } ) => {
+			const data = window.flavorAgentData || {};
+
+			data.capabilities = data.capabilities || {};
+			data.capabilities.surfaces = data.capabilities.surfaces || {};
+
+			for ( const surface of mockedSurfaces ) {
+				const config = surfaceMap[ surface ];
+
+				if ( ! config ) {
+					continue;
+				}
+
+				data[ config.flag ] = true;
+				data.capabilities.surfaces[ config.capability ] = {
+					...( data.capabilities.surfaces[ config.capability ] ||
+						{} ),
+					available: true,
+					reason: 'ready',
+					owner: 'connectors',
+				};
+			}
+
+			window.flavorAgentData = data;
+		},
+		{
+			mockedSurfaces: surfaces,
+			surfaceMap: MOCKED_RECOMMENDATION_SURFACES,
+		}
 	);
 }
 
@@ -530,8 +656,15 @@ async function saveCurrentPost( page ) {
 		} );
 }
 
-async function seedParagraphBlock( page ) {
+async function seedParagraphBlock(
+	page,
+	{ enableRecommendations = true } = {}
+) {
 	await waitForBlockEditorApis( page );
+
+	if ( enableRecommendations ) {
+		await enableMockedRecommendationSurfaces( page, [ 'block' ] );
+	}
 
 	await page.evaluate( () => {
 		const { createBlock } = window.wp.blocks;
@@ -539,7 +672,6 @@ async function seedParagraphBlock( page ) {
 			content: 'Hello world',
 		} );
 
-		window.flavorAgentData.canRecommendBlocks = true;
 		window.wp?.data?.dispatch( 'core/editor' )?.editPost( {
 			title: 'Smoke Test',
 		} );
@@ -582,6 +714,7 @@ async function seedParagraphBlock( page ) {
 
 async function seedNavigationBlock( page ) {
 	await waitForBlockEditorApis( page );
+	await enableMockedRecommendationSurfaces( page, [ 'navigation' ] );
 
 	await page.evaluate( () => {
 		const { createBlock } = window.wp.blocks;
@@ -597,7 +730,6 @@ async function seedNavigationBlock( page ) {
 			[ navigationLink ]
 		);
 
-		window.flavorAgentData.canRecommendNavigation = true;
 		window.wp?.data?.dispatch( 'core/editor' )?.editPost( {
 			title: 'Navigation Smoke',
 		} );
@@ -675,23 +807,37 @@ async function ensureSettingsSidebarOpen( page ) {
 	}
 }
 
+async function getFirstVisibleLocator( locator ) {
+	const count = await locator.count().catch( () => 0 );
+
+	for ( let index = 0; index < count; index++ ) {
+		const candidate = locator.nth( index );
+
+		if ( await candidate.isVisible().catch( () => false ) ) {
+			return candidate;
+		}
+	}
+
+	return null;
+}
+
 async function ensurePanelOpen( page, title, content ) {
 	if ( await content.isVisible().catch( () => false ) ) {
 		return;
 	}
 	await dismissWelcomeGuide( page );
 
-	const buttonToggle = page
-		.getByRole( 'button', { name: title, exact: true } )
-		.first();
-	const genericToggle = page
-		.locator(
-			`button:has-text("${ title }"), [role="button"]:has-text("${ title }")`
-		)
-		.first();
-	const toggle = ( await buttonToggle.isVisible().catch( () => false ) )
-		? buttonToggle
-		: genericToggle;
+	const buttonToggles = page.getByRole( 'button', {
+		name: title,
+		exact: true,
+	} );
+	const genericToggles = page.locator(
+		`button:has-text("${ title }"), [role="button"]:has-text("${ title }")`
+	);
+	const toggle =
+		( await getFirstVisibleLocator( buttonToggles ) ) ||
+		( await getFirstVisibleLocator( genericToggles ) ) ||
+		buttonToggles.first();
 
 	await expect( toggle ).toBeVisible( { timeout: 15000 } );
 
@@ -1693,7 +1839,7 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 			?.dispatch( 'flavor-agent' )
 			?.setPatternStatus?.( 'idle' );
 	} );
-	await seedParagraphBlock( page );
+	await seedParagraphBlock( page, { enableRecommendations: false } );
 	await ensureSettingsSidebarOpen( page );
 
 	const promptInput = page.getByPlaceholder(
@@ -1914,6 +2060,7 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 	await waitForFlavorAgent( page );
 	await dismissWelcomeGuide( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
 	await page.waitForFunction( () =>
 		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
 	);
@@ -2021,6 +2168,7 @@ test( '@wp70-site-editor global styles surface requests defaults when the prompt
 	await waitForFlavorAgent( page );
 	await dismissWelcomeGuide( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
 	await page.waitForFunction( () =>
 		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
 	);
@@ -2071,6 +2219,7 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 	await waitForFlavorAgent( page );
 	await dismissWelcomeGuide( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
 	await page.waitForFunction( () =>
 		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
 	);
@@ -2186,6 +2335,7 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 	await waitForFlavorAgent( page );
 	await dismissWelcomeGuide( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
 	await page.waitForFunction( () =>
 		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
 	);
@@ -2344,6 +2494,7 @@ test.fixme(
 		await dismissWelcomeGuide( page );
 		await openFirstTemplateEditor( page );
 		await dismissSiteEditorWelcomeGuide( page );
+		await enableMockedRecommendationSurfaces( page, [ 'template' ] );
 
 		await page.waitForFunction(
 			() =>
@@ -2484,6 +2635,7 @@ test( 'template surface keeps stale results visible but disables review and appl
 	await dismissWelcomeGuide( page );
 	await openFirstTemplateEditor( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'template' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
@@ -2626,6 +2778,7 @@ test( 'template surface keeps advisory-only suggestions visible without executab
 	await dismissWelcomeGuide( page );
 	await openFirstTemplateEditor( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'template' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
@@ -2831,6 +2984,7 @@ test( '@wp70-site-editor template-part surface smoke previews, applies, and undo
 	expect( templatePartRef ).toBeTruthy();
 
 	await openTemplatePartEditor( page, templatePartRef );
+	await enableMockedRecommendationSurfaces( page, [ 'template-part' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplateParts ) &&
@@ -2966,6 +3120,7 @@ test( '@wp70-site-editor template-part surface keeps stale results visible but d
 	expect( templatePartRef ).toBeTruthy();
 
 	await openTemplatePartEditor( page, templatePartRef );
+	await enableMockedRecommendationSurfaces( page, [ 'template-part' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplateParts ) &&
@@ -3132,6 +3287,7 @@ test( '@wp70-site-editor template-part surface keeps advisory-only suggestions v
 	expect( templatePartRef ).toBeTruthy();
 
 	await openTemplatePartEditor( page, templatePartRef );
+	await enableMockedRecommendationSurfaces( page, [ 'template-part' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplateParts ) &&
@@ -3240,6 +3396,7 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 	await dismissWelcomeGuide( page );
 	await openFirstTemplateEditor( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'template' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&
@@ -3317,6 +3474,7 @@ test( '@wp70-site-editor template undo survives a Site Editor refresh when the t
 	await waitForFlavorAgent( page );
 	await dismissWelcomeGuide( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'template' ] );
 	await page.waitForFunction(
 		() =>
 			window.wp?.data
@@ -3394,6 +3552,7 @@ test( '@wp70-site-editor template undo is disabled after inserted pattern conten
 	await dismissWelcomeGuide( page );
 	await openFirstTemplateEditor( page );
 	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'template' ] );
 	await page.waitForFunction(
 		() =>
 			Boolean( window.flavorAgentData?.canRecommendTemplates ) &&

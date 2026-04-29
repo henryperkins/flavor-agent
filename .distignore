@@ -6,6 +6,7 @@
 .git
 .gitattributes
 .vscode
+.eslintrc.js
 .gitignore
 .distignore
 .env*
