@@ -8,6 +8,7 @@ import {
 } from '../utils/style-validation';
 import {
 	buildBlockOperationValidationContext,
+	BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH,
 	validateBlockOperationSequence,
 } from '../utils/block-operation-catalog';
 import {
@@ -468,6 +469,8 @@ function getOperationIdentity( operation = {} ) {
 		targetSignature: operation.targetSignature || '',
 		position: operation.position || '',
 		action: operation.action || '',
+		expectedTargetClientId: operation.expectedTarget?.clientId || '',
+		expectedTargetName: operation.expectedTarget?.name || '',
 	} );
 }
 
@@ -503,6 +506,25 @@ function appendUniqueRejections( left = [], right = [] ) {
 	return result;
 }
 
+function buildClientServerOperationMismatchRejections(
+	serverOperations = [],
+	validationOperationIdentities = new Set()
+) {
+	return ( Array.isArray( serverOperations ) ? serverOperations : [] )
+		.filter(
+			( operation ) =>
+				! validationOperationIdentities.has(
+					getOperationIdentity( operation )
+				)
+		)
+		.map( ( operation ) => ( {
+			code: BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH,
+			message:
+				'The browser validation result no longer matches the server-approved structural operation.',
+			operation,
+		} ) );
+}
+
 function resolveBlockOperationValidation( suggestion, blockContext ) {
 	const proposedOperations = Array.isArray( suggestion?.proposedOperations )
 		? suggestion.proposedOperations
@@ -532,13 +554,21 @@ function resolveBlockOperationValidation( suggestion, blockContext ) {
 					)
 			  )
 			: [];
+	const mismatchRejections =
+		approvedOperationIdentities.size > 0 && validation.operations.length > 0
+			? buildClientServerOperationMismatchRejections(
+					serverOperations,
+					validationOperationIdentities
+			  )
+			: [];
 	const rejectedOperations = appendUniqueRejections(
 		suggestion?.rejectedOperations,
-		validation.rejectedOperations
+		[ ...validation.rejectedOperations, ...mismatchRejections ]
 	);
 
 	return {
 		...validation,
+		ok: executableOperations.length > 0,
 		operations: executableOperations,
 		rejectedOperations,
 	};

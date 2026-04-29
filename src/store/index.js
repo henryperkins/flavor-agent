@@ -6,6 +6,7 @@
  * so Inspector injection components render in the right place.
  */
 import apiFetch from '@wordpress/api-fetch';
+import { rawHandler } from '@wordpress/blocks';
 import { createReduxStore, register } from '@wordpress/data';
 
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
@@ -34,10 +35,15 @@ import {
 } from './activity-session';
 import {
 	buildBlockActivityEntry,
+	buildBlockStructuralActivityEntry,
 	createUndoActivityAction,
 	findBlockPath,
 	getNextLastUndoneActivityId,
 } from './activity-undo';
+import {
+	applyBlockStructuralSuggestionOperations,
+	getBlockStructuralActionErrorMessage,
+} from '../utils/block-structural-actions';
 import {
 	buildExecutableSurfaceReviewFreshnessThunk,
 	createExecutableSurfaceReviewFreshnessConfig,
@@ -57,6 +63,10 @@ import {
 	sanitizeRecommendationsForContext,
 } from './update-helpers';
 import { isPlainObject } from '../utils/type-guards';
+import {
+	getAllowedPatterns,
+	getBlockPatterns,
+} from '../patterns/pattern-settings';
 
 const STORE_NAME = 'flavor-agent';
 const DEFAULT_BLOCK_REQUEST_STATE = {
@@ -802,6 +812,63 @@ function logStoreActivityEntry( localDispatch, select, entry ) {
 	);
 }
 
+function findRegisteredPattern(
+	blockEditorSelect = {},
+	patternName = '',
+	rootClientId = null
+) {
+	const settingsPatterns = getBlockPatterns( blockEditorSelect );
+	const allowedPatterns = getAllowedPatterns(
+		rootClientId,
+		blockEditorSelect
+	);
+	const candidatePatterns = [
+		...( Array.isArray( settingsPatterns ) ? settingsPatterns : [] ),
+		...( Array.isArray( allowedPatterns ) ? allowedPatterns : [] ),
+	];
+
+	return (
+		candidatePatterns.find(
+			( pattern ) => pattern?.name === patternName
+		) || null
+	);
+}
+
+function createBlockStructuralPatternParser(
+	blockEditorSelect = {},
+	rootClientId = null
+) {
+	return ( patternName ) => {
+		const pattern = findRegisteredPattern(
+			blockEditorSelect,
+			patternName,
+			rootClientId
+		);
+
+		if ( ! pattern ) {
+			const error = new Error(
+				getBlockStructuralActionErrorMessage( 'pattern_missing' )
+			);
+			error.code = 'pattern_missing';
+			throw error;
+		}
+
+		if ( Array.isArray( pattern.blocks ) && pattern.blocks.length > 0 ) {
+			return pattern.blocks;
+		}
+
+		if ( typeof pattern.content === 'string' && pattern.content.trim() ) {
+			return rawHandler( { HTML: pattern.content } ).filter( Boolean );
+		}
+
+		const error = new Error(
+			getBlockStructuralActionErrorMessage( 'pattern_missing' )
+		);
+		error.code = 'pattern_missing';
+		throw error;
+	};
+}
+
 const EXECUTABLE_SURFACE_APPLY_DEPS = {
 	getCurrentActivityScope,
 	guardSurfaceApplyFreshness,
@@ -1205,7 +1272,15 @@ const actions = {
 					const payload = attachRequestMetaToRecommendationPayload(
 						result.payload || {}
 					);
-					const blockContext = requestData.editorContext?.block || {};
+					const editorContext = requestData.editorContext || {};
+					const blockOperationContext =
+						editorContext.blockOperationContext || null;
+					const blockContext = {
+						...( editorContext.block || {} ),
+						...( blockOperationContext
+							? { blockOperationContext }
+							: {} ),
+					};
 					const executionContract = payload.executionContract || null;
 					const sanitizedPayload = sanitizeRecommendationsForContext(
 						payload,
@@ -1243,6 +1318,7 @@ const actions = {
 									requestData.editorContext?.block?.name ||
 									'',
 								blockContext,
+								blockOperationContext,
 								executionContract,
 								prompt: requestData.prompt || '',
 								...sanitizedPayload,
@@ -1442,6 +1518,168 @@ const actions = {
 						storedRecommendations.requestMeta ||
 						null,
 					requestToken: select.getBlockRequestToken( clientId ) || 0,
+					scope,
+					suggestion,
+				} )
+			);
+
+			localDispatch(
+				actions.setBlockApplyState(
+					clientId,
+					'success',
+					null,
+					suggestion?.suggestionKey || suggestion?.label || null
+				)
+			);
+
+			return true;
+		};
+	},
+
+	applyBlockStructuralSuggestion(
+		clientId,
+		suggestion,
+		currentRequestSignature = null,
+		liveRequestInput = null
+	) {
+		return async ( { dispatch: localDispatch, registry, select } ) => {
+			const scope = getCurrentActivityScope( registry );
+
+			syncStoreActivitySession( localDispatch, select, scope );
+
+			const staleApplyResult = guardSurfaceApplyFreshness( {
+				surface: 'block',
+				currentRequestSignature,
+				getStoredRequestSignature: () =>
+					buildBlockRecommendationRequestSignature( {
+						clientId,
+						prompt:
+							select.getBlockRecommendations?.( clientId )
+								?.prompt || '',
+						contextSignature:
+							select.getBlockRecommendationContextSignature?.(
+								clientId
+							) || null,
+					} ),
+				localDispatch,
+				setApplyState: ( status, error, staleReason = null ) =>
+					actions.setBlockApplyState(
+						clientId,
+						status,
+						error,
+						null,
+						staleReason
+					),
+			} );
+
+			if ( staleApplyResult ) {
+				return false;
+			}
+
+			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
+				{
+					surface: 'block',
+					endpoint: '/flavor-agent/v1/recommend-block',
+					liveRequestInput,
+					storedResolvedContextSignature:
+						select.getBlockResolvedContextSignature?.( clientId ) ||
+						null,
+					localDispatch,
+					setApplyState: ( status, error, staleReason = null ) =>
+						actions.setBlockApplyState(
+							clientId,
+							status,
+							error,
+							null,
+							staleReason
+						),
+				}
+			);
+
+			if ( ! resolvedFreshness.ok ) {
+				return false;
+			}
+
+			const storedRecommendationPayload =
+				select.getBlockRecommendations( clientId ) || null;
+			const storedRecommendations = storedRecommendationPayload || {};
+			const blockEditorSelect =
+				registry?.select?.( 'core/block-editor' ) || {};
+			const blockEditorDispatch =
+				registry?.dispatch?.( 'core/block-editor' ) || {};
+			const blockContext =
+				liveRequestInput?.editorContext?.block ||
+				storedRecommendations.blockContext ||
+				{};
+			const blockOperationContext =
+				liveRequestInput?.editorContext?.blockOperationContext ||
+				storedRecommendations.blockOperationContext ||
+				null;
+
+			if ( ! blockOperationContext ) {
+				const error =
+					getBlockStructuralActionErrorMessage( 'operation_invalid' );
+
+				localDispatch(
+					actions.setBlockApplyState( clientId, 'error', error )
+				);
+
+				return false;
+			}
+
+			const targetClientId =
+				blockOperationContext.targetClientId || clientId;
+			const targetRootClientId =
+				blockEditorSelect.getBlockRootClientId?.( targetClientId ) ||
+				null;
+			const blockPath = findBlockPath(
+				blockEditorSelect.getBlocks?.() || [],
+				targetClientId
+			);
+
+			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
+
+			const result = {
+				...applyBlockStructuralSuggestionOperations( {
+					suggestion,
+					blockOperationContext,
+					blockEditorSelect,
+					blockEditorDispatch,
+					parsePatternBlocks: createBlockStructuralPatternParser(
+						blockEditorSelect,
+						targetRootClientId
+					),
+				} ),
+				blockPath,
+			};
+
+			if ( ! result.ok ) {
+				localDispatch(
+					actions.setBlockApplyState(
+						clientId,
+						'error',
+						result.error ||
+							getBlockStructuralActionErrorMessage( result.code )
+					)
+				);
+
+				return false;
+			}
+
+			await logStoreActivityEntry(
+				localDispatch,
+				select,
+				buildBlockStructuralActivityEntry( {
+					blockContext,
+					clientId,
+					requestPrompt: storedRecommendations.prompt || '',
+					requestMeta:
+						suggestion?.requestMeta ||
+						storedRecommendations.requestMeta ||
+						null,
+					requestToken: select.getBlockRequestToken( clientId ) || 0,
+					blockPath: result.blockPath,
+					result,
 					scope,
 					suggestion,
 				} )

@@ -34,6 +34,8 @@ export const BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED =
 	'block_structural_actions_disabled';
 export const BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED =
 	'multi_operation_unsupported';
+export const BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH =
+	'client_server_operation_mismatch';
 
 export const BLOCK_OPERATION_CATALOG = Object.freeze( {
 	version: BLOCK_OPERATION_CATALOG_VERSION,

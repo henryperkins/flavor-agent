@@ -1,8 +1,9 @@
-import { store as blockEditorStore } from '@wordpress/block-editor';
 import {
 	select as registrySelect,
 	dispatch as registryDispatch,
 } from '@wordpress/data';
+
+const blockEditorStore = 'core/block-editor';
 
 export const STABLE_PATTERNS_KEY = 'blockPatterns';
 export const EXPERIMENTAL_PATTERNS_KEY = '__experimentalBlockPatterns';
@@ -16,7 +17,11 @@ export const EXPERIMENTAL_ADDITIONAL_CATEGORIES_KEY =
 export const STABLE_ALLOWED_SELECTOR = 'getAllowedPatterns';
 export const EXPERIMENTAL_ALLOWED_SELECTOR = '__experimentalGetAllowedPatterns';
 
-function getSettings() {
+function getSettings( blockEditor ) {
+	if ( blockEditor?.getSettings ) {
+		return blockEditor.getSettings() || {};
+	}
+
 	return registrySelect( blockEditorStore ).getSettings?.() || {};
 }
 
@@ -105,8 +110,8 @@ function resolveAllowedPatternsResult(
 	};
 }
 
-export function getBlockPatterns() {
-	const settings = getSettings();
+export function getBlockPatterns( blockEditor ) {
+	const settings = getSettings( blockEditor );
 	const key = resolvePatternsKey( settings );
 	const patterns = settings[ key ];
 

@@ -8,6 +8,7 @@ import {
 	hasRecordedAttributeSnapshot,
 	recordedAttributeSnapshotMatchesCurrent,
 } from './update-helpers';
+import { getBlockStructuralActivityUndoState } from '../utils/block-structural-actions';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
 // v4: per-surface bucketing (was a single 20-entry cap across all surfaces).
@@ -632,6 +633,10 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 
 	if ( entry?.surface !== 'block' ) {
 		return existingUndo;
+	}
+
+	if ( entry?.type === 'apply_block_structural_suggestion' ) {
+		return getBlockStructuralActivityUndoState( entry, blockEditorSelect );
 	}
 
 	if ( entry?.type !== 'apply_suggestion' ) {

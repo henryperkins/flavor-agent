@@ -48,7 +48,7 @@ Use it when you need to answer:
 - The seven AI recommendation abilities (`recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, and `recommend-style`) also opt into the Abilities API default MCP server via `meta.mcp.public = true`
 - `flavor-agent/recommend-block` accepts different input shapes depending on the caller: the REST route passes `editorContext` (with nested `block`, `siblingsBefore`, `siblingsAfter`, `themeTokens`), while the Abilities API registers `selectedBlock` (with `structuralIdentity`, `structuralAncestors`, `structuralBranch`, `childCount`, and `blockVisibility`). `BlockAbilities::recommend_block()` normalizes both paths into a single prompt context
 - When `window.flavorAgentData.enableBlockStructuralActions` is true, the first-party REST `editorContext` also includes a client-computed `blockOperationContext` with selected-block target identity, target signature, lock/content-only state, and allowed pattern metadata from Gutenberg's allowed-pattern selector. The flag defaults off, and executable structural block operations stay empty when the flag, pattern context, target, lock, or catalog validation fails.
-- Normalized block suggestions may include `operations`, `proposedOperations`, and `rejectedOperations`. `operations` contains only PHP validator-approved block structural operations from the v1 catalog (`insert_pattern` and `replace_block_with_pattern`); `proposedOperations` preserves sanitized model proposals for diagnostics; `rejectedOperations` records validator rejection codes and sanitized proposal payloads. These fields do not create a structural apply UI in M2.
+- Normalized block suggestions may include `operations`, `proposedOperations`, and `rejectedOperations`. `operations` contains only `FlavorAgent\Context\BlockOperationValidator`-approved block structural operations from the v1 catalog (`insert_pattern` and `replace_block_with_pattern`); `proposedOperations` preserves sanitized model proposals for diagnostics; `rejectedOperations` records standardized validator rejection codes and sanitized proposal payloads. In the editor, the JS catalog revalidates the PHP-approved operation and fails closed with `client_server_operation_mismatch` if the browser validation identity disagrees before review/apply.
 - `flavor-agent/check-status` now reports the runtime-gated `availableAbilities` list plus a `surfaces` map that explains per-surface ready / unavailable state for block, pattern, template, template-part, navigation, Global Styles, and Style Book UIs
 - The `surfaces` map uses the keys `block`, `pattern`, `content`, `template`, `templatePart`, `navigation`, `globalStyles`, and `styleBook`. Each entry returns `available`, `reason`, `owner`, `actions`, `configurationLabel`, `configurationUrl`, `message`, and `advisoryOnly`.
 - `flavor-agent/get-pattern` resolves only by registered pattern name. The returned `id` is the same string as `name`, and `patternId` is a convenience alias for that same value.
@@ -310,6 +310,49 @@ The request-side `syncStatus` filter accepts `synced`, `partial`, `unsynced`, or
   "clientId": "block-client-id"
 }
 ```
+
+### Block Recommendation Structural Operation Shape
+
+```json
+{
+  "block": [
+    {
+      "label": "Add a hero after this block",
+      "description": "Use the registered hero pattern directly after the selected section.",
+      "type": "pattern_replacement",
+      "attributeUpdates": {},
+      "operations": [
+        {
+          "catalogVersion": 1,
+          "type": "insert_pattern",
+          "patternName": "theme/hero",
+          "targetClientId": "block-client-id",
+          "targetType": "block",
+          "targetSignature": "sha256-of-selected-target",
+          "position": "insert_after",
+          "expectedTarget": {
+            "clientId": "block-client-id",
+            "name": "core/group"
+          }
+        }
+      ],
+      "proposedOperations": [
+        {
+          "type": "insert_pattern",
+          "patternName": "theme/hero",
+          "targetClientId": "block-client-id",
+          "position": "insert_after"
+        }
+      ],
+      "rejectedOperations": []
+    }
+  ],
+  "explanation": "The selected section can safely be followed by the allowed hero pattern.",
+  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
+}
+```
+
+The normalized block operation metadata is `catalogVersion`, `type`, `patternName`, `targetClientId`, `targetType`, `targetSignature`, `position` for `insert_pattern`, `action: "replace"` for `replace_block_with_pattern`, and `expectedTarget` when the server can record the selected target fingerprint. Rejection entries use the same operation shape under `operation` plus one of the catalog rejection codes: `block_structural_actions_disabled`, `multi_operation_unsupported`, `invalid_operation_payload`, `unknown_operation_type`, `missing_pattern_name`, `pattern_not_available`, `missing_target_client_id`, `stale_target`, `cross_surface_target`, `invalid_target_type`, `locked_target`, `content_only_target`, `invalid_insertion_position`, `action_not_allowed`, or the client-side fail-closed code `client_server_operation_mismatch`.
 
 ### Template Ability Request
 

@@ -356,15 +356,6 @@ Exit criteria:
 
 Detailed implementation plan: `docs/reference/recommendation-actionability-m4-m1a-plan.md`.
 
-### M5: Beta Enablement Decision
-
-Exit criteria:
-
-- `node scripts/verify.js --skip-e2e` is green or blockers are recorded.
-- Matching Playwright harness evidence exists or explicit waivers are documented.
-- Docs and feature matrix reflect the final behavior.
-- Product decision explicitly enables the feature flag in targeted environments.
-
 ## Validation Gates
 
 Use `docs/reference/cross-surface-validation-gates.md` as the release gate reference.

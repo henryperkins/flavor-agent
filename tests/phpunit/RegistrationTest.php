@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\Registration;
+use FlavorAgent\Context\BlockOperationValidator;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -50,15 +51,30 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( 'array', $suggestion['properties']['proposedOperations']['type'] ?? null );
 		$this->assertSame( 'array', $suggestion['properties']['rejectedOperations']['type'] ?? null );
 		$this->assertSame(
-			[ 'insert_pattern', 'replace_block_with_pattern', null ],
+			[
+				BlockOperationValidator::INSERT_PATTERN,
+				BlockOperationValidator::REPLACE_BLOCK_WITH_PATTERN,
+				null,
+			],
 			$operation['properties']['type']['enum'] ?? null
 		);
+		$this->assertSame( [ 'integer', 'null' ], $operation['properties']['catalogVersion']['type'] ?? null );
 		$this->assertSame( [ 'string', 'null' ], $operation['properties']['patternName']['type'] ?? null );
 		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetClientId']['type'] ?? null );
 		$this->assertSame( [ 'string', 'null' ], $operation['properties']['position']['type'] ?? null );
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['action']['type'] ?? null );
 		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetSignature']['type'] ?? null );
 		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetSurface']['type'] ?? null );
 		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetType']['type'] ?? null );
+		$this->assertSame( [ 'object', 'null' ], $operation['properties']['expectedTarget']['type'] ?? null );
+		$this->assertSame(
+			[ 'string', 'null' ],
+			$operation['properties']['expectedTarget']['properties']['name']['type'] ?? null
+		);
+		$this->assertContains(
+			BlockOperationValidator::ERROR_CLIENT_SERVER_OPERATION_MISMATCH,
+			$suggestion['properties']['rejectedOperations']['items']['properties']['code']['enum'] ?? []
+		);
 
 		$this->assertTrue( (bool) ( $selected_block['properties']['attributes']['additionalProperties'] ?? false ) );
 		$this->assertTrue( (bool) ( $selected_block['properties']['blockVisibility']['additionalProperties'] ?? false ) );

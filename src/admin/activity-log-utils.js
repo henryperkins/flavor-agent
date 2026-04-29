@@ -304,6 +304,8 @@ function formatActivityTypeLabel( activityType = '' ) {
 			return __( 'Record request', 'flavor-agent' );
 		case 'apply_suggestion':
 			return __( 'Apply block suggestion', 'flavor-agent' );
+		case 'apply_block_structural_suggestion':
+			return __( 'Apply block structural suggestion', 'flavor-agent' );
 		case 'apply_template_suggestion':
 			return __( 'Apply template suggestion', 'flavor-agent' );
 		case 'apply_template_part_suggestion':

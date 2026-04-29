@@ -8,6 +8,8 @@
 
 **Tech Stack:** WordPress plugin, PHP 8+, Gutenberg block editor data store, `@wordpress/scripts` Jest, PHPUnit, Playwright, existing Flavor Agent REST/Abilities routes and activity history.
 
+**Completion Status:** Complete as of 2026-04-29. `npm run verify` passed with `VERIFY_RESULT={"status":"pass","summaryPath":"output/verify/summary.json","counts":{"total":8,"passed":8,"failed":0,"skipped":0}}`.
+
 ---
 
 ## Execution Order
@@ -798,7 +800,7 @@ If the browser harness cannot reliably model the lock/content-only transition, r
 - Modify: `docs/FEATURE_SURFACE_MATRIX.md`
 - Modify: `docs/reference/abilities-and-routes.md` only if response contract changes.
 
-- [ ] **Step 1: Update feature docs after code behavior is stable**
+- [x] **Step 1: Update feature docs after code behavior is stable**
 
 Document:
 
@@ -807,7 +809,7 @@ Document:
 - Structural activity and undo are drift-checked.
 - Native inserter usage remains owned by Gutenberg.
 
-- [ ] **Step 2: Run full non-E2E verifier**
+- [x] **Step 2: Run full non-E2E verifier**
 
 Run:
 
@@ -817,7 +819,7 @@ npm run verify -- --skip-e2e
 
 Expected: `VERIFY_RESULT` status is `pass`, or blockers are recorded.
 
-- [ ] **Step 3: Run browser evidence**
+- [x] **Step 3: Run browser evidence**
 
 Run:
 
@@ -837,15 +839,15 @@ Expected: PASS or explicit waiver with blocker details.
 
 ## Final Acceptance Checklist
 
-- [ ] M1A produces more valid template-part `operations[]` without broadening the operation vocabulary.
-- [ ] Invalid or ambiguous template-part `patternSuggestions` remain advisory.
-- [ ] Existing template-part review/apply/undo behavior remains unchanged.
-- [ ] M4 applies only one validator-approved selected-block structural operation per review.
-- [ ] M4 revalidates live target, locks, pattern availability, feature flag, and operation validity immediately before mutation.
-- [ ] M4 structural mutation is transactional and rolls back on failure.
-- [ ] M4 activity is recorded only after successful apply and distinguishes structural block applies from inline attribute applies.
-- [ ] M4 undo is disabled on post-apply live-state divergence.
-- [ ] Required race and negative tests are green.
-- [ ] Docs and feature matrix reflect final behavior.
-- [ ] `npm run verify -- --skip-e2e` passes or blockers are recorded.
-- [ ] Playwright evidence exists or explicit waivers are documented.
+- [x] M1A produces more valid template-part `operations[]` without broadening the operation vocabulary.
+- [x] Invalid or ambiguous template-part `patternSuggestions` remain advisory.
+- [x] Existing template-part review/apply/undo behavior remains unchanged.
+- [x] M4 applies only one validator-approved selected-block structural operation per review.
+- [x] M4 revalidates live target, locks, pattern availability, feature flag, and operation validity immediately before mutation.
+- [x] M4 structural mutation is transactional and rolls back on failure.
+- [x] M4 activity is recorded only after successful apply and distinguishes structural block applies from inline attribute applies.
+- [x] M4 undo is disabled on post-apply live-state divergence.
+- [x] Required race and negative tests are green.
+- [x] Docs and feature matrix reflect final behavior.
+- [x] `npm run verify -- --skip-e2e` passes or blockers are recorded.
+- [x] Playwright evidence exists or explicit waivers are documented.

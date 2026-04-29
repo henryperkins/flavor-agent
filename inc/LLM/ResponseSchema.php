@@ -328,6 +328,7 @@ final class ResponseSchema {
 	private static function block_operation_schema(): array {
 		return self::strict_object(
 			[
+				'catalogVersion'  => self::nullable_integer(),
 				'type'            => [
 					'type' => [ 'string', 'null' ],
 					'enum' => [ 'insert_pattern', 'replace_block_with_pattern', null ],
@@ -335,9 +336,11 @@ final class ResponseSchema {
 				'patternName'     => self::nullable_string(),
 				'targetClientId'  => self::nullable_string(),
 				'position'        => self::nullable_string(),
+				'action'          => self::nullable_string(),
 				'targetSignature' => self::nullable_string(),
 				'targetSurface'   => self::nullable_string(),
 				'targetType'      => self::nullable_string(),
+				'expectedTarget'  => self::nullable_expected_target_schema(),
 			]
 		);
 	}

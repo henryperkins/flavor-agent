@@ -169,6 +169,28 @@ describe( 'template-part recommender helpers', () => {
 		expect( secondSignature ).not.toBe( thirdSignature );
 	} );
 
+	test( 'buildEditorTemplatePartStructureSnapshot includes expected target metadata for executable paths', () => {
+		const snapshot = buildEditorTemplatePartStructureSnapshot( [
+			{
+				name: 'core/group',
+				attributes: { className: 'header-shell' },
+				innerBlocks: [],
+			},
+		] );
+
+		expect( snapshot.operationTargets[ 0 ] ).toEqual(
+			expect.objectContaining( {
+				path: [ 0 ],
+				name: 'core/group',
+				label: 'Group',
+				expectedTarget: expect.objectContaining( {
+					name: 'core/group',
+					childCount: 0,
+				} ),
+			} )
+		);
+	} );
+
 	test( 'buildEditorTemplatePartStructureSnapshot mirrors the live template-part structure and executable targets', () => {
 		expect(
 			buildEditorTemplatePartStructureSnapshot( [
@@ -293,6 +315,14 @@ describe( 'template-part recommender helpers', () => {
 					path: [ 0 ],
 					name: 'core/group',
 					label: 'Group',
+					expectedTarget: {
+						name: 'core/group',
+						childCount: 2,
+						attributes: {
+							tagName: 'header',
+							align: 'wide',
+						},
+					},
 					allowedOperations: [
 						'replace_block_with_pattern',
 						'remove_block',
@@ -306,6 +336,11 @@ describe( 'template-part recommender helpers', () => {
 					path: [ 0, 0 ],
 					name: 'core/site-logo',
 					label: 'Site Logo',
+					expectedTarget: {
+						name: 'core/site-logo',
+						childCount: 0,
+						attributes: {},
+					},
 					allowedOperations: [
 						'replace_block_with_pattern',
 						'remove_block',
@@ -319,6 +354,14 @@ describe( 'template-part recommender helpers', () => {
 					path: [ 0, 1 ],
 					name: 'core/navigation',
 					label: 'Navigation',
+					expectedTarget: {
+						name: 'core/navigation',
+						childCount: 0,
+						attributes: {
+							overlayMenu: 'mobile',
+							maxNestingLevel: 2,
+						},
+					},
 					allowedOperations: [
 						'replace_block_with_pattern',
 						'remove_block',

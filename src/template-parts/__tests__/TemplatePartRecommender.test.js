@@ -731,6 +731,11 @@ describe( 'TemplatePartRecommender', () => {
 							path: [ 0 ],
 							name: 'core/group',
 							label: 'Group',
+							expectedTarget: {
+								name: 'core/group',
+								childCount: 1,
+								attributes: {},
+							},
 							allowedOperations: [
 								'replace_block_with_pattern',
 								'remove_block',
@@ -744,6 +749,11 @@ describe( 'TemplatePartRecommender', () => {
 							path: [ 0, 0 ],
 							name: 'core/navigation',
 							label: 'Navigation',
+							expectedTarget: {
+								name: 'core/navigation',
+								childCount: 0,
+								attributes: {},
+							},
 							allowedOperations: [
 								'replace_block_with_pattern',
 								'remove_block',

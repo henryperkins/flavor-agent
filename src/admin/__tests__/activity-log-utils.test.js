@@ -402,6 +402,28 @@ describe( 'activity log utils', () => {
 		} );
 	} );
 
+	test( 'normalizeActivityEntries labels block structural apply rows distinctly from inline block applies', () => {
+		const entries = normalizeActivityEntries( [
+			createEntry( {
+				type: 'apply_block_structural_suggestion',
+				after: {
+					operations: [
+						{
+							type: 'insert_pattern',
+							patternName: 'theme/hero',
+						},
+					],
+				},
+			} ),
+		] );
+
+		expect( entries[ 0 ] ).toMatchObject( {
+			activityTypeLabel: 'Apply block structural suggestion',
+			operationType: 'insert',
+			operationTypeLabel: 'Insert pattern',
+		} );
+	} );
+
 	test( 'buildActivityTargetUrl returns site editor and post editor links', () => {
 		const templateUrl = buildActivityTargetUrl(
 			createEntry( {

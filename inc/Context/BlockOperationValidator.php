@@ -6,27 +6,28 @@ namespace FlavorAgent\Context;
 
 final class BlockOperationValidator {
 
-	public const CATALOG_VERSION                   = 1;
-	public const INSERT_PATTERN                    = 'insert_pattern';
-	public const REPLACE_BLOCK_WITH_PATTERN        = 'replace_block_with_pattern';
-	public const ACTION_INSERT_BEFORE              = 'insert_before';
-	public const ACTION_INSERT_AFTER               = 'insert_after';
-	public const ACTION_REPLACE                    = 'replace';
-	public const TARGET_BLOCK                      = 'block';
-	public const ERROR_STRUCTURAL_ACTIONS_DISABLED = 'block_structural_actions_disabled';
-	public const ERROR_MULTI_OPERATION_UNSUPPORTED = 'multi_operation_unsupported';
-	public const ERROR_INVALID_OPERATION_PAYLOAD   = 'invalid_operation_payload';
-	public const ERROR_UNKNOWN_OPERATION_TYPE      = 'unknown_operation_type';
-	public const ERROR_MISSING_PATTERN_NAME        = 'missing_pattern_name';
-	public const ERROR_PATTERN_NOT_AVAILABLE       = 'pattern_not_available';
-	public const ERROR_MISSING_TARGET_CLIENT_ID    = 'missing_target_client_id';
-	public const ERROR_STALE_TARGET                = 'stale_target';
-	public const ERROR_CROSS_SURFACE_TARGET        = 'cross_surface_target';
-	public const ERROR_INVALID_TARGET_TYPE         = 'invalid_target_type';
-	public const ERROR_LOCKED_TARGET               = 'locked_target';
-	public const ERROR_CONTENT_ONLY_TARGET         = 'content_only_target';
-	public const ERROR_INVALID_INSERTION_POSITION  = 'invalid_insertion_position';
-	public const ERROR_ACTION_NOT_ALLOWED          = 'action_not_allowed';
+	public const CATALOG_VERSION                        = 1;
+	public const INSERT_PATTERN                         = 'insert_pattern';
+	public const REPLACE_BLOCK_WITH_PATTERN             = 'replace_block_with_pattern';
+	public const ACTION_INSERT_BEFORE                   = 'insert_before';
+	public const ACTION_INSERT_AFTER                    = 'insert_after';
+	public const ACTION_REPLACE                         = 'replace';
+	public const TARGET_BLOCK                           = 'block';
+	public const ERROR_STRUCTURAL_ACTIONS_DISABLED      = 'block_structural_actions_disabled';
+	public const ERROR_MULTI_OPERATION_UNSUPPORTED      = 'multi_operation_unsupported';
+	public const ERROR_INVALID_OPERATION_PAYLOAD        = 'invalid_operation_payload';
+	public const ERROR_UNKNOWN_OPERATION_TYPE           = 'unknown_operation_type';
+	public const ERROR_MISSING_PATTERN_NAME             = 'missing_pattern_name';
+	public const ERROR_PATTERN_NOT_AVAILABLE            = 'pattern_not_available';
+	public const ERROR_MISSING_TARGET_CLIENT_ID         = 'missing_target_client_id';
+	public const ERROR_STALE_TARGET                     = 'stale_target';
+	public const ERROR_CROSS_SURFACE_TARGET             = 'cross_surface_target';
+	public const ERROR_INVALID_TARGET_TYPE              = 'invalid_target_type';
+	public const ERROR_LOCKED_TARGET                    = 'locked_target';
+	public const ERROR_CONTENT_ONLY_TARGET              = 'content_only_target';
+	public const ERROR_INVALID_INSERTION_POSITION       = 'invalid_insertion_position';
+	public const ERROR_ACTION_NOT_ALLOWED               = 'action_not_allowed';
+	public const ERROR_CLIENT_SERVER_OPERATION_MISMATCH = 'client_server_operation_mismatch';
 
 	private const ALLOWED_ACTIONS = [
 		self::ACTION_INSERT_BEFORE,
@@ -391,13 +392,85 @@ final class BlockOperationValidator {
 
 		$payload = [];
 
-		foreach ( [ 'type', 'patternName', 'targetClientId', 'position', 'targetSignature', 'targetSurface', 'targetType', 'surface' ] as $field ) {
+		foreach ( [ 'type', 'patternName', 'targetClientId', 'position', 'action', 'targetSignature', 'targetSurface', 'targetType', 'surface' ] as $field ) {
 			if ( array_key_exists( $field, $raw_operation ) ) {
 				$payload[ $field ] = self::normalize_string( $raw_operation[ $field ] );
 			}
 		}
 
+		if ( isset( $raw_operation['catalogVersion'] ) && is_numeric( $raw_operation['catalogVersion'] ) ) {
+			$payload['catalogVersion'] = (int) $raw_operation['catalogVersion'];
+		}
+
+		if ( isset( $raw_operation['expectedTarget'] ) && is_array( $raw_operation['expectedTarget'] ) ) {
+			$expected_target = self::sanitize_expected_target_payload( $raw_operation['expectedTarget'] );
+
+			if ( ! empty( $expected_target ) ) {
+				$payload['expectedTarget'] = $expected_target;
+			}
+		}
+
 		return $payload;
+	}
+
+	/**
+	 * @param array<string, mixed> $expected_target
+	 * @return array<string, mixed>
+	 */
+	private static function sanitize_expected_target_payload( array $expected_target ): array {
+		$target = [];
+
+		foreach ( [ 'clientId', 'name', 'label' ] as $field ) {
+			if ( array_key_exists( $field, $expected_target ) ) {
+				$target[ $field ] = self::normalize_string( $expected_target[ $field ] );
+			}
+		}
+
+		if ( isset( $expected_target['childCount'] ) && is_numeric( $expected_target['childCount'] ) ) {
+			$target['childCount'] = (int) $expected_target['childCount'];
+		}
+
+		if ( isset( $expected_target['attributes'] ) && is_array( $expected_target['attributes'] ) ) {
+			$target['attributes'] = self::sanitize_attribute_payload( $expected_target['attributes'] );
+		}
+
+		return $target;
+	}
+
+	private static function sanitize_attribute_payload( mixed $value, int $depth = 0 ): mixed {
+		if ( $depth > 5 ) {
+			return null;
+		}
+
+		if ( is_string( $value ) ) {
+			return sanitize_text_field( $value );
+		}
+
+		if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) || null === $value ) {
+			return $value;
+		}
+
+		if ( ! is_array( $value ) ) {
+			return null;
+		}
+
+		$sanitized = [];
+
+		foreach ( $value as $key => $entry ) {
+			if ( ! is_string( $key ) && ! is_int( $key ) ) {
+				continue;
+			}
+
+			$sanitized_key = is_int( $key ) ? $key : sanitize_key( $key );
+
+			if ( '' === (string) $sanitized_key ) {
+				continue;
+			}
+
+			$sanitized[ $sanitized_key ] = self::sanitize_attribute_payload( $entry, $depth + 1 );
+		}
+
+		return $sanitized;
 	}
 
 	private static function normalize_target_surface( array $raw_operation ): string {

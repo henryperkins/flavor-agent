@@ -188,6 +188,55 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertStringContainsString( 'do not recommend patterns, operations, or attribute changes that rely on disabled features or unsupported layout capabilities.', $system );
 	}
 
+	public function test_template_part_prompt_shows_copy_safe_operation_examples_for_executable_targets(): void {
+		$prompt = TemplatePartPrompt::build_user(
+			[
+				'templatePartRef'  => 'theme//header',
+				'slug'             => 'header',
+				'title'            => 'Header',
+				'area'             => 'header',
+				'blockTree'        => [
+					[
+						'path'  => [ 0 ],
+						'name'  => 'core/group',
+						'label' => 'Group',
+					],
+				],
+				'patterns'         => [
+					[
+						'name'  => 'theme/header-utility',
+						'title' => 'Header Utility',
+					],
+				],
+				'operationTargets' => [
+					[
+						'path'              => [ 0 ],
+						'name'              => 'core/group',
+						'label'             => 'Header group',
+						'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+						'allowedInsertions' => [ 'before_block_path', 'after_block_path' ],
+					],
+				],
+				'insertionAnchors' => [
+					[
+						'placement'  => 'before_block_path',
+						'targetPath' => [ 0 ],
+						'blockName'  => 'core/group',
+						'label'      => 'Before Header group',
+					],
+				],
+			],
+			'Add a utility row'
+		);
+
+		$this->assertStringContainsString( '## Executable Operation Examples', $prompt );
+		$this->assertStringContainsString( '"type":"insert_pattern"', $prompt );
+		$this->assertStringContainsString( '"patternName":"theme/header-utility"', $prompt );
+		$this->assertStringContainsString( '"placement":"before_block_path"', $prompt );
+		$this->assertStringContainsString( '"targetPath":[0]', $prompt );
+		$this->assertStringContainsString( '"type":"replace_block_with_pattern"', $prompt );
+	}
+
 	public function test_parse_response_keeps_only_valid_block_hints_and_patterns(): void {
 		$context = [
 			'blockTree'        => [
@@ -420,6 +469,66 @@ final class TemplatePartPromptTest extends TestCase {
 			],
 			$result['suggestions']
 		);
+	}
+
+	public function test_template_part_parser_keeps_valid_operations_when_pattern_suggestions_are_mixed(): void {
+		$context = [
+			'patterns'         => [
+				[
+					'name' => 'theme/header-utility',
+				],
+			],
+			'blockTree'        => [
+				[
+					'path'       => [ 0 ],
+					'name'       => 'core/group',
+					'label'      => 'Header group',
+					'attributes' => [],
+					'childCount' => 0,
+				],
+			],
+			'insertionAnchors' => [
+				[
+					'placement'  => 'after_block_path',
+					'targetPath' => [ 0 ],
+					'label'      => 'After Header group',
+				],
+			],
+			'operationTargets' => [
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/group',
+					'allowedOperations' => [ 'replace_block_with_pattern', 'remove_block' ],
+				],
+			],
+		];
+
+		$raw = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'              => 'Add utility row',
+						'description'        => 'Add a compact utility row after the header group.',
+						'patternSuggestions' => [ 'theme/header-utility', 'theme/missing' ],
+						'operations'         => [
+							[
+								'type'        => 'insert_pattern',
+								'patternName' => 'theme/header-utility',
+								'placement'   => 'after_block_path',
+								'targetPath'  => [ 0 ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [ 'theme/header-utility' ], $result['suggestions'][0]['patternSuggestions'] );
+		$this->assertSame( 'insert_pattern', $result['suggestions'][0]['operations'][0]['type'] );
+		$this->assertSame( 'theme/header-utility', $result['suggestions'][0]['operations'][0]['patternName'] );
 	}
 
 	public function test_parse_response_accepts_replace_and_remove_operations_when_paths_match(): void {

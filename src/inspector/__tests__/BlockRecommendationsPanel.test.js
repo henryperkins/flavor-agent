@@ -2,6 +2,7 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockSuggestionChips = jest.fn();
 const mockFetchBlockRecommendations = jest.fn();
+const mockApplyBlockStructuralSuggestion = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockClearBlockError = jest.fn();
 const mockClearUndoError = jest.fn();
@@ -185,6 +186,10 @@ function selectStore( storeName ) {
 				( clientId ) =>
 					getState().store.blockApplyErrors[ clientId ] || null
 			),
+			getBlockApplyStatus: jest.fn(
+				( clientId ) =>
+					getState().store.blockApplyStatuses?.[ clientId ] || 'idle'
+			),
 			getBlockInteractionState: jest.fn( () => 'idle' ),
 			getBlockStatus: jest.fn(
 				( clientId ) =>
@@ -321,6 +326,7 @@ beforeEach( () => {
 	mockUseDispatch.mockImplementation( () => ( {
 		clearBlockError: mockClearBlockError,
 		clearUndoError: mockClearUndoError,
+		applyBlockStructuralSuggestion: mockApplyBlockStructuralSuggestion,
 		fetchBlockRecommendations: mockFetchBlockRecommendations,
 		undoActivity: mockUndoActivity,
 	} ) );
@@ -850,7 +856,11 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( mockSuggestionChips ).not.toHaveBeenCalled();
 	} );
 
-	test( 'renders review-safe structural operations in a distinct non-mutating review lane', () => {
+	test( 'renders review-safe structural operations with a guarded review apply control', () => {
+		window.flavorAgentData = {
+			canRecommendBlocks: true,
+			enableBlockStructuralActions: true,
+		};
 		const liveContext = {
 			block: {
 				name: 'core/group',
@@ -998,7 +1008,38 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			'Selected structural review'
 		);
 		expect( getContainer().textContent ).toContain(
-			'Block structural apply is not available in this milestone.'
+			'This review is scoped to the current block, request token, and request signature.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Apply reviewed structure'
+		);
+
+		const applyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find(
+			( element ) => element.textContent === 'Apply reviewed structure'
+		);
+
+		expect( applyButton ).toBeDefined();
+
+		act( () => {
+			applyButton.click();
+		} );
+
+		expect( mockApplyBlockStructuralSuggestion ).toHaveBeenCalledWith(
+			'block-1',
+			expect.objectContaining( {
+				label: 'Add a hero pattern after this group',
+				actionability: expect.objectContaining( {
+					tier: 'review-safe',
+					executableOperations: [ operation ],
+				} ),
+			} ),
+			expect.any( String ),
+			expect.objectContaining( {
+				clientId: 'block-1',
+				editorContext: liveContext,
+			} )
 		);
 	} );
 
@@ -1146,6 +1187,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			targetSignature: 'target-sig',
 			targetType: 'block',
 			position: 'insert_after',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/group',
+			},
 		};
 
 		mockCollectBlockContext.mockReturnValue( initialContext );
@@ -1269,6 +1314,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			targetSignature: 'target-sig',
 			targetType: 'block',
 			action: 'replace',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/group',
+			},
 		};
 
 		mockCollectBlockContext.mockReturnValue( liveContext );

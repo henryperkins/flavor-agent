@@ -2220,9 +2220,21 @@ SYSTEM;
 
 			$proposal = [];
 
-			foreach ( [ 'type', 'patternName', 'targetClientId', 'position', 'targetSignature', 'targetSurface', 'targetType' ] as $field ) {
+			foreach ( [ 'type', 'patternName', 'targetClientId', 'position', 'action', 'targetSignature', 'targetSurface', 'targetType' ] as $field ) {
 				if ( array_key_exists( $field, $operation ) && is_string( $operation[ $field ] ) ) {
 					$proposal[ $field ] = sanitize_text_field( $operation[ $field ] );
+				}
+			}
+
+			if ( isset( $operation['catalogVersion'] ) && is_numeric( $operation['catalogVersion'] ) ) {
+				$proposal['catalogVersion'] = (int) $operation['catalogVersion'];
+			}
+
+			if ( isset( $operation['expectedTarget'] ) && is_array( $operation['expectedTarget'] ) ) {
+				$expected_target = self::sanitize_block_operation_expected_target( $operation['expectedTarget'] );
+
+				if ( ! empty( $expected_target ) ) {
+					$proposal['expectedTarget'] = $expected_target;
 				}
 			}
 
@@ -2232,6 +2244,30 @@ SYSTEM;
 		}
 
 		return $proposals;
+	}
+
+	/**
+	 * @param array<string, mixed> $expected_target
+	 * @return array<string, mixed>
+	 */
+	private static function sanitize_block_operation_expected_target( array $expected_target ): array {
+		$target = [];
+
+		foreach ( [ 'clientId', 'name', 'label' ] as $field ) {
+			if ( isset( $expected_target[ $field ] ) && is_string( $expected_target[ $field ] ) ) {
+				$target[ $field ] = sanitize_text_field( $expected_target[ $field ] );
+			}
+		}
+
+		if ( isset( $expected_target['childCount'] ) && is_numeric( $expected_target['childCount'] ) ) {
+			$target['childCount'] = (int) $expected_target['childCount'];
+		}
+
+		if ( isset( $expected_target['attributes'] ) && is_array( $expected_target['attributes'] ) ) {
+			$target['attributes'] = self::sanitize_attribute_updates( $expected_target['attributes'] );
+		}
+
+		return $target;
 	}
 
 	private static function filter_suggestion_for_content_only( array $suggestion, array $content_attribute_keys ): ?array {

@@ -252,6 +252,12 @@ function collectTemplatePartOperationTargets(
 					attributes,
 					areaLookup
 				),
+				expectedTarget: {
+					name: block.name,
+					childCount: getInnerBlocks( block ).length,
+					attributes:
+						summarizeTemplatePartBlockAttributes( attributes ),
+				},
 				allowedOperations,
 				allowedInsertions: [ ...TEMPLATE_PART_INSERTION_PLACEMENTS ],
 			} );

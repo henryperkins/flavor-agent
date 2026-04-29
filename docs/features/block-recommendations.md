@@ -9,7 +9,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Fallback surface: document settings panel titled `AI Recommendations` with the eyebrow `Last Selected Block` when the current selection clears but the last selected block still exists
 - Secondary surfaces after a successful block request:
   - executable `SuggestionChips` lanes for `block`, `settings`, and `styles` inside the main `AI Recommendations` panel
-  - non-mutating `Review first` lane for validator-approved selected-block pattern operations when structural actions are enabled and the result is fresh
+  - `Review first` lane for validator-approved selected-block pattern operations when structural actions are enabled and the result is fresh; these can be applied only from the selected review card
   - passive mirrored `SuggestionChips` injected into delegated native sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, shadow, filter, and background so the user can see the current result beside the matching core controls without creating a second apply surface. Shadow suggestions render inside Gutenberg's native Border/Shadow group.
 
 ## Surfacing Conditions
@@ -19,7 +19,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Block structural pattern actions are behind the default-off `window.flavorAgentData.enableBlockStructuralActions` rollout flag. When false, structural proposals remain advisory and the block surface does not expose a structural review/apply path for them.
 - When that rollout flag is enabled, the client adds a deterministic `blockOperationContext` to the block request. It contains the selected target identity/signature plus visible, renderable patterns from Gutenberg's current allowed-pattern selector and per-target actions (`insert_before`, `insert_after`, and, where block types permit, `replace`).
 - Behind the flag, the prompt may propose at most one selected-block pattern operation. PHP validates every proposal before it reaches the normalized response; invalid, stale, locked, content-only, cross-surface, unavailable-pattern, and multi-operation proposals stay in `rejectedOperations` for diagnostics.
-- M3 adds a non-mutating structural review lane for validator-approved operations. It is keyed by selected block, request token, request signature, and suggestion, and stale results disable review entry. Safe local block attribute suggestions remain the only one-click block apply path.
+- The structural review/apply path is keyed by selected block, request token, request signature, and suggestion. Stale results disable review entry and apply. Safe local block attribute suggestions remain the only one-click block apply path.
+- PHP owns structural operation approval through `FlavorAgent\Context\BlockOperationValidator`. The browser revalidates the approved operation against the live block operation catalog and fails closed with `client_server_operation_mismatch` when its normalized operation identity disagrees with the server-approved metadata.
 - Content-restricted blocks stay visible and show an informational notice; executable suggestions are limited to content-safe attributes, broader block ideas may remain advisory-only, and style projections are suppressed
 - A selected `core/navigation` block adds the navigation guidance section inside the same panel
 
@@ -32,10 +33,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract. Mixed suggestions keep rejected structural proposals visible as advisory remainders when a local attribute update remains inline-safe.
 - Block recommendations are the only recommendation surface that now retains stale client-side results; stale results stay visible for reference, executable chips are demoted/disabled, and `SurfaceScopeBar` exposes an explicit `Refresh` action
 - Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background revalidation checks the wrapped REST signature-only response and silently demotes/disables stale results only when that check succeeds with a mismatched signature; apply-time signature revalidation is the hard gate. Background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
-- The panel now states that inline apply is the exception for safe local block updates. Validator-approved structural block operations enter a review-only lane, but structural apply/undo is still reserved for the later transactional milestone.
+- The panel states that inline apply is the exception for safe local block updates. Validator-approved structural block operations enter a review-first lane; applying them goes through a separate transactional block-tree path with rollback and drift-safe undo.
 - The embedded navigation section remains a subordinate exception: it keeps its own request state and `Navigation Ideas` wrapper because it is nested inside block recommendations rather than acting as a peer surface
 - The main block panel is now the only executable block surface; delegated native sub-panels mirror the current result but do not own apply, refresh, or activity state
-- `Recent AI Actions` and inline undo use the same shared activity treatment as the template and template-part surfaces
+- `Recent AI Actions` and block undo use the same shared activity treatment as the template and template-part surfaces
 
 ## End-To-End Flow
 
@@ -46,10 +47,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
 6. `ChatClient::chat()` uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path; if no text-generation provider is configured in Connectors, the request returns a `missing_text_generation_provider` error
 7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails, including the PHP block operation validator when structural proposals are present
-8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders inline apply, structural review, and manual/advisory lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
-9. Opening a structural review records local UI state only. No block tree mutation, activity row, or undo payload is created in M3.
+8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders inline apply, structural review/apply, and manual/advisory lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
+9. Opening a structural review records local UI state only. The block tree is unchanged until the user chooses `Apply reviewed structure`.
 10. When the user applies an inline-safe attribute suggestion, `applySuggestion()` first compares the stored client request signature, then re-posts the same request with `resolveSignatureOnly: true` to verify the current `resolvedContextSignature`, and only then safely merges allowed attribute updates into the current block and records an activity entry
-11. Inline undo calls `undoActivity()`, which validates the live block state before restoring the previous attribute snapshot
+11. When the user applies a reviewed structural suggestion, `applyBlockStructuralSuggestion()` runs the same freshness checks, revalidates the live target, parses the current registered pattern, applies the insert or replacement transactionally, rolls back failed partial mutations, and records a structural activity entry with before/after signatures
+12. Inline undo validates the live block state before restoring the previous attribute snapshot. Structural undo validates the live structural signature before removing inserted blocks or restoring the replaced block.
 
 ## Flow Diagram
 
@@ -65,8 +67,9 @@ User selects block + prompt
   -> Prompt::parse_response()
   -> BlockOperationValidator validates proposed operations
   -> store saves grouped suggestions
-  -> Inspector renders apply chips, review cards, and advisory cards
-  -> applySuggestion() / undoActivity() for inline-safe attributes only
+  -> Inspector renders apply chips, review/apply cards, and advisory cards
+  -> applySuggestion() / undoActivity() for inline-safe attributes
+  -> applyBlockStructuralSuggestion() / undoActivity() for reviewed structural operations
 ```
 
 ## Example Request
@@ -191,6 +194,7 @@ User selects block + prompt
 - Suggest block settings changes, style changes, and broader block-level adjustments
 - Keep block, settings, and style apply actions in one place while still mirroring the result into the native Inspector location where the user would normally inspect that change
 - Apply bounded attribute updates limited to declared content/config attributes, supported style channels, supported visibility/binding metadata, and registered style variations
+- Apply validator-approved selected-block pattern insertions and replacements from `Review first` when structural actions are enabled and the result is fresh
 - Record the apply action in the shared AI activity system and surface inline undo for the newest valid tail entry
 
 ## Guardrails And Failure Modes
@@ -201,7 +205,11 @@ User selects block + prompt
 - Executable updates cannot set `lock`, arbitrary `metadata`, or undeclared top-level attributes; `metadata` is limited to supported `blockVisibility` and allowed `bindings`. Partial execution contracts inherit missing local attribute-key lists from the block context before this undeclared-attribute filter runs.
 - Apply is also blocked when the live server-resolved apply context drifts, even if the local block snapshot still hashes to the same client request signature
 - If no allowed attribute updates remain after validation, the suggestion is not applied
+- Structural apply is blocked when the reviewed target disappeared, changed block type or target signature, became locked or content-only, lost the referenced registered pattern, or no longer permits the requested insert/replace action
+- Structural apply is also blocked before review/apply when the browser-side operation catalog cannot reproduce the server-approved `catalogVersion`, type, pattern, target, position/action, signature, and expected-target identity
+- Structural insert/replace uses rollback if the editor dispatch does not produce the expected parsed pattern blocks
 - Undo is blocked if the block disappeared, changed type, or changed attributes after the AI apply; a moved block remains undoable when the same `clientId`, block name, and applied attribute snapshot still match
+- Structural undo is blocked if the live root structure no longer matches the recorded post-apply structural signature
 
 ## Primary Functions And Handlers
 
@@ -212,6 +220,9 @@ User selects block + prompt
 | Context collection | `collectBlockContext()` in `src/context/collector.js` | Builds the client snapshot sent to the backend |
 | Store request | `fetchBlockRecommendations()` in `src/store/index.js` | Sends the recommendation request and stores the result |
 | Store apply | `applySuggestion()` in `src/store/index.js` | Applies bounded attribute updates and records activity |
+| Store structural apply | `applyBlockStructuralSuggestion()` in `src/store/index.js` | Applies reviewed structural operations after freshness and live-target checks |
+| Structural operations | `applyBlockStructuralSuggestionOperations()` in `src/utils/block-structural-actions.js` | Parses patterns, applies insert/replace operations transactionally, and prepares structural signatures for activity/undo |
+| Activity undo | `undoActivity()` in `src/store/activity-undo.js` | Routes inline block undo and structural block undo through their drift validators |
 | REST handler | `Agent_Controller::handle_recommend_block()` | Adapts the REST request to the backend ability |
 | Backend ability | `BlockAbilities::recommend_block()` | Normalizes input, gathers context, and runs the prompt pipeline |
 | LLM wrapper | `ChatClient::chat()` | Uses the WordPress AI Client / Connectors runtime; direct Azure/OpenAI Native settings are not a chat fallback |
@@ -233,7 +244,10 @@ User selects block + prompt
 - `src/context/block-inspector.js` — client-side block introspection (supports, attributes, styles); see `docs/reference/shared-internals.md`
 - `src/context/theme-tokens.js` — design token extraction for LLM context; see `docs/reference/shared-internals.md`
 - `src/utils/structural-identity.js` — block structural role inference for `structuralIdentity` context; see `docs/reference/shared-internals.md`
+- `src/utils/block-structural-actions.js` — transactional selected-block structural apply and drift-safe undo helpers
 - `src/store/index.js`
+- `src/store/activity-history.js`
+- `src/store/activity-undo.js`
 - `src/store/update-helpers.js` — safe attribute merging, undo patch construction, suggestion sanitization; see `docs/reference/shared-internals.md`
 - `src/store/block-targeting.js` — resolves activity targets by clientId or blockPath for undo; see `docs/reference/shared-internals.md`
 - `src/components/CapabilityNotice.js` — shared backend-unavailable notice; see `docs/reference/shared-internals.md`

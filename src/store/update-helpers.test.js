@@ -18,6 +18,7 @@ import {
 	ACTIONABILITY_TIER_INLINE_SAFE,
 	ACTIONABILITY_TIER_REVIEW_SAFE,
 } from '../utils/recommendation-actionability';
+import { BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH } from '../utils/block-operation-catalog';
 
 describe( 'update helpers', () => {
 	test( 'buildSafeAttributeUpdates preserves unrelated metadata and style values', () => {
@@ -780,6 +781,10 @@ describe( 'update helpers', () => {
 			targetType: 'block',
 			targetSignature: 'target-sig',
 			position: 'insert_after',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/group',
+			},
 		};
 		const result = sanitizeRecommendationsForContext(
 			{
@@ -820,6 +825,69 @@ describe( 'update helpers', () => {
 			expect.objectContaining( {
 				tier: ACTIONABILITY_TIER_REVIEW_SAFE,
 				executableOperations: [ executableOperation ],
+			} )
+		);
+	} );
+
+	test( 'sanitizeRecommendationsForContext fails closed when browser validation disagrees with server structural approval', () => {
+		const result = sanitizeRecommendationsForContext(
+			{
+				settings: [],
+				styles: [],
+				block: [
+					{
+						label: 'Add a hero after this block',
+						type: 'pattern_replacement',
+						attributeUpdates: {},
+						operations: [
+							{
+								catalogVersion: 1,
+								type: 'insert_pattern',
+								patternName: 'theme/hero',
+								targetClientId: 'block-1',
+								targetType: 'block',
+								targetSignature: 'server-target-sig',
+								position: 'insert_after',
+							},
+						],
+						proposedOperations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/hero',
+								targetClientId: 'block-1',
+								position: 'insert_after',
+							},
+						],
+						rejectedOperations: [],
+					},
+				],
+				explanation: 'Use a stronger CTA.',
+			},
+			{
+				enableBlockStructuralActions: true,
+				blockOperationContext: {
+					targetClientId: 'block-1',
+					targetBlockName: 'core/group',
+					targetSignature: 'browser-target-sig',
+					allowedPatterns: [
+						{
+							name: 'theme/hero',
+							allowedActions: [ 'insert_after' ],
+						},
+					],
+				},
+			}
+		);
+
+		expect( result.block[ 0 ].operations ).toEqual( [] );
+		expect( result.block[ 0 ].rejectedOperations ).toEqual( [
+			expect.objectContaining( {
+				code: BLOCK_OPERATION_ERROR_CLIENT_SERVER_OPERATION_MISMATCH,
+			} ),
+		] );
+		expect( result.block[ 0 ].actionability ).toEqual(
+			expect.objectContaining( {
+				tier: ACTIONABILITY_TIER_ADVISORY,
 			} )
 		);
 	} );

@@ -73,6 +73,7 @@ Rules:
 - `remove_block` MUST include `targetPath` and `expectedBlockName`.
 - Every executable `targetPath` MUST resolve to a real path from the Executable Operation Targets or Executable Insertion Anchors lists.
 - `expectedBlockName` MUST match the real block at `targetPath`.
+- Prefer valid `operations[]` when the user request maps directly to the Executable Operation Examples. Keep unsupported or ambiguous ideas in `patternSuggestions` and `blockHints`.
 - If Structural Constraints mention `contentOnly` or locked paths, keep those ideas advisory unless the path is explicitly listed as executable.
 - Keep patternSuggestions aligned with any executable operations you return.
 - Keep recommendations advisory-first. Do not output raw block markup or free-form rewritten block trees.
@@ -196,6 +197,16 @@ SYSTEM;
 			$budget->add_section( 'insertion_anchors', "## Executable Insertion Anchors\n" . self::format_insertion_anchors( $insertion_anchors ), 75 );
 		}
 
+		$patterns           = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
+		$operation_examples = self::format_operation_examples( $patterns, $operation_targets, $insertion_anchors );
+		if ( '' !== $operation_examples ) {
+			$budget->add_section(
+				'operation_examples',
+				"## Executable Operation Examples\n{$operation_examples}\nUse these shapes when the user request maps to an executable target. Keep invalid or ambiguous ideas in patternSuggestions/blockHints only.",
+				62
+			);
+		}
+
 		$structural_constraints = is_array( $context['structuralConstraints'] ?? null ) ? $context['structuralConstraints'] : [];
 		$formatted_constraints  = self::format_structural_constraints( $structural_constraints );
 		if ( $formatted_constraints !== '' ) {
@@ -211,7 +222,6 @@ SYSTEM;
 			50
 		);
 
-		$patterns = is_array( $context['patterns'] ?? null ) ? $context['patterns'] : [];
 		if ( count( $patterns ) > 0 ) {
 			$max   = self::MAX_PROMPT_PATTERNS;
 			$shown = array_slice( $patterns, 0, $max );
@@ -1215,6 +1225,75 @@ EXAMPLE
 		}
 
 		return implode( "\n", $lines );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $patterns
+	 * @param array<int, array<string, mixed>> $targets
+	 * @param array<int, array<string, mixed>> $anchors
+	 */
+	private static function format_operation_examples( array $patterns, array $targets, array $anchors ): string {
+		$first_pattern = '';
+
+		foreach ( $patterns as $pattern ) {
+			if ( is_array( $pattern ) && ! empty( $pattern['name'] ) ) {
+				$first_pattern = sanitize_text_field( (string) $pattern['name'] );
+				break;
+			}
+		}
+
+		if ( '' === $first_pattern ) {
+			return '';
+		}
+
+		$examples = [];
+
+		foreach ( $anchors as $anchor ) {
+			if ( ! is_array( $anchor ) ) {
+				continue;
+			}
+
+			$placement = sanitize_key( (string) ( $anchor['placement'] ?? '' ) );
+			$path      = self::sanitize_block_path( $anchor['targetPath'] ?? null );
+
+			if ( in_array( $placement, [ 'before_block_path', 'after_block_path' ], true ) && null !== $path ) {
+				$examples[] = wp_json_encode(
+					[
+						'type'        => 'insert_pattern',
+						'patternName' => $first_pattern,
+						'placement'   => $placement,
+						'targetPath'  => $path,
+					],
+					JSON_UNESCAPED_SLASHES
+				);
+				break;
+			}
+		}
+
+		foreach ( $targets as $target ) {
+			if ( ! is_array( $target ) ) {
+				continue;
+			}
+
+			$path    = self::sanitize_block_path( $target['path'] ?? null );
+			$name    = sanitize_text_field( (string) ( $target['name'] ?? '' ) );
+			$allowed = is_array( $target['allowedOperations'] ?? null ) ? $target['allowedOperations'] : [];
+
+			if ( null !== $path && '' !== $name && in_array( 'replace_block_with_pattern', $allowed, true ) ) {
+				$examples[] = wp_json_encode(
+					[
+						'type'              => 'replace_block_with_pattern',
+						'patternName'       => $first_pattern,
+						'targetPath'        => $path,
+						'expectedBlockName' => $name,
+					],
+					JSON_UNESCAPED_SLASHES
+				);
+				break;
+			}
+		}
+
+		return implode( "\n", array_filter( $examples ) );
 	}
 
 	private static function format_structural_constraints( array $constraints ): string {

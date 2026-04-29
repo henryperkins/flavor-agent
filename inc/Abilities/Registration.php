@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Abilities;
 
+use FlavorAgent\Context\BlockOperationValidator;
+
 final class Registration {
 
 	private const STRUCTURAL_SUMMARY_MAX_ITEMS = 6;
@@ -1647,7 +1649,7 @@ final class Registration {
 	}
 
 	private static function suggestion_output_schema(): array {
-		$suggestion_schema                                   = [
+		$suggestion_schema       = [
 			'type'       => 'object',
 			'properties' => [
 				'label'            => [ 'type' => 'string' ],
@@ -1665,33 +1667,70 @@ final class Registration {
 				'cssVar'           => [ 'type' => [ 'string', 'null' ] ],
 			],
 		];
-		$block_suggestion_schema                             = $suggestion_schema;
-		$block_operation_schema                              = [
+		$block_suggestion_schema = $suggestion_schema;
+		$block_operation_schema  = [
 			'type'  => 'array',
 			'items' => [
 				'type'       => 'object',
 				'properties' => [
+					'catalogVersion'  => [ 'type' => [ 'integer', 'null' ] ],
 					'type'            => [
 						'type' => [ 'string', 'null' ],
-						'enum' => [ 'insert_pattern', 'replace_block_with_pattern', null ],
+						'enum' => [
+							BlockOperationValidator::INSERT_PATTERN,
+							BlockOperationValidator::REPLACE_BLOCK_WITH_PATTERN,
+							null,
+						],
 					],
 					'patternName'     => [ 'type' => [ 'string', 'null' ] ],
 					'targetClientId'  => [ 'type' => [ 'string', 'null' ] ],
 					'position'        => [ 'type' => [ 'string', 'null' ] ],
+					'action'          => [ 'type' => [ 'string', 'null' ] ],
 					'targetSignature' => [ 'type' => [ 'string', 'null' ] ],
 					'targetSurface'   => [ 'type' => [ 'string', 'null' ] ],
 					'targetType'      => [ 'type' => [ 'string', 'null' ] ],
+					'expectedTarget'  => [
+						'type'       => [ 'object', 'null' ],
+						'properties' => [
+							'clientId'   => [ 'type' => [ 'string', 'null' ] ],
+							'name'       => [ 'type' => [ 'string', 'null' ] ],
+							'label'      => [ 'type' => [ 'string', 'null' ] ],
+							'attributes' => [ 'type' => 'object' ],
+							'childCount' => [ 'type' => [ 'integer', 'null' ] ],
+						],
+					],
 				],
 			],
 		];
-		$block_suggestion_schema['properties']['operations'] = $block_operation_schema;
+		$block_rejection_codes   = [
+			BlockOperationValidator::ERROR_STRUCTURAL_ACTIONS_DISABLED,
+			BlockOperationValidator::ERROR_MULTI_OPERATION_UNSUPPORTED,
+			BlockOperationValidator::ERROR_INVALID_OPERATION_PAYLOAD,
+			BlockOperationValidator::ERROR_UNKNOWN_OPERATION_TYPE,
+			BlockOperationValidator::ERROR_MISSING_PATTERN_NAME,
+			BlockOperationValidator::ERROR_PATTERN_NOT_AVAILABLE,
+			BlockOperationValidator::ERROR_MISSING_TARGET_CLIENT_ID,
+			BlockOperationValidator::ERROR_STALE_TARGET,
+			BlockOperationValidator::ERROR_CROSS_SURFACE_TARGET,
+			BlockOperationValidator::ERROR_INVALID_TARGET_TYPE,
+			BlockOperationValidator::ERROR_LOCKED_TARGET,
+			BlockOperationValidator::ERROR_CONTENT_ONLY_TARGET,
+			BlockOperationValidator::ERROR_INVALID_INSERTION_POSITION,
+			BlockOperationValidator::ERROR_ACTION_NOT_ALLOWED,
+			BlockOperationValidator::ERROR_CLIENT_SERVER_OPERATION_MISMATCH,
+		];
+
+		$block_suggestion_schema['properties']['operations']         = $block_operation_schema;
 		$block_suggestion_schema['properties']['proposedOperations'] = $block_operation_schema;
 		$block_suggestion_schema['properties']['rejectedOperations'] = [
 			'type'  => 'array',
 			'items' => [
 				'type'       => 'object',
 				'properties' => [
-					'code'      => [ 'type' => 'string' ],
+					'code'      => [
+						'type' => 'string',
+						'enum' => $block_rejection_codes,
+					],
 					'message'   => [ 'type' => 'string' ],
 					'operation' => [
 						'type'       => [ 'object', 'null' ],

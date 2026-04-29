@@ -2,6 +2,7 @@ import {
 	getGlobalStylesActivityUndoState,
 	undoGlobalStyleSuggestionOperations,
 } from '../utils/style-operations';
+import { undoBlockStructuralSuggestionOperations } from '../utils/block-structural-actions';
 import {
 	getTemplateActivityUndoState,
 	getTemplatePartActivityUndoState,
@@ -176,6 +177,46 @@ export function buildBlockActivityEntry( {
 		},
 		prompt: requestPrompt,
 		requestRef: `block:${ clientId }:${ requestToken }`,
+		requestMeta,
+		document: buildActivityDocument( scope ),
+	} );
+}
+
+export function buildBlockStructuralActivityEntry( {
+	blockContext,
+	blockPath = null,
+	clientId,
+	requestPrompt = '',
+	requestMeta = null,
+	requestToken = 0,
+	result,
+	scope = null,
+	suggestion,
+} ) {
+	const operations = Array.isArray( result?.operations )
+		? result.operations
+		: [];
+
+	return createActivityEntry( {
+		type: 'apply_block_structural_suggestion',
+		surface: 'block',
+		target: {
+			clientId,
+			blockName: blockContext?.name || '',
+			blockPath: Array.isArray( blockPath ) ? blockPath : [],
+		},
+		suggestion: suggestion?.label || '',
+		suggestionKey: suggestion?.suggestionKey || null,
+		before: {
+			structuralSignature: result?.beforeSignature || '',
+			operations: buildDocumentOperationBeforeState( operations ),
+		},
+		after: {
+			structuralSignature: result?.afterSignature || '',
+			operations,
+		},
+		prompt: requestPrompt,
+		requestRef: `block:${ clientId }:${ requestToken }:structural`,
 		requestMeta,
 		document: buildActivityDocument( scope ),
 	} );
@@ -394,6 +435,10 @@ export function undoBlockActivity( activity, registry ) {
 		registry?.dispatch?.( 'core/block-editor' ) || {};
 	const beforeAttributes = activity?.before?.attributes || {};
 	const afterAttributes = activity?.after?.attributes || {};
+
+	if ( activity?.type === 'apply_block_structural_suggestion' ) {
+		return undoBlockStructuralSuggestionOperations( activity, registry );
+	}
 
 	if (
 		activity?.type !== 'apply_suggestion' ||

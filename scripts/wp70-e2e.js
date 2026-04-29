@@ -22,7 +22,7 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 		storageStatePath: path.join(
 			rootDir,
 			'output',
-			'playwright',
+			'playwright-wp70',
 			'wp70-storage-state.json'
 		),
 		resetOnBootstrap:

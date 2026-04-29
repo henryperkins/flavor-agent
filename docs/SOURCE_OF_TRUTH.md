@@ -105,6 +105,7 @@ flavor-agent/
     Context/
       ServerCollector.php               Facade for per-surface context collectors
       BlockRecommendationExecutionContract.php Server-side block execution contract builder
+      BlockOperationValidator.php       Server-side block structural operation validation
       BlockContextCollector.php         Block-level context assembly
       BlockTypeIntrospector.php         Block supports, attributes, and inspector panel introspection
       NavigationContextCollector.php    Navigation recommendation context
@@ -256,10 +257,14 @@ flavor-agent/
       template-types.js     Template slug normalization
       visible-patterns.js   Inserter-scoped visible pattern list
       block-execution-contract.js Block execution contract definitions
+      block-operation-catalog.js Block structural operation vocabulary and contracts
       block-recommendation-context.js Block recommendation context shaping
+      block-allowed-pattern-context.js Allowed-pattern resolution for block-level operations
+      block-structural-actions.js Block insert/replace operation helpers
       context-signature.js Context signature for freshness tracking
       live-structure-snapshots.js Live block tree structure snapshots
       recommendation-request-signature.js Request signature for freshness
+      recommendation-actionability.js Recommendation actionability classification and helpers
       recommendation-stale-reasons.js Stale reason definitions
       structural-equality.js Structural equality checks
       style-validation.js Style validation helpers
@@ -376,10 +381,10 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Trigger:** User selects a block, types optional prompt, clicks "Get Suggestions".
 - **Context sent:** Block name, attributes, styles, supports, inspector panels, editing mode, content/config attributes, child count, structural identity (role, location, position), sibling blocks, ancestor chain, theme tokens, WordPress docs guidance (cache-only).
 - **LLM:** `ChatClient::chat()`; uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path and reports `missing_text_generation_provider` when Connectors has no usable runtime.
-- **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`.
+- **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`. Block-lane structural suggestions may also carry PHP-validator-approved `operations`, sanitized `proposedOperations`, and standardized `rejectedOperations` using the `BlockOperationValidator` catalog.
 - **UI:** The main panel follows the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Apply now` lane, `Manual ideas` advisory section, and recent activity. Settings and style suggestions are executable only from that main panel; delegated native Inspector sub-panels mirror the same result passively. Selected `core/navigation` blocks append a nested advisory-only navigation subsection.
-- **Apply:** Safe local block updates remain one-click. Executable updates are limited to declared content/config attributes, supported style channels, supported visibility/binding metadata, and registered style variations; when a server execution contract is partial, missing local attribute-key lists are filled from the selected block context before undeclared attributes are rejected. Safe deep-merge for allowed `metadata` and `style` keys preserves unrelated existing attributes. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
-- **Guards:** Content-only blocks limit executable changes to content-safe attributes, may still surface broader advisory block ideas, suppress style projections, and keep `blockVisibility` (boolean and viewport-object forms) within the allowed contract. `lock`, arbitrary `metadata`, and undeclared top-level attributes are rejected. Disabled blocks receive no suggestions.
+- **Apply:** Safe local block updates remain one-click. Executable updates are limited to declared content/config attributes, supported style channels, supported visibility/binding metadata, and registered style variations; when a server execution contract is partial, missing local attribute-key lists are filled from the selected block context before undeclared attributes are rejected. Safe deep-merge for allowed `metadata` and `style` keys preserves unrelated existing attributes. Reviewed structural `insert_pattern` and `replace_block_with_pattern` operations run through a separate transactional apply path with rollback, before/after structural signatures, activity metadata, and drift-safe undo. Apply captures before/after snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
+- **Guards:** Content-only blocks limit executable changes to content-safe attributes, may still surface broader advisory block ideas, suppress style projections, and keep `blockVisibility` (boolean and viewport-object forms) within the allowed contract. `lock`, arbitrary `metadata`, and undeclared top-level attributes are rejected. Disabled blocks receive no suggestions. Browser-side structural validation must reproduce the server-approved `catalogVersion`, type, pattern, target, position/action, signature, and expected-target identity before review/apply; disagreements fail closed with `client_server_operation_mismatch`.
 
 #### Pattern Recommendations
 

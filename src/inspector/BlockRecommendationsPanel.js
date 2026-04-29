@@ -48,6 +48,7 @@ import {
 	getActionabilityLabel,
 	getActionabilityReasonLabel,
 } from '../utils/recommendation-actionability';
+import { isBlockStructuralActionsEnabled } from '../utils/block-operation-catalog';
 import { shallowStructuralEqual } from '../utils/structural-equality';
 import {
 	buildBlockReviewState,
@@ -155,6 +156,7 @@ function useBlockRecommendationState( clientId ) {
 		requestDiagnostics,
 		blockActivityLog,
 		blockApplyError,
+		blockApplyStatus,
 		undoError,
 		undoStatus,
 		lastUndoneActivityId,
@@ -194,6 +196,8 @@ function useBlockRecommendationState( clientId ) {
 					store.getBlockRequestDiagnostics?.( clientId ) || null,
 				blockActivityLog: blockEntries,
 				blockApplyError: store.getBlockApplyError?.( clientId ) || null,
+				blockApplyStatus:
+					store.getBlockApplyStatus?.( clientId ) || 'idle',
 				undoError: store.getUndoError(),
 				undoStatus: store.getUndoStatus(),
 				lastUndoneActivityId: store.getLastUndoneActivityId(),
@@ -250,6 +254,7 @@ function useBlockRecommendationState( clientId ) {
 		latestUndoableActivityId,
 		lastUndoneBlockActivity,
 		blockApplyError,
+		blockApplyStatus,
 		undoError,
 		undoStatus,
 		isDisabled: editingMode === 'disabled',
@@ -381,6 +386,7 @@ export function BlockRecommendationsContent( {
 		latestUndoableActivityId,
 		lastUndoneBlockActivity,
 		blockApplyError,
+		blockApplyStatus,
 		undoError,
 		undoStatus,
 		isDisabled,
@@ -391,6 +397,7 @@ export function BlockRecommendationsContent( {
 		fetchBlockRecommendations,
 		clearBlockError,
 		clearUndoError,
+		applyBlockStructuralSuggestion,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 	const liveContextSignature = useSelect(
@@ -751,6 +758,27 @@ export function BlockRecommendationsContent( {
 		},
 		[ isStaleResult, reviewScope ]
 	);
+	const handleApplyReviewedStructure = useCallback(
+		( suggestion ) => {
+			if ( isStaleResult || ! suggestion ) {
+				return;
+			}
+
+			applyBlockStructuralSuggestion(
+				clientId,
+				suggestion,
+				currentRequestSignature,
+				currentRequestInput
+			);
+		},
+		[
+			applyBlockStructuralSuggestion,
+			clientId,
+			currentRequestInput,
+			currentRequestSignature,
+			isStaleResult,
+		]
+	);
 	let dismissStatusNotice;
 
 	if ( statusNotice?.source === 'request' ) {
@@ -935,7 +963,10 @@ export function BlockRecommendationsContent( {
 									getSuggestionKey( suggestion )
 							}
 							isStale={ isStaleResult }
+							canApplyReviewedStructure={ isBlockStructuralActionsEnabled() }
+							isApplying={ blockApplyStatus === 'applying' }
 							onReview={ handleOpenReview }
+							onApply={ handleApplyReviewedStructure }
 						/>
 					) ) }
 				</RecommendationLane>
@@ -1059,7 +1090,15 @@ function getReviewDetailsId( suggestion ) {
 	) }`;
 }
 
-function ReviewSuggestionCard( { suggestion, isActive, isStale, onReview } ) {
+function ReviewSuggestionCard( {
+	suggestion,
+	isActive,
+	isStale,
+	canApplyReviewedStructure,
+	isApplying,
+	onReview,
+	onApply,
+} ) {
 	const typeLabel = getAdvisorySuggestionTypeLabel( suggestion );
 	const eligibility =
 		suggestion?.eligibility || suggestion?.actionability || {};
@@ -1141,10 +1180,22 @@ function ReviewSuggestionCard( { suggestion, isActive, isStale, onReview } ) {
 				>
 					<strong>Selected structural review</strong>
 					<p>
-						Block structural apply is not available in this
-						milestone. This review state is scoped to the current
-						block, request token, and request signature.
+						This review is scoped to the current block, request
+						token, and request signature.
 					</p>
+					{ canApplyReviewedStructure && (
+						<Button
+							variant="primary"
+							size="small"
+							disabled={ isApplying || isStale }
+							onClick={ () => onApply( suggestion ) }
+							className="flavor-agent-card__apply"
+						>
+							{ isApplying
+								? 'Applying structure'
+								: 'Apply reviewed structure' }
+						</Button>
+					) }
 				</div>
 			) }
 		</div>

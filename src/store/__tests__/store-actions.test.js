@@ -18,6 +18,10 @@ jest.mock( '../../utils/style-operations', () => ( {
 	),
 	undoGlobalStyleSuggestionOperations: jest.fn(),
 } ) );
+const mockRawHandler = jest.fn();
+jest.mock( '@wordpress/blocks', () => ( {
+	rawHandler: ( ...args ) => mockRawHandler( ...args ),
+} ) );
 
 import apiFetch from '@wordpress/api-fetch';
 
@@ -43,6 +47,7 @@ import {
 	buildTemplatePartRecommendationRequestSignature,
 	buildTemplateRecommendationRequestSignature,
 } from '../../utils/recommendation-request-signature';
+import { getBlockStructuralActivitySignature } from '../../utils/block-structural-actions';
 import {
 	createActivityEntry,
 	readPersistedActivityLog,
@@ -56,6 +61,30 @@ const PARAGRAPH_BLOCK_CONTEXT = {
 	contentAttributes: {
 		content: { role: 'content' },
 	},
+};
+const BASE_BLOCK_STRUCTURAL_OPERATION = {
+	type: 'insert_pattern',
+	patternName: 'theme/hero',
+	targetClientId: 'block-1',
+	position: 'insert_after',
+	targetSignature: 'target-sig',
+	expectedTarget: {
+		clientId: 'block-1',
+		name: 'core/group',
+	},
+};
+const BASE_BLOCK_OPERATION_CONTEXT = {
+	enableBlockStructuralActions: true,
+	targetClientId: 'block-1',
+	targetBlockName: 'core/group',
+	targetSignature: 'target-sig',
+	allowedPatterns: [
+		{
+			name: 'theme/hero',
+			title: 'Hero',
+			allowedActions: [ 'insert_before', 'insert_after', 'replace' ],
+		},
+	],
 };
 
 describe( 'store action thunks', () => {
@@ -82,6 +111,17 @@ describe( 'store action thunks', () => {
 		getGlobalStylesActivityUndoState.mockImplementation(
 			( activity ) => activity?.undo || {}
 		);
+		mockRawHandler.mockReset();
+		mockRawHandler.mockReturnValue( [
+			{
+				clientId: 'pattern-1',
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Pattern content',
+				},
+				innerBlocks: [],
+			},
+		] );
 	} );
 
 	afterEach( () => {
@@ -2428,6 +2468,598 @@ describe( 'store action thunks', () => {
 		expect( result ).toBe( true );
 	} );
 
+	test( 'applyBlockStructuralSuggestion applies a review-safe structural operation and logs structural activity', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const blocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+		];
+		const insertBlocks = jest.fn( ( blocksToInsert, index ) => {
+			blocks.splice(
+				index,
+				0,
+				...JSON.parse( JSON.stringify( blocksToInsert ) )
+			);
+		} );
+		const removeBlocks = jest.fn( ( clientIds ) => {
+			for ( let index = blocks.length - 1; index >= 0; index-- ) {
+				if ( clientIds.includes( blocks[ index ]?.clientId ) ) {
+					blocks.splice( index, 1 );
+				}
+			}
+		} );
+		const blockEditorSelect = {
+			getBlock: jest.fn( ( clientId ) =>
+				blocks.find( ( block ) => block.clientId === clientId )
+			),
+			getBlocks: jest.fn( () => blocks ),
+			getBlockRootClientId: jest.fn( () => null ),
+			getBlockIndex: jest.fn( ( clientId ) =>
+				blocks.findIndex( ( block ) => block.clientId === clientId )
+			),
+			getBlockEditingMode: jest.fn( () => 'default' ),
+			getSettings: jest.fn( () => ( {
+				blockPatterns: [
+					{
+						name: 'theme/hero',
+						title: 'Hero',
+						content:
+							'<!-- wp:paragraph {"content":"Pattern content"} /-->',
+					},
+				],
+			} ) ),
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-sig' ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: {
+					name: 'core/group',
+				},
+				prompt: 'Add a hero.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor' ? blockEditorSelect : {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+				removeBlocks,
+				selectBlock: jest.fn(),
+			} ),
+		};
+		const suggestion = {
+			label: 'Add hero pattern',
+			suggestionKey: 'add-hero-pattern',
+			actionability: {
+				tier: 'review-safe',
+				executableOperations: [
+					{
+						type: 'insert_pattern',
+						patternName: 'theme/hero',
+						targetClientId: 'block-1',
+						position: 'insert_after',
+						targetSignature: 'target-sig',
+						expectedTarget: {
+							clientId: 'block-1',
+							name: 'core/group',
+						},
+					},
+				],
+			},
+		};
+		const liveRequestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: {
+					name: 'core/group',
+				},
+				blockOperationContext: {
+					enableBlockStructuralActions: true,
+					targetClientId: 'block-1',
+					targetBlockName: 'core/group',
+					targetSignature: 'target-sig',
+					allowedPatterns: [
+						{
+							name: 'theme/hero',
+							title: 'Hero',
+							allowedActions: [
+								'insert_before',
+								'insert_after',
+								'replace',
+							],
+						},
+					],
+				},
+			},
+			prompt: 'Add a hero.',
+		};
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'block-1',
+			suggestion,
+			null,
+			liveRequestInput
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( true );
+		expect( insertBlocks ).toHaveBeenCalledWith(
+			[
+				expect.objectContaining( {
+					clientId: 'pattern-1',
+					name: 'core/paragraph',
+				} ),
+			],
+			1,
+			null,
+			true,
+			0
+		);
+		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
+			'block-1',
+			'pattern-1',
+		] );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'LOG_ACTIVITY',
+				entry: expect.objectContaining( {
+					type: 'apply_block_structural_suggestion',
+					surface: 'block',
+					target: expect.objectContaining( {
+						clientId: 'block-1',
+						blockName: 'core/group',
+					} ),
+					before: expect.objectContaining( {
+						structuralSignature: expect.any( String ),
+					} ),
+					after: expect.objectContaining( {
+						structuralSignature: expect.any( String ),
+						operations: [
+							expect.objectContaining( {
+								type: 'insert_pattern',
+								patternName: 'theme/hero',
+							} ),
+						],
+					} ),
+				} ),
+			} )
+		);
+	} );
+
+	test( 'applyBlockStructuralSuggestion finds patterns through the scoped compatibility adapter', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const rootBlock = {
+			clientId: 'root-1',
+			name: 'core/group',
+			attributes: {},
+			innerBlocks: [],
+		};
+		const childBlocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+		];
+		const insertBlocks = jest.fn( ( blocksToInsert, index ) => {
+			childBlocks.splice(
+				index,
+				0,
+				...JSON.parse( JSON.stringify( blocksToInsert ) )
+			);
+		} );
+		const experimentalAllowedPatterns = jest.fn().mockReturnValue( [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				content: '<!-- wp:paragraph {"content":"Pattern content"} /-->',
+			},
+		] );
+		const blockEditorSelect = {
+			getBlock: jest.fn( ( clientId ) => {
+				if ( clientId === 'root-1' ) {
+					return rootBlock;
+				}
+
+				return childBlocks.find(
+					( block ) => block.clientId === clientId
+				);
+			} ),
+			getBlocks: jest.fn( ( rootClientId = null ) =>
+				rootClientId === 'root-1' ? childBlocks : [ rootBlock ]
+			),
+			getBlockRootClientId: jest.fn( ( clientId ) =>
+				clientId === 'block-1' ? 'root-1' : null
+			),
+			getBlockIndex: jest.fn( ( clientId ) =>
+				childBlocks.findIndex(
+					( block ) => block.clientId === clientId
+				)
+			),
+			getBlockEditingMode: jest.fn( () => 'default' ),
+			getSettings: jest.fn( () => ( {
+				__experimentalAdditionalBlockPatterns: [],
+			} ) ),
+			__experimentalGetAllowedPatterns: experimentalAllowedPatterns,
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-sig' ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: {
+					name: 'core/group',
+				},
+				prompt: 'Add a hero.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor' ? blockEditorSelect : {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+				removeBlocks: jest.fn(),
+				selectBlock: jest.fn(),
+			} ),
+		};
+		const suggestion = {
+			label: 'Add hero pattern',
+			suggestionKey: 'add-hero-pattern',
+			actionability: {
+				tier: 'review-safe',
+				executableOperations: [
+					{ ...BASE_BLOCK_STRUCTURAL_OPERATION },
+				],
+			},
+		};
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'block-1',
+			suggestion,
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/group',
+					},
+					blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+				},
+				prompt: 'Add a hero.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( true );
+		expect( experimentalAllowedPatterns ).toHaveBeenCalledWith( 'root-1' );
+		expect( insertBlocks ).toHaveBeenCalledWith(
+			[
+				expect.objectContaining( {
+					clientId: 'pattern-1',
+					name: 'core/paragraph',
+				} ),
+			],
+			1,
+			'root-1',
+			true,
+			0
+		);
+		expect( childBlocks.map( ( block ) => block.clientId ) ).toEqual( [
+			'block-1',
+			'pattern-1',
+		] );
+	} );
+
+	test( 'applyBlockStructuralSuggestion keeps replacement activity targeted to the original path', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const blocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+			{
+				clientId: 'block-2',
+				name: 'core/paragraph',
+				attributes: {},
+				innerBlocks: [],
+			},
+		];
+		const insertBlocks = jest.fn( ( blocksToInsert, index ) => {
+			blocks.splice(
+				index,
+				0,
+				...JSON.parse( JSON.stringify( blocksToInsert ) )
+			);
+		} );
+		const removeBlocks = jest.fn( ( clientIds ) => {
+			for ( let index = blocks.length - 1; index >= 0; index-- ) {
+				if ( clientIds.includes( blocks[ index ]?.clientId ) ) {
+					blocks.splice( index, 1 );
+				}
+			}
+		} );
+		const blockEditorSelect = {
+			getBlock: jest.fn( ( clientId ) =>
+				blocks.find( ( block ) => block.clientId === clientId )
+			),
+			getBlocks: jest.fn( () => blocks ),
+			getBlockRootClientId: jest.fn( () => null ),
+			getBlockIndex: jest.fn( ( clientId ) =>
+				blocks.findIndex( ( block ) => block.clientId === clientId )
+			),
+			getBlockEditingMode: jest.fn( () => 'default' ),
+			getSettings: jest.fn( () => ( {
+				blockPatterns: [
+					{
+						name: 'theme/hero',
+						title: 'Hero',
+						content:
+							'<!-- wp:paragraph {"content":"Pattern content"} /-->',
+					},
+				],
+			} ) ),
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-sig' ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: {
+					name: 'core/group',
+				},
+				prompt: 'Replace this block.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor' ? blockEditorSelect : {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+				removeBlocks,
+				selectBlock: jest.fn(),
+			} ),
+		};
+		const suggestion = {
+			label: 'Replace with hero pattern',
+			suggestionKey: 'replace-with-hero-pattern',
+			actionability: {
+				tier: 'review-safe',
+				executableOperations: [
+					{
+						...BASE_BLOCK_STRUCTURAL_OPERATION,
+						type: 'replace_block_with_pattern',
+						action: 'replace',
+						position: undefined,
+					},
+				],
+			},
+		};
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'block-1',
+			suggestion,
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: {
+						name: 'core/group',
+					},
+					blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+				},
+				prompt: 'Replace this block.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( true );
+		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
+			'pattern-1',
+			'block-2',
+		] );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'LOG_ACTIVITY',
+				entry: expect.objectContaining( {
+					type: 'apply_block_structural_suggestion',
+					target: expect.objectContaining( {
+						clientId: 'block-1',
+						blockName: 'core/group',
+						blockPath: [ 0 ],
+					} ),
+				} ),
+			} )
+		);
+	} );
+
+	test( 'applyBlockStructuralSuggestion blocks stale request signatures before structural mutation', async () => {
+		const insertBlocks = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'stored-context' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				prompt: 'Stored prompt',
+			} ),
+		};
+		const registry = {
+			select: jest.fn( () => ( {
+				getBlock: jest.fn(),
+			} ) ),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+			} ),
+		};
+		const currentRequestSignature =
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Live prompt',
+				contextSignature: 'live-context',
+			} );
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'block-1',
+			{
+				label: 'Add hero pattern',
+				actionability: {
+					tier: 'review-safe',
+					executableOperations: [],
+				},
+			},
+			currentRequestSignature,
+			{
+				clientId: 'block-1',
+				editorContext: {},
+				prompt: 'Live prompt',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( false );
+		expect( insertBlocks ).not.toHaveBeenCalled();
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This result is stale. Refresh recommendations before applying it.',
+				null,
+				'client'
+			)
+		);
+	} );
+
+	test( 'applyBlockStructuralSuggestion blocks server resolved-context drift before structural mutation', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'next-resolved-block',
+			},
+		} );
+
+		const insertBlocks = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-sig' ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: {
+					name: 'core/group',
+				},
+				prompt: 'Add a hero.',
+			} ),
+		};
+		const registry = {
+			select: jest.fn( () => ( {
+				getBlock: jest.fn(),
+				getSettings: jest.fn(),
+			} ) ),
+			dispatch: jest.fn().mockReturnValue( {
+				insertBlocks,
+			} ),
+		};
+
+		const result = await actions.applyBlockStructuralSuggestion(
+			'block-1',
+			{
+				label: 'Add hero pattern',
+				actionability: {
+					tier: 'review-safe',
+					executableOperations: [
+						{ ...BASE_BLOCK_STRUCTURAL_OPERATION },
+					],
+				},
+			},
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+				},
+				prompt: 'Add a hero.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( result ).toBe( false );
+		expect( insertBlocks ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it.',
+				null,
+				'server-apply'
+			)
+		);
+	} );
+
 	test( 'applySuggestion surfaces a deterministic error when no safe attribute updates remain', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
@@ -4363,6 +4995,117 @@ describe( 'store action thunks', () => {
 			expect.objectContaining( {
 				type: 'UPDATE_ACTIVITY_UNDO_STATE',
 				activityId: 'activity-1',
+				status: 'undone',
+			} )
+		);
+		expect( result ).toEqual( { ok: true } );
+	} );
+
+	test( 'undoActivity routes structural block activity through structural undo', async () => {
+		const blocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+			{
+				clientId: 'pattern-1',
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Pattern content',
+				},
+				innerBlocks: [],
+			},
+		];
+		const operations = [
+			{
+				type: 'insert_pattern',
+				patternName: 'theme/hero',
+				rootLocator: {
+					type: 'root',
+					rootClientId: null,
+				},
+				index: 1,
+				insertedBlocksSnapshot: [
+					{
+						name: 'core/paragraph',
+						attributes: {
+							content: 'Pattern content',
+						},
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+		const blockEditorSelect = {
+			getBlocks: jest.fn( () => blocks ),
+		};
+		const removeBlocks = jest.fn( ( clientIds ) => {
+			for ( let index = blocks.length - 1; index >= 0; index-- ) {
+				if ( clientIds.includes( blocks[ index ]?.clientId ) ) {
+					blocks.splice( index, 1 );
+				}
+			}
+		} );
+		const structuralSignature = getBlockStructuralActivitySignature(
+			{
+				after: {
+					operations,
+				},
+			},
+			blockEditorSelect
+		);
+		const activity = {
+			id: 'activity-structural-1',
+			type: 'apply_block_structural_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/group',
+				blockPath: [ 0 ],
+			},
+			before: {
+				structuralSignature: 'before-structural-signature',
+			},
+			after: {
+				structuralSignature,
+				operations,
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ activity ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor' ? blockEditorSelect : {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				removeBlocks,
+				insertBlocks: jest.fn(),
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-structural-1' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( removeBlocks ).toHaveBeenCalledWith( [ 'pattern-1' ], false );
+		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
+			'block-1',
+		] );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'UPDATE_ACTIVITY_UNDO_STATE',
+				activityId: 'activity-structural-1',
 				status: 'undone',
 			} )
 		);

@@ -19,6 +19,7 @@ import {
 	writePersistedActivityLog,
 } from '../activity-history';
 import { getStyleBookUiState } from '../../style-book/dom';
+import { getBlockStructuralActivitySignature } from '../../utils/block-structural-actions';
 
 describe( 'activity history helpers', () => {
 	beforeEach( () => {
@@ -536,6 +537,88 @@ describe( 'activity history helpers', () => {
 			expect.objectContaining( {
 				canUndo: false,
 				status: 'review',
+			} )
+		);
+	} );
+
+	test( 'structural block activity undo is disabled after post-apply structure drifts', () => {
+		const operations = [
+			{
+				type: 'insert_pattern',
+				patternName: 'theme/hero',
+				rootLocator: {
+					type: 'root',
+					rootClientId: null,
+				},
+				index: 1,
+				insertedBlocksSnapshot: [
+					{
+						name: 'core/paragraph',
+						attributes: {
+							content: 'Pattern content',
+						},
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+		const appliedBlocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+			{
+				clientId: 'pattern-1',
+				name: 'core/paragraph',
+				attributes: {
+					content: 'Pattern content',
+				},
+				innerBlocks: [],
+			},
+		];
+		const blockEditorSelect = {
+			getBlocks: () => appliedBlocks,
+		};
+		const entry = createActivityEntry( {
+			type: 'apply_block_structural_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/group',
+				blockPath: [ 0 ],
+			},
+			before: {
+				structuralSignature: 'before-signature',
+			},
+			after: {
+				operations,
+				structuralSignature: getBlockStructuralActivitySignature(
+					{
+						after: {
+							operations,
+						},
+					},
+					blockEditorSelect
+				),
+			},
+		} );
+
+		expect( getBlockActivityUndoState( entry, blockEditorSelect ) ).toEqual(
+			expect.objectContaining( {
+				canUndo: true,
+				status: 'available',
+			} )
+		);
+
+		appliedBlocks[ 1 ].attributes.content = 'Edited after apply';
+
+		expect( getBlockActivityUndoState( entry, blockEditorSelect ) ).toEqual(
+			expect.objectContaining( {
+				canUndo: false,
+				status: 'failed',
+				error: 'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
 			} )
 		);
 	} );
