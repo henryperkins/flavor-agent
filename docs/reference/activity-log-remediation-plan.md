@@ -2,6 +2,10 @@
 
 Date: 2026-04-29
 
+Status: implemented
+
+Implementation result: completed in this changeset. The REST route rejects malformed global activity date filters with `400`, repository date filtering no longer broadens invalid active filters, projected operation filter options are deduped by effective value, and admin JS defensively avoids serializing partial/inverted filters.
+
 Scope: Address the confirmed review findings for the WordPress admin AI Activity page at `settings_page/flavor-agent-activity` and the server-backed activity/audit log. This plan intentionally avoids broader redesigns and keeps the fixes tied to the two confirmed regressions.
 
 ## Findings Covered
@@ -20,7 +24,7 @@ Scope: Address the confirmed review findings for the WordPress admin AI Activity
 
 ## Solution 1: Date Filter Contract
 
-### Current Evidence
+### Original Evidence Before Fix
 
 - `src/admin/activity-log.js` can serialize `dayOperator=between` with only `day` or only `dayEnd` when the view state contains a partial range.
 - `Agent_Controller::handle_get_activity()` passes `day`, `dayEnd`, `dayOperator`, `dayRelativeValue`, and `dayRelativeUnit` directly into `ActivityRepository::query_admin()`.
@@ -28,9 +32,9 @@ Scope: Address the confirmed review findings for the WordPress admin AI Activity
 - In the projected path, an empty SQL filter list means "no date filter."
 - The fallback in-memory path does not match incomplete or inverted `between` filters, so the two runtime paths drift.
 
-### Implementation Plan
+### Implemented Behavior
 
-1. Add a shared repository helper that normalizes admin date filters.
+1. A shared repository helper normalizes admin date filters.
    - Input: raw `query_admin()` filter array plus the resolved activity timezone.
    - Output: a structured result such as:
      - `active`: whether the caller requested a date filter.
@@ -41,25 +45,25 @@ Scope: Address the confirmed review findings for the WordPress admin AI Activity
    - Supported operators: `on`, `before`, `after`, `between`, `inThePast`, `over`.
    - Supported relative units: use the units currently supported by `resolve_relative_threshold_timestamp()`.
 
-2. Update `ActivityRepository::has_admin_day_filter()`.
+2. `ActivityRepository::has_admin_day_filter()` treats malformed active filters correctly.
    - Treat a request as active when it includes any date-filter value or relative value.
    - Do not make `dayOperator` alone active if no value is present; this preserves the "operator selected but no date entered" UI state as no-op.
    - Treat one-sided `between` as active and invalid, not inactive.
 
-3. Update `ActivityRepository::build_admin_day_sql_filters()`.
+3. `ActivityRepository::build_admin_day_sql_filters()` uses the normalized contract.
    - Use the normalized date-filter helper.
    - If `active` is false, return no date SQL clauses.
    - If `active` is true and `valid` is false, return a no-match clause such as `1 = 0`.
    - If valid, return the existing bounded `created_at` clauses.
    - Keep all date bounds generated in UTC while honoring the site timezone for local day resolution.
 
-4. Update `ActivityRepository::matches_day_filter()`.
+4. `ActivityRepository::matches_day_filter()` uses the same normalized contract.
    - Use the same normalized date-filter helper.
    - If `active` is false, return true for date matching.
    - If `active` is true and `valid` is false, return false.
    - If valid, apply the same comparison semantics as the SQL path.
 
-5. Add REST request validation in `Agent_Controller`.
+5. `Agent_Controller` validates REST date-filter combinations.
    - Add a private validator for GET `/flavor-agent/v1/activity` date-filter combinations before calling the repository.
    - Return `WP_Error` with status `400` for:
      - Unsupported `dayOperator`.
@@ -70,15 +74,15 @@ Scope: Address the confirmed review findings for the WordPress admin AI Activity
      - Unsupported `dayRelativeUnit`.
    - Keep capability checks unchanged: global requests still require `manage_options`, scoped requests still use contextual permissions.
 
-6. Update `src/admin/activity-log.js`.
+6. `src/admin/activity-log.js` avoids serializing incomplete date filters.
    - In `appendDayFilter()`, only serialize `between` when both range values exist and `start <= end`.
    - Only serialize `on`, `before`, and `after` when a valid date value exists.
    - Only serialize `inThePast` and `over` when the relative value is a positive integer and the unit is allowed.
    - If persisted view state contains an invalid partial date filter, omit the date params from the request and let the existing reset controls clear the view.
 
-### Tests
+### Covered By Tests
 
-Add or update `tests/phpunit/ActivityRepositoryTest.php`:
+`tests/phpunit/ActivityRepositoryTest.php` coverage includes:
 
 - Projected `query_admin()` with `dayOperator=between` and missing `dayEnd` returns zero entries and `totalItems=0`.
 - Projected `query_admin()` with `dayOperator=between` and missing `day` returns zero entries and `totalItems=0`.
@@ -86,14 +90,14 @@ Add or update `tests/phpunit/ActivityRepositoryTest.php`:
 - Projected `query_admin()` with invalid `day` for `on`, `before`, or `after` returns zero entries and `totalItems=0`.
 - Fallback and projected paths return the same result for invalid active date filters. Force fallback by simulating pending projection backfill if the existing test harness supports that state.
 
-Add or update `tests/phpunit/AgentControllerTest.php`:
+`tests/phpunit/AgentControllerTest.php` coverage includes:
 
 - GET `/activity?global=1&dayOperator=between&day=2026-03-01` returns `400`.
 - GET `/activity?global=1&dayOperator=between&day=2026-03-31&dayEnd=2026-03-01` returns `400`.
 - GET `/activity?global=1&dayOperator=banana&day=2026-03-01` returns `400`.
 - A valid `between` request still returns `200` with the existing admin response shape.
 
-Add or update `src/admin/__tests__/activity-log.test.js`:
+`src/admin/__tests__/activity-log.test.js` coverage includes:
 
 - Full `between` filters still serialize `dayOperator`, `day`, and `dayEnd`.
 - Partial `between` filters do not serialize a date filter.
@@ -102,7 +106,7 @@ Add or update `src/admin/__tests__/activity-log.test.js`:
 
 ## Solution 2: Unique Operation Filter Options
 
-### Current Evidence
+### Original Evidence Before Fix
 
 - `ActivityRepository::derive_admin_operation_metadata()` maps `insert_pattern` and `insert_block` to the same filter value, `insert`, with different labels.
 - It also maps `replace_template_part` and `assign_template_part` to the same filter value, `replace`, with different labels.
@@ -110,18 +114,18 @@ Add or update `src/admin/__tests__/activity-log.test.js`:
 - `src/admin/activity-log.js` trusts server-provided `filterOptions.operationType` and passes them directly to DataViews.
 - The fallback filter-options path deduplicates by value, so projected and fallback behavior drift.
 
-### Implementation Plan
+### Implemented Behavior
 
-1. Keep the existing effective filter values.
+1. The existing effective filter values are preserved.
    - Do not introduce new operation values unless the query semantics are also split.
    - `operationType=insert` should continue to match both inserted patterns and inserted blocks.
    - `operationType=replace` should continue to match both template-part replacement and assignment rows.
 
-2. Dedupe projected SQL filter options by value.
+2. Projected SQL filter options are deduped by value.
    - In `ActivityRepository::query_admin_sql_filter_options()`, store options in an associative map keyed by `value` before converting to the response list.
    - Match the fallback behavior in `build_admin_filter_options()`.
 
-3. Use canonical labels for grouped operation values.
+3. Grouped operation values use canonical labels.
    - Prefer labels that describe the effective filter scope:
      - `insert` -> `Insert`
      - `replace` -> `Replace`
@@ -129,14 +133,14 @@ Add or update `src/admin/__tests__/activity-log.test.js`:
      - `modify-attributes` -> `Modify attributes`
    - Keep row-level labels unchanged in serialized activity entries, so individual rows can still say `Insert pattern`, `Insert block`, `Replace template part`, or `Assign template part`.
 
-4. Add a defensive client dedupe.
+4. The client also dedupes defensively.
    - In `getServerFilterOptions()`, dedupe options by `value` after validating shape.
    - This protects the UI if older servers or future projection bugs return duplicates.
    - Preserve the first valid option for a value after server canonicalization.
 
-### Tests
+### Covered By Tests
 
-Add or update `tests/phpunit/ActivityRepositoryTest.php`:
+`tests/phpunit/ActivityRepositoryTest.php` coverage includes:
 
 - Seed one `insert_pattern` row and one `insert_block` row.
 - Assert `query_admin()['filterOptions']['operationType']` contains only one `insert` option.
@@ -144,7 +148,7 @@ Add or update `tests/phpunit/ActivityRepositoryTest.php`:
 - Assert only one `replace` option appears.
 - Assert row-level `operationTypeLabel` values remain specific on entries.
 
-Add or update `src/admin/__tests__/activity-log.test.js`:
+`src/admin/__tests__/activity-log.test.js` coverage includes:
 
 - Inject duplicate server `operationType` options and assert the DataViews field receives one option per value.
 

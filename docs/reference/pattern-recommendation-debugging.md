@@ -299,8 +299,9 @@ What to check:
 
 Most likely fix:
 
-- complete the missing settings in `Settings > Flavor Agent`
-- if chat is connector-backed, confirm the connector path is still available
+- configure text generation in `Settings > Connectors`
+- configure plugin-owned embeddings and Qdrant in `Settings > Flavor Agent`
+- if a connector-backed provider is pinned, confirm that connector path is still available
 
 ### `index_warming`
 

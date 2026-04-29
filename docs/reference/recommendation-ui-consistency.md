@@ -4,6 +4,7 @@ Cross-surface comparison of the Flavor Agent recommendation UI across:
 
 - `src/inspector/BlockRecommendationsPanel.js`
 - `src/inspector/NavigationRecommendations.js`
+- `src/content/ContentRecommender.js`
 - `src/patterns/PatternRecommender.js`
 - `src/templates/TemplateRecommender.js`
 - `src/template-parts/TemplatePartRecommender.js`
@@ -29,7 +30,7 @@ The most complete executable surfaces follow the same broad skeleton:
 7. review-before-apply section when required
 8. recent activity and undo
 
-That pattern is strongest in Style Book and Global Styles, mostly present in Template and Template-Part, fully present in the main Block panel, partially present in the advisory-only Navigation shell, and intentionally reduced or absent in the Pattern inserter affordance and the passive block Inspector sub-panel mirrors.
+That pattern is strongest in Style Book and Global Styles, mostly present in Template and Template-Part, fully present in the main Block panel, partially present in the advisory-only Navigation and Content shells, and intentionally reduced or absent in the Pattern inserter affordance and the passive block Inspector sub-panel mirrors.
 
 ## Prompt-Layer Contract
 
@@ -38,6 +39,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | Block          | `Prompt.php` allows executable local block mutations plus advisory-only `structural_recommendation` and `pattern_replacement` items                                                   | Yes                                  |
 | Block settings mirrors | Uses the grouped block recommendation payload but only as passive mirrored chips inside delegated Inspector sub-panels                                                             | No                                   |
 | Block style mirrors   | Uses the grouped block recommendation payload but only as passive mirrored chips inside delegated Inspector sub-panels                                                             | No                                   |
+| Content        | `WritingPrompt.php` returns draft, edit, or critique payloads with content, notes, and issues for editorial review only                                                   | Editorial/review-only               |
 | Navigation     | `NavigationPrompt.php` returns advisory-only suggestion groups with validated `changes[]` metadata and no Flavor Agent apply path                                                     | Advisory-only                        |
 | Pattern        | Ranking and inserter patching, not a review/apply prompt flow                                                                                                                         | No lane split                        |
 | Template       | `TemplatePrompt.php` keeps `operations[]` as the executable source of truth when present and preserves validated advisory-only summaries when no safe deterministic apply path exists | Yes, with bounded advisory fallbacks |
@@ -53,6 +55,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | ------------------------------ | -------------------- | -------------------- | ------------------- | ----------------- | ------------------- | ----------------- | ------------------- | ----------------- | ---------------- | ------------------ | ------------------------------------------------------------------------------------ |
 | Block inspector main panel     | Yes                  | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | One-click apply plus stale-result hero and embedded navigation subsection            |
 | Block inspector passive subpanels | No                | No                   | No                  | No                | No                  | No                | No                  | No                | No               | No                 | Passive mirrored `SuggestionChips` only; no direct apply, stale refresh, or activity surface |
+| Content document panel         | No                   | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | No                | Yes              | Yes                | Editorial-only post/page panel with read-only request history                        |
 | Navigation embedded / standalone | Partial            | Partial              | No                  | No                | No                  | Yes               | Partial             | Partial           | Yes              | Yes                | Advisory-only surface; standalone fallback uses scope/lane/hero, embedded flow uses lighter custom sections and stale banner |
 | Pattern inserter affordance    | No                   | No                   | No                  | No                | No                  | No                | No                  | No                | No               | Yes                | Injected local shelf plus loading, empty, error, and setup notices                   |
 | Template                       | Yes                  | Yes                  | Yes                 | Yes               | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | Preview-first structural surface                                                     |
@@ -66,6 +69,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | ------------------------------ | ---------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | Block inspector main panel     | `Apply now` with tone `Apply now` or `Stale`               | `Manual ideas` via `AIAdvisorySection`   | Hero uses `Apply now` or `Manual ideas`; advisory section now also shows `Advisory only`              | Clear direct-apply wording for local block attributes  |
 | Block inspector passive subpanels | None                                                   | None                                    | Mirror labels come from the delegated chip group title only                                            | Context-only mirrors of the main block result          |
+| Content                        | None                                                       | `Editorial Notes` via `AIAdvisorySection` | Hero eyebrow is `Latest Content Recommendation`; mode pill is `Draft`, `Edit`, or `Critique`           | Editorial output and review notes, no apply lane       |
 | Navigation                     | None                                                       | `Recommended Next Changes` in the standalone shell; embedded sections keep the same manual tone without `AIAdvisorySection` | Category pills plus change counts; wrapper titles stay `Recommended Next Changes` / `Recommended next change` | Advisory-only navigation guidance in a lighter nested shell |
 | Pattern inserter               | None                                                       | None                                    | Summary and state notices use `Flavor Agent`, recommendation count pills, and retry text when needed  | Ranking affordance, not lane-based                     |
 | Template                       | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Preview-confirm flow with bounded advisory fallbacks   |
@@ -86,6 +90,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | ------------------------------ | --------------------------------------------------- | -------------------------------------------------- | ---------------------- |
 | Block inspector main panel     | One-click apply for safe local block updates        | None                                               | No                     |
 | Block inspector passive subpanels | No apply path                                   | None                                               | No                     |
+| Content                        | No apply path                                       | Editorial review only                              | No                     |
 | Navigation                     | No apply path                                       | No preview/apply review contract; advisory follow-through only | No         |
 | Pattern inserter               | User inserts through core inserter UI               | Core pattern preview only                          | Core handles insertion |
 | Template                       | Select suggestion for review                        | Separate `AIReviewSection` renders below the lanes | Yes                    |
@@ -96,6 +101,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 ### Practical Difference
 
 - The main Block panel is the only one-click apply block surface. Delegated native sub-panels now mirror the latest result but do not apply anything directly.
+- Content remains editorial-only. It can generate drafts, edits, critiques, and review notes, but it does not mutate post content or enter preview/apply.
 - Navigation remains advisory-only. It owns its own request and stale-refresh shell, but it does not participate in the review-before-apply contract.
 - Template, Template-Part, Style Book, and Global Styles all preserve the review-before-apply contract and now present review with the same broad structure.
 - Those preview-first surfaces use a dedicated review panel below the lanes.
@@ -107,8 +113,9 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | ------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Block inspector main panel     | Yes              | Shared latest-valid tail undo; block snapshot must still match                                    | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
 | Block inspector passive subpanels | No            | No surface-level undo                                                                             | Mirrors the latest result passively; stale treatment stays on the main block panel rather than creating a second stale-management surface |
+| Content                        | Read-only request history | No Flavor Agent undo                                                                  | No stale UI                                                                                                                         |
 | Navigation                     | No inline history; scoped audit rows only | No Flavor Agent undo                                                               | Keeps stale results visible, marks them stale, and offers refresh from the navigation surface                                       |
-| Pattern inserter               | No               | No Flavor Agent undo                                                                              | No stale UI                                                                                                                         |
+| Pattern inserter               | No inline history; scoped audit rows only | No Flavor Agent undo                                                              | No stale UI                                                                                                                         |
 | Template                       | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
 | Template-part                  | Yes              | Shared latest-valid tail undo; validated undo preparation must still succeed                      | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
 | Style Book                     | Yes              | Shared latest-valid tail undo; block style branch must still match the recorded post-apply config | Keeps stale results visible, marks them stale, disables apply, offers refresh                                                       |
@@ -123,16 +130,18 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 - Block, Navigation, Template, Template-Part, Style Book, and Global Styles now preserve the previous result, mark it stale, disable execution as needed, and offer refresh from the surface that owns the request lifecycle.
 - Block settings and block styles preserve stale projected results, but they intentionally do not own refresh. They disable apply and send the user back to the main block `AI Recommendations` panel to refresh the source request.
 - Shadow block suggestions use `panel: "shadow"` in the recommendation contract and are mirrored inside Gutenberg's Border/Shadow inspector group, because Gutenberg exposes shadow controls through the border group rather than a standalone shadow group.
+- Content exposes inline read-only `Recent Content Requests`, but it has no undo affordance because no Flavor Agent-owned apply occurs.
 - Navigation still exposes no inline activity section or undo affordance, though scoped read-only `request_diagnostic` rows now land in the admin audit surface.
-- Pattern still exposes no activity or undo affordance, which keeps it separate from the fuller recommendation surfaces even though its loading, empty, error, and success states are now explicit.
+- Pattern still exposes no inline activity or undo affordance, which keeps it separate from the fuller recommendation surfaces even though scoped read-only `request_diagnostic` rows can land in the admin audit surface.
 
 ## Prompting And Composer Gaps
 
 | Surface                        | Starter prompts | Secondary helper text           | Submit hint | Scope bar |
 | ------------------------------ | --------------- | ------------------------------- | ----------- | --------- |
 | Block inspector main panel     | Yes             | Yes                             | Yes         | Yes       |
-| Block inspector settings subpanel | No          | Intro only                      | No          | Yes (stale only) |
-| Block inspector style subpanel | No              | Intro only                      | No          | Yes (stale only) |
+| Block inspector settings subpanel | No          | No                              | No          | No        |
+| Block inspector style subpanel | No              | No                              | No          | No        |
+| Content                        | Yes             | Yes                             | No          | No        |
 | Navigation                     | Yes             | Yes                             | No          | Partial: standalone scope bar, embedded stale banner |
 | Pattern inserter               | No              | No                              | No          | No        |
 | Template                       | Yes             | Yes                             | Yes         | Yes       |

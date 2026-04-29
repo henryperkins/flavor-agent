@@ -156,6 +156,7 @@ User prompt in wp_template editor
     }
   ],
   "explanation": "The template already has stable header and footer assignments, so the open sidebar area is the safest structural opportunity.",
+  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
   "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
 }
 ```

@@ -41,7 +41,7 @@ Representative live-tree snapshot of the current repo (selected files only; gene
 flavor-agent/
   flavor-agent.php          Bootstrap, lifecycle hooks, REST + Abilities registration, editor/admin asset enqueue
   readme.txt                Plugin readme and install/configuration summary
-  uninstall.php             Removes plugin-owned options, sync state, grounding caches, and scheduled jobs
+  uninstall.php             Current cleanup for legacy/provider/vector/docs options, sync lock, and selected cron hooks
   composer.json             PSR-4 autoload + PHP lint/test aliases
   package.json              @wordpress/scripts build/lint/test scripts plus dist/doc checks
   jsconfig.json             JS tooling config
@@ -62,9 +62,12 @@ flavor-agent/
   scripts/
     build-dist.sh           Build `dist/flavor-agent.zip`
     check-doc-freshness.sh  Guard against known stale live-doc wording
+    docker-compose.js       Cross-platform Docker Compose command wrapper
+    ensure-local-env.js     Local `.env` bootstrap helper
     local-wordpress.ps1     Start/install/reset/wp helper for local stack
     plugin-check.sh         Wrapper around the plugin validation flow
     prepare-release.sh      Build temp release tree with `.distignore`
+    sync-skills.sh          Replicate canonical `.claude/skills` into tool-specific skill trees
     wp70-e2e.js             Bootstrap/teardown helper for the WP 7.0 browser harness
   .github/
     copilot-instructions.md Repo guidance for GitHub Copilot
@@ -78,6 +81,7 @@ flavor-agent/
       Serializer.php        Activity normalization for REST/admin consumers
     Admin/
       ActivityPage.php      Settings > AI Activity screen registration and admin asset bootstrap
+      Settings/             Settings page renderer, fields, validation, help, assets, feedback, and state helpers
     Abilities/
       Registration.php      Abilities API category + 20 ability registrations
       BlockAbilities.php    recommend-block, introspect-block, list-allowed-blocks
@@ -100,6 +104,7 @@ flavor-agent/
       AISearchClient.php    Cloudflare AI Search grounding, cache, and prewarm pipeline
     Context/
       ServerCollector.php               Facade for per-surface context collectors
+      BlockRecommendationExecutionContract.php Server-side block execution contract builder
       BlockContextCollector.php         Block-level context assembly
       BlockTypeIntrospector.php         Block supports, attributes, and inspector panel introspection
       NavigationContextCollector.php    Navigation recommendation context
@@ -107,6 +112,7 @@ flavor-agent/
       PatternCandidateSelector.php      Candidate pattern selection and filtering
       PatternCatalog.php                Pattern registry metadata extraction
       PatternOverrideAnalyzer.php       Pattern override binding detection and summary
+      SyncedPatternRepository.php       Published synced/user `wp_block` pattern access and indexing helpers
       TemplateContextCollector.php      Template-level recommendation context
       TemplatePartContextCollector.php  Template-part-scoped recommendation context
       TemplateRepository.php            Template and template-part lookup helpers
@@ -143,14 +149,14 @@ flavor-agent/
       RecommendationResolvedSignature.php Signature helpers for resolved recommendations
       RecommendationReviewSignature.php Signature helpers for review-state recommendations
       StringArray.php       Array sanitization utility
+    Guidelines.php          Editorial guidelines facade, repository resolution, normalization, and export helpers
     Guidelines/
-      Guidelines.php        Editorial guidelines storage, retrieval, and export
       CoreGuidelinesRepository.php Core guidelines storage adapter
       GuidelinesRepository.php Guidelines repository interface
       LegacyGuidelinesRepository.php Legacy options-based guidelines storage
       PromptGuidelinesFormatter.php Prompt context formatting for guidelines
       RepositoryResolver.php Repository resolution and migration logic
-    Settings.php            Admin settings page, remote validation, sync/diagnostics panels
+    Settings.php            Facade for Settings > Flavor Agent registration, rendering, and sanitizers
 
   src/                      JS frontend (built with @wordpress/scripts)
     index.js                Entry: registers store, session bootstrap, and editor-side plugins
@@ -257,20 +263,26 @@ flavor-agent/
       recommendation-stale-reasons.js Stale reason definitions
       structural-equality.js Structural equality checks
       style-validation.js Style validation helpers
-      template-part-recommender-helpers.js Template-part recommendation helpers
       type-guards.js Type guard utilities
       pattern-names.js Pattern name utilities
 
   tests/
     e2e/
       flavor-agent.smoke.spec.js  Shared Playwright smoke coverage
+      flavor-agent.activity.spec.js Activity admin smoke coverage
+      flavor-agent.settings.spec.js Settings admin smoke coverage
+      flavor-agent-helper-abilities.spec.js Helper Abilities API browser coverage
       auth.wp70.setup.js          Playwright login setup for the Docker-backed WP 7.0 harness
+      wait-for-wordpress-ready.js WP readiness probe used by browser setup
       wp70.global-setup.js        Docker bootstrap for the WP 7.0 Site Editor harness
+      wp70-plugins/               Repo-local plugin fixtures for deterministic browser tests
       playground-mu-plugin/
         flavor-agent-loader.php   Loads the plugin in WP Playground
       wp70-theme/                 Repo-local block theme fixture for deterministic Site Editor tests
+      wp70-themes/                Additional WP 7.0 block/classic theme fixtures
     phpunit/
       AgentControllerTest.php
+      ActivityPageTest.php
       ActivityPermissionsTest.php
       ActivityRepositoryTest.php
       AISearchClientTest.php
@@ -278,22 +290,33 @@ flavor-agent/
       BlockAbilitiesTest.php
       ChatClientTest.php
       ContentAbilitiesTest.php
+      CoreRoadmapGuidanceTest.php
       DocsGroundingEntityCacheTest.php
       DocsPrewarmTest.php
       EditorSurfaceCapabilitiesTest.php
+      GuidelinesTest.php
       InfraAbilitiesTest.php
+      MetricsNormalizerTest.php
       NavigationAbilitiesTest.php
       PatternAbilitiesTest.php
       PatternCatalogTest.php
       PatternIndexTest.php
+      PromptBudgetTest.php
+      PromptFormattingTest.php
+      PromptGuidanceTest.php
+      PromptRulesTest.php
       ProviderTest.php
+      RankingContractTest.php
       RegistrationTest.php
       ServerCollectorTest.php
       SettingsTest.php
       StyleAbilitiesTest.php
       StylePromptTest.php
+      SupportToPanelSyncTest.php
+      TemplateAbilitiesTest.php
       TemplatePartPromptTest.php
       TemplatePromptTest.php
+      ThemeTokenFormatterTest.php
       WordPressAIClientTest.php
       WritingPromptTest.php
     src/**/__tests__/ and `*.test.js`
@@ -313,6 +336,7 @@ flavor-agent/
       activity-and-audit.md
       block-recommendations.md
       content-recommendations.md
+      helper-abilities.md
       navigation-recommendations.md
       pattern-recommendations.md
       settings-backends-and-sync.md
@@ -322,6 +346,7 @@ flavor-agent/
     reference/
       abilities-and-routes.md Contract map for Abilities API + REST
       activity-state-machine.md Undo states, transitions, ordered undo, pruning
+      cross-surface-validation-gates.md Additive validation gates for shared contract changes
       provider-precedence.md Provider selection and credential fallback chain
       shared-internals.md   Shared store/components/context helpers
       template-operations.md Operation vocabulary and validation rules per surface
@@ -333,7 +358,7 @@ flavor-agent/
 | -------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | WordPress AI Client + Connectors | Primary chat runtime and connector registry              | Block/content/template/template-part/navigation/style requests and pattern reranking                            | Core-managed in `Settings > Connectors`                                                                                          |
 | Provider selection               | Chooses Azure OpenAI, OpenAI Native, or a connector path | Embedding backend selection, connector-backed chat pinning, and pattern ranking diagnostics                     | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a configured connector-backed provider)                     |
-| Azure OpenAI Embeddings          | Pattern embedding (3072-dim)                              | Pattern index + pattern recommendations when Azure is the active embedding backend                              | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment`                                                            |
+| Azure OpenAI Embeddings          | Pattern embedding                                         | Pattern index + pattern recommendations when Azure is the active embedding backend                              | `flavor_agent_azure_openai_endpoint`, `_key`, `_embedding_deployment`                                                            |
 | OpenAI Native Embeddings         | Pattern embedding                                         | Pattern index + pattern recommendations when OpenAI Native is the active embedding backend                      | Optional `flavor_agent_openai_native_api_key` override, `_embedding_model`; otherwise inherits core OpenAI connector credentials |
 | Qdrant                           | Vector similarity search                                  | Pattern recommendations                                                                                         | `flavor_agent_qdrant_url`, `_key`                                                                                                |
 | Cloudflare AI Search             | WordPress dev-doc grounding                               | Supplemental doc context for block, pattern, template, template-part, navigation, Global Styles, and Style Book recs | Managed public search endpoint plus `flavor_agent_cloudflare_ai_search_max_results`                                              |
@@ -359,7 +384,8 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 #### Pattern Recommendations
 
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
-- **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores < 0.3 -> return max 8.
+- **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores below the saved ranking threshold (default `0.3`) -> return up to the saved max result count (default `8`, capped at `12`). Missing or empty `visiblePatternNames` returns an empty list before embedding, Qdrant, docs, or ranker calls.
+- **Synced/user patterns:** The index includes published `wp_block` patterns across `synced`, `partial`, and `unsynced` states as `core/block/{id}` candidates. Request-time ranking treats Qdrant synced/user payloads as untrusted and rehydrates each candidate through current `read_post` access before ranker input or response output.
 - **Inserter integration:** The shelf stays local to Flavor Agent. It uses the current allowed-pattern selector to show only patterns Gutenberg already exposes for the active insertion root, then dispatches core block insertion from the shelf rather than patching the native registry.
 - **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Ready count and tooltip are derived from recommendations that match the current inserter root's allowed patterns, not from a raw store badge cache. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
@@ -433,12 +459,12 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Location:** `Settings > AI Activity`
 - **Permission:** `manage_options`
 - **Bundle:** `inc/Admin/ActivityPage.php` + `src/admin/activity-log.js`
-- **Behavior:** Uses `@wordpress/dataviews/wp` with the `activity` layout as the default feed, persisted/resettable view preferences, grouped summary cards, a read-only `DataForm` details sidebar for diagnostics and links back to affected entities, plugin settings, and core Connectors, and separate summary buckets for review-only rows, blocked undo, and failed/unavailable entries.
+- **Behavior:** Uses `@wordpress/dataviews/wp` with the `activity` layout as the default feed, persisted/resettable view preferences, grouped summary cards, a read-only `DataForm` details sidebar for diagnostics, request metadata, undo state, and before/after state summaries, links back to affected entities, plugin settings, and core Connectors, and separate summary buckets for review-only rows, blocked undo, and failed/unavailable entries.
 - **Scope:** Covers recent server-backed block, template, template-part, Global Styles, and Style Book actions plus scoped read-only `request_diagnostic` rows from content, pattern, and navigation requests; it is the first audit surface, not the final observability product.
 
 #### Pattern Index Lifecycle
 
-- **Sync:** Diffs current registered patterns plus synced `wp_block` patterns normalized as `core/block/{id}` against the Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
+- **Sync:** Diffs current registered patterns plus published synced/user `wp_block` patterns normalized as `core/block/{id}` against the Qdrant index using per-pattern fingerprints. Embeds only changed patterns in batches of 100. Detects config changes for full reindex.
 - **Triggers:** Plugin activation, theme switch, plugin activate/deactivate, upgrades, settings changes, and synced-pattern save/delete/trash/untrash events.
 - **Scheduling:** WP cron with 300s cooldown and transient lock.
 - **Admin UI:** Manual sync button on settings page with status display.
@@ -474,7 +500,7 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 
 - Explicit search via `search-wordpress-docs` ability (`manage_options` only).
 - Recommendation-time grounding for block, pattern, template, template-part, navigation, Global Styles, and Style Book suggestions is cache-only and non-blocking. Exact-query cache (6h TTL) is authoritative; warmed entity cache (12h TTL) is fallback.
-- Recommendation-time grounding also merges a compact WordPress AI/Core roadmap signal from the public GitHub project board into the same guidance stream when a cached roadmap warm is available. Roadmap chunks are cached separately, tagged as `core-roadmap`, capped so developer-doc chunks remain in the first prompt window, and can be disabled with the `flavor_agent_enable_core_roadmap_guidance` filter or `skipCoreRoadmapGuidance` context flag.
+- Recommendation-time grounding can also merge a compact WordPress AI/Core roadmap signal from the GitHub project board into the same guidance stream when the opt-in `flavor_agent_enable_core_roadmap_guidance` filter is enabled and a cached roadmap warm is available. Roadmap chunks are cached separately, tagged as `core-roadmap`, capped so developer-doc chunks remain in the first prompt window, and can be skipped per request with `skipCoreRoadmapGuidance`.
 - Strict source filtering: only `developer.wordpress.org` chunks accepted. URL trust validation (HTTPS, no credentials, sourceKey/URL identity checks). Source keys with an `ai-search/<instanceId>/` prefix are now recognized alongside the plain `developer.wordpress.org/` prefix.
 - Docs grounding prewarm: on plugin activation, normal bootstrap, and successful legacy Cloudflare credential changes, an async WP-Cron job seeds the entity cache for high-frequency entities. Exact entity misses now also fall back to prewarmed generic editor/template/template-part guidance families before returning empty. Throttled by backend fingerprint and 1-hour cooldown. Admin diagnostics panel shows last prewarm status, timestamp, and warmed/failed counts.
 
@@ -495,24 +521,21 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 
 #### Admin Settings
 
-Settings page at Settings > Flavor Agent with five sections:
+Settings page at `Settings > Flavor Agent` renders four top-level groups with status cards and native Help guidance:
 
-- Embeddings Provider (select Azure OpenAI, OpenAI Native, or a configured connector-backed provider that pins chat to that connector)
-- Azure OpenAI (endpoint, key, embedding deployment, and default reasoning effort for Connectors-routed chat)
-- OpenAI Native (optional API key override, embedding model, effective key source, connector status)
-- Qdrant (URL, key)
-- Cloudflare AI Search (managed public endpoint, max results)
+- **Embeddings & Connectors** -- Embeddings backend selection (`azure_openai`, `openai_native`, or a connector-backed provider that pins chat to that connector), Azure OpenAI endpoint/key/embedding deployment/reasoning effort, OpenAI Native API key override/model/effective key source, and Qdrant URL/key.
+- **Pattern Recommendations** -- Ranking threshold, max results, and the `Sync Pattern Catalog` status/metrics/manual trigger panel.
+- **Docs Grounding** -- Managed public Cloudflare AI Search max result count, optional legacy Cloudflare override credentials, runtime grounding diagnostics, and docs prewarm diagnostics.
+- **Guidelines** -- Site/copy/image/additional guidelines, block-specific notes for content-role blocks, and JSON import/export tooling. Runtime recommendations read the core/Gutenberg Guidelines store first when the `wp_guideline` model is present, with legacy Flavor Agent options retained as migration/admin tooling and fallback storage.
 
-Block recommendations use the WordPress AI Client and `Settings > Connectors` for chat. Pattern embeddings remain plugin-owned until core exposes an embeddings provider path.
-When OpenAI Native is selected for embeddings, the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
-
-Plus pattern sync status panel with manual trigger.
+Block, content, template, template-part, navigation, Global Styles, Style Book, and pattern reranking requests use the WordPress AI Client and `Settings > Connectors` for chat. Pattern embeddings remain plugin-owned until core exposes an embeddings provider path. When OpenAI Native is selected for embeddings, the API key can be inherited from the core OpenAI connector unless a plugin-specific override is saved.
 
 When the Azure OpenAI endpoint, key, or embedding deployment changes and all three fields are present, the settings save flow validates the embeddings deployment and preserves the previous values if validation fails.
+When the OpenAI Native effective API key or embedding model changes and both values are present, the settings save flow validates the embeddings model and preserves the previous values if validation fails.
 When the Qdrant URL or key changes and both fields are present, the settings save flow validates the `/collections` endpoint and preserves the previous values if validation fails.
-Flavor Agent uses a managed public Cloudflare AI Search `/search` endpoint for docs grounding, so site owners do not need to configure Cloudflare credentials. When legacy Cloudflare account/instance/token values are still present and change, the settings save flow validates them with a lightweight probe search and preserves the previous values if validation fails. This keeps backwards compatibility with documented AI Search Run tokens.
+Flavor Agent uses a managed public Cloudflare AI Search `/search` endpoint for docs grounding, so site owners do not need to configure Cloudflare credentials. When optional legacy Cloudflare account/instance/token override values are present and change, the settings save flow validates them with a lightweight probe search and preserves the previous values if validation fails. This keeps backwards compatibility with documented AI Search Run tokens and explicit custom-endpoint overrides.
 Unchanged or partial credential submissions skip remote validation.
-Successful saves still use the standard Settings API notice flow, and failed Azure OpenAI, Qdrant, or Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
+Successful saves still use the standard Settings API notice flow, and failed Azure OpenAI, OpenAI Native, Qdrant, or Cloudflare validation surfaces a plugin-scoped error notice on the same screen.
 
 ### Not Yet Built (From Original Vision)
 
@@ -526,7 +549,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 | Interactivity API scaffolding | Phase 4        | Not built             | Future-facing only; the current plugin has no front-end runtime surface that requires `viewScriptModule` or Interactivity API code                     |
 | Navigation overlay generation | Phase 4        | Not built             | Create mobile nav overlays as template parts                                                                                                           |
 | Approval pipeline UI          | Phase 1-3      | Not built             | Visual approve/reject flow with diff preview before insertion                                                                                          |
-| Audit/revision log UI         | Phase 5        | Initial slice shipped | `Settings > AI Activity` now provides a DataViews/DataForm timeline for recent actions; diff-oriented inspection and broader observability remain open |
+| Audit/revision log UI         | Phase 5        | Initial slice shipped | `Settings > AI Activity` now provides a DataViews/DataForm timeline with structured state summaries for recent actions; richer row actions/discovery and broader observability remain open |
 | Dynamic block scaffolding     | Phase 4        | Not built             | Generate `render_callback` + dynamic block configs                                                                                                     |
 | Pattern-to-file promotion     | Phase 3        | Not built             | Export approved patterns to PHP files in `patterns/` directory                                                                                         |
 
@@ -537,16 +560,18 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 3. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
 4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
-6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. WordPress `7.0` remains pre-release as of 2026-04-23, and Core's updated schedule now targets 2026-05-20 for the general release, with 2026-05-08 `RC3` treated like a new Beta 1. The harness therefore still pins `wordpress:beta-7.0-RC2-php8.2-apache` until the official stable `7.0` Docker image exists and the repo intentionally switches over.
-7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews/DataForm timeline for privileged users, but there is still no diff-oriented inspection UI, no abilities-backed row actions/discovery layer, and no broader observability workflow beyond the stored timeline.
-8. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on the configured Connectors chat runtime plus plugin-owned embedding credentials and should be rerun whenever those paths change.
+6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path because the current Playground 7.0 beta editor runtime breaks before plugin bootstrap, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. The Docker-backed harness still pins `wordpress:beta-7.0-RC2-php8.2-apache` until an official stable `7.0` image exists and the repo intentionally switches over.
+7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews/DataForm timeline with request diagnostics and structured before/after state summaries for privileged users, but there are still no abilities-backed row actions/discovery layer and no broader observability workflow beyond the stored timeline.
+8. **Uninstall cleanup is narrower than the full runtime footprint**: `uninstall.php` currently removes selected legacy/provider/vector/docs options, clears the pattern/docs warm hooks, and deletes the sync lock transient. It does not drop the server-backed activity table or clear newer activity schema/backfill, guidelines, OpenAI Native, pattern tuning, docs runtime, or core-roadmap cache/lock options, so the old "clean uninstall" claim is not accurate for the live tree.
+9. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on the configured Connectors chat runtime plus plugin-owned embedding credentials and should be rerun whenever those paths change.
 
 ### Current Open Backlog
 
-- Deepen the new admin activity page into a richer audit/observability surface with before/after inspection, better diagnostics, and a cleaner action/discovery layer.
+- Deepen the new admin activity page into a richer audit/observability surface with broader diagnostics and a cleaner action/discovery layer.
 - Swap the Docker-backed WP 7.0 browser harness from the beta image to the official stable `7.0` image once it exists, and keep Docker available in environments that run that harness.
 - Revisit navigation apply only if a bounded previewable/undoable executor becomes its own tracked post-v1 milestone.
 - Keep Interactivity API work in the future backlog, not the current remediation backlog, until the plugin grows a front-end runtime surface.
+- Decide whether uninstall should drop the activity table and newer plugin-owned runtime/options, then either implement that cleanup or keep the narrower-retention behavior documented intentionally.
 
 ## Data Flow Diagrams
 
@@ -585,13 +610,13 @@ Editor loads (or inserter search changes)
   -> store thunk: fetchPatternRecommendations(input)
      -> POST /flavor-agent/v1/recommend-patterns
         -> Agent_Controller -> PatternAbilities::recommend_patterns()
-           -> PatternIndex: check state (ready/stale/error)
-           -> Qdrant corpus: registered patterns + synced wp_block patterns as core/block/{id}
+            -> PatternIndex: check state (ready/stale/error)
+            -> Qdrant corpus: registered patterns + published synced/user wp_block patterns as core/block/{id}
            -> EmbeddingClient::embed(query)
            -> QdrantClient::search() x2 (semantic + structural)
            -> Dedupe, take top 12 candidates
-           -> ResponsesClient::rank(instructions, candidates)
-           -> Parse ranking, filter < 0.3, rehydrate from payloads
+            -> ResponsesClient::rank(instructions, candidates)
+            -> Parse ranking, apply saved threshold (default 0.3), rehydrate synced/user payloads through read_post access
         <- JSON response: [{ name, score, reason, ... }]
   -> store: SET_PATTERN_RECS + setPatternStatus('ready')
   -> PatternRecommender.js matches allowed patterns for the current inserter root
@@ -770,14 +795,14 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [x] Global Styles recommendations panel with review-confirm-apply for bounded site-level style changes
 - [x] Style Book recommendations panel with review-confirm-apply for per-block style changes
 - [x] Undoable block/template/template-part/Global Styles/Style Book AI actions with server-backed activity persistence plus editor-scoped hydration/cache fallback
-- [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates for registered and synced patterns)
+- [x] Pattern index lifecycle (auto-sync, background cron, diff-based updates for registered and published synced/user patterns)
 - [x] WordPress Abilities API integration (all working abilities)
 - [x] WordPress docs grounding (cache-based)
 - [x] Admin settings page with backend configuration
 - [x] Legacy Cloudflare AI Search credential validation on changed settings saves
 - [x] Settings page success/error feedback for credential validation
-- [x] Clean uninstall
-- [x] Live credential validation on Azure OpenAI/Qdrant settings save
+- [ ] Full uninstall cleanup for newer activity, guidelines, tuning, docs runtime, and roadmap state
+- [x] Live credential validation on Azure OpenAI/OpenAI Native/Qdrant settings save
 - [x] Navigation recommendations (replace 501 stub)
 - [x] Integration tests for block, pattern, template, and WP 7.0 refresh/drift coverage
 - [x] Playwright smoke for navigation and `wp_template_part`, plus a default `npm run test:e2e` path that covers both harnesses
@@ -797,7 +822,7 @@ Based on the original vision and current trajectory, Flavor Agent v1.0 should sa
 - [ ] Pattern promotion: save approved AI output as registered patterns
 - [ ] Interactivity API scaffolding: generate viewScriptModule code
 - [ ] Dynamic block scaffolding: generate render_callback configurations
-- [ ] Deeper audit and observability UI: diff-oriented inspection, richer row actions, and broader operator workflows
+- [ ] Deeper audit and observability UI: richer row actions/discovery and broader operator workflows
 - [ ] Navigation overlay generation
 - [ ] Multi-turn conversation (context carryover across recommendation rounds)
 - [ ] Batch recommendations (multiple blocks at once)

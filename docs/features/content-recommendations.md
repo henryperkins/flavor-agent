@@ -29,6 +29,7 @@ The REST + Abilities contract remains available so external agents or admin tool
 5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
 7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, without mutating post content
+8. When document scope is available, the REST handler persists successful and failed requests as read-only `request_diagnostic` activity rows, and the panel shows them in `Recent Content Requests`
 
 ## 4. Capability Contract
 
@@ -54,6 +55,7 @@ Output:
 - `edit` and `critique` return a `missing_existing_content` error when no draft is provided.
 - Invalid model JSON returns a `parse_error`.
 - The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface.
+- Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history and the admin audit page, but they are not undoable.
 
 ## 6. Primary Functions, Routes, And Abilities
 

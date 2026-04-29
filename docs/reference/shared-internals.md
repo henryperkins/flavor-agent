@@ -50,7 +50,7 @@ Session-scoped AI activity schema, scope resolution, `sessionStorage` cache/fall
 
 **Session cache contract:** The server-backed activity repository is the source of truth. `sessionStorage` acts only as a cache/fallback so the current editor session can display activity entries before server hydration completes and handle transient offline periods. On entity change, `loadActivitySession()` merges server entries with pending local entries and writes the merged set back to `sessionStorage`. Entries that have been persisted to the server carry `persistence.status === 'server'`; local-only entries carry `'local'` or `'create'` status and are synced on the next opportunity.
 
-**Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/templates/TemplateRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/components/ActivitySessionBootstrap.js`, `src/admin/activity-log-utils.js`
+**Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/content/ContentRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/templates/TemplateRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/components/ActivitySessionBootstrap.js`, `src/admin/activity-log-utils.js`
 
 ### `src/store/update-helpers.js`
 
@@ -147,7 +147,7 @@ Renders a styled section container for non-executable, advisory-only AI suggesti
 
 **Props:** `title`, `advisoryLabel`, `count`, `countLabel`, `countNoun`, `description`, `meta`, `children`, `className`
 
-**Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book (5 surfaces)
+**Consumers:** Block Inspector, Content, Template, Template-Part, Global Styles, Style Book (6 surfaces)
 
 ### `src/components/AIReviewSection.js`
 
@@ -166,7 +166,7 @@ These components provide the reusable top-of-panel shell for the full recommenda
 - `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling. Executable surfaces hydrate the composer prompt from the stored ready-result prompt once per result token so preloaded results start in a fresh state and only become stale after the user edits the prompt or the live context signature changes.
 - Keyboard-only verification notes for `SurfaceComposer`: (1) tab order remains prompt textarea -> starter prompts (if present) -> submit action, (2) prompt focus ring stays clearly visible in default and high-contrast admin themes, and (3) visible labels/helper copy continue to communicate purpose even when placeholder text is absent.
 
-**Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book (5 surfaces); the block style projection subpanel only reuses `SurfacePanelIntro` and `SurfaceScopeBar`
+**Consumers:** Block Inspector, Content, Template, Template-Part, Global Styles, Style Book (6 surfaces). Delegated block Inspector subpanels render passive `SuggestionChips` only; they do not reuse the full panel shell.
 
 ### `src/components/RecommendationHero.js` and `RecommendationLane.js`
 
@@ -175,13 +175,13 @@ These components provide the shared suggestion presentation layers used before r
 - `RecommendationHero.js` renders the featured next recommendation at the top of a fresh result set.
 - `RecommendationLane.js` renders grouped executable or lightweight embedded suggestions below the hero.
 
-**Consumers:** Block Inspector, Navigation, Template, Template-Part, Global Styles, Style Book (6 surfaces); the block style projection subpanel reuses `RecommendationLane` without the hero
+**Consumers:** Block Inspector, Content, Navigation, Template, Template-Part, Global Styles, Style Book (7 surfaces)
 
 ### `src/components/AIActivitySection.js`
 
-Renders the shared recent-actions list for executable surfaces, including ordered undo state, provider/runtime metadata, and inline undo availability.
+Renders the shared recent-actions list for executable surfaces, including ordered undo state, provider/runtime metadata, and inline undo availability. Content uses the same component for read-only request diagnostics.
 
-**Consumers:** Block Inspector, Template, Template-Part, Global Styles, Style Book, admin-adjacent activity helpers (5 editor surfaces plus shared activity utilities)
+**Consumers:** Block Inspector, Content, Template, Template-Part, Global Styles, Style Book, admin-adjacent activity helpers (6 editor surfaces plus shared activity utilities)
 
 ## Context Helpers
 
@@ -586,3 +586,4 @@ template-operation-sequence.js -> store/index.js + template-recommender-helpers 
 - `src/utils/recommendation-request-signature.js`
 - `src/store/executable-surface-runtime.js`
 - `inc/Support/RecommendationResolvedSignature.php`
+- `inc/Support/RecommendationReviewSignature.php`

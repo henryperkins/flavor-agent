@@ -16,7 +16,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## What The User Can Configure
 
-- Embeddings backend selection (`azure_openai`, `openai_native`, or a connector-backed provider that pins chat to that connector)
+- Provider selection: direct Azure/OpenAI Native options configure plugin-owned embeddings; connector-backed options pin chat to that connector while embeddings still require a configured direct backend
 - Azure OpenAI endpoint, API key, embedding deployment, and default reasoning effort applied to Connectors-routed chat
 - OpenAI Native API key override and embedding model ID
 - Qdrant URL and API key
@@ -26,7 +26,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Guidelines: site context, copy guidelines, image guidelines, additional guidelines, and block-specific notes. When the core/Gutenberg Guidelines store is present, Flavor Agent reads that store first and keeps the legacy fields as migration/import-export tooling.
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
-Chat is no longer configured on this screen. After Workstream C of the WP 7.0 overlap remediation, all chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. Selecting `azure_openai` or `openai_native` only routes embeddings; selecting a connector-backed provider additionally pins chat to that connector.
+Chat is no longer configured on this screen. After Workstream C of the WP 7.0 overlap remediation, all chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. Selecting `azure_openai` or `openai_native` only routes embeddings; selecting a connector-backed provider pins chat to that connector while embeddings fall back to a configured direct Azure/OpenAI Native backend.
 
 ## Backend Gating Rules
 

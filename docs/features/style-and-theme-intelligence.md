@@ -131,6 +131,7 @@ User opens the Site Editor Styles sidebar
     }
   ],
   "explanation": "The current theme already exposes a registered variation that moves the site toward the requested tone.",
+  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
   "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
 }
 ```

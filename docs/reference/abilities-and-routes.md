@@ -122,9 +122,15 @@ Use it when you need to answer:
     }
   },
   "backends": {
+    "wordpress_ai_client": {
+      "configured": true
+    },
+    "azure_openai": {
+      "configured": true,
+      "embeddingDeployment": "text-embedding-3-small"
+    },
     "openai_native": {
       "configured": true,
-      "chatModel": "gpt-5.4-mini",
       "embeddingModel": "text-embedding-3-small",
       "credentialSource": "connector_database",
       "connectorRegistered": true,
@@ -134,6 +140,8 @@ Use it when you need to answer:
   }
 }
 ```
+
+`configured` means the active chat runtime is available, or the pattern pipeline has both a configured embedding provider and Qdrant. It is not a standalone docs-search readiness flag. WordPress docs search availability is reflected in `availableAbilities` and `backends.cloudflare_ai_search`.
 
 ### List-Allowed-Blocks Response Shape
 
@@ -500,7 +508,9 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
       "patternSuggestions": ["core/post-meta-two-column"]
     }
   ],
-  "explanation": "The top-level template structure exposes a safe anchor before the existing header block."
+  "explanation": "The top-level template structure exposes a safe anchor before the existing header block.",
+  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
+  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
 }
 ```
 
@@ -632,7 +642,9 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
       ]
     }
   ],
-  "explanation": "The current header supports a bounded insertion before the existing navigation block."
+  "explanation": "The current header supports a bounded insertion before the existing navigation block.",
+  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
+  "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
 }
 ```
 
@@ -655,7 +667,8 @@ The client only sends live slot occupancy (`assignedParts`, `emptyAreas`). The s
       ]
     }
   ],
-  "explanation": "The current menu depth is heavier than the observed information hierarchy needs."
+  "explanation": "The current menu depth is heavier than the observed information hierarchy needs.",
+  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt"
 }
 ```
 

@@ -207,7 +207,7 @@ User selects block + prompt
 | Store apply | `applySuggestion()` in `src/store/index.js` | Applies bounded attribute updates and records activity |
 | REST handler | `Agent_Controller::handle_recommend_block()` | Adapts the REST request to the backend ability |
 | Backend ability | `BlockAbilities::recommend_block()` | Normalizes input, gathers context, and runs the prompt pipeline |
-| LLM wrapper | `ChatClient::chat()` | Uses the Connectors-first runtime, then falls back to legacy direct provider settings |
+| LLM wrapper | `ChatClient::chat()` | Uses the WordPress AI Client / Connectors runtime; direct Azure/OpenAI Native settings are not a chat fallback |
 | Prompt contract | `Prompt::build_user()` / `Prompt::parse_response()` | Builds and validates the structured block-suggestion payload |
 
 ## Related Routes And Abilities

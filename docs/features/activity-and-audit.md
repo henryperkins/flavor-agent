@@ -4,33 +4,33 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 ## Exact Surfaces
 
-- Inline editor activity: `Recent AI Actions` inside the block, template, template-part, Global Styles, and Style Book recommendation panels
+- Inline editor activity: `Recent AI Actions` inside the block, template, template-part, Global Styles, and Style Book recommendation panels, plus read-only `Recent Content Requests` inside the content panel
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
-Navigation, pattern, and the content recommendation panel do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes or failures when a document scope is available, and those rows appear in the wp-admin audit page.
+Navigation, pattern, and the content recommendation panel do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes or failures when a document scope is available. Content request diagnostics also appear inline as `Recent Content Requests`; pattern and navigation diagnostics appear in the wp-admin audit page.
 
 ## Surfacing Conditions
 
-- Inline activity appears only when the current editor scope has recorded block, template, template-part, Global Styles, or Style Book AI actions
+- Inline activity appears only when the current editor scope has recorded block, template, template-part, Global Styles, or Style Book AI actions, or read-only content request diagnostics
 - The admin audit page appears only for users with `manage_options`
 - Sitewide activity queries are admin-only; scoped activity access follows contextual capability checks through `FlavorAgent\Activity\Permissions`
 
 ## End-To-End Flow
 
-1. A deterministic apply flow succeeds in the block, template, template-part, Global Styles, or Style Book surface
+1. A deterministic apply flow succeeds in the block, template, template-part, Global Styles, or Style Book surface, or a scoped content request succeeds or fails
 2. The store builds a structured activity entry and persists it through the server-backed activity repository
    The persisted request payload now carries AI execution provenance including provider/backend label, model, configuration owner, credential source, route/ability, and fallback path when the selected provider resolves to a different runtime backend. The repository also projects filterable admin columns from that payload so wp-admin queries do not need to decode every historical `request_json` blob to filter by provider or route metadata.
 3. `ActivitySessionBootstrap()` resolves the current editor scope and calls `loadActivitySession()` whenever the edited entity changes
 4. The store hydrates the current scope from server entries, merges pending local entries, and keeps `sessionStorage` as a cache/fallback for the active surface
-5. `AIActivitySection` renders the newest entries for the current scope, shows compact execution summaries, exposes a collapsed `Execution details` section for provider/path/ability/route/prompt/reference metrics, and exposes inline undo when the entry is still valid and tail-undoable
+5. `AIActivitySection` renders the newest entries for the current scope, shows compact execution summaries, exposes a collapsed `Execution details` section for provider/path/ability/route/prompt/reference metrics, and exposes inline undo when the entry is still valid and tail-undoable. Content uses the same component for read-only request history only.
 6. `undoActivity()` validates the live editor state, performs the local undo, and persists the undo-status transition to `POST /flavor-agent/v1/activity/{id}/undo`
 7. The admin page bootstraps `src/admin/activity-log.js`, queries recent server-backed entries, and renders them through `DataViews` and a read-only `DataForm` that now exposes provider path, configuration owner, credential source, selected-provider fallback notes, explicit undo reasons, and separate review-only / blocked / failed summary buckets alongside the existing before/after summaries and quick links
 
 ## What This Surface Can Do
 
 - Persist block, template, template-part, Global Styles, and Style Book apply events to a shared server-backed activity store
-- Persist read-only `request_diagnostic` audit rows for scoped content, pattern, and navigation requests without pretending those surfaces now support executable apply/undo
+- Persist read-only `request_diagnostic` audit rows for scoped content, pattern, and navigation requests without pretending those surfaces now support executable apply/undo; content shows those rows inline as `Recent Content Requests`
 - Hydrate activity back into editor-scoped history when the current entity changes
 - Preserve machine-readable AI request provenance so audit views can explain which backend actually handled a recommendation and where that configuration lives
 - Show ordered undo state: undo status values are `available`, `undone`, `blocked`, and `failed`; persistence sync states (`server`/`local` with `syncType` of `undo` or `create`) are tracked separately

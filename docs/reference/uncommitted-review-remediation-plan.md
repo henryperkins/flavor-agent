@@ -16,14 +16,14 @@ Implementation result: completed in this changeset. Targeted PHP/JS suites, full
 - Inserter badge counts unrenderable pattern recommendations.
 - Pattern docs grounding should not perform foreground AI Search work.
 
-That document is not a complete solution for the current review findings. The current staged implementation introduced additional regressions:
+That document was not a complete solution for the later review findings. The staged implementation at the time introduced additional regressions that are now resolved:
 
 - `PatternAbilitiesTest` is red because many recommendation tests now run with a hidden default `visiblePatternNames` scope of only `theme/hero`.
 - The synced-pattern indexing change now excludes published `partial` and `unsynced` user pattern posts, even when those `core/block/{id}` patterns are public-safe and visible in Gutenberg.
 - Block activity undo now fails when the same block moved paths even if the block type and attributes still match the recorded applied state.
 - JS and PHP linters are failing.
 
-The audit plan should be updated after the code fix so its "public-safe indexing" language means published `wp_block` user patterns, not only published patterns whose sync status is `synced`.
+The audit plan has since been aligned so its "public-safe indexing" language means published `wp_block` user patterns across sync states, not only published patterns whose sync status is `synced`.
 
 ## Target Outcome
 

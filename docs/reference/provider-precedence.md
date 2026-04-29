@@ -36,6 +36,8 @@ If the option is missing or invalid, it defaults to `azure_openai`.
 
 `ChatClient::is_supported()` returns `true` only when `WordPressAIClient::is_supported()` returns `true`. This is the gate for every chat-dependent ability: `flavor-agent/recommend-block`, `recommend-content`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, `recommend-style`, and the pattern-ranking phase of `flavor-agent/recommend-patterns`.
 
+`Provider::chat_configuration( $provider )` reports direct Azure/OpenAI Native providers as missing chat by design. Default runtime chat can still fall back to the generic WordPress AI Client when no connector-specific provider is pinned.
+
 ## Embedding Runtime Chain
 
 `Provider::embedding_configuration()` resolves the active embedding backend. Embeddings require a fully configured Azure OpenAI or OpenAI Native backend.

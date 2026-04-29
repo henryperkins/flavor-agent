@@ -63,9 +63,13 @@ An undo is **blocked** (HTTP 409) when newer activity entries exist on the same 
 1. Query all activity entries for the same `entity_type` and `entity_ref`, ordered by `created_at ASC`
 2. Walk backward from the newest entry
 3. If the target entry is reached before encountering any non-`undone` newer entry, the undo is eligible
-4. If any newer entry has a status other than `undone`, the undo is blocked
+4. If any newer executable entry has a status other than `undone`, the undo is blocked
 
 This ensures undos happen in reverse chronological order per entity, preventing partial rollbacks that would leave the entity in an inconsistent state.
+
+Read-only `request_diagnostic` rows do not block executable ordered undo. The repository skips review-only rows when evaluating the persisted ordered-undo rule, and the client gives diagnostic rows separate entity keys.
+
+The persisted `failed` transition is distinct from runtime unavailable/failed presentation. Client-side validators can show a non-persisted failed or unavailable state when a block, template, template-part, Global Styles, or Style Book target no longer matches the recorded post-apply snapshot; those runtime states do not rewrite the stored row unless an undo attempt is persisted as `failed`.
 
 ### Client-Side Enforcement
 

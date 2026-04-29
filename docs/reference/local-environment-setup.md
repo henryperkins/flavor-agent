@@ -22,7 +22,9 @@ Start the Docker stack:
 npm run wp:start
 ```
 
-Install WordPress if the database volume is new:
+The first run creates `.env` from `.env.example` through `scripts/ensure-local-env.js` before starting containers. The wrapper in `scripts/docker-compose.js` uses the Docker Compose CLI plugin when available and falls back to `docker-compose`.
+
+Install WordPress if the database volume is new. The examples below use the Docker Compose CLI form; if your host only has `docker-compose`, use `node scripts/docker-compose.js exec -T ...` or the wrapper-backed npm scripts instead.
 
 ```bash
 docker compose exec -T wordpress wp core is-installed --allow-root || \
@@ -121,6 +123,8 @@ sudo setfacl -m "u:$(id -un):rwx" \
 	"${WP_PLUGIN_CHECK_PATH}/wp-content" \
 	"${WP_PLUGIN_CHECK_PATH}/wp-content/plugins"
 ```
+
+On the verified Docker-backed local stack, that mountpoint resolves to `/var/lib/docker/volumes/wordpress_wordpress_data/_data`.
 
 Then run:
 

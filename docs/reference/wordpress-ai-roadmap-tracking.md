@@ -167,7 +167,7 @@ Strategic overlap with the Inspector-bound recommendation model in `src/index.js
 
 ### MCP And WebMCP
 
-Flavor Agent does not expose Model Context Protocol today; the abilities under `inc/Abilities/` are the natural participation surface once `WordPress/ai#354` exposes a per-surface gate.
+Flavor Agent exposes seven recommendation abilities to the Abilities API default MCP server via `meta.mcp.public = true`: block, content, pattern, template, template-part, navigation, and style recommendations. It does not implement a separate custom MCP adapter; future upstream MCP routing work still pressures the plugin's provider and ability-routing layers.
 
 | # | Title | Status |
 | --- | --- | --- |

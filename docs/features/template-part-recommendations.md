@@ -212,6 +212,7 @@ The prompt-facing `blockTree` may stay summarized, but `editorStructure.allBlock
     }
   ],
   "explanation": "The current header already has a clear navigation anchor, so inserting a utility pattern before that block is a deterministic way to expand the layout.",
+  "reviewContextSignature": "sha256-of-surface-review-context-and-prompt",
   "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
 }
 ```

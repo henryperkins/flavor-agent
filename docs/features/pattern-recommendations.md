@@ -56,7 +56,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 - WordPress docs grounding is cache-only and non-blocking; cache misses fall back to the existing retrieval-and-rerank path, schedule async cache warming, and never perform live AI Search in the foreground request
 - The badge fails closed when the inserter DOM anchor cannot be found and only counts recommendations that the current allowed-pattern selector can render
 - Pattern Overrides and `blockVisibility` stay recommendation-only inputs for ranking and explanation; they do not widen insertion scope beyond the native `visiblePatternNames` contract
-- Flavor Agent does not add its own undo/activity contract for patterns; insertion still lands in the core editor workflow
+- Flavor Agent does not add its own executable undo/activity contract for pattern insertion; insertion still lands in the core editor workflow. Scoped recommendation request diagnostics can still be persisted for audit.
 
 ## Primary Functions And Handlers
 

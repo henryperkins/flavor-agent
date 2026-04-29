@@ -25,7 +25,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The first returned suggestion is promoted as the recommended next navigation change; remaining ideas are grouped by category (`Structure`, `Overlay`, `Accessibility`)
 - There is no preview or apply path here; the user reviews the grouped changes and edits navigation manually
 - When the current navigation context drifts, the subsection keeps the previous result visible as stale reference material and exposes a refresh action instead of silently clearing it
-- Because navigation remains advisory-only through v1.0, it does not create activity entries and does not participate in inline undo (see `docs/features/activity-and-audit.md` for the activity contract)
+- Because navigation remains advisory-only through v1.0, it does not create executable apply/undo activity entries and does not participate in inline undo. Scoped request diagnostics may still be persisted for the admin audit page when document scope is available; see `docs/features/activity-and-audit.md`.
 
 ## End-To-End Flow
 
@@ -58,7 +58,7 @@ Navigation participates in the server review-freshness contract even though it i
 
 - This surface is advisory-only through v1.0; there is no validated apply contract
 - Structural change groups are still advisory, but the backend now rejects any structural `changes[].targetPath` that does not map to the current menu inventory
-- It does not write activity entries and does not participate in inline undo
+- It does not write executable apply/undo activity entries and does not participate in inline undo; scoped request diagnostics can still be audited
 - The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
 - The panel clears results when the selected block changes to a different navigation scope, but when the same selected navigation block drifts in place it now preserves the previous result as stale reference material and exposes a refresh affordance
 - If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled
