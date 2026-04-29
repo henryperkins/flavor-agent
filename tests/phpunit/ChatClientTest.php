@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\LLM\ChatClient;
+use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -124,5 +125,55 @@ final class ChatClientTest extends TestCase {
 		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
 		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_connector_json_schema_normalizes_nullable_enums_for_anthropic(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'anthropic',
+		];
+		WordPressTestState::$connectors                     = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		$result = ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			ResponseSchema::get( 'block' )
+		);
+
+		$this->assertSame(
+			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+			$result
+		);
+
+		$schema      = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+		$type_schema = $schema['properties']['settings']['items']['properties']['type'] ?? [];
+
+		$this->assertArrayNotHasKey( 'type', $type_schema );
+		$this->assertSame(
+			[
+				[
+					'type' => 'string',
+					'enum' => [ 'attribute_change', 'style_variation' ],
+				],
+				[
+					'type' => 'null',
+					'enum' => [ null ],
+				],
+			],
+			$type_schema['anyOf'] ?? null
+		);
 	}
 }

@@ -266,7 +266,11 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$updated_prompt = self::call_prompt_method( $candidate_prompt, 'as_json_response', [ $schema ] );
+		$updated_prompt = self::call_prompt_method(
+			$candidate_prompt,
+			'as_json_response',
+			[ self::normalize_output_schema( $schema ) ]
+		);
 
 		if ( is_wp_error( $updated_prompt ) ) {
 			return $prompt;
@@ -281,6 +285,129 @@ final class WordPressAIClient {
 		}
 
 		return self::prompt_supports_text_generation( $updated_prompt ) ? $updated_prompt : $prompt;
+	}
+
+	private static function normalize_output_schema( array $schema ): array {
+		$schema = self::normalize_nested_schemas( $schema );
+
+		if (
+			isset( $schema['type'] )
+			&& is_array( $schema['type'] )
+			&& isset( $schema['enum'] )
+			&& is_array( $schema['enum'] )
+		) {
+			return self::expand_union_enum_schema( $schema );
+		}
+
+		return $schema;
+	}
+
+	private static function normalize_nested_schemas( array $schema ): array {
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $collection_key ][ $key ] = self::normalize_output_schema( $child_schema );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$schema[ $schema_key ] = self::normalize_schema_or_schema_list( $schema[ $schema_key ] );
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$schema[ $schema_list_key ][ $key ] = self::normalize_output_schema( $child_schema );
+				}
+			}
+		}
+
+		return $schema;
+	}
+
+	private static function normalize_schema_or_schema_list( array $schema ): array {
+		if ( ! self::is_list_array( $schema ) ) {
+			return self::normalize_output_schema( $schema );
+		}
+
+		foreach ( $schema as $key => $child_schema ) {
+			if ( is_array( $child_schema ) ) {
+				$schema[ $key ] = self::normalize_output_schema( $child_schema );
+			}
+		}
+
+		return $schema;
+	}
+
+	private static function expand_union_enum_schema( array $schema ): array {
+		$types = [];
+
+		foreach ( $schema['type'] as $type ) {
+			if ( is_string( $type ) && ! in_array( $type, $types, true ) ) {
+				$types[] = $type;
+			}
+		}
+
+		if ( [] === $types ) {
+			return $schema;
+		}
+
+		$normalized = $schema;
+		$branches   = [];
+
+		foreach ( $types as $type ) {
+			$enum = [];
+
+			foreach ( $normalized['enum'] as $value ) {
+				if ( self::schema_value_matches_type( $value, $type ) ) {
+					$enum[] = $value;
+				}
+			}
+
+			if ( [] !== $enum ) {
+				$branches[] = [
+					'type' => $type,
+					'enum' => $enum,
+				];
+			}
+		}
+
+		if ( [] === $branches ) {
+			return $schema;
+		}
+
+		unset( $normalized['type'], $normalized['enum'] );
+		$normalized['anyOf'] = $branches;
+
+		return $normalized;
+	}
+
+	private static function schema_value_matches_type( mixed $value, string $type ): bool {
+		return match ( $type ) {
+			'null' => null === $value,
+			'string' => is_string( $value ),
+			'boolean' => is_bool( $value ),
+			'integer' => is_int( $value ),
+			'number' => is_int( $value ) || is_float( $value ),
+			'array' => is_array( $value ) && self::is_list_array( $value ),
+			'object' => is_array( $value ) && ! self::is_list_array( $value ),
+			default => true,
+		};
+	}
+
+	private static function is_list_array( array $value ): bool {
+		return array_keys( $value ) === range( 0, count( $value ) - 1 );
 	}
 
 	private static function ensure_text_generation_supported( object $prompt ): bool|\WP_Error {
