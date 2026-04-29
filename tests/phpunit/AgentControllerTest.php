@@ -2265,6 +2265,76 @@ final class AgentControllerTest extends TestCase {
 		);
 	}
 
+	public function test_handle_get_activity_rejects_malformed_global_admin_date_filters(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['manage_options'] = true;
+
+		$cases = [
+			[
+				'dayOperator' => 'between',
+				'day'         => '2026-03-01',
+			],
+			[
+				'dayOperator' => 'between',
+				'day'         => '2026-03-31',
+				'dayEnd'      => '2026-03-01',
+			],
+			[
+				'dayOperator' => 'banana',
+				'day'         => '2026-03-01',
+			],
+			[
+				'dayOperator' => 'on',
+				'day'         => 'not-a-date',
+			],
+			[
+				'dayOperator'      => 'over',
+				'dayRelativeValue' => 0,
+				'dayRelativeUnit'  => 'days',
+			],
+			[
+				'dayOperator'      => 'inThePast',
+				'dayRelativeValue' => 7,
+				'dayRelativeUnit'  => 'fortnights',
+			],
+		];
+
+		foreach ( $cases as $params ) {
+			$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+			$request->set_param( 'global', true );
+
+			foreach ( $params as $key => $value ) {
+				$request->set_param( $key, $value );
+			}
+
+			$response = Agent_Controller::handle_get_activity( $request );
+
+			$this->assertInstanceOf( \WP_Error::class, $response );
+			$this->assertSame( 'flavor_agent_activity_invalid_date_filter', $response->get_error_code() );
+			$this->assertSame( 400, $response->get_error_data()['status'] ?? null );
+		}
+	}
+
+	public function test_handle_get_activity_accepts_valid_global_admin_date_filters(): void {
+		ActivityRepository::install();
+		WordPressTestState::$capabilities['manage_options'] = true;
+
+		ActivityRepository::create( $this->build_activity_entry( 'activity-1' ) );
+
+		$request = new \WP_REST_Request( 'GET', '/flavor-agent/v1/activity' );
+		$request->set_param( 'global', true );
+		$request->set_param( 'dayOperator', 'between' );
+		$request->set_param( 'day', '2026-03-01' );
+		$request->set_param( 'dayEnd', '2026-03-31' );
+
+		$response = Agent_Controller::handle_get_activity( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'entries', $response->get_data() );
+		$this->assertArrayHasKey( 'paginationInfo', $response->get_data() );
+	}
+
 	public function test_handle_get_activity_supports_global_admin_query_pagination(): void {
 		ActivityRepository::install();
 		WordPressTestState::$capabilities['manage_options'] = true;

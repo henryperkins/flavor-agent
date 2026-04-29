@@ -63,6 +63,23 @@ final class Agent_Controller {
 		],
 	];
 
+	private const ACTIVITY_DAY_OPERATORS = [
+		'on',
+		'before',
+		'after',
+		'between',
+		'inThePast',
+		'over',
+	];
+
+	private const ACTIVITY_DAY_RELATIVE_UNITS = [
+		'hours',
+		'days',
+		'weeks',
+		'months',
+		'years',
+	];
+
 	public static function register_routes(): void {
 		\register_rest_route(
 			self::NAMESPACE,
@@ -1316,6 +1333,12 @@ final class Agent_Controller {
 			|| '' === \trim( (string) $request->get_param( 'scopeKey' ) );
 
 		if ( $is_global_request ) {
+			$date_filter_error = self::validate_admin_activity_date_filter_request( $request );
+
+			if ( \is_wp_error( $date_filter_error ) ) {
+				return $date_filter_error;
+			}
+
 			$result = ActivityRepository::query_admin(
 				[
 					'scopeKey'                   => $request->get_param( 'scopeKey' ),
@@ -1387,6 +1410,92 @@ final class Agent_Controller {
 			],
 			200
 		);
+	}
+
+	private static function validate_admin_activity_date_filter_request( \WP_REST_Request $request ): ?\WP_Error {
+		$operator = \trim( (string) ( $request->get_param( 'dayOperator' ) ?? 'on' ) );
+		$operator = '' !== $operator ? $operator : 'on';
+		$day      = \trim( (string) ( $request->get_param( 'day' ) ?? '' ) );
+		$day_end  = \trim( (string) ( $request->get_param( 'dayEnd' ) ?? '' ) );
+
+		if ( $request->has_param( 'dayOperator' ) && ! \in_array( $operator, self::ACTIVITY_DAY_OPERATORS, true ) ) {
+			return self::invalid_admin_activity_date_filter_error( 'Unsupported activity date filter operator.' );
+		}
+
+		if ( '' !== $day && ! self::is_valid_activity_day( $day ) ) {
+			return self::invalid_admin_activity_date_filter_error( 'Activity date filters must use YYYY-MM-DD dates.' );
+		}
+
+		if ( '' !== $day_end && ! self::is_valid_activity_day( $day_end ) ) {
+			return self::invalid_admin_activity_date_filter_error( 'Activity date range filters must use YYYY-MM-DD dates.' );
+		}
+
+		if ( 'between' === $operator ) {
+			if ( '' === $day && '' === $day_end && $request->has_param( 'dayOperator' ) ) {
+				return self::invalid_admin_activity_date_filter_error( 'Activity date range filters require both start and end dates.' );
+			}
+
+			if ( ( '' === $day ) !== ( '' === $day_end ) ) {
+				return self::invalid_admin_activity_date_filter_error( 'Activity date range filters require both start and end dates.' );
+			}
+
+			if ( '' !== $day && '' !== $day_end && $day > $day_end ) {
+				return self::invalid_admin_activity_date_filter_error( 'Activity date range start must be on or before the end date.' );
+			}
+
+			return null;
+		}
+
+		if ( '' !== $day_end ) {
+			return self::invalid_admin_activity_date_filter_error( 'Activity date range end is only supported with between filters.' );
+		}
+
+		if ( \in_array( $operator, [ 'inThePast', 'over' ], true ) ) {
+			$relative_value = $request->get_param( 'dayRelativeValue' );
+			$relative_unit  = \trim( (string) ( $request->get_param( 'dayRelativeUnit' ) ?? 'days' ) );
+			$relative_unit  = '' !== $relative_unit ? $relative_unit : 'days';
+
+			if ( ! $request->has_param( 'dayRelativeValue' ) || (int) $relative_value <= 0 ) {
+				return self::invalid_admin_activity_date_filter_error( 'Relative activity date filters require a positive value.' );
+			}
+
+			if ( ! \in_array( $relative_unit, self::ACTIVITY_DAY_RELATIVE_UNITS, true ) ) {
+				return self::invalid_admin_activity_date_filter_error( 'Unsupported relative activity date filter unit.' );
+			}
+
+			return null;
+		}
+
+		if ( $request->has_param( 'dayRelativeValue' ) && (int) $request->get_param( 'dayRelativeValue' ) > 0 ) {
+			return self::invalid_admin_activity_date_filter_error( 'Relative activity date filters require a relative date operator.' );
+		}
+
+		if ( $request->has_param( 'dayOperator' ) && '' === $day ) {
+			return self::invalid_admin_activity_date_filter_error( 'Activity date filters require a date value.' );
+		}
+
+		return null;
+	}
+
+	private static function invalid_admin_activity_date_filter_error( string $message ): \WP_Error {
+		return new \WP_Error(
+			'flavor_agent_activity_invalid_date_filter',
+			$message,
+			[ 'status' => 400 ]
+		);
+	}
+
+	private static function is_valid_activity_day( string $day ): bool {
+		$date   = \DateTimeImmutable::createFromFormat(
+			'!Y-m-d',
+			$day,
+			new \DateTimeZone( 'UTC' )
+		);
+		$errors = \DateTimeImmutable::getLastErrors();
+
+		return false !== $date
+			&& ( false === $errors || ( 0 === (int) $errors['warning_count'] && 0 === (int) $errors['error_count'] ) )
+			&& $date->format( 'Y-m-d' ) === $day;
 	}
 
 	public static function handle_create_activity( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {

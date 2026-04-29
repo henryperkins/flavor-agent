@@ -1401,7 +1401,8 @@ final class Repository {
 			$sql = self::prepare_admin_sql( $wpdb, $sql, $where['args'] );
 
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.PreparedSQL.NotPrepared -- Reads distinct filter values from the plugin-owned activity table; $sql is prepared above from fixed clauses and allow-listed columns.
-			$rows = $wpdb->get_results( $sql, ARRAY_A );
+			$rows       = $wpdb->get_results( $sql, ARRAY_A );
+			$option_map = [];
 
 			foreach ( is_array( $rows ) ? $rows : [] as $row ) {
 				$value = trim( (string) ( $row['value'] ?? '' ) );
@@ -1421,11 +1422,17 @@ final class Repository {
 					continue;
 				}
 
-				$options[ $option_key ][] = [
+				if ( isset( $option_map[ $value ] ) ) {
+					continue;
+				}
+
+				$option_map[ $value ] = [
 					'value' => $value,
 					'label' => $label,
 				];
 			}
+
+			$options[ $option_key ] = array_values( $option_map );
 		}
 
 		return $options;
@@ -1748,7 +1755,7 @@ final class Repository {
 		}
 
 		if ( 'operation' === $type ) {
-			return '' !== $label ? $label : self::format_admin_operation_filter_label( $value );
+			return self::format_admin_operation_filter_label( $value );
 		}
 
 		if ( 'user' === $type ) {
@@ -1790,7 +1797,10 @@ final class Repository {
 	private static function has_admin_day_filter( array $filters ): bool {
 		return '' !== trim( (string) ( $filters['day'] ?? '' ) )
 			|| '' !== trim( (string) ( $filters['dayEnd'] ?? '' ) )
-			|| null !== self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
+			|| (
+				array_key_exists( 'dayRelativeValue', $filters )
+				&& '' !== trim( (string) ( $filters['dayRelativeValue'] ?? '' ) )
+			);
 	}
 
 	/**
@@ -2444,6 +2454,10 @@ final class Repository {
 				$label = trim(
 					(string) ( $meta[ $definition['labelKey'] ] ?? $value )
 				);
+
+				if ( 'operationType' === $option_key ) {
+					$label = self::format_admin_operation_filter_label( $value );
+				}
 
 				if ( '' === $value || '' === $label ) {
 					continue;
@@ -3227,67 +3241,168 @@ final class Repository {
 		array $filters,
 		\DateTimeZone $timezone
 	): bool {
-		$entry_day    = trim( (string) ( $meta['dayKey'] ?? '' ) );
-		$day_operator = trim( (string) ( $filters['dayOperator'] ?? 'on' ) );
+		$day_filter = self::normalize_admin_day_filter( $filters, $timezone );
 
-		if ( '' === $entry_day ) {
+		if ( ! $day_filter['active'] ) {
+			return true;
+		}
+
+		if ( ! $day_filter['valid'] ) {
 			return false;
 		}
 
-		switch ( $day_operator ) {
+		$entry_time = (int) ( $meta['timestampUnix'] ?? 0 );
+
+		if ( $entry_time <= 0 ) {
+			return false;
+		}
+
+		switch ( $day_filter['operator'] ) {
 			case 'inThePast':
 			case 'over':
-				$relative_value = self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
-				$relative_unit  = trim( (string) ( $filters['dayRelativeUnit'] ?? 'days' ) );
-				$entry_time     = (int) ( $meta['timestampUnix'] ?? 0 );
-
-				if ( null === $relative_value || $relative_value <= 0 || $entry_time <= 0 ) {
-					return true;
-				}
-
-				$threshold = self::resolve_relative_threshold_timestamp(
-					$relative_value,
-					$relative_unit,
-					$timezone
-				);
+				$threshold = $day_filter['threshold'];
 
 				if ( null === $threshold ) {
-					return true;
+					return false;
 				}
 
-				return 'inThePast' === $day_operator
+				return 'inThePast' === $day_filter['operator']
 					? $entry_time >= $threshold
 					: $entry_time < $threshold;
-			case 'before':
-			case 'after':
-			case 'between':
-			case 'on':
 			default:
-				$day_value = trim( (string) ( $filters['day'] ?? '' ) );
-
-				if ( '' === $day_value ) {
-					return true;
+				if ( 'before' === $day_filter['operator'] ) {
+					return null !== $day_filter['start']
+						&& $entry_time < $day_filter['start'];
 				}
 
-				if ( 'before' === $day_operator ) {
-					return $entry_day < $day_value;
+				if ( 'after' === $day_filter['operator'] ) {
+					return null !== $day_filter['end']
+						&& $entry_time >= $day_filter['end'];
 				}
 
-				if ( 'after' === $day_operator ) {
-					return $entry_day > $day_value;
-				}
-
-				if ( 'between' === $day_operator ) {
-					$day_end = trim( (string) ( $filters['dayEnd'] ?? '' ) );
-
-					return '' !== $day_end
-						&& $day_value <= $day_end
-						&& $entry_day >= $day_value
-						&& $entry_day <= $day_end;
-				}
-
-				return $entry_day === $day_value;
+				return null !== $day_filter['start']
+					&& null !== $day_filter['end']
+					&& $entry_time >= $day_filter['start']
+					&& $entry_time < $day_filter['end'];
 		}
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array{
+	 *   active: bool,
+	 *   valid: bool,
+	 *   operator: string,
+	 *   start: int|null,
+	 *   end: int|null,
+	 *   relativeValue: int|null,
+	 *   relativeUnit: string,
+	 *   threshold: int|null
+	 * }
+	 */
+	private static function normalize_admin_day_filter(
+		array $filters,
+		\DateTimeZone $timezone
+	): array {
+		$operator           = trim( (string) ( $filters['dayOperator'] ?? 'on' ) );
+		$operator           = '' !== $operator ? $operator : 'on';
+		$day                = trim( (string) ( $filters['day'] ?? '' ) );
+		$day_end            = trim( (string) ( $filters['dayEnd'] ?? '' ) );
+		$has_day            = '' !== $day;
+		$has_day_end        = '' !== $day_end;
+		$has_relative_value = array_key_exists( 'dayRelativeValue', $filters )
+			&& '' !== trim( (string) ( $filters['dayRelativeValue'] ?? '' ) );
+		$result             = [
+			'active'        => $has_day || $has_day_end || $has_relative_value,
+			'valid'         => true,
+			'operator'      => $operator,
+			'start'         => null,
+			'end'           => null,
+			'relativeValue' => null,
+			'relativeUnit'  => 'days',
+			'threshold'     => null,
+		];
+
+		if ( ! $result['active'] ) {
+			return $result;
+		}
+
+		if ( ! in_array( $operator, [ 'on', 'before', 'after', 'between', 'inThePast', 'over' ], true ) ) {
+			$result['valid'] = false;
+			return $result;
+		}
+
+		$day_bounds     = $has_day ? self::resolve_local_day_bounds( $day, $timezone ) : null;
+		$day_end_bounds = $has_day_end ? self::resolve_local_day_bounds( $day_end, $timezone ) : null;
+
+		if ( ( $has_day && null === $day_bounds ) || ( $has_day_end && null === $day_end_bounds ) ) {
+			$result['valid'] = false;
+			return $result;
+		}
+
+		if ( in_array( $operator, [ 'inThePast', 'over' ], true ) ) {
+			$relative_value = self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
+			$relative_unit  = trim( (string) ( $filters['dayRelativeUnit'] ?? 'days' ) );
+			$relative_unit  = '' !== $relative_unit ? $relative_unit : 'days';
+
+			$result['relativeValue'] = $relative_value;
+			$result['relativeUnit']  = $relative_unit;
+
+			if (
+				null === $relative_value
+				|| $relative_value <= 0
+				|| ! self::is_supported_admin_relative_unit( $relative_unit )
+			) {
+				$result['valid'] = false;
+				return $result;
+			}
+
+			$result['threshold'] = self::resolve_relative_threshold_timestamp(
+				$relative_value,
+				$relative_unit,
+				$timezone
+			);
+
+			if ( null === $result['threshold'] ) {
+				$result['valid'] = false;
+			}
+
+			return $result;
+		}
+
+		if ( 'between' === $operator ) {
+			if (
+				null === $day_bounds
+				|| null === $day_end_bounds
+				|| $day_bounds['start'] > $day_end_bounds['start']
+			) {
+				$result['valid'] = false;
+				return $result;
+			}
+
+			$result['start'] = $day_bounds['start'];
+			$result['end']   = $day_end_bounds['end'];
+			return $result;
+		}
+
+		if ( null === $day_bounds ) {
+			$result['valid'] = false;
+			return $result;
+		}
+
+		if ( 'before' === $operator ) {
+			$result['start'] = $day_bounds['start'];
+			return $result;
+		}
+
+		if ( 'after' === $operator ) {
+			$result['end'] = $day_bounds['end'];
+			return $result;
+		}
+
+		$result['start'] = $day_bounds['start'];
+		$result['end']   = $day_bounds['end'];
+		return $result;
 	}
 
 	private static function resolve_relative_threshold_timestamp(
@@ -3297,11 +3412,16 @@ final class Repository {
 	): ?int {
 		$interval_spec = match ( $unit ) {
 			'hours'  => 'PT' . $value . 'H',
+			'days'   => 'P' . $value . 'D',
 			'weeks'  => 'P' . $value . 'W',
 			'months' => 'P' . $value . 'M',
 			'years'  => 'P' . $value . 'Y',
-			default  => 'P' . $value . 'D',
+			default  => null,
 		};
+
+		if ( null === $interval_spec ) {
+			return null;
+		}
 
 		try {
 			$now      = new \DateTimeImmutable( 'now', $timezone );
@@ -3313,102 +3433,82 @@ final class Repository {
 		return $now->sub( $interval )->getTimestamp();
 	}
 
+	private static function is_supported_admin_relative_unit( string $unit ): bool {
+		return in_array( $unit, [ 'hours', 'days', 'weeks', 'months', 'years' ], true );
+	}
+
 	/**
 	 * @param array<string, mixed> $filters
 	 * @return array<int, array{clause: string, args: array<int, string>}>
 	 */
 	private static function build_admin_day_sql_filters( array $filters, \DateTimeZone $timezone ): array {
-		$day_operator = trim( (string) ( $filters['dayOperator'] ?? 'on' ) );
-		$filters_sql  = [];
+		$day_filter = self::normalize_admin_day_filter( $filters, $timezone );
 
-		switch ( $day_operator ) {
+		if ( ! $day_filter['active'] ) {
+			return [];
+		}
+
+		if ( ! $day_filter['valid'] ) {
+			return [
+				[
+					'clause' => '1 = 0',
+					'args'   => [],
+				],
+			];
+		}
+
+		switch ( $day_filter['operator'] ) {
 			case 'inThePast':
 			case 'over':
-				$relative_value = self::normalize_optional_int( $filters['dayRelativeValue'] ?? null );
-				$relative_unit  = trim( (string) ( $filters['dayRelativeUnit'] ?? 'days' ) );
-
-				if ( null === $relative_value || $relative_value <= 0 ) {
-					return [];
-				}
-
-				$threshold = self::resolve_relative_threshold_timestamp(
-					$relative_value,
-					$relative_unit,
-					$timezone
-				);
+				$threshold = $day_filter['threshold'];
 
 				if ( null === $threshold ) {
-					return [];
+					return [
+						[
+							'clause' => '1 = 0',
+							'args'   => [],
+						],
+					];
 				}
 
-				$filters_sql[] = [
-					'clause' => 'created_at ' . ( 'inThePast' === $day_operator ? '>=' : '<' ) . ' %s',
-					'args'   => [ gmdate( 'Y-m-d H:i:s', $threshold ) ],
+				return [
+					[
+						'clause' => 'created_at ' . ( 'inThePast' === $day_filter['operator'] ? '>=' : '<' ) . ' %s',
+						'args'   => [ gmdate( 'Y-m-d H:i:s', $threshold ) ],
+					],
 				];
-				return $filters_sql;
 			case 'between':
-				$day_start = trim( (string) ( $filters['day'] ?? '' ) );
-				$day_end   = trim( (string) ( $filters['dayEnd'] ?? '' ) );
-
-				if ( '' === $day_start || '' === $day_end ) {
-					return [];
-				}
-
-				$start_bounds = self::resolve_local_day_bounds( $day_start, $timezone );
-				$end_bounds   = self::resolve_local_day_bounds( $day_end, $timezone );
-
-				if ( null === $start_bounds || null === $end_bounds || $start_bounds['start'] > $end_bounds['start'] ) {
-					return [];
-				}
-
-				$filters_sql[] = [
-					'clause' => 'created_at >= %s AND created_at < %s',
-					'args'   => [
-						gmdate( 'Y-m-d H:i:s', $start_bounds['start'] ),
-						gmdate( 'Y-m-d H:i:s', $end_bounds['end'] ),
-					],
-				];
-				return $filters_sql;
-			case 'before':
-			case 'after':
 			case 'on':
-			default:
-				$day = trim( (string) ( $filters['day'] ?? '' ) );
-
-				if ( '' === $day ) {
-					return [];
-				}
-
-				$bounds = self::resolve_local_day_bounds( $day, $timezone );
-
-				if ( null === $bounds ) {
-					return [];
-				}
-
-				if ( 'before' === $day_operator ) {
-					$filters_sql[] = [
-						'clause' => 'created_at < %s',
-						'args'   => [ gmdate( 'Y-m-d H:i:s', $bounds['start'] ) ],
-					];
-					return $filters_sql;
-				}
-
-				if ( 'after' === $day_operator ) {
-					$filters_sql[] = [
-						'clause' => 'created_at >= %s',
-						'args'   => [ gmdate( 'Y-m-d H:i:s', $bounds['end'] ) ],
-					];
-					return $filters_sql;
-				}
-
-				$filters_sql[] = [
-					'clause' => 'created_at >= %s AND created_at < %s',
-					'args'   => [
-						gmdate( 'Y-m-d H:i:s', $bounds['start'] ),
-						gmdate( 'Y-m-d H:i:s', $bounds['end'] ),
+				return [
+					[
+						'clause' => 'created_at >= %s AND created_at < %s',
+						'args'   => [
+							gmdate( 'Y-m-d H:i:s', (int) $day_filter['start'] ),
+							gmdate( 'Y-m-d H:i:s', (int) $day_filter['end'] ),
+						],
 					],
 				];
-				return $filters_sql;
+			case 'before':
+				return [
+					[
+						'clause' => 'created_at < %s',
+						'args'   => [ gmdate( 'Y-m-d H:i:s', (int) $day_filter['start'] ) ],
+					],
+				];
+			case 'after':
+				return [
+					[
+						'clause' => 'created_at >= %s',
+						'args'   => [ gmdate( 'Y-m-d H:i:s', (int) $day_filter['end'] ) ],
+					],
+				];
+			default:
+				return [
+					[
+						'clause' => '1 = 0',
+						'args'   => [],
+					],
+				];
 		}
 	}
 
@@ -3416,9 +3516,18 @@ final class Repository {
 	 * @return array{start: int, end: int}|null
 	 */
 	private static function resolve_local_day_bounds( string $day, \DateTimeZone $timezone ): ?array {
-		try {
-			$start = new \DateTimeImmutable( $day . ' 00:00:00', $timezone );
-		} catch ( \Exception $exception ) {
+		$start  = \DateTimeImmutable::createFromFormat(
+			'!Y-m-d H:i:s',
+			$day . ' 00:00:00',
+			$timezone
+		);
+		$errors = \DateTimeImmutable::getLastErrors();
+
+		if (
+			false === $start
+			|| ( is_array( $errors ) && ( (int) $errors['warning_count'] > 0 || (int) $errors['error_count'] > 0 ) )
+			|| $start->format( 'Y-m-d' ) !== $day
+		) {
 			return null;
 		}
 
@@ -3531,8 +3640,8 @@ final class Repository {
 
 	private static function format_admin_operation_filter_label( string $operation_type ): string {
 		return match ( $operation_type ) {
-			'insert'            => 'Insert pattern',
-			'replace'           => 'Replace template part',
+			'insert'            => 'Insert',
+			'replace'           => 'Replace',
 			'apply-style'       => 'Apply style',
 			'modify-attributes' => 'Modify attributes',
 			default             => self::humanize_label( $operation_type ),
