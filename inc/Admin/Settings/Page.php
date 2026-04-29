@@ -908,27 +908,42 @@ final class Page {
 	}
 
 	private static function render_sync_panel( array $page_state ): void {
-		$state                 = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
-		$has_prerequisites     = ! empty( $page_state['patterns_ready'] );
-		$status_label          = $has_prerequisites
+		$state                  = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
+		$has_prerequisites      = ! empty( $page_state['patterns_ready'] );
+		$status_label           = $has_prerequisites
 			? State::get_pattern_sync_status_label( (string) $state['status'] )
 			: __( 'Needs setup', 'flavor-agent' );
-		$status_tone           = ! $has_prerequisites
+		$status_tone            = ! $has_prerequisites
 			? 'warning'
 			: ( ! empty( $state['last_error'] ) ? 'error' : State::get_pattern_sync_status_tone( (string) $state['status'] ) );
-		$last_synced_label     = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
-		$stale_reason_label    = ! empty( $state['stale_reason'] )
+		$last_synced_label      = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
+		$stale_reason_label     = ! empty( $state['stale_reason'] )
 			? State::get_pattern_sync_reason_label( (string) $state['stale_reason'] )
 			: '';
-		$collection_name       = $state['qdrant_collection']
+		$collection_name        = $state['qdrant_collection']
 			? (string) $state['qdrant_collection']
 			: QdrantClient::get_collection_name(
 				[
 					'signature_hash' => (string) ( $state['embedding_signature'] ?? '' ),
 				]
 			);
-		$prerequisite_message  = self::get_pattern_sync_prerequisite_message( $page_state );
-		$sync_summary_sentence = self::get_pattern_sync_status_sentence( $page_state );
+		$prerequisite_message   = self::get_pattern_sync_prerequisite_message( $page_state );
+		$prerequisite_id        = 'flavor-agent-sync-prerequisites';
+		$sync_summary_sentence  = self::get_pattern_sync_status_sentence( $page_state );
+		$sync_button_attributes = [
+			'type'          => 'button',
+			'id'            => 'flavor-agent-sync-button',
+			'class'         => 'button button-primary',
+			'aria-disabled' => $has_prerequisites ? 'false' : 'true',
+		];
+
+		if ( ! $has_prerequisites ) {
+			$sync_button_attributes['disabled'] = 'disabled';
+
+			if ( '' !== $prerequisite_message ) {
+				$sync_button_attributes['aria-describedby'] = $prerequisite_id;
+			}
+		}
 		?>
 		<details class="flavor-agent-settings-subpanel flavor-agent-settings-subpanel--sync" data-flavor-agent-sync-panel<?php echo self::should_open_sync_panel( $page_state ) ? ' open' : ''; ?>>
 			<summary class="flavor-agent-settings-subpanel__summary">
@@ -944,7 +959,7 @@ final class Page {
 					<?php echo esc_html( $sync_summary_sentence ); ?>
 				</p>
 				<?php if ( '' !== $prerequisite_message ) : ?>
-					<p class="flavor-agent-sync-panel__prerequisites" data-pattern-prerequisite-copy>
+					<p id="<?php echo esc_attr( $prerequisite_id ); ?>" class="flavor-agent-sync-panel__prerequisites" data-pattern-prerequisite-copy>
 						<?php echo esc_html( $prerequisite_message ); ?>
 					</p>
 				<?php endif; ?>
@@ -1006,12 +1021,7 @@ final class Page {
 					</div>
 				</details>
 				<div class="flavor-agent-sync-panel__actions">
-					<button
-						type="button"
-						id="flavor-agent-sync-button"
-						class="button button-primary"
-						<?php echo $has_prerequisites ? '' : 'disabled'; ?>
-					>
+					<button<?php Utils::render_html_attributes( $sync_button_attributes ); ?>>
 						<?php echo esc_html__( 'Sync Pattern Catalog', 'flavor-agent' ); ?>
 					</button>
 					<span id="flavor-agent-sync-spinner" class="spinner" aria-hidden="true"></span>

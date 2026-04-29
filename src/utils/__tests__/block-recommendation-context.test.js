@@ -44,6 +44,39 @@ describe( 'buildBlockRecommendationContextSignature', () => {
 		expect( signatureA ).toBe( signatureB );
 	} );
 
+	test( 'includes block operation allowed pattern context in signature', () => {
+		const signatureA = buildBlockRecommendationContextSignature( {
+			block: { name: 'core/group' },
+			blockOperationContext: {
+				targetClientId: 'block-1',
+				targetBlockName: 'core/group',
+				targetSignature: 'target-sig',
+				allowedPatterns: [
+					{
+						name: 'theme/hero',
+						allowedActions: [ 'insert_after' ],
+					},
+				],
+			},
+		} );
+		const signatureB = buildBlockRecommendationContextSignature( {
+			block: { name: 'core/group' },
+			blockOperationContext: {
+				targetClientId: 'block-1',
+				targetBlockName: 'core/group',
+				targetSignature: 'target-sig',
+				allowedPatterns: [
+					{
+						name: 'theme/hero',
+						allowedActions: [ 'insert_before' ],
+					},
+				],
+			},
+		} );
+
+		expect( signatureA ).not.toBe( signatureB );
+	} );
+
 	test( 'ignores structural ancestor changes beyond the server-visible cap', () => {
 		const visibleAncestors = Array.from(
 			{ length: BLOCK_STRUCTURAL_SUMMARY_MAX_ITEMS },

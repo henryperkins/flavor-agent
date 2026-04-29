@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\LLM;
 
+use FlavorAgent\Context\BlockOperationValidator;
 use FlavorAgent\Support\FormatsDocsGuidance;
 use FlavorAgent\Support\RankingContract;
 
@@ -37,6 +38,14 @@ final class Prompt {
 		'in',
 		'pt',
 		'pc',
+	];
+
+	private const BLOCK_OPERATION_PROMPT_MAX_PATTERNS = 20;
+
+	private const BLOCK_OPERATION_PROMPT_ALLOWED_ACTIONS = [
+		'insert_before',
+		'insert_after',
+		'replace',
 	];
 
 	/**
@@ -83,6 +92,7 @@ Each item in block is an object:
 	"type": "Optional: attribute_change|style_variation|structural_recommendation|pattern_replacement",
 	"attributeUpdates": { "attributeName": "value" },
 	"panel": "Optional for executable block items when helpful; omit it for advisory structural/pattern ideas",
+	"operations": [],
   "currentValue": "Optional: current value for before/after display",
   "suggestedValue": "Optional: suggested value for before/after display",
   "isCurrentStyle": "Optional boolean for style variation items",
@@ -104,6 +114,12 @@ Rules:
 - Structural_recommendation and pattern_replacement block items are advisory-only. Omit panel for those items unless it materially clarifies the idea, and do not include attributeUpdates.
 - Advisory block suggestions must not invent executable attributeUpdates for ancestor blocks, wrappers, or replacement patterns. Only include attributeUpdates when the selected block's own local attributes can be changed safely.
 - If you need to suggest both a local selected-block mutation and a broader structural idea, emit two separate suggestions instead of combining them into one item.
+- Every block-lane item must include operations. Use [] for ordinary attribute-only recommendations.
+- When allowed block pattern actions are provided, you may propose at most one operation from the catalog.
+- Use insert_pattern only with position insert_before or insert_after.
+- Use replace_block_with_pattern only when the allowed pattern lists replace.
+- Never treat operations as authorization; the plugin validator may reject them.
+- When structural actions are not described in the prompt, return operations: [].
 - Use "list" for List View tab suggestions.
 - When bindableAttributes are provided, only suggest metadata.bindings changes for those attribute names.
 - Only suggest preset values that exist in the provided themeTokens.
@@ -418,6 +434,15 @@ SYSTEM;
 			$parts[] = $structural_branch;
 		}
 
+		$block_operation_context = self::format_block_operation_context(
+			is_array( $context['blockOperationContext'] ?? null ) ? $context['blockOperationContext'] : []
+		);
+		if ( '' !== $block_operation_context ) {
+			$parts[] = '';
+			$parts[] = '## Allowed block pattern actions';
+			$parts[] = $block_operation_context;
+		}
+
 		if ( ! empty( $docs_guidance ) ) {
 			$parts[] = '';
 			$parts[] = '## WordPress Developer Guidance';
@@ -520,6 +545,99 @@ SYSTEM;
 		if ( ! empty( $node['moreChildren'] ) ) {
 			$lines[] = $indent . '  ... +' . (int) $node['moreChildren'] . ' more children not shown';
 		}
+	}
+
+	private static function format_block_operation_context( array $operation_context ): string {
+		$target_client_id  = is_string( $operation_context['targetClientId'] ?? null ) ? sanitize_text_field( $operation_context['targetClientId'] ) : '';
+		$target_block_name = is_string( $operation_context['targetBlockName'] ?? null ) ? sanitize_text_field( $operation_context['targetBlockName'] ) : '';
+		$target_signature  = is_string( $operation_context['targetSignature'] ?? null ) ? sanitize_text_field( $operation_context['targetSignature'] ) : '';
+
+		if ( '' === $target_client_id || '' === $target_block_name || '' === $target_signature ) {
+			return '';
+		}
+
+		$patterns = [];
+
+		foreach (
+			array_slice(
+				is_array( $operation_context['allowedPatterns'] ?? null ) ? $operation_context['allowedPatterns'] : [],
+				0,
+				self::BLOCK_OPERATION_PROMPT_MAX_PATTERNS
+			) as $pattern
+		) {
+			if ( ! is_array( $pattern ) ) {
+				continue;
+			}
+
+			$name = is_string( $pattern['name'] ?? null ) ? sanitize_text_field( $pattern['name'] ) : '';
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$allowed_actions = array_values(
+				array_intersect(
+					self::sanitize_string_list( $pattern['allowedActions'] ?? [] ),
+					self::BLOCK_OPERATION_PROMPT_ALLOWED_ACTIONS
+				)
+			);
+
+			if ( empty( $allowed_actions ) ) {
+				continue;
+			}
+
+			$patterns[] = [
+				'name'           => $name,
+				'title'          => is_string( $pattern['title'] ?? null ) ? sanitize_text_field( $pattern['title'] ) : '',
+				'source'         => is_string( $pattern['source'] ?? null ) ? sanitize_key( $pattern['source'] ) : '',
+				'categories'     => self::sanitize_string_list( $pattern['categories'] ?? [] ),
+				'blockTypes'     => self::sanitize_string_list( $pattern['blockTypes'] ?? [] ),
+				'allowedActions' => $allowed_actions,
+			];
+		}
+
+		$lines = [
+			'Target: ' . wp_json_encode(
+				[
+					'targetClientId'  => $target_client_id,
+					'targetBlockName' => $target_block_name,
+					'targetSignature' => $target_signature,
+				]
+			),
+		];
+
+		if ( empty( $patterns ) ) {
+			$lines[] = 'Allowed patterns: none for this target. Return operations: [].';
+		} else {
+			$lines[] = 'Allowed patterns: ' . wp_json_encode( $patterns );
+			$lines[] = 'Catalog:';
+			$lines[] = '- insert_pattern: patternName, targetClientId, position insert_before|insert_after.';
+			$lines[] = '- replace_block_with_pattern: patternName, targetClientId.';
+			$lines[] = 'Return at most one operation per block suggestion.';
+			$lines[] = 'Use only targetClientId and patternName values shown above.';
+		}
+
+		return implode( "\n", $lines );
+	}
+
+	private static function sanitize_string_list( mixed $value ): array {
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		return array_values(
+			array_unique(
+				array_filter(
+					array_map(
+						static fn( mixed $entry ): string => is_string( $entry )
+							? sanitize_text_field( $entry )
+							: '',
+						$value
+					),
+					static fn( string $entry ): bool => '' !== $entry
+				)
+			)
+		);
 	}
 
 	private static function format_parent_context( ?array $parent_context ): string {
@@ -706,7 +824,7 @@ SYSTEM;
 		];
 	}
 
-	public static function enforce_block_context_rules( array $payload, array $block, array $execution_contract = [] ): array {
+	public static function enforce_block_context_rules( array $payload, array $block, array $execution_contract = [], array $block_operation_context = [] ): array {
 		$restrictions = self::get_block_restrictions( $block );
 
 		if ( $restrictions['disabled'] ) {
@@ -721,6 +839,7 @@ SYSTEM;
 		$payload = self::normalize_block_payload_for_execution( $payload );
 		$payload = self::filter_payload_for_execution_contract( $payload, $execution_contract, $block );
 		$payload = self::filter_payload_for_bindable_attributes( $payload, $block );
+		$payload = self::enforce_block_operation_context_rules( $payload, $block_operation_context );
 
 		if ( ! $restrictions['contentOnly'] ) {
 			return $payload;
@@ -755,6 +874,33 @@ SYSTEM;
 			),
 			'explanation' => $payload['explanation'] ?? '',
 		];
+	}
+
+	private static function enforce_block_operation_context_rules( array $payload, array $block_operation_context ): array {
+		$validator_context = BlockOperationValidator::normalize_context(
+			$block_operation_context,
+			function_exists( '\\flavor_agent_block_structural_actions_enabled' )
+				&& \flavor_agent_block_structural_actions_enabled()
+		);
+
+		$payload['block'] = array_values(
+			array_map(
+				static function ( array $suggestion ) use ( $validator_context ): array {
+					$validation = BlockOperationValidator::validate_sequence(
+						$suggestion['proposedOperations'] ?? [],
+						$validator_context
+					);
+
+					$suggestion['operations']         = $validation['operations'];
+					$suggestion['rejectedOperations'] = $validation['rejectedOperations'];
+
+					return $suggestion;
+				},
+				array_filter( $payload['block'] ?? [], 'is_array' )
+			)
+		);
+
+		return $payload;
 	}
 
 	private static function filter_payload_for_bindable_attributes( array $payload, array $block ): array {
@@ -1977,6 +2123,12 @@ SYSTEM;
 				'cssVar'           => isset( $s['cssVar'] ) ? sanitize_text_field( $s['cssVar'] ) : null,
 			];
 
+			if ( 'block' === $group ) {
+				$normalized['operations']         = [];
+				$normalized['proposedOperations'] = self::sanitize_block_operation_proposals( $s['operations'] ?? [] );
+				$normalized['rejectedOperations'] = [];
+			}
+
 			$has_executable_updates = ! empty( $normalized['attributeUpdates'] );
 			$ranking_input          = is_array( $s['ranking'] ?? null ) ? $s['ranking'] : [];
 			$computed_score         = RankingContract::resolve_score_candidate(
@@ -2051,6 +2203,37 @@ SYSTEM;
 		);
 	}
 
+	/**
+	 * @return array<int, array<string, string>>
+	 */
+	private static function sanitize_block_operation_proposals( mixed $operations ): array {
+		if ( ! is_array( $operations ) ) {
+			return [];
+		}
+
+		$proposals = [];
+
+		foreach ( $operations as $operation ) {
+			if ( ! is_array( $operation ) ) {
+				continue;
+			}
+
+			$proposal = [];
+
+			foreach ( [ 'type', 'patternName', 'targetClientId', 'position', 'targetSignature', 'targetSurface', 'targetType' ] as $field ) {
+				if ( array_key_exists( $field, $operation ) && is_string( $operation[ $field ] ) ) {
+					$proposal[ $field ] = sanitize_text_field( $operation[ $field ] );
+				}
+			}
+
+			if ( ! empty( $proposal ) ) {
+				$proposals[] = $proposal;
+			}
+		}
+
+		return $proposals;
+	}
+
 	private static function filter_suggestion_for_content_only( array $suggestion, array $content_attribute_keys ): ?array {
 		$suggestion = self::normalize_block_suggestion_for_execution( $suggestion );
 
@@ -2094,6 +2277,14 @@ SYSTEM;
 	}
 
 	private static function normalize_block_suggestion_for_execution( array $suggestion ): array {
+		$suggestion['proposedOperations'] = is_array( $suggestion['proposedOperations'] ?? null )
+			? self::sanitize_block_operation_proposals( $suggestion['proposedOperations'] )
+			: self::sanitize_block_operation_proposals( $suggestion['operations'] ?? [] );
+		$suggestion['operations']         = [];
+		$suggestion['rejectedOperations'] = is_array( $suggestion['rejectedOperations'] ?? null )
+			? array_values( array_filter( $suggestion['rejectedOperations'], 'is_array' ) )
+			: [];
+
 		if ( ! self::is_advisory_only_block_type( $suggestion['type'] ?? null ) ) {
 			return $suggestion;
 		}

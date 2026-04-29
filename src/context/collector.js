@@ -13,6 +13,7 @@ import {
 	introspectBlockTree,
 	summarizeTree,
 } from './block-inspector';
+import { getAllowedPatterns } from '../patterns/pattern-settings';
 import {
 	annotateStructuralIdentity,
 	findBranchRoot,
@@ -29,7 +30,12 @@ import {
 	capBlockStructuralBranchItems,
 	buildBlockRecommendationContextSignature,
 } from '../utils/block-recommendation-context';
+import {
+	buildAllowedPatternContext,
+	buildBlockOperationTargetSignature,
+} from '../utils/block-allowed-pattern-context';
 import { buildContextSignature } from '../utils/context-signature';
+import { isBlockStructuralActionsEnabled } from '../utils/block-operation-catalog';
 export { buildBlockRecommendationContextSignature };
 
 const BASE_VISUAL_HINT_PATHS = [
@@ -108,6 +114,34 @@ function extractVisualHints( attributes, allowlist ) {
 	} );
 
 	return hints;
+}
+
+function hasStructuralLock( lock ) {
+	if ( lock === true ) {
+		return true;
+	}
+
+	if ( typeof lock === 'string' ) {
+		return lock.trim() !== '';
+	}
+
+	if ( ! lock || typeof lock !== 'object' ) {
+		return false;
+	}
+
+	return [ 'move', 'remove', 'edit', 'insert' ].some(
+		( key ) => lock[ key ] === true
+	);
+}
+
+function isTargetLocked( block = {} ) {
+	const attributes = block.currentAttributes || {};
+
+	return (
+		hasStructuralLock( attributes.lock ) ||
+		hasStructuralLock( attributes.templateLock ) ||
+		hasStructuralLock( block.lock )
+	);
 }
 
 /**
@@ -529,8 +563,7 @@ export function collectBlockContext( clientId ) {
 		annotatedTree,
 		identityIndex
 	);
-
-	return {
+	const context = {
 		block: {
 			name: instance.name,
 			title: instance.title,
@@ -578,6 +611,32 @@ export function collectBlockContext( clientId ) {
 		structuralBranch,
 		themeTokens: tokenSummary,
 	};
+
+	if ( isBlockStructuralActionsEnabled() ) {
+		const blockEditor = select( blockEditorStore );
+		const rootClientId =
+			blockEditor?.getBlockRootClientId?.( clientId ) || null;
+		const targetLocked = isTargetLocked( context.block );
+		const targetSignature = buildBlockOperationTargetSignature( {
+			clientId,
+			...context.block,
+			isTargetLocked: targetLocked,
+		} );
+
+		context.blockOperationContext = buildAllowedPatternContext(
+			getAllowedPatterns( rootClientId, blockEditor ),
+			{
+				targetClientId: clientId,
+				targetBlockName: context.block.name,
+				targetSignature,
+				editingMode: context.block.editingMode,
+				isInsideContentOnly: context.block.isInsideContentOnly,
+				isTargetLocked: targetLocked,
+			}
+		);
+	}
+
+	return context;
 }
 
 /**
@@ -610,6 +669,10 @@ function subscribeToBlockContextSources( registrySelect, clientId ) {
 	editor.getBlockOrder?.( rootId );
 	editor.getBlocks?.();
 	editor.getSettings?.();
+
+	if ( isBlockStructuralActionsEnabled() ) {
+		getAllowedPatterns( rootId || null, editor );
+	}
 
 	if ( rootId ) {
 		editor.getBlockAttributes?.( rootId );

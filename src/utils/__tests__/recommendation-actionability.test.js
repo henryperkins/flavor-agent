@@ -1,6 +1,10 @@
 import {
 	ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT,
+	ACTIONABILITY_REASON_LOCKED_TARGET,
+	ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE,
+	ACTIONABILITY_REASON_PATTERN_NOT_AVAILABLE,
 	ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE,
+	ACTIONABILITY_REASON_TARGET_STALE,
 	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
 	ACTIONABILITY_SOURCE_VALIDATOR,
 	ACTIONABILITY_TIER_ADVISORY,
@@ -10,6 +14,14 @@ import {
 	classifyOperationActionability,
 	summarizeActionability,
 } from '../recommendation-actionability';
+import {
+	BLOCK_OPERATION_ERROR_CONTENT_ONLY_TARGET,
+	BLOCK_OPERATION_ERROR_CROSS_SURFACE_TARGET,
+	BLOCK_OPERATION_ERROR_LOCKED_TARGET,
+	BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
+	BLOCK_OPERATION_ERROR_PATTERN_NOT_AVAILABLE,
+	BLOCK_OPERATION_ERROR_STALE_TARGET,
+} from '../block-operation-catalog';
 
 describe( 'recommendation actionability', () => {
 	test( 'computes block eligibility from validator state instead of model-provided metadata', () => {
@@ -108,6 +120,55 @@ describe( 'recommendation actionability', () => {
 				advisoryOperationsRejected: [ operation ],
 				blockers: [ ACTIONABILITY_REASON_UNSUPPORTED_OPERATION ],
 				executableOperations: [],
+				tier: ACTIONABILITY_TIER_ADVISORY,
+			} )
+		);
+	} );
+
+	test.each( [
+		[
+			BLOCK_OPERATION_ERROR_PATTERN_NOT_AVAILABLE,
+			ACTIONABILITY_REASON_PATTERN_NOT_AVAILABLE,
+		],
+		[
+			BLOCK_OPERATION_ERROR_STALE_TARGET,
+			ACTIONABILITY_REASON_TARGET_STALE,
+		],
+		[
+			BLOCK_OPERATION_ERROR_LOCKED_TARGET,
+			ACTIONABILITY_REASON_LOCKED_TARGET,
+		],
+		[
+			BLOCK_OPERATION_ERROR_CONTENT_ONLY_TARGET,
+			ACTIONABILITY_REASON_LOCKED_TARGET,
+		],
+		[
+			BLOCK_OPERATION_ERROR_CROSS_SURFACE_TARGET,
+			ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE,
+		],
+		[
+			BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
+			ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE,
+		],
+	] )( 'maps %s rejection codes to blocker reasons', ( code, reason ) => {
+		expect(
+			classifyOperationActionability( {
+				operations: [ { type: 'insert_pattern' } ],
+				validation: {
+					ok: false,
+					operations: [],
+					rejectedOperations: [
+						{
+							code,
+							operation: { type: 'insert_pattern' },
+						},
+					],
+				},
+			} )
+		).toEqual(
+			expect.objectContaining( {
+				blockers: [ reason ],
+				reasons: [ reason ],
 				tier: ACTIONABILITY_TIER_ADVISORY,
 			} )
 		);

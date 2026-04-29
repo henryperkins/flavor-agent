@@ -42,6 +42,24 @@ final class RegistrationTest extends TestCase {
 			$ability['input_schema']['properties']['resolveSignatureOnly']['type'] ?? null
 		);
 
+		$block_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? [];
+		$suggestion    = $block_ability['output_schema']['properties']['block']['items'] ?? [];
+		$operation     = $suggestion['properties']['operations']['items'] ?? [];
+
+		$this->assertSame( 'array', $suggestion['properties']['operations']['type'] ?? null );
+		$this->assertSame( 'array', $suggestion['properties']['proposedOperations']['type'] ?? null );
+		$this->assertSame( 'array', $suggestion['properties']['rejectedOperations']['type'] ?? null );
+		$this->assertSame(
+			[ 'insert_pattern', 'replace_block_with_pattern', null ],
+			$operation['properties']['type']['enum'] ?? null
+		);
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['patternName']['type'] ?? null );
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetClientId']['type'] ?? null );
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['position']['type'] ?? null );
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetSignature']['type'] ?? null );
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetSurface']['type'] ?? null );
+		$this->assertSame( [ 'string', 'null' ], $operation['properties']['targetType']['type'] ?? null );
+
 		$this->assertTrue( (bool) ( $selected_block['properties']['attributes']['additionalProperties'] ?? false ) );
 		$this->assertTrue( (bool) ( $selected_block['properties']['blockVisibility']['additionalProperties'] ?? false ) );
 		$this->assertTrue( (bool) ( $selected_block['properties']['structuralIdentity']['additionalProperties'] ?? false ) );

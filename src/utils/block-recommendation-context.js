@@ -37,5 +37,6 @@ export function buildBlockRecommendationContextSignature( context = null ) {
 		parentContext: context?.parentContext || null,
 		siblingSummariesBefore: context?.siblingSummariesBefore || [],
 		siblingSummariesAfter: context?.siblingSummariesAfter || [],
+		blockOperationContext: context?.blockOperationContext || null,
 	} );
 }

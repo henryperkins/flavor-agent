@@ -16,6 +16,9 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - The selected block must exist and its editing mode must not be `disabled`
 - The main panel still renders when recommendations are unavailable, but fetch is disabled when `window.flavorAgentData.canRecommendBlocks` is false
 - Block structural pattern actions are behind the default-off `window.flavorAgentData.enableBlockStructuralActions` rollout flag. When false, structural proposals remain advisory and the block surface does not expose a review/apply path for them.
+- When that rollout flag is enabled, the client adds a deterministic `blockOperationContext` to the block request. It contains the selected target identity/signature plus visible, renderable patterns from Gutenberg's current allowed-pattern selector and per-target actions (`insert_before`, `insert_after`, and, where block types permit, `replace`).
+- Behind the flag, the prompt may propose at most one selected-block pattern operation. PHP validates every proposal before it reaches the normalized response; invalid, stale, locked, content-only, cross-surface, unavailable-pattern, and multi-operation proposals stay in `rejectedOperations` for diagnostics.
+- M2 does not add structural review UI or structural mutation. Safe local block attribute suggestions remain the only one-click block apply path.
 - Content-restricted blocks stay visible and show an informational notice; executable suggestions are limited to content-safe attributes, broader block ideas may remain advisory-only, and style projections are suppressed
 - A selected `core/navigation` block adds the navigation guidance section inside the same panel
 
@@ -41,7 +44,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_block()` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
 6. `ChatClient::chat()` uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path; if no text-generation provider is configured in Connectors, the request returns a `missing_text_generation_provider` error
-7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails
+7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails, including the PHP block operation validator when structural proposals are present
 8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders executable lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
 9. When the user applies a suggestion, `applySuggestion()` first compares the stored client request signature, then re-posts the same request with `resolveSignatureOnly: true` to verify the current `resolvedContextSignature`, and only then safely merges allowed attribute updates into the current block and records an activity entry
 10. Inline undo calls `undoActivity()`, which validates the live block state before restoring the previous attribute snapshot
@@ -58,6 +61,7 @@ User selects block + prompt
   -> BlockAbilities::recommend_block()
   -> ChatClient::chat()
   -> Prompt::parse_response()
+  -> BlockOperationValidator validates proposed operations
   -> store saves grouped suggestions
   -> Inspector renders cards and chips
   -> applySuggestion() / undoActivity()

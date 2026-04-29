@@ -16,6 +16,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Validation {
 
+	private const SECRET_OPTION_NAMES = [
+		'flavor_agent_azure_openai_key',
+		'flavor_agent_openai_native_api_key',
+		'flavor_agent_qdrant_key',
+		'flavor_agent_cloudflare_ai_search_api_token',
+	];
+
+	private const SECRET_OPTION_COMPANIONS = [
+		'flavor_agent_azure_openai_key'               => [
+			'flavor_agent_azure_openai_endpoint',
+			'flavor_agent_azure_embedding_deployment',
+		],
+		'flavor_agent_openai_native_api_key'          => [
+			'flavor_agent_openai_native_embedding_model',
+		],
+		'flavor_agent_qdrant_key'                     => [
+			'flavor_agent_qdrant_url',
+		],
+		'flavor_agent_cloudflare_ai_search_api_token' => [
+			'flavor_agent_cloudflare_ai_search_account_id',
+			'flavor_agent_cloudflare_ai_search_instance_id',
+		],
+	];
+
 	/**
 	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
 	 */
@@ -50,7 +74,7 @@ final class Validation {
 	private static array $submission_value_cache = [];
 
 	/**
-	 * @var array{raw_post: array<string, mixed>, fingerprint: string}|null
+	 * @var array{fingerprint: string}|null
 	 */
 	private static ?array $submission_request_fingerprint = null;
 
@@ -159,7 +183,7 @@ final class Validation {
 	}
 
 	public static function sanitize_qdrant_key( mixed $value ): string {
-		$sanitized_value = sanitize_text_field( $value );
+		$sanitized_value = self::sanitize_text_option_value( $value, 'flavor_agent_qdrant_key' );
 		Feedback::mark_section_changed_by_option( 'flavor_agent_qdrant_key', $sanitized_value );
 		$resolved_values = self::resolve_qdrant_submission_values(
 			[
@@ -569,7 +593,11 @@ final class Validation {
 	}
 
 	public static function has_valid_submission_nonce(): bool {
-		if ( defined( 'FLAVOR_AGENT_TESTS_RUNNING' ) ) {
+		if (
+			defined( 'FLAVOR_AGENT_TESTS_RUNNING' ) &&
+			function_exists( 'wp_get_environment_type' ) &&
+			'tests' === wp_get_environment_type()
+		) {
 			return true;
 		}
 
@@ -604,7 +632,7 @@ final class Validation {
 	}
 
 	private static function sanitize_azure_text_option( mixed $value, string $option_name ): string {
-		$sanitized_value = sanitize_text_field( $value );
+		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
 		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
 		$resolved_values = self::resolve_azure_submission_values(
 			[
@@ -622,7 +650,7 @@ final class Validation {
 	}
 
 	private static function sanitize_openai_native_text_option( mixed $value, string $option_name ): string {
-		$sanitized_value = sanitize_text_field( $value );
+		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
 		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
 		$resolved_values = self::resolve_openai_native_submission_values(
 			[
@@ -640,7 +668,7 @@ final class Validation {
 	}
 
 	private static function sanitize_cloudflare_text_option( mixed $value, string $option_name ): string {
-		$sanitized_value = sanitize_text_field( $value );
+		$sanitized_value = self::sanitize_text_option_value( $value, $option_name );
 		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
 		$resolved_values = self::resolve_cloudflare_submission_values(
 			[
@@ -662,6 +690,16 @@ final class Validation {
 		Feedback::mark_section_changed_by_option( $option_name, $sanitized_value );
 
 		return $sanitized_value;
+	}
+
+	private static function sanitize_text_option_value( mixed $value, string $option_name ): string {
+		$sanitized_value = sanitize_text_field( $value );
+
+		if ( '' !== $sanitized_value || ! self::should_preserve_blank_secret( $option_name ) ) {
+			return $sanitized_value;
+		}
+
+		return sanitize_text_field( (string) get_option( $option_name, '' ) );
 	}
 
 	/**
@@ -793,7 +831,60 @@ final class Validation {
 
 		$value = wp_unslash( $value );
 
-		return sanitize_text_field( $value );
+		$sanitized_value = sanitize_text_field( $value );
+
+		if ( '' !== $sanitized_value || ! self::should_preserve_blank_secret( $option_name ) ) {
+			return $sanitized_value;
+		}
+
+		return sanitize_text_field( $fallback );
+	}
+
+	private static function should_preserve_blank_secret( string $option_name ): bool {
+		if ( ! in_array( $option_name, self::SECRET_OPTION_NAMES, true ) ) {
+			return false;
+		}
+
+		if ( '' === (string) get_option( $option_name, '' ) ) {
+			return false;
+		}
+
+		$companion_options = self::SECRET_OPTION_COMPANIONS[ $option_name ] ?? [];
+
+		foreach ( $companion_options as $companion_option ) {
+			if ( ! self::has_posted_option( $companion_option ) ) {
+				return true;
+			}
+
+			$companion_value = self::get_raw_posted_string( $companion_option );
+
+			if ( null === $companion_value ) {
+				return true;
+			}
+
+			$sanitized_companion = str_ends_with( $companion_option, '_url' ) || str_ends_with( $companion_option, '_endpoint' )
+				? Utils::sanitize_url_value( $companion_value )
+				: sanitize_text_field( $companion_value );
+
+			if ( '' !== $sanitized_companion ) {
+				return true;
+			}
+		}
+
+		return [] === $companion_options;
+	}
+
+	private static function get_raw_posted_string( string $option_name ): ?string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Callers validate the nonce first and sanitize the returned value before use.
+		$value = $_POST[ $option_name ] ?? null;
+
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$value = wp_unslash( $value );
+
+		return is_string( $value ) ? $value : null;
 	}
 
 	private static function read_posted_url_value( string $option_name, string $fallback ): string {
@@ -871,27 +962,20 @@ final class Validation {
 	private static function get_submission_request_fingerprint(): string {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only request snapshot used to invalidate in-request caches when the posted payload changes.
 		$raw_post_data = is_array( $_POST ) ? $_POST : [];
-
-		if (
-			is_array( self::$submission_request_fingerprint ) &&
-			( self::$submission_request_fingerprint['raw_post'] ?? [] ) === $raw_post_data
-		) {
-			return (string) ( self::$submission_request_fingerprint['fingerprint'] ?? '' );
-		}
-
-		$post_data = wp_unslash( $raw_post_data );
-		$payload   = wp_json_encode( is_array( $post_data ) ? $post_data : [] );
+		$post_data     = wp_unslash( $raw_post_data );
+		$payload       = wp_json_encode( is_array( $post_data ) ? $post_data : [] );
 
 		if ( ! is_string( $payload ) || '' === $payload ) {
 			$payload = '';
 		}
 
+		$fingerprint = md5( $payload );
+
 		self::$submission_request_fingerprint = [
-			'raw_post'    => $raw_post_data,
-			'fingerprint' => md5( $payload ),
+			'fingerprint' => $fingerprint,
 		];
 
-		return self::$submission_request_fingerprint['fingerprint'];
+		return $fingerprint;
 	}
 
 	private static function report_azure_validation_error( \WP_Error $error ): void {

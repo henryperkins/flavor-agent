@@ -297,13 +297,15 @@ final class Feedback {
 		\WP_Error $error,
 		string $preserved_message
 	): void {
+		$safe_error_message = self::get_safe_validation_error_message( $settings_error_code, $error );
+
 		if ( '' !== self::get_request_key_from_post() ) {
 			self::record_section_feedback_messages(
 				$section,
 				[
 					[
 						'tone'    => 'error',
-						'message' => $error->get_error_message(),
+						'message' => $safe_error_message,
 					],
 					[
 						'tone'    => 'warning',
@@ -318,7 +320,7 @@ final class Feedback {
 		add_settings_error(
 			Config::OPTION_GROUP,
 			$settings_error_code,
-			$error->get_error_message(),
+			$safe_error_message,
 			'error'
 		);
 		add_settings_error(
@@ -327,6 +329,20 @@ final class Feedback {
 			$preserved_message,
 			'warning'
 		);
+	}
+
+	private static function get_safe_validation_error_message( string $settings_error_code, \WP_Error $error ): string {
+		if ( 'cloudflare_ai_search_validation_untrusted_source' === $error->get_error_code() ) {
+			return $error->get_error_message();
+		}
+
+		return match ( $settings_error_code ) {
+			'flavor_agent_azure_validation' => __( 'Azure validation failed. Check the endpoint, API key, and embedding deployment, then try again.', 'flavor-agent' ),
+			'flavor_agent_openai_native_validation' => __( 'OpenAI Native validation failed. Check the API key and embedding model, then try again.', 'flavor-agent' ),
+			'flavor_agent_qdrant_validation' => __( 'Qdrant validation failed. Check the cluster URL and API key, then try again.', 'flavor-agent' ),
+			'flavor_agent_cloudflare_ai_search_validation' => __( 'Docs grounding validation failed. Check the Cloudflare account, instance, and API token, then try again.', 'flavor-agent' ),
+			default => __( 'Validation failed. Check the saved values and try again.', 'flavor-agent' ),
+		};
 	}
 
 	public static function has_settings_updated_query_flag(): bool {

@@ -875,6 +875,15 @@ function getDetailForm() {
 	};
 }
 
+function handleReadOnlyDataFormChange() {
+	if ( process.env.NODE_ENV !== 'production' ) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			'Flavor Agent activity details are read-only; DataForm changes are ignored.'
+		);
+	}
+}
+
 function ActivityEntryDetails( { entry } ) {
 	if ( ! entry ) {
 		return (
@@ -923,7 +932,7 @@ function ActivityEntryDetails( { entry } ) {
 					data={ entry }
 					fields={ getDetailFields() }
 					form={ getDetailForm() }
-					onChange={ () => {} }
+					onChange={ handleReadOnlyDataFormChange }
 				/>
 			</CardBody>
 		</Card>

@@ -48,6 +48,20 @@ final class ActivityPageTest extends TestCase {
 		);
 	}
 
+	public function test_bootstrap_uses_page_load_hook_instead_of_global_admin_enqueue_for_assets(): void {
+		$bootstrap = file_get_contents( dirname( __DIR__, 2 ) . '/flavor-agent.php' );
+
+		$this->assertIsString( $bootstrap );
+		$this->assertStringContainsString(
+			"add_action( 'admin_menu', [ FlavorAgent\\Admin\\ActivityPage::class, 'add_menu' ] );",
+			$bootstrap
+		);
+		$this->assertStringNotContainsString(
+			"add_action( 'admin_enqueue_scripts', [ FlavorAgent\\Admin\\ActivityPage::class, 'maybe_enqueue_assets' ] );",
+			$bootstrap
+		);
+	}
+
 	public function test_should_enqueue_assets_accepts_settings_and_admin_hook_variants(): void {
 		$method = new ReflectionMethod( ActivityPage::class, 'should_enqueue_assets' );
 		$method->setAccessible( true );

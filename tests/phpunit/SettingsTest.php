@@ -159,7 +159,7 @@ final class SettingsTest extends TestCase {
 			'body'     => wp_json_encode(
 				[
 					'error' => [
-						'message' => 'Azure authentication failed',
+						'message' => 'Azure authentication failed for bad-key',
 					],
 				]
 			),
@@ -176,7 +176,7 @@ final class SettingsTest extends TestCase {
 				[
 					'setting' => 'flavor_agent_settings',
 					'code'    => 'flavor_agent_azure_validation',
-					'message' => 'Azure authentication failed',
+					'message' => 'Azure validation failed. Check the endpoint, API key, and embedding deployment, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -212,7 +212,7 @@ final class SettingsTest extends TestCase {
 			'body'     => wp_json_encode(
 				[
 					'error' => [
-						'message' => 'Azure authentication failed',
+						'message' => 'Azure authentication failed for bad-key',
 					],
 				]
 			),
@@ -234,7 +234,7 @@ final class SettingsTest extends TestCase {
 			[
 				[
 					'tone'    => 'error',
-					'message' => 'Azure authentication failed',
+					'message' => 'Azure validation failed. Check the endpoint, API key, and embedding deployment, then try again.',
 				],
 				[
 					'tone'    => 'warning',
@@ -243,7 +243,44 @@ final class SettingsTest extends TestCase {
 			],
 			$feedback['messages']['chat'] ?? []
 		);
+		$this->assertStringNotContainsString( 'bad-key', (string) wp_json_encode( $feedback ) );
 		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_blank_password_submission_preserves_saved_azure_key_when_companion_values_remain(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'saved-azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+		];
+		$_POST                       = [
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => '',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+		];
+
+		$this->assertSame( 'saved-azure-key', Settings::sanitize_azure_openai_key( '' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_blank_password_submission_can_clear_secret_when_companion_values_are_blank(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'saved-azure-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+		];
+		$_POST                       = [
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => '',
+			'flavor_agent_azure_openai_key'           => '',
+			'flavor_agent_azure_embedding_deployment' => '',
+		];
+
+		$this->assertSame( '', Settings::sanitize_azure_openai_key( '' ) );
+		$this->assertSame( [], WordPressTestState::$settings_errors );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_sanitize_azure_settings_allow_partial_credentials_without_remote_validation(): void {
@@ -448,7 +485,7 @@ final class SettingsTest extends TestCase {
 				[
 					'setting' => 'flavor_agent_settings',
 					'code'    => 'flavor_agent_openai_native_validation',
-					'message' => 'OpenAI authentication failed',
+					'message' => 'OpenAI Native validation failed. Check the API key and embedding model, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -654,7 +691,7 @@ final class SettingsTest extends TestCase {
 				[
 					'setting' => 'flavor_agent_settings',
 					'code'    => 'flavor_agent_qdrant_validation',
-					'message' => 'Invalid Qdrant API key',
+					'message' => 'Qdrant validation failed. Check the cluster URL and API key, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -806,7 +843,7 @@ final class SettingsTest extends TestCase {
 				[
 					'setting' => 'flavor_agent_settings',
 					'code'    => 'flavor_agent_cloudflare_ai_search_validation',
-					'message' => 'Authentication error',
+					'message' => 'Docs grounding validation failed. Check the Cloudflare account, instance, and API token, then try again.',
 					'type'    => 'error',
 				],
 				[
@@ -1089,6 +1126,28 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'step="0.01"', $output );
 		$this->assertStringContainsString( 'min="0"', $output );
 		$this->assertStringContainsString( 'max="1"', $output );
+	}
+
+	public function test_render_text_field_redacts_saved_password_values(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_key' => 'saved-secret-key',
+		];
+
+		ob_start();
+		Settings::render_text_field(
+			[
+				'option'      => 'flavor_agent_azure_openai_key',
+				'label_for'   => 'flavor_agent_azure_openai_key',
+				'type'        => 'password',
+				'description' => 'Azure API key used for embeddings.',
+			]
+		);
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'type="password"', $output );
+		$this->assertStringContainsString( 'value=""', $output );
+		$this->assertStringNotContainsString( 'saved-secret-key', $output );
+		$this->assertStringContainsString( 'Leave this field blank to keep it', $output );
 	}
 
 	public function test_register_contextual_help_uses_native_wp_screen_help_tabs(): void {
@@ -1531,6 +1590,31 @@ final class SettingsTest extends TestCase {
 
 		$this->assertSame( 'first-embed', $first_resolution['flavor_agent_azure_embedding_deployment'] );
 		$this->assertSame( 'second-embed', $second_resolution['flavor_agent_azure_embedding_deployment'] );
+	}
+
+	public function test_submission_request_fingerprint_does_not_retain_raw_post_secrets(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_azure_openai_endpoint'      => '',
+			'flavor_agent_azure_openai_key'           => '',
+			'flavor_agent_azure_embedding_deployment' => 'old-embed',
+		];
+		$_POST                       = [
+			'option_page'                             => 'flavor_agent_settings',
+			'flavor_agent_azure_openai_endpoint'      => 'https://example.openai.azure.com/',
+			'flavor_agent_azure_openai_key'           => 'posted-secret-key',
+			'flavor_agent_azure_embedding_deployment' => 'embed-deployment',
+		];
+
+		Validation::resolve_azure_submission_values();
+
+		$reflection = new \ReflectionClass( Validation::class );
+		$property   = $reflection->getProperty( 'submission_request_fingerprint' );
+		$property->setAccessible( true );
+		$state = $property->getValue();
+
+		$this->assertIsArray( $state );
+		$this->assertArrayNotHasKey( 'raw_post', $state );
+		$this->assertStringNotContainsString( 'posted-secret-key', (string) wp_json_encode( $state ) );
 	}
 
 	public function test_render_page_keeps_cloudflare_override_controls_available(): void {

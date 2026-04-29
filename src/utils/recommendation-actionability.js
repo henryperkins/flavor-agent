@@ -1,3 +1,13 @@
+import {
+	BLOCK_OPERATION_ERROR_CONTENT_ONLY_TARGET,
+	BLOCK_OPERATION_ERROR_CROSS_SURFACE_TARGET,
+	BLOCK_OPERATION_ERROR_LOCKED_TARGET,
+	BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
+	BLOCK_OPERATION_ERROR_PATTERN_NOT_AVAILABLE,
+	BLOCK_OPERATION_ERROR_STALE_TARGET,
+	BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
+} from './block-operation-catalog';
+
 export const ACTIONABILITY_TIER_INLINE_SAFE = 'inline-safe';
 export const ACTIONABILITY_TIER_REVIEW_SAFE = 'review-safe';
 export const ACTIONABILITY_TIER_ADVISORY = 'advisory';
@@ -64,6 +74,91 @@ function normalizeExecutableOperations( operations = [] ) {
 	return Array.isArray( operations ) ? operations.filter( Boolean ) : [];
 }
 
+function getRejectionOperations( rejectedOperations = [] ) {
+	return Array.isArray( rejectedOperations )
+		? rejectedOperations
+				.map( ( rejection ) => rejection?.operation )
+				.filter( Boolean )
+		: [];
+}
+
+function mapOperationRejectionCodeToReason( code = '' ) {
+	switch ( code ) {
+		case BLOCK_OPERATION_ERROR_PATTERN_NOT_AVAILABLE:
+			return ACTIONABILITY_REASON_PATTERN_NOT_AVAILABLE;
+		case BLOCK_OPERATION_ERROR_STALE_TARGET:
+			return ACTIONABILITY_REASON_TARGET_STALE;
+		case BLOCK_OPERATION_ERROR_LOCKED_TARGET:
+		case BLOCK_OPERATION_ERROR_CONTENT_ONLY_TARGET:
+			return ACTIONABILITY_REASON_LOCKED_TARGET;
+		case BLOCK_OPERATION_ERROR_CROSS_SURFACE_TARGET:
+		case BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED:
+			return ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE;
+		case BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED:
+			return ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT;
+		default:
+			return ACTIONABILITY_REASON_UNSUPPORTED_OPERATION;
+	}
+}
+
+function getOperationRejectionReasons( rejectedOperations = [] ) {
+	return normalizeReasons(
+		( Array.isArray( rejectedOperations ) ? rejectedOperations : [] ).map(
+			( rejection ) =>
+				mapOperationRejectionCodeToReason( rejection?.code || '' )
+		)
+	);
+}
+
+function getSuggestionRejectedOperations( suggestion, validation ) {
+	if ( Array.isArray( suggestion?.rejectedOperations ) ) {
+		return suggestion.rejectedOperations;
+	}
+
+	if ( Array.isArray( validation?.rejectedOperations ) ) {
+		return validation.rejectedOperations;
+	}
+
+	return [];
+}
+
+function getAdvisoryOnlyReason( suggestion, rejectedOperations ) {
+	if ( rejectedOperations.length > 0 ) {
+		return getOperationRejectionReasons( rejectedOperations );
+	}
+
+	if ( suggestion?.type === 'pattern_replacement' ) {
+		return ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT;
+	}
+
+	return ACTIONABILITY_REASON_UNSUPPORTED_OPERATION;
+}
+
+function getRejectedOrFallbackOperations(
+	suggestion,
+	rejectedOperationPayloads
+) {
+	if ( rejectedOperationPayloads.length > 0 ) {
+		return rejectedOperationPayloads;
+	}
+
+	if ( Array.isArray( suggestion?.operations ) ) {
+		return suggestion.operations;
+	}
+
+	return [];
+}
+
+function getNonExecutableReason( hasProposedUpdates, rejectedOperations ) {
+	if ( rejectedOperations.length > 0 ) {
+		return getOperationRejectionReasons( rejectedOperations );
+	}
+
+	return hasProposedUpdates
+		? ACTIONABILITY_REASON_UNSUPPORTED_OPERATION
+		: ACTIONABILITY_REASON_MANUAL_COPY_ONLY;
+}
+
 export function buildActionability( tier, reasons = [], options = {} ) {
 	const resolvedTier = TIER_LABELS[ tier ]
 		? tier
@@ -106,6 +201,7 @@ export function classifyBlockSuggestionActionability( {
 	allowedUpdates = {},
 	isAdvisoryOnly = false,
 	restrictions = {},
+	operationValidation = null,
 } = {} ) {
 	const hasAllowedUpdates =
 		allowedUpdates &&
@@ -116,19 +212,26 @@ export function classifyBlockSuggestionActionability( {
 		typeof suggestion.attributeUpdates === 'object' &&
 		! Array.isArray( suggestion.attributeUpdates ) &&
 		Object.keys( suggestion.attributeUpdates ).length > 0;
+	const validatedOperations = Array.isArray( operationValidation?.operations )
+		? operationValidation.operations
+		: [];
+	const rejectedOperations = getSuggestionRejectedOperations(
+		suggestion,
+		operationValidation
+	);
+	const rejectedOperationPayloads =
+		getRejectionOperations( rejectedOperations );
+	const hasSingleValidatedOperation = validatedOperations.length === 1;
 
-	if ( isAdvisoryOnly ) {
+	if ( isAdvisoryOnly && ! hasSingleValidatedOperation ) {
 		return buildActionability(
 			ACTIONABILITY_TIER_ADVISORY,
-			suggestion?.type === 'pattern_replacement'
-				? ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT
-				: ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
+			getAdvisoryOnlyReason( suggestion, rejectedOperations ),
 			{
-				advisoryOperationsRejected: Array.isArray(
-					suggestion?.operations
-				)
-					? suggestion.operations
-					: [],
+				advisoryOperationsRejected: getRejectedOrFallbackOperations(
+					suggestion,
+					rejectedOperationPayloads
+				),
 			}
 		);
 	}
@@ -144,6 +247,17 @@ export function classifyBlockSuggestionActionability( {
 						attributeUpdates: allowedUpdates,
 					},
 				],
+				advisoryOperationsRejected: rejectedOperationPayloads,
+			}
+		);
+	}
+
+	if ( hasSingleValidatedOperation ) {
+		return buildActionability(
+			ACTIONABILITY_TIER_REVIEW_SAFE,
+			ACTIONABILITY_REASON_VALID_STRUCTURAL_OPERATION,
+			{
+				executableOperations: validatedOperations,
 			}
 		);
 	}
@@ -160,9 +274,10 @@ export function classifyBlockSuggestionActionability( {
 
 	return buildActionability(
 		ACTIONABILITY_TIER_ADVISORY,
-		hasProposedUpdates
-			? ACTIONABILITY_REASON_UNSUPPORTED_OPERATION
-			: ACTIONABILITY_REASON_MANUAL_COPY_ONLY
+		getNonExecutableReason( hasProposedUpdates, rejectedOperations ),
+		{
+			advisoryOperationsRejected: rejectedOperationPayloads,
+		}
 	);
 }
 
@@ -175,7 +290,7 @@ export function classifyOperationActionability( {
 		? validation.operations
 		: [];
 
-	if ( validation?.ok && validatedOperations.length > 0 ) {
+	if ( validation?.ok && validatedOperations.length === 1 ) {
 		return buildActionability(
 			ACTIONABILITY_TIER_REVIEW_SAFE,
 			ACTIONABILITY_REASON_VALID_STRUCTURAL_OPERATION,
@@ -194,11 +309,20 @@ export function classifyOperationActionability( {
 
 	const validationError =
 		typeof validation?.error === 'string' ? validation.error : '';
-	const reason = /overlap|multiple|more than|at most/i.test( validationError )
-		? ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE
-		: ACTIONABILITY_REASON_UNSUPPORTED_OPERATION;
+	let reasons = ACTIONABILITY_REASON_UNSUPPORTED_OPERATION;
 
-	return buildActionability( ACTIONABILITY_TIER_ADVISORY, reason, {
+	if (
+		Array.isArray( validation?.rejectedOperations ) &&
+		validation.rejectedOperations.length > 0
+	) {
+		reasons = getOperationRejectionReasons( validation.rejectedOperations );
+	} else if (
+		/overlap|multiple|more than|at most/i.test( validationError )
+	) {
+		reasons = ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE;
+	}
+
+	return buildActionability( ACTIONABILITY_TIER_ADVISORY, reasons, {
 		advisoryOperationsRejected: operations,
 	} );
 }

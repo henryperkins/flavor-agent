@@ -80,10 +80,13 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Update copy',
-					'attributeUpdates' => [
+					'label'              => 'Update copy',
+					'attributeUpdates'   => [
 						'content' => 'Shorter copy',
 					],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -120,10 +123,13 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Update copy',
-					'attributeUpdates' => [
+					'label'              => 'Update copy',
+					'attributeUpdates'   => [
 						'content' => 'Updated',
 					],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -176,18 +182,21 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Wrap this block in a Group',
-					'description'      => 'Use a Group parent to unlock spacing and background controls.',
-					'type'             => 'structural_recommendation',
-					'attributeUpdates' => [],
-					'currentValue'     => null,
-					'suggestedValue'   => null,
-					'isCurrentStyle'   => null,
-					'isRecommended'    => null,
-					'confidence'       => null,
-					'preview'          => null,
-					'presetSlug'       => null,
-					'cssVar'           => null,
+					'label'              => 'Wrap this block in a Group',
+					'description'        => 'Use a Group parent to unlock spacing and background controls.',
+					'type'               => 'structural_recommendation',
+					'attributeUpdates'   => [],
+					'currentValue'       => null,
+					'suggestedValue'     => null,
+					'isCurrentStyle'     => null,
+					'isRecommended'      => null,
+					'confidence'         => null,
+					'preview'            => null,
+					'presetSlug'         => null,
+					'cssVar'             => null,
+					'operations'         => [],
+					'proposedOperations' => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -256,9 +265,12 @@ final class PromptRulesTest extends TestCase {
 				'styles'      => [],
 				'block'       => [
 					[
-						'label'            => 'Wrap this block in a Group',
-						'type'             => 'structural_recommendation',
-						'attributeUpdates' => [],
+						'label'              => 'Wrap this block in a Group',
+						'type'               => 'structural_recommendation',
+						'attributeUpdates'   => [],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
 					],
 				],
 				'explanation' => 'Advisory structure guidance should survive binding filters.',
@@ -271,9 +283,12 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Wrap this block in a Group',
-					'type'             => 'structural_recommendation',
-					'attributeUpdates' => [],
+					'label'              => 'Wrap this block in a Group',
+					'type'               => 'structural_recommendation',
+					'attributeUpdates'   => [],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -316,9 +331,12 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Wrap this block in a Group',
-					'type'             => 'structural_recommendation',
-					'attributeUpdates' => [],
+					'label'              => 'Wrap this block in a Group',
+					'type'               => 'structural_recommendation',
+					'attributeUpdates'   => [],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -362,9 +380,12 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Replace with a richer pattern',
-					'type'             => 'pattern_replacement',
-					'attributeUpdates' => [],
+					'label'              => 'Replace with a richer pattern',
+					'type'               => 'pattern_replacement',
+					'attributeUpdates'   => [],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -563,11 +584,14 @@ final class PromptRulesTest extends TestCase {
 				],
 				'block'       => [
 					[
-						'label'            => 'Use outline style',
-						'type'             => 'style_variation',
-						'attributeUpdates' => [
+						'label'              => 'Use outline style',
+						'type'               => 'style_variation',
+						'attributeUpdates'   => [
 							'className' => 'is-style-outline',
 						],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
 					],
 				],
 				'explanation' => 'Only the registered style variation should survive.',
@@ -589,11 +613,14 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Use outline style',
-					'type'             => 'style_variation',
-					'attributeUpdates' => [
+					'label'              => 'Use outline style',
+					'type'               => 'style_variation',
+					'attributeUpdates'   => [
 						'className' => 'is-style-outline',
 					],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -698,11 +725,14 @@ final class PromptRulesTest extends TestCase {
 				'styles'      => [],
 				'block'       => [
 					[
-						'label'            => 'Set custom alignment',
-						'panel'            => 'layout',
-						'attributeUpdates' => [
+						'label'              => 'Set custom alignment',
+						'panel'              => 'layout',
+						'attributeUpdates'   => [
 							'align' => 'wide',
 						],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
 					],
 				],
 				'explanation' => 'Block suggestions should survive when the execution contract is not authoritative.',
@@ -720,11 +750,14 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Set custom alignment',
-					'panel'            => 'layout',
-					'attributeUpdates' => [
+					'label'              => 'Set custom alignment',
+					'panel'              => 'layout',
+					'attributeUpdates'   => [
 						'align' => 'wide',
 					],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']
@@ -738,11 +771,14 @@ final class PromptRulesTest extends TestCase {
 				'styles'      => [],
 				'block'       => [
 					[
-						'label'            => 'Set custom alignment',
-						'panel'            => 'layout',
-						'attributeUpdates' => [
+						'label'              => 'Set custom alignment',
+						'panel'              => 'layout',
+						'attributeUpdates'   => [
 							'align' => 'wide',
 						],
+						'proposedOperations' => [],
+						'operations'         => [],
+						'rejectedOperations' => [],
 					],
 				],
 				'explanation' => 'Block suggestions targeting an unknown panel should drop when the contract is authoritative.',
@@ -825,8 +861,8 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'label'            => 'Connect supported metadata',
-					'attributeUpdates' => [
+					'label'              => 'Connect supported metadata',
+					'attributeUpdates'   => [
 						'metadata' => [
 							'blockVisibility' => [
 								'viewport' => [
@@ -841,6 +877,9 @@ final class PromptRulesTest extends TestCase {
 							],
 						],
 					],
+					'proposedOperations' => [],
+					'operations'         => [],
+					'rejectedOperations' => [],
 				],
 			],
 			$result['block']

@@ -32,12 +32,15 @@ Implemented in the current working branch:
 - `src/store/update-helpers.js` attaches computed eligibility to block suggestions while preserving current safety behavior.
 - `src/inspector/BlockRecommendationsPanel.js` surfaces eligibility labels and blocker reasons without enabling structural apply.
 - `src/utils/block-operation-catalog.js` defines a versioned block operation catalog for `insert_pattern` and `replace_block_with_pattern`.
+- `flavor-agent.php` localizes the default-off block structural actions rollout flag for JS, with strict boolean parsing for constants and filters.
+- `src/utils/block-allowed-pattern-context.js` builds deterministic allowed-pattern context for selected-block pattern actions when the rollout flag is enabled.
+- `src/context/collector.js`, `inc/Abilities/BlockAbilities.php`, and `inc/LLM/Prompt.php` carry sanitized `blockOperationContext` into the block prompt.
+- `inc/Context/BlockOperationValidator.php` is the authoritative PHP validator for the block operation catalog.
+- Block-lane responses now normalize structural metadata into `operations`, `proposedOperations`, and `rejectedOperations`; multiple proposed structural operations are rejected in M2.
 - Focused JS tests cover actionability, block suggestion execution metadata, inspector surfacing, and block operation catalog validation.
 
 Still intentionally not implemented:
 
-- Block prompt/schema `operations[]` output.
-- Allowed pattern context in block requests.
 - Block structural review UI.
 - Block structural apply/undo.
 - Any ordinary native pattern inserter activity ownership.
@@ -142,6 +145,8 @@ Acceptance criteria:
 - Unknown pattern names are rejected locally and stay advisory.
 - Pattern disappearance or action invalidation between recommendation and apply demotes/blocks execution.
 
+Implementation note: as of 2026-04-29, the rollout-gated request/prompt context exists and is sanitized server-side. Workstream D now parses model-supplied structural proposals, but only validator-approved operations enter `operations[]`.
+
 ## Workstream D: Block Operation Proposal Contract
 
 Goal: add proposals without making proposals authoritative.
@@ -172,16 +177,18 @@ Prompt-facing proposal examples:
 }
 ```
 
-Response normalization must support attribute-only suggestions with empty structural operations:
+Response normalization uses the existing block suggestion item shape and supports attribute-only suggestions with empty structural operations:
 
 ```json
 {
-  "title": "Make the CTA clearer",
-  "rationale": "The button copy can be more direct.",
+  "label": "Make the CTA clearer",
+  "description": "The button copy can be more direct.",
   "attributeUpdates": {
     "text": "Get started"
   },
-  "operations": []
+  "operations": [],
+  "proposedOperations": [],
+  "rejectedOperations": []
 }
 ```
 
@@ -196,7 +203,7 @@ Required work:
 MVP constraint:
 
 - The validator may parse multiple proposals, but the first apply-capable release should apply at most one structural operation per recommendation unless the transaction engine and negative tests cover multi-operation partial failure.
-- More complex recommendations should be decomposed into atomic operations only when the operation engine supports every step, including target resolution for newly inserted child blocks and all-or-nothing rollback. Until then, emit a single structural operation plus advisory remainder.
+- M2 rejects multiple proposed structural operations in one block suggestion. More complex recommendations should be decomposed into atomic operations only when the operation engine supports every step, including target resolution for newly inserted child blocks and all-or-nothing rollback. Until then, emit a single structural operation plus advisory remainder.
 
 Acceptance criteria:
 
@@ -317,8 +324,9 @@ Exit criteria:
 Exit criteria:
 
 - Block prompt can request only catalog operations from the allowed pattern list.
-- Response schema supports proposed operations.
-- Server parser computes final eligibility and separates executable operations from advisory remainder.
+- Response schema supports proposed operations on block-lane items.
+- Server parser computes final operation metadata and separates executable operations from advisory remainder.
+- No structural review UI or structural mutation is introduced by M2.
 - REST/Abilities contract docs are updated.
 
 ### M3: Review UI Without Apply

@@ -359,6 +359,30 @@ describe( 'settings page controller', () => {
 		).toBe( '' );
 	} );
 
+	test( 'disabled sync button references the prerequisite guidance', () => {
+		const root = renderSettingsPage( {
+			prerequisitesReady: '0',
+			prerequisiteMessage:
+				'Add the Qdrant URL and API key before syncing.',
+		} );
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const button = root.querySelector( '#flavor-agent-sync-button' );
+		const describedBy = button.getAttribute( 'aria-describedby' );
+
+		expect( button.disabled ).toBe( true );
+		expect( button.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		expect( describedBy ).toBeTruthy();
+		expect( root.querySelector( `#${ describedBy }` ).textContent ).toBe(
+			'Add the Qdrant URL and API key before syncing.'
+		);
+	} );
+
 	test( 'guidelines manager adds, edits, and removes block guidelines in the hidden field', () => {
 		const root = renderGuidelinesSettingsPage();
 		const originalConfirm = window.confirm;
@@ -448,7 +472,7 @@ describe( 'settings page controller', () => {
 							guidelines: 'Avoid mentioning discounts.',
 						},
 						blocks: {
-							'core/image': {
+							'Core/Image': {
 								guidelines:
 									'All images need meaningful alt text.',
 							},

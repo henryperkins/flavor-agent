@@ -1647,7 +1647,7 @@ final class Registration {
 	}
 
 	private static function suggestion_output_schema(): array {
-		$suggestion_schema = [
+		$suggestion_schema                                   = [
 			'type'       => 'object',
 			'properties' => [
 				'label'            => [ 'type' => 'string' ],
@@ -1665,6 +1665,41 @@ final class Registration {
 				'cssVar'           => [ 'type' => [ 'string', 'null' ] ],
 			],
 		];
+		$block_suggestion_schema                             = $suggestion_schema;
+		$block_operation_schema                              = [
+			'type'  => 'array',
+			'items' => [
+				'type'       => 'object',
+				'properties' => [
+					'type'            => [
+						'type' => [ 'string', 'null' ],
+						'enum' => [ 'insert_pattern', 'replace_block_with_pattern', null ],
+					],
+					'patternName'     => [ 'type' => [ 'string', 'null' ] ],
+					'targetClientId'  => [ 'type' => [ 'string', 'null' ] ],
+					'position'        => [ 'type' => [ 'string', 'null' ] ],
+					'targetSignature' => [ 'type' => [ 'string', 'null' ] ],
+					'targetSurface'   => [ 'type' => [ 'string', 'null' ] ],
+					'targetType'      => [ 'type' => [ 'string', 'null' ] ],
+				],
+			],
+		];
+		$block_suggestion_schema['properties']['operations'] = $block_operation_schema;
+		$block_suggestion_schema['properties']['proposedOperations'] = $block_operation_schema;
+		$block_suggestion_schema['properties']['rejectedOperations'] = [
+			'type'  => 'array',
+			'items' => [
+				'type'       => 'object',
+				'properties' => [
+					'code'      => [ 'type' => 'string' ],
+					'message'   => [ 'type' => 'string' ],
+					'operation' => [
+						'type'       => [ 'object', 'null' ],
+						'properties' => $block_operation_schema['items']['properties'],
+					],
+				],
+			],
+		];
 
 		return [
 			'type'       => 'object',
@@ -1679,7 +1714,7 @@ final class Registration {
 				],
 				'block'                    => [
 					'type'  => 'array',
-					'items' => $suggestion_schema,
+					'items' => $block_suggestion_schema,
 				],
 				'explanation'              => [ 'type' => 'string' ],
 				'executionContract'        => [ 'type' => 'object' ],

@@ -24,6 +24,21 @@ final class BlockAbilities {
 
 	private const DOCS_SCOPE_MAX_ITEMS = 3;
 
+	private const BLOCK_OPERATION_CONTEXT_MAX_PATTERNS = 20;
+
+	private const BLOCK_OPERATION_CONTEXT_ALLOWED_ACTIONS = [
+		'insert_before',
+		'insert_after',
+		'replace',
+	];
+
+	private const BLOCK_OPERATION_CONTEXT_ALLOWED_SOURCES = [
+		'core',
+		'theme',
+		'plugin',
+		'user',
+	];
+
 	public static function recommend_block( mixed $input ): array|\WP_Error {
 		$input                  = self::normalize_map( $input );
 		$resolve_signature_only = filter_var(
@@ -92,7 +107,8 @@ final class BlockAbilities {
 		$payload = Prompt::enforce_block_context_rules(
 			$payload,
 			$context['block'] ?? [],
-			$execution_contract
+			$execution_contract,
+			$context['blockOperationContext'] ?? []
 		);
 
 		if ( is_wp_error( $payload ) ) {
@@ -312,6 +328,11 @@ final class BlockAbilities {
 			$normalized['themeTokens'] = $theme_tokens;
 		}
 
+		$block_operation_context = self::normalize_block_operation_context( $context['blockOperationContext'] ?? [] );
+		if ( ! empty( $block_operation_context ) ) {
+			$normalized['blockOperationContext'] = $block_operation_context;
+		}
+
 		return $normalized;
 	}
 
@@ -522,6 +543,86 @@ final class BlockAbilities {
 			),
 			true
 		);
+	}
+
+	private static function normalize_block_operation_context( mixed $raw_context ): array {
+		if ( ! self::block_structural_actions_enabled() ) {
+			return [];
+		}
+
+		$context = self::normalize_map( $raw_context );
+
+		if ( empty( $context ) ) {
+			return [];
+		}
+
+		$target_client_id  = is_string( $context['targetClientId'] ?? null ) ? sanitize_text_field( $context['targetClientId'] ) : '';
+		$target_block_name = is_string( $context['targetBlockName'] ?? null ) ? sanitize_text_field( $context['targetBlockName'] ) : '';
+		$target_signature  = is_string( $context['targetSignature'] ?? null ) ? sanitize_text_field( $context['targetSignature'] ) : '';
+
+		if ( '' === $target_client_id || '' === $target_block_name || '' === $target_signature ) {
+			return [];
+		}
+
+		$allowed_patterns = [];
+		$raw_patterns     = array_slice(
+			self::normalize_list( $context['allowedPatterns'] ?? [] ),
+			0,
+			self::BLOCK_OPERATION_CONTEXT_MAX_PATTERNS
+		);
+
+		foreach ( $raw_patterns as $pattern ) {
+			if ( ! is_array( $pattern ) ) {
+				continue;
+			}
+
+			$name = is_string( $pattern['name'] ?? null ) ? sanitize_text_field( $pattern['name'] ) : '';
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$allowed_actions = array_values(
+				array_intersect(
+					StringArray::sanitize( $pattern['allowedActions'] ?? [] ),
+					self::BLOCK_OPERATION_CONTEXT_ALLOWED_ACTIONS
+				)
+			);
+
+			if ( empty( $allowed_actions ) ) {
+				continue;
+			}
+
+			$source = is_string( $pattern['source'] ?? null ) ? sanitize_key( $pattern['source'] ) : '';
+
+			if ( ! in_array( $source, self::BLOCK_OPERATION_CONTEXT_ALLOWED_SOURCES, true ) ) {
+				$source = 'theme';
+			}
+
+			$allowed_patterns[] = [
+				'name'           => $name,
+				'title'          => is_string( $pattern['title'] ?? null ) ? sanitize_text_field( $pattern['title'] ) : '',
+				'source'         => $source,
+				'categories'     => StringArray::sanitize( $pattern['categories'] ?? [] ),
+				'blockTypes'     => StringArray::sanitize( $pattern['blockTypes'] ?? [] ),
+				'allowedActions' => $allowed_actions,
+			];
+		}
+
+		return [
+			'targetClientId'  => $target_client_id,
+			'targetBlockName' => $target_block_name,
+			'targetSignature' => $target_signature,
+			'isTargetLocked'  => ! empty( $context['isTargetLocked'] ),
+			'isContentOnly'   => ! empty( $context['isContentOnly'] ) || ! empty( $context['isInsideContentOnly'] ),
+			'editingMode'     => self::normalize_editing_mode( $context['editingMode'] ?? 'default' ),
+			'allowedPatterns' => $allowed_patterns,
+		];
+	}
+
+	private static function block_structural_actions_enabled(): bool {
+		return function_exists( '\\flavor_agent_block_structural_actions_enabled' )
+			&& \flavor_agent_block_structural_actions_enabled();
 	}
 
 	private static function normalize_structural_summary_items( array $items, bool $include_children = false, int $depth = 0 ): array {

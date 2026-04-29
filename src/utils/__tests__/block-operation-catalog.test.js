@@ -11,13 +11,14 @@ import {
 	BLOCK_OPERATION_ERROR_LOCKED_TARGET,
 	BLOCK_OPERATION_ERROR_MISSING_PATTERN_NAME,
 	BLOCK_OPERATION_ERROR_MISSING_TARGET_CLIENT_ID,
-	BLOCK_OPERATION_ERROR_NO_OPERATIONS,
+	BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
 	BLOCK_OPERATION_ERROR_PATTERN_NOT_AVAILABLE,
 	BLOCK_OPERATION_ERROR_STALE_TARGET,
 	BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
 	BLOCK_OPERATION_ERROR_UNKNOWN_OPERATION_TYPE,
 	BLOCK_OPERATION_INSERT_PATTERN,
 	BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+	buildBlockOperationValidationContext,
 	isBlockStructuralActionsEnabled,
 	normalizeAllowedPatternsForBlockOperations,
 	validateBlockOperationSequence,
@@ -75,7 +76,31 @@ describe( 'block operation catalog', () => {
 		).toEqual( allowedPatterns );
 	} );
 
-	test( 'validates insert and replace operations against the catalog and allowed pattern actions', () => {
+	test( 'adapts nested block operation context for validation', () => {
+		expect(
+			buildBlockOperationValidationContext( {
+				enableBlockStructuralActions: true,
+				blockOperationContext: {
+					targetClientId: 'block-1',
+					targetBlockName: 'core/group',
+					targetSignature: 'sig:block-1',
+					editingMode: 'contentOnly',
+					allowedPatterns,
+				},
+			} )
+		).toEqual( {
+			enableBlockStructuralActions: true,
+			targetClientId: 'block-1',
+			targetBlockName: 'core/group',
+			targetSignature: 'sig:block-1',
+			allowedPatterns,
+			isTargetLocked: false,
+			isContentOnly: true,
+			editingMode: 'contentOnly',
+		} );
+	} );
+
+	test( 'validates insert operations against the catalog and allowed pattern actions', () => {
 		expect(
 			validateBlockOperationSequence(
 				[
@@ -85,11 +110,6 @@ describe( 'block operation catalog', () => {
 						targetClientId: 'block-1',
 						targetSignature: 'sig:block-1',
 						position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
-					},
-					{
-						type: BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
-						patternName: 'flavor-agent/cta-with-image',
-						targetClientId: 'block-1',
 					},
 				],
 				baseContext
@@ -118,6 +138,28 @@ describe( 'block operation catalog', () => {
 					targetType: 'block',
 					type: BLOCK_OPERATION_INSERT_PATTERN,
 				},
+			],
+			proposedCount: 1,
+			rejectedOperations: [],
+		} );
+	} );
+
+	test( 'validates replace operations against the catalog and allowed pattern actions', () => {
+		expect(
+			validateBlockOperationSequence(
+				[
+					{
+						type: BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
+						patternName: 'flavor-agent/cta-with-image',
+						targetClientId: 'block-1',
+					},
+				],
+				baseContext
+			)
+		).toEqual( {
+			catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
+			ok: true,
+			operations: [
 				{
 					action: BLOCK_OPERATION_ACTION_REPLACE,
 					catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
@@ -140,7 +182,7 @@ describe( 'block operation catalog', () => {
 					type: BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN,
 				},
 			],
-			proposedCount: 2,
+			proposedCount: 1,
 			rejectedOperations: [],
 		} );
 	} );
@@ -187,7 +229,7 @@ describe( 'block operation catalog', () => {
 		] );
 	} );
 
-	test( 'keeps mixed recommendations partially executable with advisory rejections', () => {
+	test( 'rejects multiple proposed operations in M2', () => {
 		const result = validateBlockOperationSequence(
 			[
 				{
@@ -205,26 +247,16 @@ describe( 'block operation catalog', () => {
 			baseContext
 		);
 
-		expect( result.ok ).toBe( true );
-		expect( result.operations ).toEqual( [
-			expect.objectContaining( {
-				patternName: 'theme/text-band',
-				position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
-				type: BLOCK_OPERATION_INSERT_PATTERN,
-			} ),
-		] );
+		expect( result.ok ).toBe( false );
+		expect( result.operations ).toEqual( [] );
 		expect( getRejectedCodes( result ) ).toEqual( [
-			BLOCK_OPERATION_ERROR_ACTION_NOT_ALLOWED,
+			BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
+			BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
 		] );
 	} );
 
 	test.each( [
-		[
-			'no operations',
-			[],
-			baseContext,
-			[ BLOCK_OPERATION_ERROR_NO_OPERATIONS ],
-		],
+		[ 'no operations', [], baseContext, [] ],
 		[
 			'unknown operation types',
 			[

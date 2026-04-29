@@ -414,9 +414,21 @@ Deep and shallow structural equality helpers used for comparing block attributes
 
 ### `src/utils/block-operation-catalog.js`
 
-Versioned validator for future block structural operations. It currently defines the v1 selected-block pattern operation vocabulary (`insert_pattern` and `replace_block_with_pattern`), normalizes allowed pattern context, and rejects proposed structural operations unless the localized `flavorAgentData.enableBlockStructuralActions` rollout flag is explicitly enabled.
+Client-side diagnostic mirror for the block structural operation catalog. It defines the v1 selected-block pattern operation vocabulary (`insert_pattern` and `replace_block_with_pattern`), adapts nested `blockOperationContext` into validator input, rejects multiple proposed operations in M2, and mirrors PHP rejection codes so the UI can explain why structural proposals stayed advisory.
 
-**Consumers:** Block recommendation actionability tests today; future block review/apply state will use this before exposing structural operations.
+**Consumers:** `src/store/update-helpers.js`, block recommendation actionability tests, future block review/apply state.
+
+### `inc/Context/BlockOperationValidator.php`
+
+Authoritative server-side gate for block structural operation proposals. It normalizes the rollout-gated `blockOperationContext`, validates proposal type, pattern name, target identity/signature, target surface/type, locks, content-only state, and allowed actions, and returns separate executable `operations` plus `rejectedOperations` diagnostics.
+
+**Consumers:** `inc/LLM/Prompt.php`, `tests/phpunit/BlockOperationValidatorTest.php`
+
+### `src/utils/block-allowed-pattern-context.js`
+
+Builds the client-side `blockOperationContext` used by the narrow block structural-action rollout. It derives target identity/signature from the selected block, filters Gutenberg allowed-pattern selector results down to visible renderable patterns, normalizes the prompt-safe pattern metadata, and computes selected-target actions before the model can propose any structural work.
+
+**Consumers:** `src/context/collector.js`, block operation context tests
 
 ## Pattern Internals
 

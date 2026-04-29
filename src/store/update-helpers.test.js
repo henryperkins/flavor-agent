@@ -10,11 +10,13 @@ import {
 } from './update-helpers';
 import {
 	ACTIONABILITY_REASON_MISSING_PATTERN_CONTEXT,
+	ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE,
 	ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE,
 	ACTIONABILITY_REASON_UNSUPPORTED_OPERATION,
 	ACTIONABILITY_SOURCE_VALIDATOR,
 	ACTIONABILITY_TIER_ADVISORY,
 	ACTIONABILITY_TIER_INLINE_SAFE,
+	ACTIONABILITY_TIER_REVIEW_SAFE,
 } from '../utils/recommendation-actionability';
 
 describe( 'update helpers', () => {
@@ -759,6 +761,191 @@ describe( 'update helpers', () => {
 					source: ACTIONABILITY_SOURCE_VALIDATOR,
 					tier: ACTIONABILITY_TIER_ADVISORY,
 				} ),
+			} )
+		);
+	} );
+
+	test( 'sanitizeRecommendationsForContext promotes one server-approved structural operation to review-safe', () => {
+		const rawOperation = {
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			position: 'insert_after',
+		};
+		const executableOperation = {
+			catalogVersion: 1,
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			targetType: 'block',
+			targetSignature: 'target-sig',
+			position: 'insert_after',
+		};
+		const result = sanitizeRecommendationsForContext(
+			{
+				settings: [],
+				styles: [],
+				block: [
+					{
+						label: 'Add a hero after this block',
+						type: 'pattern_replacement',
+						attributeUpdates: {},
+						operations: [ executableOperation ],
+						proposedOperations: [ rawOperation ],
+						rejectedOperations: [],
+					},
+				],
+				explanation: 'Use a stronger CTA.',
+			},
+			{
+				enableBlockStructuralActions: true,
+				blockOperationContext: {
+					targetClientId: 'block-1',
+					targetBlockName: 'core/group',
+					targetSignature: 'target-sig',
+					allowedPatterns: [
+						{
+							name: 'theme/hero',
+							allowedActions: [ 'insert_after' ],
+						},
+					],
+				},
+			}
+		);
+
+		expect( result.block[ 0 ].operations ).toEqual( [
+			executableOperation,
+		] );
+		expect( result.block[ 0 ].actionability ).toEqual(
+			expect.objectContaining( {
+				tier: ACTIONABILITY_TIER_REVIEW_SAFE,
+				executableOperations: [ executableOperation ],
+			} )
+		);
+	} );
+
+	test( 'sanitizeRecommendationsForContext keeps inline-safe updates when structural proposals are rejected', () => {
+		const result = sanitizeRecommendationsForContext(
+			{
+				settings: [],
+				styles: [],
+				block: [
+					{
+						label: 'Update copy and add missing pattern',
+						type: 'attribute_change',
+						attributeUpdates: {
+							content: 'Get started',
+						},
+						operations: [],
+						proposedOperations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/missing',
+								targetClientId: 'block-1',
+								position: 'insert_after',
+							},
+						],
+						rejectedOperations: [
+							{
+								code: 'pattern_not_available',
+								operation: {
+									type: 'insert_pattern',
+									patternName: 'theme/missing',
+									targetClientId: 'block-1',
+									position: 'insert_after',
+								},
+							},
+						],
+					},
+				],
+				explanation: 'Mixed recommendation.',
+			},
+			{
+				enableBlockStructuralActions: true,
+				blockOperationContext: {
+					targetClientId: 'block-1',
+					targetBlockName: 'core/paragraph',
+					targetSignature: 'target-sig',
+					allowedPatterns: [],
+				},
+				contentAttributes: {
+					content: { role: 'content' },
+				},
+			},
+			{
+				contentAttributeKeys: [ 'content' ],
+				isAuthoritative: true,
+			}
+		);
+
+		expect( result.block[ 0 ].attributeUpdates ).toEqual( {
+			content: 'Get started',
+		} );
+		expect( result.block[ 0 ].operations ).toEqual( [] );
+		expect( result.block[ 0 ].actionability ).toEqual(
+			expect.objectContaining( {
+				tier: ACTIONABILITY_TIER_INLINE_SAFE,
+				reasons: [ ACTIONABILITY_REASON_SAFE_LOCAL_ATTRIBUTE_UPDATE ],
+				advisoryOperationsRejected: [
+					expect.objectContaining( {
+						patternName: 'theme/missing',
+					} ),
+				],
+			} )
+		);
+	} );
+
+	test( 'sanitizeRecommendationsForContext keeps multi-operation proposals advisory in M2', () => {
+		const result = sanitizeRecommendationsForContext(
+			{
+				settings: [],
+				styles: [],
+				block: [
+					{
+						label: 'Add and replace patterns',
+						type: 'pattern_replacement',
+						attributeUpdates: {},
+						operations: [],
+						proposedOperations: [
+							{
+								type: 'insert_pattern',
+								patternName: 'theme/hero',
+								targetClientId: 'block-1',
+								position: 'insert_after',
+							},
+							{
+								type: 'replace_block_with_pattern',
+								patternName: 'theme/hero',
+								targetClientId: 'block-1',
+							},
+						],
+					},
+				],
+				explanation: 'Too much structural work.',
+			},
+			{
+				enableBlockStructuralActions: true,
+				blockOperationContext: {
+					targetClientId: 'block-1',
+					targetBlockName: 'core/group',
+					targetSignature: 'target-sig',
+					allowedPatterns: [
+						{
+							name: 'theme/hero',
+							allowedActions: [ 'insert_after', 'replace' ],
+						},
+					],
+				},
+			}
+		);
+
+		expect( result.block[ 0 ].operations ).toEqual( [] );
+		expect( result.block[ 0 ].actionability ).toEqual(
+			expect.objectContaining( {
+				tier: ACTIONABILITY_TIER_ADVISORY,
+				blockers: [
+					ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE,
+				],
 			} )
 		);
 	} );

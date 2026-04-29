@@ -32,6 +32,8 @@ export const BLOCK_OPERATION_ERROR_INVALID_INSERTION_POSITION =
 export const BLOCK_OPERATION_ERROR_ACTION_NOT_ALLOWED = 'action_not_allowed';
 export const BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED =
 	'block_structural_actions_disabled';
+export const BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED =
+	'multi_operation_unsupported';
 
 export const BLOCK_OPERATION_CATALOG = Object.freeze( {
 	version: BLOCK_OPERATION_CATALOG_VERSION,
@@ -180,6 +182,37 @@ function contextEnablesBlockStructuralActions( context = {} ) {
 	}
 
 	return isBlockStructuralActionsEnabled();
+}
+
+export function buildBlockOperationValidationContext( blockContext = {} ) {
+	const operationContext = blockContext.blockOperationContext || blockContext;
+	let enableBlockStructuralActions;
+
+	if ( typeof blockContext.enableBlockStructuralActions === 'boolean' ) {
+		enableBlockStructuralActions =
+			blockContext.enableBlockStructuralActions === true;
+	} else if (
+		typeof operationContext.enableBlockStructuralActions === 'boolean'
+	) {
+		enableBlockStructuralActions =
+			operationContext.enableBlockStructuralActions === true;
+	} else {
+		enableBlockStructuralActions = isBlockStructuralActionsEnabled();
+	}
+
+	return {
+		enableBlockStructuralActions,
+		targetClientId: operationContext.targetClientId || '',
+		targetBlockName: operationContext.targetBlockName || '',
+		targetSignature: operationContext.targetSignature || '',
+		allowedPatterns: operationContext.allowedPatterns || [],
+		isTargetLocked: operationContext.isTargetLocked === true,
+		isContentOnly:
+			operationContext.isContentOnly === true ||
+			operationContext.isInsideContentOnly === true ||
+			operationContext.editingMode === 'contentOnly',
+		editingMode: operationContext.editingMode || 'default',
+	};
 }
 
 function createRollbackPayload( type ) {
@@ -457,13 +490,7 @@ export function validateBlockOperationSequence(
 			ok: false,
 			catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
 			operations: [],
-			rejectedOperations: [
-				rejectOperation(
-					null,
-					BLOCK_OPERATION_ERROR_NO_OPERATIONS,
-					'This recommendation does not include block operations.'
-				),
-			],
+			rejectedOperations: [],
 			proposedCount: 0,
 		};
 	}
@@ -478,6 +505,22 @@ export function validateBlockOperationSequence(
 					rawOperation,
 					BLOCK_OPERATION_ERROR_STRUCTURAL_ACTIONS_DISABLED,
 					'Block structural actions are disabled for this environment.'
+				)
+			),
+			proposedCount: rawOperations.length,
+		};
+	}
+
+	if ( rawOperations.length > 1 ) {
+		return {
+			ok: false,
+			catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
+			operations: [],
+			rejectedOperations: rawOperations.map( ( rawOperation ) =>
+				rejectOperation(
+					rawOperation,
+					BLOCK_OPERATION_ERROR_MULTI_OPERATION_UNSUPPORTED,
+					'Only one block structural operation can be executable in this milestone.'
 				)
 			),
 			proposedCount: rawOperations.length,

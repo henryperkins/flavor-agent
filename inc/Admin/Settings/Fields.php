@@ -13,13 +13,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Fields {
 
 	public static function render_text_field( array $args ): void {
-		$option         = (string) ( $args['option'] ?? '' );
-		$type           = $args['type'] ?? 'text';
-		$placeholder    = $args['placeholder'] ?? '';
-		$description    = $args['description'] ?? '';
-		$default        = (string) ( $args['default'] ?? '' );
-		$value          = (string) get_option( $option, $default );
-		$field_id       = (string) ( $args['label_for'] ?? $option );
+		$option      = (string) ( $args['option'] ?? '' );
+		$type        = $args['type'] ?? 'text';
+		$placeholder = $args['placeholder'] ?? '';
+		$description = $args['description'] ?? '';
+		$default     = (string) ( $args['default'] ?? '' );
+		$value       = (string) get_option( $option, $default );
+		$field_id    = (string) ( $args['label_for'] ?? $option );
+		$is_password = 'password' === (string) $type;
+
+		if ( $is_password && '' !== $value ) {
+			$value       = '';
+			$description = '' !== (string) $description
+				? sprintf(
+					'%1$s<br />%2$s',
+					(string) $description,
+					esc_html__( 'Saved value is set. Leave this field blank to keep it, or enter a new value to replace it.', 'flavor-agent' )
+				)
+				: esc_html__( 'Saved value is set. Leave this field blank to keep it, or enter a new value to replace it.', 'flavor-agent' );
+		}
+
 		$description_id = '' !== $description ? $field_id . '-description' : '';
 		$attributes     = [
 			'type'        => (string) $type,

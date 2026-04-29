@@ -309,6 +309,10 @@ final class ResponseSchema {
 					'type' => [ 'string', 'null' ],
 					'enum' => array_merge( self::BLOCK_PANELS, [ null ] ),
 				],
+				'operations'       => [
+					'type'  => 'array',
+					'items' => self::block_operation_schema(),
+				],
 				'currentValue'     => self::any_value(),
 				'suggestedValue'   => self::any_value(),
 				'isCurrentStyle'   => self::nullable_boolean(),
@@ -317,6 +321,23 @@ final class ResponseSchema {
 				'preview'          => self::nullable_string(),
 				'presetSlug'       => self::nullable_string(),
 				'cssVar'           => self::nullable_string(),
+			]
+		);
+	}
+
+	private static function block_operation_schema(): array {
+		return self::strict_object(
+			[
+				'type'            => [
+					'type' => [ 'string', 'null' ],
+					'enum' => [ 'insert_pattern', 'replace_block_with_pattern', null ],
+				],
+				'patternName'     => self::nullable_string(),
+				'targetClientId'  => self::nullable_string(),
+				'position'        => self::nullable_string(),
+				'targetSignature' => self::nullable_string(),
+				'targetSurface'   => self::nullable_string(),
+				'targetType'      => self::nullable_string(),
 			]
 		);
 	}

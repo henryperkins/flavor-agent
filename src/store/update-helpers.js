@@ -7,6 +7,10 @@ import {
 	validateFreeformStyleValueByKind,
 } from '../utils/style-validation';
 import {
+	buildBlockOperationValidationContext,
+	validateBlockOperationSequence,
+} from '../utils/block-operation-catalog';
+import {
 	classifyBlockSuggestionActionability,
 	summarizeActionability,
 } from '../utils/recommendation-actionability';
@@ -325,12 +329,35 @@ function isAdvisoryOnlyBlockSuggestion( suggestion ) {
  * @return {Object} Normalized suggestion.
  */
 function normalizeBlockSuggestionForExecution( suggestion ) {
-	if ( ! suggestion || ! isAdvisoryOnlyBlockSuggestion( suggestion ) ) {
+	if ( ! suggestion || typeof suggestion !== 'object' ) {
 		return suggestion;
 	}
 
-	return {
+	const proposedOperations = Array.isArray( suggestion.proposedOperations )
+		? suggestion.proposedOperations
+		: [];
+	const fallbackProposedOperations =
+		proposedOperations.length === 0 &&
+		Array.isArray( suggestion.operations )
+			? suggestion.operations
+			: proposedOperations;
+	const normalized = {
 		...suggestion,
+		operations: Array.isArray( suggestion.operations )
+			? suggestion.operations
+			: [],
+		proposedOperations: fallbackProposedOperations,
+		rejectedOperations: Array.isArray( suggestion.rejectedOperations )
+			? suggestion.rejectedOperations
+			: [],
+	};
+
+	if ( ! isAdvisoryOnlyBlockSuggestion( normalized ) ) {
+		return normalized;
+	}
+
+	return {
+		...normalized,
 		attributeUpdates: [],
 	};
 }
@@ -428,6 +455,92 @@ function getEditingRestrictions( blockContext, executionContract = null ) {
 		contentOnly:
 			blockContext?.isInsideContentOnly ||
 			blockContext?.editingMode === 'contentOnly',
+	};
+}
+
+function getOperationIdentity( operation = {} ) {
+	return JSON.stringify( {
+		catalogVersion: operation.catalogVersion || 1,
+		type: operation.type || '',
+		patternName: operation.patternName || '',
+		targetClientId: operation.targetClientId || '',
+		targetType: operation.targetType || 'block',
+		targetSignature: operation.targetSignature || '',
+		position: operation.position || '',
+		action: operation.action || '',
+	} );
+}
+
+function getServerApprovedOperationIdentities( operations = [] ) {
+	return new Set(
+		( Array.isArray( operations ) ? operations : [] ).map(
+			getOperationIdentity
+		)
+	);
+}
+
+function appendUniqueRejections( left = [], right = [] ) {
+	const result = [];
+	const seen = new Set();
+
+	for ( const rejection of [
+		...( Array.isArray( left ) ? left : [] ),
+		...( Array.isArray( right ) ? right : [] ),
+	] ) {
+		const key = JSON.stringify( {
+			code: rejection?.code || '',
+			operation: rejection?.operation || null,
+		} );
+
+		if ( seen.has( key ) ) {
+			continue;
+		}
+
+		seen.add( key );
+		result.push( rejection );
+	}
+
+	return result;
+}
+
+function resolveBlockOperationValidation( suggestion, blockContext ) {
+	const proposedOperations = Array.isArray( suggestion?.proposedOperations )
+		? suggestion.proposedOperations
+		: [];
+	const fallbackProposedOperations =
+		proposedOperations.length === 0 &&
+		Array.isArray( suggestion?.operations )
+			? suggestion.operations
+			: proposedOperations;
+	const serverOperations = Array.isArray( suggestion?.operations )
+		? suggestion.operations
+		: [];
+	const validation = validateBlockOperationSequence(
+		fallbackProposedOperations,
+		buildBlockOperationValidationContext( blockContext )
+	);
+	const approvedOperationIdentities =
+		getServerApprovedOperationIdentities( serverOperations );
+	const validationOperationIdentities = new Set(
+		validation.operations.map( getOperationIdentity )
+	);
+	const executableOperations =
+		approvedOperationIdentities.size > 0
+			? serverOperations.filter( ( operation ) =>
+					validationOperationIdentities.has(
+						getOperationIdentity( operation )
+					)
+			  )
+			: [];
+	const rejectedOperations = appendUniqueRejections(
+		suggestion?.rejectedOperations,
+		validation.rejectedOperations
+	);
+
+	return {
+		...validation,
+		operations: executableOperations,
+		rejectedOperations,
 	};
 }
 
@@ -1314,22 +1427,38 @@ function attachBlockSuggestionActionability(
 	);
 
 	return suggestions.map( ( suggestion ) => {
-		const advisoryOnly = isAdvisoryOnlyBlockSuggestion( suggestion );
+		const normalizedSuggestion =
+			normalizeBlockSuggestionForExecution( suggestion );
+		const operationValidation = resolveBlockOperationValidation(
+			normalizedSuggestion,
+			blockContext
+		);
+		const advisoryOnly =
+			isAdvisoryOnlyBlockSuggestion( normalizedSuggestion );
 		const allowedUpdates = advisoryOnly
 			? {}
 			: getSuggestionAttributeUpdates(
-					suggestion,
+					normalizedSuggestion,
 					blockContext,
 					resolvedExecutionContract
 			  );
+		const suggestionWithOperations = {
+			...normalizedSuggestion,
+			operations: operationValidation.operations,
+			rejectedOperations: operationValidation.rejectedOperations,
+		};
 		const actionability = classifyBlockSuggestionActionability( {
-			suggestion,
+			suggestion: suggestionWithOperations,
 			allowedUpdates,
 			isAdvisoryOnly: advisoryOnly,
 			restrictions,
+			operationValidation,
 		} );
 
-		return withComputedActionability( suggestion, actionability );
+		return withComputedActionability(
+			suggestionWithOperations,
+			actionability
+		);
 	} );
 }
 
@@ -2152,15 +2281,22 @@ export function getBlockSuggestionExecutionInfo(
 	blockContext = {},
 	executionContract = null
 ) {
-	const advisoryOnly = isAdvisoryOnlyBlockSuggestion( suggestion );
+	const normalizedSuggestion =
+		normalizeBlockSuggestionForExecution( suggestion );
+	const operationValidation = resolveBlockOperationValidation(
+		normalizedSuggestion,
+		blockContext
+	);
+	const advisoryOnly = isAdvisoryOnlyBlockSuggestion( normalizedSuggestion );
 	const allowedUpdates = advisoryOnly
 		? {}
 		: getSuggestionAttributeUpdates(
-				suggestion,
+				normalizedSuggestion,
 				blockContext,
 				executionContract
 		  );
 	const hasExecutableUpdates = Object.keys( allowedUpdates ).length > 0;
+	const hasReviewOperation = operationValidation.operations.length === 1;
 	const resolvedExecutionContract = resolveExecutionContract(
 		blockContext,
 		executionContract
@@ -2170,17 +2306,24 @@ export function getBlockSuggestionExecutionInfo(
 		resolvedExecutionContract
 	);
 	const actionability = classifyBlockSuggestionActionability( {
-		suggestion,
+		suggestion: {
+			...normalizedSuggestion,
+			operations: operationValidation.operations,
+			rejectedOperations: operationValidation.rejectedOperations,
+		},
 		allowedUpdates,
 		isAdvisoryOnly: advisoryOnly,
 		restrictions,
+		operationValidation,
 	} );
 
 	return {
 		allowedUpdates,
 		actionability,
 		eligibility: actionability,
-		isAdvisory: advisoryOnly || ! hasExecutableUpdates,
+		isAdvisory:
+			( advisoryOnly && ! hasReviewOperation ) ||
+			( ! hasExecutableUpdates && ! hasReviewOperation ),
 		isAdvisoryOnly: advisoryOnly,
 		isExecutable: ! advisoryOnly && hasExecutableUpdates,
 	};

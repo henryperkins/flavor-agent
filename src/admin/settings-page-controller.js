@@ -450,7 +450,7 @@ function parseJsonValue( value, fallback = null ) {
 }
 
 function isValidBlockName( blockName ) {
-	return /^[a-z0-9-]+\/[a-z0-9-]+$/.test( normalizeText( blockName ) );
+	return /^[a-z0-9-]+\/[a-z0-9-]+$/.test( normalizeText( blockName ).trim() );
 }
 
 function normalizeBlockGuidelines( value ) {
@@ -461,7 +461,11 @@ function normalizeBlockGuidelines( value ) {
 	return Object.fromEntries(
 		Object.entries( value )
 			.map( ( [ blockName, blockData ] ) => {
-				if ( ! isValidBlockName( blockName ) ) {
+				const normalizedBlockName = normalizeText( blockName )
+					.trim()
+					.toLowerCase();
+
+				if ( ! isValidBlockName( normalizedBlockName ) ) {
 					return null;
 				}
 
@@ -477,7 +481,7 @@ function normalizeBlockGuidelines( value ) {
 					return null;
 				}
 
-				return [ blockName, guidelines ];
+				return [ normalizedBlockName, guidelines ];
 			} )
 			.filter( Boolean )
 			.sort( ( [ leftName ], [ rightName ] ) =>
@@ -981,14 +985,35 @@ function initializePatternSync( root, fetchImpl ) {
 
 	const canSync =
 		normalizeText( syncBody.dataset.patternPrerequisitesReady ) === '1';
+	const prerequisiteCopy = syncBody.querySelector(
+		'[data-pattern-prerequisite-copy]'
+	);
+
+	const updateButtonAccessibility = ( isBusy = false ) => {
+		const isDisabled = isBusy || ! canSync;
+
+		button.disabled = isDisabled;
+		button.setAttribute( 'aria-disabled', isDisabled ? 'true' : 'false' );
+
+		if ( canSync || ! prerequisiteCopy ) {
+			button.removeAttribute( 'aria-describedby' );
+			return;
+		}
+
+		if ( ! prerequisiteCopy.id ) {
+			prerequisiteCopy.id = 'flavor-agent-sync-prerequisites';
+		}
+
+		button.setAttribute( 'aria-describedby', prerequisiteCopy.id );
+	};
 
 	const setBusy = ( isBusy ) => {
-		button.disabled = isBusy || ! canSync;
+		updateButtonAccessibility( isBusy );
 		spinner.classList.toggle( 'is-active', isBusy );
 		setStatusText( statusNode, isBusy ? 'Syncing...' : '' );
 	};
 
-	button.disabled = ! canSync;
+	updateButtonAccessibility();
 
 	button.addEventListener( 'click', async () => {
 		if ( ! canSync ) {
