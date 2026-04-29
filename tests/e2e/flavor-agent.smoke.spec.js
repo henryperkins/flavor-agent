@@ -1976,14 +1976,28 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	const patternRequests = [];
 
 	await page.route( '**/*recommend-patterns*', async ( route ) => {
-		patternRequests.push( route.request().postDataJSON() );
+		const requestData = route.request().postDataJSON();
+		const visiblePatternNames = Array.isArray(
+			requestData.visiblePatternNames
+		)
+			? requestData.visiblePatternNames
+			: [];
+		const recommendationName =
+			visiblePatternNames.find( ( name ) => name.includes( 'hero' ) ) ||
+			visiblePatternNames[ 0 ] ||
+			'playground/recommended-pattern';
+
+		patternRequests.push( {
+			...requestData,
+			mockedRecommendationName: recommendationName,
+		} );
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify( {
 				recommendations: [
 					{
-						name: 'playground/recommended-pattern',
+						name: recommendationName,
 						score: 0.97,
 						reason: PATTERN_REASON,
 					},
@@ -2006,6 +2020,7 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	const searchPrompt = 'hero';
 
 	await expect.poll( () => patternRequests.length > 0 ).toBe( true );
+	await dismissWelcomeGuide( page );
 
 	await page
 		.getByRole( 'button', {
@@ -2037,6 +2052,9 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	);
 
 	expect( activeRequest.prompt ).toBe( searchPrompt );
+	expect( activeRequest.visiblePatternNames ).toContain(
+		activeRequest.mockedRecommendationName
+	);
 	expect( activeRequest.blockContext ).toEqual( {
 		blockName: 'core/paragraph',
 	} );

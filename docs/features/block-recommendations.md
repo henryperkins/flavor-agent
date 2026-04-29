@@ -26,7 +26,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Fresh results now surface one featured next step before the grouped `Apply now` and `Manual ideas` lanes
 - Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract
 - Block recommendations are the only recommendation surface that now retains stale client-side results; stale results stay visible for reference, executable chips are demoted/disabled, and `SurfaceScopeBar` exposes an explicit `Refresh` action
-- Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
+- Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background revalidation also checks the wrapped REST signature-only response and demotes/disables stale results before apply; background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
 - The panel now states that inline apply is the exception for safe local block updates, while structural surfaces keep the same status/history framing but require preview first
 - The embedded navigation section remains a subordinate exception: it keeps its own request state and `Recommended Next Changes` wrapper because it is nested inside block recommendations rather than acting as a peer surface
 - The main block panel is now the only executable block surface; delegated native sub-panels mirror the current result but do not own apply, refresh, or activity state
@@ -183,7 +183,7 @@ User selects block + prompt
 
 - Suggest block settings changes, style changes, and broader block-level adjustments
 - Keep block, settings, and style apply actions in one place while still mirroring the result into the native Inspector location where the user would normally inspect that change
-- Apply bounded attribute updates with safe handling for nested `style` and `metadata` keys
+- Apply bounded attribute updates limited to declared content/config attributes, supported style channels, supported visibility/binding metadata, and registered style variations
 - Record the apply action in the shared AI activity system and surface inline undo for the newest valid tail entry
 
 ## Guardrails And Failure Modes
@@ -191,9 +191,10 @@ User selects block + prompt
 - Disabled blocks do not render the surface at all
 - Content-only editing mode limits executable suggestions to content-safe attributes, though broader manual guidance can still remain visible
 - Visibility state in `attributes.metadata.blockVisibility` is respected during prompt building and post-parse enforcement
+- Executable updates cannot set `lock`, arbitrary `metadata`, or undeclared top-level attributes; `metadata` is limited to supported `blockVisibility` and allowed `bindings`. Partial execution contracts inherit missing local attribute-key lists from the block context before this undeclared-attribute filter runs.
 - Apply is also blocked when the live server-resolved apply context drifts, even if the local block snapshot still hashes to the same client request signature
 - If no allowed attribute updates remain after validation, the suggestion is not applied
-- Undo is blocked if the block moved, disappeared, or changed after the AI apply
+- Undo is blocked if the block disappeared, changed type, or changed attributes after the AI apply; a moved block remains undoable when the same `clientId`, block name, and applied attribute snapshot still match
 
 ## Primary Functions And Handlers
 

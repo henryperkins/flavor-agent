@@ -5,6 +5,7 @@ function joinClassNames( ...values ) {
 function mockWpComponents( overrides = {} ) {
 	const {
 		Children,
+		cloneElement,
 		Fragment,
 		createElement,
 	} = require( '@wordpress/element' );
@@ -208,7 +209,10 @@ function mockWpComponents( overrides = {} ) {
 				help ? createElement( 'div', null, help ) : null
 			);
 		},
-		Tooltip: ( { children } ) => createElement( Fragment, null, children ),
+		Tooltip: ( { children, text } ) =>
+			children?.props
+				? cloneElement( children, { title: text } )
+				: createElement( Fragment, null, children ),
 		ToggleGroupControl,
 		ToggleGroupControlOption,
 		__experimentalToggleGroupControl: ToggleGroupControl,

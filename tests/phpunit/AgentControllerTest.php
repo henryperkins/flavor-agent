@@ -501,6 +501,7 @@ final class AgentControllerTest extends TestCase {
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
 		$request->set_param( 'postType', 'page' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/hero' ] );
 		$request->set_param(
 			'document',
 			[
@@ -564,6 +565,7 @@ final class AgentControllerTest extends TestCase {
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
 		$request->set_param( 'postType', 'page' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/header-utility' ] );
 		$request->set_param(
 			'insertionContext',
 			[
@@ -621,6 +623,7 @@ final class AgentControllerTest extends TestCase {
 
 		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
 		$request->set_param( 'postType', 'page' );
+		$request->set_param( 'visiblePatternNames', [ 'theme/hero' ] );
 
 		$response = Agent_Controller::handle_recommend_patterns( $request );
 
@@ -628,6 +631,46 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( 'index_warming', $response->get_error_code() );
 		$this->assertSame( 503, $response->get_error_data()['status'] ?? null );
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+	}
+
+	public function test_handle_recommend_patterns_returns_empty_when_visible_scope_is_missing(): void {
+		$this->disable_wordpress_ai_client_runtime();
+		$this->configure_pattern_recommendation_backends();
+		$this->save_ready_pattern_index_state();
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
+		$request->set_param( 'postType', 'page' );
+
+		$response = Agent_Controller::handle_recommend_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $response->get_data()['recommendations'] ?? null );
+		$this->assertResponseRequestMeta(
+			$response->get_data(),
+			'flavor-agent/recommend-patterns',
+			'POST /flavor-agent/v1/recommend-patterns'
+		);
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_handle_recommend_patterns_preserves_explicit_empty_visible_scope(): void {
+		$this->disable_wordpress_ai_client_runtime();
+		$this->configure_pattern_recommendation_backends();
+		$this->save_ready_pattern_index_state();
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-patterns' );
+		$request->set_param( 'postType', 'page' );
+		$request->set_param( 'visiblePatternNames', [] );
+
+		$response = Agent_Controller::handle_recommend_patterns( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $response->get_data()['recommendations'] ?? null );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 	}
 
 

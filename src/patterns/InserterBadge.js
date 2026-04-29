@@ -7,25 +7,57 @@
  * Toggle button discovery goes through `inserter-dom.js` so caller
  * code treats missing toolbar markup as a clean degraded path.
  */
+import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
-import { useEffect, useState, createPortal } from '@wordpress/element';
+import { useEffect, useMemo, useState, createPortal } from '@wordpress/element';
 import { Tooltip } from '@wordpress/components';
 
 import { findInserterToggle } from './inserter-dom';
 import { STORE_NAME } from '../store';
 import { getInserterBadgeState } from './inserter-badge-state';
+import { getAllowedPatterns } from './pattern-settings';
+import {
+	buildRecommendedPatterns,
+	getPatternBadgeReason,
+} from './recommendation-utils';
 
 export default function InserterBadge() {
-	const badgeState = useSelect( ( select ) => {
+	const patternState = useSelect( ( select ) => {
 		const store = select( STORE_NAME );
 
-		return getInserterBadgeState( {
+		return {
 			status: store.getPatternStatus(),
 			recommendations: store.getPatternRecommendations(),
-			badge: store.getPatternBadge(),
 			error: store.getPatternError(),
-		} );
+		};
 	}, [] );
+	const allowedPatterns = useSelect( ( select ) => {
+		const editor = select( blockEditorStore );
+		const insertionPoint = editor.getBlockInsertionPoint?.() || null;
+
+		return getAllowedPatterns(
+			insertionPoint?.rootClientId ?? null,
+			editor
+		);
+	}, [] );
+	const renderableRecommendations = useMemo(
+		() =>
+			buildRecommendedPatterns(
+				patternState.recommendations,
+				allowedPatterns
+			).map( ( { recommendation } ) => recommendation ),
+		[ allowedPatterns, patternState.recommendations ]
+	);
+	const badgeState = useMemo(
+		() =>
+			getInserterBadgeState( {
+				status: patternState.status,
+				recommendations: renderableRecommendations,
+				badge: getPatternBadgeReason( renderableRecommendations ),
+				error: patternState.error,
+			} ),
+		[ patternState.error, patternState.status, renderableRecommendations ]
+	);
 	const [ anchor, setAnchor ] = useState( null );
 
 	useEffect( () => {

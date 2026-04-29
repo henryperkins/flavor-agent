@@ -378,8 +378,26 @@ function resolveExecutionContract(
 	executionContract = null
 ) {
 	if ( executionContract && typeof executionContract === 'object' ) {
+		const blockContextContract = buildBlockRecommendationExecutionContract(
+			blockContext,
+			{}
+		);
+		const hasContentKeys = Array.isArray(
+			executionContract.contentAttributeKeys
+		);
+		const hasConfigKeys = Array.isArray(
+			executionContract.configAttributeKeys
+		);
+
 		return {
+			...blockContextContract,
 			...executionContract,
+			contentAttributeKeys: hasContentKeys
+				? executionContract.contentAttributeKeys
+				: blockContextContract.contentAttributeKeys,
+			configAttributeKeys: hasConfigKeys
+				? executionContract.configAttributeKeys
+				: blockContextContract.configAttributeKeys,
 			isAuthoritative: executionContract.isAuthoritative !== false,
 		};
 	}
@@ -903,18 +921,34 @@ function filterStyleAttributeUpdatesForExecutionContract(
 
 function filterAttributeUpdatesForExecutionContract(
 	attributeUpdates,
-	executionContract
+	executionContract,
+	{ allowClassName = false } = {}
 ) {
 	if ( ! isPlainObject( attributeUpdates ) ) {
 		return {};
 	}
 
 	const filtered = {};
+	const allowedLocalAttributes =
+		getAllowedLocalAttributeKeys( executionContract );
 
 	for ( const [ key, value ] of Object.entries( attributeUpdates ) ) {
 		let validated = value;
 
 		switch ( key ) {
+			case 'lock':
+				validated = null;
+				break;
+			case 'className':
+				validated =
+					allowClassName && typeof value === 'string' ? value : null;
+				break;
+			case 'metadata':
+				validated = filterMetadataAttributeUpdatesForExecutionContract(
+					value,
+					executionContract
+				);
+				break;
 			case 'backgroundColor':
 				validated = validateTopLevelPresetAttribute(
 					value,
@@ -999,6 +1033,9 @@ function filterAttributeUpdatesForExecutionContract(
 					executionContract
 				);
 				break;
+			default:
+				validated = allowedLocalAttributes.has( key ) ? value : null;
+				break;
 		}
 
 		if (
@@ -1010,6 +1047,60 @@ function filterAttributeUpdatesForExecutionContract(
 		}
 
 		filtered[ key ] = validated;
+	}
+
+	return filtered;
+}
+
+function getAllowedLocalAttributeKeys( executionContract = {} ) {
+	return new Set( [
+		...( Array.isArray( executionContract?.contentAttributeKeys )
+			? executionContract.contentAttributeKeys
+			: [] ),
+		...( Array.isArray( executionContract?.configAttributeKeys )
+			? executionContract.configAttributeKeys
+			: [] ),
+	] );
+}
+
+function filterMetadataAttributeUpdatesForExecutionContract(
+	metadata,
+	executionContract = {}
+) {
+	if ( ! isPlainObject( metadata ) ) {
+		return {};
+	}
+
+	const filtered = {};
+
+	if (
+		Object.prototype.hasOwnProperty.call( metadata, 'blockVisibility' ) &&
+		( metadata.blockVisibility === false ||
+			isPlainObject( metadata.blockVisibility ) )
+	) {
+		filtered.blockVisibility = metadata.blockVisibility;
+	}
+
+	if ( isPlainObject( metadata.bindings ) ) {
+		const bindableAttributeKeys = getBindableAttributeKeys(
+			{},
+			executionContract
+		);
+
+		if ( Array.isArray( bindableAttributeKeys ) ) {
+			const allowedKeys = new Set( bindableAttributeKeys );
+			const filteredBindings = Object.fromEntries(
+				Object.entries( metadata.bindings ).filter( ( [ key ] ) =>
+					allowedKeys.has( key )
+				)
+			);
+
+			if ( Object.keys( filteredBindings ).length > 0 ) {
+				filtered.bindings = filteredBindings;
+			}
+		} else {
+			filtered.bindings = metadata.bindings;
+		}
 	}
 
 	return filtered;
@@ -1118,11 +1209,14 @@ function sanitizeSuggestionForExecutionContract(
 
 	const filteredUpdates = filterAttributeUpdatesForExecutionContract(
 		suggestion.attributeUpdates,
-		executionContract
+		executionContract,
+		{ allowClassName: isStyleVariation }
 	);
 
 	if ( Object.keys( filteredUpdates ).length === 0 ) {
-		return isAdvisoryOnly || group === 'block' ? suggestion : null;
+		return isAdvisoryOnly
+			? normalizeBlockSuggestionForExecution( suggestion )
+			: null;
 	}
 
 	return {
@@ -1867,7 +1961,8 @@ export function getSuggestionAttributeUpdates(
 	const executionContractSafeUpdates =
 		filterAttributeUpdatesForExecutionContract(
 			themeSafeUpdates,
-			resolvedExecutionContract
+			resolvedExecutionContract,
+			{ allowClassName: suggestion?.type === 'style_variation' }
 		);
 
 	if ( Object.keys( executionContractSafeUpdates ).length === 0 ) {

@@ -1,5 +1,8 @@
 import { getStyleBookUiState } from '../style-book/dom';
-import { resolveActivityBlock } from './block-targeting';
+import {
+	BLOCK_TARGET_MOVED_ERROR,
+	resolveActivityBlockTarget,
+} from './block-targeting';
 import { attributeSnapshotsMatch } from './update-helpers';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
@@ -627,10 +630,11 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 		return existingUndo;
 	}
 
-	const resolvedBlock = resolveActivityBlock(
+	const resolvedTarget = resolveActivityBlockTarget(
 		blockEditorSelect,
 		entry?.target || {}
 	);
+	const resolvedBlock = resolvedTarget.block;
 
 	if ( ! resolvedBlock?.clientId ) {
 		return {
@@ -649,7 +653,7 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 			...existingUndo,
 			canUndo: false,
 			status: 'failed',
-			error: 'The target block changed position or type and cannot be undone automatically.',
+			error: BLOCK_TARGET_MOVED_ERROR,
 		};
 	}
 

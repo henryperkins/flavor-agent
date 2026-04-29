@@ -54,7 +54,7 @@ Session-scoped AI activity schema, scope resolution, `sessionStorage` cache/fall
 
 ### `src/store/update-helpers.js`
 
-Pure-function utility with zero internal dependencies. Contains the core of the block apply/undo path: safe attribute merging, undo patch construction, snapshot comparison, content-only filtering, and full suggestion sanitization.
+Pure-function utility with zero internal dependencies. Contains the core of the block apply/undo path: safe attribute merging, undo patch construction, snapshot comparison, content-only filtering, execution-contract allowlisting, and full suggestion sanitization.
 
 **Key exports:**
 
@@ -63,7 +63,7 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 | `buildSafeAttributeUpdates(currentAttributes, suggestedUpdates)`   | Produces a safe attribute patch by filtering out raw CSS injection, stripping unsafe theme payloads, and deep-merging nested keys so existing sub-properties are preserved |
 | `buildUndoAttributeUpdates(previousAttributes, nextAttributes)`    | Builds a restoration patch that reverts an applied attribute change; keys present only in `next` are set to `undefined`                                                    |
 | `attributeSnapshotsMatch(previousSnapshot, currentSnapshot)`       | Deep structural equality check between two attribute snapshots, used by undo logic to determine whether a block's attributes still match the expected state                |
-| `sanitizeRecommendationsForContext(recommendations, blockContext)` | Main sanitization pipeline: normalizes suggestion groups, strips theme-unsafe CSS, filters binding-unsafe attributes, enforces editing-mode restrictions                   |
+| `sanitizeRecommendationsForContext(recommendations, blockContext)` | Main sanitization pipeline: normalizes suggestion groups, strips theme-unsafe CSS, restricts executable updates to declared/supported attributes, filters binding-unsafe metadata, and enforces editing-mode restrictions |
 | `getBlockSuggestionExecutionInfo(suggestion, blockContext)`        | Returns `{ allowedUpdates, isAdvisory, isAdvisoryOnly, isExecutable }` describing whether a suggestion is purely informational or carries executable attribute changes     |
 | `filterAttributeUpdatesForContentOnly(updates, blockContext)`      | Filters attribute updates to only content attributes when the block is in content-only editing mode                                                                        |
 | `buildBlockRecommendationDiagnostics(suggestion, context)`         | Builds diagnostic metadata for a block recommendation (advisory status, allowed updates, execution info)                                                                   |
@@ -73,14 +73,17 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 
 ### `src/store/block-targeting.js`
 
-Minimal module (2 exports) that resolves activity entry targets to live editor blocks. This is the bridge between persisted activity entries and the live block editor state.
+Minimal module that resolves activity entry targets to live editor blocks and compares recorded paths with the current block tree. This is the bridge between persisted activity entries and the live block editor state.
 
 **Key exports:**
 
-| Export                                            | Role                                                                                                                 |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `getBlockByPath(blocks, path)`                    | Traverses a block tree using an array of numeric indices and returns the block at that location                      |
-| `resolveActivityBlock(blockEditorSelect, target)` | Resolves an activity target: tries `target.clientId` first, then falls back to `target.blockPath` via tree traversal |
+| Export                                                   | Role                                                                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `getBlockByPath(blocks, path)`                           | Traverses a block tree using an array of numeric indices and returns the block at that location                      |
+| `getBlockPathByClientId(blocks, clientId)`               | Walks the current block tree and returns the live path for a block client ID                                        |
+| `resolveActivityBlockTarget(blockEditorSelect, target)`  | Resolves an activity target plus its current path: tries `target.clientId` first, then falls back to `target.blockPath` via tree traversal |
+| `hasResolvedActivityBlockMoved(resolvedTarget, target)`  | Returns true when a clientId-resolved block no longer matches the recorded `target.blockPath`; path drift is diagnostic only because undo safety is enforced by block name and attribute snapshot checks |
+| `resolveActivityBlock(blockEditorSelect, target)`        | Backward-compatible block-only resolver used by older callers                                                       |
 
 **Consumers:** `src/store/activity-history.js`, `src/store/index.js`
 
@@ -102,7 +105,7 @@ Local request-signature builder shared by the executable recommendation surfaces
 
 **Consumers:** `src/store/index.js`, `src/inspector/BlockRecommendationsPanel.js`, `src/templates/TemplateRecommender.js`, `src/template-parts/TemplatePartRecommender.js`, `src/global-styles/GlobalStylesRecommender.js`, `src/style-book/StyleBookRecommender.js`, `src/inspector/SuggestionChips.js`
 
-`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety, template/template-part/Global Styles/Style Book also store a docs-free `reviewContextSignature` for background review revalidation, and navigation stores a docs-free `reviewContextSignature` without an apply hash. Apply actions keep the existing local stale check first, then re-post the same request with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
+`src/store/index.js` now pairs these local request signatures with server freshness signatures. Block stores `resolvedContextSignature` for apply safety and background server freshness demotion, template/template-part/Global Styles/Style Book also store a docs-free `reviewContextSignature` for background review revalidation, and navigation stores a docs-free `reviewContextSignature` without an apply hash. Apply actions keep the existing local stale check first, then re-post the same request with `resolveSignatureOnly: true` and compare the returned server apply-context signature before any deterministic mutation runs.
 
 ### `inc/Support/RecommendationResolvedSignature.php`
 
@@ -159,7 +162,7 @@ Renders a review-before-apply confirmation panel for executable AI operations. D
 These components provide the reusable top-of-panel shell for the full recommendation surfaces.
 
 - `SurfacePanelIntro.js` renders the short surface-specific intro copy block.
-- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. On executable surfaces, freshness still starts with local request-signature comparison, then hybrid review surfaces (template/template-part/Global Styles/Style Book) can layer server review staleness from `reviewContextSignature` revalidation while block keeps client-review-only freshness. Store apply actions continue using server `resolvedContextSignature` revalidation before mutation. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
+- `SurfaceScopeBar.js` renders current/stale scope state plus the refresh affordance when a result exists. On executable surfaces, freshness still starts with local request-signature comparison, then hybrid review surfaces (template/template-part/Global Styles/Style Book) can layer server review staleness from `reviewContextSignature` revalidation while block layers background server staleness from the wrapped REST `payload.resolvedContextSignature`. Store apply actions continue using server `resolvedContextSignature` revalidation before mutation. Stale-state messaging is intentionally surface-owned; the shared status notice does not render stale notices.
 - `SurfaceComposer.js` wraps the prompt field, starter prompts, submit action, helper text, and keyboard submission handling. Executable surfaces hydrate the composer prompt from the stored ready-result prompt once per result token so preloaded results start in a fresh state and only become stale after the user edits the prompt or the live context signature changes.
 - Keyboard-only verification notes for `SurfaceComposer`: (1) tab order remains prompt textarea -> starter prompts (if present) -> submit action, (2) prompt focus ring stays clearly visible in default and high-contrast admin themes, and (3) visible labels/helper copy continue to communicate purpose even when placeholder text is absent.
 
@@ -425,7 +428,7 @@ CSS selector constants and DOM finders for the inserter container, search input,
 
 ### `src/patterns/inserter-badge-state.js`
 
-Pure state-machine function `getInserterBadgeState()` that maps pattern recommendation status (`loading`, `error`, `ready`) into a badge view-model with `status`, `count`, `content`, `tooltip`, `ariaLabel`, and `className`.
+Pure state-machine function `getInserterBadgeState()` that maps pattern recommendation status (`loading`, `error`, `ready`) into a badge view-model with `status`, `count`, `content`, `tooltip`, `ariaLabel`, and `className`. `InserterBadge` passes only renderable recommendations for the current allowed-pattern scope, so the ready count and tooltip do not use a raw store-level badge cache.
 
 **Consumers:** `src/patterns/InserterBadge.js`
 
@@ -443,9 +446,9 @@ Single export `extractPatternNames()` that extracts distinct pattern names from 
 
 ### `src/patterns/recommendation-utils.js`
 
-Small utility module for pattern badge reason extraction. `getPatternBadgeReason()` returns the reason from the highest-confidence recommendation for badge tooltip use.
+Small utility module for renderable pattern recommendation matching and badge reason extraction. `buildRecommendedPatterns()` intersects recommendations with the current inserter allowed-pattern list, and `getPatternBadgeReason()` returns the reason from the highest-confidence renderable recommendation for badge tooltip use.
 
-**Consumers:** `src/store/index.js`
+**Consumers:** `src/patterns/InserterBadge.js`, `src/patterns/PatternRecommender.js`
 
 ## Template And Template-Part Utilities
 

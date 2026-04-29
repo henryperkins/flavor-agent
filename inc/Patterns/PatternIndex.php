@@ -8,6 +8,7 @@ use FlavorAgent\AzureOpenAI\EmbeddingClient;
 use FlavorAgent\AzureOpenAI\EmbeddingSignature;
 use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
 
 final class PatternIndex {
@@ -19,7 +20,6 @@ final class PatternIndex {
 	private const LOCK_TTL                    = 300;
 	private const COOLDOWN                    = 300;
 	private const BATCH_SIZE                  = 100;
-	private const SYNCED_PATTERN_NAME_PREFIX  = 'core/block/';
 	private const COMPATIBILITY_STALE_REASONS = [
 		'embedding_signature_changed',
 		'qdrant_url_changed',
@@ -462,24 +462,7 @@ final class PatternIndex {
 			return [];
 		}
 
-		$name = self::SYNCED_PATTERN_NAME_PREFIX . $pattern_id;
-
-		return [
-			'id'                  => $name,
-			'name'                => $name,
-			'title'               => (string) ( $pattern['title'] ?? '' ),
-			'description'         => '',
-			'categories'          => [ 'reusable' ],
-			'blockTypes'          => [],
-			'templateTypes'       => [],
-			'patternOverrides'    => [],
-			'type'                => 'user',
-			'source'              => 'synced',
-			'syncedPatternId'     => $pattern_id,
-			'syncStatus'          => (string) ( $pattern['syncStatus'] ?? '' ),
-			'wpPatternSyncStatus' => (string) ( $pattern['wpPatternSyncStatus'] ?? '' ),
-			'content'             => (string) ( $pattern['content'] ?? '' ),
-		];
+		return SyncedPatternRepository::normalize_synced_pattern_payload( $pattern );
 	}
 
 	private static function is_synced_pattern_post( mixed $post_id, mixed $post = null ): bool {

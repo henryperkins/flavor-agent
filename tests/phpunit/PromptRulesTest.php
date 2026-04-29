@@ -223,6 +223,9 @@ final class PromptRulesTest extends TestCase {
 			],
 			[
 				'bindableAttributes' => [ 'url' ],
+			],
+			[
+				'bindableAttributes' => [ 'url' ],
 			]
 		);
 
@@ -232,7 +235,6 @@ final class PromptRulesTest extends TestCase {
 					'label'            => 'Connect CTA fields',
 					'attributeUpdates' => [
 						'metadata' => [
-							'name'     => 'Hero CTA',
 							'bindings' => [
 								'url' => [
 									'source' => 'core/post-meta',
@@ -653,10 +655,11 @@ final class PromptRulesTest extends TestCase {
 			],
 			[],
 			[
-				'panelMappingKnown' => false,
-				'allowedPanels'     => [],
-				'styleSupportPaths' => [],
-				'presetSlugs'       => [
+				'panelMappingKnown'   => false,
+				'allowedPanels'       => [],
+				'configAttributeKeys' => [ 'dropCap' ],
+				'styleSupportPaths'   => [],
+				'presetSlugs'         => [
 					'color' => [ 'accent' ],
 				],
 			]
@@ -709,6 +712,7 @@ final class PromptRulesTest extends TestCase {
 				'panelMappingKnown'        => false,
 				'allowedPanels'            => [],
 				'hasExplicitlyEmptyPanels' => false,
+				'configAttributeKeys'      => [ 'align' ],
 				'styleSupportPaths'        => [],
 			]
 		);
@@ -753,6 +757,203 @@ final class PromptRulesTest extends TestCase {
 		);
 
 		$this->assertSame( [], $result['block'] );
+	}
+
+	public function test_enforce_block_context_rules_filters_executable_updates_to_declared_attribute_contract(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Update declared config',
+						'panel'            => 'general',
+						'attributeUpdates' => [
+							'dropCap'           => true,
+							'lock'              => [ 'move' => true ],
+							'unregisteredThing' => 'surprise',
+						],
+					],
+				],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Connect supported metadata',
+						'attributeUpdates' => [
+							'metadata' => [
+								'name'            => 'Hero CTA',
+								'blockVisibility' => [
+									'viewport' => [
+										'mobile' => false,
+									],
+								],
+								'bindings'        => [
+									'content' => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_label' ],
+									],
+									'url'     => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_url' ],
+									],
+								],
+							],
+						],
+					],
+				],
+				'explanation' => 'Only declared local attributes and supported metadata should survive.',
+			],
+			[
+				'bindableAttributes' => [ 'content' ],
+			],
+			[
+				'allowedPanels'       => [ 'general' ],
+				'configAttributeKeys' => [ 'dropCap' ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Update declared config',
+					'panel'            => 'general',
+					'attributeUpdates' => [
+						'dropCap' => true,
+					],
+				],
+			],
+			$result['settings']
+		);
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Connect supported metadata',
+					'attributeUpdates' => [
+						'metadata' => [
+							'blockVisibility' => [
+								'viewport' => [
+									'mobile' => false,
+								],
+							],
+							'bindings'        => [
+								'content' => [
+									'source' => 'core/post-meta',
+									'args'   => [ 'key' => 'cta_label' ],
+								],
+							],
+						],
+					],
+				],
+			],
+			$result['block']
+		);
+	}
+
+	public function test_enforce_block_context_rules_merges_partial_execution_contract_with_block_local_attributes(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Update local attributes',
+						'panel'            => 'general',
+						'attributeUpdates' => [
+							'content'          => 'Updated copy',
+							'dropCap'          => true,
+							'unknownAttribute' => 'remove me',
+						],
+					],
+				],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Partial contracts should still use block-local keys.',
+			],
+			[
+				'contentAttributes' => [
+					'content' => [ 'role' => 'content' ],
+				],
+				'configAttributes'  => [
+					'dropCap' => [ 'type' => 'boolean' ],
+				],
+			],
+			[
+				'allowedPanels'     => [ 'general' ],
+				'panelMappingKnown' => true,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Update local attributes',
+					'panel'            => 'general',
+					'attributeUpdates' => [
+						'content' => 'Updated copy',
+						'dropCap' => true,
+					],
+				],
+			],
+			$result['settings']
+		);
+	}
+
+	public function test_enforce_block_context_rules_filters_bindings_declared_by_execution_contract(): void {
+		$result = Prompt::enforce_block_context_rules(
+			[
+				'settings'    => [
+					[
+						'label'            => 'Scope CTA visibility and bindings',
+						'attributeUpdates' => [
+							'metadata' => [
+								'blockVisibility' => [
+									'viewport' => [
+										'mobile' => false,
+									],
+								],
+								'bindings'        => [
+									'content' => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_label' ],
+									],
+									'url'     => [
+										'source' => 'core/post-meta',
+										'args'   => [ 'key' => 'cta_url' ],
+									],
+								],
+							],
+						],
+					],
+				],
+				'styles'      => [],
+				'block'       => [],
+				'explanation' => 'Execution contracts can carry binding support.',
+			],
+			[],
+			[
+				'bindableAttributes' => [ 'content' ],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'label'            => 'Scope CTA visibility and bindings',
+					'attributeUpdates' => [
+						'metadata' => [
+							'blockVisibility' => [
+								'viewport' => [
+									'mobile' => false,
+								],
+							],
+							'bindings'        => [
+								'content' => [
+									'source' => 'core/post-meta',
+									'args'   => [ 'key' => 'cta_label' ],
+								],
+							],
+						],
+					],
+				],
+			],
+			$result['settings']
+		);
 	}
 
 	public function test_enforce_block_context_rules_drops_unsupported_presets_and_unregistered_style_variations(): void {

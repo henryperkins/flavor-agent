@@ -8,7 +8,10 @@ import {
 	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../utils/template-actions';
-import { resolveActivityBlock } from './block-targeting';
+import {
+	BLOCK_TARGET_MOVED_ERROR,
+	resolveActivityBlockTarget,
+} from './block-targeting';
 import {
 	createActivityEntry,
 	getActivityEntityKey,
@@ -387,7 +390,11 @@ export function undoBlockActivity( activity, registry ) {
 	const blockEditorSelect = registry?.select?.( 'core/block-editor' ) || {};
 	const blockEditorDispatch =
 		registry?.dispatch?.( 'core/block-editor' ) || {};
-	const resolvedBlock = resolveActivityBlock( blockEditorSelect, target );
+	const resolvedTarget = resolveActivityBlockTarget(
+		blockEditorSelect,
+		target
+	);
+	const resolvedBlock = resolvedTarget.block;
 
 	if ( ! resolvedBlock?.clientId ) {
 		return {
@@ -406,7 +413,7 @@ export function undoBlockActivity( activity, registry ) {
 	if ( target.blockName && resolvedBlock.name !== target.blockName ) {
 		return {
 			ok: false,
-			error: 'The target block changed position or type and cannot be undone automatically.',
+			error: BLOCK_TARGET_MOVED_ERROR,
 		};
 	}
 

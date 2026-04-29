@@ -8,7 +8,6 @@
 import apiFetch from '@wordpress/api-fetch';
 import { createReduxStore, register } from '@wordpress/data';
 
-import { getPatternBadgeReason } from '../patterns/recommendation-utils';
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
 import {
 	buildBlockRecommendationRequestSignature,
@@ -104,7 +103,6 @@ const DEFAULT_STATE = {
 	patternRecommendations: [],
 	patternStatus: 'idle',
 	patternError: null,
-	patternBadge: null,
 	patternRequestToken: 0,
 	patternResultToken: 0,
 	patternRequestSignature: '',
@@ -1862,7 +1860,8 @@ const actions = {
 					},
 				} );
 
-				const serverSig = response?.resolvedContextSignature || '';
+				const serverSig =
+					getResolvedContextSignatureFromResponse( response ) || '';
 
 				if (
 					serverSig &&
@@ -2337,7 +2336,6 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				patternRecommendations: action.recommendations,
-				patternBadge: getPatternBadgeReason( action.recommendations ),
 				patternError: null,
 				patternRequestToken:
 					action.requestToken ?? state.patternRequestToken,
@@ -2506,7 +2504,6 @@ const selectors = {
 	getLastUndoneActivityId: ( state ) => state.lastUndoneActivityId,
 	getPatternRecommendations: ( state ) => state.patternRecommendations,
 	getPatternStatus: ( state ) => state.patternStatus,
-	getPatternBadge: ( state ) => state.patternBadge,
 	getPatternError: ( state ) => state.patternError,
 	getPatternRequestToken: ( state ) => state.patternRequestToken,
 	getPatternResultToken: ( state ) => state.patternResultToken,

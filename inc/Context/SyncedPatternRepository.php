@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace FlavorAgent\Context;
 
 final class SyncedPatternRepository {
-	private const QUERY_BATCH_SIZE = 100;
+	private const QUERY_BATCH_SIZE           = 100;
+	private const SYNCED_PATTERN_NAME_PREFIX = 'core/block/';
 
 	/**
 	 * @return array<int, array<string, mixed>>
@@ -16,7 +17,8 @@ final class SyncedPatternRepository {
 		?int $limit = null,
 		int $offset = 0,
 		?string $search = null,
-		bool $enforce_access = true
+		bool $enforce_access = true,
+		string|array $post_status = 'any'
 	): array {
 		if ( 0 === $limit ) {
 			return [];
@@ -30,7 +32,7 @@ final class SyncedPatternRepository {
 		$patterns         = [];
 
 		while ( true ) {
-			$posts = $this->query_posts( $batch_size, $query_offset );
+			$posts = $this->query_posts( $batch_size, $query_offset, $post_status );
 
 			if ( [] === $posts ) {
 				break;
@@ -147,10 +149,79 @@ final class SyncedPatternRepository {
 	}
 
 	/**
+	 * Return the current synced pattern only when the active caller can read it.
+	 *
+	 * This is stricter than helper-list access, which keeps the legacy published
+	 * fallback for browse operations. Recommendation ranking must never treat a
+	 * published post as sufficient proof of access.
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	public function get_readable_pattern_for_recommendation( int $pattern_id ): ?array {
+		if ( $pattern_id <= 0 || ! function_exists( 'get_post' ) ) {
+			return null;
+		}
+
+		$post = get_post( $pattern_id );
+
+		if ( ! is_object( $post ) ) {
+			return null;
+		}
+
+		$post_id   = absint( $post->ID ?? 0 );
+		$post_type = sanitize_key( (string) ( $post->post_type ?? '' ) );
+
+		if ( $post_id <= 0 || 'wp_block' !== $post_type ) {
+			return null;
+		}
+
+		if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'read_post', $post_id ) ) {
+			return null;
+		}
+
+		$pattern = $this->normalize_pattern( $post, true );
+
+		return [] === $pattern ? null : $pattern;
+	}
+
+	/**
 	 * @return array<int, array<string, mixed>>
 	 */
 	public function for_indexable_patterns(): array {
-		return $this->for_patterns( 'all', true, null, 0, null, false );
+		return $this->for_patterns( 'all', true, null, 0, null, false, 'publish' );
+	}
+
+	/**
+	 * Normalize a current synced-pattern post snapshot into the recommendation
+	 * payload shape used by Qdrant and request-time rehydration.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function normalize_synced_pattern_payload( array $pattern ): array {
+		$pattern_id = absint( $pattern['id'] ?? 0 );
+
+		if ( $pattern_id <= 0 ) {
+			return [];
+		}
+
+		$name = self::SYNCED_PATTERN_NAME_PREFIX . $pattern_id;
+
+		return [
+			'id'                  => $name,
+			'name'                => $name,
+			'title'               => (string) ( $pattern['title'] ?? '' ),
+			'description'         => '',
+			'categories'          => [ 'reusable' ],
+			'blockTypes'          => [],
+			'templateTypes'       => [],
+			'patternOverrides'    => [],
+			'type'                => 'user',
+			'source'              => 'synced',
+			'syncedPatternId'     => $pattern_id,
+			'syncStatus'          => (string) ( $pattern['syncStatus'] ?? '' ),
+			'wpPatternSyncStatus' => (string) ( $pattern['wpPatternSyncStatus'] ?? '' ),
+			'content'             => (string) ( $pattern['content'] ?? '' ),
+		];
 	}
 
 	private function normalize_requested_sync_status( ?string $sync_status ): string {
@@ -236,14 +307,14 @@ final class SyncedPatternRepository {
 	/**
 	 * @return array<int, object>
 	 */
-	private function query_posts( int $limit, int $offset ): array {
+	private function query_posts( int $limit, int $offset, string|array $post_status = 'any' ): array {
 		if ( ! function_exists( 'get_posts' ) ) {
 			return [];
 		}
 
 		$args = [
 			'post_type'      => 'wp_block',
-			'post_status'    => 'any',
+			'post_status'    => $post_status,
 			'posts_per_page' => max( 1, $limit ),
 			'offset'         => max( 0, $offset ),
 			'orderby'        => 'title',

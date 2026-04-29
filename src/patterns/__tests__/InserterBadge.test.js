@@ -1,6 +1,10 @@
 const mockUseSelect = jest.fn();
 const mockFindInserterToggle = jest.fn();
-const mockGetInserterBadgeState = jest.fn();
+const mockGetAllowedPatterns = jest.fn();
+
+jest.mock( '@wordpress/block-editor', () => ( {
+	store: 'core/block-editor',
+} ) );
 
 jest.mock( '@wordpress/components', () =>
 	require( '../../test-utils/wp-components' ).mockWpComponents()
@@ -14,12 +18,12 @@ jest.mock( '../inserter-dom', () => ( {
 	findInserterToggle: ( ...args ) => mockFindInserterToggle( ...args ),
 } ) );
 
-jest.mock( '../inserter-badge-state', () => ( {
-	getInserterBadgeState: ( ...args ) => mockGetInserterBadgeState( ...args ),
-} ) );
-
 jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',
+} ) );
+
+jest.mock( '../pattern-settings', () => ( {
+	getAllowedPatterns: ( ...args ) => mockGetAllowedPatterns( ...args ),
 } ) );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -36,25 +40,47 @@ function renderComponent() {
 	} );
 }
 
+function setSelectState( {
+	status = 'ready',
+	recommendations = [],
+	error = null,
+	rootClientId = 'root-a',
+	allowedPatterns = [],
+} = {} ) {
+	mockGetAllowedPatterns.mockReturnValue( allowedPatterns );
+	mockUseSelect.mockImplementation( ( callback ) =>
+		callback( ( storeName ) => {
+			if ( storeName === 'flavor-agent' ) {
+				return {
+					getPatternStatus: jest.fn( () => status ),
+					getPatternRecommendations: jest.fn( () => recommendations ),
+					getPatternError: jest.fn( () => error ),
+				};
+			}
+
+			if ( storeName === 'core/block-editor' ) {
+				return {
+					getBlockInsertionPoint: jest.fn( () => ( {
+						rootClientId,
+					} ) ),
+				};
+			}
+
+			return {};
+		} )
+	);
+}
+
 describe( 'InserterBadge', () => {
 	beforeEach( () => {
 		mockUseSelect.mockReset();
 		mockFindInserterToggle.mockReset();
-		mockGetInserterBadgeState.mockReset();
-		mockUseSelect.mockImplementation( ( callback ) =>
-			callback( () => ( {
-				getPatternStatus: jest.fn( () => 'success' ),
-				getPatternRecommendations: jest.fn( () => [] ),
-				getPatternBadge: jest.fn( () => null ),
-				getPatternError: jest.fn( () => null ),
-			} ) )
-		);
-		mockGetInserterBadgeState.mockReturnValue( {
-			status: 'ready',
-			className: 'flavor-agent-badge flavor-agent-badge--test',
-			ariaLabel: '2 pattern recommendations available',
-			content: '2',
-			tooltip: '2 recommendations',
+		mockGetAllowedPatterns.mockReset();
+		setSelectState( {
+			recommendations: [
+				{ name: 'theme/hero', score: 0.92, reason: 'Hero match.' },
+			],
+			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
 		} );
 		document.body.innerHTML = '';
 		document.body.appendChild( getContainer() );
@@ -70,7 +96,7 @@ describe( 'InserterBadge', () => {
 		renderComponent();
 
 		expect(
-			document.querySelector( '.flavor-agent-badge--test' )
+			document.querySelector( '.flavor-agent-inserter-badge--ready' )
 		).toBeNull();
 		expect(
 			document.querySelector( '.flavor-agent-inserter-badge-anchor' )
@@ -94,8 +120,13 @@ describe( 'InserterBadge', () => {
 			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
 		).toBe( true );
 		expect(
-			anchor.querySelector( '.flavor-agent-badge--test' )
+			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
 		).not.toBeNull();
+		expect(
+			anchor
+				.querySelector( '.flavor-agent-inserter-badge--ready' )
+				?.getAttribute( 'title' )
+		).toBe( 'Hero match.' );
 
 		act( () => {
 			getRoot().unmount();
@@ -104,5 +135,130 @@ describe( 'InserterBadge', () => {
 		expect(
 			anchor.classList.contains( 'flavor-agent-inserter-badge-anchor' )
 		).toBe( false );
+	} );
+
+	test( 'hides ready badge when raw recommendations have no allowed matches', () => {
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		anchor.appendChild( button );
+		document.body.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+		setSelectState( {
+			recommendations: [
+				{ name: 'theme/private', score: 0.95, reason: 'Private.' },
+			],
+			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+		} );
+
+		renderComponent();
+
+		expect(
+			document.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).toBeNull();
+		expect( mockFindInserterToggle ).not.toHaveBeenCalled();
+	} );
+
+	test( 'shows ready count for renderable recommendations only', () => {
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		anchor.appendChild( button );
+		document.body.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+		setSelectState( {
+			recommendations: [
+				{ name: 'theme/hidden', score: 0.97, reason: 'Hidden.' },
+				{ name: 'theme/hero', score: 0.91, reason: 'Hero.' },
+			],
+			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+		} );
+
+		renderComponent();
+
+		expect(
+			anchor.querySelector( '.flavor-agent-inserter-badge--ready' )
+				?.textContent
+		).toBe( '1' );
+		expect(
+			anchor
+				.querySelector( '.flavor-agent-inserter-badge--ready' )
+				?.getAttribute( 'aria-label' )
+		).toBe( '1 pattern recommendation available' );
+	} );
+
+	test( 'uses renderable high-confidence reason instead of filtered raw reason', () => {
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		anchor.appendChild( button );
+		document.body.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+		setSelectState( {
+			recommendations: [
+				{ name: 'theme/hidden', score: 0.99, reason: 'Hidden reason.' },
+				{
+					name: 'theme/hero',
+					score: 0.93,
+					reason: 'Renderable reason.',
+				},
+			],
+			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+		} );
+
+		renderComponent();
+
+		expect(
+			anchor
+				.querySelector( '.flavor-agent-inserter-badge--ready' )
+				?.getAttribute( 'aria-label' )
+		).toBe( '1 pattern recommendation available' );
+		expect(
+			anchor
+				.querySelector( '.flavor-agent-inserter-badge--ready' )
+				?.getAttribute( 'title' )
+		).toBe( 'Renderable reason.' );
+		expect( document.body.textContent ).not.toContain( 'Hidden reason.' );
+	} );
+
+	test( 'loading state still renders when allowed matches are zero', () => {
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		anchor.appendChild( button );
+		document.body.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+		setSelectState( {
+			status: 'loading',
+			recommendations: [],
+			allowedPatterns: [],
+		} );
+
+		renderComponent();
+
+		expect(
+			anchor.querySelector( '.flavor-agent-inserter-badge--loading' )
+		).not.toBeNull();
+	} );
+
+	test( 'error state still renders when allowed matches are zero', () => {
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		anchor.appendChild( button );
+		document.body.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+		setSelectState( {
+			status: 'error',
+			error: 'Pattern request failed.',
+			recommendations: [],
+			allowedPatterns: [],
+		} );
+
+		renderComponent();
+
+		expect(
+			anchor.querySelector( '.flavor-agent-inserter-badge--error' )
+		).not.toBeNull();
 	} );
 } );

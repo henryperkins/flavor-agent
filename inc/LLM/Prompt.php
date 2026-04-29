@@ -719,7 +719,7 @@ SYSTEM;
 		}
 
 		$payload = self::normalize_block_payload_for_execution( $payload );
-		$payload = self::filter_payload_for_execution_contract( $payload, $execution_contract );
+		$payload = self::filter_payload_for_execution_contract( $payload, $execution_contract, $block );
 		$payload = self::filter_payload_for_bindable_attributes( $payload, $block );
 
 		if ( ! $restrictions['contentOnly'] ) {
@@ -799,10 +799,12 @@ SYSTEM;
 		);
 	}
 
-	private static function filter_payload_for_execution_contract( array $payload, array $execution_contract ): array {
+	private static function filter_payload_for_execution_contract( array $payload, array $execution_contract, array $block = [] ): array {
 		if ( [] === $execution_contract ) {
 			return $payload;
 		}
+
+		$execution_contract = self::normalize_execution_contract_for_payload_filtering( $block, $execution_contract );
 
 		return [
 			'settings'    => self::filter_suggestion_group_for_execution_contract(
@@ -822,6 +824,28 @@ SYSTEM;
 			),
 			'explanation' => $payload['explanation'] ?? '',
 		];
+	}
+
+	private static function normalize_execution_contract_for_payload_filtering( array $block, array $execution_contract ): array {
+		foreach (
+			[
+				'contentAttributeKeys' => 'contentAttributes',
+				'configAttributeKeys'  => 'configAttributes',
+			] as $contract_key => $context_key
+		) {
+			if ( array_key_exists( $contract_key, $execution_contract ) || ! is_array( $block[ $context_key ] ?? null ) ) {
+				continue;
+			}
+
+			$execution_contract[ $contract_key ] = array_values(
+				array_filter(
+					array_keys( $block[ $context_key ] ),
+					'is_string'
+				)
+			);
+		}
+
+		return $execution_contract;
 	}
 
 	private static function filter_suggestion_group_for_execution_contract( array $suggestions, string $group, array $execution_contract ): array {
@@ -873,7 +897,8 @@ SYSTEM;
 
 		$filtered_updates = self::filter_attribute_updates_for_execution_contract(
 			$suggestion['attributeUpdates'],
-			$execution_contract
+			$execution_contract,
+			$is_style_variation
 		);
 
 		if ( [] === $filtered_updates ) {
@@ -885,11 +910,29 @@ SYSTEM;
 		return $suggestion;
 	}
 
-	private static function filter_attribute_updates_for_execution_contract( array $attribute_updates, array $execution_contract ): array {
+	private static function filter_attribute_updates_for_execution_contract(
+		array $attribute_updates,
+		array $execution_contract,
+		bool $allow_class_name = false
+	): array {
 		$filtered_updates = [];
+		$local_attributes = self::get_allowed_local_attribute_lookup( $execution_contract );
 
 		foreach ( $attribute_updates as $key => $value ) {
 			switch ( $key ) {
+				case 'lock':
+					$validated = null;
+					break;
+				case 'className':
+					$validated = $allow_class_name && is_string( $value )
+						? $value
+						: null;
+					break;
+				case 'metadata':
+					$validated = is_array( $value )
+						? self::filter_metadata_attribute_updates_for_execution_contract( $value, $execution_contract )
+						: [];
+					break;
 				case 'backgroundColor':
 					$validated = self::validate_top_level_preset_attribute(
 						$value,
@@ -977,7 +1020,9 @@ SYSTEM;
 						: [];
 					break;
 				default:
-					$validated = $value;
+					$validated = isset( $local_attributes[ $key ] )
+						? $value
+						: null;
 					break;
 			}
 
@@ -989,6 +1034,64 @@ SYSTEM;
 		}
 
 		return $filtered_updates;
+	}
+
+	private static function get_allowed_local_attribute_lookup( array $execution_contract ): array {
+		$attributes = array_merge(
+			(array) ( $execution_contract['contentAttributeKeys'] ?? [] ),
+			(array) ( $execution_contract['configAttributeKeys'] ?? [] )
+		);
+		$lookup     = [];
+
+		foreach ( $attributes as $attribute ) {
+			$attribute_key = self::sanitize_attribute_update_key( $attribute );
+
+			if ( null !== $attribute_key ) {
+				$lookup[ $attribute_key ] = true;
+			}
+		}
+
+		return $lookup;
+	}
+
+	private static function filter_metadata_attribute_updates_for_execution_contract(
+		array $metadata,
+		array $execution_contract
+	): array {
+		$filtered = [];
+
+		if (
+			array_key_exists( 'blockVisibility', $metadata ) &&
+			(
+				false === $metadata['blockVisibility'] ||
+				is_array( $metadata['blockVisibility'] )
+			)
+		) {
+			$filtered['blockVisibility'] = $metadata['blockVisibility'];
+		}
+
+		if ( is_array( $metadata['bindings'] ?? null ) ) {
+			$bindable_attribute_keys = self::get_bindable_attribute_keys_from_execution_contract( $execution_contract );
+
+			if ( is_array( $bindable_attribute_keys ) ) {
+				$allowed_bindings  = array_fill_keys( $bindable_attribute_keys, true );
+				$filtered_bindings = [];
+
+				foreach ( $metadata['bindings'] as $attribute_name => $binding ) {
+					if ( is_string( $attribute_name ) && isset( $allowed_bindings[ $attribute_name ] ) ) {
+						$filtered_bindings[ $attribute_name ] = $binding;
+					}
+				}
+
+				if ( [] !== $filtered_bindings ) {
+					$filtered['bindings'] = $filtered_bindings;
+				}
+			} else {
+				$filtered['bindings'] = $metadata['bindings'];
+			}
+		}
+
+		return $filtered;
 	}
 
 	private static function filter_style_attribute_updates_for_execution_contract(
@@ -2046,10 +2149,23 @@ SYSTEM;
 		}
 
 		if ( [] === $filtered_bindings ) {
-			unset( $attribute_updates['metadata'] );
-			return $attribute_updates;
+			unset( $metadata['bindings'] );
 		} else {
 			$metadata['bindings'] = $filtered_bindings;
+		}
+
+		foreach ( array_keys( $metadata ) as $metadata_key ) {
+			if ( ! in_array( $metadata_key, [ 'blockVisibility', 'bindings' ], true ) ) {
+				unset( $metadata[ $metadata_key ] );
+			}
+		}
+
+		if (
+			array_key_exists( 'blockVisibility', $metadata ) &&
+			false !== $metadata['blockVisibility'] &&
+			! is_array( $metadata['blockVisibility'] )
+		) {
+			unset( $metadata['blockVisibility'] );
 		}
 
 		if ( [] === $metadata ) {
@@ -2069,6 +2185,22 @@ SYSTEM;
 			return null;
 		}
 
+		return self::sanitize_attribute_update_keys( (array) $block['bindableAttributes'] );
+	}
+
+	private static function get_bindable_attribute_keys_from_execution_contract( array $execution_contract ): ?array {
+		if ( ! array_key_exists( 'bindableAttributes', $execution_contract ) ) {
+			return null;
+		}
+
+		return self::sanitize_attribute_update_keys( (array) $execution_contract['bindableAttributes'] );
+	}
+
+	/**
+	 * @param array<int|string, mixed> $attributes
+	 * @return string[]
+	 */
+	private static function sanitize_attribute_update_keys( array $attributes ): array {
 		return array_values(
 			array_unique(
 				array_filter(
@@ -2076,7 +2208,7 @@ SYSTEM;
 						static fn( mixed $attribute ): string => is_string( $attribute )
 							? ( self::sanitize_attribute_update_key( $attribute ) ?? '' )
 							: '',
-						(array) $block['bindableAttributes']
+						$attributes
 					),
 					static fn( string $attribute ): bool => $attribute !== ''
 				)
@@ -2233,7 +2365,7 @@ SYSTEM;
 			return false;
 		}
 
-		if ( 'customCSS' === $path[0] ) {
+		if ( in_array( $path[0], [ 'customCSS', 'lock' ], true ) ) {
 			return true;
 		}
 
@@ -2254,7 +2386,7 @@ SYSTEM;
 			return false;
 		}
 
-		if ( 'customCSS' === $path[0] ) {
+		if ( in_array( $path[0], [ 'customCSS', 'lock' ], true ) ) {
 			return true;
 		}
 

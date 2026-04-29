@@ -9,6 +9,7 @@ use FlavorAgent\AzureOpenAI\QdrantClient;
 use FlavorAgent\AzureOpenAI\ResponsesClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\Context\SyncedPatternRepository;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Support\CollectsDocsGuidance;
@@ -40,6 +41,7 @@ final class PatternAbilities {
 	private const MAX_LLM_STRUCTURE_BLOCKS               = 14;
 	private const MAX_LLM_STRUCTURE_LINES                = 18;
 	private const MAX_LLM_CONTENT_PREVIEW_CHARS          = 240;
+	private const SYNCED_PATTERN_NAME_PREFIX             = 'core/block/';
 
 	public static function list_patterns( mixed $input ): array {
 		$input           = self::normalize_input( $input );
@@ -162,7 +164,7 @@ final class PatternAbilities {
 			? StringArray::sanitize( $input['visiblePatternNames'] )
 			: null;
 
-		if ( is_array( $visible_pattern_names ) && empty( $visible_pattern_names ) ) {
+		if ( null === $visible_pattern_names || [] === $visible_pattern_names ) {
 			return [ 'recommendations' => [] ];
 		}
 
@@ -280,9 +282,7 @@ final class PatternAbilities {
 			|| $template_part_slug !== ''
 			|| $container_layout !== '';
 		$is_custom_block_context = self::is_custom_block_name( $block_name );
-		$visible_lookup          = is_array( $visible_pattern_names )
-			? array_fill_keys( $visible_pattern_names, true )
-			: null;
+		$visible_lookup          = array_fill_keys( $visible_pattern_names, true );
 		$semantic_limit          = $visible_lookup ? self::FILTERED_SEMANTIC_LIMIT : self::DEFAULT_SEMANTIC_LIMIT;
 		$structural_limit        = $visible_lookup ? self::FILTERED_STRUCTURAL_LIMIT : self::DEFAULT_STRUCTURAL_LIMIT;
 		$docs_guidance           = self::collect_wordpress_docs_guidance(
@@ -291,7 +291,7 @@ final class PatternAbilities {
 				'templateType'        => $template_type,
 				'blockContext'        => $block_context,
 				'insertionContext'    => $insertion_context,
-				'visiblePatternNames' => is_array( $visible_pattern_names ) ? $visible_pattern_names : [],
+				'visiblePatternNames' => $visible_pattern_names,
 			],
 			$prompt
 		);
@@ -410,7 +410,14 @@ final class PatternAbilities {
 		$candidates                = [];
 		$retrieved_candidate_names = [];
 		foreach ( array_merge( $pass_a, $pass_b ) as $point ) {
-			$name  = $point['payload']['name'] ?? '';
+			$payload = is_array( $point['payload'] ?? null ) ? $point['payload'] : [];
+			$payload = self::resolve_recommendation_candidate_payload( $payload );
+
+			if ( [] === $payload ) {
+				continue;
+			}
+
+			$name  = $payload['name'] ?? '';
 			$score = $point['score'] ?? 0.0;
 			if ( $name === '' ) {
 				continue;
@@ -422,7 +429,7 @@ final class PatternAbilities {
 			if ( ! isset( $candidates[ $name ] ) || $candidates[ $name ]['score'] < $score ) {
 				$candidates[ $name ] = [
 					'score'   => $score,
-					'payload' => $point['payload'],
+					'payload' => $payload,
 				];
 			}
 		}
@@ -591,6 +598,86 @@ final class PatternAbilities {
 		}
 
 		return true;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_recommendation_candidate_payload( array $payload ): array {
+		if ( ! self::is_synced_candidate_payload( $payload ) ) {
+			return $payload;
+		}
+
+		$synced_pattern_id = self::resolve_synced_pattern_id_from_payload( $payload );
+
+		if ( $synced_pattern_id <= 0 ) {
+			return [];
+		}
+
+		$current_pattern = ServerCollector::for_readable_synced_pattern_recommendation( $synced_pattern_id );
+
+		if ( ! is_array( $current_pattern ) ) {
+			return [];
+		}
+
+		$rehydrated = SyncedPatternRepository::normalize_synced_pattern_payload( $current_pattern );
+
+		if ( [] === $rehydrated ) {
+			return [];
+		}
+
+		$rehydrated['traits'] = PatternIndex::infer_layout_traits( $rehydrated );
+
+		return $rehydrated;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private static function is_synced_candidate_payload( array $payload ): bool {
+		return 'user' === sanitize_key( (string) ( $payload['type'] ?? '' ) )
+			|| 'synced' === sanitize_key( (string) ( $payload['source'] ?? '' ) )
+			|| absint( $payload['syncedPatternId'] ?? 0 ) > 0
+			|| self::resolve_core_block_pattern_id( $payload['name'] ?? '' ) > 0
+			|| self::resolve_core_block_pattern_id( $payload['id'] ?? '' ) > 0;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private static function resolve_synced_pattern_id_from_payload( array $payload ): int {
+		$synced_pattern_id = absint( $payload['syncedPatternId'] ?? 0 );
+
+		if ( $synced_pattern_id > 0 ) {
+			return $synced_pattern_id;
+		}
+
+		foreach ( [ 'name', 'id' ] as $key ) {
+			$synced_pattern_id = self::resolve_core_block_pattern_id( $payload[ $key ] ?? '' );
+
+			if ( $synced_pattern_id > 0 ) {
+				return $synced_pattern_id;
+			}
+		}
+
+		if ( is_numeric( $payload['id'] ?? null ) ) {
+			return absint( $payload['id'] );
+		}
+
+		return 0;
+	}
+
+	private static function resolve_core_block_pattern_id( mixed $value ): int {
+		if ( ! is_string( $value ) ) {
+			return 0;
+		}
+
+		if ( ! preg_match( '#^' . preg_quote( self::SYNCED_PATTERN_NAME_PREFIX, '#' ) . '(\d+)$#', $value, $matches ) ) {
+			return 0;
+		}
+
+		return absint( $matches[1] ?? 0 );
 	}
 
 	private static function ranking_system_prompt(): string {
@@ -1395,7 +1482,7 @@ SYSTEM;
 		bool $has_insertion_context,
 		bool $is_custom_block_context,
 		array $docs_guidance,
-		?array $visible_pattern_names,
+		array $visible_pattern_names,
 		int $retrieved_candidate_count,
 		array $candidates
 	): string {
@@ -1560,15 +1647,11 @@ SYSTEM;
 	}
 
 	private static function build_visible_pattern_scope_section(
-		?array $visible_pattern_names,
+		array $visible_pattern_names,
 		int $shown_candidates,
 		int $total_candidates,
 		int $retrieved_candidate_count
 	): string {
-		if ( ! is_array( $visible_pattern_names ) ) {
-			return '';
-		}
-
 		return "\n## Visible Pattern Scope\n"
 			. 'Allowed patterns at this insertion point: ' . count( array_unique( StringArray::sanitize( $visible_pattern_names ) ) ) . "\n"
 			. "Unique retrieved candidates before visibility filtering: {$retrieved_candidate_count}\n"
@@ -1699,7 +1782,10 @@ SYSTEM;
 			static fn( array $request_context ): string => self::build_wordpress_docs_entity_key( $request_context ),
 			static fn( array $request_context, string $request_prompt, string $entity_key ): array => self::build_wordpress_docs_family_context( $request_context, $entity_key ),
 			$context,
-			$prompt
+			$prompt,
+			[
+				'allowForegroundWarm' => false,
+			]
 		);
 	}
 

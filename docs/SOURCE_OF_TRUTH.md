@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-04-23
+> Last updated: 2026-04-29
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.0+
 
@@ -118,9 +118,12 @@ flavor-agent/
       ChatClient.php        Shared chat entry point with provider selection + fallback
       NavigationPrompt.php  Navigation recommendation prompt assembly and parsing
       Prompt.php            Block recommendation prompt assembly and parsing
+      PromptBudget.php      Token budget tracking and enforcement for recommendation prompts
+      ResponseSchema.php    Structured response schema definitions for LLM outputs
       StylePrompt.php       Global Styles / Style Book prompt assembly and parsing
       TemplatePartPrompt.php Template-part recommendation prompt assembly and parsing
       TemplatePrompt.php    Template recommendation prompt assembly and parsing
+      ThemeTokenFormatter.php Theme token extraction and formatting helpers
       WordPressAIClient.php WordPress AI Client wrapper for connector-backed execution
       WritingPrompt.php     Programmatic content-lane prompt assembly and parsing
     OpenAI/
@@ -131,9 +134,22 @@ flavor-agent/
       Agent_Controller.php  REST routes under `flavor-agent/v1/`
     Support/
       CollectsDocsGuidance.php Docs-guidance helper trait
+      CoreRoadmapGuidance.php Core roadmap signal extraction and caching
       FormatsDocsGuidance.php Docs-guidance formatting helpers
+      GuidanceExcerpt.php    Guidance excerpt extraction helpers
+      MetricsNormalizer.php  Request/response metrics normalization
       NormalizesInput.php   Structured input normalization helpers
+      RankingContract.php   Shared ranking contract definitions
+      RecommendationResolvedSignature.php Signature helpers for resolved recommendations
+      RecommendationReviewSignature.php Signature helpers for review-state recommendations
       StringArray.php       Array sanitization utility
+    Guidelines/
+      Guidelines.php        Editorial guidelines storage, retrieval, and export
+      CoreGuidelinesRepository.php Core guidelines storage adapter
+      GuidelinesRepository.php Guidelines repository interface
+      LegacyGuidelinesRepository.php Legacy options-based guidelines storage
+      PromptGuidelinesFormatter.php Prompt context formatting for guidelines
+      RepositoryResolver.php Repository resolution and migration logic
     Settings.php            Admin settings page, remote validation, sync/diagnostics panels
 
   src/                      JS frontend (built with @wordpress/scripts)
@@ -158,11 +174,16 @@ flavor-agent/
       ActivitySessionBootstrap.js Entity-change-driven activity hydration
       CapabilityNotice.js   Shared unavailable/setup messaging
       InlineActionFeedback.js Inline apply/undo feedback shell
+      LinkedEntityText.js   Clickable entity link renderer for template/template-part references
       RecommendationHero.js Shared featured recommendation presentation
       RecommendationLane.js Shared grouped recommendation lane
+      StaleResultBanner.js  Stale result warning banner
       SurfaceComposer.js    Shared surface layout composer
       SurfacePanelIntro.js  Shared panel intro copy block
       SurfaceScopeBar.js    Shared scope/freshness strip
+      surface-labels.js     Surface label definitions
+    content/
+      ContentRecommender.js Post/page editorial content recommendation panel
     context/
       collector.js          Assembles full block context for block recommendations
       block-inspector.js    Recursive block capability manifest builder
@@ -175,6 +196,7 @@ flavor-agent/
       BlockRecommendationsPanel.js Block-level prompt and suggestion panel
       NavigationRecommendations.js Navigation advisory panel for `core/navigation`
       SuggestionChips.js    Compact chips for sub-panel injection
+      block-recommendation-request.js Block recommendation request shaping
       group-by-panel.js     Panel-grouping helpers
       panel-delegation.js   Inspector panel routing for block vs navigation surfaces
       suggestion-keys.js    Stable key generation for suggestion tracking
@@ -193,16 +215,27 @@ flavor-agent/
     store/
       index.js              `@wordpress/data` store for request state, apply/undo, and activity hydration
       activity-history.js   Editor-scoped activity schema plus storage adapter/helpers
+      activity-session.js   Session-based activity bootstrap
+      activity-undo.js      Activity undo state machine
       block-targeting.js    Live block resolution for activity entries
+      executable-surface-runtime.js Executable surface runtime helpers
+      executable-surfaces.js Executable surface definitions
       update-helpers.js     Safe attribute merge, content-only filtering, undo snapshot helpers
     style-book/
       StyleBookRecommender.js Style Book per-block style AI panel
       dom.js                Style Book panel DOM discovery and portal target resolution
+    style-surfaces/
+      presentation.js       Style surface shared presentation helpers
+      request-input.js     Style surface request input shaping
     template-parts/
       TemplatePartRecommender.js Template-part-scoped AI recommendations panel
+      template-part-recommender-helpers.js Template-part UI and operation helpers
     templates/
       TemplateRecommender.js Site Editor review-confirm-apply panel with linked entities
       template-recommender-helpers.js Template UI and executable-operation helpers
+    test-utils/
+      setup-react-test.js   Jest React test setup helpers
+      wp-components.js     WordPress component test helpers
     utils/
       capability-flags.js   Surface capability flag derivation from localized data
       editor-context-metadata.js Shared editor metadata summaries
@@ -216,6 +249,17 @@ flavor-agent/
       template-part-areas.js Template-part area resolution
       template-types.js     Template slug normalization
       visible-patterns.js   Inserter-scoped visible pattern list
+      block-execution-contract.js Block execution contract definitions
+      block-recommendation-context.js Block recommendation context shaping
+      context-signature.js Context signature for freshness tracking
+      live-structure-snapshots.js Live block tree structure snapshots
+      recommendation-request-signature.js Request signature for freshness
+      recommendation-stale-reasons.js Stale reason definitions
+      structural-equality.js Structural equality checks
+      style-validation.js Style validation helpers
+      template-part-recommender-helpers.js Template-part recommendation helpers
+      type-guards.js Type guard utilities
+      pattern-names.js Pattern name utilities
 
   tests/
     e2e/
@@ -309,15 +353,15 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **LLM:** `ChatClient::chat()`; uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path and reports `missing_text_generation_provider` when Connectors has no usable runtime.
 - **Response:** Parsed into `settings`, `styles`, `block` suggestion groups. Each suggestion has label, description, panel, confidence (0-1), and `attributeUpdates`.
 - **UI:** The main panel follows the shared full-surface shell: scope/freshness, prompt composer, featured recommendation, `Apply now` lane, `Manual ideas` advisory section, and recent activity. Settings and style suggestions are executable only from that main panel; delegated native Inspector sub-panels mirror the same result passively. Selected `core/navigation` blocks append a nested advisory-only navigation subsection.
-- **Apply:** Safe local block updates remain one-click. Safe deep-merge for `metadata` and `style` keys preserves unrelated attributes. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
-- **Guards:** Content-only blocks limit executable changes to content-safe attributes, may still surface broader advisory block ideas, suppress style projections, and keep `blockVisibility` (boolean and viewport-object forms) within the allowed contract. Disabled blocks receive no suggestions.
+- **Apply:** Safe local block updates remain one-click. Executable updates are limited to declared content/config attributes, supported style channels, supported visibility/binding metadata, and registered style variations; when a server execution contract is partial, missing local attribute-key lists are filled from the selected block context before undeclared attributes are rejected. Safe deep-merge for allowed `metadata` and `style` keys preserves unrelated existing attributes. Apply captures before/after attribute snapshots, shows an inline success notice with `Undo`, and writes a structured activity record.
+- **Guards:** Content-only blocks limit executable changes to content-safe attributes, may still surface broader advisory block ideas, suppress style projections, and keep `blockVisibility` (boolean and viewport-object forms) within the allowed contract. `lock`, arbitrary `metadata`, and undeclared top-level attributes are rejected. Disabled blocks receive no suggestions.
 
 #### Pattern Recommendations
 
 - **Trigger:** Passive fetch on editor load; active fetch on inserter search input change (400ms debounce).
 - **Pipeline:** Build query text -> cache-backed WordPress docs grounding via Cloudflare AI Search -> provider-selected embedding -> two-pass Qdrant search (semantic + structural) -> dedupe -> LLM rerank via the active responses backend -> filter scores < 0.3 -> return max 8.
 - **Inserter integration:** The shelf stays local to Flavor Agent. It uses the current allowed-pattern selector to show only patterns Gutenberg already exposes for the active insertion root, then dispatches core block insertion from the shelf rather than patching the native registry.
-- **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Toggle discovery centralized in `compat.findInserterToggle`.
+- **Badge:** Inserter toggle badge shows recommendation count (ready), loading pulse, or error indicator. Ready count and tooltip are derived from recommendations that match the current inserter root's allowed patterns, not from a raw store badge cache. Toggle discovery centralized in `compat.findInserterToggle`.
 - **Scoping:** `visiblePatternNames` derived from inserter root for context-appropriate results via `compat.getAllowedPatterns`.
 - **Model:** This is intentionally a ranking/browse-only surface. Flavor Agent owns a local shelf and badge inside the native inserter, but does not add its own review, undo, or activity contract.
 
@@ -382,7 +426,7 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 - **Schema:** Block, template, template-part, Global Styles, and Style Book apply actions share one activity shape: surface, target identifiers, suggestion label, before/after state, prompt/reference metadata, timestamp, and undo status. The admin audit lane also stores scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes/failures when a document scope exists.
 - **Persistence:** Activity records are persisted through the server-backed activity repository when available and are hydrated back into the editor-side storage adapter keyed by the current post, template, template-part, or Global Styles scope reference. The same repository now also supports recent unscoped/admin reads for privileged users and projects filterable admin columns for provider/model/path/ability metadata so global audit queries do not need to decode every historical `request_json` payload to filter by provenance. Template, template-part, and Global Styles activities use schema-versioned persisted metadata; legacy clientId-only entries load as undo unavailable with a clear reason.
 - **UI:** The Block Inspector, Template Recommendations panel, Template Part panel, Global Styles panel, and Style Book panel share the same status vocabulary, recent-activity shell, and inline undo treatment. Navigation still shares only the advisory/status framing and remains non-executable, while pattern recommendations remain browse-only. A first dedicated admin page at `Settings > AI Activity` exposes the recent server-backed timeline across supported executable surfaces plus scoped review-only diagnostics through a `DataViews` activity feed and a read-only `DataForm` details panel.
-- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo remains path-plus-attribute based. Template assignment/replacement undo resolves the current block from a stable area/slug locator, template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot, Global Styles and Style Book undo only stays available while the active `root/globalStyles` entity still matches the recorded post-apply user config. The admin audit view applies the same ordered-tail rule when it marks older entries as blocked by newer still-applied actions.
+- **Undo rules:** Only the most recent AI action is auto-undoable. Block undo resolves by `clientId` first and allows a moved block when the block name and recorded post-apply attributes still match; path fallback remains guarded by block name and attribute snapshots. Template assignment/replacement undo resolves the current block from a stable area/slug locator, template/template-part inserted-pattern undo only stays available while the recorded inserted subtree still exactly matches the persisted post-apply snapshot, Global Styles and Style Book undo only stays available while the active `root/globalStyles` entity still matches the recorded post-apply user config. The admin audit view applies the same ordered-tail rule when it marks older entries as blocked by newer still-applied actions.
 
 #### Admin Activity Page
 
@@ -693,6 +737,9 @@ This section is intentionally representative rather than a line-by-line manifest
 | Activity and persistence | `ActivityRepositoryTest`, `ActivityPermissionsTest` | Activity create/query/prune, ordered undo eligibility, undo state transitions, and contextual permissions |
 | Docs grounding | `AISearchClientTest`, `DocsGroundingEntityCacheTest`, `DocsPrewarmTest` | Trusted-source filtering, cache layers, prewarm scheduling, throttling, and diagnostics |
 | Shared context collectors | `ServerCollectorTest` | Template/template-part metadata, visible-pattern filtering, and token diagnostics |
+| Guidelines storage and formatting | `GuidelinesTest`, `CoreRoadmapGuidanceTest` | Editorial guidelines retrieval, migration status, prompt context formatting, and core roadmap signal caching |
+| Support utilities | `MetricsNormalizerTest`, `RankingContractTest`, `ThemeTokenFormatterTest`, `PromptBudgetTest`, `PromptFormattingTest` | Metrics normalization, ranking contracts, theme token formatting, prompt budget enforcement, and prompt formatting helpers |
+| Admin pages | `ActivityPageTest`, `SupportToPanelSyncTest` | Settings page panel sync, activity admin page rendering |
 
 ### JS (Jest)
 

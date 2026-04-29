@@ -51,6 +51,12 @@ import { actions, reducer } from '../index';
 
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
+const PARAGRAPH_BLOCK_CONTEXT = {
+	name: 'core/paragraph',
+	contentAttributes: {
+		content: { role: 'content' },
+	},
+};
 
 describe( 'store action thunks', () => {
 	beforeEach( () => {
@@ -2332,7 +2338,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'resolved-block' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Tighten the copy.',
 				requestMeta: {
 					backendLabel: 'Azure OpenAI responses',
@@ -2437,7 +2443,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'resolved-block' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Tighten the copy.',
 			} ),
 			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
@@ -2493,6 +2499,78 @@ describe( 'store action thunks', () => {
 		expect( result ).toBe( false );
 	} );
 
+	test( 'applySuggestion rejects lock and undeclared top-level attribute updates', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const updateBlockAttributes = jest.fn();
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( null ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
+				prompt: 'Tighten the copy.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlocks: jest.fn().mockReturnValue( [] ),
+							getBlockAttributes: jest.fn().mockReturnValue( {
+								content: 'Old copy',
+							} ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Lock and tag block',
+				attributeUpdates: {
+					lock: {
+						move: true,
+					},
+					unregisteredThing: 'surprise',
+				},
+			},
+			null,
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: PARAGRAPH_BLOCK_CONTEXT,
+				},
+				prompt: 'Tighten the copy.',
+			}
+		)( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This suggestion includes unsupported or unsafe attribute changes and could not be applied.'
+			)
+		);
+		expect( result ).toBe( false );
+	} );
+
 	test( 'applySuggestion uses the stored execution contract to block unsupported preset updates', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
@@ -2508,7 +2586,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'resolved-block' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				executionContract: {
 					allowedPanels: [ 'color' ],
 					styleSupportPaths: [ 'color.background' ],
@@ -2587,7 +2665,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'resolved-block' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Keep the same content.',
 			} ),
 			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
@@ -2658,7 +2736,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'resolved-block' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Improve the layout.',
 			} ),
 			getBlockRequestToken: jest.fn().mockReturnValue( 7 ),
@@ -2730,7 +2808,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'stored-context' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Refresh content.',
 			} ),
 		};
@@ -2794,7 +2872,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'shared-context' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Refresh content.',
 			} ),
 			getBlockResolvedContextSignature: jest
@@ -2926,6 +3004,110 @@ describe( 'store action thunks', () => {
 		expect( state.blockRequestState[ 'block-1' ].staleReason ).toBeNull();
 	} );
 
+	test( 'revalidateBlockReviewFreshness marks wrapped signature-only drift stale', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block-next',
+			},
+			clientId: 'block-1',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block-stored' ),
+		};
+		const requestInput = {
+			clientId: 'block-1',
+			editorContext: {
+				block: PARAGRAPH_BLOCK_CONTEXT,
+			},
+			prompt: 'Refresh content.',
+		};
+
+		await actions.revalidateBlockReviewFreshness(
+			'block-1',
+			requestInput
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/flavor-agent/v1/recommend-block',
+			method: 'POST',
+			data: {
+				...requestInput,
+				resolveSignatureOnly: true,
+			},
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'idle',
+				null,
+				null,
+				'server'
+			)
+		);
+	} );
+
+	test( 'revalidateBlockReviewFreshness leaves matching wrapped signatures fresh', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+			clientId: 'block-1',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+		};
+
+		await actions.revalidateBlockReviewFreshness( 'block-1', {
+			clientId: 'block-1',
+			editorContext: {
+				block: PARAGRAPH_BLOCK_CONTEXT,
+			},
+			prompt: 'Refresh content.',
+		} )( {
+			dispatch,
+			select,
+		} );
+
+		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'revalidateBlockReviewFreshness keeps direct signature-only compatibility', async () => {
+		apiFetch.mockResolvedValue( {
+			resolvedContextSignature: 'resolved-block',
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+		};
+
+		await actions.revalidateBlockReviewFreshness( 'block-1', {
+			clientId: 'block-1',
+			editorContext: {
+				block: PARAGRAPH_BLOCK_CONTEXT,
+			},
+			prompt: 'Refresh content.',
+		} )( {
+			dispatch,
+			select,
+		} );
+
+		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
 	test( 'applySuggestion blocks prompt-stale block results before mutating attributes', async () => {
 		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
@@ -2935,7 +3117,7 @@ describe( 'store action thunks', () => {
 				.fn()
 				.mockReturnValue( 'shared-context' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: { name: 'core/paragraph' },
+				blockContext: PARAGRAPH_BLOCK_CONTEXT,
 				prompt: 'Keep the copy concise.',
 			} ),
 		};
@@ -4277,6 +4459,96 @@ describe( 'store action thunks', () => {
 				),
 			} )
 		);
+	} );
+
+	test( 'undoActivity restores a moved block target when attributes still match', async () => {
+		const updateBlockAttributes = jest.fn();
+		const activity = {
+			id: 'activity-1',
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			before: {
+				attributes: {
+					content: 'Old copy',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'New copy',
+				},
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+			undo: {
+				canUndo: true,
+				status: 'available',
+			},
+			persistence: {
+				status: 'local',
+			},
+		};
+		const movedBlock = {
+			clientId: 'block-1',
+			name: 'core/paragraph',
+			attributes: {
+				content: 'New copy',
+			},
+		};
+		const dispatch = jest.fn();
+		const select = {
+			getActivityScopeKey: jest.fn().mockReturnValue( 'post:42' ),
+			getActivityLog: jest.fn().mockReturnValue( [ activity ] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlock: jest.fn().mockReturnValue( movedBlock ),
+							getBlocks: jest.fn().mockReturnValue( [
+								{
+									clientId: 'block-0',
+									name: 'core/heading',
+									attributes: {},
+								},
+								movedBlock,
+							] ),
+							getBlockAttributes: jest
+								.fn()
+								.mockReturnValue( movedBlock.attributes ),
+					  }
+					: {}
+			),
+			dispatch: jest.fn().mockReturnValue( {
+				updateBlockAttributes,
+			} ),
+		};
+
+		const result = await actions.undoActivity( 'activity-1' )( {
+			dispatch,
+			registry,
+			select,
+		} );
+
+		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
+			content: 'Old copy',
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				type: 'UPDATE_ACTIVITY_UNDO_STATE',
+				activityId: 'activity-1',
+				status: 'undone',
+				error: null,
+			} )
+		);
+		expect( result ).toEqual( {
+			ok: true,
+		} );
 	} );
 
 	test( 'undoActivity reconciles terminal 409 undo conflicts against server state instead of marking the action failed locally', async () => {

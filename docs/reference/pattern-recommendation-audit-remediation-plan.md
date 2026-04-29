@@ -2,7 +2,9 @@
 
 Date: 2026-04-29
 
-Status: proposed implementation plan
+Status: implemented
+
+Implementation result: completed in this changeset. Synced/user recommendations are public-safe in the global index, rehydrated through current `read_post` checks before ranking, stale unsafe synced points are deleted during sync, the inserter badge counts only renderable recommendations, and pattern docs grounding skips foreground AI Search while still scheduling async warming.
 
 Scope: Address the confirmed review findings in the `flavor-agent/recommend-patterns` runtime path. This plan keeps the surface browse/rank-only inside the native Gutenberg inserter and avoids adding lane/review/apply, preview, deterministic executor, or Flavor Agent undo/activity semantics to pattern insertion.
 
@@ -15,12 +17,13 @@ Scope: Address the confirmed review findings in the `flavor-agent/recommend-patt
 ## Target Outcomes
 
 - Synced `wp_block` pattern content is never exposed to a caller that cannot read that pattern.
-- Synced pattern payloads sent to the ranker are filtered or rehydrated through current WordPress access checks before the LLM prompt is built.
-- Stale Qdrant payloads from older, overly broad syncs cannot leak private synced pattern content during retrieval.
+- Synced pattern payloads sent to the ranker are filtered and rehydrated through current WordPress `read_post` checks before the LLM prompt is built.
+- Stale Qdrant payloads from older, overly broad syncs cannot leak private synced pattern content during retrieval and are deleted by the next sync when they no longer satisfy the public-safe index query.
 - The first-party inserter shelf continues to use `visiblePatternNames` as the local insertion-scope contract and still fails closed for explicit empty arrays.
-- The badge count only reports recommendations that can render in the shelf for the current allowed-pattern selector result.
+- The badge count and tooltip reason only report recommendations that can render in the shelf for the current allowed-pattern selector result.
 - Pattern recommendation docs grounding uses cache/fallback guidance only during the foreground recommendation request; live AI Search warming runs asynchronously.
 - Existing REST and Abilities permissions remain `edit_posts`; the fix is additional scoped filtering, not a permission bypass or route removal.
+- `list-synced-patterns` and `get-synced-pattern` preserve their existing helper browse behavior, including the published-post fallback, while recommendation ranking uses stricter `read_post` authorization.
 
 ## Solution 1: Access-Safe Synced Pattern Recommendations
 
@@ -30,41 +33,49 @@ Scope: Address the confirmed review findings in the `flavor-agent/recommend-patt
 - `flavor-agent/recommend-patterns` is registered as a public recommendation ability with the same `edit_posts` permission.
 - `PatternIndex::collect_indexable_patterns()` appends synced `wp_block` patterns from `ServerCollector::for_indexable_synced_patterns()`.
 - `SyncedPatternRepository::for_indexable_patterns()` calls `for_patterns( 'all', true, null, 0, null, false )`, disabling per-post read access.
-- `SyncedPatternRepository::query_posts()` uses `post_status => any`, so private, draft, trashed, partial, and unsynced `wp_block` records can enter the index.
+- `SyncedPatternRepository::query_posts()` uses `post_status => any`, so private, draft, and trashed `wp_block` records can enter the index.
 - `PatternAbilities::recommend_patterns()` filters candidates only by caller-supplied `visiblePatternNames` when present, then sends candidate payloads to the ranker and returns title/content metadata from Qdrant payloads.
 
 ### Product Decision
 
-Keep the global pattern index for registered and user patterns, but treat indexed synced payloads as untrusted snapshots at request time. Visibility scoping remains client-derived because only Gutenberg knows the active inserter root; sensitive synced pattern access must be enforced separately by WordPress post permissions.
+Keep the global pattern index for registered and user patterns, but treat indexed synced payloads as untrusted snapshots at request time. Visibility scoping remains client-derived because only Gutenberg knows the active inserter root; sensitive synced pattern access must be enforced separately by current WordPress `read_post` permissions. The public-safe indexing rule is a data-minimization layer, not a replacement for request-time authorization.
 
 ### Implementation Plan
 
 1. Restrict future synced-pattern indexing to public-safe records.
    - Modify `inc/Context/SyncedPatternRepository.php`.
-   - Add a public-safe index query path that returns only `post_status = publish` synced `wp_block` records and includes content.
-   - Avoid depending on the current cron/admin user for indexability; the global shared Qdrant corpus should not contain private or draft synced pattern content.
+   - Add a public-safe index query path that returns only `post_status = publish` user `wp_block` records across `synced`, `partial`, and `unsynced` sync states and includes content.
+   - Avoid depending on the current cron/admin user for indexability; the global shared Qdrant corpus should not contain private, draft, or trashed synced pattern content.
    - Update `ServerCollector::for_indexable_synced_patterns()` to use the public-safe path.
-   - Keep `list-synced-patterns` and `get-synced-pattern` behavior unchanged; those helper abilities should continue to use per-caller `read_post` checks.
+   - Keep `list-synced-patterns` and `get-synced-pattern` behavior unchanged; those helper abilities should continue to use their legacy `read_post`-or-published browse fallback.
+   - Keep the index-only public-safe helper separate from request-time read authorization helpers so a published-post fallback cannot be reused as proof of caller access.
 
-2. Recheck synced pattern access before ranking.
+2. Scrub existing unsafe synced points during normal pattern sync.
+   - Keep using the Qdrant scroll/diff path in `PatternIndex::sync()` to compare existing remote point IDs with the current public-safe corpus.
+   - Ensure points for synced patterns that were previously indexed but are now private, draft, trashed, deleted, or otherwise absent from the public-safe corpus are included in the `/points/delete` request.
+   - Treat this as required cleanup, not only future data minimization, because existing collections may already contain private synced payloads from older broad syncs.
+   - Add a regression that proves a stale `core/block/{privateId}` point discovered through Qdrant scroll is deleted even when its title/content are no longer present in current upsert payloads.
+
+3. Recheck synced pattern access before ranking.
    - Modify `inc/Abilities/PatternAbilities.php`.
-   - When processing Qdrant candidates, identify synced candidates by `type === 'user'`, `source === 'synced'`, or a positive `syncedPatternId`.
-   - Before adding a synced candidate to `$candidates`, call a server-side helper that resolves the current `wp_block` post and verifies the caller can read it or it is safely public.
+   - When processing Qdrant candidates, identify synced candidates by `type === 'user'`, `source === 'synced'`, a positive `syncedPatternId`, or a legacy `core/block/{id}` value in `payload.name` or `payload.id`.
+   - Before adding a synced candidate to `$candidates`, call a server-side helper that resolves the current `wp_block` post and verifies the current caller can read it with `current_user_can( 'read_post', $post_id )`.
+   - Do not treat `post_status = publish` as sufficient request-time authorization, and do not reuse helpers whose fallback returns true for published posts when `read_post` fails.
    - If access fails, skip the candidate before it reaches `build_candidate_ranking_hint()`, `build_ranking_input()`, or `ResponsesClient::rank()`.
    - If access succeeds, rehydrate title, sync status, and content from the current post record so stale Qdrant payloads do not preserve deleted/private/changed content.
 
-3. Add a small normalization helper for rehydrated synced candidates.
+4. Add a small normalization helper for rehydrated synced candidates.
    - Prefer a single helper shared by indexing and request-time rehydration so `core/block/{id}`, `type: user`, `source: synced`, `syncedPatternId`, `syncStatus`, and `wpPatternSyncStatus` stay consistent.
    - The existing `PatternIndex::normalize_synced_pattern_for_index()` is private; either make a narrowly named public static helper or move the normalizer to `SyncedPatternRepository`.
    - Preserve the `core/block/{id}` name exactly. Do not switch to `post_name`, `core/block-flavor-agent-sync`, or any local alias.
 
-4. Fail closed on missing visible scope for this inserter route.
+5. Fail closed on missing visible scope for this inserter route.
    - The first-party `PatternRecommender` always sends `visiblePatternNames`, including `[]` when the allowed-pattern selector has no results.
    - In `Agent_Controller::handle_recommend_patterns()` and/or `PatternAbilities::recommend_patterns()`, treat an absent `visiblePatternNames` key as unscoped and return an empty recommendation set or a typed `missing_visible_pattern_scope` `WP_Error`.
    - Prefer an empty recommendation set for first-party UI compatibility unless API consumers already depend on a hard error.
    - Keep the explicit empty-array behavior unchanged: `visiblePatternNames: []` returns `['recommendations' => []]` before backend validation.
 
-5. Keep local insertion enforcement unchanged.
+6. Keep local insertion enforcement unchanged.
    - Do not patch Gutenberg's pattern registry.
    - Do not widen insertion scope based on Pattern Overrides, `blockVisibility`, stale Qdrant hits, or server-ranked names.
    - `PatternRecommender` should still match recommendations against `getAllowedPatterns()` before rendering or inserting.
@@ -75,18 +86,46 @@ Add or update PHPUnit coverage:
 
 - `tests/phpunit/PatternIndexTest.php`
   - `test_sync_excludes_non_public_synced_pattern_posts_from_global_index`
-    - Create published, private, draft, and trashed `wp_block` fixtures.
+    - Create published synced, published partial, published unsynced, private synced, draft synced, and trashed synced `wp_block` fixtures.
     - Run `PatternIndex::sync()`.
-    - Assert only the published synced pattern appears in upsert payloads.
+    - Assert published synced, partial, and unsynced patterns appear in upsert payloads.
     - Assert private/draft/trash titles and content are absent from remote request bodies.
 
+  - `test_sync_deletes_existing_non_public_synced_points_from_qdrant`
+    - Seed ready index state and Qdrant scroll results with a stale `core/block/{privateId}` point from an older broad sync.
+    - Provide current fixtures where that `wp_block` post is private, draft, trashed, or deleted.
+    - Run `PatternIndex::sync()`.
+    - Assert the stale synced point UUID is sent to `/points/delete`.
+    - Assert the stale private title/content are absent from any new upsert request body.
+
 - `tests/phpunit/PatternAbilitiesTest.php`
+  - `test_list_synced_patterns_preserves_published_browse_fallback_when_read_post_is_denied`
+    - Create a published `wp_block` fixture and deny `read_post` for that ID.
+    - Call `list_synced_patterns()` through the helper ability path.
+    - Assert the published pattern is still returned according to the existing browse fallback contract.
+
+  - `test_get_synced_pattern_preserves_published_browse_fallback_when_read_post_is_denied`
+    - Create a published `wp_block` fixture and deny `read_post` for that ID.
+    - Call `get_synced_pattern()` through the helper ability path.
+    - Assert the published pattern is still returned.
+
   - `test_recommend_patterns_skips_unreadable_synced_qdrant_candidates_before_ranking`
     - Seed ready index state.
     - Mock Qdrant search returning a `core/block/{privateId}` payload with private content.
     - Set `current_user_can( 'read_post', privateId )` false.
     - Assert `ResponsesClient::rank()` is not called with the private title/content.
     - Assert the response omits that recommendation even if the mocked ranker returns its name.
+
+  - `test_recommend_patterns_skips_published_synced_candidate_when_read_post_is_denied`
+    - Create a published `wp_block` fixture.
+    - Deny `read_post` for that ID with the test capability hook.
+    - Mock Qdrant search returning that candidate.
+    - Assert the candidate is skipped before ranking despite `post_status = publish`.
+
+  - `test_recommend_patterns_treats_legacy_core_block_name_as_synced_candidate`
+    - Mock a stale Qdrant payload that contains `name: core/block/{privateId}` but no `source` or `syncedPatternId`.
+    - Deny `read_post` for the resolved post ID.
+    - Assert the stale title/content do not reach the LLM input or final response.
 
   - `test_recommend_patterns_rehydrates_readable_synced_candidates_before_ranking`
     - Mock a stale Qdrant payload title/content.
@@ -110,12 +149,13 @@ Add or update PHPUnit coverage:
 Update after implementation:
 
 - `docs/features/pattern-recommendations.md`
-  - Clarify that the global synced-pattern index only stores public-safe synced patterns.
+  - Clarify that the global synced-pattern index stores public-safe published user patterns across sync states.
   - Clarify that request-time synced candidates are rechecked against current post read access before ranking/response.
   - Keep the statement that `core/block/{id}` names are preserved.
 
 - `docs/reference/abilities-and-routes.md`
   - Update the `recommend-patterns` note to say synced/user recommendations are returned only when currently readable and in the supplied visible scope.
+  - Clarify that `list-synced-patterns` and `get-synced-pattern` keep their helper browse fallback for published synced/user patterns, and that this fallback is not reused for recommendation ranking.
   - If missing `visiblePatternNames` becomes a typed error, document the error.
 
 - `docs/reference/pattern-recommendation-debugging.md`
@@ -137,14 +177,16 @@ The badge is a promise that opening the inserter can reveal something actionable
 ### Implementation Plan
 
 1. Extract shared renderable matching.
-   - Move `buildRecommendedPatterns()` from `src/patterns/PatternRecommender.js` to a small reusable helper, for example `src/patterns/recommendation-utils.js`.
+   - Move `buildRecommendedPatterns()` from `src/patterns/PatternRecommender.js` to `src/patterns/recommendation-utils.js`, which already owns pattern badge reason extraction.
    - Keep the helper pure: input raw recommendations and allowed patterns, output matched `{ pattern, recommendation }` pairs.
    - Preserve exact-name matching, including `core/block/{id}` for synced patterns.
 
 2. Use the same helper in the shelf and badge.
    - `PatternRecommender` imports the helper and continues rendering only matched items.
    - `InserterBadge` selects the current block insertion point/root from `@wordpress/block-editor`, reads `getAllowedPatterns()` for that root, and filters raw store recommendations through the helper before calling `getInserterBadgeState()`.
-   - Pass only renderable recommendation payloads to `getInserterBadgeState()` for ready counts and reason extraction.
+   - Pass only renderable recommendation payloads to `getInserterBadgeState()` for ready counts.
+   - Recompute the badge tooltip reason from the renderable recommendations, for example with `getPatternBadgeReason( renderableRecommendations )`.
+   - Do not pass the raw `store.getPatternBadge()` value into ready badge state, because it may describe a recommendation that cannot render in the current inserter scope.
 
 3. Keep error/loading behavior visible.
    - If `patternStatus === 'loading'`, show the loading badge regardless of current renderable count.
@@ -167,6 +209,7 @@ Add or update Jest coverage:
 - `src/patterns/__tests__/InserterBadge.test.js`
   - Ready raw recommendations with zero allowed matches render no badge.
   - Ready raw recommendations with one allowed match render a count of `1`.
+  - Ready raw recommendations with multiple entries use the first high-confidence reason from renderable matches, not from filtered-out raw matches.
   - Loading state still renders when allowed matches are zero.
   - Error state still renders when allowed matches are zero.
   - Missing toggle anchor still fails closed.
@@ -247,7 +290,8 @@ Update after implementation:
 
 1. Add synced-pattern access protections first.
    - This is the only security-sensitive finding.
-   - Include tests that prove private synced content is absent from Qdrant upserts, LLM input, and final responses.
+   - Include tests that prove private synced content is absent from Qdrant upserts, deleted from existing Qdrant points, absent from LLM input, and absent from final responses.
+   - Include helper-ability regressions that preserve the published-post browse fallback for `list-synced-patterns` and `get-synced-pattern` without weakening recommendation-time `read_post` checks.
 
 2. Fix badge renderable counts.
    - Extract the shared matching helper.
@@ -281,10 +325,10 @@ node scripts/verify.js --skip-e2e
 npm run check:docs
 ```
 
-Before release evidence, run the relevant browser coverage if the local WordPress/Playwright environment is available:
+Before release evidence, run the relevant browser coverage if the local WordPress/Playwright environment is available. The current pattern inserter smoke coverage lives in `tests/e2e/flavor-agent.smoke.spec.js`; add a dedicated `tests/e2e/flavor-agent.patterns.spec.js` only if the implementation needs broader browser scenarios than the smoke test covers.
 
 ```bash
-npm run test:e2e -- tests/e2e/flavor-agent.patterns.spec.js
+npx playwright test tests/e2e/flavor-agent.smoke.spec.js -g "pattern surface smoke uses the inserter search to fetch recommendations"
 ```
 
 If the browser harness is unavailable or known-red, record that as a blocker or explicit waiver. Do not silently skip it.
@@ -292,5 +336,5 @@ If the browser harness is unavailable or known-red, record that as a blocker or 
 ## Residual Risk
 
 - `visiblePatternNames` remains a client-derived insertion-scope signal. That is acceptable for the native inserter shelf because the client still filters and inserts only Gutenberg-exposed allowed patterns, but it must not be treated as authorization for synced pattern content.
-- Existing Qdrant collections may already contain private synced payloads. Request-time access filtering must ship with the index change so stale collections cannot leak before the next sync completes.
+- Existing Qdrant collections may already contain private synced payloads. Request-time access filtering must ship with the index cleanup so stale collections cannot leak before the next sync deletes unsafe points.
 - If non-first-party Abilities consumers depend on omitted `visiblePatternNames` returning global recommendations, the fail-closed scope change is a behavior break. The route is documented here as first-party inserter scoped, so the safer behavior is preferred.

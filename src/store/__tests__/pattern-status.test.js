@@ -19,7 +19,7 @@ describe( 'pattern status store contract', () => {
 		expect( state.patternError ).toBe( 'Some message' );
 	} );
 
-	test( 'SET_PATTERN_RECS clears patternError and recomputes the badge', () => {
+	test( 'SET_PATTERN_RECS clears patternError and stores recommendations', () => {
 		const errorState = reducer(
 			undefined,
 			actions.setPatternStatus( 'error', 'Some message' )
@@ -37,9 +37,7 @@ describe( 'pattern status store contract', () => {
 
 		expect( nextState.patternRecommendations ).toHaveLength( 1 );
 		expect( nextState.patternError ).toBeNull();
-		expect( nextState.patternBadge ).toBe(
-			'High-confidence recommendation'
-		);
+		expect( nextState ).not.toHaveProperty( 'patternBadge' );
 	} );
 
 	test( 'success cycle ends with a cleared error state', () => {
@@ -64,12 +62,10 @@ describe( 'pattern status store contract', () => {
 
 		expect( readyState.patternStatus ).toBe( 'ready' );
 		expect( readyState.patternError ).toBeNull();
-		expect( readyState.patternBadge ).toBe(
-			'Gallery matches the media-heavy section'
-		);
+		expect( readyState.patternRecommendations ).toHaveLength( 1 );
 	} );
 
-	test( 'empty recommendations clear the badge and preserve an empty list', () => {
+	test( 'empty recommendations preserve an empty list and clear errors', () => {
 		const stateWithBadge = reducer(
 			undefined,
 			actions.setPatternRecommendations( [
@@ -86,8 +82,8 @@ describe( 'pattern status store contract', () => {
 		);
 
 		expect( clearedState.patternRecommendations ).toEqual( [] );
-		expect( clearedState.patternBadge ).toBeNull();
 		expect( clearedState.patternError ).toBeNull();
+		expect( clearedState ).not.toHaveProperty( 'patternBadge' );
 	} );
 
 	test( 'stale pattern completions are ignored', () => {

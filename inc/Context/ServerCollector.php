@@ -194,6 +194,13 @@ final class ServerCollector {
 		return self::synced_pattern_repository()->get_pattern( $pattern_id );
 	}
 
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	public static function for_readable_synced_pattern_recommendation( int $pattern_id ): ?array {
+		return self::synced_pattern_repository()->get_readable_pattern_for_recommendation( $pattern_id );
+	}
+
 	public static function for_template_parts( ?string $area = null, bool $include_content = true ): array {
 		return self::template_repository()->for_template_parts( $area, $include_content );
 	}

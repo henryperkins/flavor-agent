@@ -42,6 +42,7 @@ import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
+import { buildRecommendedPatterns } from './recommendation-utils';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
@@ -141,38 +142,6 @@ function resolvePatternBlocks( pattern ) {
 	}
 
 	return [];
-}
-
-function buildRecommendedPatterns( recommendations, allowedPatterns ) {
-	if (
-		! Array.isArray( recommendations ) ||
-		! Array.isArray( allowedPatterns )
-	) {
-		return [];
-	}
-
-	const allowedByName = new Map(
-		allowedPatterns
-			.filter(
-				( pattern ) => typeof pattern?.name === 'string' && pattern.name
-			)
-			.map( ( pattern ) => [ pattern.name, pattern ] )
-	);
-
-	return recommendations
-		.map( ( recommendation ) => {
-			const pattern = allowedByName.get( recommendation?.name );
-
-			if ( ! pattern ) {
-				return null;
-			}
-
-			return {
-				pattern,
-				recommendation,
-			};
-		} )
-		.filter( Boolean );
 }
 
 function PatternShelf( { items, onInsert } ) {

@@ -521,7 +521,7 @@ describe( 'update helpers', () => {
 		).toEqual( suggestion.attributeUpdates );
 	} );
 
-	test( 'getSuggestionAttributeUpdates rejects unsupported metadata.bindings updates when bindable attributes are known', () => {
+	test( 'getSuggestionAttributeUpdates strips arbitrary metadata and unsupported bindings when bindable attributes are known', () => {
 		expect(
 			getSuggestionAttributeUpdates(
 				{
@@ -548,7 +548,6 @@ describe( 'update helpers', () => {
 			)
 		).toEqual( {
 			metadata: {
-				name: 'Hero CTA',
 				bindings: {
 					url: {
 						source: 'core/post-meta',
@@ -559,7 +558,7 @@ describe( 'update helpers', () => {
 		} );
 	} );
 
-	test( 'getSuggestionAttributeUpdates preserves unrelated metadata when bindings are disallowed', () => {
+	test( 'getSuggestionAttributeUpdates drops arbitrary metadata when bindings are disallowed', () => {
 		expect(
 			getSuggestionAttributeUpdates(
 				{
@@ -580,11 +579,7 @@ describe( 'update helpers', () => {
 					isInsideContentOnly: false,
 				}
 			)
-		).toEqual( {
-			metadata: {
-				name: 'Hero CTA',
-			},
-		} );
+		).toEqual( {} );
 	} );
 
 	test( 'getSuggestionAttributeUpdates drops binding-only suggestions when no bindable attributes are allowed', () => {
@@ -807,6 +802,7 @@ describe( 'update helpers', () => {
 		const executionContract = {
 			panelMappingKnown: false,
 			allowedPanels: [],
+			configAttributeKeys: [ 'dropCap' ],
 			styleSupportPaths: [],
 			presetSlugs: {
 				color: [ 'accent' ],
@@ -841,6 +837,35 @@ describe( 'update helpers', () => {
 			)
 		).toEqual( {
 			backgroundColor: 'accent',
+		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates merges partial execution contracts with block local attribute keys', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						content: 'Updated copy',
+						dropCap: true,
+						unknownAttribute: 'remove me',
+					},
+				},
+				{
+					contentAttributes: {
+						content: { role: 'content' },
+					},
+					configAttributes: {
+						dropCap: { type: 'boolean' },
+					},
+				},
+				{
+					allowedPanels: [ 'general' ],
+					panelMappingKnown: true,
+				}
+			)
+		).toEqual( {
+			content: 'Updated copy',
+			dropCap: true,
 		} );
 	} );
 
@@ -882,7 +907,6 @@ describe( 'update helpers', () => {
 					label: 'Connect button text and URL',
 					attributeUpdates: {
 						metadata: {
-							name: 'Hero CTA',
 							bindings: {
 								url: {
 									source: 'core/post-meta',
@@ -896,6 +920,136 @@ describe( 'update helpers', () => {
 			styles: [],
 			block: [],
 			explanation: 'Only supported bindings should survive.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext preserves supported visibility and binding metadata only', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Scope CTA visibility and bindings',
+					attributeUpdates: {
+						metadata: {
+							name: 'Hero CTA',
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+								},
+							},
+							bindings: {
+								content: {
+									source: 'core/post-meta',
+									args: { key: 'cta_label' },
+								},
+								unregistered: {
+									source: 'core/post-meta',
+									args: { key: 'cta_extra' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Supported metadata channels should survive.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext( recommendations, {
+				bindableAttributes: [ 'content' ],
+				isInsideContentOnly: false,
+			} )
+		).toEqual( {
+			settings: [
+				{
+					label: 'Scope CTA visibility and bindings',
+					attributeUpdates: {
+						metadata: {
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+								},
+							},
+							bindings: {
+								content: {
+									source: 'core/post-meta',
+									args: { key: 'cta_label' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Supported metadata channels should survive.',
+		} );
+	} );
+
+	test( 'sanitizeRecommendationsForContext filters metadata.bindings declared by the execution contract', () => {
+		const recommendations = {
+			settings: [
+				{
+					label: 'Scope CTA visibility and bindings',
+					attributeUpdates: {
+						metadata: {
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+								},
+							},
+							bindings: {
+								content: {
+									source: 'core/post-meta',
+									args: { key: 'cta_label' },
+								},
+								url: {
+									source: 'core/post-meta',
+									args: { key: 'cta_url' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Execution contracts can carry binding support.',
+		};
+
+		expect(
+			sanitizeRecommendationsForContext(
+				recommendations,
+				{},
+				{
+					bindableAttributes: [ 'content' ],
+				}
+			)
+		).toEqual( {
+			settings: [
+				{
+					label: 'Scope CTA visibility and bindings',
+					attributeUpdates: {
+						metadata: {
+							blockVisibility: {
+								viewport: {
+									mobile: false,
+								},
+							},
+							bindings: {
+								content: {
+									source: 'core/post-meta',
+									args: { key: 'cta_label' },
+								},
+							},
+						},
+					},
+				},
+			],
+			styles: [],
+			block: [],
+			explanation: 'Execution contracts can carry binding support.',
 		} );
 	} );
 
@@ -953,7 +1107,7 @@ describe( 'update helpers', () => {
 		);
 	} );
 
-	test( 'sanitizeRecommendationsForContext preserves non-binding metadata when bindings are disallowed', () => {
+	test( 'sanitizeRecommendationsForContext drops arbitrary metadata when bindings are disallowed', () => {
 		const recommendations = {
 			settings: [
 				{
@@ -974,7 +1128,7 @@ describe( 'update helpers', () => {
 			styles: [],
 			block: [],
 			explanation:
-				'Unsupported bindings should not remove unrelated metadata.',
+				'Unsupported bindings should not degrade into arbitrary metadata.',
 		};
 
 		expect(
@@ -983,21 +1137,35 @@ describe( 'update helpers', () => {
 				isInsideContentOnly: false,
 			} )
 		).toEqual( {
-			settings: [
-				{
-					label: 'Connect CTA fields',
-					attributeUpdates: {
-						metadata: {
-							name: 'Hero CTA',
-						},
-					},
-				},
-			],
+			settings: [],
 			styles: [],
 			block: [],
 			explanation:
-				'Unsupported bindings should not remove unrelated metadata.',
+				'Unsupported bindings should not degrade into arbitrary metadata.',
 		} );
+	} );
+
+	test( 'getSuggestionAttributeUpdates rejects lock and unregistered top-level attributes', () => {
+		expect(
+			getSuggestionAttributeUpdates(
+				{
+					attributeUpdates: {
+						lock: {
+							move: true,
+						},
+						unregisteredThing: 'surprise',
+					},
+				},
+				{
+					contentAttributes: {
+						content: { role: 'content' },
+					},
+					configAttributes: {
+						dropCap: { type: 'boolean' },
+					},
+				}
+			)
+		).toEqual( {} );
 	} );
 
 	test( 'sanitizeRecommendationsForContext preserves advisory structural suggestions in contentOnly mode', () => {

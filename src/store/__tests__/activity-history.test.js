@@ -393,6 +393,58 @@ describe( 'activity history helpers', () => {
 		);
 	} );
 
+	test( 'getBlockActivityUndoState keeps moved block activity undoable when attributes still match', () => {
+		const entry = createActivityEntry( {
+			type: 'apply_suggestion',
+			surface: 'block',
+			target: {
+				clientId: 'block-1',
+				blockName: 'core/paragraph',
+				blockPath: [ 0 ],
+			},
+			before: {
+				attributes: {
+					content: 'Before',
+				},
+			},
+			after: {
+				attributes: {
+					content: 'After',
+				},
+			},
+			document: {
+				scopeKey: 'post:42',
+			},
+		} );
+		const movedBlock = {
+			clientId: 'block-1',
+			name: 'core/paragraph',
+			attributes: {
+				content: 'After',
+			},
+		};
+		const blockEditorSelect = {
+			getBlock: () => movedBlock,
+			getBlockAttributes: () => movedBlock.attributes,
+			getBlocks: () => [
+				{
+					clientId: 'block-0',
+					name: 'core/heading',
+					attributes: {},
+				},
+				movedBlock,
+			],
+		};
+
+		expect( getBlockActivityUndoState( entry, blockEditorSelect ) ).toEqual(
+			expect.objectContaining( {
+				canUndo: true,
+				status: 'available',
+				error: null,
+			} )
+		);
+	} );
+
 	test( 'block runtime state revives an AI action after native redo reapplies the recorded after snapshot', () => {
 		const entry = {
 			...createActivityEntry( {

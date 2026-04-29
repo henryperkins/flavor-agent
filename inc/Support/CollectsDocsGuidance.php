@@ -22,13 +22,23 @@ final class CollectsDocsGuidance {
 		callable $build_entity_key,
 		callable $build_family_context,
 		array $context,
-		string $prompt
+		string $prompt,
+		array $options = []
 	): array {
-		$query            = $build_query( $context, $prompt );
-		$entity_key       = $build_entity_key( $context, $query );
-		$family_context   = $build_family_context( $context, $prompt, $entity_key );
-		$docs_guidance    = AISearchClient::maybe_search_with_cache_fallbacks( $query, $entity_key, $family_context );
-		$roadmap_guidance = CoreRoadmapGuidance::collect( $context );
+		$query                 = $build_query( $context, $prompt );
+		$entity_key            = $build_entity_key( $context, $query );
+		$family_context        = $build_family_context( $context, $prompt, $entity_key );
+		$allow_foreground_warm = array_key_exists( 'allowForegroundWarm', $options )
+			? (bool) $options['allowForegroundWarm']
+			: true;
+		$docs_guidance         = AISearchClient::maybe_search_with_cache_fallbacks(
+			$query,
+			$entity_key,
+			$family_context,
+			null,
+			$allow_foreground_warm
+		);
+		$roadmap_guidance      = CoreRoadmapGuidance::collect( $context );
 
 		if ( [] === $roadmap_guidance ) {
 			return $docs_guidance;

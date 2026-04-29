@@ -158,6 +158,26 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [ 11 ], array_column( $result['patterns'], 'id' ) );
 	}
 
+	public function test_list_synced_patterns_preserves_published_browse_fallback_when_read_post_is_denied(): void {
+		WordPressTestState::$capabilities = [
+			'read_post:13' => false,
+		];
+		WordPressTestState::$posts        = [
+			13 => $this->synced_pattern_post( 13, 'Published Shared Header', 'Published shared copy', 'publish' ),
+		];
+
+		$result = PatternAbilities::list_synced_patterns(
+			[
+				'includeContent' => true,
+			]
+		);
+
+		$this->assertSame( 1, $result['total'] );
+		$this->assertSame( [ 13 ], array_column( $result['patterns'], 'id' ) );
+		$this->assertSame( 'Published Shared Header', $result['patterns'][0]['title'] ?? '' );
+		$this->assertStringContainsString( 'Published shared copy', (string) ( $result['patterns'][0]['content'] ?? '' ) );
+	}
+
 	public function test_list_synced_patterns_can_filter_partial_and_omit_content_by_default(): void {
 		WordPressTestState::$capabilities = [
 			'read_post' => static fn( int $post_id ): bool => in_array( $post_id, [ 21, 22 ], true ),
@@ -298,6 +318,25 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'unsynced', $result['wpPatternSyncStatus'] );
 	}
 
+	public function test_get_synced_pattern_preserves_published_browse_fallback_when_read_post_is_denied(): void {
+		WordPressTestState::$capabilities = [
+			'read_post:14' => false,
+		];
+		WordPressTestState::$posts        = [
+			14 => $this->synced_pattern_post( 14, 'Published Browse Pattern', 'Published browse copy', 'publish' ),
+		];
+
+		$result = PatternAbilities::get_synced_pattern(
+			[
+				'patternId' => 14,
+			]
+		);
+
+		$this->assertSame( 14, $result['id'] );
+		$this->assertSame( 'Published Browse Pattern', $result['title'] );
+		$this->assertStringContainsString( 'Published browse copy', (string) ( $result['content'] ?? '' ) );
+	}
+
 	public function test_get_synced_pattern_returns_not_found_for_unreadable_pattern(): void {
 		WordPressTestState::$capabilities = [
 			'read_post:42' => false,
@@ -327,10 +366,11 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_patterns_returns_missing_credentials_when_backends_are_not_configured(): void {
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -338,10 +378,22 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_patterns_short_circuits_explicitly_empty_visible_patterns_before_backend_validation(): void {
+		$result = $this->recommend_patterns(
+			[
+				'postType' => 'page',
+			],
+			[]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_recommend_patterns_returns_empty_when_visible_pattern_scope_is_absent(): void {
 		$result = PatternAbilities::recommend_patterns(
 			[
-				'postType'            => 'page',
-				'visiblePatternNames' => [],
+				'postType' => 'page',
 			]
 		);
 
@@ -361,10 +413,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -383,10 +436,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -405,10 +459,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -428,10 +483,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -454,10 +510,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -480,10 +537,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -504,10 +562,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -529,10 +588,11 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -598,7 +658,7 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'            => 'page',
 				'templateType'        => 'home',
@@ -607,7 +667,8 @@ final class PatternAbilitiesTest extends TestCase {
 				],
 				'prompt'              => 'Make the intro more editorial.',
 				'visiblePatternNames' => [ 'theme/hero', 'theme/footer-callout' ],
-			]
+			],
+			[ 'theme/hero', 'theme/footer-callout' ]
 		);
 
 		$this->assertSame(
@@ -682,10 +743,11 @@ final class PatternAbilitiesTest extends TestCase {
 			$this->embedding_response( [ 0.12, 0.34, 0.56 ] ),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -705,10 +767,11 @@ final class PatternAbilitiesTest extends TestCase {
 			$this->embedding_response( [ 0.12, 0.34, 0.56 ] ),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -738,10 +801,11 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -764,10 +828,11 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 		WordPressTestState::$remote_get_response   = $this->qdrant_collection_response( 3 );
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -795,10 +860,11 @@ final class PatternAbilitiesTest extends TestCase {
 			$this->ranking_response( 'not-json' ),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -851,7 +917,7 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'     => 'page',
 				'templateType' => 'home',
@@ -859,7 +925,8 @@ final class PatternAbilitiesTest extends TestCase {
 					'blockName' => 'core/cover',
 				],
 				'prompt'       => 'Make the hero feel more editorial.',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
@@ -868,6 +935,63 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( '## WordPress Developer Guidance', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Cover block reference', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'overlay styling, and inner content layout controls', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_docs_grounding_does_not_perform_foreground_ai_search_on_cache_miss(): void {
+		$this->configure_backends();
+		$this->configure_docs_grounding();
+		$this->save_index_state();
+
+		$generic_guidance = [
+			[
+				'id'        => 'generic-block-editor-doc',
+				'title'     => 'Block Editor Handbook',
+				'sourceKey' => 'developer.wordpress.org/block-editor',
+				'url'       => 'https://developer.wordpress.org/block-editor/',
+				'excerpt'   => 'Use patterns that fit the inserter context.',
+				'score'     => 0.82,
+			],
+		];
+
+		AISearchClient::cache_entity_guidance( 'guidance:block-editor', $generic_guidance );
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point( 'theme/hero', 0.71 ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'theme/hero',
+								'score'  => 0.82,
+								'reason' => 'Matches the current context.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'theme/hero' ],
+			],
+			[ 'theme/hero' ]
+		);
+
+		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertStringNotContainsString( 'api.cloudflare.com', wp_json_encode( WordPressTestState::$remote_post_calls ) );
+		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertStringContainsString( 'Block Editor Handbook', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
 	public function test_recommend_patterns_adds_trait_should_clauses_from_insertion_context(): void {
@@ -913,7 +1037,7 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'         => 'page',
 				'insertionContext' => [
@@ -924,7 +1048,8 @@ final class PatternAbilitiesTest extends TestCase {
 					'templatePartSlug' => 'site-header',
 					'containerLayout'  => 'flex',
 				],
-			]
+			],
+			[ 'theme/header-utility' ]
 		);
 
 		$this->assertSame( [ 'theme/header-utility' ], array_column( $result['recommendations'], 'name' ) );
@@ -1016,11 +1141,12 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'         => 'page',
 				'insertionContext' => [],
-			]
+			],
+			[ 'theme/root-section' ]
 		);
 
 		$this->assertSame( [ 'theme/root-section' ], array_column( $result['recommendations'], 'name' ) );
@@ -1092,11 +1218,12 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'         => 'post',
 				'insertionContext' => [],
-			]
+			],
+			[ 'theme/post-feature' ]
 		);
 
 		$this->assertSame( [ 'theme/post-feature' ], array_column( $result['recommendations'], 'name' ) );
@@ -1164,11 +1291,12 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'         => 'wp_template_part',
 				'insertionContext' => [],
-			]
+			],
+			[ 'theme/template-part-shell' ]
 		);
 
 		$this->assertSame( [ 'theme/template-part-shell' ], array_column( $result['recommendations'], 'name' ) );
@@ -1269,7 +1397,7 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'         => 'page',
 				'blockContext'     => [
@@ -1285,7 +1413,8 @@ final class PatternAbilitiesTest extends TestCase {
 						'core/button',
 					],
 				],
-			]
+			],
+			[ 'theme/override-ready', 'theme/plain-pattern' ]
 		);
 
 		$this->assertSame( [ 'theme/override-ready' ], array_column( $result['recommendations'], 'name' ) );
@@ -1369,14 +1498,15 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType'     => 'page',
 				'blockContext' => [
 					'blockName' => 'plugin/card',
 				],
 				'prompt'       => 'Keep it flexible for repeated card instances.',
-			]
+			],
+			[ 'theme/custom-block-generic', 'theme/plain-pattern' ]
 		);
 
 		$this->assertSame( [ 'theme/custom-block-generic' ], array_column( $result['recommendations'], 'name' ) );
@@ -1390,6 +1520,185 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'Custom block context: plugin/card', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Supports Pattern Overrides for plugin/card.', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'matchesNearbyCustomBlock', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_skips_unreadable_synced_qdrant_candidates_before_ranking(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		$payload_json                     = wp_json_encode( [ $this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ) ] );
+		WordPressTestState::$capabilities = [
+			'read_post:91' => false,
+		];
+		WordPressTestState::$posts        = [
+			91 => $this->synced_pattern_post( 91, 'Private Launch Banner', 'Private launch copy', 'private' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/91' ],
+			],
+			[ 'core/block/91' ]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertStringNotContainsString(
+			'Private Launch Banner',
+			(string) ( WordPressTestState::$remote_post_calls[1]['args']['body'] ?? '' )
+		);
+		$this->assertStringNotContainsString(
+			'Private launch copy',
+			(string) ( WordPressTestState::$remote_post_calls[1]['args']['body'] ?? '' )
+		);
+		$this->assertStringContainsString( 'Private Launch Banner', (string) $payload_json );
+	}
+
+	public function test_recommend_patterns_skips_published_synced_candidate_when_read_post_is_denied(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:92' => false,
+		];
+		WordPressTestState::$posts        = [
+			92 => $this->synced_pattern_post( 92, 'Published Shared Banner', 'Published shared copy', 'publish' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 92, 0.96, 'Published Shared Banner', 'Published shared copy' ),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/92' ],
+			],
+			[ 'core/block/92' ]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_recommend_patterns_treats_legacy_core_block_name_as_synced_candidate(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		$payload_json                     = wp_json_encode(
+			[
+				$this->pattern_point(
+					'core/block/93',
+					0.96,
+					[
+						'id'      => 'core/block/93',
+						'title'   => 'Legacy Private Banner',
+						'content' => '<!-- wp:paragraph --><p>Legacy private copy</p><!-- /wp:paragraph -->',
+					]
+				),
+			]
+		);
+		WordPressTestState::$capabilities = [
+			'read_post:93' => false,
+		];
+		WordPressTestState::$posts        = [
+			93 => $this->synced_pattern_post( 93, 'Legacy Private Banner', 'Legacy private copy', 'private' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->pattern_point(
+						'core/block/93',
+						0.96,
+						[
+							'id'      => 'core/block/93',
+							'title'   => 'Legacy Private Banner',
+							'content' => '<!-- wp:paragraph --><p>Legacy private copy</p><!-- /wp:paragraph -->',
+						]
+					),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/93' ],
+			],
+			[ 'core/block/93' ]
+		);
+
+		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertStringNotContainsString(
+			'Legacy Private Banner',
+			(string) ( WordPressTestState::$remote_post_calls[1]['args']['body'] ?? '' )
+		);
+		$this->assertStringContainsString( 'Legacy Private Banner', (string) $payload_json );
+	}
+
+	public function test_recommend_patterns_rehydrates_readable_synced_candidates_before_ranking(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:94' => true,
+		];
+		WordPressTestState::$posts        = [
+			94 => $this->synced_pattern_post( 94, 'Current Shared Banner', 'Current shared copy', 'publish' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 94, 0.96, 'Stale Shared Banner', 'Stale shared copy' ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'core/block/94',
+								'score'  => 0.91,
+								'reason' => 'Best current shared match.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/94' ],
+			],
+			[ 'core/block/94' ]
+		);
+
+		$this->assertSame( [ 'core/block/94' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame( 'Current Shared Banner', $result['recommendations'][0]['title'] ?? '' );
+		$this->assertStringContainsString( 'Current shared copy', $result['recommendations'][0]['content'] ?? '' );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertStringContainsString( 'Current Shared Banner', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( 'Current shared copy', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringNotContainsString( 'Stale Shared Banner', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringNotContainsString( 'Stale shared copy', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
 	public function test_recommend_patterns_uses_connector_chat_with_fallback_direct_embeddings(): void {
@@ -1442,10 +1751,11 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/hero' ]
 		);
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
@@ -1489,10 +1799,14 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			array_map(
+				static fn( int $index ): string => "theme/pattern-{$index}",
+				range( 1, 9 )
+			)
 		);
 
 		$this->assertCount( 8, $result['recommendations'] );
@@ -1550,10 +1864,11 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/pattern-a', 'theme/pattern-b', 'theme/pattern-c' ]
 		);
 
 		$this->assertSame(
@@ -1601,10 +1916,11 @@ final class PatternAbilitiesTest extends TestCase {
 			),
 		];
 
-		$result = PatternAbilities::recommend_patterns(
+		$result = $this->recommend_patterns(
 			[
 				'postType' => 'page',
-			]
+			],
+			[ 'theme/pattern-a', 'theme/pattern-b', 'theme/pattern-c' ]
 		);
 
 		$this->assertSame(
@@ -1643,6 +1959,11 @@ final class PatternAbilitiesTest extends TestCase {
 				'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 			]
 		);
+	}
+
+	private function recommend_patterns( array $input, array $visible_pattern_names ): array|\WP_Error {
+		$input['visiblePatternNames'] = $visible_pattern_names;
+		return PatternAbilities::recommend_patterns( $input );
 	}
 
 	private function save_index_state( array $overrides = [] ): void {
@@ -1793,6 +2114,40 @@ final class PatternAbilitiesTest extends TestCase {
 			'score'   => $score,
 			'payload' => array_replace_recursive( $payload, $overrides ),
 		];
+	}
+
+	private function synced_pattern_post( int $id, string $title, string $copy, string $status = 'publish' ): object {
+		return (object) [
+			'ID'                => $id,
+			'post_type'         => 'wp_block',
+			'post_title'        => $title,
+			'post_name'         => 'synced-pattern-' . $id,
+			'post_content'      => '<!-- wp:paragraph --><p>' . $copy . '</p><!-- /wp:paragraph -->',
+			'post_status'       => $status,
+			'post_author'       => 7,
+			'post_date_gmt'     => '2026-04-20 00:00:00',
+			'post_modified_gmt' => '2026-04-21 00:00:00',
+		];
+	}
+
+	/**
+	 * @return array{score: float, payload: array<string, mixed>}
+	 */
+	private function synced_pattern_point( int $id, float $score, string $title, string $copy ): array {
+		return $this->pattern_point(
+			'core/block/' . $id,
+			$score,
+			[
+				'id'                  => 'core/block/' . $id,
+				'title'               => $title,
+				'type'                => 'user',
+				'source'              => 'synced',
+				'syncedPatternId'     => $id,
+				'syncStatus'          => 'synced',
+				'wpPatternSyncStatus' => '',
+				'content'             => '<!-- wp:paragraph --><p>' . $copy . '</p><!-- /wp:paragraph -->',
+			]
+		);
 	}
 
 	/**

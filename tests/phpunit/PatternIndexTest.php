@@ -414,6 +414,75 @@ final class PatternIndexTest extends TestCase {
 		$this->assertStringContainsString( 'Synced hero', $payloads_by_name['core/block/51']['content'] ?? '' );
 	}
 
+	public function test_sync_indexes_published_user_patterns_and_excludes_non_public_posts_from_global_index(): void {
+		$this->register_pattern( 'theme/hero', $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' ) );
+		WordPressTestState::$posts     = [
+			61 => $this->synced_post( 61, 'Public Synced Pattern', 'Public synced copy', 'publish' ),
+			62 => $this->synced_post( 62, 'Public Partial Pattern', 'Public partial copy', 'publish' ),
+			63 => $this->synced_post( 63, 'Public Unsynced Pattern', 'Public unsynced copy', 'publish' ),
+			64 => $this->synced_post( 64, 'Private Synced Pattern', 'Private synced copy', 'private' ),
+			65 => $this->synced_post( 65, 'Draft Synced Pattern', 'Draft synced copy', 'draft' ),
+			66 => $this->synced_post( 66, 'Trashed Synced Pattern', 'Trashed synced copy', 'trash' ),
+		];
+		WordPressTestState::$post_meta = [
+			62 => [
+				'wp_pattern_sync_status' => 'partial',
+			],
+			63 => [
+				'wp_pattern_sync_status' => 'unsynced',
+			],
+		];
+
+		$this->queue_signature_probe();
+		$this->queue_ensure_collection( false );
+		$this->queue_scroll( [] );
+		$this->queue_embeddings(
+			[
+				[ 0.11, 0.22 ],
+				[ 0.33, 0.44 ],
+				[ 0.55, 0.66 ],
+				[ 0.77, 0.88 ],
+			]
+		);
+		$this->queue_qdrant_success( '/points', 'PUT' );
+
+		$result = PatternIndex::sync();
+
+		$this->assertSame( 4, $result['indexed'] );
+
+		$upsert_call      = $this->find_remote_post_call( '/points', 'PUT' );
+		$upsert_body      = $this->decode_request_body( $upsert_call );
+		$payloads_by_name = [];
+
+		foreach ( $upsert_body['points'] ?? [] as $point ) {
+			$payload                                       = is_array( $point['payload'] ?? null ) ? $point['payload'] : [];
+			$payloads_by_name[ (string) $payload['name'] ] = $payload;
+		}
+
+		$this->assertArrayHasKey( 'theme/hero', $payloads_by_name );
+		$this->assertArrayHasKey( 'core/block/61', $payloads_by_name );
+		$this->assertArrayHasKey( 'core/block/62', $payloads_by_name );
+		$this->assertArrayHasKey( 'core/block/63', $payloads_by_name );
+		$this->assertArrayNotHasKey( 'core/block/64', $payloads_by_name );
+		$this->assertArrayNotHasKey( 'core/block/65', $payloads_by_name );
+		$this->assertArrayNotHasKey( 'core/block/66', $payloads_by_name );
+		$this->assertSame( 'synced', $payloads_by_name['core/block/61']['syncStatus'] ?? '' );
+		$this->assertSame( 'partial', $payloads_by_name['core/block/62']['syncStatus'] ?? '' );
+		$this->assertSame( 'unsynced', $payloads_by_name['core/block/63']['syncStatus'] ?? '' );
+
+		$request_bodies = wp_json_encode( WordPressTestState::$remote_post_calls );
+
+		$this->assertStringContainsString( 'Public Synced Pattern', (string) $request_bodies );
+		$this->assertStringContainsString( 'Public Partial Pattern', (string) $request_bodies );
+		$this->assertStringContainsString( 'Public Unsynced Pattern', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Private Synced Pattern', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Private synced copy', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Draft Synced Pattern', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Draft synced copy', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Trashed Synced Pattern', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Trashed synced copy', (string) $request_bodies );
+	}
+
 	public function test_sync_performs_incremental_reindex_and_deletes_removed_patterns(): void {
 		$hero   = $this->pattern_fixture( 'theme/hero', 'Hero', 'Updated hero copy' );
 		$footer = $this->pattern_fixture( 'theme/footer-callout', 'Footer Callout', 'Footer copy' );
@@ -475,6 +544,71 @@ final class PatternIndexTest extends TestCase {
 		$delete_call = $this->find_remote_post_call( '/points/delete', 'POST' );
 		$delete_body = $this->decode_request_body( $delete_call );
 		$this->assertSame( [ $removed_uuid ], $delete_body['points'] ?? null );
+	}
+
+	public function test_sync_deletes_existing_non_public_synced_points_from_qdrant(): void {
+		$hero = $this->pattern_fixture( 'theme/hero', 'Hero', 'Hero copy' );
+
+		$this->register_pattern( 'theme/hero', $hero );
+
+		$current_patterns = $this->current_patterns();
+		$patterns_by_name = [];
+		foreach ( $current_patterns as $pattern ) {
+			$patterns_by_name[ (string) $pattern['name'] ] = $pattern;
+		}
+
+		$hero_uuid    = PatternIndex::pattern_uuid( 'theme/hero' );
+		$private_uuid = PatternIndex::pattern_uuid( 'core/block/71' );
+
+		WordPressTestState::$posts = [
+			71 => $this->synced_post( 71, 'Stale Private Synced Pattern', 'Stale private copy', 'private' ),
+		];
+
+		$this->save_ready_state_for_patterns(
+			$current_patterns,
+			[
+				'fingerprint'          => 'outdated-fingerprint',
+				'indexed_count'        => 2,
+				'pattern_fingerprints' => [
+					$hero_uuid    => $this->expected_pattern_fingerprint( $patterns_by_name['theme/hero'] ?? [] ),
+					$private_uuid => 'stale-private-fingerprint',
+				],
+			]
+		);
+
+		$this->queue_signature_probe();
+		$this->queue_ensure_collection();
+		$this->queue_scroll(
+			[
+				$this->scroll_point( $hero_uuid, 'theme/hero' ),
+				$this->scroll_point( $private_uuid, 'core/block/71' ),
+			]
+		);
+		$this->queue_qdrant_success( '/points/delete', 'POST' );
+
+		$result = PatternIndex::sync();
+		$state  = PatternIndex::get_state();
+
+		$this->assertSame( 0, $result['indexed'] );
+		$this->assertSame( 1, $result['removed'] );
+		$this->assertSame( 1, $state['indexed_count'] );
+		$this->assertArrayNotHasKey( $private_uuid, $state['pattern_fingerprints'] );
+
+		foreach ( WordPressTestState::$remote_post_calls as $call ) {
+			$this->assertFalse(
+				'PUT' === ( $call['args']['method'] ?? 'POST' )
+				&& str_ends_with( (string) ( $call['url'] ?? '' ), '/points' ),
+				'Stale private synced cleanup must not send a replacement upsert.'
+			);
+		}
+
+		$delete_call = $this->find_remote_post_call( '/points/delete', 'POST' );
+		$delete_body = $this->decode_request_body( $delete_call );
+		$this->assertSame( [ $private_uuid ], $delete_body['points'] ?? null );
+
+		$request_bodies = wp_json_encode( WordPressTestState::$remote_post_calls );
+		$this->assertStringNotContainsString( 'Stale Private Synced Pattern', (string) $request_bodies );
+		$this->assertStringNotContainsString( 'Stale private copy', (string) $request_bodies );
 	}
 
 	public function test_sync_persists_error_state_when_collection_creation_fails(): void {
@@ -657,6 +791,20 @@ final class PatternIndexTest extends TestCase {
 			'blockTypes'    => [ 'core/group' ],
 			'templateTypes' => [ 'home' ],
 			'content'       => "<!-- wp:paragraph --><p>{$content}</p><!-- /wp:paragraph -->",
+		];
+	}
+
+	private function synced_post( int $id, string $title, string $copy, string $status ): object {
+		return (object) [
+			'ID'                => $id,
+			'post_type'         => 'wp_block',
+			'post_title'        => $title,
+			'post_name'         => 'synced-pattern-' . $id,
+			'post_content'      => '<!-- wp:paragraph --><p>' . $copy . '</p><!-- /wp:paragraph -->',
+			'post_status'       => $status,
+			'post_author'       => 7,
+			'post_date_gmt'     => '2026-04-20 00:00:00',
+			'post_modified_gmt' => '2026-04-21 00:00:00',
 		];
 	}
 

@@ -15,7 +15,7 @@ This is the operational companion to `docs/features/pattern-recommendations.md`.
 The pattern pipeline has four distinct stages:
 
 1. `PatternIndex::sync()` in `inc/Patterns/PatternIndex.php` builds and maintains the Qdrant collection
-2. `PatternAbilities::recommend_patterns()` in `inc/Abilities/PatternAbilities.php` checks runtime state and backend readiness
+2. `PatternAbilities::recommend_patterns()` in `inc/Abilities/PatternAbilities.php` checks visible-pattern scope, runtime state, backend readiness, and synced-pattern access
 3. `QdrantClient::search()` in `inc/AzureOpenAI/QdrantClient.php` retrieves semantic and structural candidates
 4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates into the final recommendation list
 
@@ -27,7 +27,7 @@ When the system is healthy, all of the following should be true:
 
 - the stored pattern index state reports `status: ready`
 - `last_synced_at` is populated
-- `indexed_count` is non-zero and matches the collection point count closely for registered patterns plus synced/user `wp_block` patterns
+- `indexed_count` is non-zero and matches the collection point count closely for registered patterns plus public-safe published synced/user `wp_block` patterns
 - `QdrantClient::validate_configuration()` returns `true`
 - `QdrantClient::probe_health( 'readyz' )` returns HTTP `200`
 - the collection definition reports `status: green`
@@ -36,7 +36,7 @@ When the system is healthy, all of the following should be true:
 - the collection payload schema includes keyword indexes for `blockTypes`, `templateTypes`, `categories`, and `traits`
 - raw Qdrant hits for a prompt include obviously relevant patterns
 - synced/user pattern hits use payload names like `core/block/{id}` with `source: synced`
-- final recommendations either preserve those hits or improve their order
+- final recommendations either preserve those hits or improve their order after request-time synced-pattern rehydration
 
 Small collections have one easy-to-misread detail:
 
@@ -252,8 +252,9 @@ Then inspect the final recommendation output:
 wp eval '
 $result = \FlavorAgent\Abilities\PatternAbilities::recommend_patterns(
 	array(
-		"postType" => "page",
-		"prompt"   => "hero section with image and call to action",
+		"postType"            => "page",
+		"prompt"              => "hero section with image and call to action",
+		"visiblePatternNames" => array( "theme/hero", "theme/call-to-action", "core/block/123" ),
 	)
 );
 
@@ -367,8 +368,9 @@ What it means:
 
 Most likely causes:
 
-- `visiblePatternNames` was present but empty
+- `visiblePatternNames` was missing or empty
 - raw Qdrant retrieval returned no usable matches
+- synced/user candidates were dropped during request-time `read_post` rehydration
 - reranker scores fell below the score threshold
 
 Where to look:
@@ -376,11 +378,13 @@ Where to look:
 - `PatternAbilities::recommend_patterns()` in `inc/Abilities/PatternAbilities.php`
 - `DEFAULT_RECOMMENDATION_SCORE_THRESHOLD`
 - the caller-supplied `visiblePatternNames`
+- current `wp_block` post status and `current_user_can( 'read_post', $id )` for synced/user candidates
 
 Important nuance:
 
 - this is not automatically a Qdrant failure
 - raw retrieval can succeed while thresholding still removes every final result
+- raw synced hits can also be correct while current post access removes them before ranking
 
 ### Raw Qdrant hits look broad or irrelevant
 
@@ -431,7 +435,9 @@ Low-priority suspect:
 Reason:
 
 - in this pipeline, docs guidance is cache-only and non-blocking
+- cache misses schedule async warming and do not perform foreground AI Search
 - cache misses do not block retrieval or ranking
+- live Cloudflare AI Search requests should not appear in foreground `/recommend-patterns` request traces
 
 ## Fast Decision Rules
 
@@ -439,7 +445,7 @@ Reason:
 - If the runtime state is stale or erroring, fix the rebuild path before looking at ranking quality.
 - If the collection is green and raw hits look good, stop blaming Qdrant.
 - If raw hits are good but final picks are poor, debug `ResponsesClient` and thresholding.
-- If final picks are empty without errors, inspect `visiblePatternNames` and score filtering before changing infrastructure.
+- If final picks are empty without errors, inspect `visiblePatternNames`, synced-pattern access, and score filtering before changing infrastructure.
 
 ## Related Docs
 

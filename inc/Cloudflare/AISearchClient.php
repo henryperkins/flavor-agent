@@ -254,7 +254,8 @@ final class AISearchClient {
 		string $query,
 		string $entity_key = '',
 		array $family_context = [],
-		?int $max_results = null
+		?int $max_results = null,
+		bool $allow_foreground_warm = true
 	): array {
 		$guidance = self::maybe_search( $query, $max_results );
 
@@ -280,7 +281,7 @@ final class AISearchClient {
 			$fallback_type = [] === $guidance ? 'none' : 'generic';
 		}
 
-		if ( in_array( $fallback_type, [ 'generic', 'none' ], true ) ) {
+		if ( $allow_foreground_warm && in_array( $fallback_type, [ 'generic', 'none' ], true ) ) {
 			$fresh_guidance = self::maybe_foreground_warm_context(
 				$query,
 				$entity_key,

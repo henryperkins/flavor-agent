@@ -11,15 +11,22 @@
 | `flavor-agent/recommend-block`         | `BlockAbilities`         | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client                                                   |
 | `flavor-agent/recommend-content`       | `ContentAbilities`       | Programmatic content drafting, editing, and critique scaffold using `WritingPrompt` and the shared chat backend                                |
 | `flavor-agent/introspect-block`        | `BlockAbilities`         | Block type registry introspection                                                                                                              |
+| `flavor-agent/list-allowed-blocks`     | `BlockAbilities`         | Site-wide registered block manifests with optional search, category, pagination, and variation controls                                       |
 | `flavor-agent/recommend-patterns`      | `PatternAbilities`       | Provider-selected embeddings + Qdrant retrieval + LLM reranking                                                                                |
+| `flavor-agent/list-patterns`           | `PatternAbilities`       | Pattern registry listing with optional category, block-type, template-type, search, pagination, and content controls                          |
+| `flavor-agent/get-pattern`             | `PatternAbilities`       | One registered block pattern by name                                                                                                           |
+| `flavor-agent/list-synced-patterns`    | `PatternAbilities`       | Caller-readable or published `wp_block` pattern entities filtered by syncStatus                                                               |
+| `flavor-agent/get-synced-pattern`      | `PatternAbilities`       | One caller-readable or published `wp_block` pattern entity by numeric post ID                                                                |
 | `flavor-agent/recommend-template`      | `TemplateAbilities`      | Provider-selected template composition suggestions for Site Editor templates                                                                   |
 | `flavor-agent/recommend-template-part` | `TemplateAbilities`      | Template-part composition suggestions with validated bounded composition operations for Site Editor template parts                             |
-| `flavor-agent/recommend-style`         | `StyleAbilities`         | Shared Global Styles and Style Book suggestions constrained to validated `theme.json` paths, theme variations, and theme-backed values         |
-| `flavor-agent/list-patterns`           | `PatternAbilities`       | Pattern registry listing with filters                                                                                                          |
 | `flavor-agent/list-template-parts`     | `TemplateAbilities`      | Template part listing with optional area filter                                                                                                |
-| `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search                                                               |
-| `flavor-agent/get-theme-tokens`        | `InfraAbilities`         | Theme preset and global style token extraction                                                                                                 |
+| `flavor-agent/recommend-style`         | `StyleAbilities`         | Shared Global Styles and Style Book suggestions constrained to validated `theme.json` paths, theme variations, and theme-backed values         |
 | `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | Navigation structure, overlay behavior, and organization recommendations                                                                       |
+| `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search                                                               |
+| `flavor-agent/get-active-theme`        | `InfraAbilities`         | Active theme name, stylesheet, template, and version                                                                                          |
+| `flavor-agent/get-theme-presets`       | `InfraAbilities`         | Theme preset families from global settings                                                                                                     |
+| `flavor-agent/get-theme-styles`        | `InfraAbilities`         | Applied global theme styles plus extracted element and pseudo-state summaries                                                                  |
+| `flavor-agent/get-theme-tokens`        | `InfraAbilities`         | Theme token snapshot: colors, typography, spacing, layout, and related feature flags                                                          |
 | `flavor-agent/check-status`            | `InfraAbilities`         | Backend inventory, OpenAI Native credential metadata, available ability list, and per-surface readiness including Global Styles and Style Book |
 
 ### REST API

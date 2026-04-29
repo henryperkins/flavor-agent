@@ -32,7 +32,7 @@ Use this together with `docs/features/README.md` for per-surface flows and `docs
 | Helper abilities and diagnostics | Server-registered helper abilities plus the settings-driven readiness/status contract                                     | Per-ability capability gates, plus Cloudflare and provider/backend gating where relevant | Block introspection and block-type listing, registered and synced pattern inspection, template-part listing, active theme plus presets/styles/tokens, backend readiness, and trusted WordPress docs search | `docs/features/helper-abilities.md`      |
 | Flavor Agent REST API            | Routes under `flavor-agent/v1` consumed by the `flavor-agent` data store and admin scripts                                | Per-route capability callbacks plus route-specific validation and sanitization           | First-party request/response path for recommendations, server-backed activity, and manual pattern sync                                                       | `docs/reference/abilities-and-routes.md` |
 
-## Quick Mapping
+## Quick Mapping (10 REST routes)
 
 - Block Inspector -> `POST /flavor-agent/v1/recommend-block` -> `flavor-agent/recommend-block`
 - Content panel -> `POST /flavor-agent/v1/recommend-content` -> `flavor-agent/recommend-content`
@@ -41,8 +41,9 @@ Use this together with `docs/features/README.md` for per-surface flows and `docs
 - Template panel -> `POST /flavor-agent/v1/recommend-template` -> `flavor-agent/recommend-template`
 - Template-part panel -> `POST /flavor-agent/v1/recommend-template-part` -> `flavor-agent/recommend-template-part`
 - Global Styles / Style Book panel -> `POST /flavor-agent/v1/recommend-style` -> `flavor-agent/recommend-style`
-- Inline and admin activity -> `GET/POST /flavor-agent/v1/activity` and `POST /flavor-agent/v1/activity/{id}/undo` (REST only)
-- Settings sync button -> `POST /flavor-agent/v1/sync-patterns` (REST only)
+- Activity (read/write) -> `GET/POST /flavor-agent/v1/activity`
+- Activity undo -> `POST /flavor-agent/v1/activity/{id}/undo`
+- Pattern sync -> `POST /flavor-agent/v1/sync-patterns`
 
 Content recommendations also remain available as a REST + Abilities contract for external callers.
 

@@ -830,6 +830,49 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
+	public function test_maybe_search_with_cache_fallbacks_can_skip_foreground_warm_and_queue_async_warm(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+
+		$family_context   = [
+			'surface'   => 'template-part',
+			'entityKey' => 'core/template-part',
+			'area'      => 'header',
+		];
+		$generic_guidance = [
+			[
+				'id'        => 'generic-chunk',
+				'title'     => 'Template parts overview',
+				'sourceKey' => 'developer.wordpress.org/themes/templates/template-parts',
+				'url'       => 'https://developer.wordpress.org/themes/templates/template-parts/',
+				'excerpt'   => 'Template parts should stay focused and reusable.',
+				'score'     => 0.83,
+			],
+		];
+
+		WordPressTestState::$transients[ $this->build_entity_cache_key( 'guidance:template-part' ) ] = $generic_guidance;
+
+		$result = AISearchClient::maybe_search_with_cache_fallbacks(
+			'missing query cache',
+			'core/template-part',
+			$family_context,
+			4,
+			false
+		);
+
+		$this->assertSame( $generic_guidance, $result );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+		$this->assertArrayHasKey( AISearchClient::CONTEXT_WARM_CRON_HOOK, WordPressTestState::$scheduled_events );
+
+		$queue = WordPressTestState::$options['flavor_agent_docs_warm_queue'] ?? [];
+
+		$this->assertCount( 1, $queue );
+		$this->assertSame( 'missing query cache', array_values( $queue )[0]['query'] ?? '' );
+	}
+
 	public function test_maybe_search_with_cache_fallbacks_prefers_foreground_warm_over_generic_guidance_when_live_search_succeeds(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
