@@ -17,7 +17,7 @@ The pattern pipeline has four distinct stages:
 1. `PatternIndex::sync()` in `inc/Patterns/PatternIndex.php` builds and maintains the Qdrant collection
 2. `PatternAbilities::recommend_patterns()` in `inc/Abilities/PatternAbilities.php` checks visible-pattern scope, runtime state, backend readiness, and synced-pattern access
 3. `QdrantClient::search()` in `inc/AzureOpenAI/QdrantClient.php` retrieves semantic and structural candidates
-4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates into the final recommendation list
+4. `ResponsesClient::rank()` in `inc/AzureOpenAI/ResponsesClient.php` reranks those candidates through the WordPress AI Client / Connectors runtime into the final recommendation list
 
 If you identify which stage is failing, the rest of the debugging path usually becomes obvious.
 
@@ -84,7 +84,7 @@ Interpretation:
 
 - if Qdrant validation fails, stop there and fix connectivity or credentials first
 - if embeddings validation fails, both sync and live retrieval are blocked
-- if Responses validation fails, raw retrieval can still be healthy while final recommendations fail
+- if Connectors/text-generation validation fails, raw retrieval can still be healthy while final recommendations fail
 
 ### 3. Inspect the live collection definition
 
@@ -425,7 +425,7 @@ Where it happens:
 
 What to check:
 
-- can `ResponsesClient::validate_configuration()` still succeed
+- can `ResponsesClient::validate_configuration()` still succeed against the WordPress AI Client / Connectors runtime
 - are final scores unexpectedly low
 - do the returned reasons ignore obvious layout traits or the user instruction
 

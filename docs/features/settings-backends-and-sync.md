@@ -38,7 +38,7 @@ Chat is no longer configured on this screen. After Workstream C of the WP 7.0 ov
 | Template-part recommendations | Runtime chat configured through `Settings > Connectors` |
 | Navigation recommendations | Runtime chat configured through `Settings > Connectors` and current user can edit theme options |
 | Global Styles / Style Book | Runtime chat configured through `Settings > Connectors` and current user can edit theme options |
-| WordPress docs grounding | Built-in public Cloudflare AI Search endpoint; recommendation-time use stays cache-first, non-blocking for model execution, and can fall back through query, family, entity, and warm generic guidance caches |
+| WordPress docs grounding | Built-in public Cloudflare AI Search endpoint; recommendation-time use checks exact-query, family, entity, and generic guidance caches first. Pattern recommendations disable foreground warming; block, template, template-part, navigation, Global Styles, and Style Book requests may foreground-warm docs guidance on generic or missing fallback guidance before async warming is queued. |
 
 ## Save And Validation Flow
 
@@ -46,7 +46,7 @@ Chat is no longer configured on this screen. After Workstream C of the WP 7.0 ov
 2. WordPress Settings API saves the options registered by `FlavorAgent\Settings::register_settings()`
 3. Flavor Agent validates Azure, OpenAI Native, and Qdrant **embedding** settings when those credential sets changed and enough data is present to run the validation. Direct-provider fields submitted while a connector-backed provider is pinned for chat still validate as embedding credentials. Cloudflare override credentials are only revalidated when those override fields are still being used.
 4. If validation fails, the plugin keeps the previous values and surfaces the error through normal Settings API notices
-5. If OpenAI Native is selected, the page also reports the current effective API key source and whether the core OpenAI connector is registered/configured
+5. The OpenAI Native embeddings section reports the current effective API key source and whether the core OpenAI connector is registered/configured
 6. Connector-backed providers appear in the dropdown only when the WordPress AI Client reports that they currently support text generation
 7. Runtime status messages call out which connector-backed provider is currently serving chat and reflect the embeddings backend in use
 8. Durable setup guidance, troubleshooting, and format notes live in the native WordPress `Help` dropdown so inline page copy can stay focused on active controls and runtime state

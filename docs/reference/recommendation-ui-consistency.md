@@ -70,7 +70,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 | Block inspector main panel     | `Apply now` with tone `Apply now` or `Stale`               | `Manual ideas` via `AIAdvisorySection`   | Hero uses `Apply now` or `Manual ideas`; advisory section now also shows `Advisory only`              | Clear direct-apply wording for local block attributes  |
 | Block inspector passive subpanels | None                                                   | None                                    | Mirror labels come from the delegated chip group title only                                            | Context-only mirrors of the main block result          |
 | Content                        | None                                                       | `Editorial Notes` via `AIAdvisorySection` | Hero eyebrow is `Latest Content Recommendation`; mode pill is `Draft`, `Edit`, or `Critique`           | Editorial output and review notes, no apply lane       |
-| Navigation                     | None                                                       | `Recommended Next Changes` in the standalone shell; embedded sections keep the same manual tone without `AIAdvisorySection` | Category pills plus change counts; wrapper titles stay `Recommended Next Changes` / `Recommended next change` | Advisory-only navigation guidance in a lighter nested shell |
+| Navigation                     | None                                                       | `Recommended Next Changes` in the unmounted standalone shell; embedded sections keep the same manual tone without `AIAdvisorySection` | Category pills plus change counts; wrapper titles are `Navigation Ideas` / `Recommended next change` in the mounted embedded flow | Advisory-only navigation guidance in a lighter nested shell |
 | Pattern inserter               | None                                                       | None                                    | Summary and state notices use `Flavor Agent`, recommendation count pills, and retry text when needed  | Ranking affordance, not lane-based                     |
 | Template                       | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Preview-confirm flow with bounded advisory fallbacks   |
 | Template-part                  | `Review first` with tone `Review first`                    | `Manual ideas` via `AIAdvisorySection`  | Card pills show `Review first`, `Manual ideas`, `Advisory only`, and `Review open`; button uses `Review` / `Reviewing` | Best match for a true advisory-first structure surface |
@@ -81,7 +81,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 - The main recommendation surfaces now share the same three user-facing labels: `Apply now`, `Review first`, and `Manual ideas`.
 - The advisory badge policy is now standardized through `AIAdvisorySection`; full-panel advisory surfaces all show `Advisory only` unless a future surface has a documented reason to suppress it.
-- Navigation keeps `Recommended Next Changes` as its wrapper title, but that is now a documented embedded-surface exception rather than a second advisory taxonomy.
+- Navigation keeps `Navigation Ideas` as the mounted embedded wrapper title and `Recommended next change` for the featured card; the standalone component branch still uses `Recommended Next Changes` but is not mounted by the plugin.
 - Block settings and block styles no longer act as second apply surfaces. They are passive mirrors of the main block panel result.
 
 ## Review-Before-Apply Contract
@@ -158,7 +158,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 ### Resolved Product-Model Decisions
 
 - Block advisory suggestions now use `AIAdvisorySection`. The block panel remains a direct-apply exception only for executable local block updates.
-- Navigation keeps `Recommended Next Changes` as an embedded wrapper title, but the actual advisory taxonomy is the shared `Manual ideas` tone. Treat this as an intentional nested-surface exception, not drift.
+- Navigation keeps `Navigation Ideas` as an embedded wrapper title and `Recommended next change` as the featured-card title, while the actual advisory taxonomy remains the shared manual-follow-through tone. Treat this as an intentional nested-surface exception, not drift.
 - Delegated Settings and Styles sub-panels remain passive mirrors. They reflect safe local results from the main block request and intentionally do not own composer, refresh, capability, activity, or apply state.
 - Pattern recommendations remain ranking/browse-only and intentionally stay outside the lane/review/apply/undo contract.
 - Style Book and Global Styles remain portal-first Styles-sidebar surfaces with document-panel fallback; some mount-context divergence from inspector/document panels is expected and acceptable.

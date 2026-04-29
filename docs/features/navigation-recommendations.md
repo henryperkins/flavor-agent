@@ -6,22 +6,20 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 
 - Surface location: inside the block `AI Recommendations` panel
 - Scope: only for selected `core/navigation` blocks
-- UI shape: advisory-only nested subsection with its own prompt and request state, framed as `Recommended Next Changes`, with a featured recommendation first and grouped shared-`Manual ideas` category lanes and per-change detail rows
+- UI shape: advisory-only nested subsection with its own prompt and request state, framed as `Navigation Ideas`, with a featured `Recommended next change` section followed by grouped manual change sections and per-change detail rows
 
 ## Surfacing Conditions
 
 - The selected block must be `core/navigation`
 - The section stays visible with a notice when `window.flavorAgentData.canRecommendNavigation` is false; the localized flag comes from the shared surface-capability contract and requires both `edit_theme_options` and a compatible text-generation provider in `Settings > Connectors`
-- The request button is only enabled when `buildNavigationFetchInput()` can derive either:
-  - a menu ID from `attributes.ref`, or
-  - serialized navigation block markup
+- The request button is only enabled when `buildNavigationFetchInput()` can send a selected `core/navigation` block as either a serialized block markup payload, an `attributes.ref` menu ID, or both
 
 ## Shared Interaction Model
 
 - Learned-once sequence: scope/freshness -> prompt -> status -> featured recommendation -> grouped manual lanes
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Navigation uses the same advisory/status shell as the executable surfaces but intentionally stops at `advisory-ready`
-- The subsection keeps `Recommended Next Changes` as its wrapper title because it is an embedded next-step flow inside block recommendations, but the actual advisory taxonomy uses the shared `Manual ideas` tone
+- The embedded subsection uses `Navigation Ideas` as its wrapper title because it is a nested flow inside block recommendations; the first card is labeled `Recommended next change`, and grouped sections keep the shared manual-follow-through tone
 - The first returned suggestion is promoted as the recommended next navigation change; remaining ideas are grouped by category (`Structure`, `Overlay`, `Accessibility`)
 - There is no preview or apply path here; the user reviews the grouped changes and edits navigation manually
 - When the current navigation context drifts, the subsection keeps the previous result visible as stale reference material and exposes a refresh action instead of silently clearing it
@@ -33,7 +31,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 2. `buildNavigationFetchInput()` extracts the prompt, menu ID, and/or serialized navigation markup
 3. `fetchNavigationRecommendations()` in the `flavor-agent` store posts the request to `POST /flavor-agent/v1/recommend-navigation`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_navigation()` adapts the request to `FlavorAgent\Abilities\NavigationAbilities::recommend_navigation()`
-5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, computes a docs-free `reviewContextSignature`, returns early for signature-only revalidation, and only then builds prompt text, optionally adds WordPress docs grounding, and calls `ResponsesClient::rank()`
+5. `NavigationAbilities::recommend_navigation()` gathers navigation context through `ServerCollector::for_navigation()`, including location details, structure summary, a path-based current target inventory, overlay context, and overlay template-part metadata, computes a docs-free `reviewContextSignature`, returns early for signature-only revalidation, and only then collects WordPress docs grounding, builds prompt text, and calls `ResponsesClient::rank()`
 6. The parsed response returns advisory suggestion groups, an explanation string, and a `reviewContextSignature`
 7. The store caches the result against the current block client ID and the UI renders suggestion cards and per-change rows
 
@@ -45,6 +43,7 @@ Navigation participates in the server review-freshness contract even though it i
 2. The backend resolves the server context that participates in review freshness (menu structure, target inventory, overlay parts, overlay context, and theme tokens) and returns only the `reviewContextSignature` hash — no docs lookup or model call is made
 3. If the returned signature differs from the stored result's `reviewContextSignature`, the UI marks the result as stale and exposes a refresh affordance
 4. Full recommendation requests still collect docs grounding after the signature-only fast path, but docs churn alone does not make a stored navigation result stale
+5. Navigation docs grounding uses the shared cache/fallback collector. Exact, family, and entity cache hits are reused immediately; on generic or missing fallback guidance, a full request may perform a foreground docs warm before queuing async warming.
 
 ## What This Surface Can Do
 
@@ -61,7 +60,7 @@ Navigation participates in the server review-freshness contract even though it i
 - It does not write executable apply/undo activity entries and does not participate in inline undo; scoped request diagnostics can still be audited
 - The store and UI never route navigation suggestions through the template/style apply or undo executors even though they share the same normalized request-state vocabulary
 - The panel clears results when the selected block changes to a different navigation scope, but when the same selected navigation block drifts in place it now preserves the previous result as stale reference material and exposes a refresh affordance
-- If the block cannot provide either a menu ID or serialized markup, the fetch action stays disabled
+- If the selected `core/navigation` block cannot provide serialized markup or a menu ID, the fetch action stays disabled
 - Background `resolveSignatureOnly` revalidation detects server-side drift (e.g., saved menu changes, overlay-part changes, or theme token updates) and marks stored results as stale; this costs a server round-trip and context collection but no model call
 
 ## Primary Functions And Handlers

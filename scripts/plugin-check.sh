@@ -5,6 +5,48 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 plugin_dir="$(cd -- "${script_dir}/.." && pwd)"
 plugin_slug="${PLUGIN_SLUG:-$(basename "${plugin_dir}")}"
+
+load_local_env() {
+	local env_file="${plugin_dir}/.env"
+	local line key value
+
+	if [[ ! -f "${env_file}" ]]; then
+		return
+	fi
+
+	while IFS= read -r line || [[ -n "${line}" ]]; do
+		line="${line%$'\r'}"
+
+		if [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]]; then
+			continue
+		fi
+
+		if [[ ! "${line}" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+			continue
+		fi
+
+		key="${BASH_REMATCH[1]}"
+
+		if [[ -n "${!key+x}" ]]; then
+			continue
+		fi
+
+		value="${BASH_REMATCH[2]}"
+		value="${value#"${value%%[![:space:]]*}"}"
+		value="${value%"${value##*[![:space:]]}"}"
+
+		if [[ "${value}" == \"*\" && "${value}" == *\" ]]; then
+			value="${value:1:${#value}-2}"
+		elif [[ "${value}" == \'*\' && "${value}" == *\' ]]; then
+			value="${value:1:${#value}-2}"
+		fi
+
+		export "${key}=${value}"
+	done < "${env_file}"
+}
+
+load_local_env
+
 wp_root="${WP_PLUGIN_CHECK_PATH:-$(cd -- "${plugin_dir}/../../.." && pwd)}"
 prepare_release_script="${script_dir}/prepare-release.sh"
 plugins_dir="${wp_root}/wp-content/plugins"

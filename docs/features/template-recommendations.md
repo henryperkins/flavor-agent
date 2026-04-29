@@ -166,7 +166,7 @@ User prompt in wp_template editor
 - The panel still computes a local request signature from `templateRef + prompt + contextSignature` so stale cards can stay visible immediately when the prompt or live editor snapshot drifts.
 - Normal template responses now also store docs-free `reviewContextSignature` and `resolvedContextSignature`. The review hash is used by background `revalidateTemplateReviewFreshness()` checks, while the resolved hash is computed in PHP from the canonical server-normalized template apply context plus the sanitized prompt after live overlays and server-only context such as theme tokens and pattern candidates have been resolved.
 - `applyTemplateSuggestion()` keeps the current client-side stale guard first. If the local request signature still matches, it re-posts the same request with `resolveSignatureOnly: true` and only allows apply when the returned `resolvedContextSignature` still matches the stored result; review revalidation compares `reviewContextSignature` without treating docs grounding churn as stale state.
-- Template docs grounding uses `visiblePatternNames` in the query text, but the family cache key stays coarse and only records bounded booleans and counters such as `hasVisiblePatternScope` and `visiblePatternCount`.
+- Template docs grounding uses `visiblePatternNames` in the query text, but the family cache key stays coarse and only records bounded booleans and counters such as `hasVisiblePatternScope` and `visiblePatternCount`. Full requests use the shared cache/fallback collector, so exact, family, and entity cache hits are reused immediately; on generic or missing fallback guidance, a request may perform a foreground docs warm before queuing async warming.
 
 ## Example Preview Contract
 

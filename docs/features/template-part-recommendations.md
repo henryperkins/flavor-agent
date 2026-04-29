@@ -222,7 +222,7 @@ The prompt-facing `blockTree` may stay summarized, but `editorStructure.allBlock
 - The panel still computes a local request signature from `templatePartRef + prompt + contextSignature` so stale review cards are detected immediately when the prompt or live structure drifts.
 - Normal template-part responses now also store docs-free `reviewContextSignature` and a PHP-computed `resolvedContextSignature`. The review hash is used by background `revalidateTemplatePartReviewFreshness()` checks, while the resolved hash is based on the server-normalized structural apply context plus the sanitized prompt after live overlays and server-only context have been resolved.
 - `applyTemplatePartSuggestion()` keeps the local stale guard first, then re-posts the same request with `resolveSignatureOnly: true` and only allows apply when the current `resolvedContextSignature` still matches the stored result; review revalidation compares `reviewContextSignature` without treating docs grounding churn as stale state.
-- Template-part docs grounding now uses `currentPatternOverrides` in the query text, while the family cache key stays coarse and records only bounded override booleans and counters.
+- Template-part docs grounding now uses `currentPatternOverrides` in the query text, while the family cache key stays coarse and records only bounded override booleans and counters. Full requests use the shared cache/fallback collector, so exact, family, and entity cache hits are reused immediately; on generic or missing fallback guidance, a request may perform a foreground docs warm before queuing async warming.
 
 ## Example Preview Contract
 

@@ -23,10 +23,10 @@ Use these docs when you need exact answers for:
 
 ## First-Party Editor And Admin Surfaces
 
-- `docs/features/block-recommendations.md` - per-block Inspector recommendations, projection tabs, apply, and undo
+- `docs/features/block-recommendations.md` - per-block Inspector recommendations, passive native sub-panel mirrors, apply, and undo
 - `docs/features/pattern-recommendations.md` - inserter recommendations, badge state, and pattern ranking pipeline
 - `docs/features/content-recommendations.md` - post/page document panel for drafting, editing, and critique; also exposed as REST + Abilities
-- `docs/features/navigation-recommendations.md` - advisory guidance for selected `core/navigation` blocks, including embedded and fallback shells
+- `docs/features/navigation-recommendations.md` - embedded advisory guidance for selected `core/navigation` blocks inside block recommendations
 - `docs/features/template-recommendations.md` - Site Editor template composition suggestions and validated apply flow
 - `docs/features/template-part-recommendations.md` - Site Editor template-part suggestions, focus links, and bounded operations
 - `docs/features/style-and-theme-intelligence.md` - Site Editor Global Styles and Style Book recommendations, guarded operations, and scoped undo

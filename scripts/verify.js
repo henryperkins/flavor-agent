@@ -171,6 +171,67 @@ function hasCommand( cmd ) {
 	return probe.status === 0;
 }
 
+function parseDotEnvLine( line ) {
+	const normalizedLine = line.replace( /\r$/, '' );
+
+	if (
+		! normalizedLine.trim() ||
+		normalizedLine.trimStart().startsWith( '#' )
+	) {
+		return null;
+	}
+
+	const match = normalizedLine.match(
+		/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/
+	);
+
+	if ( ! match ) {
+		return null;
+	}
+
+	let value = match[ 2 ].trim();
+
+	if (
+		( value.startsWith( '"' ) && value.endsWith( '"' ) ) ||
+		( value.startsWith( "'" ) && value.endsWith( "'" ) )
+	) {
+		value = value.slice( 1, -1 );
+	}
+
+	return {
+		key: match[ 1 ],
+		value,
+	};
+}
+
+function loadDotEnvFile(
+	envPath = path.join( REPO_ROOT, '.env' ),
+	env = process.env
+) {
+	if ( ! fs.existsSync( envPath ) ) {
+		return {};
+	}
+
+	const loaded = {};
+	const contents = fs.readFileSync( envPath, 'utf8' );
+
+	for ( const line of contents.split( '\n' ) ) {
+		const parsed = parseDotEnvLine( line );
+
+		if (
+			! parsed ||
+			Object.prototype.hasOwnProperty.call( env, parsed.key )
+		) {
+			continue;
+		}
+
+		env[ parsed.key ] = parsed.value;
+		loaded[ parsed.key ] = parsed.value;
+	}
+
+	return loaded;
+}
+
 function resolvePluginCheckContext( env = process.env ) {
 	const configuredRoot = env.WP_PLUGIN_CHECK_PATH
 		? path.resolve( REPO_ROOT, env.WP_PLUGIN_CHECK_PATH )
@@ -218,11 +279,13 @@ function resolveStepAvailability(
 	step,
 	{ env = process.env, commandExists = hasCommand } = {}
 ) {
-	const requiredCommands = Array.isArray( step.requires )
-		? step.requires
-		: step.requires
-		? [ step.requires ]
-		: [];
+	let requiredCommands = [];
+
+	if ( Array.isArray( step.requires ) ) {
+		requiredCommands = step.requires;
+	} else if ( step.requires ) {
+		requiredCommands = [ step.requires ];
+	}
 
 	for ( const command of requiredCommands ) {
 		if ( ! commandExists( command ) ) {
@@ -494,6 +557,8 @@ async function main() {
 		process.exit( 0 );
 	}
 
+	loadDotEnvFile();
+
 	const outputDirAbs = path.isAbsolute( opts.outputDir )
 		? opts.outputDir
 		: path.join( REPO_ROOT, opts.outputDir );
@@ -664,7 +729,9 @@ module.exports = {
 	computeStatus,
 	getArtifactFingerprint,
 	getLintPluginAvailability,
+	loadDotEnvFile,
 	parseArgs,
+	parseDotEnvLine,
 	resolvePluginCheckContext,
 	resolveStepAvailability,
 	snapshotArtifacts,

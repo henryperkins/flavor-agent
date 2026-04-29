@@ -111,7 +111,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Ability: `flavor-agent/get-theme-tokens`
 - Ability: `flavor-agent/check-status`
 - Ability: `flavor-agent/search-wordpress-docs`
-- There is no dedicated REST route for these helper abilities
+- There is no plugin-owned `/flavor-agent/v1` route for these helper abilities; they are exposed through the WordPress Abilities API REST surface because the ability registrations set `meta.show_in_rest` to `true`
 
 ## Key Implementation Files
 

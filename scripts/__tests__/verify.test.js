@@ -10,7 +10,9 @@ const {
 	collectDiscoveredArtifacts,
 	computeStatus,
 	getLintPluginAvailability,
+	loadDotEnvFile,
 	parseArgs,
+	parseDotEnvLine,
 	resolveStepAvailability,
 	snapshotArtifacts,
 } = require( '../verify.js' );
@@ -115,6 +117,56 @@ describe( 'verify script helpers', () => {
 		} finally {
 			fs.rmSync( tempRoot, { recursive: true, force: true } );
 		}
+	} );
+
+	test( 'loads repo .env defaults without overriding existing process env values', () => {
+		const tempRoot = fs.mkdtempSync(
+			path.join( os.tmpdir(), 'verify-env-' )
+		);
+		const envPath = path.join( tempRoot, '.env' );
+		const env = {
+			WORDPRESS_DB_USER: 'shell-user',
+		};
+
+		try {
+			fs.writeFileSync(
+				envPath,
+				[
+					'# Local defaults',
+					'WP_PLUGIN_CHECK_PATH=/tmp/wp',
+					'WORDPRESS_DB_HOST=127.0.0.1:3306',
+					'WORDPRESS_DB_USER=env-file-user',
+					'WORDPRESS_TITLE="Flavor Agent Local"',
+				].join( '\n' )
+			);
+
+			const loaded = loadDotEnvFile( envPath, env );
+
+			expect( loaded ).toEqual( {
+				WP_PLUGIN_CHECK_PATH: '/tmp/wp',
+				WORDPRESS_DB_HOST: '127.0.0.1:3306',
+				WORDPRESS_TITLE: 'Flavor Agent Local',
+			} );
+			expect( env.WORDPRESS_DB_USER ).toBe( 'shell-user' );
+		} finally {
+			fs.rmSync( tempRoot, { recursive: true, force: true } );
+		}
+	} );
+
+	test( 'parses shell-style env lines used by local defaults', () => {
+		expect(
+			parseDotEnvLine( 'export WP_PLUGIN_CHECK_PATH=/tmp/wp' )
+		).toEqual( {
+			key: 'WP_PLUGIN_CHECK_PATH',
+			value: '/tmp/wp',
+		} );
+		expect(
+			parseDotEnvLine( 'WORDPRESS_TITLE="Flavor Agent Local"' )
+		).toEqual( {
+			key: 'WORDPRESS_TITLE',
+			value: 'Flavor Agent Local',
+		} );
+		expect( parseDotEnvLine( '# comment' ) ).toBeNull();
 	} );
 
 	test( 'reports only artifacts changed during the current run', () => {
