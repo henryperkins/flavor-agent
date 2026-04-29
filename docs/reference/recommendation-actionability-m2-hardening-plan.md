@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status:** M2 is closed and this plan is historical for the validator/parser hardening milestone. It intentionally stops before review UI and mutation; current work that adds the non-mutating `Review first` lane is Workstream E / M3 and is tracked in `docs/reference/recommendation-actionability-implementation-plan.md`.
+
 **Goal:** Make Workstream D / M2 safe to implement by turning block structural operations into validator-owned proposals, not model-owned authority.
 
 **Architecture:** Add a PHP block operation validator as the authoritative server-side gate, mirror the same catalog in JS for client diagnostics, and keep the normalized recommendation payload explicit about proposed, executable, and rejected operations. M2 stops before review UI and mutation: it prepares a trustworthy `operations[]` contract for M3/M4.
@@ -747,7 +749,7 @@ npm run verify -- --skip-e2e
 ```
 
 Expected: `VERIFY_RESULT` with `"status":"pass"`, with E2E skipped by flag.
-
+st
 ## Acceptance Criteria
 
 - The block response schema supports `operations[]` without changing the existing `label`/`description` item contract.

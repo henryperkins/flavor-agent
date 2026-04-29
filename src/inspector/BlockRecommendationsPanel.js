@@ -1,4 +1,4 @@
-import { PanelBody, Notice } from '@wordpress/components';
+import { Button, PanelBody, Notice } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
@@ -34,6 +34,7 @@ import {
 	APPLY_NOW_LABEL,
 	MANUAL_IDEAS_LABEL,
 	REFRESH_ACTION_LABEL,
+	REVIEW_LANE_LABEL,
 	STALE_STATUS_LABEL,
 } from '../components/surface-labels';
 import NavigationRecommendations from './NavigationRecommendations';
@@ -42,10 +43,16 @@ import { getSuggestionKey } from './suggestion-keys';
 import { getSurfaceCapability } from '../utils/capability-flags';
 import { describeEditorBlockLabel } from '../utils/editor-context-metadata';
 import {
+	ACTIONABILITY_TIER_REVIEW_SAFE,
+	classifyOperationActionability,
 	getActionabilityLabel,
 	getActionabilityReasonLabel,
 } from '../utils/recommendation-actionability';
 import { shallowStructuralEqual } from '../utils/structural-equality';
+import {
+	buildBlockReviewState,
+	isBlockReviewStateCurrent,
+} from './block-review-state';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const EMPTY_SURFACE_SUGGESTIONS = [];
@@ -143,6 +150,7 @@ function useBlockRecommendationState( clientId ) {
 		error,
 		status,
 		storedContextSignature,
+		requestToken,
 		storedStaleReason,
 		requestDiagnostics,
 		blockActivityLog,
@@ -179,6 +187,7 @@ function useBlockRecommendationState( clientId ) {
 				status: store.getBlockStatus( clientId ),
 				storedContextSignature:
 					store.getBlockRecommendationContextSignature( clientId ),
+				requestToken: store.getBlockRequestToken?.( clientId ) || 0,
 				storedStaleReason:
 					store.getBlockStaleReason?.( clientId ) || null,
 				requestDiagnostics:
@@ -233,6 +242,7 @@ function useBlockRecommendationState( clientId ) {
 		error,
 		status,
 		storedContextSignature,
+		requestToken,
 		storedStaleReason,
 		requestDiagnostics,
 		blockActivityEntries,
@@ -251,6 +261,7 @@ function useBlockRecommendationState( clientId ) {
 
 function getFeaturedSuggestion(
 	executableBlockSuggestions,
+	reviewBlockSuggestions,
 	advisoryBlockSuggestions
 ) {
 	if ( executableBlockSuggestions.length > 0 ) {
@@ -258,6 +269,14 @@ function getFeaturedSuggestion(
 			suggestion: executableBlockSuggestions[ 0 ],
 			tone: APPLY_NOW_LABEL,
 			why: 'Flavor Agent can safely apply this directly on the current block.',
+		};
+	}
+
+	if ( reviewBlockSuggestions.length > 0 ) {
+		return {
+			suggestion: reviewBlockSuggestions[ 0 ],
+			tone: REVIEW_LANE_LABEL,
+			why: 'This is the strongest validated structural change, but it requires review before any apply path.',
 		};
 	}
 
@@ -270,6 +289,74 @@ function getFeaturedSuggestion(
 	}
 
 	return null;
+}
+
+function isReviewSafeSuggestion( suggestion = {} ) {
+	const actionability =
+		suggestion?.actionability || suggestion?.eligibility || {};
+
+	return (
+		actionability?.tier === ACTIONABILITY_TIER_REVIEW_SAFE &&
+		Array.isArray( actionability.executableOperations ) &&
+		actionability.executableOperations.length > 0
+	);
+}
+
+function getAdvisoryRemainderOperations( suggestion = {} ) {
+	const actionability =
+		suggestion?.actionability || suggestion?.eligibility || {};
+
+	return Array.isArray( actionability.advisoryOperationsRejected )
+		? actionability.advisoryOperationsRejected
+		: [];
+}
+
+function getReviewRemainderOperations( suggestion = {} ) {
+	const actionability =
+		suggestion?.actionability || suggestion?.eligibility || {};
+
+	return Array.isArray( actionability.reviewOperations )
+		? actionability.reviewOperations
+		: [];
+}
+
+function buildAdvisoryRemainderSuggestion( suggestion ) {
+	const actionability = classifyOperationActionability( {
+		operations: getAdvisoryRemainderOperations( suggestion ),
+		validation: {
+			ok: false,
+			operations: [],
+			rejectedOperations: Array.isArray( suggestion?.rejectedOperations )
+				? suggestion.rejectedOperations
+				: [],
+		},
+	} );
+
+	return {
+		...suggestion,
+		suggestionKey: `${ getSuggestionKey( suggestion ) }-advisory-remainder`,
+		eligibility: actionability,
+		actionability,
+	};
+}
+
+function buildReviewRemainderSuggestion( suggestion ) {
+	const reviewOperations = getReviewRemainderOperations( suggestion );
+	const actionability = classifyOperationActionability( {
+		operations: reviewOperations,
+		validation: {
+			ok: true,
+			operations: reviewOperations,
+			rejectedOperations: [],
+		},
+	} );
+
+	return {
+		...suggestion,
+		suggestionKey: `${ getSuggestionKey( suggestion ) }-review-remainder`,
+		eligibility: actionability,
+		actionability,
+	};
 }
 
 export function BlockRecommendationsContent( {
@@ -286,6 +373,7 @@ export function BlockRecommendationsContent( {
 		error,
 		status,
 		storedContextSignature,
+		requestToken,
 		storedStaleReason,
 		requestDiagnostics,
 		blockActivityEntries,
@@ -318,6 +406,7 @@ export function BlockRecommendationsContent( {
 	const [ uncontrolledPrompt, setUncontrolledPrompt ] = useState(
 		() => recommendations?.prompt || ''
 	);
+	const [ activeReviewState, setActiveReviewState ] = useState( null );
 	const currentPrompt = isPromptControlled ? prompt : uncontrolledPrompt;
 	const handlePromptChange = isPromptControlled
 		? onPromptChange
@@ -423,51 +512,113 @@ export function BlockRecommendationsContent( {
 			} ),
 		};
 	} );
-	const { executableBlockSuggestions, advisoryBlockSuggestions } =
-		useMemo( () => {
-			const blockContext = recommendations?.blockContext || {};
-			const executionContract =
-				recommendations?.executionContract || null;
-			const executable = [];
-			const advisory = [];
+	const reviewScope = useMemo(
+		() => ( {
+			clientId,
+			requestToken,
+			requestSignature: currentRequestSignature || '',
+		} ),
+		[ clientId, currentRequestSignature, requestToken ]
+	);
+	useEffect( () => {
+		if (
+			activeReviewState &&
+			( isStaleResult ||
+				! isBlockReviewStateCurrent( activeReviewState, reviewScope ) )
+		) {
+			setActiveReviewState( null );
+		}
+	}, [ activeReviewState, isStaleResult, reviewScope ] );
 
-			for ( const suggestion of blockSuggestions ) {
-				const execution = getBlockSuggestionExecutionInfo(
-					suggestion,
-					blockContext,
-					executionContract
-				);
-				const viewSuggestion = {
-					...suggestion,
-					eligibility: execution.eligibility,
-					actionability: execution.actionability,
-				};
+	const {
+		executableBlockSuggestions,
+		reviewBlockSuggestions,
+		advisoryBlockSuggestions,
+	} = useMemo( () => {
+		const blockContext = recommendations?.blockContext || {};
+		const executionContract = recommendations?.executionContract || null;
+		const executable = [];
+		const review = [];
+		const advisory = [];
 
-				if ( execution.isExecutable ) {
-					executable.push( viewSuggestion );
-				} else {
-					advisory.push( viewSuggestion );
-				}
+		for ( const suggestion of blockSuggestions ) {
+			const execution = getBlockSuggestionExecutionInfo(
+				suggestion,
+				blockContext,
+				executionContract
+			);
+			const viewSuggestion = {
+				...suggestion,
+				eligibility: execution.eligibility,
+				actionability: execution.actionability,
+			};
+
+			if ( execution.isExecutable ) {
+				executable.push( viewSuggestion );
+			} else if ( isReviewSafeSuggestion( viewSuggestion ) ) {
+				review.push( viewSuggestion );
+			} else {
+				advisory.push( viewSuggestion );
 			}
 
-			return {
-				executableBlockSuggestions: executable,
-				advisoryBlockSuggestions: advisory,
-			};
-		}, [
-			blockSuggestions,
-			recommendations?.blockContext,
-			recommendations?.executionContract,
-		] );
+			if ( getReviewRemainderOperations( viewSuggestion ).length > 0 ) {
+				review.push( buildReviewRemainderSuggestion( viewSuggestion ) );
+			}
+
+			if ( getAdvisoryRemainderOperations( viewSuggestion ).length > 0 ) {
+				advisory.push(
+					buildAdvisoryRemainderSuggestion( viewSuggestion )
+				);
+			}
+		}
+
+		return {
+			executableBlockSuggestions: executable,
+			reviewBlockSuggestions: review,
+			advisoryBlockSuggestions: advisory,
+		};
+	}, [
+		blockSuggestions,
+		recommendations?.blockContext,
+		recommendations?.executionContract,
+	] );
+	const activeReviewSuggestion = useMemo( () => {
+		if (
+			! activeReviewState ||
+			isStaleResult ||
+			! isBlockReviewStateCurrent( activeReviewState, reviewScope )
+		) {
+			return null;
+		}
+
+		return (
+			reviewBlockSuggestions.find(
+				( suggestion ) =>
+					getSuggestionKey( suggestion ) ===
+					activeReviewState.suggestionKey
+			) || null
+		);
+	}, [
+		activeReviewState,
+		isStaleResult,
+		reviewBlockSuggestions,
+		reviewScope,
+	] );
 	const featuredSuggestion = useMemo(
 		() =>
 			isStaleResult
 				? null
 				: getFeaturedSuggestion(
 						executableBlockSuggestions,
+						reviewBlockSuggestions,
 						advisoryBlockSuggestions
 				  ),
-		[ advisoryBlockSuggestions, executableBlockSuggestions, isStaleResult ]
+		[
+			advisoryBlockSuggestions,
+			executableBlockSuggestions,
+			isStaleResult,
+			reviewBlockSuggestions,
+		]
 	);
 	const diagnosticActivityEntry = useMemo( () => {
 		const isFailureDiagnostic = requestDiagnostics?.type === 'failure';
@@ -585,6 +736,21 @@ export function BlockRecommendationsContent( {
 		fetchBlockRecommendations,
 		liveContext,
 	] );
+	const handleOpenReview = useCallback(
+		( suggestion ) => {
+			if ( isStaleResult ) {
+				return;
+			}
+
+			setActiveReviewState(
+				buildBlockReviewState( {
+					...reviewScope,
+					suggestionKey: getSuggestionKey( suggestion ),
+				} )
+			);
+		},
+		[ isStaleResult, reviewScope ]
+	);
 	let dismissStatusNotice;
 
 	if ( statusNotice?.source === 'request' ) {
@@ -740,6 +906,41 @@ export function BlockRecommendationsContent( {
 				</RecommendationLane>
 			) }
 
+			{ reviewBlockSuggestions.length > 0 && (
+				<RecommendationLane
+					title={ REVIEW_LANE_LABEL }
+					tone={
+						isStaleResult ? STALE_STATUS_LABEL : REVIEW_LANE_LABEL
+					}
+					count={ reviewBlockSuggestions.length }
+					countNoun="suggestion"
+					description={
+						isStaleResult
+							? 'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
+							: 'Validated structural operations require review before apply.'
+					}
+					meta={
+						<EligibilitySummary
+							suggestions={ reviewBlockSuggestions }
+						/>
+					}
+				>
+					{ reviewBlockSuggestions.map( ( suggestion ) => (
+						<ReviewSuggestionCard
+							key={ getSuggestionKey( suggestion ) }
+							suggestion={ suggestion }
+							isActive={
+								activeReviewSuggestion &&
+								getSuggestionKey( activeReviewSuggestion ) ===
+									getSuggestionKey( suggestion )
+							}
+							isStale={ isStaleResult }
+							onReview={ handleOpenReview }
+						/>
+					) ) }
+				</RecommendationLane>
+			) }
+
 			{ settingsSuggestions.length > 0 && (
 				<RecommendationLane
 					title="Settings suggestions"
@@ -822,6 +1023,130 @@ export function BlockRecommendationsContent( {
 				resetKey={ clientId || 'block' }
 				maxVisible={ 3 }
 			/>
+		</div>
+	);
+}
+
+function getReviewOperationSummary( operation = {} ) {
+	if ( operation?.type === 'insert_pattern' ) {
+		return operation.position === 'insert_before'
+			? 'Insert pattern before the selected block.'
+			: 'Insert pattern after the selected block.';
+	}
+
+	if ( operation?.type === 'replace_block_with_pattern' ) {
+		return 'Replace the selected block with a pattern.';
+	}
+
+	return 'Review structural operation.';
+}
+
+function getReviewOperationDetails( operation = {} ) {
+	return [
+		[ 'Pattern', operation.patternName ],
+		[ 'Target', operation.targetClientId ],
+		[ 'Expected block', operation.expectedTarget?.name ],
+		[ 'Target signature', operation.targetSignature ],
+		[ 'Position', operation.position ],
+		[ 'Action', operation.action ],
+	].filter( ( [ , value ] ) => typeof value === 'string' && value !== '' );
+}
+
+function getReviewDetailsId( suggestion ) {
+	return `flavor-agent-block-review-${ getSuggestionKey( suggestion ).replace(
+		/[^a-zA-Z0-9_-]+/g,
+		'-'
+	) }`;
+}
+
+function ReviewSuggestionCard( { suggestion, isActive, isStale, onReview } ) {
+	const typeLabel = getAdvisorySuggestionTypeLabel( suggestion );
+	const eligibility =
+		suggestion?.eligibility || suggestion?.actionability || {};
+	const executableOperations = Array.isArray(
+		eligibility.executableOperations
+	)
+		? eligibility.executableOperations
+		: [];
+	const operationSummaries = executableOperations.map(
+		getReviewOperationSummary
+	);
+	const operationDetails = executableOperations.flatMap(
+		getReviewOperationDetails
+	);
+	const label = suggestion?.label || 'Suggestion';
+	const reviewDetailsId = getReviewDetailsId( suggestion );
+	const reviewButtonLabel = isStale
+		? `Refresh to review ${ label }`
+		: `Review ${ label }`;
+
+	return (
+		<div className="flavor-agent-card">
+			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
+				<div className="flavor-agent-card__lead">
+					<span className="flavor-agent-card__label">{ label }</span>
+					<div className="flavor-agent-card__meta">
+						<span className="flavor-agent-pill">
+							{ getActionabilityLabel( eligibility?.tier ) }
+						</span>
+						<span className="flavor-agent-pill">{ typeLabel }</span>
+						<span className="flavor-agent-pill">
+							Validator computed
+						</span>
+					</div>
+				</div>
+				<Button
+					variant="secondary"
+					size="small"
+					disabled={ isStale }
+					onClick={ () => onReview( suggestion ) }
+					className="flavor-agent-card__apply"
+					aria-label={ reviewButtonLabel }
+					aria-expanded={ isActive ? 'true' : 'false' }
+					aria-controls={ isActive ? reviewDetailsId : undefined }
+				>
+					{ isStale ? 'Refresh to review' : 'Review' }
+				</Button>
+			</div>
+
+			{ suggestion?.description && (
+				<p className="flavor-agent-card__description">
+					{ suggestion.description }
+				</p>
+			) }
+
+			{ operationSummaries.length > 0 && (
+				<ul className="flavor-agent-card__list">
+					{ operationSummaries.map( ( summary ) => (
+						<li key={ summary }>{ summary }</li>
+					) ) }
+				</ul>
+			) }
+
+			{ operationDetails.length > 0 && (
+				<ul className="flavor-agent-card__list">
+					{ operationDetails.map( ( [ detailLabel, value ] ) => (
+						<li key={ `${ detailLabel }:${ value }` }>
+							{ detailLabel }: { value }
+						</li>
+					) ) }
+				</ul>
+			) }
+
+			{ isActive && (
+				<div
+					id={ reviewDetailsId }
+					className="flavor-agent-card__description"
+					role="status"
+				>
+					<strong>Selected structural review</strong>
+					<p>
+						Block structural apply is not available in this
+						milestone. This review state is scoped to the current
+						block, request token, and request signature.
+					</p>
+				</div>
+			) }
 		</div>
 	);
 }

@@ -30,7 +30,8 @@ Implemented in the current working branch:
 
 - `src/utils/recommendation-actionability.js` defines validator-sourced tiers, blockers, executable operation metadata, and advisory rejection metadata.
 - `src/store/update-helpers.js` attaches computed eligibility to block suggestions while preserving current safety behavior.
-- `src/inspector/BlockRecommendationsPanel.js` surfaces eligibility labels and blocker reasons without enabling structural apply.
+- `src/inspector/BlockRecommendationsPanel.js` surfaces eligibility labels, blocker reasons, block-keyed structural review state, and a non-mutating `Review first` lane for validator-approved operations.
+- `src/inspector/block-review-state.js` keys active block structural review state by `clientId`, request token, request signature, and suggestion key.
 - `src/utils/block-operation-catalog.js` defines a versioned block operation catalog for `insert_pattern` and `replace_block_with_pattern`.
 - `flavor-agent.php` localizes the default-off block structural actions rollout flag for JS, with strict boolean parsing for constants and filters.
 - `src/utils/block-allowed-pattern-context.js` builds deterministic allowed-pattern context for selected-block pattern actions when the rollout flag is enabled.
@@ -41,7 +42,6 @@ Implemented in the current working branch:
 
 Still intentionally not implemented:
 
-- Block structural review UI.
 - Block structural apply/undo.
 - Any ordinary native pattern inserter activity ownership.
 
@@ -226,8 +226,8 @@ Required work:
 Acceptance criteria:
 
 - `Apply now` still means inline-safe local attributes.
-- `Review first` means deterministic structural operation requiring confirmation.
-- Stale structural recommendations remain visible but cannot apply.
+- `Review first` means deterministic structural operation selected for non-mutating review; confirmation and apply remain M4 scope.
+- Stale structural recommendations remain visible but cannot enter review or apply.
 
 ## Workstream F: Transactional Apply, Activity, And Undo
 
@@ -319,6 +319,8 @@ Exit criteria:
 - Invalid or ambiguous `patternSuggestions` stay advisory.
 - Existing template-part review/apply/undo behavior remains unchanged.
 
+Detailed implementation plan: `docs/reference/recommendation-actionability-m4-m1a-plan.md`.
+
 ### M2: Prompt, Schema, And Server Parser
 
 Exit criteria:
@@ -329,6 +331,8 @@ Exit criteria:
 - No structural review UI or structural mutation is introduced by M2.
 - REST/Abilities contract docs are updated.
 
+M2 status: closed. The `No structural review UI` criterion applies only to that historical milestone; the non-mutating review lane below is M3 scope.
+
 ### M3: Review UI Without Apply
 
 Exit criteria:
@@ -337,6 +341,8 @@ Exit criteria:
 - Review lane renders validated operations.
 - Stale and disabled states block review apply.
 - No structural mutation occurs yet.
+
+Current branch status: complete. The block panel separates inline-safe `Apply now` suggestions, review-safe structural suggestions, and advisory/manual remainders. The review lane opens scoped non-mutating details only; structural apply remains unavailable until M4.
 
 ### M4: Transactional Apply And Undo Behind Flag
 
@@ -347,6 +353,8 @@ Exit criteria:
 - Activity and undo metadata are recorded only after successful apply.
 - Undo is disabled on post-apply live-state divergence.
 - Race and negative tests are green.
+
+Detailed implementation plan: `docs/reference/recommendation-actionability-m4-m1a-plan.md`.
 
 ### M5: Beta Enablement Decision
 

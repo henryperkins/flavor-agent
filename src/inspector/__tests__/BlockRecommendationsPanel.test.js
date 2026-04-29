@@ -199,6 +199,10 @@ function selectStore( storeName ) {
 					getState().store.blockRequestDiagnostics?.[ clientId ] ||
 					null
 			),
+			getBlockRequestToken: jest.fn(
+				( clientId ) =>
+					getState().store.blockRequestTokens?.[ clientId ] || 0
+			),
 			getBlockRecommendations: jest.fn(
 				( clientId ) =>
 					getState().store.blockRecommendations[ clientId ] || null
@@ -775,8 +779,6 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 	} );
 
 	test( 'keeps structural and pattern suggestions advisory even when they include safe local updates', () => {
-		renderPanel();
-
 		currentState = createState( {
 			blockEditor: {
 				selectedBlockClientId: null,
@@ -828,7 +830,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			},
 		} );
 
-		renderPanel();
+		renderContent();
 
 		expect( getContainer().textContent ).toContain( 'Manual ideas' );
 		expect( getContainer().textContent ).toContain( 'Advisory only' );
@@ -846,6 +848,601 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			'Replace with a callout pattern'
 		);
 		expect( mockSuggestionChips ).not.toHaveBeenCalled();
+	} );
+
+	test( 'renders review-safe structural operations in a distinct non-mutating review lane', () => {
+		const liveContext = {
+			block: {
+				name: 'core/group',
+			},
+		};
+		const contextSignature = JSON.stringify( liveContext );
+		const operation = {
+			catalogVersion: 1,
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			targetSignature: 'target-sig',
+			targetType: 'block',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/group',
+			},
+			position: 'insert_after',
+		};
+
+		mockCollectBlockContext.mockReturnValue( liveContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Add a hero pattern after this group',
+								description:
+									'Use a stronger CTA section after the selected group.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						blockContext: {
+							name: 'core/group',
+							blockOperationContext: {
+								enableBlockStructuralActions: true,
+								targetClientId: 'block-1',
+								targetBlockName: 'core/group',
+								targetSignature: 'target-sig',
+								isTargetLocked: false,
+								isContentOnly: false,
+								allowedPatterns: [
+									{
+										name: 'theme/hero',
+										title: 'Hero',
+										allowedActions: [ 'insert_after' ],
+									},
+								],
+							},
+						},
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockRequestTokens: {
+					'block-1': 7,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Review first' );
+		expect( getContainer().textContent ).toContain( 'Review-safe' );
+		expect( getContainer().textContent ).toContain(
+			'Validated structural operations require review before apply.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Add a hero pattern after this group'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Insert pattern after the selected block.'
+		);
+		expect( getContainer().textContent ).toContain( 'Pattern: theme/hero' );
+		expect( getContainer().textContent ).toContain( 'Target: block-1' );
+		expect( getContainer().textContent ).toContain(
+			'Expected block: core/group'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Target signature: target-sig'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Position: insert_after'
+		);
+		expect( getContainer().textContent ).not.toContain( 'Manual ideas' );
+		expect( mockSuggestionChips ).not.toHaveBeenCalled();
+
+		const reviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Review' );
+
+		expect( reviewButton ).toBeDefined();
+		expect( reviewButton.disabled ).toBe( false );
+		expect( reviewButton.getAttribute( 'aria-label' ) ).toBe(
+			'Review Add a hero pattern after this group'
+		);
+		expect( reviewButton.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
+		expect( reviewButton.getAttribute( 'aria-controls' ) ).toBeNull();
+
+		act( () => {
+			reviewButton.click();
+		} );
+
+		const activeReviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Review' );
+		const reviewDetailsId =
+			activeReviewButton.getAttribute( 'aria-controls' );
+
+		expect( activeReviewButton.getAttribute( 'aria-expanded' ) ).toBe(
+			'true'
+		);
+		expect( reviewDetailsId ).toMatch( /^flavor-agent-block-review-/ );
+		expect(
+			getContainer().querySelector( `#${ reviewDetailsId }` )
+		).not.toBeNull();
+		expect( getContainer().textContent ).toContain(
+			'Selected structural review'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Block structural apply is not available in this milestone.'
+		);
+	} );
+
+	test( 'keeps approved structural operations reviewable when inline-safe updates can apply', () => {
+		const liveContext = {
+			block: {
+				name: 'core/group',
+			},
+		};
+		const contextSignature = JSON.stringify( liveContext );
+		const operation = {
+			catalogVersion: 1,
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			targetSignature: 'target-sig',
+			targetType: 'block',
+			expectedTarget: {
+				clientId: 'block-1',
+				name: 'core/group',
+			},
+			position: 'insert_after',
+		};
+
+		mockCollectBlockContext.mockReturnValue( liveContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Tighten copy and add a hero',
+								description:
+									'Update local copy now and review the structural hero placement.',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						blockContext: {
+							name: 'core/group',
+							blockOperationContext: {
+								enableBlockStructuralActions: true,
+								targetClientId: 'block-1',
+								targetBlockName: 'core/group',
+								targetSignature: 'target-sig',
+								isTargetLocked: false,
+								isContentOnly: false,
+								allowedPatterns: [
+									{
+										name: 'theme/hero',
+										title: 'Hero',
+										allowedActions: [ 'insert_after' ],
+									},
+								],
+							},
+						},
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockRequestTokens: {
+					'block-1': 7,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Apply now' );
+		expect( getContainer().textContent ).toContain( 'Review first' );
+		expect( getContainer().textContent ).toContain(
+			'Tighten copy and add a hero'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Insert pattern after the selected block.'
+		);
+		expect( getContainer().textContent ).toContain( 'Pattern: theme/hero' );
+		expect( getContainer().textContent ).toContain(
+			'Position: insert_after'
+		);
+		expect( mockSuggestionChips ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Tighten copy and add a hero',
+						eligibility: expect.objectContaining( {
+							tier: 'inline-safe',
+						} ),
+					} ),
+				],
+			} )
+		);
+	} );
+
+	test( 'clears an open structural review when the result becomes stale', () => {
+		const initialContext = {
+			block: {
+				name: 'core/group',
+			},
+		};
+		const updatedContext = {
+			block: {
+				name: 'core/quote',
+			},
+		};
+		const contextSignature = JSON.stringify( initialContext );
+		const operation = {
+			catalogVersion: 1,
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			targetSignature: 'target-sig',
+			targetType: 'block',
+			position: 'insert_after',
+		};
+
+		mockCollectBlockContext.mockReturnValue( initialContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Add a hero pattern after this group',
+								description:
+									'Use a stronger CTA section after the selected group.',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						blockContext: {
+							name: 'core/group',
+							blockOperationContext: {
+								enableBlockStructuralActions: true,
+								targetClientId: 'block-1',
+								targetBlockName: 'core/group',
+								targetSignature: 'target-sig',
+								isTargetLocked: false,
+								isContentOnly: false,
+								allowedPatterns: [
+									{
+										name: 'theme/hero',
+										title: 'Hero',
+										allowedActions: [ 'insert_after' ],
+									},
+								],
+							},
+						},
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockRequestTokens: {
+					'block-1': 7,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		const reviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Review' );
+
+		act( () => {
+			reviewButton.click();
+		} );
+
+		expect( getContainer().textContent ).toContain(
+			'Selected structural review'
+		);
+
+		mockCollectBlockContext.mockReturnValue( updatedContext );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Review first' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
+		);
+		expect( getContainer().textContent ).not.toContain(
+			'Selected structural review'
+		);
+
+		const staleReviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Refresh to review' );
+
+		expect( staleReviewButton ).toBeDefined();
+		expect( staleReviewButton.disabled ).toBe( true );
+	} );
+
+	test( 'keeps stale review-safe structural operations visible but blocks review entry', () => {
+		const storedContext = {
+			block: {
+				name: 'core/group',
+			},
+		};
+		const liveContext = {
+			block: {
+				name: 'core/quote',
+			},
+		};
+		const operation = {
+			catalogVersion: 1,
+			type: 'replace_block_with_pattern',
+			patternName: 'theme/callout',
+			targetClientId: 'block-1',
+			targetSignature: 'target-sig',
+			targetType: 'block',
+			action: 'replace',
+		};
+
+		mockCollectBlockContext.mockReturnValue( liveContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+				blockLookup: {
+					'block-1': {
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				},
+				blocks: [
+					{
+						clientId: 'block-1',
+						name: 'core/group',
+						attributes: {},
+						innerBlocks: [],
+					},
+				],
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Replace with a callout pattern',
+								type: 'pattern_replacement',
+								operations: [ operation ],
+								proposedOperations: [ operation ],
+								rejectedOperations: [],
+							},
+						],
+						blockContext: {
+							name: 'core/group',
+							blockOperationContext: {
+								enableBlockStructuralActions: true,
+								targetClientId: 'block-1',
+								targetBlockName: 'core/group',
+								targetSignature: 'target-sig',
+								isTargetLocked: false,
+								isContentOnly: false,
+								allowedPatterns: [
+									{
+										name: 'theme/callout',
+										title: 'Callout',
+										allowedActions: [ 'replace' ],
+									},
+								],
+							},
+						},
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( storedContext ),
+				},
+				blockRequestTokens: {
+					'block-1': 4,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Review first' );
+		expect( getContainer().textContent ).toContain( 'Stale' );
+		expect( getContainer().textContent ).toContain(
+			'These structural suggestions are shown for reference from the last request. Refresh before reviewing them.'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Replace with a callout pattern'
+		);
+
+		const reviewButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( element ) => element.textContent === 'Refresh to review' );
+
+		expect( reviewButton ).toBeDefined();
+		expect( reviewButton.disabled ).toBe( true );
+	} );
+
+	test( 'keeps rejected structural proposals visible as advisory remainder when local attributes can apply', () => {
+		const liveContext = {
+			block: {
+				name: 'core/paragraph',
+			},
+		};
+
+		mockCollectBlockContext.mockReturnValue( liveContext );
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [
+							{
+								label: 'Tighten copy and consider a hero pattern',
+								description:
+									'Update local copy now, and keep the pattern idea as review guidance.',
+								attributeUpdates: {
+									metadata: {
+										blockVisibility: {
+											viewport: {
+												mobile: false,
+											},
+										},
+									},
+								},
+								proposedOperations: [
+									{
+										type: 'insert_pattern',
+										patternName: 'theme/hero',
+										targetClientId: 'block-1',
+										position: 'insert_after',
+									},
+								],
+								rejectedOperations: [
+									{
+										code: 'block_structural_actions_disabled',
+										message:
+											'Block structural actions are disabled for this environment.',
+										operation: {
+											type: 'insert_pattern',
+											patternName: 'theme/hero',
+											targetClientId: 'block-1',
+											position: 'insert_after',
+										},
+									},
+								],
+							},
+						],
+						blockContext: {
+							name: 'core/paragraph',
+						},
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( liveContext ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+
+		renderContent();
+
+		expect( getContainer().textContent ).toContain( 'Apply now' );
+		expect( getContainer().textContent ).toContain( 'Manual ideas' );
+		expect( getContainer().textContent ).toContain(
+			'Tighten copy and consider a hero pattern'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Eligibility blockers: Missing pattern context.'
+		);
+		expect( mockSuggestionChips ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				suggestions: [
+					expect.objectContaining( {
+						label: 'Tighten copy and consider a hero pattern',
+						eligibility: expect.objectContaining( {
+							tier: 'inline-safe',
+						} ),
+					} ),
+				],
+			} )
+		);
 	} );
 
 	test( 'does not keep an undo success notice once the resolved entry is no longer undone', () => {

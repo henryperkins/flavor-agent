@@ -9,16 +9,17 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Fallback surface: document settings panel titled `AI Recommendations` with the eyebrow `Last Selected Block` when the current selection clears but the last selected block still exists
 - Secondary surfaces after a successful block request:
   - executable `SuggestionChips` lanes for `block`, `settings`, and `styles` inside the main `AI Recommendations` panel
+  - non-mutating `Review first` lane for validator-approved selected-block pattern operations when structural actions are enabled and the result is fresh
   - passive mirrored `SuggestionChips` injected into delegated native sub-panels such as position, advanced, bindings, list, color, typography, dimensions, border, shadow, filter, and background so the user can see the current result beside the matching core controls without creating a second apply surface. Shadow suggestions render inside Gutenberg's native Border/Shadow group.
 
 ## Surfacing Conditions
 
 - The selected block must exist and its editing mode must not be `disabled`
 - The main panel still renders when recommendations are unavailable, but fetch is disabled when `window.flavorAgentData.canRecommendBlocks` is false
-- Block structural pattern actions are behind the default-off `window.flavorAgentData.enableBlockStructuralActions` rollout flag. When false, structural proposals remain advisory and the block surface does not expose a review/apply path for them.
+- Block structural pattern actions are behind the default-off `window.flavorAgentData.enableBlockStructuralActions` rollout flag. When false, structural proposals remain advisory and the block surface does not expose a structural review/apply path for them.
 - When that rollout flag is enabled, the client adds a deterministic `blockOperationContext` to the block request. It contains the selected target identity/signature plus visible, renderable patterns from Gutenberg's current allowed-pattern selector and per-target actions (`insert_before`, `insert_after`, and, where block types permit, `replace`).
 - Behind the flag, the prompt may propose at most one selected-block pattern operation. PHP validates every proposal before it reaches the normalized response; invalid, stale, locked, content-only, cross-surface, unavailable-pattern, and multi-operation proposals stay in `rejectedOperations` for diagnostics.
-- M2 does not add structural review UI or structural mutation. Safe local block attribute suggestions remain the only one-click block apply path.
+- M3 adds a non-mutating structural review lane for validator-approved operations. It is keyed by selected block, request token, request signature, and suggestion, and stale results disable review entry. Safe local block attribute suggestions remain the only one-click block apply path.
 - Content-restricted blocks stay visible and show an informational notice; executable suggestions are limited to content-safe attributes, broader block ideas may remain advisory-only, and style projections are suppressed
 - A selected `core/navigation` block adds the navigation guidance section inside the same panel
 
@@ -27,11 +28,11 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Learned-once sequence: intro -> scope/freshness -> prompt -> status -> featured recommendation -> grouped lanes -> embedded navigation when present -> undo and history
 - Shared normalized states: `idle`, `loading`, `advisory-ready`, `preview-ready`, `applying`, `success`, `undoing`, `error`
 - Block recommendations normally move `idle -> loading -> advisory-ready`; safe local attribute updates can then move directly to `success` because only the selected block's local attributes are mutated
-- Fresh results now surface one featured next step before the grouped `Apply now` and `Manual ideas` lanes
-- Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract
+- Fresh results now surface one featured next step before the grouped `Apply now`, `Review first`, and `Manual ideas` lanes
+- Advisory block ideas now use the shared `AIAdvisorySection` shell so the block surface matches the review-first surfaces more closely without changing its direct-apply contract. Mixed suggestions keep rejected structural proposals visible as advisory remainders when a local attribute update remains inline-safe.
 - Block recommendations are the only recommendation surface that now retains stale client-side results; stale results stay visible for reference, executable chips are demoted/disabled, and `SurfaceScopeBar` exposes an explicit `Refresh` action
 - Freshness now has two layers on the block surface: the client-local request signature still drives immediate stale UI, and the stored server `resolvedContextSignature` hashes the server-normalized block apply context plus the sanitized prompt. Background revalidation checks the wrapped REST signature-only response and silently demotes/disables stale results only when that check succeeds with a mismatched signature; apply-time signature revalidation is the hard gate. Background docs-cache warms alone do not invalidate apply. `applySuggestion()` only mutates attributes after both checks pass.
-- The panel now states that inline apply is the exception for safe local block updates, while structural surfaces keep the same status/history framing but require preview first
+- The panel now states that inline apply is the exception for safe local block updates. Validator-approved structural block operations enter a review-only lane, but structural apply/undo is still reserved for the later transactional milestone.
 - The embedded navigation section remains a subordinate exception: it keeps its own request state and `Navigation Ideas` wrapper because it is nested inside block recommendations rather than acting as a peer surface
 - The main block panel is now the only executable block surface; delegated native sub-panels mirror the current result but do not own apply, refresh, or activity state
 - `Recent AI Actions` and inline undo use the same shared activity treatment as the template and template-part surfaces
@@ -45,9 +46,10 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
 6. `ChatClient::chat()` uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path; if no text-generation provider is configured in Connectors, the request returns a `missing_text_generation_provider` error
 7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails, including the PHP block operation validator when structural proposals are present
-8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders executable lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
-9. When the user applies a suggestion, `applySuggestion()` first compares the stored client request signature, then re-posts the same request with `resolveSignatureOnly: true` to verify the current `resolvedContextSignature`, and only then safely merges allowed attribute updates into the current block and records an activity entry
-10. Inline undo calls `undoActivity()`, which validates the live block state before restoring the previous attribute snapshot
+8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders inline apply, structural review, and manual/advisory lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
+9. Opening a structural review records local UI state only. No block tree mutation, activity row, or undo payload is created in M3.
+10. When the user applies an inline-safe attribute suggestion, `applySuggestion()` first compares the stored client request signature, then re-posts the same request with `resolveSignatureOnly: true` to verify the current `resolvedContextSignature`, and only then safely merges allowed attribute updates into the current block and records an activity entry
+11. Inline undo calls `undoActivity()`, which validates the live block state before restoring the previous attribute snapshot
 
 ## Flow Diagram
 
@@ -63,8 +65,8 @@ User selects block + prompt
   -> Prompt::parse_response()
   -> BlockOperationValidator validates proposed operations
   -> store saves grouped suggestions
-  -> Inspector renders cards and chips
-  -> applySuggestion() / undoActivity()
+  -> Inspector renders apply chips, review cards, and advisory cards
+  -> applySuggestion() / undoActivity() for inline-safe attributes only
 ```
 
 ## Example Request

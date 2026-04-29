@@ -56,6 +56,46 @@ describe( 'recommendation actionability', () => {
 		} );
 	} );
 
+	test( 'preserves validated structural operations for review when local updates can apply', () => {
+		const operation = {
+			type: 'insert_pattern',
+			patternName: 'theme/hero',
+			targetClientId: 'block-1',
+			position: 'insert_after',
+		};
+
+		expect(
+			classifyBlockSuggestionActionability( {
+				suggestion: {
+					attributeUpdates: {
+						content: 'Better copy',
+					},
+				},
+				allowedUpdates: {
+					content: 'Better copy',
+				},
+				operationValidation: {
+					ok: true,
+					operations: [ operation ],
+					rejectedOperations: [],
+				},
+			} )
+		).toEqual(
+			expect.objectContaining( {
+				executableOperations: [
+					{
+						type: 'update_block_attributes',
+						attributeUpdates: {
+							content: 'Better copy',
+						},
+					},
+				],
+				reviewOperations: [ operation ],
+				tier: ACTIONABILITY_TIER_INLINE_SAFE,
+			} )
+		);
+	} );
+
 	test( 'keeps pattern replacements advisory without deterministic allowed pattern context', () => {
 		expect(
 			classifyBlockSuggestionActionability( {

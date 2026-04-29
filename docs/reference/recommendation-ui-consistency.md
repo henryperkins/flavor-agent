@@ -36,7 +36,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 | Surface        | Prompt contract                                                                                                                                                                       | Real executable/advisory split       |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| Block          | `Prompt.php` allows executable local block mutations plus advisory-only `structural_recommendation` and `pattern_replacement` items                                                   | Yes                                  |
+| Block          | `Prompt.php` allows executable local block mutations plus validator-approved selected-block pattern operations behind the structural flag                                              | Yes                                  |
 | Block settings mirrors | Uses the grouped block recommendation payload but only as passive mirrored chips inside delegated Inspector sub-panels                                                             | No                                   |
 | Block style mirrors   | Uses the grouped block recommendation payload but only as passive mirrored chips inside delegated Inspector sub-panels                                                             | No                                   |
 | Content        | `WritingPrompt.php` returns draft, edit, or critique payloads with content, notes, and issues for editorial review only                                                   | Editorial/review-only               |
@@ -53,7 +53,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 | Surface                        | `RecommendationLane` | `RecommendationHero` | `AIAdvisorySection` | `AIReviewSection` | `AIActivitySection` | `SurfaceComposer` | `SurfacePanelIntro` | `SurfaceScopeBar` | `AIStatusNotice` | `CapabilityNotice` | Notes                                                                                |
 | ------------------------------ | -------------------- | -------------------- | ------------------- | ----------------- | ------------------- | ----------------- | ------------------- | ----------------- | ---------------- | ------------------ | ------------------------------------------------------------------------------------ |
-| Block inspector main panel     | Yes                  | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | One-click apply plus stale-result hero and embedded navigation subsection            |
+| Block inspector main panel     | Yes                  | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | Yes               | Yes              | Yes                | One-click attribute apply, non-mutating structural review lane, stale-result hero, and embedded navigation subsection |
 | Block inspector passive subpanels | No                | No                   | No                  | No                | No                  | No                | No                  | No                | No               | No                 | Passive mirrored `SuggestionChips` only; no direct apply, stale refresh, or activity surface |
 | Content document panel         | No                   | Yes                  | Yes                 | No                | Yes                 | Yes               | Yes                 | No                | Yes              | Yes                | Editorial-only post/page panel with read-only request history                        |
 | Navigation embedded / standalone | Partial            | Partial              | No                  | No                | No                  | Yes               | Partial             | Partial           | Yes              | Yes                | Advisory-only surface; standalone fallback uses scope/lane/hero, embedded flow uses lighter custom sections and stale banner |
@@ -67,7 +67,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 | Surface                        | Executable lane                                            | Advisory lane                           | Card or badge labels                                                                                  | Copy pattern                                           |
 | ------------------------------ | ---------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Block inspector main panel     | `Apply now` with tone `Apply now` or `Stale`               | `Manual ideas` via `AIAdvisorySection`   | Hero uses `Apply now` or `Manual ideas`; advisory section now also shows `Advisory only`              | Clear direct-apply wording for local block attributes  |
+| Block inspector main panel     | `Apply now` for inline-safe attributes; `Review first` for validator-approved structural operations, with `Stale` when stale | `Manual ideas` via `AIAdvisorySection` | Hero uses `Apply now`, `Review first`, or `Manual ideas`; advisory section now also shows `Advisory only` | Direct local-attribute apply plus non-mutating structural review |
 | Block inspector passive subpanels | None                                                   | None                                    | Mirror labels come from the delegated chip group title only                                            | Context-only mirrors of the main block result          |
 | Content                        | None                                                       | `Editorial Notes` via `AIAdvisorySection` | Hero eyebrow is `Latest Content Recommendation`; mode pill is `Draft`, `Edit`, or `Critique`           | Editorial output and review notes, no apply lane       |
 | Navigation                     | None                                                       | `Recommended Next Changes` in the unmounted standalone shell; embedded sections keep the same manual tone without `AIAdvisorySection` | Category pills plus change counts; wrapper titles are `Navigation Ideas` / `Recommended next change` in the mounted embedded flow | Advisory-only navigation guidance in a lighter nested shell |
@@ -88,7 +88,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 | Surface                        | Apply model                                         | Review model                                       | Confirm step           |
 | ------------------------------ | --------------------------------------------------- | -------------------------------------------------- | ---------------------- |
-| Block inspector main panel     | One-click apply for safe local block updates        | None                                               | No                     |
+| Block inspector main panel     | One-click apply for safe local block updates        | Non-mutating selected-card review for validator-approved structural operations | No                     |
 | Block inspector passive subpanels | No apply path                                   | None                                               | No                     |
 | Content                        | No apply path                                       | Editorial review only                              | No                     |
 | Navigation                     | No apply path                                       | No preview/apply review contract; advisory follow-through only | No         |
@@ -100,7 +100,7 @@ That pattern is strongest in Style Book and Global Styles, mostly present in Tem
 
 ### Practical Difference
 
-- The main Block panel is the only one-click apply block surface. Delegated native sub-panels now mirror the latest result but do not apply anything directly.
+- The main Block panel is the only one-click apply block surface. It also owns the non-mutating structural `Review first` lane; delegated native sub-panels now mirror the latest result but do not apply or review anything directly.
 - Content remains editorial-only. It can generate drafts, edits, critiques, and review notes, but it does not mutate post content or enter preview/apply.
 - Navigation remains advisory-only. It owns its own request and stale-refresh shell, but it does not participate in the review-before-apply contract.
 - Template, Template-Part, Style Book, and Global Styles all preserve the review-before-apply contract and now present review with the same broad structure.
@@ -170,7 +170,7 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 Use the same three labels everywhere:
 
 - `Apply now`: deterministic local mutation, no preview required
-- `Review first`: deterministic change, preview required before apply
+- `Review first`: deterministic change staged for review; preview/confirm is required before apply where an apply path exists
 - `Manual ideas`: advisory only, no apply
 
 Then remove surface-specific synonyms such as `Suggested`, `Executable`, and `Advisory` from user-facing copy unless they describe something materially different.
@@ -192,7 +192,7 @@ For full recommendation panels, keep this order:
 9. `AIReviewSection` when applicable
 10. `AIActivitySection`
 
-Block now adopts `SurfacePanelIntro` so it matches the Site Editor surfaces more closely while still keeping its one-click apply contract and embedded navigation subsection.
+Block now adopts `SurfacePanelIntro` and a non-mutating structural review lane so it matches the Site Editor surfaces more closely while still keeping one-click apply limited to safe local attributes and preserving the embedded navigation subsection.
 For the main block panel specifically, the embedded navigation section is a subordinate exception that renders after the block lanes and before activity/history.
 
 Status: completed in the current block shell alignment pass.

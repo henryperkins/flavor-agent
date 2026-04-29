@@ -178,6 +178,9 @@ export function buildActionability( tier, reasons = [], options = {} ) {
 	const advisoryOperationsRejected = normalizeExecutableOperations(
 		options.advisoryOperationsRejected
 	);
+	const reviewOperations = normalizeExecutableOperations(
+		options.reviewOperations
+	);
 	const actionability = {
 		tier: resolvedTier,
 		source: ACTIONABILITY_SOURCE_VALIDATOR,
@@ -191,6 +194,10 @@ export function buildActionability( tier, reasons = [], options = {} ) {
 
 	if ( advisoryOperationsRejected.length > 0 ) {
 		actionability.advisoryOperationsRejected = advisoryOperationsRejected;
+	}
+
+	if ( reviewOperations.length > 0 ) {
+		actionability.reviewOperations = reviewOperations;
 	}
 
 	return actionability;
@@ -248,6 +255,9 @@ export function classifyBlockSuggestionActionability( {
 					},
 				],
 				advisoryOperationsRejected: rejectedOperationPayloads,
+				reviewOperations: hasSingleValidatedOperation
+					? validatedOperations
+					: [],
 			}
 		);
 	}
