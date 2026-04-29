@@ -107,6 +107,9 @@ namespace FlavorAgent\Tests\Support {
 		/** @var array<string, bool> */
 		public static array $ai_client_provider_support = [];
 
+		/** @var array<string, bool> */
+		public static array $ai_client_feature_support = [];
+
 		public static mixed $ai_client_generate_text_result = '';
 
 		/**
@@ -118,6 +121,44 @@ namespace FlavorAgent\Tests\Support {
 
 		public static function get_connector_api_error( string $function_name ): ?string {
 			return self::$connector_api_errors[ $function_name ] ?? null;
+		}
+
+		/**
+		 * @param array<string, mixed> $prompt_state
+		 */
+		public static function ai_client_prompt_supports_text_generation( array $prompt_state ): bool {
+			if (
+				array_key_exists( 'reasoning', self::$ai_client_feature_support )
+				&& ! self::$ai_client_feature_support['reasoning']
+				&& isset( $prompt_state['reasoning'] )
+				&& '' !== (string) $prompt_state['reasoning']
+			) {
+				return false;
+			}
+
+			if (
+				array_key_exists( 'json_schema', self::$ai_client_feature_support )
+				&& ! self::$ai_client_feature_support['json_schema']
+				&& is_array( $prompt_state['json_schema'] ?? null )
+			) {
+				return false;
+			}
+
+			$provider = $prompt_state['provider'] ?? '';
+
+			if (
+				is_string( $provider )
+				&& '' !== $provider
+				&& array_key_exists( $provider, self::$ai_client_provider_support )
+			) {
+				return (bool) self::$ai_client_provider_support[ $provider ];
+			}
+
+			if ( self::$ai_client_supported ) {
+				return true;
+			}
+
+			return null !== self::pending_chat_output_text();
 		}
 
 		/**
@@ -266,6 +307,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_get_response         = [];
 			self::$ai_client_supported         = false;
 			self::$ai_client_provider_support  = [];
+			self::$ai_client_feature_support   = [];
 			self::$ai_client_generate_text_result = '';
 
 			$GLOBALS['wp_settings_fields']   = [];
@@ -333,26 +375,9 @@ namespace WordPress\AI_Client {
 		}
 
 		public function is_supported_for_text_generation(): bool {
-			$provider = WordPressTestState::$last_ai_client_prompt['provider'] ?? '';
-
-			if (
-				is_string( $provider )
-				&& '' !== $provider
-				&& array_key_exists( $provider, WordPressTestState::$ai_client_provider_support )
-			) {
-				return (bool) WordPressTestState::$ai_client_provider_support[ $provider ];
-			}
-
-			if ( WordPressTestState::$ai_client_supported ) {
-				return true;
-			}
-
-			// Compatibility bridge for Workstream C of the WP 7.0 overlap remediation:
-			// many pre-existing tests still seed Azure-shaped chat responses via
-			// $remote_post_response. After C step 2, chat goes through Connectors via
-			// wp_ai_client_prompt(), so when a chat-shaped response is queued we treat
-			// it as a usable text-generation provider.
-			return null !== \FlavorAgent\Tests\Support\WordPressTestState::pending_chat_output_text();
+			return WordPressTestState::ai_client_prompt_supports_text_generation(
+				WordPressTestState::$last_ai_client_prompt
+			);
 		}
 
 		public function generate_text(): mixed {
@@ -378,48 +403,55 @@ namespace {
 	if ( ! class_exists( 'WP_AI_Client_Prompt_Builder' ) ) {
 		class WP_AI_Client_Prompt_Builder {
 
+			/**
+			 * @var array<string, mixed>
+			 */
+			private array $state = [];
+
+			/**
+			 * @param array<string, mixed> $state
+			 */
+			public function __construct( array $state = [] ) {
+				$this->state = $state;
+				$this->sync_state();
+			}
+
 			public function __call( string $name, array $arguments ) {
 				switch ( $name ) {
 					case 'using_system_instruction':
-						WordPressTestState::$last_ai_client_prompt['system'] = (string) ( $arguments[0] ?? '' );
+						$this->state['system'] = (string) ( $arguments[0] ?? '' );
+						$this->sync_state();
 
 						return $this;
 					case 'using_provider':
-						WordPressTestState::$last_ai_client_prompt['provider'] = (string) ( $arguments[0] ?? '' );
+						$this->state['provider'] = (string) ( $arguments[0] ?? '' );
+						$this->sync_state();
 
 						return $this;
 					case 'using_reasoning_effort':
 					case 'using_reasoning':
 						$reasoning = $arguments[0] ?? '';
 
-						WordPressTestState::$last_ai_client_prompt['reasoning'] = is_array( $reasoning )
+						$this->state['reasoning'] = is_array( $reasoning )
 							? (string) ( $reasoning['effort'] ?? '' )
 							: (string) $reasoning;
+						$this->sync_state();
 
 						return $this;
 					case 'as_json_response':
-						WordPressTestState::$last_ai_client_prompt['json_schema'] = is_array( $arguments[0] ?? null )
+						$this->state['json_schema'] = is_array( $arguments[0] ?? null )
 							? $arguments[0]
 							: null;
+						$this->sync_state();
 
 						return $this;
 					case 'is_supported_for_text_generation':
-						$provider = WordPressTestState::$last_ai_client_prompt['provider'] ?? '';
+						$this->sync_state();
 
-						if (
-							is_string( $provider )
-							&& '' !== $provider
-							&& array_key_exists( $provider, WordPressTestState::$ai_client_provider_support )
-						) {
-							return WordPressTestState::$ai_client_provider_support[ $provider ];
-						}
-
-						if ( WordPressTestState::$ai_client_supported ) {
-							return true;
-						}
-
-						return null !== WordPressTestState::pending_chat_output_text();
+						return WordPressTestState::ai_client_prompt_supports_text_generation( $this->state );
 					case 'generate_text':
+						$this->sync_state();
+
 						$explicit = WordPressTestState::$ai_client_generate_text_result;
 
 						if ( '' !== $explicit && null !== $explicit ) {
@@ -427,7 +459,7 @@ namespace {
 						}
 
 						$translated = WordPressTestState::consume_pending_chat_response_for_ai_client(
-							(object) WordPressTestState::$last_ai_client_prompt
+							(object) $this->state
 						);
 
 						return null !== $translated ? $translated : $explicit;
@@ -440,17 +472,21 @@ namespace {
 						)
 					);
 				}
+
+			private function sync_state(): void {
+				WordPressTestState::$last_ai_client_prompt = $this->state;
 			}
 		}
+	}
 
 	if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 		function wp_ai_client_prompt( $prompt = null ): WP_AI_Client_Prompt_Builder {
-			WordPressTestState::$last_ai_client_prompt = [
-				'text'      => is_string( $prompt ) ? $prompt : '',
-				'transport' => 'core_function',
-			];
-
-			return new WP_AI_Client_Prompt_Builder();
+			return new WP_AI_Client_Prompt_Builder(
+				[
+					'text'      => is_string( $prompt ) ? $prompt : '',
+					'transport' => 'core_function',
+				]
+			);
 		}
 	}
 

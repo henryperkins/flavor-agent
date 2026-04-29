@@ -1171,7 +1171,7 @@ describe( 'TemplateRecommender', () => {
 				'[data-panel-title="AI Template Recommendations"]'
 			)
 		).not.toBeNull();
-		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
+		expect( hasText( 'Settings > Connectors' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( true );
 		expect(
 			hasText(
@@ -1204,7 +1204,7 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Settings > Flavor Agent' ) ).toBe( true );
+		expect( hasText( 'Settings > Connectors' ) ).toBe( true );
 		expect( hasText( 'Recent AI Actions' ) ).toBe( false );
 	} );
 

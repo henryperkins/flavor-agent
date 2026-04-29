@@ -95,6 +95,33 @@ final class PatternIndexTest extends TestCase {
 		$this->assertNotSame( $baseline, PatternIndex::compute_fingerprint( [ $override_ready ] ) );
 	}
 
+	public function test_compute_fingerprint_handles_pattern_with_non_array_taxonomy_fields(): void {
+		// WooCommerce registers patterns with `templateTypes` as a string slug
+		// (or empty string), and occasionally non-array categories. The
+		// fingerprint pipeline must treat those defensively rather than
+		// fataling on PHP 8 strict-types coercion.
+		$broken                  = $this->pattern_fixture( 'plugin/coming-soon', 'Coming Soon', 'Hello' );
+		$broken['categories']    = '';
+		$broken['blockTypes']    = null;
+		$broken['templateTypes'] = 'coming-soon';
+
+		$fingerprint = PatternIndex::compute_fingerprint( [ $broken ] );
+
+		$this->assertIsString( $fingerprint );
+		$this->assertNotSame( '', $fingerprint );
+
+		$normalized                  = $broken;
+		$normalized['categories']    = [];
+		$normalized['blockTypes']    = [];
+		$normalized['templateTypes'] = [ 'coming-soon' ];
+
+		$this->assertSame(
+			$fingerprint,
+			PatternIndex::compute_fingerprint( [ $normalized ] ),
+			'String/null taxonomy fields must produce the same fingerprint as the equivalent array form.'
+		);
+	}
+
 	public function test_mark_dirty_uses_stale_when_a_usable_index_exists_and_uninitialized_otherwise(): void {
 		PatternIndex::save_state(
 			array_merge(

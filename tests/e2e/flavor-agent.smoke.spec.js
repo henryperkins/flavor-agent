@@ -1707,11 +1707,6 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 	);
 	await expect(
 		recommendationsPanel.getByRole( 'link', {
-			name: 'Settings > Flavor Agent',
-		} )
-	).toBeVisible( { timeout: 15000 } );
-	await expect(
-		recommendationsPanel.getByRole( 'link', {
 			name: 'Settings > Connectors',
 		} )
 	).toBeVisible( { timeout: 15000 } );

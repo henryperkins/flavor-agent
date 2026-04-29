@@ -79,4 +79,50 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
+
+	public function test_selected_connector_provider_skips_unsupported_optional_prompt_features(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'anthropic',
+		];
+		WordPressTestState::$connectors                     = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_feature_support      = [
+			'reasoning'   => false,
+			'json_schema' => false,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		$result = ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			[
+				'type'       => 'object',
+				'properties' => [
+					'explanation' => [ 'type' => 'string' ],
+				],
+			]
+		);
+
+		$this->assertSame(
+			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
+			$result
+		);
+		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( 'system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
 }

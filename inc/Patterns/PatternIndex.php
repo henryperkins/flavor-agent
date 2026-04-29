@@ -904,10 +904,12 @@ final class PatternIndex {
 			$pattern['name'] ?? '',
 			$pattern['title'] ?? '',
 			$pattern['description'] ?? '',
-			self::normalize_list( $pattern['categories'] ?? [] ),
-			self::normalize_list( $pattern['blockTypes'] ?? [] ),
-			self::normalize_list( $pattern['templateTypes'] ?? [] ),
-			self::normalize_pattern_overrides( $pattern['patternOverrides'] ?? [] ),
+			self::normalize_list( self::coerce_string_list( $pattern['categories'] ?? [] ) ),
+			self::normalize_list( self::coerce_string_list( $pattern['blockTypes'] ?? [] ) ),
+			self::normalize_list( self::coerce_string_list( $pattern['templateTypes'] ?? [] ) ),
+			self::normalize_pattern_overrides(
+				is_array( $pattern['patternOverrides'] ?? null ) ? $pattern['patternOverrides'] : []
+			),
 			(string) ( $pattern['syncedPatternId'] ?? 0 ),
 			$pattern['syncStatus'] ?? '',
 			$pattern['wpPatternSyncStatus'] ?? '',
@@ -916,6 +918,17 @@ final class PatternIndex {
 		];
 
 		return md5( implode( '|', $entry ) );
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function coerce_string_list( mixed $value ): array {
+		if ( is_string( $value ) ) {
+			return '' === $value ? [] : [ $value ];
+		}
+
+		return is_array( $value ) ? $value : [];
 	}
 
 	private static function normalize_list( array $values ): string {

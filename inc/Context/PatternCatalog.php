@@ -60,23 +60,24 @@ final class PatternCatalog {
 			$result = [];
 
 			foreach ( $all as $pattern ) {
+				$pattern['categories']    = self::ensure_string_list( $pattern['categories'] ?? [] );
+				$pattern['blockTypes']    = self::ensure_string_list( $pattern['blockTypes'] ?? [] );
+				$pattern['templateTypes'] = self::ensure_string_list( $pattern['templateTypes'] ?? [] );
+
 				if ( null !== $categories ) {
-					$pattern_categories = $pattern['categories'] ?? [];
-					if ( empty( array_intersect( $categories, $pattern_categories ) ) ) {
+					if ( empty( array_intersect( $categories, $pattern['categories'] ) ) ) {
 						continue;
 					}
 				}
 
 				if ( null !== $block_types ) {
-					$pattern_block_types = $pattern['blockTypes'] ?? [];
-					if ( empty( array_intersect( $block_types, $pattern_block_types ) ) ) {
+					if ( empty( array_intersect( $block_types, $pattern['blockTypes'] ) ) ) {
 						continue;
 					}
 				}
 
 				if ( null !== $template_types ) {
-					$pattern_template_types = $pattern['templateTypes'] ?? [];
-					if ( empty( array_intersect( $template_types, $pattern_template_types ) ) ) {
+					if ( empty( array_intersect( $template_types, $pattern['templateTypes'] ) ) ) {
 						continue;
 					}
 				}
@@ -194,6 +195,41 @@ final class PatternCatalog {
 		}
 
 		return $entry;
+	}
+
+	/**
+	 * Coerce raw registry values to a clean list of non-empty strings.
+	 *
+	 * WordPress allows pattern fields like `templateTypes` to be strings,
+	 * arrays, or absent (WooCommerce registers patterns with a string
+	 * `templateTypes`); downstream code expects an array of slugs.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function ensure_string_list( mixed $value ): array {
+		if ( is_string( $value ) ) {
+			return '' === $value ? [] : [ $value ];
+		}
+
+		if ( ! is_array( $value ) ) {
+			return [];
+		}
+
+		$list = [];
+
+		foreach ( $value as $item ) {
+			if ( ! is_scalar( $item ) ) {
+				continue;
+			}
+
+			$coerced = (string) $item;
+
+			if ( '' !== $coerced ) {
+				$list[] = $coerced;
+			}
+		}
+
+		return array_values( $list );
 	}
 
 	/**

@@ -438,13 +438,10 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect( getContainer().textContent ).toContain(
-			'Settings > Flavor Agent'
-		);
-		expect( getContainer().textContent ).toContain(
 			'Settings > Connectors'
 		);
 		expect( getContainer().textContent ).toContain(
-			'Configure Azure OpenAI or OpenAI Native in Settings > Flavor Agent'
+			'Configure a text-generation provider in Settings > Connectors'
 		);
 	} );
 

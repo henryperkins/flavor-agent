@@ -52,6 +52,12 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
+		$supported = self::ensure_text_generation_supported( $prompt );
+
+		if ( is_wp_error( $supported ) ) {
+			return $supported;
+		}
+
 		$prompt = self::apply_system_instruction( $prompt, $system_prompt );
 
 		if ( is_wp_error( $prompt ) ) {
@@ -68,20 +74,6 @@ final class WordPressAIClient {
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
-		}
-
-		$supported = self::call_prompt_method( $prompt, 'is_supported_for_text_generation' );
-
-		if ( is_wp_error( $supported ) ) {
-			return $supported;
-		}
-
-		if ( ! $supported ) {
-			return new \WP_Error(
-				'missing_text_generation_provider',
-				self::SETUP_MESSAGE,
-				[ 'status' => 400 ]
-			);
 		}
 
 		$started_at = microtime( true );
@@ -227,14 +219,20 @@ final class WordPressAIClient {
 				continue;
 			}
 
+			$candidate_prompt = self::clone_prompt_for_optional_feature( $prompt );
+
+			if ( null === $candidate_prompt ) {
+				continue;
+			}
+
 			try {
-				$updated_prompt = $prompt->{$method}( ...$candidate['arguments'] );
+				$updated_prompt = $candidate_prompt->{$method}( ...$candidate['arguments'] );
 			} catch ( \Throwable $throwable ) {
 				continue;
 			}
 
 			if ( is_wp_error( $updated_prompt ) ) {
-				return $updated_prompt;
+				continue;
 			}
 
 			if ( ! is_object( $updated_prompt ) ) {
@@ -245,7 +243,9 @@ final class WordPressAIClient {
 				);
 			}
 
-			return $updated_prompt;
+			if ( self::prompt_supports_text_generation( $updated_prompt ) ) {
+				return $updated_prompt;
+			}
 		}
 
 		return $prompt;
@@ -260,10 +260,16 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$updated_prompt = self::call_prompt_method( $prompt, 'as_json_response', [ $schema ] );
+		$candidate_prompt = self::clone_prompt_for_optional_feature( $prompt );
+
+		if ( null === $candidate_prompt ) {
+			return $prompt;
+		}
+
+		$updated_prompt = self::call_prompt_method( $candidate_prompt, 'as_json_response', [ $schema ] );
 
 		if ( is_wp_error( $updated_prompt ) ) {
-			return $updated_prompt;
+			return $prompt;
 		}
 
 		if ( ! is_object( $updated_prompt ) ) {
@@ -274,7 +280,39 @@ final class WordPressAIClient {
 			);
 		}
 
-		return $updated_prompt;
+		return self::prompt_supports_text_generation( $updated_prompt ) ? $updated_prompt : $prompt;
+	}
+
+	private static function ensure_text_generation_supported( object $prompt ): bool|\WP_Error {
+		$supported = self::call_prompt_method( $prompt, 'is_supported_for_text_generation' );
+
+		if ( is_wp_error( $supported ) ) {
+			return $supported;
+		}
+
+		if ( ! $supported ) {
+			return new \WP_Error(
+				'missing_text_generation_provider',
+				self::SETUP_MESSAGE,
+				[ 'status' => 400 ]
+			);
+		}
+
+		return true;
+	}
+
+	private static function prompt_supports_text_generation( object $prompt ): bool {
+		$supported = self::call_prompt_method( $prompt, 'is_supported_for_text_generation' );
+
+		return ! is_wp_error( $supported ) && (bool) $supported;
+	}
+
+	private static function clone_prompt_for_optional_feature( object $prompt ): ?object {
+		try {
+			return clone $prompt;
+		} catch ( \Throwable $throwable ) {
+			return null;
+		}
 	}
 
 	private static function call_prompt_method( object $prompt, string $method, array $arguments = [] ): mixed {
