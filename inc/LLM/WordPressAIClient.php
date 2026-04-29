@@ -296,7 +296,11 @@ final class WordPressAIClient {
 			&& isset( $schema['enum'] )
 			&& is_array( $schema['enum'] )
 		) {
-			return self::expand_union_enum_schema( $schema );
+			$schema = self::expand_union_enum_schema( $schema );
+		}
+
+		if ( self::schema_includes_type( $schema, 'object' ) ) {
+			$schema['additionalProperties'] = false;
 		}
 
 		return $schema;
@@ -376,10 +380,16 @@ final class WordPressAIClient {
 			}
 
 			if ( [] !== $enum ) {
-				$branches[] = [
+				$branch = [
 					'type' => $type,
 					'enum' => $enum,
 				];
+
+				if ( 'object' === $type ) {
+					$branch['additionalProperties'] = false;
+				}
+
+				$branches[] = $branch;
 			}
 		}
 
@@ -391,6 +401,16 @@ final class WordPressAIClient {
 		$normalized['anyOf'] = $branches;
 
 		return $normalized;
+	}
+
+	private static function schema_includes_type( array $schema, string $type ): bool {
+		$schema_type = $schema['type'] ?? null;
+
+		if ( is_string( $schema_type ) ) {
+			return $type === $schema_type;
+		}
+
+		return is_array( $schema_type ) && in_array( $type, $schema_type, true );
 	}
 
 	private static function schema_value_matches_type( mixed $value, string $type ): bool {
@@ -407,6 +427,10 @@ final class WordPressAIClient {
 	}
 
 	private static function is_list_array( array $value ): bool {
+		if ( [] === $value ) {
+			return true;
+		}
+
 		return array_keys( $value ) === range( 0, count( $value ) - 1 );
 	}
 

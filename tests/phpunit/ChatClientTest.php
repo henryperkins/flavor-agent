@@ -176,4 +176,91 @@ final class ChatClientTest extends TestCase {
 			$type_schema['anyOf'] ?? null
 		);
 	}
+
+	public function test_connector_json_schema_closes_object_nodes_for_anthropic(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'anthropic',
+		];
+		WordPressTestState::$connectors                     = [
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			ResponseSchema::get( 'block' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+
+		$this->assertObjectSchemasDisallowAdditionalProperties( $schema );
+	}
+
+	private function assertObjectSchemasDisallowAdditionalProperties( array $schema, string $path = '$' ): void {
+		if ( self::schema_includes_type( $schema, 'object' ) ) {
+			$this->assertArrayHasKey( 'additionalProperties', $schema, $path );
+			$this->assertFalse( $schema['additionalProperties'], $path );
+		}
+
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$this->assertObjectSchemasDisallowAdditionalProperties(
+						$child_schema,
+						$path . '.' . $collection_key . '.' . $key
+					);
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$this->assertObjectSchemasDisallowAdditionalProperties(
+					$schema[ $schema_key ],
+					$path . '.' . $schema_key
+				);
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$this->assertObjectSchemasDisallowAdditionalProperties(
+						$child_schema,
+						$path . '.' . $schema_list_key . '.' . $key
+					);
+				}
+			}
+		}
+	}
+
+	private static function schema_includes_type( array $schema, string $type ): bool {
+		$schema_type = $schema['type'] ?? null;
+
+		if ( is_string( $schema_type ) ) {
+			return $type === $schema_type;
+		}
+
+		return is_array( $schema_type ) && in_array( $type, $schema_type, true );
+	}
 }
