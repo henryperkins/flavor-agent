@@ -127,23 +127,23 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_connector_json_schema_normalizes_nullable_enums_for_anthropic(): void {
+	public function test_connector_json_schema_normalizes_nullable_enums_for_schema_compatible_connector(): void {
 		WordPressTestState::$options                        = [
-			'flavor_agent_openai_provider' => 'anthropic',
+			'flavor_agent_openai_provider' => 'openai',
 		];
 		WordPressTestState::$connectors                     = [
-			'anthropic' => [
-				'name'           => 'Anthropic',
-				'description'    => 'Anthropic connector',
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
 				'type'           => 'ai_provider',
 				'authentication' => [
 					'method'       => 'api_key',
-					'setting_name' => 'connectors_ai_anthropic_api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
 				],
 			],
 		];
 		WordPressTestState::$ai_client_provider_support     = [
-			'anthropic' => true,
+			'openai' => true,
 		];
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
@@ -177,7 +177,38 @@ final class ChatClientTest extends TestCase {
 		);
 	}
 
-	public function test_connector_json_schema_closes_object_nodes_for_anthropic(): void {
+	public function test_connector_json_schema_closes_object_nodes_for_schema_compatible_connector(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
+
+		ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			ResponseSchema::get( 'block' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+
+		$this->assertObjectSchemasDisallowAdditionalProperties( $schema );
+	}
+
+	public function test_anthropic_connector_skips_block_schema_that_exceeds_union_limit(): void {
 		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
@@ -205,7 +236,8 @@ final class ChatClientTest extends TestCase {
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
 
-		$this->assertObjectSchemasDisallowAdditionalProperties( $schema );
+		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
+		$this->assertLessThanOrEqual( 16, self::count_schema_unions( $schema ) );
 	}
 
 	private function assertObjectSchemasDisallowAdditionalProperties( array $schema, string $path = '$' ): void {
@@ -262,5 +294,49 @@ final class ChatClientTest extends TestCase {
 		}
 
 		return is_array( $schema_type ) && in_array( $type, $schema_type, true );
+	}
+
+	private static function count_schema_unions( array $schema ): int {
+		$count = 0;
+
+		if ( isset( $schema['type'] ) && is_array( $schema['type'] ) ) {
+			++$count;
+		}
+
+		if ( isset( $schema['anyOf'] ) && is_array( $schema['anyOf'] ) ) {
+			++$count;
+		}
+
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$count += self::count_schema_unions( $child_schema );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$count += self::count_schema_unions( $schema[ $schema_key ] );
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$count += self::count_schema_unions( $child_schema );
+				}
+			}
+		}
+
+		return $count;
 	}
 }

@@ -10,8 +10,10 @@ use WordPress\AI_Client\AI_Client;
 
 final class WordPressAIClient {
 
-	private const SETUP_MESSAGE     = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
-	private const REASONING_EFFORTS = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const SETUP_MESSAGE         = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
+	private const REASONING_EFFORTS     = [ 'low', 'medium', 'high', 'xhigh' ];
+	private const ANTHROPIC_PROVIDER    = 'anthropic';
+	private const ANTHROPIC_UNION_LIMIT = 16;
 
 	public static function is_supported( ?string $provider = null ): bool {
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
@@ -70,7 +72,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt = self::apply_output_schema( $prompt, $schema );
+		$prompt = self::apply_output_schema( $prompt, $schema, $provider );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -251,8 +253,14 @@ final class WordPressAIClient {
 		return $prompt;
 	}
 
-	private static function apply_output_schema( object $prompt, ?array $schema ): object {
+	private static function apply_output_schema( object $prompt, ?array $schema, ?string $provider ): object {
 		if ( null === $schema || [] === $schema ) {
+			return $prompt;
+		}
+
+		$schema = self::normalize_output_schema( $schema );
+
+		if ( self::should_skip_output_schema( $provider, $schema ) ) {
 			return $prompt;
 		}
 
@@ -269,7 +277,7 @@ final class WordPressAIClient {
 		$updated_prompt = self::call_prompt_method(
 			$candidate_prompt,
 			'as_json_response',
-			[ self::normalize_output_schema( $schema ) ]
+			[ $schema ]
 		);
 
 		if ( is_wp_error( $updated_prompt ) ) {
@@ -411,6 +419,57 @@ final class WordPressAIClient {
 		}
 
 		return is_array( $schema_type ) && in_array( $type, $schema_type, true );
+	}
+
+	private static function should_skip_output_schema( ?string $provider, array $schema ): bool {
+		$provider = is_string( $provider ) ? sanitize_key( $provider ) : '';
+
+		return self::ANTHROPIC_PROVIDER === $provider
+			&& self::count_schema_unions( $schema ) > self::ANTHROPIC_UNION_LIMIT;
+	}
+
+	private static function count_schema_unions( array $schema ): int {
+		$count = 0;
+
+		if ( isset( $schema['type'] ) && is_array( $schema['type'] ) ) {
+			++$count;
+		}
+
+		if ( isset( $schema['anyOf'] ) && is_array( $schema['anyOf'] ) ) {
+			++$count;
+		}
+
+		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
+			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $collection_key ] as $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$count += self::count_schema_unions( $child_schema );
+				}
+			}
+		}
+
+		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
+			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
+				$count += self::count_schema_unions( $schema[ $schema_key ] );
+			}
+		}
+
+		foreach ( [ 'anyOf', 'oneOf', 'allOf', 'prefixItems' ] as $schema_list_key ) {
+			if ( ! isset( $schema[ $schema_list_key ] ) || ! is_array( $schema[ $schema_list_key ] ) ) {
+				continue;
+			}
+
+			foreach ( $schema[ $schema_list_key ] as $child_schema ) {
+				if ( is_array( $child_schema ) ) {
+					$count += self::count_schema_unions( $child_schema );
+				}
+			}
+		}
+
+		return $count;
 	}
 
 	private static function schema_value_matches_type( mixed $value, string $type ): bool {
