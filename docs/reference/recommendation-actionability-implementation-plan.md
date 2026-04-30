@@ -2,9 +2,11 @@
 
 Date: 2026-04-29
 
-Status: canonical implementation scope for recommendation actionability and narrow block structural actions.
+Status: canonical implementation record for recommendation actionability and narrow block structural actions.
 
 This plan supersedes the broader implementation sequencing in `docs/recommendation-improvement-report-and-checklist.md` when there is a scope conflict. The broader checklist remains the backlog and checklist source. `recommendation-actionability-review.md` remains the rationale and architecture review.
+
+Implementation note: M0-M4 and M1A are complete in the current branch. `docs/reference/recommendation-actionability-m4-m1a-plan.md` is the detailed completion plan and acceptance checklist for template-part yield improvements plus transactional block structural apply/undo.
 
 ## Source Inputs
 
@@ -38,12 +40,16 @@ Implemented in the current working branch:
 - `src/context/collector.js`, `inc/Abilities/BlockAbilities.php`, and `inc/LLM/Prompt.php` carry sanitized `blockOperationContext` into the block prompt.
 - `inc/Context/BlockOperationValidator.php` is the authoritative PHP validator for the block operation catalog.
 - Block-lane responses now normalize structural metadata into `operations`, `proposedOperations`, and `rejectedOperations`; multiple proposed structural operations are rejected in M2.
-- Focused JS tests cover actionability, block suggestion execution metadata, inspector surfacing, and block operation catalog validation.
+- `src/utils/block-structural-actions.js` implements transactional selected-block structural apply and drift-safe undo helpers.
+- `src/store/index.js` exposes `applyBlockStructuralSuggestion()` for the review-safe structural apply path.
+- `src/store/activity-history.js` and `src/store/activity-undo.js` distinguish structural block applies from inline attribute applies and block automatic undo after post-apply drift.
+- Focused JS tests cover actionability, block suggestion execution metadata, inspector surfacing, block operation catalog validation, structural apply, activity, and undo.
+- Focused PHP tests cover the block operation validator and block operation context handling.
 
-Still intentionally not implemented:
+Still intentionally out of scope:
 
-- Block structural apply/undo.
 - Any ordinary native pattern inserter activity ownership.
+- Any rollout beyond the default-off structural-actions flag without explicit release approval.
 
 ## MVP Scope
 
@@ -55,7 +61,7 @@ The MVP is narrow:
   - `insert_pattern` before the selected block.
   - `insert_pattern` after the selected block.
   - `replace_block_with_pattern` for the selected block.
-- Gate structural actions behind a default-off rollout flag until the full review/apply/undo path and negative tests are complete.
+- Keep structural actions behind a default-off rollout flag while release hardening and rollout decisions continue.
 - Keep pattern recommendations in the standalone pattern shelf ranking/browse-only.
 - Keep template, template-part, Global Styles, and Style Book review-first behavior intact.
 
@@ -83,7 +89,8 @@ Required work:
 
 Acceptance criteria:
 
-- Existing block structural and pattern suggestions remain advisory-only.
+- When the rollout flag is disabled, block structural and pattern suggestions remain advisory-only.
+- When the rollout flag is enabled, only validator-approved review-safe selected-block pattern operations can become executable.
 - A model-supplied eligibility field cannot make a suggestion executable.
 - Tests prove inline-safe eligibility only appears when local validators return executable updates.
 
@@ -226,7 +233,7 @@ Required work:
 Acceptance criteria:
 
 - `Apply now` still means inline-safe local attributes.
-- `Review first` means deterministic structural operation selected for non-mutating review; confirmation and apply remain M4 scope.
+- `Review first` means deterministic structural operation selected for scoped review; confirmation and apply are available only through the M4 structural path when the rollout flag is enabled and live checks pass.
 - Stale structural recommendations remain visible but cannot enter review or apply.
 
 ## Workstream F: Transactional Apply, Activity, And Undo
@@ -301,7 +308,7 @@ Exit criteria:
 - Block operation catalog exists with parser fixtures.
 - Structural/pattern block suggestions remain advisory.
 
-Current branch status: substantially complete.
+Current branch status: complete.
 
 ### M1: Feature Flag And Pattern Context
 
@@ -320,6 +327,8 @@ Exit criteria:
 - Existing template-part review/apply/undo behavior remains unchanged.
 
 Detailed implementation plan: `docs/reference/recommendation-actionability-m4-m1a-plan.md`.
+
+M1A status: complete. The detailed plan records the final acceptance checklist and verification evidence for the template-part yield work.
 
 ### M2: Prompt, Schema, And Server Parser
 
@@ -342,7 +351,7 @@ Exit criteria:
 - Stale and disabled states block review apply.
 - No structural mutation occurs yet.
 
-Current branch status: complete. The block panel separates inline-safe `Apply now` suggestions, review-safe structural suggestions, and advisory/manual remainders. The review lane opens scoped non-mutating details only; structural apply remains unavailable until M4.
+Current branch status: complete. The block panel separates inline-safe `Apply now` suggestions, review-safe structural suggestions, and advisory/manual remainders. The review lane opens scoped details and hands apply requests to the M4 structural path only when the rollout flag is enabled and live checks pass.
 
 ### M4: Transactional Apply And Undo Behind Flag
 
@@ -355,6 +364,20 @@ Exit criteria:
 - Race and negative tests are green.
 
 Detailed implementation plan: `docs/reference/recommendation-actionability-m4-m1a-plan.md`.
+
+M4 status: complete behind the default-off rollout flag. The apply path revalidates live editor state immediately before mutation, applies a single validator-approved selected-block structural operation transactionally, records structural activity only after success, and disables automatic undo when post-apply state diverges.
+
+Completion evidence:
+
+- `docs/reference/recommendation-actionability-m4-m1a-plan.md` final acceptance checklist is complete.
+- `docs/features/block-recommendations.md` and `docs/FEATURE_SURFACE_MATRIX.md` document reviewed structural apply behind the rollout flag.
+- `output/verify/summary.json` records a full pass on 2026-04-29 for build, JS lint, Plugin Check, JS unit, PHP lint, PHP unit, Playground E2E, and WP 7.0 E2E.
+
+Post-M4 release-hardening backlog:
+
+- Keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` and the `flavor_agent_enable_block_structural_actions` filter default-off until an explicit rollout decision is made.
+- Run a flag-enabled manual QA pass in the representative WP 7.0 runtime before any beta or site-admin exposure.
+- Decide whether exposure remains developer-only, beta opt-in by constant/filter, or graduates to a site-admin setting.
 
 ## Validation Gates
 
@@ -376,6 +399,6 @@ Minimum evidence before any structural apply release:
 - Block structural actions are review-safe, not inline-safe.
 - One-click block apply remains limited to safe local attributes.
 - Structural operations are editor-bound selected-block operations only in v1.
-- Feature flag defaults off until transactional apply, activity, undo, and negative tests are complete.
+- Feature flag remains default-off for rollout control even though transactional apply, activity, undo, and negative tests are complete.
 - Ordinary native pattern inserter use remains owned by Gutenberg, not Flavor Agent.
 - Upstream Site Agent, Observability Logger, provider routing, ability exposure policy, and core revisions are watched but not reimplemented here.

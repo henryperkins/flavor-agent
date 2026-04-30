@@ -3,18 +3,14 @@ jest.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 const mockRegistrySelect = jest.fn();
-const mockRegistryDispatch = jest.fn();
 
 jest.mock( '@wordpress/data', () => ( {
 	select: ( ...args ) => mockRegistrySelect( ...args ),
-	dispatch: ( ...args ) => mockRegistryDispatch( ...args ),
 } ) );
 
 import {
 	getBlockPatterns,
-	setBlockPatterns,
 	getBlockPatternCategories,
-	setBlockPatternCategories,
 	getAllowedPatterns,
 	getPatternAPIPath,
 	getPatternRuntimeDiagnostics,
@@ -38,14 +34,6 @@ function mockBlockEditorStore( settings = {}, selectors = {} ) {
 	mockRegistrySelect.mockReturnValue( blockEditor );
 
 	return blockEditor;
-}
-
-function mockUpdateSettings() {
-	const updateSettings = jest.fn();
-
-	mockRegistryDispatch.mockReturnValue( { updateSettings } );
-
-	return updateSettings;
 }
 
 /* ------------------------------------------------------------------
@@ -100,70 +88,6 @@ describe( 'getBlockPatterns', () => {
 	} );
 } );
 
-describe( 'setBlockPatterns', () => {
-	beforeEach( () => {
-		mockRegistrySelect.mockReset();
-		mockRegistryDispatch.mockReset();
-	} );
-
-	test( 'supports future stable writes when WordPress provides blockPatterns', () => {
-		mockBlockEditorStore( {
-			blockPatterns: [ { name: 'theme/old' } ],
-			__experimentalBlockPatterns: [],
-		} );
-		const updateSettings = mockUpdateSettings();
-
-		const newPatterns = [ { name: 'theme/new' } ];
-		setBlockPatterns( newPatterns );
-
-		expect( updateSettings ).toHaveBeenCalledWith( {
-			blockPatterns: newPatterns,
-		} );
-	} );
-
-	test( 'writes to experimental key when stable key is absent', () => {
-		mockBlockEditorStore( {
-			__experimentalBlockPatterns: [ { name: 'theme/old' } ],
-		} );
-		const updateSettings = mockUpdateSettings();
-
-		const newPatterns = [ { name: 'theme/new' } ];
-		setBlockPatterns( newPatterns );
-
-		expect( updateSettings ).toHaveBeenCalledWith( {
-			__experimentalBlockPatterns: newPatterns,
-		} );
-	} );
-
-	test( 'writes to __experimentalAdditionalBlockPatterns when that key is populated', () => {
-		mockBlockEditorStore( {
-			__experimentalAdditionalBlockPatterns: [ { name: 'theme/old' } ],
-			__experimentalBlockPatterns: [ { name: 'theme/stale' } ],
-		} );
-		const updateSettings = mockUpdateSettings();
-
-		const newPatterns = [ { name: 'theme/new' } ];
-		setBlockPatterns( newPatterns );
-
-		expect( updateSettings ).toHaveBeenCalledWith( {
-			__experimentalAdditionalBlockPatterns: newPatterns,
-		} );
-	} );
-
-	test( 'defaults to experimental key when neither key exists', () => {
-		mockBlockEditorStore( {} );
-		const updateSettings = mockUpdateSettings();
-
-		setBlockPatterns( [ { name: 'theme/first' } ] );
-
-		expect( updateSettings ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				__experimentalBlockPatterns: [ { name: 'theme/first' } ],
-			} )
-		);
-	} );
-} );
-
 describe( 'getBlockPatternCategories', () => {
 	beforeEach( () => mockRegistrySelect.mockReset() );
 
@@ -205,86 +129,6 @@ describe( 'getBlockPatternCategories', () => {
 		mockBlockEditorStore( {} );
 
 		expect( getBlockPatternCategories() ).toEqual( [] );
-	} );
-} );
-
-describe( 'setBlockPatternCategories', () => {
-	beforeEach( () => {
-		mockRegistrySelect.mockReset();
-		mockRegistryDispatch.mockReset();
-	} );
-
-	test( 'supports future stable writes when WordPress provides blockPatternCategories', () => {
-		mockBlockEditorStore( {
-			blockPatternCategories: [ { name: 'featured', label: 'Featured' } ],
-			__experimentalBlockPatternCategories: [],
-		} );
-		const updateSettings = mockUpdateSettings();
-
-		const nextCategories = [
-			{ name: 'recommended', label: 'Recommended' },
-		];
-		setBlockPatternCategories( nextCategories );
-
-		expect( updateSettings ).toHaveBeenCalledWith( {
-			blockPatternCategories: nextCategories,
-		} );
-	} );
-
-	test( 'writes to experimental key when stable key is absent', () => {
-		mockBlockEditorStore( {
-			__experimentalBlockPatternCategories: [
-				{ name: 'featured', label: 'Featured' },
-			],
-		} );
-		const updateSettings = mockUpdateSettings();
-
-		const nextCategories = [
-			{ name: 'recommended', label: 'Recommended' },
-		];
-		setBlockPatternCategories( nextCategories );
-
-		expect( updateSettings ).toHaveBeenCalledWith( {
-			__experimentalBlockPatternCategories: nextCategories,
-		} );
-	} );
-
-	test( 'writes to __experimentalAdditionalBlockPatternCategories when that key is populated', () => {
-		mockBlockEditorStore( {
-			__experimentalAdditionalBlockPatternCategories: [
-				{ name: 'featured', label: 'Featured' },
-			],
-			__experimentalBlockPatternCategories: [
-				{ name: 'stale', label: 'Stale' },
-			],
-		} );
-		const updateSettings = mockUpdateSettings();
-
-		const nextCategories = [
-			{ name: 'recommended', label: 'Recommended' },
-		];
-		setBlockPatternCategories( nextCategories );
-
-		expect( updateSettings ).toHaveBeenCalledWith( {
-			__experimentalAdditionalBlockPatternCategories: nextCategories,
-		} );
-	} );
-
-	test( 'defaults to experimental key when neither categories key exists', () => {
-		mockBlockEditorStore( {} );
-		const updateSettings = mockUpdateSettings();
-
-		setBlockPatternCategories( [
-			{ name: 'recommended', label: 'Recommended' },
-		] );
-
-		expect( updateSettings ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				__experimentalBlockPatternCategories: [
-					{ name: 'recommended', label: 'Recommended' },
-				],
-			} )
-		);
 	} );
 } );
 

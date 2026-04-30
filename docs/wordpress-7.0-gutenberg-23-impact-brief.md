@@ -1,16 +1,17 @@
 # Flavor Agent Impact Brief: WordPress 7.0 and Gutenberg 23
 
 > Compiled: 2026-04-23
-> Scope: current upstream release posture plus the concrete impact on this repo's shipped code and docs
-> Use this file for the maintained compatibility snapshot.
-> Use `docs/wordpress-7.0-developer-docs-index.md` for the broader upstream source map, `docs/wp7-migration-opportunities.md` for the older migration snapshot, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` for the active overlap-remediation backlog.
+> Reviewed: 2026-04-30
+> Scope: dated upstream release posture plus the concrete impact on this repo's shipped code and docs
+> Status: retained as a point-in-time compatibility snapshot for the WordPress 7.0 / Gutenberg 23.0 release cycle. Use `docs/reference/gutenberg-feature-tracking.md` for ongoing Gutenberg/API tracking and `docs/reference/wordpress-ai-roadmap-tracking.md` for ongoing WordPress AI roadmap pressure.
+> Use `docs/wordpress-7.0-developer-docs-index.md` for the broader upstream source map, `docs/wp7-migration-opportunities.md` for the older migration snapshot, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md` for the overlap-remediation backlog.
 
 ## Current Upstream Snapshot
 
 | Topic | Current state | Why it matters here |
 | --- | --- | --- |
 | WordPress 7.0 schedule | Core published an updated 7.0 schedule on 2026-04-22. The new target general release is 2026-05-20. `RC3` lands 2026-05-08 but should be tested like a "new Beta 1", and `RC4` lands 2026-05-14 acting like a new `RC1`. | Repo docs should no longer say the updated schedule is still pending. |
-| WordPress 7.0 release mode | 7.0 remains pre-release as of 2026-04-23. The cycle is still in stabilization mode after the RTC architecture delay. | Keep the dedicated WP 7.0 browser harness framed as a pre-release compatibility path. |
+| WordPress 7.0 release mode | 7.0 remains pre-release as of the 2026-04-30 review. The cycle is still in stabilization mode after the RTC architecture delay. | Keep the dedicated WP 7.0 browser harness framed as a pre-release compatibility path until the repo intentionally moves to the stable image. |
 | Gutenberg plugin latest | The latest Gutenberg plugin release is `23.0.0`, published 2026-04-22. | Useful for forward-compat testing and upstream watch items, but not a signal that WordPress core 7.0 will ship every 23.0 API unchanged. |
 | Gutenberg in core | The Block Editor handbook still lists WordPress `7.0.x` as based on Gutenberg `22.6`, with later bug fixes cherry-picked as needed during beta/RC. | Flavor Agent should keep runtime assumptions anchored to WordPress 7.0 core behavior first, and treat 22.7-23.0 as supplemental compatibility context. |
 | Main upstream pressure point | The release delay is about RTC persistence and hosting compatibility, especially around cache behavior and plugin metabox compatibility. | Flavor Agent does not ship classic metabox UI or RTC transport/storage code, so this is not a direct product blocker. |
@@ -136,14 +137,15 @@ Action:
 - Continue describing connector-backed chat as a first-class path.
 - Avoid wording that implies community providers are fringe or unsupported by concept.
 
-### 4. Re-run the pre-release browser evidence once Docker is available
+### 4. Keep WP 7.0 browser evidence fresh
 
-The remaining WP 7.0 blocker in this repo is still test execution and behavior, not release-note drift.
+This item is no longer blocked by local Docker availability or unresolved WP 7.0 E2E reds in the current checkout. `STATUS.md` records that `npm run test:e2e:wp70` passed on 2026-04-29 with `14 passed / 0 failed`, and `output/verify/summary.json` records a full aggregate pass including `e2e-wp70`.
 
 Action:
 
-- Keep the current product blockers in `STATUS.md`.
-- Do not confuse those test failures with a need for fresh WordPress 7.0 migration work.
+- Keep the current green evidence in `STATUS.md`, `docs/reference/cross-surface-validation-gates.md`, and `output/verify/summary.json` aligned after each significant harness rerun.
+- Re-run `npm run test:e2e:wp70` after any prerelease image update, stable-image swap, Site Editor/template/style change, or RTC-related upstream change.
+- Do not treat historical 2026-04-22 WP 7.0 browser reds as current blockers unless a fresh rerun reproduces them.
 
 ## No New Product Work Required From This Refresh
 

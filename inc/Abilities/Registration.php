@@ -1064,10 +1064,7 @@ final class Registration {
 						],
 					],
 				],
-				'meta'                => [
-					'show_in_rest' => true,
-					'readonly'     => true,
-				],
+				'meta'                => self::readonly_rest_meta(),
 			]
 		);
 	}
@@ -1160,10 +1157,7 @@ final class Registration {
 						'blockPseudoStyles' => [ 'type' => 'object' ],
 					],
 				],
-				'meta'                => [
-					'show_in_rest' => true,
-					'readonly'     => true,
-				],
+				'meta'                => self::readonly_rest_meta(),
 			]
 		);
 
@@ -1238,10 +1232,7 @@ final class Registration {
 						],
 					],
 				],
-				'meta'                => [
-					'show_in_rest' => true,
-					'readonly'     => true,
-				],
+				'meta'                => self::readonly_rest_meta(),
 			]
 		);
 	}
@@ -1256,6 +1247,11 @@ final class Registration {
 			'mcp'          => [
 				'public' => true,
 			],
+			'annotations'  => [
+				'readOnlyHint' => true,
+				'destructive'  => false,
+				'idempotent'   => false,
+			],
 		];
 	}
 
@@ -1263,6 +1259,11 @@ final class Registration {
 		return [
 			'show_in_rest' => true,
 			'readonly'     => true,
+			'annotations'  => [
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			],
 		];
 	}
 

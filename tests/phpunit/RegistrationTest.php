@@ -137,6 +137,107 @@ final class RegistrationTest extends TestCase {
 		);
 	}
 
+	public function test_register_abilities_emits_annotations_for_recommend_abilities(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$expected = [
+			'readOnlyHint' => true,
+			'destructive'  => false,
+			'idempotent'   => false,
+		];
+
+		foreach ( [
+			'flavor-agent/recommend-block',
+			'flavor-agent/recommend-content',
+			'flavor-agent/recommend-patterns',
+			'flavor-agent/recommend-template',
+			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-navigation',
+			'flavor-agent/recommend-style',
+		] as $ability_id ) {
+			$ability     = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+			$annotations = $ability['meta']['annotations'] ?? null;
+
+			$this->assertIsArray( $annotations, "{$ability_id} should declare meta.annotations." );
+			$this->assertArrayNotHasKey( 'readonly', $annotations, "{$ability_id} must keep WP-format readonly unset so core executes it with POST." );
+			$this->assertSame( $expected, $annotations, "{$ability_id} should declare LLM-invoking annotations." );
+		}
+	}
+
+	public function test_register_abilities_emits_annotations_for_read_abilities(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$expected = [
+			'readonly'    => true,
+			'destructive' => false,
+			'idempotent'  => true,
+		];
+
+		foreach ( [
+			'flavor-agent/introspect-block',
+			'flavor-agent/list-allowed-blocks',
+			'flavor-agent/list-patterns',
+			'flavor-agent/get-pattern',
+			'flavor-agent/list-synced-patterns',
+			'flavor-agent/get-synced-pattern',
+			'flavor-agent/list-template-parts',
+			'flavor-agent/get-active-theme',
+			'flavor-agent/get-theme-presets',
+			'flavor-agent/get-theme-styles',
+			'flavor-agent/get-theme-tokens',
+			'flavor-agent/check-status',
+			'flavor-agent/search-wordpress-docs',
+		] as $ability_id ) {
+			$ability     = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+			$annotations = $ability['meta']['annotations'] ?? null;
+
+			$this->assertIsArray( $annotations, "{$ability_id} should declare meta.annotations." );
+			$this->assertSame( $expected, $annotations, "{$ability_id} should declare read-only annotations." );
+		}
+	}
+
+	public function test_register_abilities_annotation_expectations_cover_every_registered_ability(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$expected = [
+			'flavor-agent/recommend-block',
+			'flavor-agent/recommend-content',
+			'flavor-agent/recommend-patterns',
+			'flavor-agent/recommend-template',
+			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-navigation',
+			'flavor-agent/recommend-style',
+			'flavor-agent/introspect-block',
+			'flavor-agent/list-allowed-blocks',
+			'flavor-agent/list-patterns',
+			'flavor-agent/get-pattern',
+			'flavor-agent/list-synced-patterns',
+			'flavor-agent/get-synced-pattern',
+			'flavor-agent/list-template-parts',
+			'flavor-agent/get-active-theme',
+			'flavor-agent/get-theme-presets',
+			'flavor-agent/get-theme-styles',
+			'flavor-agent/get-theme-tokens',
+			'flavor-agent/check-status',
+			'flavor-agent/search-wordpress-docs',
+		];
+
+		$actual = array_keys( WordPressTestState::$registered_abilities );
+		sort( $expected );
+		sort( $actual );
+
+		$this->assertSame( $expected, $actual, 'Every registered ability should be assigned to an annotation group.' );
+
+		foreach ( $actual as $ability_id ) {
+			$annotations = WordPressTestState::$registered_abilities[ $ability_id ]['meta']['annotations'] ?? null;
+
+			$this->assertIsArray( $annotations, "{$ability_id} should declare meta.annotations." );
+		}
+	}
+
 	public function test_selected_block_schema_bounds_parent_and_sibling_summaries(): void {
 		Registration::register_category();
 		Registration::register_abilities();

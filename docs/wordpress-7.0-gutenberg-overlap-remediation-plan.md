@@ -1,10 +1,11 @@
 # Flavor Agent Remediation Plan: WordPress 7.0 and Gutenberg Overlap
 
 > Compiled: 2026-04-23
+> Reviewed: 2026-04-30
 > Scope: active remediation plan for current repo findings where Flavor Agent duplicates Gutenberg or WordPress 7.0 functionality, or owns the right surface but in the wrong way
-> Status: active plan, with workstreams 1 and 2 now implemented in the current repo state
+> Status: active backlog with Workstreams A-C complete, Workstream D read bridge implemented / write migration pending, and Workstream E pending
 > Supersedes: relevant forward-looking overlap items in `docs/wp7-migration-opportunities.md` where the two documents conflict
-> Upstream pressure source: see `docs/reference/wordpress-ai-roadmap-tracking.md` for the live snapshot of WordPress org project 240 board items that motivate workstreams C, D, and E. New upstream pressures without a workstream yet are listed there under **Action Implications** with a "not yet covered" marker.
+> Upstream pressure source: see `docs/reference/wordpress-ai-roadmap-tracking.md` for the live snapshot of WordPress org project 240 board items and `docs/reference/gutenberg-feature-tracking.md` for the Gutenberg/API matrix. New upstream pressures without a workstream yet are listed in those docs under **Action Implications** with a "not yet covered" marker.
 
 ## Objective
 
@@ -29,13 +30,19 @@ Completed on 2026-04-28:
 
 - Workstream 3: chat is now owned by Settings > Connectors via the WordPress AI Client. Direct Azure and OpenAI Native chat fields (`flavor_agent_azure_chat_deployment`, `flavor_agent_openai_native_chat_model`) and the corresponding sanitizers, validators, settings UI rows, and runtime fallback paths are removed. `ChatClient::chat()` and `ResponsesClient::rank()` now route every chat call through `WordPressAIClient::chat()`. Plugin settings retain Azure and OpenAI Native credentials only for embeddings, which Connectors does not yet provide.
 
-In progress as of 2026-04-28:
+Read bridge implemented on 2026-04-28; write migration pending:
 
 - Workstream 4: Guidelines bridge to core storage. The first bridge slice adds storage-agnostic reads, core/Gutenberg feature detection for the emerging `wp_guideline` / `wp_guideline_type` model, legacy option fallback, migration status scaffolding, prompt consumption, and settings copy that frames current fields as migration tooling when core Guidelines storage is present. A write migration into core storage remains intentionally deferred until the public API and final data model settle.
 
 Still pending:
 
 - Workstream 5: `DataForm`-based settings screen rebuild
+
+Current live tracking:
+
+- `docs/reference/wordpress-ai-roadmap-tracking.md` is the source for WordPress AI project-board pressure and unmapped AI overlap items, including observability, Site Agent, ability exposure, lifecycle logging, and prompt-template extension points.
+- `docs/reference/gutenberg-feature-tracking.md` is the source for Gutenberg/API pressure and unmapped editor overlap items, including ability annotations, pattern shim collapse, navigation sidebar, Block Fields/Bindings, RTC rollout, and possible core-revisions handoff.
+- This remediation plan remains the action-oriented backlog only after a watch item moves from "track" to "implement."
 
 ## Final Product Decisions
 
@@ -178,6 +185,7 @@ Result:
 - no native registry writes on the pattern surface
 - no docs that claim Flavor Agent rewrites pattern metadata or categories
 - pattern insert still works from the Flavor Agent shelf
+- post-reset compatibility audit completed 2026-04-30: required stable/experimental read shims remain, while unused `setBlockPatterns()` and `setBlockPatternCategories()` adapter exports were removed.
 
 ## Workstream B: Block Inspector Ownership Reset
 
@@ -419,9 +427,9 @@ This plan does not remove the plugin's real product value:
 
 The overlap remediation is complete when all of the following are true:
 
-1. Flavor Agent no longer rewrites Gutenberg pattern registry data.
-2. Block recommendations have one executable surface, not several mirrored ones.
-3. Chat provider setup is Connectors-first, with plugin chat config removed.
-4. Guidelines read through a core-first bridge instead of a permanent plugin-only store.
-5. The settings screen uses WordPress admin primitives for forms rather than a large bespoke controller.
-6. Docs and tests describe the new ownership model consistently.
+1. [x] Flavor Agent no longer rewrites Gutenberg pattern registry data.
+2. [x] Block recommendations have one executable surface, not several mirrored ones.
+3. [x] Chat provider setup is Connectors-first, with plugin chat config removed.
+4. [x] Guidelines read through a core-first bridge instead of a permanent plugin-only store.
+5. [ ] The settings screen uses WordPress admin primitives for forms rather than a large bespoke controller.
+6. [ ] Docs and tests describe the completed Workstream E ownership model consistently.

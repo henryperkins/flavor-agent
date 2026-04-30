@@ -434,11 +434,11 @@ Builds the client-side `blockOperationContext` used by the narrow block structur
 
 ### `src/patterns/compat.js`
 
-Re-export facade that centralizes `pattern-settings.js` and `inserter-dom.js` into a single public API surface. Feature surfaces that only need pattern reads/writes or inserter DOM access import through this barrel.
+Re-export facade that centralizes `pattern-settings.js` and `inserter-dom.js` into a single public API surface. Feature surfaces that need pattern reads, allowed-pattern diagnostics, or inserter DOM access import through this barrel.
 
 ### `src/patterns/pattern-settings.js`
 
-Three-tier pattern API adapter: resolves stable settings keys first (`blockPatterns`), then `__experimentalAdditionalBlockPatterns`, then `__experimentalBlockPatterns`. Provides `getBlockPatterns()`, `setBlockPatterns()`, `getAllowedPatterns()`, and runtime diagnostics.
+Three-tier read-only pattern API adapter: resolves stable settings keys first (`blockPatterns`), then `__experimentalAdditionalBlockPatterns`, then `__experimentalBlockPatterns`. Provides `getBlockPatterns()`, `getBlockPatternCategories()`, `getAllowedPatterns()`, and runtime diagnostics. The old write helpers were removed after the 2026-04-30 compatibility audit confirmed no production caller writes native pattern settings.
 
 ### `src/patterns/inserter-dom.js`
 

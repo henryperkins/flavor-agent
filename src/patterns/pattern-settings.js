@@ -1,7 +1,4 @@
-import {
-	select as registrySelect,
-	dispatch as registryDispatch,
-} from '@wordpress/data';
+import { select as registrySelect } from '@wordpress/data';
 
 const blockEditorStore = 'core/block-editor';
 
@@ -118,30 +115,12 @@ export function getBlockPatterns( blockEditor ) {
 	return Array.isArray( patterns ) ? patterns : [];
 }
 
-export function setBlockPatterns( patterns ) {
-	const settings = getSettings();
-	const key = resolvePatternsKey( settings );
-
-	registryDispatch( blockEditorStore ).updateSettings( {
-		[ key ]: patterns,
-	} );
-}
-
 export function getBlockPatternCategories() {
 	const settings = getSettings();
 	const key = resolveCategoriesKey( settings );
 	const categories = settings[ key ];
 
 	return Array.isArray( categories ) ? categories : [];
-}
-
-export function setBlockPatternCategories( categories ) {
-	const settings = getSettings();
-	const key = resolveCategoriesKey( settings );
-
-	registryDispatch( blockEditorStore ).updateSettings( {
-		[ key ]: categories,
-	} );
 }
 
 export function getAllowedPatterns( rootClientId = null, blockEditor ) {
