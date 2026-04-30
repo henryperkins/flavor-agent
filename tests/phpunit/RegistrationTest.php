@@ -46,10 +46,13 @@ final class RegistrationTest extends TestCase {
 		$block_ability = WordPressTestState::$registered_abilities['flavor-agent/recommend-block'] ?? [];
 		$suggestion    = $block_ability['output_schema']['properties']['block']['items'] ?? [];
 		$operation     = $suggestion['properties']['operations']['items'] ?? [];
+		$proposal      = $suggestion['properties']['proposedOperations']['items'] ?? [];
+		$rejection     = $suggestion['properties']['rejectedOperations']['items'] ?? [];
 
 		$this->assertSame( 'array', $suggestion['properties']['operations']['type'] ?? null );
 		$this->assertSame( 'array', $suggestion['properties']['proposedOperations']['type'] ?? null );
 		$this->assertSame( 'array', $suggestion['properties']['rejectedOperations']['type'] ?? null );
+		$this->assertSame( $operation['properties'], $proposal['properties'] ?? null );
 		$this->assertSame(
 			[
 				BlockOperationValidator::INSERT_PATTERN,
@@ -69,7 +72,15 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( [ 'object', 'null' ], $operation['properties']['expectedTarget']['type'] ?? null );
 		$this->assertSame(
 			[ 'string', 'null' ],
+			$operation['properties']['expectedTarget']['properties']['clientId']['type'] ?? null
+		);
+		$this->assertSame(
+			[ 'string', 'null' ],
 			$operation['properties']['expectedTarget']['properties']['name']['type'] ?? null
+		);
+		$this->assertSame(
+			[ 'object', 'null' ],
+			$rejection['properties']['operation']['type'] ?? null
 		);
 		$this->assertContains(
 			BlockOperationValidator::ERROR_CLIENT_SERVER_OPERATION_MISMATCH,

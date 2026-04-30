@@ -42,7 +42,7 @@ Read:
 
 Run:
 
-- `node skills/wp-performance/scripts/perf_inspect.mjs --path=<path> [--url=<url>]`
+- `node .codex/skills/wp-performance/scripts/perf_inspect.mjs --path=<path> [--url=<url>]`
 
 This detects:
 

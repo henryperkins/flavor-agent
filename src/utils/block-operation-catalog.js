@@ -158,11 +158,56 @@ function getAllowedPatternLookup( allowedPatterns = [] ) {
 	return new Map( entries );
 }
 
+function sanitizeOperationPayload( rawOperation ) {
+	if (
+		! rawOperation ||
+		typeof rawOperation !== 'object' ||
+		Array.isArray( rawOperation )
+	) {
+		return null;
+	}
+
+	const payload = {};
+
+	for ( const field of [
+		'catalogVersion',
+		'type',
+		'patternName',
+		'targetClientId',
+		'position',
+		'action',
+		'targetSignature',
+		'targetSurface',
+		'targetType',
+		'surface',
+	] ) {
+		if ( rawOperation[ field ] === undefined ) {
+			continue;
+		}
+
+		if ( field === 'catalogVersion' ) {
+			const catalogVersion = Number.parseInt( rawOperation[ field ], 10 );
+
+			if ( Number.isFinite( catalogVersion ) ) {
+				payload[ field ] = catalogVersion;
+			}
+
+			continue;
+		}
+
+		if ( typeof rawOperation[ field ] === 'string' ) {
+			payload[ field ] = rawOperation[ field ].trim();
+		}
+	}
+
+	return payload;
+}
+
 function rejectOperation( rawOperation, code, message ) {
 	return {
 		code,
 		message,
-		operation: rawOperation || null,
+		operation: sanitizeOperationPayload( rawOperation ),
 	};
 }
 
@@ -301,7 +346,7 @@ function validateSharedOperationFields( rawOperation, context, patternLookup ) {
 
 	const contextTargetClientId = getContextTargetClientId( context );
 
-	if ( contextTargetClientId && targetClientId !== contextTargetClientId ) {
+	if ( ! contextTargetClientId || targetClientId !== contextTargetClientId ) {
 		return rejectOperation(
 			rawOperation,
 			BLOCK_OPERATION_ERROR_STALE_TARGET,

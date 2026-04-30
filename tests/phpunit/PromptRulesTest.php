@@ -9,6 +9,27 @@ use PHPUnit\Framework\TestCase;
 
 final class PromptRulesTest extends TestCase {
 
+	public function test_build_system_describes_catalog_operations_as_validator_owned_proposals(): void {
+		$system = Prompt::build_system();
+
+		$this->assertStringContainsString(
+			'Structural_recommendation and pattern_replacement block items are advisory-only unless they include exactly one operation from the allowed catalog shown in the prompt.',
+			$system
+		);
+		$this->assertStringContainsString(
+			'Do not include attributeUpdates on structural_recommendation or pattern_replacement items.',
+			$system
+		);
+		$this->assertStringContainsString(
+			'Do not invent proposedOperations or rejectedOperations',
+			$system
+		);
+		$this->assertStringNotContainsString(
+			'Structural_recommendation and pattern_replacement block items are advisory-only. Omit panel',
+			$system
+		);
+	}
+
 	public function test_enforce_block_context_rules_returns_empty_payload_for_disabled_blocks(): void {
 		$result = Prompt::enforce_block_context_rules(
 			[

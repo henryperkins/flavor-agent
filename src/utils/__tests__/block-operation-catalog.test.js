@@ -320,6 +320,22 @@ describe( 'block operation catalog', () => {
 			[ BLOCK_OPERATION_ERROR_STALE_TARGET ],
 		],
 		[
+			'missing target contexts',
+			[
+				{
+					type: BLOCK_OPERATION_INSERT_PATTERN,
+					patternName: 'flavor-agent/cta-with-image',
+					targetClientId: 'block-1',
+					position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+				},
+			],
+			{
+				...baseContext,
+				targetClientId: '',
+			},
+			[ BLOCK_OPERATION_ERROR_STALE_TARGET ],
+		],
+		[
 			'stale target signatures',
 			[
 				{
@@ -425,5 +441,34 @@ describe( 'block operation catalog', () => {
 		expect( result.ok ).toBe( false );
 		expect( result.operations ).toEqual( [] );
 		expect( getRejectedCodes( result ) ).toEqual( expectedCodes );
+	} );
+
+	test( 'sanitizes rejected operation payloads', () => {
+		const result = validateBlockOperationSequence(
+			[
+				{
+					catalogVersion: '1',
+					type: BLOCK_OPERATION_INSERT_PATTERN,
+					patternName: 'theme/missing-pattern',
+					targetClientId: 'block-1',
+					position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+					target: {
+						clientId: 'nested-block',
+					},
+					unexpected: {
+						value: '<script>alert(1)</script>',
+					},
+				},
+			],
+			baseContext
+		);
+
+		expect( result.rejectedOperations[ 0 ].operation ).toEqual( {
+			catalogVersion: BLOCK_OPERATION_CATALOG_VERSION,
+			type: BLOCK_OPERATION_INSERT_PATTERN,
+			patternName: 'theme/missing-pattern',
+			targetClientId: 'block-1',
+			position: BLOCK_OPERATION_ACTION_INSERT_AFTER,
+		} );
 	} );
 } );

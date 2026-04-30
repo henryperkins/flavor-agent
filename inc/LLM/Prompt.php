@@ -93,6 +93,8 @@ Each item in block is an object:
 	"attributeUpdates": { "attributeName": "value" },
 	"panel": "Optional for executable block items when helpful; omit it for advisory structural/pattern ideas",
 	"operations": [],
+	"proposedOperations": [],
+	"rejectedOperations": [],
   "currentValue": "Optional: current value for before/after display",
   "suggestedValue": "Optional: suggested value for before/after display",
   "isCurrentStyle": "Optional boolean for style variation items",
@@ -111,10 +113,12 @@ Rules:
 - If inspectorPanels is an empty object or array, treat that as an explicit signal that no mapped Inspector panels are available — not that the field was omitted. Do not say the panels were not provided.
 - You may still suggest a registered style variation as a block-level "style_variation" item when styles are provided and one is clearly beneficial, even if inspectorPanels is empty.
 - When a block has little or no direct Inspector surface, you may use the block array for advisory suggestions about parent containers, structural composition, or replacing the block with a more suitable pattern.
-- Structural_recommendation and pattern_replacement block items are advisory-only. Omit panel for those items unless it materially clarifies the idea, and do not include attributeUpdates.
+- Structural_recommendation and pattern_replacement block items are advisory-only unless they include exactly one operation from the allowed catalog shown in the prompt. Even then, the operation is only a proposal; the plugin validator decides whether it becomes review-safe metadata. Omit panel for those items unless it materially clarifies the idea.
+- Do not include attributeUpdates on structural_recommendation or pattern_replacement items. If a local selected-block attribute update is also useful, emit it as a separate attribute_change item.
 - Advisory block suggestions must not invent executable attributeUpdates for ancestor blocks, wrappers, or replacement patterns. Only include attributeUpdates when the selected block's own local attributes can be changed safely.
 - If you need to suggest both a local selected-block mutation and a broader structural idea, emit two separate suggestions instead of combining them into one item.
 - Every block-lane item must include operations. Use [] for ordinary attribute-only recommendations.
+- Do not invent proposedOperations or rejectedOperations; return [] for those fields when present. The plugin derives them after validation.
 - When allowed block pattern actions are provided, you may propose at most one operation from the catalog.
 - Use insert_pattern only with position insert_before or insert_after.
 - Use replace_block_with_pattern only when the allowed pattern lists replace.

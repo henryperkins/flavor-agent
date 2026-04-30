@@ -296,31 +296,39 @@ final class ResponseSchema {
 	private static function block_block_item_schema(): array {
 		return self::strict_object(
 			[
-				'label'            => [ 'type' => 'string' ],
-				'description'      => [ 'type' => 'string' ],
-				'type'             => [
+				'label'              => [ 'type' => 'string' ],
+				'description'        => [ 'type' => 'string' ],
+				'type'               => [
 					'type' => [ 'string', 'null' ],
 					'enum' => [ 'attribute_change', 'style_variation', 'structural_recommendation', 'pattern_replacement', null ],
 				],
-				'attributeUpdates' => [
+				'attributeUpdates'   => [
 					'type' => [ 'object', 'null' ],
 				],
-				'panel'            => [
+				'panel'              => [
 					'type' => [ 'string', 'null' ],
 					'enum' => array_merge( self::BLOCK_PANELS, [ null ] ),
 				],
-				'operations'       => [
+				'operations'         => [
 					'type'  => 'array',
 					'items' => self::block_operation_schema(),
 				],
-				'currentValue'     => self::any_value(),
-				'suggestedValue'   => self::any_value(),
-				'isCurrentStyle'   => self::nullable_boolean(),
-				'isRecommended'    => self::nullable_boolean(),
-				'confidence'       => self::nullable_number(),
-				'preview'          => self::nullable_string(),
-				'presetSlug'       => self::nullable_string(),
-				'cssVar'           => self::nullable_string(),
+				'proposedOperations' => [
+					'type'  => 'array',
+					'items' => self::block_operation_schema(),
+				],
+				'rejectedOperations' => [
+					'type'  => 'array',
+					'items' => self::block_operation_rejection_schema(),
+				],
+				'currentValue'       => self::any_value(),
+				'suggestedValue'     => self::any_value(),
+				'isCurrentStyle'     => self::nullable_boolean(),
+				'isRecommended'      => self::nullable_boolean(),
+				'confidence'         => self::nullable_number(),
+				'preview'            => self::nullable_string(),
+				'presetSlug'         => self::nullable_string(),
+				'cssVar'             => self::nullable_string(),
 			]
 		);
 	}
@@ -340,7 +348,32 @@ final class ResponseSchema {
 				'targetSignature' => self::nullable_string(),
 				'targetSurface'   => self::nullable_string(),
 				'targetType'      => self::nullable_string(),
-				'expectedTarget'  => self::nullable_expected_target_schema(),
+				'expectedTarget'  => self::nullable_block_operation_expected_target_schema(),
+			]
+		);
+	}
+
+	private static function block_operation_rejection_schema(): array {
+		return self::strict_object(
+			[
+				'code'      => self::nullable_string(),
+				'message'   => self::nullable_string(),
+				'operation' => [
+					'type'                 => [ 'object', 'null' ],
+					'additionalProperties' => true,
+				],
+			]
+		);
+	}
+
+	private static function nullable_block_operation_expected_target_schema(): array {
+		return self::nullable_strict_object(
+			[
+				'clientId'   => self::nullable_string(),
+				'name'       => self::nullable_string(),
+				'label'      => self::nullable_string(),
+				'attributes' => [ 'type' => [ 'object', 'null' ] ],
+				'childCount' => self::nullable_integer(),
 			]
 		);
 	}

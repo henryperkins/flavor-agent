@@ -17,6 +17,25 @@ final class ChatClientTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
+	public function test_block_response_schema_exposes_normalized_operation_diagnostics(): void {
+		$schema     = ResponseSchema::get( 'block' );
+		$suggestion = $schema['properties']['block']['items'] ?? [];
+		$operation  = $suggestion['properties']['operations']['items'] ?? [];
+		$rejection  = $suggestion['properties']['rejectedOperations']['items'] ?? [];
+
+		$this->assertSame( 'array', $suggestion['properties']['operations']['type'] ?? null );
+		$this->assertSame( 'array', $suggestion['properties']['proposedOperations']['type'] ?? null );
+		$this->assertSame( 'array', $suggestion['properties']['rejectedOperations']['type'] ?? null );
+		$this->assertSame(
+			[ 'string', 'null' ],
+			$operation['properties']['expectedTarget']['properties']['clientId']['type'] ?? null
+		);
+		$this->assertSame(
+			[ 'object', 'null' ],
+			$rejection['properties']['operation']['type'] ?? null
+		);
+	}
+
 	public function test_is_supported_when_wordpress_ai_client_has_a_text_generation_provider(): void {
 		WordPressTestState::$ai_client_supported = true;
 
