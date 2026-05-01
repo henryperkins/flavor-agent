@@ -28,9 +28,9 @@ Use this skill for block work such as:
 ### 0) Triage and locate blocks
 
 1. Run triage:
-   - `node skills/wp-project-triage/scripts/detect_wp_project.mjs`
+   - `node .codex/skills/wp-project-triage/scripts/detect_wp_project.mjs`
 2. List blocks (deterministic scan):
-   - `node skills/wp-block-development/scripts/list_blocks.mjs`
+   - `node .codex/skills/wp-block-development/scripts/list_blocks.mjs`
 3. Identify the block root (directory containing `block.json`) you’re changing.
 
 If this repo is a full site (`wp-content/` present), be explicit about *which* plugin/theme contains the block.

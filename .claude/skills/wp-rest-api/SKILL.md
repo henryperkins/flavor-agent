@@ -29,7 +29,7 @@ Use this skill when you need to:
 ### 0) Triage and locate REST usage
 
 1. Run triage:
-   - `node skills/wp-project-triage/scripts/detect_wp_project.mjs`
+   - `node .codex/skills/wp-project-triage/scripts/detect_wp_project.mjs`
 2. Search for existing REST usage:
    - `register_rest_route`
    - `WP_REST_Controller`

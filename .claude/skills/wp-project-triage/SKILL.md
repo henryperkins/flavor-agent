@@ -17,9 +17,9 @@ Use this skill to quickly understand what kind of WordPress repo you’re in and
 ## Procedure
 
 1. Run the detector (prints JSON to stdout):
-   - `node skills/wp-project-triage/scripts/detect_wp_project.mjs`
+   - `node .codex/skills/wp-project-triage/scripts/detect_wp_project.mjs`
 2. If you need the exact output contract, read:
-   - `skills/wp-project-triage/references/triage.schema.json`
+   - `.codex/skills/wp-project-triage/references/triage.schema.json`
 3. Use the report to select workflow guardrails:
    - project kind(s)
    - PHP/Node tooling present
