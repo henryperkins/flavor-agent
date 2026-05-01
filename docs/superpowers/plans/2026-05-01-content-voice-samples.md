@@ -58,16 +58,18 @@ public function test_required_sections_are_never_dropped_even_over_budget(): voi
     $this->assertGreaterThan( $budget->get_max_tokens(), PromptBudget::estimate_tokens( $result ) );
 }
 
-public function test_optional_sections_drop_in_priority_order_when_required_present(): void {
+public function test_lower_priority_required_outlasts_higher_priority_optional(): void {
+    // Without the required flag, optional_high (priority 100) would survive
+    // and required_low (priority 10) would drop first. With the required
+    // flag honored, required_low survives even though it has lower priority.
     $budget = new PromptBudget( 2000 );
-    $budget->add_section( 'required', 'required content', 100, true );
-    $budget->add_section( 'low', str_repeat( 'l', 5000 ), 10, false );
-    $budget->add_section( 'medium', str_repeat( 'm', 5000 ), 50, false );
+    $budget->add_section( 'required_low', 'required content', 10, true );
+    $budget->add_section( 'optional_high', str_repeat( 'h', 8000 ), 100, false );
 
     $result = $budget->assemble();
 
     $this->assertStringContainsString( 'required content', $result );
-    $this->assertStringNotContainsString( str_repeat( 'l', 100 ), $result );
+    $this->assertStringNotContainsString( str_repeat( 'h', 100 ), $result );
 }
 
 public function test_default_required_false_preserves_existing_behavior(): void {
@@ -91,15 +93,40 @@ public function test_diagnostics_includes_required_flag(): void {
     $this->assertTrue( $diagnostics['sections'][0]['required'] );
     $this->assertFalse( $diagnostics['sections'][1]['required'] );
 }
+
+public function test_equal_priority_drops_last_inserted_first(): void {
+    // Regression: TemplatePart/Template/Style prompts add multiple
+    // equal-priority sections (e.g. few_shot_0/1/2 at priority 10).
+    // The original get_lowest_priority_index dropped the last-inserted
+    // equal-priority section first; the new removable variant must
+    // preserve that tie-breaker for non-required sections.
+    $budget = new PromptBudget( 2000 );
+    $budget->add_section( 'identity', 'identity content', 100 );
+    $budget->add_section( 'few_shot_0', str_repeat( '0', 4000 ), 10 );
+    $budget->add_section( 'few_shot_1', str_repeat( '1', 4000 ), 10 );
+    $budget->add_section( 'few_shot_2', str_repeat( '2', 4000 ), 10 );
+
+    $result = $budget->assemble();
+
+    // few_shot_2 (last inserted at priority 10) is the first to drop.
+    $this->assertStringContainsString( 'identity content', $result );
+    $this->assertStringContainsString( str_repeat( '0', 100 ), $result );
+    $this->assertStringNotContainsString( str_repeat( '2', 100 ), $result );
+}
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify the new behavior is missing**
 
 ```
 vendor/bin/phpunit --filter PromptBudgetTest
 ```
 
-Expected: 4 failures — `add_section` does not accept a 4th parameter; `get_diagnostics` does not return `required`.
+Expected: 3 failures.
+- `test_required_sections_are_never_dropped_even_over_budget` fails because the original code drops sections in priority order regardless of any caller intent — the b-string drops alongside optional, and the result fits under budget instead of exceeding it.
+- `test_lower_priority_required_outlasts_higher_priority_optional` fails because the original code drops `required_low` (priority 10) before `optional_high` (priority 100), inverting the desired behavior.
+- `test_diagnostics_includes_required_flag` fails because `get_diagnostics` doesn't yet return a `required` key.
+
+The two remaining new tests already pass against the existing implementation: `test_default_required_false_preserves_existing_behavior` exercises today's drop-by-priority order, and `test_equal_priority_drops_last_inserted_first` is a regression check that the new backward scan plus strict-less comparison reproduces the original tie-breaker.
 
 - [ ] **Step 3: Update PromptBudget**
 
@@ -162,7 +189,7 @@ public function assemble(): string {
 }
 ```
 
-Replace `get_lowest_priority_index` with:
+Replace `get_lowest_priority_index` with the version below. The scan walks **backward** so equal-priority sections drop in the same order the existing implementation produced — last-inserted first. `TemplatePartPrompt` and `TemplatePrompt` add multiple equal-priority `few_shot_<N>` and similar sections (e.g., `inc/LLM/TemplatePartPrompt.php:296`), and a forward scan would silently flip which examples survive a tight budget. Strict-less comparison combined with the backward walk reproduces the existing `get_lowest_priority_index` behavior exactly when no section is marked required:
 
 ```php
 /**
@@ -172,7 +199,9 @@ private static function get_lowest_priority_removable_index( array $sections ): 
     $lowest_index    = null;
     $lowest_priority = PHP_INT_MAX;
 
-    foreach ( $sections as $index => $section ) {
+    for ( $index = count( $sections ) - 1; $index >= 0; --$index ) {
+        $section = $sections[ $index ];
+
         if ( ! empty( $section['required'] ) ) {
             continue;
         }
@@ -217,7 +246,7 @@ public function get_diagnostics(): array {
 vendor/bin/phpunit --filter PromptBudgetTest
 ```
 
-Expected: All PromptBudgetTest tests pass (existing + 4 new).
+Expected: All PromptBudgetTest tests pass — the existing cases plus the five new ones.
 
 - [ ] **Step 5: Commit**
 
@@ -552,13 +581,13 @@ public function test_resolves_author_from_current_user_for_unsaved_post(): void 
 
 Verify `WordPressTestState` already has `$current_user_id` (used by Layer 1 tests). If not, add it during Step 3 below.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify the get_posts-call assertions fail**
 
 ```
 vendor/bin/phpunit --filter PostVoiceSampleCollectorTest
 ```
 
-Expected: 4 failures — `for_post` does not yet call `get_posts`.
+Expected: 2 failures — `test_resolves_author_from_post_for_positive_post_id` and `test_resolves_author_from_current_user_for_unsaved_post` both assert that `get_posts` is invoked with the correct `author` arg, but Task 3's skeleton returns `[]` without calling `get_posts`. The two empty-return tests (`test_returns_empty_when_current_user_is_zero_and_post_id_is_zero` and `test_returns_empty_when_post_author_is_zero`) already pass because the skeleton's unconditional `return []` happens to satisfy them — they become regression coverage for the short-circuit branches once the real implementation lands.
 
 - [ ] **Step 3: Implement author resolution and a stub get_posts call**
 
@@ -987,18 +1016,17 @@ foreach ( $candidates as $candidate ) {
 return $samples;
 ```
 
-Add the helper at the bottom of the class:
+Add the helper at the bottom of the class. `PostContentRenderer::assemble_output` emits `[Attribute references]` in two shapes — `"{visible}\n\n[Attribute references]\n- ..."` when there is visible text, and `"[Attribute references]\n- ..."` (no leading blank line) when the candidate rendered to attributes only (e.g., a block that produces only an `<img>` with `alt`). The helper handles both by truncating at the marker substring and trimming trailing whitespace — attribute-only output collapses to `""`, which the truncation step then drops via the existing empty-opening guard.
 
 ```php
 private static function strip_attribute_references( string $rendered ): string {
-    $marker   = "\n\n[Attribute references]\n";
-    $position = strpos( $rendered, $marker );
+    $position = strpos( $rendered, '[Attribute references]' );
 
     if ( false === $position ) {
         return $rendered;
     }
 
-    return substr( $rendered, 0, $position );
+    return rtrim( substr( $rendered, 0, $position ) );
 }
 ```
 
@@ -1147,6 +1175,35 @@ public function test_drops_sample_whose_opening_truncates_to_empty(): void {
     $titles = array_column( $samples, 'title' );
     $this->assertNotContains( 'EmptyAfterStrip', $titles );
 }
+
+public function test_drops_attribute_only_rendered_output(): void {
+    WordPressTestState::$current_user_id = 5;
+
+    register_block_type(
+        'flavor-agent-test/voice-image-only',
+        [
+            'render_callback' => static fn (): string => '<img src="https://example.test/img.jpg" alt="A description" />',
+        ]
+    );
+
+    WordPressTestState::$posts[404] = new \WP_Post(
+        [
+            'ID'            => 404,
+            'post_type'     => 'post',
+            'post_status'   => 'publish',
+            'post_author'   => 5,
+            'post_title'    => 'ImageOnly',
+            'post_content'  => '<!-- wp:flavor-agent-test/voice-image-only /-->',
+            'post_date_gmt' => '2026-04-15 09:00:00',
+        ]
+    );
+    WordPressTestState::$capabilities['read_post:404'] = true;
+
+    $samples = $this->collector->for_post( 0, 'post' );
+
+    $titles = array_column( $samples, 'title' );
+    $this->assertNotContains( 'ImageOnly', $titles );
+}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1155,7 +1212,7 @@ public function test_drops_sample_whose_opening_truncates_to_empty(): void {
 vendor/bin/phpunit --filter PostVoiceSampleCollectorTest
 ```
 
-Expected: 3 failures (the empty-after-strip test may already pass if the renderer returns ''; the others fail because nothing is truncated).
+Expected: 4 of the 5 new tests fail. The `test_short_opening_passes_through_untruncated` case already passes because Task 6 already wires `extract → strip` and the body is short enough that no truncation is needed. The two truncation tests fail because no truncation runs yet, and the two drop-on-empty tests (empty-after-strip and attribute-only) fail because Task 6 still inserts the sample even when `opening` is empty.
 
 - [ ] **Step 3: Add the truncation helper and apply it**
 
@@ -1214,7 +1271,7 @@ $samples[] = [
 vendor/bin/phpunit --filter PostVoiceSampleCollectorTest
 ```
 
-Expected: All 16 tests pass.
+Expected: All 17 tests pass.
 
 - [ ] **Step 5: Commit**
 
@@ -1225,8 +1282,9 @@ git commit -m "feat(content-context): truncate sample openings to ~1500 chars
 Paragraph-snaps to the latest \\n\\n boundary at or before the
 1500-char cap when possible. Falls back to UTF-8-safe truncation
 with an ellipsis when the first paragraph alone exceeds the cap.
-Empty-after-truncate samples are dropped — Layer 2 never emits
-zero-content slots."
+Empty-after-truncate samples are dropped — covers both
+sanitize_textarea_field-empty content and attribute-only
+rendered output. Layer 2 never emits zero-content slots."
 ```
 
 ---
@@ -1381,7 +1439,7 @@ private static function post_voice_sample_collector(): PostVoiceSampleCollector 
 vendor/bin/phpunit --filter PostVoiceSampleCollectorTest
 ```
 
-Expected: All 19 tests pass.
+Expected: All 20 tests pass.
 
 - [ ] **Step 6: Commit**
 
@@ -1937,13 +1995,13 @@ public function test_recommend_content_uses_canonical_post_type_for_saved_post()
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify the wiring assertions fail**
 
 ```
 vendor/bin/phpunit --filter ContentAbilitiesTest
 ```
 
-Expected: Both new tests fail — `ContentAbilities` does not yet call the voice-samples facade.
+Expected: 2 of the 4 new tests fail. `test_recommend_content_includes_voice_samples_section_when_present` and `test_recommend_content_uses_canonical_post_type_for_saved_post` both expect the voice-samples section to land in the prompt, which can't happen until Step 3 wires `voiceSamples` through. The two `omits_*` tests (`test_recommend_content_omits_voice_samples_section_when_no_samples`, `test_recommend_content_omits_samples_for_unsupported_post_type`) already pass because the prompt doesn't contain the section either way before wiring — they become regression coverage that the wiring respects the empty-list and unsupported-type cases.
 
 - [ ] **Step 3: Wire voice samples into ContentAbilities**
 
