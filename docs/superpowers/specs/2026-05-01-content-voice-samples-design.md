@@ -56,6 +56,8 @@ namespace FlavorAgent\Context;
 
 final class PostVoiceSampleCollector {
 
+    public const SUPPORTED_POST_TYPES = [ 'post', 'page' ];
+
     public function __construct(
         private PostContentRenderer $post_content_renderer
     ) {}
@@ -72,7 +74,9 @@ final class PostVoiceSampleCollector {
 - `$post_id` — the current post's ID. `0` for an unsaved post; positive for a saved post.
 - `$post_type` — the resolved post type. For `$post_id > 0`, this is `get_post( $post_id )->post_type` (canonical). For `$post_id <= 0`, this is the sanitized request `postContext.postType`. Caller resolves before calling.
 
-Returns a list of zero to three sample dictionaries. Each sample has a UTF-8-safe `title`, ISO date `published`, and rendered/trimmed `opening`. The list is empty when no candidates qualify; the caller (WritingPrompt) treats an empty list as "omit the section entirely."
+Returns a list of zero to three sample dictionaries. Each sample has a UTF-8-safe `title`, ISO date `published`, and rendered/trimmed `opening`. The list is empty when no candidates qualify, when `$post_type` is not in `SUPPORTED_POST_TYPES`, or when author resolution fails; the caller (WritingPrompt) treats an empty list as "omit the section entirely."
+
+The supported-type allowlist is enforced server-side in the collector even though the frontend gate already restricts to the same set. Layer 2 must not query candidates for an unsupported type even if a request bypasses the frontend gate. The set is duplicated rather than shared with `src/content/ContentRecommender.js:16` because no shared PHP→JS contract for surface support exists today; if/when one is introduced, both call sites adopt it.
 
 ### Facade
 
@@ -189,7 +193,11 @@ The client never supplies an author ID. The server resolves it from the canonica
 
 ## Components
 
-### 1. Author resolution
+### 1. Supported-type allowlist
+
+The collector's first check: if `$post_type` is not in `self::SUPPORTED_POST_TYPES`, return `[]` immediately. No author resolution, no database query, no rendering. Cheapest possible early-exit for unsupported types.
+
+### 2. Author resolution
 
 ```php
 private function resolve_author_id( int $post_id ): int
@@ -200,12 +208,12 @@ private function resolve_author_id( int $post_id ): int
 
 If the resolved value is `0`, the collector short-circuits and returns `[]` immediately.
 
-### 2. Candidate selection
+### 3. Candidate selection
 
-Single `WP_Query` with conservative flags:
+Single `get_posts` call with conservative flags:
 
 ```php
-$query = new \WP_Query( [
+$candidates = get_posts( [
     'post_type'              => $post_type,
     'author'                 => $author_id,
     'post_status'            => 'publish',
@@ -217,18 +225,21 @@ $query = new \WP_Query( [
     'update_post_meta_cache' => false,
     'update_post_term_cache' => false,
     'has_password'           => false,
+    'suppress_filters'       => false,
 ] );
 ```
 
+`get_posts` returns a `WP_Post[]` directly, mirroring the existing `get_posts` usage and test stub in the codebase. No new `WP_Query` test surface is needed.
+
 `has_password => false` is the WordPress query argument that excludes password-protected posts at the SQL layer. The per-candidate `! empty( $candidate->post_password )` check is defense in depth for older WP versions and unusual storage shapes.
 
-Suppression of meta and term cache updates keeps the query lean — Layer 2 only needs `ID`, `post_title`, `post_date_gmt`, `post_content`, `post_password`, and `post_type` from the result.
+Suppression of meta and term cache updates keeps the query lean — Layer 2 only needs `ID`, `post_title`, `post_date_gmt`, `post_date`, `post_content`, `post_password`, and `post_type` from the result.
 
-### 3. Per-candidate rendering and truncation
+### 4. Per-candidate rendering and truncation
 
 For each candidate that passes the password and `read_post` checks:
 
-1. Run `PostContentRenderer::extract( $candidate->post_content, [ 'postId' => $candidate->ID ] )`.
+1. Run `PostContentRenderer::extract( $candidate->post_content, [ 'postId' => $candidate->ID ] )` inside `try { ... } catch ( \Throwable $e )`. On any throw, log via `error_log` with the candidate ID and exception message, and skip this candidate. Layer 2 is supplemental; a single sample-render failure must not break the recommendation request. Other candidates continue.
 2. The rendered output may include an `[Attribute references]` block at the tail; split on `"\n\n[Attribute references]\n"` and discard the trailing block. Visible text only.
 3. Truncate the visible text:
    - If the visible text is `<= 1500` chars (UTF-8), use as-is.
@@ -246,7 +257,7 @@ For each candidate that passes the password and `read_post` checks:
 
 If the resulting `opening` is empty after truncation (the candidate rendered to nothing), the sample is dropped from the result. We do not include zero-content slots.
 
-### 4. Sample formatting in prompt
+### 5. Sample formatting in prompt
 
 Inside `WritingPrompt::build_user`, when `$context['voiceSamples']` is a non-empty array:
 
@@ -270,9 +281,18 @@ When the array is empty, the section is omitted entirely — no preamble, no hea
 
 The samples appear in the order returned by the collector (most recent first). Existing-draft and other content sections are unchanged in placement.
 
-### 5. PromptBudget integration
+### 6. PromptBudget integration
 
-`WritingPrompt::build_user` constructs a `PromptBudget` instance with the default 12000-token budget. Each section is added via `add_section( $key, $content, $priority, $required )` per the table above. The final string is `$budget->assemble()`.
+`WritingPrompt::build_user` constructs a `PromptBudget` instance via the existing surface-keyed budget filter, mirroring `TemplatePrompt`, `TemplatePartPrompt`, and `StylePrompt`:
+
+```php
+$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'content' );
+$budget     = new PromptBudget( $max_tokens );
+```
+
+Passing `0` selects `PromptBudget`'s default (12000 tokens). Tests and sites can tune the content budget via the `flavor_agent_prompt_budget_max_tokens` filter scoped to the `'content'` surface.
+
+Each section is added via `add_section( $key, $content, $priority, $required )` per the table above. The final string is `$budget->assemble()`.
 
 Empty sections (no content after trim) are not added — `PromptBudget::add_section` already short-circuits on empty content.
 
@@ -289,13 +309,15 @@ ContentAbilities::recommend_content
   │    postId <= 0 → sanitized request postContext.postType
   ├─ ServerCollector::for_post_voice_samples( $post_id, $resolved_post_type )
   │    └─ PostVoiceSampleCollector::for_post
+  │         ├─ if $post_type ∉ SUPPORTED_POST_TYPES → return []
   │         ├─ resolve_author_id (post_author or current_user_id)
   │         ├─ if author_id == 0 → return []
-  │         ├─ WP_Query (3 most recent same-author publish posts, no password)
+  │         ├─ get_posts (3 most recent same-author publish posts, no password)
   │         ├─ per-candidate:
   │         │    ├─ skip if ! empty(post_password)  (defense in depth)
   │         │    ├─ skip if ! current_user_can('read_post', $id)
-  │         │    ├─ PostContentRenderer::extract → strip attribute-refs tail
+  │         │    ├─ try PostContentRenderer::extract → strip attribute-refs tail
+  │         │    │   catch Throwable → error_log + skip this candidate
   │         │    ├─ truncate to ~1500 chars, paragraph-snapped, ellipsis on overflow
   │         │    └─ if empty after truncation, drop the sample
   │         └─ return sample dicts
@@ -316,7 +338,8 @@ ContentAbilities::recommend_content
 | `WP_Query` returns empty | Return `[]`. Section omitted. |
 | All candidates fail password / `read_post` checks | Return `[]`. Section omitted. |
 | `PostContentRenderer::extract` returns empty for a candidate | That sample is dropped; remaining samples included. |
-| `PostContentRenderer::extract` throws | The throw propagates; Layer 1's `try/finally` already restores globals. ContentAbilities returns the natural error. (Same posture as Layer 1.) |
+| `PostContentRenderer::extract` throws for a candidate | Caught; logged via `error_log` with candidate ID and message; that sample is dropped; remaining candidates continue. Layer 2 is supplemental — sample-render failures must never fail the parent recommendation request. (Layer 1's per-block `try/finally` still restores globals before the throw escapes the candidate's render.) |
+| Resolved `$post_type` not in supported allowlist | Return `[]` from collector. Section omitted. |
 | `voice_samples` is dropped by `PromptBudget` overflow | Rest of prompt unaffected; request proceeds. |
 | Required sections alone exceed budget | `assemble()` returns over-budget string; request proceeds. Layer 2 does not silently strip required content. |
 | Database is read-only / `WP_Query` fails | Catches no specific error; an empty result is treated as "no samples." |
@@ -336,6 +359,9 @@ ContentAbilities::recommend_content
 - UTF-8-safe ellipsis when the first paragraph alone exceeds 1500 chars.
 - Strips the `[Attribute references]` tail from rendered output before truncation.
 - Drops samples whose `opening` truncates to empty.
+- Returns `[]` immediately when `$post_type` is not in `SUPPORTED_POST_TYPES`, without invoking `get_posts`.
+- When `PostContentRenderer::extract` throws for a candidate, the candidate is dropped, `error_log` is invoked once with the candidate ID, and remaining candidates continue.
+- Falls back to `post_date` for `Published:` when `post_date_gmt` is empty.
 - For `postId === 0` and a logged-in user, samples come from the current user's published posts in the requested post type.
 - For `postId > 0` and an authorized user, samples come from `post_author` of that post (which may differ from current user on multi-author sites).
 
@@ -361,9 +387,9 @@ ContentAbilities::recommend_content
 
 ### Bootstrap test-harness additions (`tests/phpunit/bootstrap.php`)
 
-- `WP_Query` shim: minimal class supporting the args used by `PostVoiceSampleCollector` (`post_type`, `author`, `post_status`, `posts_per_page`, `orderby`, `order`, `post__not_in`, `has_password`). Returns a `posts` array of `WP_Post` objects from `WordPressTestState`. Filters by author/type/status/has_password in the stub.
+- `get_posts` stub already exists at `tests/phpunit/bootstrap.php:2007`. Extend it to honor the args `PostVoiceSampleCollector` uses: `post_type`, `author`, `post_status`, `posts_per_page`, `orderby`, `order`, `post__not_in`, and `has_password`. Returns a `WP_Post[]` from `WordPressTestState::$posts` filtered by those args.
 - `mysql2date` shim: returns a date string in the requested format from a `Y-m-d H:i:s` input, sufficient for the `Y-m-d` format Layer 2 uses.
-- `WP_Post` shim from Layer 1 already exists; extend with `post_password`, `post_date_gmt`, `post_author` properties (zero-value defaults).
+- `WP_Post` shim from Layer 1 already exists; extend with `post_password`, `post_date_gmt`, `post_date`, and `post_author` properties (zero-value defaults).
 
 ### Browser smoke
 
@@ -372,14 +398,14 @@ ContentAbilities::recommend_content
 ## Implementation ordering
 
 1. Extend `PromptBudget::add_section` with the optional `bool $required = false` parameter; introduce `get_lowest_priority_removable_index`. Add tests asserting required sections never drop. Existing call sites and tests are unchanged because the default is `false` (today's behavior).
-2. Add bootstrap stubs (`WP_Query`, `mysql2date`, extended `WP_Post`).
-3. Create `PostVoiceSampleCollector` skeleton with `for_post( int, string ): array` returning `[]`. Add the failing tests for empty author / no candidates / unsupported type.
-4. Implement author resolution and the WP_Query candidate fetch. Pass the empty / no-candidate tests.
+2. Bootstrap test-harness additions: extend the existing `get_posts` stub at `tests/phpunit/bootstrap.php:2007` to honor `post_type` / `author` / `post_status` / `posts_per_page` / `orderby` / `order` / `post__not_in` / `has_password`; add a `mysql2date` shim; extend `WP_Post` with `post_password`, `post_date_gmt`, `post_date`, `post_author`.
+3. Create `PostVoiceSampleCollector` skeleton with `SUPPORTED_POST_TYPES = ['post', 'page']` and `for_post( int, string ): array` returning `[]`. Add failing tests for: unsupported `$post_type` (returns `[]` without querying), empty author, no candidates.
+4. Implement author resolution and the `get_posts` candidate fetch. Pass the empty / no-candidate tests.
 5. Add password and `read_post` filtering. Tests for both gates.
-6. Wire `PostContentRenderer` injection. Strip `[Attribute references]` from output. Tests for the strip.
+6. Wire `PostContentRenderer` injection. Strip `[Attribute references]` from output. Wrap each `extract` call in `try { ... } catch ( \Throwable $e )` with `error_log` and skip-candidate-on-throw. Tests for the strip and for the catch path (a stub block whose render_callback throws → that sample dropped, sibling candidates returned, `error_log` invoked).
 7. Implement truncation: paragraph-snap → first-paragraph fallback with UTF-8-safe ellipsis. Tests for both branches and for the "empty after truncate → drop sample" path.
 8. Wire facade: `ServerCollector::for_post_voice_samples`. Smoke test through the facade.
-9. Refactor `WritingPrompt::build_user` onto `PromptBudget` with the priority/required table above. Existing prompt-shape tests assert section ordering and content; add new tests that voice samples appears when present and is omitted when absent.
+9. Refactor `WritingPrompt::build_user` onto `PromptBudget` with the priority/required table above and the surface-keyed budget filter `apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'content' )`. Existing prompt-shape tests assert section ordering and content; add new tests that voice samples appears when present, is omitted when absent, and that the filter actually scopes to `'content'`.
 10. Wire `voiceSamples` into `ContentAbilities::recommend_content` between Layer 1's renderer call and `ChatClient::chat`. Add the `ContentAbilitiesTest` cases.
 11. Loosen the frontend gate in `src/content/ContentRecommender.js` and add the `postId === 0` test.
 12. Run `composer test:php`, `npm run test:unit -- --runInBand`, `node scripts/verify.js --skip-e2e`.
