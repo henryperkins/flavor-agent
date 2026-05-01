@@ -685,7 +685,7 @@ final class Page {
 			</summary>
 			<div class="flavor-agent-settings-subpanel__body">
 				<p class="description">
-					<?php echo esc_html__( 'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint.', 'flavor-agent' ); ?>
+					<?php echo esc_html__( 'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint. Override values are live-probed before saving and are rejected unless the instance returns trusted developer.wordpress.org guidance.', 'flavor-agent' ); ?>
 				</p>
 				<?php if ( $has_saved_legacy_values ) : ?>
 					<p class="description">
@@ -912,7 +912,7 @@ final class Page {
 		$has_prerequisites      = ! empty( $page_state['patterns_ready'] );
 		$status_label           = $has_prerequisites
 			? State::get_pattern_sync_status_label( (string) $state['status'] )
-			: __( 'Needs setup', 'flavor-agent' );
+			: self::get_pattern_sync_prerequisite_status_label( $page_state );
 		$status_tone            = ! $has_prerequisites
 			? 'warning'
 			: ( ! empty( $state['last_error'] ) ? 'error' : State::get_pattern_sync_status_tone( (string) $state['status'] ) );
@@ -1057,14 +1057,29 @@ final class Page {
 		}
 
 		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Choose and complete an embeddings backend, then add Qdrant before syncing the pattern index.', 'flavor-agent' );
+			return __( 'Choose and complete an embeddings backend, then add Qdrant before the Sync Pattern Catalog button can run.', 'flavor-agent' );
 		}
 
 		if ( ! $embedding_ready ) {
-			return __( 'Choose and complete an embeddings backend before syncing the pattern index.', 'flavor-agent' );
+			return __( 'Add a complete embeddings backend (OpenAI Native key and model, or Azure endpoint, key, and deployment) before the Sync Pattern Catalog button can run.', 'flavor-agent' );
 		}
 
-		return __( 'Add the Qdrant URL and API key before syncing the pattern index.', 'flavor-agent' );
+		return __( 'Add the Qdrant URL and API key before the Sync Pattern Catalog button can run.', 'flavor-agent' );
+	}
+
+	private static function get_pattern_sync_prerequisite_status_label( array $page_state ): string {
+		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
+		$qdrant_ready    = ! empty( $page_state['qdrant_configured'] );
+
+		if ( ! $embedding_ready && ! $qdrant_ready ) {
+			return __( 'Needs embeddings & Qdrant', 'flavor-agent' );
+		}
+
+		if ( ! $embedding_ready ) {
+			return __( 'Needs embeddings', 'flavor-agent' );
+		}
+
+		return __( 'Needs Qdrant', 'flavor-agent' );
 	}
 
 	private static function get_pattern_sync_status_sentence( array $page_state ): string {

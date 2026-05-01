@@ -193,7 +193,11 @@ final class PromptGuidanceTest extends TestCase {
 			$prompt
 		);
 		$this->assertStringContainsString(
-			'Optional for executable block items when helpful; omit it for advisory structural/pattern ideas',
+			'Inspector panel for executable block items; use empty string for advisory structural/pattern ideas',
+			$prompt
+		);
+		$this->assertStringContainsString(
+			'attributeUpdates must be a JSON object string, not a nested object.',
 			$prompt
 		);
 		$this->assertStringContainsString(

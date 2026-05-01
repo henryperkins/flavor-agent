@@ -194,6 +194,7 @@ export default function ContentRecommender() {
 			mode: contentMode,
 			prompt,
 			postContext: {
+				postId: postContext.postId,
 				postType: postContext.postType,
 				title: postContext.title,
 				excerpt: postContext.excerpt,

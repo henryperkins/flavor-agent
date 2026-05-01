@@ -193,6 +193,183 @@ final class ContentAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_recommend_content_allows_post_id_zero_without_per_post_auth(): void {
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'draft',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'draft',
+				'prompt'      => 'Sketch something.',
+				'postContext' => [
+					'postId'  => 0,
+					'title'   => 'New post',
+					'content' => '',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+	}
+
+	public function test_recommend_content_requires_edit_post_for_positive_post_id(): void {
+		WordPressTestState::$capabilities['edit_post:42'] = false;
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Refine.',
+				'postContext' => [
+					'postId'  => 42,
+					'title'   => 'Other post',
+					'content' => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'rest_forbidden_context', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] ?? null );
+	}
+
+	public function test_recommend_content_renders_dynamic_block_into_existing_draft_section(): void {
+		register_block_type(
+			'flavor-agent-test/dynamic-text',
+			[
+				'render_callback' => static fn (): string => '<p>Rendered dynamic content sentinel.</p>',
+			]
+		);
+
+		WordPressTestState::$capabilities['edit_post:77'] = true;
+		WordPressTestState::$posts[77]                    = new \WP_Post(
+			[
+				'ID'         => 77,
+				'post_title' => 'Working title',
+				'post_type'  => 'post',
+			]
+		);
+
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'edit',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten.',
+				'postContext' => [
+					'postId'  => 77,
+					'title'   => 'Working title',
+					'content' => '<!-- wp:flavor-agent-test/dynamic-text /-->',
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertStringContainsString(
+			'Rendered dynamic content sentinel.',
+			WordPressTestState::$last_ai_client_prompt['text'] ?? ''
+		);
+	}
+
+	public function test_recommend_content_propagates_post_id_to_renderer_globals(): void {
+		$captured_id = null;
+		register_block_type(
+			'flavor-agent-test/global-capture',
+			[
+				'render_callback' => static function () use ( &$captured_id ): string {
+					$post        = $GLOBALS['post'] ?? null;
+					$captured_id = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : null;
+
+					return 'captured';
+				},
+			]
+		);
+
+		WordPressTestState::$capabilities['edit_post:88'] = true;
+		WordPressTestState::$posts[88]                    = new \WP_Post(
+			[
+				'ID'         => 88,
+				'post_title' => 'X',
+				'post_type'  => 'post',
+			]
+		);
+
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'edit',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Anything.',
+				'postContext' => [
+					'postId'  => 88,
+					'title'   => 'X',
+					'content' => '<!-- wp:flavor-agent-test/global-capture /-->',
+				],
+			]
+		);
+
+		$this->assertSame( 88, $captured_id );
+	}
+
+	public function test_recommend_content_validates_after_rendering_empty_content(): void {
+		WordPressTestState::$capabilities['edit_post:42'] = true;
+		WordPressTestState::$posts[42]                    = new \WP_Post(
+			[
+				'ID'         => 42,
+				'post_title' => 'X',
+				'post_type'  => 'post',
+			]
+		);
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten.',
+				'postContext' => [
+					'postId'  => 42,
+					'title'   => 'X',
+					'content' => '<div></div>',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_existing_content', $result->get_error_code() );
+	}
+
+	public function test_recommend_content_preserves_no_post_id_fallback_empty_instruction_validation(): void {
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'draft',
+				'postContext' => [
+					'content' => '<!-- random comment -->',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_content_instruction', $result->get_error_code() );
+	}
+
 	/**
 	 * @param array<string, mixed> $payload
 	 */

@@ -168,7 +168,18 @@ final class State {
 		$pattern_state = is_array( $state['pattern_state'] ?? null ) ? $state['pattern_state'] : [];
 
 		if ( empty( $state['patterns_ready'] ) ) {
-			return self::make_badge( __( 'Needs embeddings & Qdrant', 'flavor-agent' ), 'warning' );
+			$embedding_ready = ! empty( $state['runtime_embedding']['configured'] );
+			$qdrant_ready    = ! empty( $state['qdrant_configured'] );
+
+			if ( ! $embedding_ready && ! $qdrant_ready ) {
+				return self::make_badge( __( 'Needs embeddings & Qdrant', 'flavor-agent' ), 'warning' );
+			}
+
+			if ( ! $embedding_ready ) {
+				return self::make_badge( __( 'Needs embeddings', 'flavor-agent' ), 'warning' );
+			}
+
+			return self::make_badge( __( 'Needs Qdrant', 'flavor-agent' ), 'warning' );
 		}
 
 		if ( ! empty( $pattern_state['last_error'] ) ) {

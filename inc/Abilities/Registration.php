@@ -171,6 +171,10 @@ final class Registration {
 						],
 						'postContext'  => self::open_object_schema(
 							[
+								'postId'          => [
+									'type'        => 'integer',
+									'description' => 'Numeric post ID being recommended on. Required for server-side block rendering; absent or 0 uses the text fallback path.',
+								],
 								'postType'        => [ 'type' => 'string' ],
 								'title'           => [ 'type' => 'string' ],
 								'excerpt'         => [ 'type' => 'string' ],

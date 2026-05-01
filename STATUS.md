@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-29
+> Last updated: 2026-04-30
 
 ## Working
 
@@ -9,7 +9,7 @@
 | Ability                                | Handler                  | Description                                                                                                                                    |
 | -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `flavor-agent/recommend-block`         | `BlockAbilities`         | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client                                                   |
-| `flavor-agent/recommend-content`       | `ContentAbilities`       | Programmatic content drafting, editing, and critique scaffold using `WritingPrompt` and the shared chat backend                                |
+| `flavor-agent/recommend-content`       | `ContentAbilities`       | Programmatic content drafting, editing, and critique using `WritingPrompt`, the shared chat backend, and authorized current-post block rendering |
 | `flavor-agent/introspect-block`        | `BlockAbilities`         | Block type registry introspection                                                                                                              |
 | `flavor-agent/list-allowed-blocks`     | `BlockAbilities`         | Site-wide registered block manifests with optional search, category, pagination, and variation controls                                       |
 | `flavor-agent/recommend-patterns`      | `PatternAbilities`       | Provider-selected embeddings + Qdrant retrieval + LLM reranking                                                                                |
@@ -34,7 +34,7 @@
 | Route                                           | Permission                                                                 | Description                                                                            |
 | ----------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `POST /flavor-agent/v1/recommend-block`         | `edit_posts`                                                               | Block recommendations from client-provided editor context                              |
-| `POST /flavor-agent/v1/recommend-content`       | `edit_posts`                                                               | Programmatic content-lane scaffold for draft, edit, and critique payloads              |
+| `POST /flavor-agent/v1/recommend-content`       | `edit_posts`; positive `postContext.postId` also requires `edit_post`     | Programmatic content-lane scaffold for draft, edit, and critique payloads              |
 | `POST /flavor-agent/v1/recommend-patterns`      | `edit_posts`                                                               | Pattern recommendations for the inserter                                               |
 | `POST /flavor-agent/v1/recommend-navigation`    | `edit_theme_options`                                                       | Advisory navigation recommendations for selected `core/navigation` blocks              |
 | `POST /flavor-agent/v1/recommend-template`      | `edit_theme_options`                                                       | Template composition recommendations for the Site Editor                               |
@@ -47,7 +47,7 @@
 ### Editor UI
 
 - Inspector sidebar recommendation panel for selected, editable blocks with per-block loading and error state
-- Content Recommendations post/page document panel via `src/content/ContentRecommender.js`, `flavor-agent/recommend-content`, and `POST /flavor-agent/v1/recommend-content`, with draft, edit, and critique modes that remain editorial-only and do not auto-apply post content
+- Content Recommendations post/page document panel via `src/content/ContentRecommender.js`, `flavor-agent/recommend-content`, and `POST /flavor-agent/v1/recommend-content`, with draft, edit, and critique modes that remain editorial-only, pass `postId` for authorized server-rendered current-post context, and do not auto-apply post content
 - Content-only blocks keep the panel, limit executable changes to content-safe attributes, may still show advisory-only block ideas, suppress style projections, and disabled blocks do not render AI controls
 - Shared capability notices now keep block, navigation, template, template-part, Global Styles, and Style Book surfaces visible when they are otherwise in scope but unavailable, and the pattern inserter now prepends the same why-unavailable guidance inside the native inserter, with explicit links back to `Settings > Connectors` or `Settings > Flavor Agent`
 - Pattern inserter integration with a Flavor Agent shelf, toolbar badge for high-confidence matches, root-aware allowed-pattern scoping, and local matching against the native allowed-pattern selector without rewriting Gutenberg's pattern registry; this surface remains intentionally ranking/browse-only, and pattern API access and DOM discovery are centralized through `src/patterns/compat.js` so all experimental/stable transitions are handled in one place

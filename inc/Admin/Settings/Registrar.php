@@ -431,7 +431,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_cloudflare_ai_search_account_id',
 				'label_for'    => 'flavor_agent_cloudflare_ai_search_account_id',
 				'placeholder'  => 'e.g. 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
-				'description'  => 'Optional override. Cloudflare account ID for older installs or custom endpoints.',
+				'description'  => 'Optional override. Cloudflare account ID for the AI Search instance that indexes developer.wordpress.org docs.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -446,7 +446,7 @@ final class Registrar {
 				'option'       => 'flavor_agent_cloudflare_ai_search_instance_id',
 				'label_for'    => 'flavor_agent_cloudflare_ai_search_instance_id',
 				'placeholder'  => 'wordpress-developer-docs',
-				'description'  => 'Optional override. AI Search instance ID for older installs or custom endpoints.',
+				'description'  => 'Optional override. Enter the AI Search instance name from the REST path. For namespace-scoped Search, use namespace/instance-name. The instance must return trusted developer.wordpress.org chunks.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]
@@ -462,7 +462,7 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_cloudflare_ai_search_api_token',
 				'type'         => 'password',
 				'placeholder'  => 'Cloudflare API token',
-				'description'  => 'Optional override. Needs AI Search Run or Edit for older installs or custom endpoints.',
+				'description'  => 'Optional override. Needs Account > AI Search:Edit and Account > AI Search:Run permissions.',
 				'autocomplete' => 'new-password',
 				'class'        => 'flavor-agent-settings-row--critical',
 			]

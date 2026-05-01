@@ -311,6 +311,10 @@ final class RegistrationTest extends TestCase {
 			$ability['input_schema']['properties']['postContext']['type'] ?? null
 		);
 		$this->assertSame(
+			'integer',
+			$ability['input_schema']['properties']['postContext']['properties']['postId']['type'] ?? null
+		);
+		$this->assertSame(
 			'string',
 			$ability['input_schema']['properties']['postContext']['properties']['categories']['items']['type'] ?? null
 		);

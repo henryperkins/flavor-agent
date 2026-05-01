@@ -1146,8 +1146,10 @@ final class SettingsTest extends TestCase {
 
 		$this->assertStringContainsString( 'type="password"', $output );
 		$this->assertStringContainsString( 'value=""', $output );
+		$this->assertStringContainsString( 'data-saved-secret="true"', $output );
+		$this->assertStringContainsString( 'Saved', $output );
 		$this->assertStringNotContainsString( 'saved-secret-key', $output );
-		$this->assertStringContainsString( 'Leave this field blank to keep it', $output );
+		$this->assertStringContainsString( 'this field is intentionally blank', $output );
 	}
 
 	public function test_register_contextual_help_uses_native_wp_screen_help_tabs(): void {
@@ -1191,6 +1193,9 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Add vector search for pattern recommendations.', $output );
 		$this->assertStringContainsString( 'Ground responses with developer.wordpress.org docs.', $output );
 		$this->assertStringContainsString( 'Store plugin-owned site, writing, image, and block guidance.', $output );
+		$this->assertStringContainsString( 'Override values are live-probed before saving', $output );
+		$this->assertStringContainsString( 'The instance must return trusted developer.wordpress.org chunks.', $output );
+		$this->assertStringContainsString( 'Needs Account &gt; AI Search:Edit and Account &gt; AI Search:Run permissions.', esc_html( $output ) );
 		$this->assertStringNotContainsString( 'Set up chat first.', $output );
 		$this->assertStringNotContainsString( 'Optional second step for vector-based pattern recommendations.', $output );
 		$this->assertStringNotContainsString( 'Recent Activity', $output );
@@ -1226,7 +1231,7 @@ final class SettingsTest extends TestCase {
 		$output = (string) ob_get_clean();
 
 		$this->assertStringContainsString(
-			'Choose and complete an embeddings backend, then add Qdrant before syncing the pattern index.',
+			'Choose and complete an embeddings backend, then add Qdrant before the Sync Pattern Catalog button can run.',
 			$output
 		);
 		$this->assertStringNotContainsString( 'Chat Provider', $output );
@@ -1645,7 +1650,7 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'Older installs or explicit custom-endpoint overrides only. Leave these blank to use the built-in public docs endpoint.',
+			'Override values are live-probed before saving and are rejected unless the instance returns trusted developer.wordpress.org guidance.',
 			$output
 		);
 		$this->assertStringContainsString(
@@ -1653,7 +1658,19 @@ final class SettingsTest extends TestCase {
 			$output
 		);
 		$this->assertStringContainsString(
-			'Optional override. Cloudflare account ID for older installs or custom endpoints.',
+			'Optional override. Cloudflare account ID for the AI Search instance that indexes developer.wordpress.org docs.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Optional override. Enter the AI Search instance name from the REST path. For namespace-scoped Search, use namespace/instance-name. The instance must return trusted developer.wordpress.org chunks.',
+			$output
+		);
+		$this->assertStringContainsString(
+			'Optional override. Needs Account &gt; AI Search:Edit and Account &gt; AI Search:Run permissions.',
+			esc_html( $output )
+		);
+		$this->assertStringContainsString(
+			'Saved value exists. For security, this field is intentionally blank.',
 			$output
 		);
 		$this->assertStringNotContainsString( 'Legacy override only.', $output );

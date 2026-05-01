@@ -180,6 +180,89 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( 'list', $result['settings'][0]['panel'] );
 	}
 
+	public function test_parse_response_decodes_json_string_attribute_updates_from_compact_schema(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [
+						[
+							'label'            => 'Use accent background',
+							'description'      => 'Align the block with the theme accent.',
+							'panel'            => 'color',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => '{"backgroundColor":"accent","style":{"color":{"text":"var(--wp--preset--color--base)"}}}',
+							'currentValue'     => 'base',
+							'suggestedValue'   => 'accent',
+							'isCurrentStyle'   => false,
+							'isRecommended'    => true,
+							'confidence'       => 0.72,
+							'preview'          => '#fff',
+							'presetSlug'       => 'accent',
+							'cssVar'           => 'var(--wp--preset--color--accent)',
+						],
+					],
+					'styles'      => [],
+					'block'       => [],
+					'explanation' => 'Color routing should survive the compact schema.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'accent', $result['settings'][0]['attributeUpdates']['backgroundColor'] );
+		$this->assertSame(
+			'var(--wp--preset--color--base)',
+			$result['settings'][0]['attributeUpdates']['style']['color']['text']
+		);
+		$this->assertSame( 'base', $result['settings'][0]['currentValue'] );
+		$this->assertSame( 'accent', $result['settings'][0]['suggestedValue'] );
+		$this->assertFalse( $result['settings'][0]['isCurrentStyle'] );
+		$this->assertTrue( $result['settings'][0]['isRecommended'] );
+		$this->assertSame( 0.72, $result['settings'][0]['confidence'] );
+		$this->assertSame( '#fff', $result['settings'][0]['preview'] );
+		$this->assertSame( 'accent', $result['settings'][0]['presetSlug'] );
+		$this->assertSame( 'var(--wp--preset--color--accent)', $result['settings'][0]['cssVar'] );
+		$this->assertSame( 0.72, $result['settings'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_treats_compact_schema_display_sentinels_as_absent(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings'    => [
+						[
+							'label'            => 'Use accent background',
+							'description'      => 'Align the block with the theme accent.',
+							'panel'            => 'color',
+							'type'             => 'attribute_change',
+							'attributeUpdates' => '{"backgroundColor":"accent"}',
+							'currentValue'     => '',
+							'suggestedValue'   => '',
+							'isCurrentStyle'   => false,
+							'isRecommended'    => false,
+							'confidence'       => 0,
+							'preview'          => '',
+							'presetSlug'       => '',
+							'cssVar'           => '',
+						],
+					],
+					'styles'      => [],
+					'block'       => [],
+					'explanation' => 'Empty display metadata should not become meaningful metadata.',
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertNull( $result['settings'][0]['currentValue'] );
+		$this->assertNull( $result['settings'][0]['suggestedValue'] );
+		$this->assertNull( $result['settings'][0]['confidence'] );
+		$this->assertNull( $result['settings'][0]['preview'] );
+		$this->assertNull( $result['settings'][0]['presetSlug'] );
+		$this->assertNull( $result['settings'][0]['cssVar'] );
+		$this->assertArrayNotHasKey( 'ranking', $result['settings'][0] );
+	}
+
 	public function test_parse_response_keeps_advisory_block_suggestions_without_panel_and_strips_attribute_updates(): void {
 		$result = Prompt::parse_response(
 			wp_json_encode(

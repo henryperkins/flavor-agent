@@ -124,6 +124,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static mixed $ai_client_generate_text_result = '';
 
+		public static ?object $current_post = null;
+
 		/**
 		 * @param array<string, string> $errors
 		 */
@@ -325,6 +327,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$ai_client_provider_support  = [];
 			self::$ai_client_feature_support   = [];
 			self::$ai_client_generate_text_result = '';
+			self::$current_post                = null;
 
 			$GLOBALS['wp_settings_fields']   = [];
 			$GLOBALS['wp_settings_sections'] = [];
@@ -416,6 +419,10 @@ namespace WordPress\AI_Client {
 
 			return null !== $translated ? $translated : $explicit;
 		}
+
+		public function generate_text_result(): mixed {
+			return $this->generate_text();
+		}
 	}
 }
 
@@ -477,6 +484,7 @@ namespace {
 
 						return WordPressTestState::ai_client_prompt_supports_text_generation( $this->state );
 					case 'generate_text':
+					case 'generate_text_result':
 						$this->sync_state();
 
 						if ( (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $this ) ) {
@@ -2408,68 +2416,286 @@ namespace {
 		}
 	}
 
-	if ( ! function_exists( 'parse_blocks' ) ) {
-		function parse_blocks( string $content ): array {
-			$blocks  = [];
-			$pattern = '/<!--\s+wp:([a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)\s*(\{.*?\})?\s*(\/)?-->/s';
-			$offset  = 0;
+	if ( ! class_exists( 'WP_Post' ) ) {
+		class WP_Post {
 
-			while ( preg_match( $pattern, $content, $match, PREG_OFFSET_CAPTURE, $offset ) ) {
-				$full_match = $match[0][0];
-				$match_pos  = $match[0][1];
-				$block_name = 'core/' . $match[1][0];
+			public int $ID = 0;
 
-				if ( str_contains( $match[1][0], '/' ) ) {
-					$block_name = $match[1][0];
+			public string $post_title = '';
+
+			public string $post_content = '';
+
+			public string $post_excerpt = '';
+
+			public string $post_status = 'publish';
+
+			public string $post_type = 'post';
+
+			public int $post_author = 0;
+
+			/**
+			 * @param array<string, mixed> $fields
+			 */
+			public function __construct( array $fields = [] ) {
+				foreach ( $fields as $key => $value ) {
+					if ( property_exists( $this, $key ) ) {
+						$this->{$key} = $value;
+					}
+				}
+			}
+		}
+	}
+
+	if ( ! function_exists( 'setup_postdata' ) ) {
+		function setup_postdata( $post ): bool {
+			if ( $post instanceof WP_Post ) {
+				WordPressTestState::$current_post = $post;
+
+				return true;
+			}
+
+			return false;
+		}
+	}
+
+	if ( ! function_exists( 'wp_reset_postdata' ) ) {
+		function wp_reset_postdata(): void {
+			WordPressTestState::$current_post = null;
+		}
+	}
+
+	if ( ! function_exists( 'register_block_type' ) ) {
+		function register_block_type( string $name, array $args = [] ): object {
+			\WP_Block_Type_Registry::get_instance()->register( $name, $args );
+			$registered = \WP_Block_Type_Registry::get_instance()->get_registered( $name );
+
+			return is_object( $registered )
+				? $registered
+				: (object) array_merge( $args, [ 'name' => $name ] );
+		}
+	}
+
+	if ( ! function_exists( 'render_block' ) ) {
+		function render_block( array $block ): string {
+			$name = $block['blockName'] ?? null;
+
+			if ( null === $name ) {
+				return (string) ( $block['innerHTML'] ?? '' );
+			}
+
+			$rendered_inner  = '';
+			$inner_blocks    = is_array( $block['innerBlocks'] ?? null ) ? $block['innerBlocks'] : [];
+			$inner_block_idx = 0;
+			$inner_content   = $block['innerContent'] ?? [ $block['innerHTML'] ?? '' ];
+
+			if ( ! is_array( $inner_content ) ) {
+				$inner_content = [ (string) $inner_content ];
+			}
+
+			foreach ( $inner_content as $chunk ) {
+				if ( is_string( $chunk ) ) {
+					$rendered_inner .= $chunk;
+					continue;
 				}
 
-				$attrs_json   = $match[2][0] ?? '';
-				$self_closing = ! empty( $match[3][0] );
+				$next = $inner_blocks[ $inner_block_idx++ ] ?? null;
+				if ( is_array( $next ) ) {
+					$rendered_inner .= render_block( $next );
+				}
+			}
 
-				$attrs = [];
-				if ( $attrs_json !== '' ) {
-					$decoded = json_decode( $attrs_json, true );
-					if ( is_array( $decoded ) ) {
-						$attrs = $decoded;
+			$registered      = \WP_Block_Type_Registry::get_instance()->get_registered( (string) $name );
+			$render_callback = is_object( $registered ) ? ( $registered->render_callback ?? null ) : null;
+
+			if ( is_callable( $render_callback ) ) {
+				return (string) call_user_func(
+					$render_callback,
+					$block['attrs'] ?? [],
+					$rendered_inner,
+					$block
+				);
+			}
+
+			return $rendered_inner;
+		}
+	}
+
+	if ( ! function_exists( 'parse_blocks' ) ) {
+		function parse_blocks( string $content ): array {
+			if ( '' === $content ) {
+				return [];
+			}
+
+			$blocks = [];
+			$offset = 0;
+			$length = strlen( $content );
+
+			while ( $offset < $length ) {
+				$next = _flavor_agent_parse_next_block( $content, $offset );
+
+				if ( null === $next ) {
+					$remainder = substr( $content, $offset );
+					if ( '' !== $remainder ) {
+						$blocks[] = _flavor_agent_make_freeform_block( $remainder );
+					}
+					break;
+				}
+
+				if ( $next['start'] > $offset ) {
+					$freeform = substr( $content, $offset, $next['start'] - $offset );
+					if ( '' !== $freeform ) {
+						$blocks[] = _flavor_agent_make_freeform_block( $freeform );
 					}
 				}
 
-				if ( $self_closing ) {
-					$blocks[] = [
+				$blocks[] = $next['parsed'];
+				$offset   = $next['end'];
+			}
+
+			return $blocks;
+		}
+	}
+
+	if ( ! function_exists( '_flavor_agent_make_freeform_block' ) ) {
+		function _flavor_agent_make_freeform_block( string $html ): array {
+			return [
+				'blockName'    => null,
+				'attrs'        => [],
+				'innerBlocks'  => [],
+				'innerHTML'    => $html,
+				'innerContent' => [ $html ],
+			];
+		}
+	}
+
+	if ( ! function_exists( '_flavor_agent_parse_next_block' ) ) {
+		function _flavor_agent_parse_next_block( string $content, int $offset ): ?array {
+			$pattern = '/<!--\s+wp:([a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)\s*(\{.*?\})?\s*(\/)?-->/s';
+
+			if ( ! preg_match( $pattern, $content, $match, PREG_OFFSET_CAPTURE, $offset ) ) {
+				return null;
+			}
+
+			$full_match   = $match[0][0];
+			$match_pos    = $match[0][1];
+			$short_name   = $match[1][0];
+			$block_name   = str_contains( $short_name, '/' ) ? $short_name : 'core/' . $short_name;
+			$attrs_json   = $match[2][0] ?? '';
+			$self_closing = ! empty( $match[3][0] );
+
+			$attrs = [];
+			if ( '' !== $attrs_json ) {
+				$decoded = json_decode( $attrs_json, true );
+				if ( is_array( $decoded ) ) {
+					$attrs = $decoded;
+				}
+			}
+
+			$opening_end = $match_pos + strlen( $full_match );
+
+			if ( $self_closing ) {
+				return [
+					'start'  => $match_pos,
+					'end'    => $opening_end,
+					'parsed' => [
 						'blockName'    => $block_name,
 						'attrs'        => $attrs,
 						'innerBlocks'  => [],
 						'innerHTML'    => '',
 						'innerContent' => [],
-					];
-					$offset = $match_pos + strlen( $full_match );
-				} else {
-					$close_tag = '<!-- /wp:' . $match[1][0] . ' -->';
-					$close_pos = strpos( $content, $close_tag, $match_pos + strlen( $full_match ) );
-
-					if ( $close_pos !== false ) {
-						$inner_html = substr(
-							$content,
-							$match_pos + strlen( $full_match ),
-							$close_pos - ( $match_pos + strlen( $full_match ) )
-						);
-
-						$blocks[] = [
-							'blockName'    => $block_name,
-							'attrs'        => $attrs,
-							'innerBlocks'  => parse_blocks( $inner_html ),
-							'innerHTML'    => $inner_html,
-							'innerContent' => [ $inner_html ],
-						];
-
-						$offset = $close_pos + strlen( $close_tag );
-					} else {
-						$offset = $match_pos + strlen( $full_match );
-					}
-				}
+					],
+				];
 			}
 
-			return $blocks;
+			$close_tag      = '<!-- /wp:' . $short_name . ' -->';
+			$same_open_regex = '/<!--\s+wp:' . preg_quote( $short_name, '/' ) . '(?:\s+\{.*?\})?\s*(\/)?-->/s';
+			$depth           = 1;
+			$scan_pos        = $opening_end;
+			$close_pos       = -1;
+
+			while ( $scan_pos < strlen( $content ) ) {
+				$next_open  = preg_match( $same_open_regex, $content, $same_open_match, PREG_OFFSET_CAPTURE, $scan_pos )
+					? $same_open_match[0][1]
+					: false;
+				$next_close = strpos( $content, $close_tag, $scan_pos );
+
+				if ( false === $next_close ) {
+					break;
+				}
+
+				if ( false !== $next_open && $next_open < $next_close ) {
+					if ( empty( $same_open_match[1][0] ) ) {
+						++$depth;
+					}
+					$scan_pos = $next_open + strlen( (string) $same_open_match[0][0] );
+					continue;
+				}
+
+				--$depth;
+				if ( 0 === $depth ) {
+					$close_pos = $next_close;
+					break;
+				}
+
+				$scan_pos = $next_close + strlen( $close_tag );
+			}
+
+			if ( $close_pos < 0 ) {
+				return [
+					'start'  => $match_pos,
+					'end'    => $opening_end,
+					'parsed' => [
+						'blockName'    => $block_name,
+						'attrs'        => $attrs,
+						'innerBlocks'  => [],
+						'innerHTML'    => '',
+						'innerContent' => [],
+					],
+				];
+			}
+
+			$inner_offset  = $opening_end;
+			$inner_end     = $close_pos;
+			$inner_content = [];
+			$inner_html    = '';
+			$inner_blocks  = [];
+
+			while ( $inner_offset < $inner_end ) {
+				$child = _flavor_agent_parse_next_block( $content, $inner_offset );
+
+				if ( null === $child || $child['start'] >= $inner_end ) {
+					$tail = substr( $content, $inner_offset, $inner_end - $inner_offset );
+					if ( '' !== $tail ) {
+						$inner_content[] = $tail;
+						$inner_html     .= $tail;
+					}
+					break;
+				}
+
+				if ( $child['start'] > $inner_offset ) {
+					$prefix = substr( $content, $inner_offset, $child['start'] - $inner_offset );
+					if ( '' !== $prefix ) {
+						$inner_content[] = $prefix;
+						$inner_html     .= $prefix;
+					}
+				}
+
+				$inner_content[] = null;
+				$inner_blocks[]  = $child['parsed'];
+				$inner_offset    = $child['end'];
+			}
+
+			return [
+				'start'  => $match_pos,
+				'end'    => $close_pos + strlen( $close_tag ),
+				'parsed' => [
+					'blockName'    => $block_name,
+					'attrs'        => $attrs,
+					'innerBlocks'  => $inner_blocks,
+					'innerHTML'    => $inner_html,
+					'innerContent' => $inner_content,
+				],
+			];
 		}
 	}
 

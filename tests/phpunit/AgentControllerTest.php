@@ -408,6 +408,82 @@ final class AgentControllerTest extends TestCase {
 		$this->assertSame( 'review', $entries[0]['executionResult'] ?? null );
 	}
 
+	public function test_handle_recommend_content_persists_ai_client_result_object_token_usage(): void {
+		ActivityRepository::install();
+		WordPressTestState::$options                    = [];
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$capabilities['edit_posts'] = true;
+		$usage = new class() {
+			public function __call( string $name, array $arguments ): array {
+				unset( $arguments );
+
+				if ( 'toArray' === $name ) {
+					return [
+						'promptTokens'     => 18,
+						'completionTokens' => 29,
+						'totalTokens'      => 47,
+					];
+				}
+
+				return [];
+			}
+		};
+		WordPressTestState::$ai_client_generate_text_result = new class( $usage ) {
+			private object $usage;
+
+			public function __construct( object $usage ) {
+				$this->usage = $usage;
+			}
+
+			public function __call( string $name, array $arguments ): mixed {
+				unset( $arguments );
+
+				return match ( $name ) {
+					'toText' => wp_json_encode(
+						[
+							'mode'    => 'draft',
+							'title'   => 'Sharper draft',
+							'summary' => 'The draft now has a clearer opening.',
+							'content' => 'A more specific opening paragraph.',
+							'notes'   => [],
+							'issues'  => [],
+						]
+					),
+					'toArray' => [
+						'id' => 'content-result-123',
+					],
+					'getTokenUsage' => $this->usage,
+					default => null,
+				};
+			}
+		};
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-content' );
+		$request->set_param( 'mode', 'draft' );
+		$request->set_param( 'prompt', 'Write a stronger opening.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_content( $request );
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 47, $response->get_data()['requestMeta']['tokenUsage']['total'] ?? null );
+		$this->assertSame( 18, $response->get_data()['requestMeta']['tokenUsage']['input'] ?? null );
+		$this->assertSame( 29, $response->get_data()['requestMeta']['tokenUsage']['output'] ?? null );
+
+		$entries = ActivityRepository::query( [ 'scopeKey' => 'post:42' ] );
+		$this->assertCount( 1, $entries );
+		$this->assertSame( 47, $entries[0]['request']['ai']['tokenUsage']['total'] ?? null );
+		$this->assertSame( 18, $entries[0]['request']['ai']['tokenUsage']['input'] ?? null );
+		$this->assertSame( 29, $entries[0]['request']['ai']['tokenUsage']['output'] ?? null );
+	}
+
 	public function test_handle_recommend_content_persists_failed_request_diagnostic_when_scoped(): void {
 		ActivityRepository::install();
 		WordPressTestState::$options                        = [];

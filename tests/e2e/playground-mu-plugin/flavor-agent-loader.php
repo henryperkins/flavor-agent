@@ -50,6 +50,10 @@ if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 			public function generate_text(): string {
 				return '{}';
 			}
+
+			public function generate_text_result(): string {
+				return $this->generate_text();
+			}
 		};
 	}
 }

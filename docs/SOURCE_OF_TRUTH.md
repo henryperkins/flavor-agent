@@ -439,10 +439,10 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 #### Content Recommendations
 
 - **Surface:** `src/content/ContentRecommender.js` mounts a post/page `PluginDocumentSettingPanel` titled `Content Recommendations`. The same contract remains available through REST and Abilities for external callers.
-- **Trigger:** The user chooses `Draft`, `Edit`, or `Critique`, enters an optional prompt, and requests a recommendation. External callers can post the same `mode`, optional `prompt`, optional `voiceProfile`, and optional `postContext` to the endpoint.
-- **LLM:** `ChatClient::chat()` using `WritingPrompt` for Henry-voice system prompt assembly and response parsing.
+- **Trigger:** The user chooses `Draft`, `Edit`, or `Critique`, enters an optional prompt, and requests a recommendation. External callers can post the same `mode`, optional `prompt`, optional `voiceProfile`, and optional `postContext` to the endpoint; positive `postContext.postId` enables server-rendered current-post context after a per-post edit check.
+- **LLM:** `ChatClient::chat()` using `WritingPrompt` for Henry-voice system prompt assembly and response parsing. When an authorized positive `postId` is present, `PostContentRenderer` renders current-post blocks server-side and `WritingPrompt` receives that rendered text under `Existing draft`; absent or `0` keeps the text fallback path.
 - **Response:** `mode`, `title`, `summary`, `content`, `notes[]`, and `issues[]`. Editorial-only — no auto-apply path.
-- **Guards:** `edit` and `critique` modes require `postContext.content`. `draft` mode accepts a prompt, title, or other working context.
+- **Guards:** `edit` and `critique` modes require `postContext.content`. `draft` mode accepts a prompt, title, or other working context. Positive `postContext.postId` requires `current_user_can( 'edit_post', $post_id )`; no block render callbacks run without a positive post ID.
 
 #### Shared Inline Review Model
 
@@ -481,7 +481,7 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 | Ability                                | Handler                  | Permission           | Status             |
 | -------------------------------------- | ------------------------ | -------------------- | ------------------ |
 | `flavor-agent/recommend-block`         | `BlockAbilities`         | `edit_posts`         | Working            |
-| `flavor-agent/recommend-content`       | `ContentAbilities`       | `edit_posts`         | Working            |
+| `flavor-agent/recommend-content`       | `ContentAbilities`       | `edit_posts`; positive `postContext.postId` also requires `edit_post` | Working            |
 | `flavor-agent/introspect-block`        | `BlockAbilities`         | `edit_posts`         | Working (readonly) |
 | `flavor-agent/list-allowed-blocks`     | `BlockAbilities`         | `edit_posts`         | Working (readonly) |
 | `flavor-agent/recommend-patterns`      | `PatternAbilities`       | `edit_posts`         | Working            |
@@ -514,7 +514,7 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 | Route                                      | Method   | Permission                                                                    | Handler                                                         |
 | ------------------------------------------ | -------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | `/flavor-agent/v1/recommend-block`         | POST     | `edit_posts`                                                                  | `BlockAbilities::recommend_block`                               |
-| `/flavor-agent/v1/recommend-content`       | POST     | `edit_posts`                                                                  | `ContentAbilities::recommend_content`                           |
+| `/flavor-agent/v1/recommend-content`       | POST     | `edit_posts`; positive `postContext.postId` also requires `edit_post`         | `ContentAbilities::recommend_content`                           |
 | `/flavor-agent/v1/recommend-patterns`      | POST     | `edit_posts`                                                                  | `PatternAbilities::recommend_patterns`                          |
 | `/flavor-agent/v1/recommend-navigation`    | POST     | `edit_theme_options`                                                          | `NavigationAbilities::recommend_navigation`                     |
 | `/flavor-agent/v1/recommend-template`      | POST     | `edit_theme_options`                                                          | `TemplateAbilities::recommend_template`                         |

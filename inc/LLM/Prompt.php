@@ -73,36 +73,34 @@ Each item in settings/styles is an object:
   "label": "Human-readable name (e.g. 'Use theme accent background')",
   "description": "Why this helps (one sentence)",
 	"panel": "Which Inspector panel: general|layout|position|advanced|bindings|list|color|filter|typography|dimensions|border|shadow|background",
-	"type": "Optional: attribute_change|style_variation",
-	"attributeUpdates": { "attributeName": "value" },
-  "currentValue": "Optional: current value for before/after display",
-  "suggestedValue": "Optional: suggested value for before/after display",
-  "isCurrentStyle": "Optional boolean for style variation items",
-  "isRecommended": "Optional boolean for style variation items",
-  "confidence": 0.0-1.0,
-  "preview": "Optional: hex color for visual preview swatch",
-  "presetSlug": "Optional: theme preset slug being used",
-  "cssVar": "Optional: var(--wp--preset--color--accent)"
+	"type": "attribute_change|style_variation or empty string",
+	"attributeUpdates": "{\"attributeName\":\"value\"}",
+  "currentValue": "Current value display label or empty string",
+  "suggestedValue": "Suggested value display label or empty string",
+  "isCurrentStyle": false,
+  "isRecommended": false,
+  "confidence": 0.0,
+  "preview": "Hex color for visual preview swatch or empty string",
+  "presetSlug": "Theme preset slug or empty string",
+  "cssVar": "CSS custom property reference or empty string"
 }
 
 Each item in block is an object:
 {
   "label": "Human-readable name",
   "description": "Why this helps (one sentence)",
-	"type": "Optional: attribute_change|style_variation|structural_recommendation|pattern_replacement",
-	"attributeUpdates": { "attributeName": "value" },
-	"panel": "Optional for executable block items when helpful; omit it for advisory structural/pattern ideas",
+	"type": "attribute_change|style_variation|structural_recommendation|pattern_replacement or empty string",
+	"attributeUpdates": "{\"attributeName\":\"value\"}",
+	"panel": "Inspector panel for executable block items; use empty string for advisory structural/pattern ideas",
 	"operations": [],
-	"proposedOperations": [],
-	"rejectedOperations": [],
-  "currentValue": "Optional: current value for before/after display",
-  "suggestedValue": "Optional: suggested value for before/after display",
-  "isCurrentStyle": "Optional boolean for style variation items",
-  "isRecommended": "Optional boolean for style variation items",
-  "confidence": 0.0-1.0,
-  "preview": "Optional: hex color for visual preview swatch",
-  "presetSlug": "Optional: theme preset slug being used",
-  "cssVar": "Optional: var(--wp--preset--color--accent)"
+  "currentValue": "Current value display label or empty string",
+  "suggestedValue": "Suggested value display label or empty string",
+  "isCurrentStyle": false,
+  "isRecommended": false,
+  "confidence": 0.0,
+  "preview": "Hex color for visual preview swatch or empty string",
+  "presetSlug": "Theme preset slug or empty string",
+  "cssVar": "CSS custom property reference or empty string"
 }
 
 Rules:
@@ -117,8 +115,10 @@ Rules:
 - Do not include attributeUpdates on structural_recommendation or pattern_replacement items. If a local selected-block attribute update is also useful, emit it as a separate attribute_change item.
 - Advisory block suggestions must not invent executable attributeUpdates for ancestor blocks, wrappers, or replacement patterns. Only include attributeUpdates when the selected block's own local attributes can be changed safely.
 - If you need to suggest both a local selected-block mutation and a broader structural idea, emit two separate suggestions instead of combining them into one item.
+- attributeUpdates must be a JSON object string, not a nested object. Use "{}" when there are no selected-block attribute changes.
+- For display metadata, use empty string, false, or 0 when the metadata is not applicable. Use confidence 0 only when you cannot estimate confidence.
 - Every block-lane item must include operations. Use [] for ordinary attribute-only recommendations.
-- Do not invent proposedOperations or rejectedOperations; return [] for those fields when present. The plugin derives them after validation.
+- Do not invent proposedOperations or rejectedOperations. The plugin derives them after validation.
 - When allowed block pattern actions are provided, you may propose at most one operation from the catalog.
 - Use insert_pattern only with position insert_before or insert_after.
 - Use replace_block_with_pattern only when the allowed pattern lists replace.
@@ -139,12 +139,12 @@ Rules:
 - Return 2-6 suggestions total. Prioritize high-impact visual improvements.
 - If the block is inside a contentOnly container, only suggest changes to content attributes (role=content). Do not suggest style or settings changes — those panels are locked.
 - If a block only exposes content through supports.contentRole inner blocks and has no direct content attributes, do not suggest direct wrapper attribute changes.
-- You may suggest viewport visibility rules: { "metadata": { "blockVisibility": { "viewport": { "mobile": false } } } } to show/hide the block on specific devices.
+- You may suggest viewport visibility rules in attributeUpdates: "{\"metadata\":{\"blockVisibility\":{\"viewport\":{\"mobile\":false}}}}" to show/hide the block on specific devices.
 - If theme pseudo-class styles (:hover, :focus, :active, :focus-visible) are provided for a block, use them when suggesting interactive state styles.
 - Treat themeTokens.enabledFeatures and themeTokens.layout as hard capability constraints. Avoid suggesting controls the theme has disabled or locked.
 - For style objects in attributeUpdates, use the nested style format:
-  { "style": { "color": { "background": "var(--wp--preset--color--accent)" } } }
-  or preset attributes like { "backgroundColor": "accent" }.
+  "{\"style\":{\"color\":{\"background\":\"var(--wp--preset--color--accent)\"}}}"
+  or preset attributes like "{\"backgroundColor\":\"accent\"}".
 - For duotone, use style.color.duotone. Preset references must use the canonical format "var:preset|duotone|{slug}".
 - When a block supports both aspect ratio and explicit height, never suggest setting both in the same recommendation. Choose aspectRatio or height/minHeight, not both.
 - Preserve Gutenberg attribute key casing exactly in attributeUpdates (for example, backgroundColor and metadata.blockVisibility).
@@ -2077,6 +2077,60 @@ SYSTEM;
 		return null;
 	}
 
+	private static function normalize_attribute_updates_payload( mixed $value ): array {
+		if ( is_array( $value ) ) {
+			return $value;
+		}
+
+		if ( ! is_string( $value ) ) {
+			return [];
+		}
+
+		$trimmed = trim( $value );
+
+		if ( '' === $trimmed || '{}' === $trimmed ) {
+			return [];
+		}
+
+		$decoded = json_decode( $trimmed, true );
+
+		if (
+			JSON_ERROR_NONE !== json_last_error()
+			|| ! is_array( $decoded )
+			|| self::is_list_array( $decoded )
+		) {
+			return [];
+		}
+
+		return $decoded;
+	}
+
+	private static function sanitize_optional_display_value( mixed $value ): mixed {
+		$sanitized = self::sanitize_display_value( $value );
+
+		return '' === $sanitized ? null : $sanitized;
+	}
+
+	private static function sanitize_optional_number( mixed $value ): ?float {
+		if ( ! is_scalar( $value ) || ! is_numeric( $value ) ) {
+			return null;
+		}
+
+		$number = (float) $value;
+
+		return $number > 0.0 ? $number : null;
+	}
+
+	private static function sanitize_optional_text_value( mixed $value, bool $sanitize_key = false ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+
+		$sanitized = $sanitize_key ? sanitize_key( $value ) : sanitize_text_field( $value );
+
+		return '' !== $sanitized ? $sanitized : null;
+	}
+
 	private static function validate_suggestions( array $suggestions, string $group ): array {
 		$valid = [];
 		$order = 0;
@@ -2086,9 +2140,14 @@ SYSTEM;
 			}
 
 			$type                   = isset( $s['type'] ) ? sanitize_key( $s['type'] ) : null;
-			$has_executable_updates = is_array( $s['attributeUpdates'] ?? null ) && [] !== $s['attributeUpdates'];
-			$attribute_updates      = self::sanitize_attribute_updates( $s['attributeUpdates'] ?? [] );
+			$raw_attribute_updates  = self::normalize_attribute_updates_payload( $s['attributeUpdates'] ?? [] );
+			$has_executable_updates = [] !== $raw_attribute_updates;
+			$attribute_updates      = self::sanitize_attribute_updates( $raw_attribute_updates );
 			$is_advisory_block_type = 'block' === $group && self::is_advisory_only_block_type( $type );
+			$confidence             = self::sanitize_optional_number( $s['confidence'] ?? null );
+			$preview                = self::sanitize_optional_text_value( $s['preview'] ?? null );
+			$preset_slug            = self::sanitize_optional_text_value( $s['presetSlug'] ?? null, true );
+			$css_var                = self::sanitize_optional_text_value( $s['cssVar'] ?? null );
 
 			if ( $is_advisory_block_type ) {
 				$has_executable_updates = false;
@@ -2117,14 +2176,14 @@ SYSTEM;
 			$normalized += [
 				'type'             => $type,
 				'attributeUpdates' => is_array( $attribute_updates ) ? $attribute_updates : [],
-				'currentValue'     => self::sanitize_display_value( $s['currentValue'] ?? null ),
-				'suggestedValue'   => self::sanitize_display_value( $s['suggestedValue'] ?? null ),
+				'currentValue'     => self::sanitize_optional_display_value( $s['currentValue'] ?? null ),
+				'suggestedValue'   => self::sanitize_optional_display_value( $s['suggestedValue'] ?? null ),
 				'isCurrentStyle'   => isset( $s['isCurrentStyle'] ) ? (bool) $s['isCurrentStyle'] : null,
 				'isRecommended'    => isset( $s['isRecommended'] ) ? (bool) $s['isRecommended'] : null,
-				'confidence'       => isset( $s['confidence'] ) ? (float) $s['confidence'] : null,
-				'preview'          => isset( $s['preview'] ) ? sanitize_text_field( $s['preview'] ) : null,
-				'presetSlug'       => isset( $s['presetSlug'] ) ? sanitize_key( $s['presetSlug'] ) : null,
-				'cssVar'           => isset( $s['cssVar'] ) ? sanitize_text_field( $s['cssVar'] ) : null,
+				'confidence'       => $confidence,
+				'preview'          => $preview,
+				'presetSlug'       => $preset_slug,
+				'cssVar'           => $css_var,
 			];
 
 			if ( 'block' === $group ) {
@@ -2139,7 +2198,7 @@ SYSTEM;
 				$ranking_input['score'] ?? null,
 				$s['score'] ?? null,
 				$ranking_input['confidence'] ?? null,
-				$s['confidence'] ?? null
+				$confidence
 			);
 			if ( null === $computed_score ) {
 				$computed_score = RankingContract::derive_score(
@@ -2148,7 +2207,7 @@ SYSTEM;
 						'has_executable_updates' => $has_executable_updates ? 0.25 : 0.0,
 						'has_description'        => '' !== $normalized['description'] ? 0.15 : 0.0,
 						'has_type'               => null !== $type && '' !== $type ? 0.05 : 0.0,
-						'has_preview'            => null !== $normalized['preview'] && '' !== $normalized['preview'] ? 0.05 : 0.0,
+						'has_preview'            => null !== $normalized['preview'] ? 0.05 : 0.0,
 					]
 				);
 			}
@@ -2162,7 +2221,7 @@ SYSTEM;
 				$source_signals[] = 'has_description';
 			}
 
-			if ( array_key_exists( 'ranking', $s ) || isset( $s['confidence'] ) || isset( $s['score'] ) ) {
+			if ( array_key_exists( 'ranking', $s ) || null !== $confidence || isset( $s['score'] ) ) {
 				$normalized['ranking'] = RankingContract::normalize(
 					$ranking_input,
 					[

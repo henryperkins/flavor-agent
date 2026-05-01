@@ -123,6 +123,67 @@ final class AISearchClientTest extends TestCase {
 		);
 	}
 
+	public function test_search_accepts_current_cloudflare_chunk_shape_with_source_key_only(): void {
+		WordPressTestState::$options              = [
+			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
+			'flavor_agent_cloudflare_ai_search_instance_id' => 'default/green-sun',
+			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
+		];
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'search_query' => 'block editor',
+					'chunks'       => [
+						[
+							'id'    => 'chunk-1',
+							'score' => 0.88,
+							'type'  => 'text',
+							'item'  => [
+								'key'       => 'ai-search/wp-dev-docs/developer.wordpress.org/block-editor/reference-guides/packages/packages-edit-widgets/17cdbd65c37e71c679c075cbf9b1443c019c399384140cae7323fcfa3ae26769/part-0001.md',
+								'timestamp' => 1775925540000,
+							],
+							'text'  => 'The Widgets screen is another block editor in WordPress admin.',
+						],
+						[
+							'id'    => 'chunk-2',
+							'score' => 0.77,
+							'type'  => 'text',
+							'item'  => [
+								'key'       => 'ai-search/green-sun/developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/27cdbd65c37e71c679c075cbf9b1443c019c399384140cae7323fcfa3ae26769/part-0001.md',
+								'timestamp' => 1775925540000,
+							],
+							'text'  => 'Instance-keyed chunks can derive the docs URL when a namespace-scoped instance is configured.',
+						],
+					],
+				]
+			),
+		];
+
+		$result = AISearchClient::search( 'block editor' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			'https://api.cloudflare.com/client/v4/accounts/account-123/ai-search/namespaces/default/instances/green-sun/search',
+			WordPressTestState::$last_remote_post['url']
+		);
+		$this->assertCount( 2, $result['guidance'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/block-editor/reference-guides/packages/packages-edit-widgets/',
+			$result['guidance'][0]['url']
+		);
+		$this->assertSame(
+			'The Widgets screen is another block editor in WordPress admin.',
+			$result['guidance'][0]['excerpt']
+		);
+		$this->assertSame(
+			'https://developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/',
+			$result['guidance'][1]['url']
+		);
+	}
+
 	public function test_search_normalizes_crlf_frontmatter_before_extracting_url_and_excerpt(): void {
 		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -169,41 +230,45 @@ final class AISearchClientTest extends TestCase {
 		$this->assertStringNotContainsString( 'source_url', $result['guidance'][0]['excerpt'] );
 	}
 
-	public function test_search_rejects_chunks_without_explicit_trusted_urls_even_with_trusted_source_keys(): void {
-		WordPressTestState::$options                  = [
+	public function test_search_accepts_trusted_ai_search_source_key_when_url_metadata_is_missing(): void {
+		WordPressTestState::$options              = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 			'flavor_agent_cloudflare_ai_search_max_results' => 4,
 		];
-			WordPressTestState::$remote_post_response = [
-				'response' => [
-					'code' => 200,
-				],
-				'body'     => wp_json_encode(
-					[
-						'result' => [
-							'search_query' => 'block editor',
-							'chunks'       => [
-								[
-									'id'    => 'chunk-1',
-									'score' => 0.76,
-									'item'  => [
-										'key'      => 'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
-										'metadata' => [],
-									],
-									'text'  => 'Malicious non-doc content that only borrows a trusted-looking source key.',
+		WordPressTestState::$remote_post_response = [
+			'response' => [
+				'code' => 200,
+			],
+			'body'     => wp_json_encode(
+				[
+					'result' => [
+						'search_query' => 'block editor',
+						'chunks'       => [
+							[
+								'id'    => 'chunk-1',
+								'score' => 0.76,
+								'item'  => [
+									'key'      => 'ai-search/wp-dev-docs/developer.wordpress.org/rest-api/reference/blocks/20783ff926859519ef7fb001db48a93ffe461fec8c5d4d02505544331fff64d2/part-0001.md',
+									'metadata' => [],
 								],
+								'text'  => 'REST API block reference guidance.',
 							],
 						],
-					]
-				),
-			];
+					],
+				]
+			),
+		];
 
-			$result = AISearchClient::search( 'block editor' );
+		$result = AISearchClient::search( 'block editor' );
 
-			$this->assertIsArray( $result );
-			$this->assertSame( [], $result['guidance'] );
+		$this->assertIsArray( $result );
+		$this->assertCount( 1, $result['guidance'] );
+		$this->assertSame(
+			'https://developer.wordpress.org/rest-api/reference/blocks/',
+			$result['guidance'][0]['url']
+		);
 	}
 
 	public function test_search_rejects_forged_or_traversing_source_keys_when_urls_are_missing(): void {
@@ -307,7 +372,7 @@ final class AISearchClientTest extends TestCase {
 		$this->assertSame( 3, $request_body['ai_search_options']['retrieval']['max_num_results'] );
 	}
 
-	public function test_validate_configuration_rejects_probe_results_without_explicit_trusted_urls(): void {
+	public function test_validate_configuration_rejects_probe_results_without_trusted_source_keys_or_urls(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [
 				'code' => 200,
@@ -319,7 +384,7 @@ final class AISearchClientTest extends TestCase {
 							[
 								'id'   => 'forged-probe',
 								'item' => [
-									'key'      => 'developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
+									'key'      => 'internal/developer.wordpress.org/block-editor/reference-guides/block-api/block-supports',
 									'metadata' => [],
 								],
 								'text' => 'Malicious non-doc content that only borrows a trusted-looking source key.',

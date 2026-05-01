@@ -198,6 +198,7 @@ describe( 'ContentRecommender', () => {
 			mode: 'draft',
 			prompt: 'Tighten the opening.',
 			postContext: {
+				postId: 42,
 				postType: 'post',
 				title: 'Working draft',
 				excerpt: '',

@@ -267,113 +267,76 @@ final class ResponseSchema {
 
 	private static function block_setting_style_item_schema(): array {
 		return self::strict_object(
-			[
-				'label'            => [ 'type' => 'string' ],
-				'description'      => [ 'type' => 'string' ],
-				'panel'            => [
-					'type' => 'string',
-					'enum' => self::BLOCK_PANELS,
+			array_merge(
+				[
+					'label'            => [ 'type' => 'string' ],
+					'description'      => [ 'type' => 'string' ],
+					'panel'            => [
+						'type' => 'string',
+						'enum' => self::BLOCK_PANELS,
+					],
+					'type'             => [
+						'type' => 'string',
+						'enum' => [ 'attribute_change', 'style_variation', '' ],
+					],
+					'attributeUpdates' => [ 'type' => 'string' ],
 				],
-				'type'             => [
-					'type' => [ 'string', 'null' ],
-					'enum' => [ 'attribute_change', 'style_variation', null ],
-				],
-				'attributeUpdates' => [
-					'type' => [ 'object', 'null' ],
-				],
-				'currentValue'     => self::any_value(),
-				'suggestedValue'   => self::any_value(),
-				'isCurrentStyle'   => self::nullable_boolean(),
-				'isRecommended'    => self::nullable_boolean(),
-				'confidence'       => self::nullable_number(),
-				'preview'          => self::nullable_string(),
-				'presetSlug'       => self::nullable_string(),
-				'cssVar'           => self::nullable_string(),
-			]
+				self::block_display_metadata_schema()
+			)
 		);
 	}
 
 	private static function block_block_item_schema(): array {
 		return self::strict_object(
-			[
-				'label'              => [ 'type' => 'string' ],
-				'description'        => [ 'type' => 'string' ],
-				'type'               => [
-					'type' => [ 'string', 'null' ],
-					'enum' => [ 'attribute_change', 'style_variation', 'structural_recommendation', 'pattern_replacement', null ],
+			array_merge(
+				[
+					'label'            => [ 'type' => 'string' ],
+					'description'      => [ 'type' => 'string' ],
+					'type'             => [
+						'type' => 'string',
+						'enum' => [ 'attribute_change', 'style_variation', 'structural_recommendation', 'pattern_replacement', '' ],
+					],
+					'attributeUpdates' => [ 'type' => 'string' ],
+					'panel'            => [
+						'type' => 'string',
+						'enum' => array_merge( self::BLOCK_PANELS, [ '' ] ),
+					],
+					'operations'       => [
+						'type'  => 'array',
+						'items' => self::block_operation_schema(),
+					],
 				],
-				'attributeUpdates'   => [
-					'type' => [ 'object', 'null' ],
-				],
-				'panel'              => [
-					'type' => [ 'string', 'null' ],
-					'enum' => array_merge( self::BLOCK_PANELS, [ null ] ),
-				],
-				'operations'         => [
-					'type'  => 'array',
-					'items' => self::block_operation_schema(),
-				],
-				'proposedOperations' => [
-					'type'  => 'array',
-					'items' => self::block_operation_schema(),
-				],
-				'rejectedOperations' => [
-					'type'  => 'array',
-					'items' => self::block_operation_rejection_schema(),
-				],
-				'currentValue'       => self::any_value(),
-				'suggestedValue'     => self::any_value(),
-				'isCurrentStyle'     => self::nullable_boolean(),
-				'isRecommended'      => self::nullable_boolean(),
-				'confidence'         => self::nullable_number(),
-				'preview'            => self::nullable_string(),
-				'presetSlug'         => self::nullable_string(),
-				'cssVar'             => self::nullable_string(),
-			]
+				self::block_display_metadata_schema()
+			)
 		);
+	}
+
+	private static function block_display_metadata_schema(): array {
+		return [
+			'currentValue'   => [ 'type' => 'string' ],
+			'suggestedValue' => [ 'type' => 'string' ],
+			'isCurrentStyle' => [ 'type' => 'boolean' ],
+			'isRecommended'  => [ 'type' => 'boolean' ],
+			'confidence'     => [ 'type' => 'number' ],
+			'preview'        => [ 'type' => 'string' ],
+			'presetSlug'     => [ 'type' => 'string' ],
+			'cssVar'         => [ 'type' => 'string' ],
+		];
 	}
 
 	private static function block_operation_schema(): array {
 		return self::strict_object(
 			[
-				'catalogVersion'  => self::nullable_integer(),
-				'type'            => [
-					'type' => [ 'string', 'null' ],
-					'enum' => [ 'insert_pattern', 'replace_block_with_pattern', null ],
+				'type'           => [
+					'type' => 'string',
+					'enum' => [ 'insert_pattern', 'replace_block_with_pattern' ],
 				],
-				'patternName'     => self::nullable_string(),
-				'targetClientId'  => self::nullable_string(),
-				'position'        => self::nullable_string(),
-				'action'          => self::nullable_string(),
-				'targetSignature' => self::nullable_string(),
-				'targetSurface'   => self::nullable_string(),
-				'targetType'      => self::nullable_string(),
-				'expectedTarget'  => self::nullable_block_operation_expected_target_schema(),
-			]
-		);
-	}
-
-	private static function block_operation_rejection_schema(): array {
-		return self::strict_object(
-			[
-				'code'      => self::nullable_string(),
-				'message'   => self::nullable_string(),
-				'operation' => [
-					'type'                 => [ 'object', 'null' ],
-					'additionalProperties' => true,
+				'patternName'    => [ 'type' => 'string' ],
+				'targetClientId' => [ 'type' => 'string' ],
+				'position'       => [
+					'type' => 'string',
+					'enum' => [ 'insert_before', 'insert_after', '' ],
 				],
-			]
-		);
-	}
-
-	private static function nullable_block_operation_expected_target_schema(): array {
-		return self::nullable_strict_object(
-			[
-				'clientId'   => self::nullable_string(),
-				'name'       => self::nullable_string(),
-				'label'      => self::nullable_string(),
-				'attributes' => [ 'type' => [ 'object', 'null' ] ],
-				'childCount' => self::nullable_integer(),
 			]
 		);
 	}

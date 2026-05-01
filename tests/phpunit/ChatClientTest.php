@@ -17,22 +17,21 @@ final class ChatClientTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
-	public function test_block_response_schema_exposes_normalized_operation_diagnostics(): void {
+	public function test_block_response_schema_exposes_compact_operation_proposals(): void {
 		$schema     = ResponseSchema::get( 'block' );
 		$suggestion = $schema['properties']['block']['items'] ?? [];
 		$operation  = $suggestion['properties']['operations']['items'] ?? [];
-		$rejection  = $suggestion['properties']['rejectedOperations']['items'] ?? [];
 
 		$this->assertSame( 'array', $suggestion['properties']['operations']['type'] ?? null );
-		$this->assertSame( 'array', $suggestion['properties']['proposedOperations']['type'] ?? null );
-		$this->assertSame( 'array', $suggestion['properties']['rejectedOperations']['type'] ?? null );
+		$this->assertArrayNotHasKey( 'proposedOperations', $suggestion['properties'] ?? [] );
+		$this->assertArrayNotHasKey( 'rejectedOperations', $suggestion['properties'] ?? [] );
 		$this->assertSame(
-			[ 'string', 'null' ],
-			$operation['properties']['expectedTarget']['properties']['clientId']['type'] ?? null
+			[ 'type', 'patternName', 'targetClientId', 'position' ],
+			array_keys( $operation['properties'] ?? [] )
 		);
 		$this->assertSame(
-			[ 'object', 'null' ],
-			$rejection['properties']['operation']['type'] ?? null
+			[ 'insert_pattern', 'replace_block_with_pattern' ],
+			$operation['properties']['type']['enum'] ?? null
 		);
 	}
 
@@ -146,7 +145,7 @@ final class ChatClientTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_connector_json_schema_normalizes_nullable_enums_for_schema_compatible_connector(): void {
+	public function test_connector_json_schema_sends_compact_block_schema_for_schema_compatible_connector(): void {
 		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'openai',
 		];
@@ -177,22 +176,28 @@ final class ChatClientTest extends TestCase {
 			$result
 		);
 
-		$schema      = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
-		$type_schema = $schema['properties']['settings']['items']['properties']['type'] ?? [];
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
 
-		$this->assertArrayNotHasKey( 'type', $type_schema );
+		$this->assertSame( 0, self::count_schema_unions( $schema ) );
 		$this->assertSame(
-			[
-				[
-					'type' => 'string',
-					'enum' => [ 'attribute_change', 'style_variation' ],
-				],
-				[
-					'type' => 'null',
-					'enum' => [ null ],
-				],
-			],
-			$type_schema['anyOf'] ?? null
+			'string',
+			$schema['properties']['settings']['items']['properties']['attributeUpdates']['type'] ?? null
+		);
+		$this->assertSame(
+			'string',
+			$schema['properties']['settings']['items']['properties']['currentValue']['type'] ?? null
+		);
+		$this->assertSame(
+			'number',
+			$schema['properties']['settings']['items']['properties']['confidence']['type'] ?? null
+		);
+		$this->assertArrayNotHasKey(
+			'proposedOperations',
+			$schema['properties']['block']['items']['properties'] ?? []
+		);
+		$this->assertArrayNotHasKey(
+			'rejectedOperations',
+			$schema['properties']['block']['items']['properties'] ?? []
 		);
 	}
 
@@ -227,7 +232,7 @@ final class ChatClientTest extends TestCase {
 		$this->assertObjectSchemasDisallowAdditionalProperties( $schema );
 	}
 
-	public function test_anthropic_connector_skips_block_schema_that_exceeds_union_limit(): void {
+	public function test_connector_skips_schema_that_exceeds_union_limit(): void {
 		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'anthropic',
 		];
@@ -250,7 +255,7 @@ final class ChatClientTest extends TestCase {
 		ChatClient::chat(
 			'system prompt',
 			'user prompt',
-			ResponseSchema::get( 'block' )
+			$this->make_schema_with_many_unions( 17 )
 		);
 
 		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
@@ -357,5 +362,20 @@ final class ChatClientTest extends TestCase {
 		}
 
 		return $count;
+	}
+
+	private function make_schema_with_many_unions( int $count ): array {
+		$properties = [];
+
+		for ( $index = 0; $index < $count; ++$index ) {
+			$properties[ 'field' . $index ] = [ 'type' => [ 'string', 'null' ] ];
+		}
+
+		return [
+			'type'                 => 'object',
+			'additionalProperties' => false,
+			'properties'           => $properties,
+			'required'             => array_keys( $properties ),
+		];
 	}
 }

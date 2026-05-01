@@ -13,24 +13,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Fields {
 
 	public static function render_text_field( array $args ): void {
-		$option      = (string) ( $args['option'] ?? '' );
-		$type        = $args['type'] ?? 'text';
-		$placeholder = $args['placeholder'] ?? '';
-		$description = $args['description'] ?? '';
-		$default     = (string) ( $args['default'] ?? '' );
-		$value       = (string) get_option( $option, $default );
-		$field_id    = (string) ( $args['label_for'] ?? $option );
-		$is_password = 'password' === (string) $type;
+		$option             = (string) ( $args['option'] ?? '' );
+		$type               = $args['type'] ?? 'text';
+		$placeholder        = $args['placeholder'] ?? '';
+		$description        = $args['description'] ?? '';
+		$default            = (string) ( $args['default'] ?? '' );
+		$value              = (string) get_option( $option, $default );
+		$field_id           = (string) ( $args['label_for'] ?? $option );
+		$is_password        = 'password' === (string) $type;
+		$has_saved_password = $is_password && '' !== $value;
 
-		if ( $is_password && '' !== $value ) {
+		if ( $has_saved_password ) {
 			$value       = '';
 			$description = '' !== (string) $description
 				? sprintf(
 					'%1$s<br />%2$s',
 					(string) $description,
-					esc_html__( 'Saved value is set. Leave this field blank to keep it, or enter a new value to replace it.', 'flavor-agent' )
+					esc_html__( 'Saved value exists. For security, this field is intentionally blank. Leave it blank to keep the saved value, or enter a new value to replace it.', 'flavor-agent' )
 				)
-				: esc_html__( 'Saved value is set. Leave this field blank to keep it, or enter a new value to replace it.', 'flavor-agent' );
+				: esc_html__( 'Saved value exists. For security, this field is intentionally blank. Leave it blank to keep the saved value, or enter a new value to replace it.', 'flavor-agent' );
 		}
 
 		$description_id = '' !== $description ? $field_id . '-description' : '';
@@ -72,8 +73,21 @@ final class Fields {
 		if ( '' !== $autocomplete ) {
 			$attributes['autocomplete'] = $autocomplete;
 		}
+
+		if ( $has_saved_password ) {
+			$attributes['data-saved-secret'] = 'true';
+		}
 		?>
+		<?php if ( $has_saved_password ) : ?>
+			<span class="flavor-agent-settings-secret-field">
+		<?php endif; ?>
 		<input<?php Utils::render_html_attributes( $attributes ); ?> />
+		<?php if ( $has_saved_password ) : ?>
+			<span class="flavor-agent-settings-secret-field__status" aria-hidden="true">
+				<?php echo esc_html__( 'Saved', 'flavor-agent' ); ?>
+			</span>
+			</span>
+		<?php endif; ?>
 		<?php
 
 		if ( $description ) {

@@ -326,6 +326,33 @@
 	padding-inline: 14px;
 }
 
+.flavor-agent-settings-secret-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: min(100%, 460px);
+}
+
+.flavor-agent-settings-secret-field .flavor-agent-settings-field {
+	width: 100%;
+	min-width: 0;
+}
+
+.flavor-agent-settings-secret-field__status {
+	display: inline-flex;
+	align-items: center;
+	min-height: 28px;
+	padding: 0 10px;
+	border-radius: var(--flavor-agent-radius-full);
+	background: var(--wpds-color-bg-surface-success-weak, #eaffed);
+	color: var(--wpds-color-fg-content-success-weak, #007f30);
+	font-size: var(--wpds-font-size-xs, 11px);
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
 .flavor-agent-settings textarea.flavor-agent-settings-field {
 	min-height: 132px;
 	padding: 14px;
@@ -729,6 +756,7 @@
 
 	.flavor-agent-settings-section__summary {
 		flex-direction: column;
+		align-items: stretch;
 	}
 
 	.flavor-agent-settings-section__summary-side {

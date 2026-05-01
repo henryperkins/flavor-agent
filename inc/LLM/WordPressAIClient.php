@@ -6,7 +6,6 @@ namespace FlavorAgent\LLM;
 
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\MetricsNormalizer;
-use WordPress\AI_Client\AI_Client;
 use WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception;
 
 final class WordPressAIClient {
@@ -15,8 +14,7 @@ final class WordPressAIClient {
 	private const PROMPT_PREVENTED_CODE    = 'prompt_prevented';
 	private const PROMPT_PREVENTED_MESSAGE = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
 	private const REASONING_EFFORTS        = [ 'low', 'medium', 'high', 'xhigh' ];
-	private const ANTHROPIC_PROVIDER       = 'anthropic';
-	private const ANTHROPIC_UNION_LIMIT    = 16;
+	private const SCHEMA_UNION_LIMIT       = 16;
 
 	public static function is_supported( ?string $provider = null ): bool {
 		$prompt = self::make_prompt( 'Flavor Agent availability check.' );
@@ -75,7 +73,8 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt = self::apply_output_schema( $prompt, $schema, $provider );
+		$schema = self::prepare_output_schema( $schema );
+		$prompt = self::apply_output_schema( $prompt, $schema );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -89,7 +88,7 @@ final class WordPressAIClient {
 			$schema
 		);
 		$started_at          = microtime( true );
-		$result              = self::call_prompt_method( $prompt, 'generate_text' );
+		$result              = self::call_prompt_method( $prompt, 'generate_text_result' );
 
 		if ( is_wp_error( $result ) ) {
 			Provider::record_runtime_chat_diagnostics(
@@ -268,14 +267,18 @@ final class WordPressAIClient {
 		return $prompt;
 	}
 
-	private static function apply_output_schema( object $prompt, ?array $schema, ?string $provider ): object {
+	private static function prepare_output_schema( ?array $schema ): ?array {
 		if ( null === $schema || [] === $schema ) {
-			return $prompt;
+			return null;
 		}
 
 		$schema = self::normalize_output_schema( $schema );
 
-		if ( self::should_skip_output_schema( $provider, $schema ) ) {
+		return self::should_skip_output_schema( $schema ) ? null : $schema;
+	}
+
+	private static function apply_output_schema( object $prompt, ?array $schema ): object {
+		if ( null === $schema || [] === $schema ) {
 			return $prompt;
 		}
 
@@ -436,11 +439,8 @@ final class WordPressAIClient {
 		return is_array( $schema_type ) && in_array( $type, $schema_type, true );
 	}
 
-	private static function should_skip_output_schema( ?string $provider, array $schema ): bool {
-		$provider = is_string( $provider ) ? sanitize_key( $provider ) : '';
-
-		return self::ANTHROPIC_PROVIDER === $provider
-			&& self::count_schema_unions( $schema ) > self::ANTHROPIC_UNION_LIMIT;
+	private static function should_skip_output_schema( array $schema ): bool {
+		return self::count_schema_unions( $schema ) > self::SCHEMA_UNION_LIMIT;
 	}
 
 	private static function count_schema_unions( array $schema ): int {
@@ -602,7 +602,12 @@ final class WordPressAIClient {
 		}
 
 		if ( is_object( $result ) ) {
-			$result = get_object_vars( $result );
+			$object_text = self::extract_generated_text_from_object( $result );
+			$result      = self::normalize_result_object( $result );
+
+			if ( '' !== $object_text && ! isset( $result['text'] ) ) {
+				$result['text'] = $object_text;
+			}
 		}
 
 		if ( ! is_array( $result ) ) {
@@ -739,6 +744,104 @@ final class WordPressAIClient {
 		return '';
 	}
 
+	private static function extract_generated_text_from_object( object $result ): string {
+		foreach ( [ 'toText', 'to_text', 'getText', 'get_text' ] as $method ) {
+			if ( ! is_callable( [ $result, $method ] ) ) {
+				continue;
+			}
+
+			try {
+				$text = $result->{$method}();
+
+				if ( is_string( $text ) ) {
+					return trim( $text );
+				}
+			} catch ( \Throwable ) {
+				continue;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_result_object( object $result ): array {
+		$normalized = [];
+
+		foreach ( [ 'toArray', 'to_array', 'jsonSerialize' ] as $method ) {
+			if ( ! is_callable( [ $result, $method ] ) ) {
+				continue;
+			}
+
+			try {
+				$value = $result->{$method}();
+
+				if ( is_array( $value ) ) {
+					$normalized = $value;
+					break;
+				}
+			} catch ( \Throwable ) {
+				continue;
+			}
+		}
+
+		if ( [] === $normalized ) {
+			$normalized = get_object_vars( $result );
+		}
+
+		foreach ( [ 'getTokenUsage', 'get_token_usage' ] as $method ) {
+			if ( ! is_callable( [ $result, $method ] ) ) {
+				continue;
+			}
+
+			try {
+				$usage = self::normalize_result_metric_object( $result->{$method}() );
+
+				if ( [] !== $usage ) {
+					$normalized['tokenUsage'] = $usage;
+					break;
+				}
+			} catch ( \Throwable ) {
+				continue;
+			}
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function normalize_result_metric_object( mixed $value ): array {
+		if ( is_array( $value ) ) {
+			return $value;
+		}
+
+		if ( ! is_object( $value ) ) {
+			return [];
+		}
+
+		foreach ( [ 'toArray', 'to_array', 'jsonSerialize' ] as $method ) {
+			if ( ! is_callable( [ $value, $method ] ) ) {
+				continue;
+			}
+
+			try {
+				$normalized = $value->{$method}();
+
+				if ( is_array( $normalized ) ) {
+					return $normalized;
+				}
+			} catch ( \Throwable ) {
+				continue;
+			}
+		}
+
+		return get_object_vars( $value );
+	}
+
 	/**
 	 * @param array<string, mixed> $result
 	 * @return array<string, int>
@@ -751,8 +854,8 @@ final class WordPressAIClient {
 		}
 
 		$total  = self::first_metric_int( $usage, [ 'total', 'totalTokens', 'total_tokens' ] );
-		$input  = self::first_metric_int( $usage, [ 'input', 'inputTokens', 'input_tokens', 'prompt_tokens' ] );
-		$output = self::first_metric_int( $usage, [ 'output', 'outputTokens', 'output_tokens', 'completion_tokens' ] );
+		$input  = self::first_metric_int( $usage, [ 'input', 'inputTokens', 'input_tokens', 'promptTokens', 'prompt_tokens' ] );
+		$output = self::first_metric_int( $usage, [ 'output', 'outputTokens', 'output_tokens', 'completionTokens', 'completion_tokens' ] );
 
 		return array_filter(
 			[

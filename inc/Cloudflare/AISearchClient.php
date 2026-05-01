@@ -180,9 +180,8 @@ final class AISearchClient {
 			return $data;
 		}
 
-		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
 		$guidance = self::normalize_chunks(
-			is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [],
+			self::extract_search_chunks( $data ),
 			$config['instanceId']
 		);
 
@@ -195,7 +194,7 @@ final class AISearchClient {
 		}
 
 		return [
-			'query'    => sanitize_text_field( (string) ( $result['search_query'] ?? $query ) ),
+			'query'    => self::extract_search_query( $data, $query ),
 			'guidance' => $guidance,
 		];
 	}
@@ -1421,7 +1420,7 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @return array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
+	 * @return array{mode: string, namespace: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
 	 */
 	private static function get_config(
 		?string $account_id = null,
@@ -1458,7 +1457,7 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @return array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
+	 * @return array{mode: string, namespace: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
 	 */
 	private static function build_legacy_config( string $account_id, string $instance_id, string $api_token ): array|\WP_Error {
 		if ( ! self::has_legacy_credentials( $account_id, $instance_id, $api_token ) ) {
@@ -1469,25 +1468,41 @@ final class AISearchClient {
 			);
 		}
 
-		return [
-			'mode'        => 'legacy',
-			'instanceId'  => $instance_id,
-			'instanceUrl' => sprintf(
+		$instance_reference = self::parse_legacy_instance_reference( $instance_id );
+
+		if ( '' === $instance_reference['instanceId'] ) {
+			return new \WP_Error(
+				'invalid_cloudflare_ai_search_instance',
+				'Cloudflare AI Search instance name is invalid.',
+				[ 'status' => 400 ]
+			);
+		}
+
+		$instance_path = '' !== $instance_reference['namespace']
+			? sprintf(
+				'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/namespaces/%s/instances/%s',
+				rawurlencode( $account_id ),
+				rawurlencode( $instance_reference['namespace'] ),
+				rawurlencode( $instance_reference['instanceId'] )
+			)
+			: sprintf(
 				'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances/%s',
 				rawurlencode( $account_id ),
-				rawurlencode( $instance_id )
-			),
-			'searchUrl'   => sprintf(
-				'https://api.cloudflare.com/client/v4/accounts/%s/ai-search/instances/%s/search',
-				rawurlencode( $account_id ),
-				rawurlencode( $instance_id )
-			),
+				rawurlencode( $instance_reference['instanceId'] )
+			);
+
+		return [
+			'mode'        => 'legacy',
+			'namespace'   => $instance_reference['namespace'],
+			'instanceId'  => $instance_reference['instanceId'],
+			'instanceUrl' => $instance_path,
+			'searchUrl'   => $instance_path . '/search',
 			'apiToken'    => $api_token,
 		];
 	}
 
 	/**
-	 * @return array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
+	 * @return array{mode: string, namespace: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string}|\WP_Error
 	 */
 	private static function build_public_config( string $search_url ): array|\WP_Error {
 		$normalized_search_url = self::normalize_public_search_url( $search_url );
@@ -1502,10 +1517,71 @@ final class AISearchClient {
 
 		return [
 			'mode'        => 'public',
+			'namespace'   => '',
 			'instanceId'  => self::extract_public_instance_id( $normalized_search_url ),
 			'instanceUrl' => '',
 			'searchUrl'   => $normalized_search_url,
 			'apiToken'    => '',
+		];
+	}
+
+	/**
+	 * @return array{namespace: string, instanceId: string}
+	 */
+	private static function parse_legacy_instance_reference( string $instance_id ): array {
+		$instance_id = trim( $instance_id );
+
+		if ( '' === $instance_id ) {
+			return [
+				'namespace'  => '',
+				'instanceId' => '',
+			];
+		}
+
+		$parts = wp_parse_url( $instance_id );
+
+		if ( is_array( $parts ) && ! empty( $parts['path'] ) ) {
+			$path = (string) $parts['path'];
+
+			if ( preg_match( '#/ai-search/namespaces/([^/]+)/instances/([^/]+)(?:/search)?/?$#', $path, $matches ) ) {
+				return [
+					'namespace'  => sanitize_text_field( rawurldecode( (string) ( $matches[1] ?? '' ) ) ),
+					'instanceId' => sanitize_text_field( rawurldecode( (string) ( $matches[2] ?? '' ) ) ),
+				];
+			}
+
+			if ( preg_match( '#/ai-search/instances/([^/]+)(?:/search)?/?$#', $path, $matches ) ) {
+				return [
+					'namespace'  => '',
+					'instanceId' => sanitize_text_field( rawurldecode( (string) ( $matches[1] ?? '' ) ) ),
+				];
+			}
+		}
+
+		if ( preg_match( '#^namespaces/([^/]+)/instances/([^/]+)(?:/search)?/?$#', $instance_id, $matches ) ) {
+			return [
+				'namespace'  => sanitize_text_field( rawurldecode( (string) ( $matches[1] ?? '' ) ) ),
+				'instanceId' => sanitize_text_field( rawurldecode( (string) ( $matches[2] ?? '' ) ) ),
+			];
+		}
+
+		$segments = array_values(
+			array_filter(
+				explode( '/', $instance_id ),
+				static fn ( string $segment ): bool => '' !== trim( $segment )
+			)
+		);
+
+		if ( 2 === count( $segments ) ) {
+			return [
+				'namespace'  => sanitize_text_field( rawurldecode( $segments[0] ) ),
+				'instanceId' => sanitize_text_field( rawurldecode( $segments[1] ) ),
+			];
+		}
+
+		return [
+			'namespace'  => '',
+			'instanceId' => sanitize_text_field( rawurldecode( $instance_id ) ),
 		];
 	}
 
@@ -1609,7 +1685,7 @@ final class AISearchClient {
 	}
 
 	/**
-	 * @param array{mode: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
+	 * @param array{mode: string, namespace: string, instanceId: string, instanceUrl: string, searchUrl: string, apiToken: string} $config
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	private static function request_search(
@@ -1665,6 +1741,25 @@ final class AISearchClient {
 		}
 
 		return $data;
+	}
+
+	/**
+	 * @param array<string, mixed> $data
+	 * @return array<int, mixed>
+	 */
+	private static function extract_search_chunks( array $data ): array {
+		$result = is_array( $data['result'] ?? null ) ? $data['result'] : $data;
+
+		return is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [];
+	}
+
+	/**
+	 * @param array<string, mixed> $data
+	 */
+	private static function extract_search_query( array $data, string $fallback ): string {
+		$result = is_array( $data['result'] ?? null ) ? $data['result'] : $data;
+
+		return sanitize_text_field( (string) ( $result['search_query'] ?? $fallback ) );
 	}
 
 	private static function build_search_request_body( string $query, int $result_limit ): string {
@@ -1911,9 +2006,8 @@ final class AISearchClient {
 			return $data;
 		}
 
-		$result   = is_array( $data['result'] ?? null ) ? $data['result'] : [];
 		$guidance = self::normalize_chunks(
-			is_array( $result['chunks'] ?? null ) ? $result['chunks'] : [],
+			self::extract_search_chunks( $data ),
 			$config['instanceId']
 		);
 
@@ -2054,7 +2148,14 @@ final class AISearchClient {
 			$metadata     = is_array( $item['metadata'] ?? null ) ? $item['metadata'] : [];
 			$parsed_chunk = self::parse_chunk_text( (string) ( $chunk['text'] ?? '' ) );
 			$source_key   = sanitize_text_field( (string) ( $item['key'] ?? '' ) );
-			$url          = self::normalize_guidance_url( $metadata['url'] ?? null, $parsed_chunk['url'] );
+			$url          = self::normalize_guidance_url(
+				self::collect_guidance_url_candidates(
+					$metadata,
+					$parsed_chunk['url'],
+					$source_key,
+					$instance_id
+				)
+			);
 			$text         = self::sanitize_excerpt( $parsed_chunk['excerpt'] );
 
 			if ( $text === '' || $url === '' || ! self::is_allowed_guidance_source( $source_key, $url, $instance_id ) ) {
@@ -2078,34 +2179,64 @@ final class AISearchClient {
 		return \FlavorAgent\Support\GuidanceExcerpt::sanitize( $text );
 	}
 
-	private static function normalize_guidance_url( mixed $metadata_url, string $frontmatter_url ): string {
-		$has_metadata_url    = is_string( $metadata_url ) && trim( $metadata_url ) !== '';
-		$has_frontmatter_url = trim( $frontmatter_url ) !== '';
+	/**
+	 * @param array<string, mixed> $metadata
+	 * @return array<int, string>
+	 */
+	private static function collect_guidance_url_candidates( array $metadata, string $frontmatter_url, string $source_key, ?string $instance_id = null ): array {
+		$candidates = [];
 
-		$normalized_metadata_url    = self::normalize_trusted_guidance_url( $metadata_url );
-		$normalized_frontmatter_url = self::normalize_trusted_guidance_url( $frontmatter_url );
-
-		if ( $has_metadata_url && $normalized_metadata_url === '' ) {
-			return '';
+		foreach ( [ 'url', 'source_url', 'sourceUrl', 'original_url', 'originalUrl', 'permalink' ] as $key ) {
+			if ( isset( $metadata[ $key ] ) && is_string( $metadata[ $key ] ) && '' !== trim( $metadata[ $key ] ) ) {
+				$candidates[] = $metadata[ $key ];
+			}
 		}
 
-		if ( $has_frontmatter_url && $normalized_frontmatter_url === '' ) {
-			return '';
+		if ( '' !== trim( $frontmatter_url ) ) {
+			$candidates[] = $frontmatter_url;
 		}
 
-		if (
-			$normalized_metadata_url !== '' &&
-			$normalized_frontmatter_url !== '' &&
-			! self::guidance_urls_match( $normalized_metadata_url, $normalized_frontmatter_url )
-		) {
-			return '';
+		if ( '' !== self::normalize_trusted_guidance_url( $source_key ) ) {
+			$candidates[] = $source_key;
 		}
 
-		if ( $normalized_metadata_url !== '' ) {
-			return $normalized_metadata_url;
+		$source_key_url = self::normalize_guidance_url_from_source_key( $source_key, $instance_id );
+
+		if ( '' !== $source_key_url ) {
+			$candidates[] = $source_key_url;
 		}
 
-		return $normalized_frontmatter_url;
+		return $candidates;
+	}
+
+	/**
+	 * @param array<int, string> $url_candidates
+	 */
+	private static function normalize_guidance_url( array $url_candidates ): string {
+		$normalized_url = '';
+
+		foreach ( $url_candidates as $url_candidate ) {
+			if ( ! is_string( $url_candidate ) || '' === trim( $url_candidate ) ) {
+				continue;
+			}
+
+			$normalized_candidate = self::normalize_trusted_guidance_url( $url_candidate );
+
+			if ( '' === $normalized_candidate ) {
+				return '';
+			}
+
+			if (
+				'' !== $normalized_url &&
+				! self::guidance_urls_match( $normalized_url, $normalized_candidate )
+			) {
+				return '';
+			}
+
+			$normalized_url = $normalized_candidate;
+		}
+
+		return $normalized_url;
 	}
 
 	private static function normalize_trusted_guidance_url( mixed $value ): string {
@@ -2179,7 +2310,14 @@ final class AISearchClient {
 	}
 
 	private static function normalize_guidance_url_from_source_key( string $source_key, ?string $instance_id = null ): string {
-		$normalized = strtolower( trim( $source_key ) );
+		$source_key  = trim( $source_key );
+		$trusted_url = self::normalize_trusted_guidance_url( $source_key );
+
+		if ( '' !== $trusted_url ) {
+			return $trusted_url;
+		}
+
+		$normalized = strtolower( $source_key );
 
 		if ( $normalized === '' ) {
 			return '';
@@ -2238,14 +2376,17 @@ final class AISearchClient {
 	 * @return array<int, string>
 	 */
 	private static function trusted_source_key_prefixes( ?string $instance_id = null ): array {
-		$prefixes            = [ self::ALLOWED_SOURCE_KEY_PREFIX ];
+		$prefixes            = [
+			self::ALLOWED_SOURCE_KEY_PREFIX,
+			'ai-search/wp-dev-docs/' . self::ALLOWED_SOURCE_KEY_PREFIX,
+		];
 		$normalized_instance = self::normalize_source_key_instance_id( $instance_id );
 
 		if ( $normalized_instance !== '' ) {
 			$prefixes[] = 'ai-search/' . $normalized_instance . '/' . self::ALLOWED_SOURCE_KEY_PREFIX;
 		}
 
-		return $prefixes;
+		return array_values( array_unique( $prefixes ) );
 	}
 
 	private static function match_trusted_source_key_prefix( string $source_key, ?string $instance_id = null ): string {

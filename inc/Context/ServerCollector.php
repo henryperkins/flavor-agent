@@ -38,6 +38,8 @@ final class ServerCollector {
 
 	private static ?NavigationContextCollector $navigation_context_collector = null;
 
+	private static ?PostContentRenderer $post_content_renderer = null;
+
 	public static function introspect_block_type( string $block_name ): ?array {
 		return self::block_type_introspector()->introspect_block_type( $block_name );
 	}
@@ -232,6 +234,13 @@ final class ServerCollector {
 		return self::navigation_context_collector()->for_navigation( $menu_id, $markup, $editor_context );
 	}
 
+	/**
+	 * @param array<string, mixed> $context
+	 */
+	public static function for_post_content( string $post_content, array $context = [] ): string {
+		return self::post_content_renderer()->extract( $post_content, $context );
+	}
+
 	private static function block_type_introspector(): BlockTypeIntrospector {
 		return self::$block_type_introspector ??= new BlockTypeIntrospector();
 	}
@@ -320,5 +329,9 @@ final class ServerCollector {
 			self::template_repository(),
 			self::theme_token_collector()
 		);
+	}
+
+	private static function post_content_renderer(): PostContentRenderer {
+		return self::$post_content_renderer ??= new PostContentRenderer();
 	}
 }
