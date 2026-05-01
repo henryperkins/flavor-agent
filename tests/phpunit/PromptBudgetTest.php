@@ -130,4 +130,65 @@ final class PromptBudgetTest extends TestCase {
 		$budget = new PromptBudget( 10 );
 		$this->assertSame( 2000, $budget->get_max_tokens() );
 	}
+
+	public function test_required_sections_are_never_dropped_even_over_budget(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'required_a', str_repeat( 'a', 5000 ), 100, true );
+		$budget->add_section( 'required_b', str_repeat( 'b', 5000 ), 100, true );
+		$budget->add_section( 'optional', 'optional content', 10, false );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( str_repeat( 'a', 100 ), $result );
+		$this->assertStringContainsString( str_repeat( 'b', 100 ), $result );
+		$this->assertStringNotContainsString( 'optional content', $result );
+		$this->assertGreaterThan( $budget->get_max_tokens(), PromptBudget::estimate_tokens( $result ) );
+	}
+
+	public function test_lower_priority_required_outlasts_higher_priority_optional(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'required_low', 'required content', 10, true );
+		$budget->add_section( 'optional_high', str_repeat( 'h', 8000 ), 100, false );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( 'required content', $result );
+		$this->assertStringNotContainsString( str_repeat( 'h', 100 ), $result );
+	}
+
+	public function test_default_required_false_preserves_existing_behavior(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'high', str_repeat( 'h', 5000 ), 100 );
+		$budget->add_section( 'low', str_repeat( 'l', 5000 ), 10 );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( str_repeat( 'h', 100 ), $result );
+		$this->assertStringNotContainsString( str_repeat( 'l', 100 ), $result );
+	}
+
+	public function test_diagnostics_includes_required_flag(): void {
+		$budget = new PromptBudget();
+		$budget->add_section( 'critical', 'kept', 100, true );
+		$budget->add_section( 'optional', 'maybe', 10, false );
+
+		$diagnostics = $budget->get_diagnostics();
+
+		$this->assertTrue( $diagnostics['sections'][0]['required'] );
+		$this->assertFalse( $diagnostics['sections'][1]['required'] );
+	}
+
+	public function test_equal_priority_drops_last_inserted_first(): void {
+		$budget = new PromptBudget( 2000 );
+		$budget->add_section( 'identity', 'identity content', 100 );
+		$budget->add_section( 'few_shot_0', str_repeat( '0', 4000 ), 10 );
+		$budget->add_section( 'few_shot_1', str_repeat( '1', 4000 ), 10 );
+		$budget->add_section( 'few_shot_2', str_repeat( '2', 4000 ), 10 );
+
+		$result = $budget->assemble();
+
+		$this->assertStringContainsString( 'identity content', $result );
+		$this->assertStringContainsString( str_repeat( '0', 100 ), $result );
+		$this->assertStringNotContainsString( str_repeat( '2', 100 ), $result );
+	}
 }

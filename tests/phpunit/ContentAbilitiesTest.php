@@ -356,6 +356,49 @@ final class ContentAbilitiesTest extends TestCase {
 		$this->assertSame( 'missing_existing_content', $result->get_error_code() );
 	}
 
+	public function test_recommend_content_does_not_collect_voice_samples_when_edit_content_renders_empty(): void {
+		WordPressTestState::$current_user_id              = 5;
+		WordPressTestState::$capabilities['edit_post:42'] = true;
+		WordPressTestState::$posts[42]                    = new \WP_Post(
+			[
+				'ID'          => 42,
+				'post_type'   => 'post',
+				'post_status' => 'draft',
+				'post_author' => 5,
+				'post_title'  => 'Current',
+			]
+		);
+		WordPressTestState::$posts[43]                    = new \WP_Post(
+			[
+				'ID'            => 43,
+				'post_type'     => 'post',
+				'post_status'   => 'publish',
+				'post_author'   => 5,
+				'post_title'    => 'Sample',
+				'post_content'  => '<!-- wp:paragraph --><p>Sample body.</p><!-- /wp:paragraph -->',
+				'post_date_gmt' => '2026-04-12 09:00:00',
+			]
+		);
+		WordPressTestState::$capabilities['read_post:43'] = true;
+
+		$result = ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten.',
+				'postContext' => [
+					'postId'   => 42,
+					'postType' => 'post',
+					'title'    => 'Current',
+					'content'  => '<div></div>',
+				],
+			]
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_existing_content', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$get_posts_calls );
+	}
+
 	public function test_recommend_content_preserves_no_post_id_fallback_empty_instruction_validation(): void {
 		$result = ContentAbilities::recommend_content(
 			[
@@ -368,6 +411,206 @@ final class ContentAbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'missing_content_instruction', $result->get_error_code() );
+	}
+
+	public function test_recommend_content_includes_voice_samples_section_when_present(): void {
+		WordPressTestState::$current_user_id = 5;
+
+		WordPressTestState::$capabilities['edit_post:600'] = true;
+		WordPressTestState::$posts[600]                    = new \WP_Post(
+			[
+				'ID'           => 600,
+				'post_type'    => 'post',
+				'post_status'  => 'draft',
+				'post_author'  => 5,
+				'post_title'   => 'Current',
+				'post_content' => '<!-- wp:paragraph --><p>Current body.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		WordPressTestState::$posts[601]                    = new \WP_Post(
+			[
+				'ID'            => 601,
+				'post_type'     => 'post',
+				'post_status'   => 'publish',
+				'post_author'   => 5,
+				'post_title'    => 'Published Sample',
+				'post_content'  => '<!-- wp:paragraph --><p>Sample paragraph.</p><!-- /wp:paragraph -->',
+				'post_date_gmt' => '2026-04-12 09:00:00',
+			]
+		);
+		WordPressTestState::$capabilities['read_post:601'] = true;
+
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'edit',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten.',
+				'postContext' => [
+					'postId'   => 600,
+					'postType' => 'post',
+					'title'    => 'Current',
+					'content'  => '<!-- wp:paragraph --><p>Current body.</p><!-- /wp:paragraph -->',
+				],
+			]
+		);
+
+		$prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+
+		$this->assertStringContainsString( '## Site voice samples', $prompt );
+		$this->assertStringContainsString( '### Sample: Published Sample', $prompt );
+		$this->assertStringContainsString( 'Published: 2026-04-12', $prompt );
+		$this->assertStringContainsString( 'Opening:', $prompt );
+		$this->assertStringContainsString( 'Sample paragraph.', $prompt );
+	}
+
+	public function test_recommend_content_omits_voice_samples_section_when_no_samples(): void {
+		WordPressTestState::$current_user_id = 7;
+
+		WordPressTestState::$capabilities['edit_post:610'] = true;
+		WordPressTestState::$posts[610]                    = new \WP_Post(
+			[
+				'ID'           => 610,
+				'post_type'    => 'post',
+				'post_status'  => 'draft',
+				'post_author'  => 7,
+				'post_title'   => 'Lonely',
+				'post_content' => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'edit',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten.',
+				'postContext' => [
+					'postId'   => 610,
+					'postType' => 'post',
+					'title'    => 'Lonely',
+					'content'  => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
+				],
+			]
+		);
+
+		$prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+
+		$this->assertStringNotContainsString( '## Site voice samples', $prompt );
+		$this->assertStringNotContainsString( '### Sample:', $prompt );
+	}
+
+	public function test_recommend_content_omits_samples_for_unsupported_post_type(): void {
+		WordPressTestState::$current_user_id = 9;
+
+		WordPressTestState::$posts[700]                    = new \WP_Post(
+			[
+				'ID'            => 700,
+				'post_type'     => 'post',
+				'post_status'   => 'publish',
+				'post_author'   => 9,
+				'post_title'    => 'Should Not Appear',
+				'post_content'  => '<!-- wp:paragraph --><p>Hidden body.</p><!-- /wp:paragraph -->',
+				'post_date_gmt' => '2026-04-12 09:00:00',
+			]
+		);
+		WordPressTestState::$capabilities['read_post:700'] = true;
+
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'draft',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		ContentAbilities::recommend_content(
+			[
+				'mode'        => 'draft',
+				'prompt'      => 'Sketch.',
+				'postContext' => [
+					'postId'   => 0,
+					'postType' => 'wp_template',
+					'title'    => 'Brand new template',
+				],
+			]
+		);
+
+		$prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+
+		$this->assertStringNotContainsString( '## Site voice samples', $prompt );
+		$this->assertStringNotContainsString( 'Should Not Appear', $prompt );
+	}
+
+	public function test_recommend_content_uses_canonical_post_type_for_saved_post(): void {
+		WordPressTestState::$current_user_id = 9;
+
+		WordPressTestState::$capabilities['edit_post:710'] = true;
+		WordPressTestState::$posts[710]                    = new \WP_Post(
+			[
+				'ID'           => 710,
+				'post_type'    => 'page',
+				'post_status'  => 'draft',
+				'post_author'  => 9,
+				'post_title'   => 'Saved Page',
+				'post_content' => '<!-- wp:paragraph --><p>Page draft.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		WordPressTestState::$posts[711]                    = new \WP_Post(
+			[
+				'ID'            => 711,
+				'post_type'     => 'page',
+				'post_status'   => 'publish',
+				'post_author'   => 9,
+				'post_title'    => 'Sister page',
+				'post_content'  => '<!-- wp:paragraph --><p>Sister body.</p><!-- /wp:paragraph -->',
+				'post_date_gmt' => '2026-04-10 09:00:00',
+			]
+		);
+		WordPressTestState::$capabilities['read_post:711'] = true;
+
+		$this->stub_successful_content_response(
+			[
+				'mode'    => 'edit',
+				'title'   => 'OK',
+				'summary' => '',
+				'content' => 'X',
+			]
+		);
+
+		ContentAbilities::recommend_content(
+			[
+				'mode'        => 'edit',
+				'prompt'      => 'Tighten.',
+				'postContext' => [
+					'postId'   => 710,
+					'postType' => 'post',
+					'title'    => 'Saved Page',
+					'content'  => '<!-- wp:paragraph --><p>Page draft.</p><!-- /wp:paragraph -->',
+				],
+			]
+		);
+
+		$prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+
+		$this->assertStringContainsString( '### Sample: Sister page', $prompt );
 	}
 
 	/**

@@ -2028,22 +2028,51 @@ namespace {
 				);
 			}
 
-			if ( 'any' !== $post_status ) {
-				$allowed_statuses = is_array( $post_status ) ? $post_status : [ $post_status ];
-				$posts            = array_values(
-					array_filter(
+		if ( 'any' !== $post_status ) {
+			$allowed_statuses = is_array( $post_status ) ? $post_status : [ $post_status ];
+			$posts            = array_values(
+				array_filter(
 						$posts,
 						static fn ( object $post ): bool => in_array(
 							(string) ( $post->post_status ?? '' ),
 							array_map( 'strval', $allowed_statuses ),
 							true
 						)
-					)
-				);
-			}
+				)
+			);
+		}
 
-			if ( '' !== $search ) {
-				$search = strtolower( $search );
+		if ( isset( $args['author'] ) ) {
+			$author_id = (int) $args['author'];
+			$posts     = array_values(
+				array_filter(
+					$posts,
+					static fn ( object $post ): bool => (int) ( $post->post_author ?? 0 ) === $author_id
+				)
+			);
+		}
+
+		if ( ! empty( $args['post__not_in'] ) && is_array( $args['post__not_in'] ) ) {
+			$excluded = array_map( 'intval', $args['post__not_in'] );
+			$posts    = array_values(
+				array_filter(
+					$posts,
+					static fn ( object $post ): bool => ! in_array( (int) ( $post->ID ?? 0 ), $excluded, true )
+				)
+			);
+		}
+
+		if ( isset( $args['has_password'] ) && false === $args['has_password'] ) {
+			$posts = array_values(
+				array_filter(
+					$posts,
+					static fn ( object $post ): bool => '' === (string) ( $post->post_password ?? '' )
+				)
+			);
+		}
+
+		if ( '' !== $search ) {
+			$search = strtolower( $search );
 				$posts  = array_values(
 					array_filter(
 						$posts,
@@ -2431,10 +2460,16 @@ namespace {
 
 			public string $post_type = 'post';
 
-			public int $post_author = 0;
+		public int $post_author = 0;
 
-			/**
-			 * @param array<string, mixed> $fields
+		public string $post_password = '';
+
+		public string $post_date = '';
+
+		public string $post_date_gmt = '';
+
+		/**
+		 * @param array<string, mixed> $fields
 			 */
 			public function __construct( array $fields = [] ) {
 				foreach ( $fields as $key => $value ) {
@@ -2443,6 +2478,23 @@ namespace {
 					}
 				}
 			}
+		}
+	}
+
+	if ( ! function_exists( 'mysql2date' ) ) {
+		function mysql2date( string $format, string $date, bool $translate = true ): string {
+			unset( $translate );
+
+			if ( '' === $date ) {
+				return '';
+			}
+
+			$timestamp = strtotime( $date );
+			if ( false === $timestamp ) {
+				return '';
+			}
+
+			return date( $format, $timestamp );
 		}
 	}
 

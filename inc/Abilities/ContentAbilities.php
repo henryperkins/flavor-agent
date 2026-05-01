@@ -60,10 +60,16 @@ final class ContentAbilities {
 			);
 		}
 
+		$resolved_post_type = $post_id > 0
+			? (string) ( get_post( $post_id )?->post_type ?? '' )
+			: (string) ( $post_context['postType'] ?? '' );
+		$voice_samples      = ServerCollector::for_post_voice_samples( $post_id, $resolved_post_type );
+
 		$context = [
 			'mode'         => $mode,
 			'postContext'  => $post_context,
 			'voiceProfile' => $voice_profile,
+			'voiceSamples' => $voice_samples,
 		];
 
 		$result = ChatClient::chat(

@@ -38,7 +38,7 @@ final class PromptBudget {
 	private int $max_tokens;
 
 	/**
-	 * @var array<int, array{key: string, content: string, priority: int}>
+	 * @var array<int, array{key: string, content: string, priority: int, required: bool}>
 	 */
 	private array $sections = [];
 
@@ -61,8 +61,9 @@ final class PromptBudget {
 	 * @param string $key      Unique section identifier.
 	 * @param string $content  Section content.
 	 * @param int    $priority Higher = more important (100 max).
+	 * @param bool   $required Whether this section may not be dropped.
 	 */
-	public function add_section( string $key, string $content, int $priority = 50 ): self {
+	public function add_section( string $key, string $content, int $priority = 50, bool $required = false ): self {
 		if ( '' === trim( $content ) ) {
 			return $this;
 		}
@@ -71,6 +72,7 @@ final class PromptBudget {
 			'key'      => $key,
 			'content'  => $content,
 			'priority' => max( 0, min( 100, $priority ) ),
+			'required' => $required,
 		];
 
 		return $this;
@@ -136,7 +138,11 @@ final class PromptBudget {
 				return $assembled;
 			}
 
-			$lowest_index = self::get_lowest_priority_index( $included );
+			$lowest_index = self::get_lowest_priority_removable_index( $included );
+			if ( null === $lowest_index ) {
+				return $assembled;
+			}
+
 			array_splice( $included, $lowest_index, 1 );
 		}
 
@@ -147,7 +153,7 @@ final class PromptBudget {
 	/**
 	 * Get a diagnostic summary of sections and their budget impact.
 	 *
-	 * @return array{max_tokens: int, current_tokens: int, within_budget: bool, sections: array<int, array{key: string, tokens: int, priority: int}>}
+	 * @return array{max_tokens: int, current_tokens: int, within_budget: bool, sections: array<int, array{key: string, tokens: int, priority: int, required: bool}>}
 	 */
 	public function get_diagnostics(): array {
 		$section_diagnostics = [];
@@ -156,6 +162,7 @@ final class PromptBudget {
 				'key'      => $section['key'],
 				'tokens'   => self::estimate_tokens( $section['content'] ),
 				'priority' => $section['priority'],
+				'required' => (bool) ( $section['required'] ?? false ),
 			];
 		}
 
@@ -168,7 +175,7 @@ final class PromptBudget {
 	}
 
 	/**
-	 * @param array<int, array{key: string, content: string, priority: int}> $sections
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool}> $sections
 	 */
 	private static function join_sections( array $sections ): string {
 		$parts = [];
@@ -180,15 +187,20 @@ final class PromptBudget {
 	}
 
 	/**
-	 * @param array<int, array{key: string, content: string, priority: int}> $sections
+	 * @param array<int, array{key: string, content: string, priority: int, required: bool}> $sections
 	 */
-	private static function get_lowest_priority_index( array $sections ): int {
-		$count           = count( $sections );
-		$lowest_index    = $count - 1;
-		$lowest_priority = $sections[ $lowest_index ]['priority'] ?? 0;
+	private static function get_lowest_priority_removable_index( array $sections ): ?int {
+		$lowest_index    = null;
+		$lowest_priority = PHP_INT_MAX;
 
-		for ( $index = $count - 2; $index >= 0; --$index ) {
-			$priority = $sections[ $index ]['priority'] ?? 0;
+		for ( $index = count( $sections ) - 1; $index >= 0; --$index ) {
+			$section = $sections[ $index ];
+
+			if ( ! empty( $section['required'] ) ) {
+				continue;
+			}
+
+			$priority = (int) ( $section['priority'] ?? 0 );
 			if ( $priority < $lowest_priority ) {
 				$lowest_index    = $index;
 				$lowest_priority = $priority;

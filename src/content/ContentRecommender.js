@@ -167,9 +167,7 @@ export default function ContentRecommender() {
 	const { clearContentError, fetchContentRecommendations, setContentMode } =
 		useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
-	const hasSupportedPost =
-		Boolean( postContext.postId ) &&
-		SUPPORTED_POST_TYPES.has( postContext.postType );
+	const hasSupportedPost = SUPPORTED_POST_TYPES.has( postContext.postType );
 	const hasResult =
 		contentStatus === 'ready' && Boolean( contentRecommendation );
 	const hasOutput =

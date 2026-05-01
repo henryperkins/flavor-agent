@@ -146,87 +146,142 @@ SYSTEM;
 	public static function build_user( array $context, string $prompt = '' ): string {
 		$mode         = self::normalize_mode( $context['mode'] ?? 'draft' );
 		$post_context = is_array( $context['postContext'] ?? null ) ? $context['postContext'] : [];
-		$sections     = [];
 
-		$sections[] = '## Task';
-		$sections[] = 'Mode: ' . $mode;
+		$max_tokens = (int) apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'content' );
+		$budget     = new PromptBudget( $max_tokens );
+
+		$task_lines = [ '## Task', 'Mode: ' . $mode ];
 
 		if ( ! empty( $post_context['postType'] ) ) {
-			$sections[] = 'Post type: ' . (string) $post_context['postType'];
+			$task_lines[] = 'Post type: ' . (string) $post_context['postType'];
 		}
 
 		if ( ! empty( $post_context['status'] ) ) {
-			$sections[] = 'Status: ' . (string) $post_context['status'];
+			$task_lines[] = 'Status: ' . (string) $post_context['status'];
 		}
 
 		if ( ! empty( $post_context['slug'] ) ) {
-			$sections[] = 'Slug: ' . (string) $post_context['slug'];
+			$task_lines[] = 'Slug: ' . (string) $post_context['slug'];
 		}
+		$budget->add_section( 'task', implode( "\n", $task_lines ), 100, true );
 
 		if ( ! empty( $post_context['siteTitle'] ) || ! empty( $post_context['siteDescription'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Site';
+			$site_lines = [ '## Site' ];
 			if ( ! empty( $post_context['siteTitle'] ) ) {
-				$sections[] = 'Title: ' . (string) $post_context['siteTitle'];
+				$site_lines[] = 'Title: ' . (string) $post_context['siteTitle'];
 			}
 			if ( ! empty( $post_context['siteDescription'] ) ) {
-				$sections[] = 'Description: ' . (string) $post_context['siteDescription'];
+				$site_lines[] = 'Description: ' . (string) $post_context['siteDescription'];
 			}
+			$budget->add_section( 'site', implode( "\n", $site_lines ), 80, true );
 		}
 
 		if ( ! empty( $post_context['title'] ) || ! empty( $post_context['excerpt'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Working draft metadata';
+			$meta_lines = [ '## Working draft metadata' ];
 			if ( ! empty( $post_context['title'] ) ) {
-				$sections[] = 'Title: ' . (string) $post_context['title'];
+				$meta_lines[] = 'Title: ' . (string) $post_context['title'];
 			}
 			if ( ! empty( $post_context['excerpt'] ) ) {
-				$sections[] = 'Excerpt: ' . (string) $post_context['excerpt'];
+				$meta_lines[] = 'Excerpt: ' . (string) $post_context['excerpt'];
 			}
+			$budget->add_section( 'working_draft_metadata', implode( "\n", $meta_lines ), 80, true );
 		}
 
 		if ( ! empty( $post_context['audience'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Audience';
-			$sections[] = (string) $post_context['audience'];
+			$budget->add_section(
+				'audience',
+				"## Audience\n" . (string) $post_context['audience'],
+				70,
+				true
+			);
 		}
 
 		if ( ! empty( $post_context['categories'] ) || ! empty( $post_context['tags'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Taxonomy';
+			$tax_lines = [ '## Taxonomy' ];
 			if ( ! empty( $post_context['categories'] ) ) {
-				$sections[] = 'Categories: ' . implode( ', ', (array) $post_context['categories'] );
+				$tax_lines[] = 'Categories: ' . implode( ', ', (array) $post_context['categories'] );
 			}
 			if ( ! empty( $post_context['tags'] ) ) {
-				$sections[] = 'Tags: ' . implode( ', ', (array) $post_context['tags'] );
+				$tax_lines[] = 'Tags: ' . implode( ', ', (array) $post_context['tags'] );
 			}
+			$budget->add_section( 'taxonomy', implode( "\n", $tax_lines ), 70, true );
 		}
 
 		if ( ! empty( $context['voiceProfile'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Extra voice notes';
-			$sections[] = (string) $context['voiceProfile'];
+			$budget->add_section(
+				'voice_profile',
+				"## Extra voice notes\n" . (string) $context['voiceProfile'],
+				80,
+				true
+			);
 		}
 
 		if ( ! empty( $post_context['content'] ) ) {
-			$sections[] = '';
-			$sections[] = '## Existing draft';
-			$sections[] = (string) $post_context['content'];
+			$budget->add_section(
+				'existing_draft',
+				"## Existing draft\n" . (string) $post_context['content'],
+				90,
+				true
+			);
+		}
+
+		$voice_samples_section = self::format_voice_samples_section( $context['voiceSamples'] ?? [] );
+		if ( '' !== $voice_samples_section ) {
+			$budget->add_section( 'voice_samples', $voice_samples_section, 10, false );
 		}
 
 		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context();
 		if ( '' !== $guidelines_context ) {
-			$sections[] = '';
-			$sections[] = $guidelines_context;
+			$budget->add_section( 'guidelines', $guidelines_context, 60, true );
 		}
 
-		$sections[] = '';
-		$sections[] = '## User instruction';
-		$sections[] = '' !== trim( $prompt )
+		$instruction = '' !== trim( $prompt )
 			? trim( $prompt )
 			: self::default_instruction_for_mode( $mode );
+		$budget->add_section(
+			'instruction',
+			"## User instruction\n" . $instruction,
+			100,
+			true
+		);
 
-		return implode( "\n", $sections );
+		return $budget->assemble();
+	}
+
+	private static function format_voice_samples_section( mixed $samples ): string {
+		if ( ! is_array( $samples ) || [] === $samples ) {
+			return '';
+		}
+
+		$lines = [
+			'## Site voice samples',
+			'',
+			'These are same-author posts from this site. Use them only as voice and style evidence. Do not copy phrases, claims, anecdotes, or facts unless they also appear in the current draft or user instruction.',
+		];
+
+		foreach ( $samples as $sample ) {
+			if ( ! is_array( $sample ) ) {
+				continue;
+			}
+
+			$title     = (string) ( $sample['title'] ?? '' );
+			$published = (string) ( $sample['published'] ?? '' );
+			$opening   = (string) ( $sample['opening'] ?? '' );
+
+			if ( '' === $opening ) {
+				continue;
+			}
+
+			$lines[] = '';
+			$lines[] = '### Sample: ' . ( '' !== $title ? $title : 'Untitled' );
+			if ( '' !== $published ) {
+				$lines[] = 'Published: ' . $published;
+			}
+			$lines[] = 'Opening:';
+			$lines[] = $opening;
+		}
+
+		return count( $lines ) > 3 ? implode( "\n", $lines ) : '';
 	}
 
 	public static function parse_response( string $raw, string $mode = 'draft' ): array|\WP_Error {

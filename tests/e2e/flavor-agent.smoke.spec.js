@@ -2415,6 +2415,28 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	).toBeVisible();
 } );
 
+test( 'content panel renders for a brand-new unsaved post', async ( { page } ) => {
+	test.setTimeout( 180_000 );
+
+	await page.goto( '/wp-admin/post-new.php?post_type=post', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await ensurePostDocumentSettingsSidebarOpen( page );
+
+	const promptInput = page
+		.locator( '.flavor-agent-content-recommender textarea' )
+		.first();
+
+	await ensurePanelOpen( page, 'Content Recommendations', promptInput );
+	await expect( promptInput ).toBeVisible();
+	await expect(
+		page.getByRole( 'button', { name: 'Generate Draft' } )
+	).toBeVisible();
+} );
+
 test( 'block and pattern surfaces explain unavailable providers in native UI', async ( {
 	page,
 } ) => {

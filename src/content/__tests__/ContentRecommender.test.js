@@ -407,4 +407,29 @@ describe( 'ContentRecommender', () => {
 
 		expect( getContainer().textContent ).toBe( '' );
 	} );
+
+	test( 'renders for a brand-new unsaved post in a supported type', () => {
+		currentState = createState( {
+			editor: {
+				postId: 0,
+				postType: 'post',
+				attributes: {
+					title: '',
+					excerpt: '',
+					content: '',
+					slug: '',
+					status: 'auto-draft',
+				},
+			},
+		} );
+
+		act( () => {
+			getRoot().render( <ContentRecommender /> );
+		} );
+
+		const text = getContainer().textContent;
+
+		expect( text ).toContain( 'Generate Draft' );
+		expect( getContainer().querySelector( 'textarea' ) ).not.toBeNull();
+	} );
 } );

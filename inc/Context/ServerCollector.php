@@ -40,6 +40,8 @@ final class ServerCollector {
 
 	private static ?PostContentRenderer $post_content_renderer = null;
 
+	private static ?PostVoiceSampleCollector $post_voice_sample_collector = null;
+
 	public static function introspect_block_type( string $block_name ): ?array {
 		return self::block_type_introspector()->introspect_block_type( $block_name );
 	}
@@ -241,6 +243,13 @@ final class ServerCollector {
 		return self::post_content_renderer()->extract( $post_content, $context );
 	}
 
+	/**
+	 * @return array<int, array{title: string, published: string, opening: string}>
+	 */
+	public static function for_post_voice_samples( int $post_id, string $post_type ): array {
+		return self::post_voice_sample_collector()->for_post( $post_id, $post_type );
+	}
+
 	private static function block_type_introspector(): BlockTypeIntrospector {
 		return self::$block_type_introspector ??= new BlockTypeIntrospector();
 	}
@@ -333,5 +342,11 @@ final class ServerCollector {
 
 	private static function post_content_renderer(): PostContentRenderer {
 		return self::$post_content_renderer ??= new PostContentRenderer();
+	}
+
+	private static function post_voice_sample_collector(): PostVoiceSampleCollector {
+		return self::$post_voice_sample_collector ??= new PostVoiceSampleCollector(
+			self::post_content_renderer()
+		);
 	}
 }

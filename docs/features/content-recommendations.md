@@ -26,7 +26,7 @@ The REST + Abilities contract remains available so external agents or admin tool
 2. The store action `fetchContentRecommendations()` posts `mode`, optional `prompt`, and `postContext` to `POST /flavor-agent/v1/recommend-content`
 3. `Agent_Controller::handle_recommend_content()` forwards that payload to `ContentAbilities::recommend_content()`
 4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and renders the current post content through `PostContentRenderer`
-5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt, including the rendered current-post text under `Existing draft`. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
+5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft` and, when the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) drawn through `PostVoiceSampleCollector`. Voice samples is the only section the budget will drop under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
 7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, without mutating post content
 8. When document scope is available, the REST handler persists successful and failed requests as read-only `request_diagnostic` activity rows, and the panel shows them in `Recent Content Requests`
@@ -63,6 +63,9 @@ Output:
 - Current-post block rendering is postId-gated. Unsaved posts and external callers that omit `postId` keep the fallback text path and do not execute block render callbacks.
 - Self-reference substitution is top-level only. If a `core/post-title` or `core/post-excerpt` block is nested inside another block, WordPress may render the saved value rather than the staged editor value.
 - Attribute extraction is capped by count and per-value length. Layer 1 does not yet cap rendered visible text; the deferred `PromptBudget` follow-up should own that before broader Layer 2/3 context expansion.
+- Voice samples are same-author, publish-only, password-protected-excluded, and `read_post`-gated per candidate. Render failures for an individual sample drop only that sample, never the parent recommendation.
+- The `## Site voice samples` section is omitted entirely when no candidates qualify: new authors, unsupported post types, all candidates filtered out, or all renders failed.
+- Sites can tune the prompt token budget via the `flavor_agent_prompt_budget_max_tokens` filter, scope `content`.
 - Invalid model JSON returns a `parse_error`.
 - The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface.
 - Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history and the admin audit page, but they are not undoable.
@@ -72,6 +75,7 @@ Output:
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/ContentAbilities.php`
 - `inc/Context/PostContentRenderer.php`
+- `inc/Context/PostVoiceSampleCollector.php`
 - `inc/Context/ServerCollector.php`
 - `inc/LLM/WritingPrompt.php`
 - `src/content/ContentRecommender.js`
