@@ -830,13 +830,18 @@ populated; published and opening land in subsequent commits."
 
 ---
 
-## Task 6: Render candidate via PostContentRenderer with try/catch
+## Task 6: Render candidate via PostContentRenderer, detect failures
 
 **Files:**
 - Modify: `inc/Context/PostVoiceSampleCollector.php`
 - Modify: `tests/phpunit/PostVoiceSampleCollectorTest.php`
 
-Each candidate goes through `PostContentRenderer::extract`. The rendered output may carry an `[Attribute references]` tail; Layer 2 only wants the visible-text portion. A render throw drops that candidate, logs once, and continues.
+Each candidate goes through `PostContentRenderer::extract`. Two failure modes need handling, plus the `[Attribute references]` tail strip:
+
+1. **Catastrophic failure** (e.g., `parse_blocks` corruption, OOM) — `extract` throws. Outer `try { ... } catch ( \Throwable $e )` logs and drops the candidate.
+2. **Per-block render failure** — Layer 1's `PostContentRenderer::extract` catches per-block exceptions internally (`inc/Context/PostContentRenderer.php:92-108`) and inserts a `[block render failed: <name>]` marker into the rendered output. For voice samples, that marker would pollute the prompt, so Layer 2 detects the marker and drops the whole sample. Layer 1's behavior is unchanged because Layer 1's caller (current-post rendering) wants the partial result; Layer 2 doesn't.
+
+The strip of `[Attribute references]` runs regardless.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -959,6 +964,17 @@ foreach ( $candidates as $candidate ) {
         continue;
     }
 
+    if ( str_contains( $rendered, '[block render failed:' ) ) {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Surface per-block sample render failures without aborting recommendations.
+        error_log(
+            sprintf(
+                '[flavor-agent] PostVoiceSampleCollector: dropping post %d due to block render failure marker',
+                (int) $candidate->ID
+            )
+        );
+        continue;
+    }
+
     $opening = self::strip_attribute_references( $rendered );
 
     $samples[] = [
@@ -985,6 +1001,8 @@ private static function strip_attribute_references( string $rendered ): string {
     return substr( $rendered, 0, $position );
 }
 ```
+
+The marker-detection check uses Layer 1's literal failure marker (`[block render failed:`). It runs after the catastrophic-failure catch but before strip + truncation, so a contaminated sample never reaches the prompt. Both detection paths log to `error_log` so operators can correlate dropped samples with the underlying block-render diagnostic that Layer 1 already emits.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1383,125 +1401,150 @@ existing PostContentRenderer pattern."
 
 **Files:**
 - Modify: `inc/LLM/WritingPrompt.php`
-- Modify: `tests/phpunit/ContentAbilitiesTest.php` (only assertions about prompt structure)
+- Modify: `tests/phpunit/WritingPromptTest.php`
 
 Existing direct concatenation is replaced by `PromptBudget`. Each existing section is added with `required = true` and a priority from the spec table. The new `voice_samples` section is added with `priority = 10, required = false`. Budget is sourced from `apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'content' )`.
 
-- [ ] **Step 1: Write a failing test in ContentAbilitiesTest**
+Tests live at the `WritingPromptTest` level and pass synthetic `voiceSamples` arrays directly to `build_user`, so this task is independently green without depending on Task 10's `ContentAbilities` wiring.
 
-Append to `tests/phpunit/ContentAbilitiesTest.php` before the closing brace:
+- [ ] **Step 1: Write failing tests in WritingPromptTest**
+
+Append to `tests/phpunit/WritingPromptTest.php` before the closing brace:
 
 ```php
-public function test_recommend_content_includes_voice_samples_section_when_present(): void {
-    WordPressTestState::$current_user_id = 5;
-
-    WordPressTestState::$capabilities['edit_post:600'] = true;
-    WordPressTestState::$posts[600]                   = new \WP_Post(
+public function test_build_user_renders_voice_samples_section_when_provided(): void {
+    $prompt = WritingPrompt::build_user(
         [
-            'ID'            => 600,
-            'post_type'     => 'post',
-            'post_status'   => 'draft',
-            'post_author'   => 5,
-            'post_title'    => 'Current',
-            'post_content'  => '<!-- wp:paragraph --><p>Current body.</p><!-- /wp:paragraph -->',
-        ]
-    );
-
-    WordPressTestState::$posts[601] = new \WP_Post(
-        [
-            'ID'            => 601,
-            'post_type'     => 'post',
-            'post_status'   => 'publish',
-            'post_author'   => 5,
-            'post_title'    => 'Published Sample',
-            'post_content'  => '<!-- wp:paragraph --><p>Sample paragraph.</p><!-- /wp:paragraph -->',
-            'post_date_gmt' => '2026-04-12 09:00:00',
-        ]
-    );
-    WordPressTestState::$capabilities['read_post:601'] = true;
-
-    $this->stub_successful_content_response(
-        [
-            'mode'    => 'edit',
-            'title'   => 'OK',
-            'summary' => '',
-            'content' => 'X',
-        ]
-    );
-
-    ContentAbilities::recommend_content(
-        [
-            'mode'        => 'edit',
-            'prompt'      => 'Tighten.',
-            'postContext' => [
-                'postId'   => 600,
+            'mode'         => 'edit',
+            'postContext'  => [
                 'postType' => 'post',
                 'title'    => 'Current',
-                'content'  => '<!-- wp:paragraph --><p>Current body.</p><!-- /wp:paragraph -->',
+                'content'  => 'Existing body.',
             ],
-        ]
+            'voiceSamples' => [
+                [
+                    'title'     => 'Earlier post',
+                    'published' => '2026-04-12',
+                    'opening'   => 'Retail floors. WordPress themes.',
+                ],
+                [
+                    'title'     => 'Older post',
+                    'published' => '2026-03-05',
+                    'opening'   => 'Cloud platforms. Agentic AI.',
+                ],
+            ],
+        ],
+        'Tighten the opener.'
     );
-
-    $prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
 
     $this->assertStringContainsString( '## Site voice samples', $prompt );
-    $this->assertStringContainsString( '### Sample: Published Sample', $prompt );
+    $this->assertStringContainsString( 'Use them only as voice and style evidence.', $prompt );
+    $this->assertStringContainsString( '### Sample: Earlier post', $prompt );
     $this->assertStringContainsString( 'Published: 2026-04-12', $prompt );
     $this->assertStringContainsString( 'Opening:', $prompt );
-    $this->assertStringContainsString( 'Sample paragraph.', $prompt );
+    $this->assertStringContainsString( 'Retail floors. WordPress themes.', $prompt );
+    $this->assertStringContainsString( '### Sample: Older post', $prompt );
 }
 
-public function test_recommend_content_omits_voice_samples_section_when_no_samples(): void {
-    WordPressTestState::$current_user_id = 7;
-
-    WordPressTestState::$capabilities['edit_post:610'] = true;
-    WordPressTestState::$posts[610]                   = new \WP_Post(
+public function test_build_user_omits_voice_samples_section_when_array_empty(): void {
+    $prompt = WritingPrompt::build_user(
         [
-            'ID'            => 610,
-            'post_type'     => 'post',
-            'post_status'   => 'draft',
-            'post_author'   => 7,
-            'post_title'    => 'Lonely',
-            'post_content'  => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
-        ]
-    );
-
-    $this->stub_successful_content_response(
-        [
-            'mode'    => 'edit',
-            'title'   => 'OK',
-            'summary' => '',
-            'content' => 'X',
-        ]
-    );
-
-    ContentAbilities::recommend_content(
-        [
-            'mode'        => 'edit',
-            'prompt'      => 'Tighten.',
-            'postContext' => [
-                'postId'   => 610,
+            'mode'         => 'edit',
+            'postContext'  => [
                 'postType' => 'post',
-                'title'    => 'Lonely',
-                'content'  => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
+                'title'    => 'Current',
+                'content'  => 'Existing body.',
             ],
-        ]
+            'voiceSamples' => [],
+        ],
+        'Tighten.'
     );
-
-    $prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
 
     $this->assertStringNotContainsString( '## Site voice samples', $prompt );
     $this->assertStringNotContainsString( '### Sample:', $prompt );
+}
+
+public function test_build_user_omits_voice_samples_section_when_key_missing(): void {
+    $prompt = WritingPrompt::build_user(
+        [
+            'mode'        => 'draft',
+            'postContext' => [
+                'postType' => 'post',
+                'title'    => 'New piece',
+            ],
+        ],
+        'Sketch it.'
+    );
+
+    $this->assertStringNotContainsString( '## Site voice samples', $prompt );
+}
+
+public function test_build_user_uses_content_scoped_budget_filter(): void {
+    $captured = [];
+    $filter   = static function ( int $value, string $surface ) use ( &$captured ): int {
+        $captured[] = $surface;
+        return $value;
+    };
+
+    add_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10, 2 );
+
+    try {
+        WritingPrompt::build_user(
+            [
+                'mode'        => 'draft',
+                'postContext' => [ 'postType' => 'post' ],
+            ],
+            'Anything.'
+        );
+    } finally {
+        remove_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+    }
+
+    $this->assertContains( 'content', $captured );
+}
+
+public function test_build_user_drops_voice_samples_first_under_budget_pressure(): void {
+    $existing_draft = str_repeat( 'A', 6000 );
+    $voice_opening  = str_repeat( 'B', 6000 );
+
+    $filter = static fn (): int => 2000;
+    add_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+
+    try {
+        $prompt = WritingPrompt::build_user(
+            [
+                'mode'         => 'edit',
+                'postContext'  => [
+                    'postType' => 'post',
+                    'content'  => $existing_draft,
+                ],
+                'voiceSamples' => [
+                    [
+                        'title'     => 'Sample',
+                        'published' => '2026-04-12',
+                        'opening'   => $voice_opening,
+                    ],
+                ],
+            ],
+            'Tighten.'
+        );
+    } finally {
+        remove_filter( 'flavor_agent_prompt_budget_max_tokens', $filter, 10 );
+    }
+
+    $this->assertStringContainsString( str_repeat( 'A', 100 ), $prompt );
+    $this->assertStringNotContainsString( str_repeat( 'B', 100 ), $prompt );
+    $this->assertStringNotContainsString( '## Site voice samples', $prompt );
 }
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```
-vendor/bin/phpunit --filter ContentAbilitiesTest
+vendor/bin/phpunit --filter WritingPromptTest
 ```
 
-Expected: Both new tests fail. Existing tests still pass — `WritingPrompt::build_user` has not changed yet.
+Expected: Five new tests fail. Existing WritingPromptTest tests still pass.
 
 - [ ] **Step 3: Refactor WritingPrompt::build_user**
 
@@ -1659,12 +1702,12 @@ private static function format_voice_samples_section( mixed $samples ): string {
 vendor/bin/phpunit
 ```
 
-Expected: All tests pass — including existing `ContentAbilitiesTest` cases asserting prompt structure (since the assembled output preserves section content) and the two new voice-samples cases. If any existing test breaks because section ordering changed, inspect the assertions and decide whether the test was over-specifying order or whether the refactor introduced a real regression. Section order produced by `PromptBudget::assemble` follows insertion order, which matches the previous order in `build_user`.
+Expected: All tests pass. The five new `WritingPromptTest` cases now go green. Existing `WritingPromptTest` cases continue to pass because `PromptBudget::assemble` preserves insertion order. Existing `ContentAbilitiesTest` cases asserting prompt content (e.g., `Mode: critique`, `Categories: ...`) still pass because section content is unchanged. If any existing test breaks because of strict section-ordering assertions, inspect the assertions and decide whether the test was over-specifying order — section order produced by `PromptBudget::assemble` matches the previous insertion order in `build_user`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add inc/LLM/WritingPrompt.php tests/phpunit/ContentAbilitiesTest.php
+git add inc/LLM/WritingPrompt.php tests/phpunit/WritingPromptTest.php
 git commit -m "feat(content-prompt): refactor build_user onto PromptBudget
 
 Each existing section now passes through add_section with
@@ -1673,7 +1716,9 @@ The new voice_samples section is added with priority=10 and
 required=false so the budget drops it first under pressure.
 Budget is sourced via the surface-keyed filter
 flavor_agent_prompt_budget_max_tokens, scope='content',
-matching TemplatePrompt/TemplatePartPrompt/StylePrompt."
+matching TemplatePrompt/TemplatePartPrompt/StylePrompt.
+Tests live in WritingPromptTest and pass synthetic voiceSamples
+arrays so this task is green without ContentAbilities wiring."
 ```
 
 ---
@@ -1686,11 +1731,113 @@ matching TemplatePrompt/TemplatePartPrompt/StylePrompt."
 
 `ContentAbilities::recommend_content` resolves the canonical post type (from saved post when `postId > 0`, request payload otherwise) and calls the facade. The result joins `$context` under `voiceSamples`. Per-post auth on the current post is unchanged.
 
-- [ ] **Step 1: Write a failing test for the post-type allowlist enforcement**
+- [ ] **Step 1: Write failing tests for the integration**
 
-Append to `ContentAbilitiesTest.php`:
+Append to `tests/phpunit/ContentAbilitiesTest.php` before the closing brace. These four cover the wiring between `ContentAbilities`, the collector, and the prompt assembler:
 
 ```php
+public function test_recommend_content_includes_voice_samples_section_when_present(): void {
+    WordPressTestState::$current_user_id = 5;
+
+    WordPressTestState::$capabilities['edit_post:600'] = true;
+    WordPressTestState::$posts[600]                   = new \WP_Post(
+        [
+            'ID'           => 600,
+            'post_type'    => 'post',
+            'post_status'  => 'draft',
+            'post_author'  => 5,
+            'post_title'   => 'Current',
+            'post_content' => '<!-- wp:paragraph --><p>Current body.</p><!-- /wp:paragraph -->',
+        ]
+    );
+
+    WordPressTestState::$posts[601] = new \WP_Post(
+        [
+            'ID'            => 601,
+            'post_type'     => 'post',
+            'post_status'   => 'publish',
+            'post_author'   => 5,
+            'post_title'    => 'Published Sample',
+            'post_content'  => '<!-- wp:paragraph --><p>Sample paragraph.</p><!-- /wp:paragraph -->',
+            'post_date_gmt' => '2026-04-12 09:00:00',
+        ]
+    );
+    WordPressTestState::$capabilities['read_post:601'] = true;
+
+    $this->stub_successful_content_response(
+        [
+            'mode'    => 'edit',
+            'title'   => 'OK',
+            'summary' => '',
+            'content' => 'X',
+        ]
+    );
+
+    ContentAbilities::recommend_content(
+        [
+            'mode'        => 'edit',
+            'prompt'      => 'Tighten.',
+            'postContext' => [
+                'postId'   => 600,
+                'postType' => 'post',
+                'title'    => 'Current',
+                'content'  => '<!-- wp:paragraph --><p>Current body.</p><!-- /wp:paragraph -->',
+            ],
+        ]
+    );
+
+    $prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+
+    $this->assertStringContainsString( '## Site voice samples', $prompt );
+    $this->assertStringContainsString( '### Sample: Published Sample', $prompt );
+    $this->assertStringContainsString( 'Published: 2026-04-12', $prompt );
+    $this->assertStringContainsString( 'Opening:', $prompt );
+    $this->assertStringContainsString( 'Sample paragraph.', $prompt );
+}
+
+public function test_recommend_content_omits_voice_samples_section_when_no_samples(): void {
+    WordPressTestState::$current_user_id = 7;
+
+    WordPressTestState::$capabilities['edit_post:610'] = true;
+    WordPressTestState::$posts[610]                   = new \WP_Post(
+        [
+            'ID'           => 610,
+            'post_type'    => 'post',
+            'post_status'  => 'draft',
+            'post_author'  => 7,
+            'post_title'   => 'Lonely',
+            'post_content' => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
+        ]
+    );
+
+    $this->stub_successful_content_response(
+        [
+            'mode'    => 'edit',
+            'title'   => 'OK',
+            'summary' => '',
+            'content' => 'X',
+        ]
+    );
+
+    ContentAbilities::recommend_content(
+        [
+            'mode'        => 'edit',
+            'prompt'      => 'Tighten.',
+            'postContext' => [
+                'postId'   => 610,
+                'postType' => 'post',
+                'title'    => 'Lonely',
+                'content'  => '<!-- wp:paragraph --><p>Body.</p><!-- /wp:paragraph -->',
+            ],
+        ]
+    );
+
+    $prompt = WordPressTestState::$last_ai_client_prompt['text'] ?? '';
+
+    $this->assertStringNotContainsString( '## Site voice samples', $prompt );
+    $this->assertStringNotContainsString( '### Sample:', $prompt );
+}
+
 public function test_recommend_content_omits_samples_for_unsupported_post_type(): void {
     WordPressTestState::$current_user_id = 9;
 
@@ -1930,17 +2077,55 @@ npm run test:unit -- --runInBand --testPathPattern=ContentRecommender
 
 Expected: All tests pass — the new postId=0 test, the existing "does not render for unsupported editor entities" test (still gates on `postType`), and all others.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add a brand-new-post assertion to the E2E smoke spec**
+
+Open `tests/e2e/flavor-agent.smoke.spec.js`. Locate the existing content-panel block that navigates to `wp-admin/post.php?post=${ postId }&action=edit` (around line 2358). Add a new `test( ... )` block adjacent to it that verifies the panel renders for an unsaved post:
+
+```js
+test( 'content panel renders for a brand-new unsaved post', async ( { page } ) => {
+    await page.goto( '/wp-admin/post-new.php?post_type=post', {
+        waitUntil: 'domcontentloaded',
+    } );
+    await waitForWordPressReady( page );
+    await waitForFlavorAgent( page );
+    await dismissWelcomeGuide( page );
+    await ensurePostDocumentSettingsSidebarOpen( page );
+
+    const promptInput = page
+        .locator( '.flavor-agent-content-recommender textarea' )
+        .first();
+
+    await ensurePanelOpen( page, 'Content Recommendations', promptInput );
+    await expect( promptInput ).toBeVisible();
+    await expect(
+        page.getByRole( 'button', { name: 'Generate Draft' } )
+    ).toBeVisible();
+} );
+```
+
+Use whatever helper imports the existing `wp-admin/post.php` test relies on; they should already be in scope at the top of the file.
+
+- [ ] **Step 6: Run the playground E2E smoke suite**
+
+```
+npm run test:e2e:playground
+```
+
+Expected: The new test passes alongside the existing content-panel test. If the playground harness isn't available locally (it requires Node 24 + the WordPress Playground CLI), record this as a deferred check and pick it up in Task 13.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/content/ContentRecommender.js src/content/__tests__/ContentRecommender.test.js
+git add src/content/ContentRecommender.js src/content/__tests__/ContentRecommender.test.js tests/e2e/flavor-agent.smoke.spec.js
 git commit -m "feat(content-ui): show panel for brand-new unsaved posts
 
 The panel now renders when the post type is supported, regardless
 of whether the post has been saved yet. Layer 1's renderer falls
 back safely at postId=0; Layer 2's collector resolves author from
 the current user. Brand-new drafts can benefit from voice priming
-without waiting for an autosave."
+without waiting for an autosave. Adds matching Jest unit test and
+a Playwright smoke assertion that the panel renders on
+post-new.php."
 ```
 
 ---
@@ -2023,7 +2208,24 @@ node scripts/verify.js --skip-e2e
 
 Expected: `output/verify/summary.json` shows `status: "pass"`. Inspect `summary.json` if any step fails; the per-step `stdoutPath`/`stderrPath` point to the full logs.
 
-- [ ] **Step 4: Inspect the verify summary**
+- [ ] **Step 4: Run the Playground E2E smoke suite**
+
+```
+npm run test:e2e:playground
+```
+
+Expected: All Playwright tests pass, including the new "content panel renders for a brand-new unsaved post" assertion added in Task 11. If the harness isn't available locally — running this requires Node 24 and the WordPress Playground CLI — record the gap explicitly. The cross-surface validation gates document treats a known-red or unavailable harness as something that must be called out, not silently skipped (`docs/reference/cross-surface-validation-gates.md`).
+
+If you are deferring the run, capture it in the final commit body:
+
+```
+[verification waiver] tests/e2e/flavor-agent.smoke.spec.js added
+the brand-new-post assertion but the Playground harness was
+unavailable in this environment. Maintainer to confirm before
+merging or run the suite in CI.
+```
+
+- [ ] **Step 5: Inspect the verify summary**
 
 ```
 cat output/verify/summary.json
@@ -2031,7 +2233,7 @@ cat output/verify/summary.json
 
 Confirm `counts` shows zero failed steps and that `lint-plugin` is either passing or explicitly skipped (it requires a resolvable WordPress root). If `lint-plugin` is skipped because the prerequisite is missing, that flips the run to `incomplete` — record this as a waiver in the commit body if intentional.
 
-- [ ] **Step 5: Commit any documentation updates surfaced by check:docs**
+- [ ] **Step 6: Commit any documentation updates surfaced by check:docs**
 
 If `npm run check:docs` flagged additional files needing a refresh (`docs/SOURCE_OF_TRUTH.md`, `docs/reference/abilities-and-routes.md`, etc.), edit them inline and commit. Otherwise no commit needed for this step.
 

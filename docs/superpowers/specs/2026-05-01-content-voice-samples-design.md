@@ -239,13 +239,14 @@ Suppression of meta and term cache updates keeps the query lean — Layer 2 only
 
 For each candidate that passes the password and `read_post` checks:
 
-1. Run `PostContentRenderer::extract( $candidate->post_content, [ 'postId' => $candidate->ID ] )` inside `try { ... } catch ( \Throwable $e )`. On any throw, log via `error_log` with the candidate ID and exception message, and skip this candidate. Layer 2 is supplemental; a single sample-render failure must not break the recommendation request. Other candidates continue.
-2. The rendered output may include an `[Attribute references]` block at the tail; split on `"\n\n[Attribute references]\n"` and discard the trailing block. Visible text only.
-3. Truncate the visible text:
+1. Run `PostContentRenderer::extract( $candidate->post_content, [ 'postId' => $candidate->ID ] )` inside `try { ... } catch ( \Throwable $e )`. On any throw, log via `error_log` with the candidate ID and exception message, and skip this candidate. This catches catastrophic failures (e.g., `parse_blocks` corruption, OOM) — Layer 1's `PostContentRenderer::extract` does not throw on per-block render failures.
+2. Check the rendered output for the `[block render failed:` marker that Layer 1 inserts when an inner block's `render_callback` throws (see `inc/Context/PostContentRenderer.php:92-108`). If present, log once and skip this candidate. Layer 1 keeps the partial output for current-post rendering; voice samples drop it instead because contaminated openings would dilute the voice signal in the prompt.
+3. The rendered output may include an `[Attribute references]` block at the tail; split on `"\n\n[Attribute references]\n"` and discard the trailing block. Visible text only.
+4. Truncate the visible text:
    - If the visible text is `<= 1500` chars (UTF-8), use as-is.
    - Otherwise, find the latest paragraph break (`"\n\n"`) at position `<= 1500`. Truncate at that boundary.
    - If no paragraph break exists below `1500` (the first paragraph alone exceeds the cap), UTF-8-safely truncate to 1500 chars and append `…`.
-4. Build the sample dict:
+5. Build the sample dict:
 
 ```php
 [
@@ -316,8 +317,10 @@ ContentAbilities::recommend_content
   │         ├─ per-candidate:
   │         │    ├─ skip if ! empty(post_password)  (defense in depth)
   │         │    ├─ skip if ! current_user_can('read_post', $id)
-  │         │    ├─ try PostContentRenderer::extract → strip attribute-refs tail
-  │         │    │   catch Throwable → error_log + skip this candidate
+  │         │    ├─ try PostContentRenderer::extract
+  │         │    │   catch Throwable → error_log + skip (catastrophic only)
+  │         │    ├─ if rendered contains '[block render failed:' → error_log + skip
+  │         │    ├─ strip [Attribute references] tail
   │         │    ├─ truncate to ~1500 chars, paragraph-snapped, ellipsis on overflow
   │         │    └─ if empty after truncation, drop the sample
   │         └─ return sample dicts
@@ -338,7 +341,8 @@ ContentAbilities::recommend_content
 | `WP_Query` returns empty | Return `[]`. Section omitted. |
 | All candidates fail password / `read_post` checks | Return `[]`. Section omitted. |
 | `PostContentRenderer::extract` returns empty for a candidate | That sample is dropped; remaining samples included. |
-| `PostContentRenderer::extract` throws for a candidate | Caught; logged via `error_log` with candidate ID and message; that sample is dropped; remaining candidates continue. Layer 2 is supplemental — sample-render failures must never fail the parent recommendation request. (Layer 1's per-block `try/finally` still restores globals before the throw escapes the candidate's render.) |
+| `PostContentRenderer::extract` throws for a candidate (catastrophic — e.g., `parse_blocks` corruption) | Outer `try/catch ( \Throwable )` in the collector logs via `error_log` with candidate ID and message; sample dropped; remaining candidates continue. Layer 2 is supplemental — sample-render failures must never fail the parent recommendation. |
+| One or more per-block `render_callback`s in a candidate throw | Layer 1's `PostContentRenderer` catches each per-block exception internally (`inc/Context/PostContentRenderer.php:92-108`) and inserts a `[block render failed: <name>]` marker. Layer 2 detects `[block render failed:` in the rendered output, logs via `error_log` with the candidate ID, and drops the sample. Layer 1's behavior is unchanged because Layer 1's caller (current-post rendering) wants the partial result; voice samples don't. |
 | Resolved `$post_type` not in supported allowlist | Return `[]` from collector. Section omitted. |
 | `voice_samples` is dropped by `PromptBudget` overflow | Rest of prompt unaffected; request proceeds. |
 | Required sections alone exceed budget | `assemble()` returns over-budget string; request proceeds. Layer 2 does not silently strip required content. |
@@ -402,7 +406,7 @@ ContentAbilities::recommend_content
 3. Create `PostVoiceSampleCollector` skeleton with `SUPPORTED_POST_TYPES = ['post', 'page']` and `for_post( int, string ): array` returning `[]`. Add failing tests for: unsupported `$post_type` (returns `[]` without querying), empty author, no candidates.
 4. Implement author resolution and the `get_posts` candidate fetch. Pass the empty / no-candidate tests.
 5. Add password and `read_post` filtering. Tests for both gates.
-6. Wire `PostContentRenderer` injection. Strip `[Attribute references]` from output. Wrap each `extract` call in `try { ... } catch ( \Throwable $e )` with `error_log` and skip-candidate-on-throw. Tests for the strip and for the catch path (a stub block whose render_callback throws → that sample dropped, sibling candidates returned, `error_log` invoked).
+6. Wire `PostContentRenderer` injection. Wrap each `extract` call in `try { ... } catch ( \Throwable $e )` with `error_log` and skip-candidate-on-throw (covers catastrophic failures). After a successful `extract`, check the rendered output for `[block render failed:` and drop the sample with `error_log` if present (covers per-block render failures that Layer 1 catches internally and surfaces as marker text). Strip `[Attribute references]` tail from rendered output. Tests for: the strip, the catastrophic-throw catch, and the per-block-failure marker drop.
 7. Implement truncation: paragraph-snap → first-paragraph fallback with UTF-8-safe ellipsis. Tests for both branches and for the "empty after truncate → drop sample" path.
 8. Wire facade: `ServerCollector::for_post_voice_samples`. Smoke test through the facade.
 9. Refactor `WritingPrompt::build_user` onto `PromptBudget` with the priority/required table above and the surface-keyed budget filter `apply_filters( 'flavor_agent_prompt_budget_max_tokens', 0, 'content' )`. Existing prompt-shape tests assert section ordering and content; add new tests that voice samples appears when present, is omitted when absent, and that the filter actually scopes to `'content'`.
