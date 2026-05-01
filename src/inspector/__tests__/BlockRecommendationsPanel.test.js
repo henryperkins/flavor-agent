@@ -3,6 +3,7 @@ const mockUseSelect = jest.fn();
 const mockSuggestionChips = jest.fn();
 const mockFetchBlockRecommendations = jest.fn();
 const mockApplyBlockStructuralSuggestion = jest.fn();
+const mockRevalidateBlockReviewFreshness = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockClearBlockError = jest.fn();
 const mockClearUndoError = jest.fn();
@@ -145,6 +146,7 @@ function createState( overrides = {} ) {
 			blockErrors: {},
 			blockRecommendations: {},
 			blockContextSignatures: {},
+			blockResolvedContextSignatures: {},
 			blockStatuses: {},
 			lastUndoneActivityId: null,
 			undoError: null,
@@ -207,6 +209,16 @@ function selectStore( storeName ) {
 			getBlockRequestToken: jest.fn(
 				( clientId ) =>
 					getState().store.blockRequestTokens?.[ clientId ] || 0
+			),
+			getBlockResolvedContextSignature: jest.fn(
+				( clientId ) =>
+					getState().store.blockResolvedContextSignatures?.[
+						clientId
+					] || null
+			),
+			getBlockStaleReason: jest.fn(
+				( clientId ) =>
+					getState().store.blockStaleReasons?.[ clientId ] || null
 			),
 			getBlockRecommendations: jest.fn(
 				( clientId ) =>
@@ -297,6 +309,7 @@ function getTextarea() {
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	jest.useFakeTimers();
 	mockSuggestionChips.mockReset();
 	mockShouldRenderNavigationRecommendations = false;
 	currentState = createState();
@@ -328,6 +341,7 @@ beforeEach( () => {
 		clearUndoError: mockClearUndoError,
 		applyBlockStructuralSuggestion: mockApplyBlockStructuralSuggestion,
 		fetchBlockRecommendations: mockFetchBlockRecommendations,
+		revalidateBlockReviewFreshness: mockRevalidateBlockReviewFreshness,
 		undoActivity: mockUndoActivity,
 	} ) );
 	mockUseSelect.mockImplementation( ( mapSelect ) =>
@@ -336,6 +350,8 @@ beforeEach( () => {
 } );
 
 afterEach( () => {
+	jest.clearAllTimers();
+	jest.useRealTimers();
 	delete window.flavorAgentData;
 	currentState = null;
 } );
@@ -366,6 +382,105 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 				'[data-panel-title="AI Recommendations"]'
 			)
 		).not.toBeNull();
+	} );
+
+	test( 'revalidates ready last-selected block results in the document panel', () => {
+		const context = {
+			block: {
+				name: 'core/paragraph',
+			},
+		};
+		const contextSignature = JSON.stringify( context );
+
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [ { label: 'Tighten copy' } ],
+						prompt: 'Improve this block.',
+					},
+				},
+				blockContextSignatures: {
+					'block-1': contextSignature,
+				},
+				blockRequestTokens: {
+					'block-1': 7,
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+		mockCollectBlockContext.mockReturnValue( context );
+
+		renderPanel();
+		currentState = createState( {
+			blockEditor: {
+				selectedBlockClientId: null,
+			},
+			store: currentState.store,
+		} );
+
+		renderPanel();
+
+		expect( mockRevalidateBlockReviewFreshness ).not.toHaveBeenCalled();
+
+		act( () => {
+			jest.advanceTimersByTime( 300 );
+		} );
+
+		expect( mockRevalidateBlockReviewFreshness ).toHaveBeenCalledWith(
+			'block-1',
+			{
+				clientId: 'block-1',
+				editorContext: context,
+				contextSignature,
+				prompt: 'Improve this block.',
+			},
+			expect.objectContaining( {
+				requestToken: 7,
+				requestSignature: expect.any( String ),
+			} )
+		);
+	} );
+
+	test( 'does not background revalidate already client-stale block results', () => {
+		const storedContext = {
+			block: {
+				name: 'core/paragraph',
+			},
+		};
+		const liveContext = {
+			block: {
+				name: 'core/quote',
+			},
+		};
+
+		currentState = createState( {
+			store: {
+				blockRecommendations: {
+					'block-1': {
+						block: [ { label: 'Tighten copy' } ],
+						prompt: 'Improve this block.',
+					},
+				},
+				blockContextSignatures: {
+					'block-1': JSON.stringify( storedContext ),
+				},
+				blockStatuses: {
+					'block-1': 'ready',
+				},
+			},
+		} );
+		mockCollectBlockContext.mockReturnValue( liveContext );
+
+		renderContent();
+
+		act( () => {
+			jest.advanceTimersByTime( 300 );
+		} );
+
+		expect( mockRevalidateBlockReviewFreshness ).not.toHaveBeenCalled();
 	} );
 
 	test( 'fetches block recommendations for the remembered block after save clears selection', () => {

@@ -2,7 +2,7 @@
 
 ## Change Summary
 
-Cross-surface remediation pass for the uncommitted-review findings tracked in `docs/reference/uncommitted-review-remediation-plan.md`. The implementation closes the pattern visible-scope contract, public-safe user-pattern indexing, block-undo path-drift handling, partial execution-contract merging, inserter-badge derivation, and the JS/PHP lint regressions without changing surface contracts or provider routing. Documentation, planning, and contributor artifacts are aligned to the same model:
+Cross-surface remediation pass for the uncommitted-review findings from the prior remediation wave. The implementation closes the pattern visible-scope contract, public-safe user-pattern indexing, block-undo path-drift handling, partial execution-contract merging, inserter-badge derivation, and the JS/PHP lint regressions without changing surface contracts or provider routing. Documentation, planning, and contributor artifacts are aligned to the same model:
 
 - `Settings > Connectors` owns chat/text generation through the WordPress AI Client.
 - `Settings > Flavor Agent` retains plugin-owned embedding, Qdrant, Cloudflare docs grounding, and pattern sync controls.
@@ -15,7 +15,7 @@ Cross-surface remediation pass for the uncommitted-review findings tracked in `d
 - Pattern inserter UI: `src/patterns/InserterBadge.js`, `src/patterns/PatternRecommender.js`, `src/patterns/recommendation-utils.js`.
 - Activity / undo store: `src/store/index.js`, `src/store/activity-history.js`, `src/store/activity-undo.js`, `src/store/block-targeting.js`, `src/store/update-helpers.js`.
 - Tests: `tests/phpunit/PatternAbilitiesTest.php`, `tests/phpunit/PatternIndexTest.php`, `tests/phpunit/PromptRulesTest.php`, `tests/phpunit/AISearchClientTest.php`, `tests/phpunit/AgentControllerTest.php`, `src/patterns/__tests__/InserterBadge.test.js`, `src/patterns/__tests__/recommendation-utils.test.js`, `src/store/update-helpers.test.js`, `src/store/__tests__/store-actions.test.js`, `src/store/__tests__/activity-history.test.js`, `src/store/__tests__/pattern-status.test.js`, `tests/e2e/flavor-agent.smoke.spec.js`, `src/test-utils/wp-components.js`.
-- Recommendation docs / contributor artifacts: `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/reference/abilities-and-routes.md`, `docs/reference/shared-internals.md`, `docs/reference/pattern-recommendation-audit-remediation-plan.md`, `docs/reference/pattern-recommendation-debugging.md`, `docs/reference/uncommitted-review-remediation-plan.md`, `docs/features/block-recommendations.md`, `docs/features/pattern-recommendations.md`, `STATUS.md`.
+- Recommendation docs / contributor artifacts: `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/reference/abilities-and-routes.md`, `docs/reference/shared-internals.md`, `docs/reference/pattern-recommendation-audit-remediation-plan.md`, `docs/reference/pattern-recommendation-debugging.md`, `docs/features/block-recommendations.md`, `docs/features/pattern-recommendations.md`, `STATUS.md`.
 
 ## Formal Gates Triggered
 
@@ -72,9 +72,9 @@ No new external dependencies, no changes to settings field IDs, no changes to pr
 
 ## Browser Evidence
 
-- `npm run test:e2e:playground` 2026-04-29: full saved log at [`output/playwright/playground-run-2026-04-29.log`](../../output/playwright/playground-run-2026-04-29.log).
+- `npm run test:e2e:playground` 2026-04-29: full saved log was at `output/playwright/playground-run-2026-04-29.log` in the historical working tree; that artifact is no longer retained in this checkout.
   - First run: `8 passed / 1 failed / 2 skipped`. The single failure was `tests/e2e/flavor-agent.smoke.spec.js:2896 › template surface explains unavailable plugin backends`, where the Playground PHP-WASM `WebServer` crashed with `Error: Invalid state: Controller is already closed` in `@php-wasm/universal/index.js:4106` before the test could `page.goto( /wp-admin/site-editor.php )`. The two skipped tests are the same explicitly-skipped specs as the 2026-04-22 baseline (block-inspector smoke applies/persists/undoes; template surface smoke previews/applies executable templates).
-  - Targeted rerun of only the failing test: `npx playwright test tests/e2e/flavor-agent.smoke.spec.js -g "template surface explains unavailable plugin backends" --reporter=list` returned `1 passed (1.2m)` (saved at [`output/playwright/playground-rerun-2026-04-29.log`](../../output/playwright/playground-rerun-2026-04-29.log)), confirming the original failure was a `@php-wasm/universal` controller-closed flake at suite end, not a regression. The failing spec is a Site Editor unavailable-backend copy test and is not on a code path touched by this change.
+  - Targeted rerun of only the failing test: `npx playwright test tests/e2e/flavor-agent.smoke.spec.js -g "template surface explains unavailable plugin backends" --reporter=list` returned `1 passed (1.2m)`, confirming the original failure was a `@php-wasm/universal` controller-closed flake at suite end, not a regression. The failing spec is a Site Editor unavailable-backend copy test and is not on a code path touched by this change. (That rerun log, `output/playwright/playground-rerun-2026-04-29.log`, was not retained in this checkout.)
   - Net pattern-surface coverage: `pattern surface smoke uses the inserter search to fetch recommendations` passed (26.2 s) on the first run, matching the 2026-04-22 baseline; `block and pattern surfaces explain unavailable providers in native UI` passed (28.2 s); `navigation surface smoke renders advisory recommendations` passed (28.6 s); template stale and advisory-only paths passed.
 - `npm run test:e2e:wp70` 2026-04-29: rerun on the Docker-backed WP 7.0 harness returned `14 passed (6.1m)`, clearing the four 2026-04-22 Site Editor reds. The passing rerun includes:
   - `@wp70-site-editor global styles surface previews, applies, and undoes executable recommendations`

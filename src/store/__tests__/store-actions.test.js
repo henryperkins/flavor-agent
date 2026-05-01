@@ -3714,6 +3714,169 @@ describe( 'store action thunks', () => {
 		expect( dispatch ).not.toHaveBeenCalled();
 	} );
 
+	test( 'revalidateBlockReviewFreshness ignores stale background responses after a newer block result is stored', async () => {
+		let resolveRevalidation;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					resolveRevalidation = resolve;
+				} )
+		);
+
+		const dispatch = jest.fn();
+		let storedState = {
+			contextSignature: 'context-old',
+			prompt: 'Refresh content.',
+			requestToken: 4,
+			resolvedContextSignature: 'resolved-block-old',
+		};
+		const select = {
+			getBlockRecommendationContextSignature: jest.fn(
+				() => storedState.contextSignature
+			),
+			getBlockRecommendations: jest.fn( () => ( {
+				prompt: storedState.prompt,
+			} ) ),
+			getBlockRequestToken: jest.fn( () => storedState.requestToken ),
+			getBlockResolvedContextSignature: jest.fn(
+				() => storedState.resolvedContextSignature
+			),
+			getBlockStaleReason: jest.fn( () => null ),
+		};
+		const requestSignature = buildBlockRecommendationRequestSignature( {
+			clientId: 'block-1',
+			prompt: 'Refresh content.',
+			contextSignature: 'context-old',
+		} );
+		const revalidationPromise = actions.revalidateBlockReviewFreshness(
+			'block-1',
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: PARAGRAPH_BLOCK_CONTEXT,
+				},
+				prompt: 'Refresh content.',
+			},
+			{
+				requestSignature,
+				requestToken: 4,
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		storedState = {
+			contextSignature: 'context-new',
+			prompt: 'Refresh content.',
+			requestToken: 5,
+			resolvedContextSignature: 'resolved-block-new',
+		};
+		resolveRevalidation( {
+			payload: {
+				resolvedContextSignature: 'resolved-block-drifted',
+			},
+		} );
+
+		await revalidationPromise;
+
+		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'revalidateBlockReviewFreshness skips stale client request signatures before hitting the server', async () => {
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-current' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				prompt: 'Current prompt.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 3 ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-current' ),
+		};
+		const staleRequestSignature = buildBlockRecommendationRequestSignature(
+			{
+				clientId: 'block-1',
+				prompt: 'Previous prompt.',
+				contextSignature: 'context-current',
+			}
+		);
+
+		await actions.revalidateBlockReviewFreshness(
+			'block-1',
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: PARAGRAPH_BLOCK_CONTEXT,
+				},
+				prompt: 'Previous prompt.',
+			},
+			{
+				requestSignature: staleRequestSignature,
+				requestToken: 3,
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( dispatch ).not.toHaveBeenCalled();
+	} );
+
+	test( 'revalidateBlockReviewFreshness clears passive server stale state after a matching check', async () => {
+		apiFetch.mockResolvedValue( {
+			payload: {
+				resolvedContextSignature: 'resolved-block',
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRecommendationContextSignature: jest
+				.fn()
+				.mockReturnValue( 'context-current' ),
+			getBlockRecommendations: jest.fn().mockReturnValue( {
+				prompt: 'Refresh content.',
+			} ),
+			getBlockRequestToken: jest.fn().mockReturnValue( 3 ),
+			getBlockResolvedContextSignature: jest
+				.fn()
+				.mockReturnValue( 'resolved-block' ),
+			getBlockStaleReason: jest.fn().mockReturnValue( 'server' ),
+		};
+		const requestSignature = buildBlockRecommendationRequestSignature( {
+			clientId: 'block-1',
+			prompt: 'Refresh content.',
+			contextSignature: 'context-current',
+		} );
+
+		await actions.revalidateBlockReviewFreshness(
+			'block-1',
+			{
+				clientId: 'block-1',
+				editorContext: {
+					block: PARAGRAPH_BLOCK_CONTEXT,
+				},
+				prompt: 'Refresh content.',
+			},
+			{
+				requestSignature,
+				requestToken: 3,
+			}
+		)( {
+			dispatch,
+			select,
+		} );
+
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState( 'block-1', 'idle' )
+		);
+	} );
+
 	test( 'revalidateBlockReviewFreshness keeps direct signature-only compatibility', async () => {
 		apiFetch.mockResolvedValue( {
 			resolvedContextSignature: 'resolved-block',

@@ -2075,16 +2075,46 @@ const actions = {
 		} )( activityId );
 	},
 
-	revalidateBlockReviewFreshness( clientId, requestInput = null ) {
+	revalidateBlockReviewFreshness(
+		clientId,
+		requestInput = null,
+		options = {}
+	) {
 		return async ( { dispatch, select } ) => {
 			if ( ! clientId || ! requestInput ) {
 				return;
 			}
 
-			const storedResolvedSig =
-				select.getBlockResolvedContextSignature?.( clientId ) || '';
+			const requestSignature = normalizeStringMessage(
+				options?.requestSignature
+			);
+			const requestToken = Number.isFinite( options?.requestToken )
+				? options.requestToken
+				: null;
+			const getStoredRequestSignature = () =>
+				buildBlockRecommendationRequestSignature( {
+					clientId,
+					prompt:
+						select.getBlockRecommendations?.( clientId )?.prompt ||
+						'',
+					contextSignature:
+						select.getBlockRecommendationContextSignature?.(
+							clientId
+						) || null,
+				} );
+			const storedResolvedSig = normalizeStringMessage(
+				select.getBlockResolvedContextSignature?.( clientId ) || ''
+			);
+			const storedRequestSignature = getStoredRequestSignature();
+			const storedRequestToken =
+				select.getBlockRequestToken?.( clientId ) || 0;
 
-			if ( ! storedResolvedSig ) {
+			if (
+				! storedResolvedSig ||
+				( requestSignature &&
+					storedRequestSignature !== requestSignature ) ||
+				( requestToken !== null && requestToken !== storedRequestToken )
+			) {
 				return;
 			}
 
@@ -2100,11 +2130,28 @@ const actions = {
 
 				const serverSig =
 					getResolvedContextSignatureFromResponse( response ) || '';
+				const currentResolvedSig = normalizeStringMessage(
+					select.getBlockResolvedContextSignature?.( clientId ) || ''
+				);
+				const currentRequestToken =
+					select.getBlockRequestToken?.( clientId ) || 0;
+				const currentRequestSignature = getStoredRequestSignature();
+
+				if (
+					! currentResolvedSig ||
+					currentResolvedSig !== storedResolvedSig ||
+					( requestSignature &&
+						currentRequestSignature !== requestSignature ) ||
+					( requestToken !== null &&
+						currentRequestToken !== requestToken )
+				) {
+					return;
+				}
 
 				if (
 					serverSig &&
-					storedResolvedSig &&
-					serverSig !== storedResolvedSig
+					currentResolvedSig &&
+					serverSig !== currentResolvedSig
 				) {
 					dispatch(
 						actions.setBlockApplyState(
@@ -2115,6 +2162,11 @@ const actions = {
 							'server'
 						)
 					);
+				} else if (
+					serverSig === currentResolvedSig &&
+					select.getBlockStaleReason?.( clientId ) === 'server'
+				) {
+					dispatch( actions.setBlockApplyState( clientId, 'idle' ) );
 				}
 			} catch {
 				// Background revalidation failures are silent.

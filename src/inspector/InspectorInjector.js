@@ -10,7 +10,7 @@ import {
 	InspectorControls,
 	store as blockEditorStore,
 } from '@wordpress/block-editor';
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useSelect } from '@wordpress/data';
 import {
 	useCallback,
 	useEffect,
@@ -43,7 +43,6 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			value: '',
 		} );
 		const hydratedResultKeyRef = useRef( null );
-		const { revalidateBlockReviewFreshness } = useDispatch( STORE_NAME );
 		const {
 			recommendations,
 			editingMode,
@@ -84,6 +83,8 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			[ clientId ]
 		);
 		const liveContext = useMemo( () => {
+			// Keep the collected context tied to selector-driven signature
+			// changes without reading the signature value directly here.
 			void liveContextSignature;
 
 			return clientId ? collectBlockContext( clientId ) : null;
@@ -190,28 +191,6 @@ const withAIRecommendations = createHigherOrderComponent( ( BlockEdit ) => {
 			status,
 			storedRequestSignature,
 			storedRequestToken,
-		] );
-
-		// Background server-side freshness revalidation for block
-		// recommendations. This extends the resolveSignatureOnly pattern
-		// (already used by template/style/navigation surfaces) to blocks,
-		// so stale detection happens without re-running the full LLM call.
-		useEffect( () => {
-			if (
-				status !== 'ready' ||
-				! hasStoredResult ||
-				! currentRequestInput
-			) {
-				return;
-			}
-
-			revalidateBlockReviewFreshness( clientId, currentRequestInput );
-		}, [
-			clientId,
-			currentRequestInput,
-			hasStoredResult,
-			revalidateBlockReviewFreshness,
-			status,
 		] );
 
 		if ( ! isSelected || isDisabled ) {

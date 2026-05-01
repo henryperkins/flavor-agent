@@ -73,6 +73,7 @@ const CONTENT_ONLY_STARTER_PROMPTS = [
 	'Clarify the message',
 	'Make the content more concise',
 ];
+const BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS = 300;
 
 export function findBlockPath( blocks, clientId, path = [] ) {
 	for ( let index = 0; index < blocks.length; index++ ) {
@@ -398,6 +399,7 @@ export function BlockRecommendationsContent( {
 		clearBlockError,
 		clearUndoError,
 		applyBlockStructuralSuggestion,
+		revalidateBlockReviewFreshness,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
 	const liveContextSignature = useSelect(
@@ -446,6 +448,7 @@ export function BlockRecommendationsContent( {
 		[ clientId, currentPrompt, liveContext, liveContextSignature ]
 	);
 	const {
+		clientStaleReason,
 		effectiveStaleReason,
 		hasFreshResult,
 		hasStoredResult: hasResult,
@@ -536,6 +539,41 @@ export function BlockRecommendationsContent( {
 			setActiveReviewState( null );
 		}
 	}, [ activeReviewState, isStaleResult, reviewScope ] );
+	// Background server-side freshness revalidation for the executable block
+	// surface. Client-stale results are already demoted immediately, so avoid
+	// converting temporary prompt/context edits into sticky server-stale state.
+	useEffect( () => {
+		if (
+			isDisabled ||
+			status !== 'ready' ||
+			! hasResult ||
+			clientStaleReason ||
+			! currentRequestInput
+		) {
+			return;
+		}
+
+		const timer = window.setTimeout( () => {
+			revalidateBlockReviewFreshness( clientId, currentRequestInput, {
+				requestSignature: currentRequestSignature,
+				requestToken,
+			} );
+		}, BLOCK_REVIEW_REVALIDATION_DEBOUNCE_MS );
+
+		return () => {
+			window.clearTimeout( timer );
+		};
+	}, [
+		clientId,
+		clientStaleReason,
+		currentRequestInput,
+		currentRequestSignature,
+		hasResult,
+		isDisabled,
+		revalidateBlockReviewFreshness,
+		requestToken,
+		status,
+	] );
 
 	const {
 		executableBlockSuggestions,

@@ -48,20 +48,25 @@ export function getBlockRecommendationFreshness( {
 		prompt,
 		contextSignature: liveContextSignature || '',
 	} );
-	const storedRequestSignature = buildBlockRecommendationRequestSignature( {
-		clientId,
-		prompt: recommendations?.prompt || '',
-		contextSignature: storedContextSignature || liveContextSignature,
-	} );
+	const storedRequestSignature = storedContextSignature
+		? buildBlockRecommendationRequestSignature( {
+				clientId,
+				prompt: recommendations?.prompt || '',
+				contextSignature: storedContextSignature,
+		  } )
+		: null;
 	const clientStaleReason =
-		hasStoredResult && storedRequestSignature !== currentRequestSignature
+		hasStoredResult &&
+		( ! storedRequestSignature ||
+			storedRequestSignature !== currentRequestSignature )
 			? 'client'
 			: null;
+	const serverStaleReason =
+		storedStaleReason === 'server' || storedStaleReason === 'server-apply'
+			? storedStaleReason
+			: null;
 	const effectiveStaleReason =
-		clientStaleReason ||
-		( storedStaleReason === 'server' || storedStaleReason === 'server-apply'
-			? 'server-apply'
-			: null );
+		clientStaleReason || serverStaleReason;
 
 	return {
 		clientStaleReason,

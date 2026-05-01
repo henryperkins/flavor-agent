@@ -193,15 +193,13 @@ Result:
 
 - `src/inspector/InspectorInjector.js`
 - `src/inspector/BlockRecommendationsPanel.js`
-- `src/inspector/SettingsRecommendations.js`
-- `src/inspector/StylesRecommendations.js`
 - `src/inspector/SuggestionChips.js`
 - `docs/features/block-recommendations.md`
 - `docs/reference/recommendation-ui-consistency.md`
 
 ### Changes
 
-1. Remove `SettingsRecommendations` and `StylesRecommendations` as standalone panels.
+1. Remove `SettingsRecommendations` and `StylesRecommendations` standalone panels (files were deleted after landing the ownership reset).
 2. Keep `BlockRecommendationsPanel` as the only executable block recommendation surface.
 3. Convert delegated subpanel chips into passive helpers:
    - suggested value preview

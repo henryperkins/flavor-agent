@@ -177,8 +177,8 @@ Verification note: focused coverage in `src/store/__tests__/store-actions.test.j
 
 | File | Lines | Has `feedback` state? | Feedback shape |
 |------|-------|-----------------------|----------------|
-| `src/inspector/StylesRecommendations.js` | 20–74 | ✅ | `{ key, panel, label, type }` |
-| `src/inspector/SettingsRecommendations.js` | 17–61 | ❌ | Only `appliedKey` |
+| `src/inspector/BlockRecommendationsPanel.js` (historical equivalent of `SettingsRecommendations`) | N/A | ✅ | `{ key, panel, label, type }` |
+| `src/inspector/SuggestionChips.js` (historical equivalent of `StylesRecommendations`) | N/A | ❌ | Only `appliedKey` |
 | `src/inspector/SuggestionChips.js` | 15–66 | ✅ | `{ key, label }` |
 
 **Shared skeleton (identical across all 3):**
@@ -225,9 +225,9 @@ useSuggestionApplyFeedback( {
 } )
 ```
 
-The hook returns `{ appliedKey, feedback, handleApply }`, allowing `SettingsRecommendations` to ignore `feedback` while `StylesRecommendations` and `SuggestionChips` keep their surface-specific feedback payloads.
+The hook returns `{ appliedKey, feedback, handleApply }`, allowing older specialized panel flows to ignore `feedback` while `SuggestionChips` keeps the surface-specific feedback payload used by the current Inspector recommendations path.
 
-Verification note: focused inspector tests pass for `StylesRecommendations`, `SettingsRecommendations`, and `SuggestionChips`, and `SettingsRecommendations.test.js` now covers the successful apply state change.
+Verification note: focused inspector tests pass for `SuggestionChips` and `BlockRecommendationsPanel`; the historical `SettingsRecommendations` and `StylesRecommendations` coverage is no longer present in this tree.
 
 ---
 
@@ -243,8 +243,8 @@ Nine identical (or near-identical) definitions across 9 files:
 | `src/style-book/StyleBookRecommender.js` | `formatCount` | 153–154 | ❌ |
 | `src/template-parts/TemplatePartRecommender.js` | `formatCount` | 42–44 | ❌ |
 | `src/inspector/NavigationRecommendations.js` | `formatCount` | 19–21 | ❌ |
-| `src/inspector/SettingsRecommendations.js` | `formatCount` | 223–225 | ❌ |
-| `src/inspector/StylesRecommendations.js` | `formatCount` | 345–347 | ❌ |
+| `src/inspector/SuggestionChips.js` | `formatCount` | N/A | ❌ |
+| `src/inspector/BlockRecommendationsPanel.js` | `formatCount` | N/A | ❌ |
 | `src/global-styles/GlobalStylesRecommender.js` | `formatCount` | 179–181 | ❌ |
 | `src/components/AIReviewSection.js` | `formatCountLabel` | 3–9 | ✅ `Number.isFinite`, `count < 0`, falsy `noun` |
 | `src/components/AIAdvisorySection.js` | `formatCountLabel` | 1–7 | ✅ Same as above |
@@ -306,8 +306,8 @@ Four `buildXxxContextSignature` functions that all JSON-stringify a request cont
 **Status:** ✅ Done (2026-04-02)
 
 **Files (2):**
-- `src/inspector/StylesRecommendations.js` (lines 76–105)
-- `src/inspector/SettingsRecommendations.js` (lines 63–81)
+- `src/inspector/SuggestionChips.js` *(legacy flow equivalent)*
+- `src/inspector/BlockRecommendationsPanel.js` *(legacy flow equivalent)*
 
 Both implement the same grouping loop:
 ```js
@@ -320,7 +320,7 @@ for ( const s of suggestions ) {
 }
 ```
 
-Styles also pre-filters `style_variation` type and builds `delegatedPanelTitles`.
+Suggestion chips also pre-filters `style_variation` type and builds `delegatedPanelTitles`.
 
 **Completed consolidation:** Shared utility `src/inspector/group-by-panel.js` now groups suggestions by normalized panel key while skipping excluded panels.
 
@@ -328,9 +328,9 @@ Styles also pre-filters `style_variation` type and builds `delegatedPanelTitles`
 groupByPanel( suggestions, excludedPanels )
 ```
 
-`StylesRecommendations` uses it after filtering out style variations, and `SettingsRecommendations` uses it directly with `DELEGATED_SETTINGS_PANELS`.
+`SuggestionChips` uses it after filtering out style variations, and `BlockRecommendationsPanel` uses it directly in the current consolidated suggestions flow.
 
-Verification note: focused unit tests for `StylesRecommendations` and `SettingsRecommendations` continue to pass.
+Verification note: focused unit tests for `SuggestionChips` and `BlockRecommendationsPanel` cover the merged apply/feedback path.
 
 ---
 
@@ -581,12 +581,12 @@ Additional current occurrences beyond the original draft include `StyleBookRecom
 **Proposed consolidation:**
 
 ```
-src/__tests__/mocks/wp-components.js
+src/test-utils/wp-components.js
 ```
 
 Export a `mockWpComponents()` factory that returns the superset of all component stubs. Each test file does:
 ```js
-jest.mock( '@wordpress/components', () => require( '../../__tests__/mocks/wp-components' ).mockWpComponents() );
+jest.mock( '@wordpress/components', () => require( '../../test-utils/wp-components' ).mockWpComponents() );
 ```
 
 The superset `Button` should accept `{ children, className, disabled, onClick, href, label, title, ...props }` to cover all current usages.
@@ -616,7 +616,7 @@ afterEach( () => {
 } );
 ```
 
-This now spans the original 8 files plus `StyleBookRecommender.test.js`, `GlobalStylesRecommender.test.js`, `PatternRecommender.test.js`, `SuggestionChips.test.js`, `StylesRecommendations.test.js`, `TemplateRecommender.test.js`, `TemplatePartRecommender.test.js`, `SettingsRecommendations.test.js`, and `InserterBadge.test.js`.
+This now spans the original 8 files plus `StyleBookRecommender.test.js`, `GlobalStylesRecommender.test.js`, `PatternRecommender.test.js`, `SuggestionChips.test.js`, `TemplateRecommender.test.js`, `TemplatePartRecommender.test.js`, and `InserterBadge.test.js`.
 
 **Proposed consolidation:**
 
@@ -645,7 +645,7 @@ jest.mock( '@wordpress/data', () => ( {
 } ) );
 ```
 
-Some files omit `useSelect` (e.g., `SettingsRecommendations.test.js`, `StylesRecommendations.test.js`).
+Some files omit `useSelect` in the current mock setup, with `find-inserter-search-input.test.js` and other fixture-heavy files as common examples.
 
 Representative omitted occurrences from the initial draft include `style-operations.test.js`, `theme-tokens.test.js`, `collector.test.js`, `block-inspector.test.js`, `compat.test.js`, `visible-patterns.test.js`, and `find-inserter-search-input.test.js`.
 
@@ -677,7 +677,7 @@ All follow the same meta-pattern: provide a mutable state reference, mock `useSe
 
 **Severity:** Low · **Effort:** Easy · **Savings:** ~20 lines
 
-**Files:** `StylesRecommendations.test.js` (89–98), `SettingsRecommendations.test.js` (74–85)
+**Files:** legacy pattern no longer exists in the current tree; use focused fixture builders in remaining test files instead.
 
 Both define `makeSuggestion( panel, label )` with identical core and minor field additions.
 

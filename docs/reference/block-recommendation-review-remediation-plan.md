@@ -6,7 +6,7 @@ Status: partially implemented and partially superseded
 
 Scope: Address the confirmed review findings in the `flavor-agent/recommend-block` runtime path. This plan intentionally avoids broader redesigns and keeps changes tied to freshness, executable attribute validation, undo contract drift, tests, and docs.
 
-Implementation result: Solutions 1 and 2 are implemented in the current source. Solution 3 was superseded by the later undo decision captured in `docs/reference/uncommitted-review-remediation-plan.md` and `docs/SOURCE_OF_TRUTH.md`: path drift is not a hard block when the same `clientId`, block name, and recorded post-apply attributes still identify the target block. Path fallback remains guarded by block name and attribute snapshots.
+Implementation result: Solutions 1 and 2 are implemented in the current source. Solution 3 was superseded by the later undo decision captured in `docs/SOURCE_OF_TRUTH.md`: path drift is not a hard block when the same `clientId`, block name, and recorded post-apply attributes still identify the target block. Path fallback remains guarded by block name and attribute snapshots.
 
 ## Findings Covered
 

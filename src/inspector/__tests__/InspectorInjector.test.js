@@ -1,9 +1,7 @@
 const mockUseSelect = jest.fn();
-const mockUseDispatch = jest.fn();
 const mockCollectBlockContext = jest.fn();
 const mockRenderBlockRecommendationsPanel = jest.fn();
 const mockRenderSuggestionChips = jest.fn();
-let mockRevalidateBlockReviewFreshness;
 
 jest.mock( '@wordpress/hooks', () => ( {
 	addFilter: jest.fn(),
@@ -20,7 +18,6 @@ jest.mock( '@wordpress/compose', () => ( {
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
-	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
 } ) );
 
 jest.mock( '../../context/collector', () => ( {
@@ -114,10 +111,6 @@ function getLatestChipProps( label ) {
 
 beforeEach( () => {
 	jest.clearAllMocks();
-	mockRevalidateBlockReviewFreshness = jest.fn();
-	mockUseDispatch.mockReturnValue( {
-		revalidateBlockReviewFreshness: mockRevalidateBlockReviewFreshness,
-	} );
 	currentState = {
 		blockEditor: {
 			editingMode: 'default',
@@ -187,48 +180,6 @@ describe( 'InspectorInjector', () => {
 		const colorChipProps = getLatestChipProps( 'AI color suggestions' );
 
 		expect( colorChipProps?.interactive ).toBe( false );
-	} );
-
-	test( 'revalidates block freshness in the background for ready stored results', () => {
-		renderComponent();
-
-		expect( mockRevalidateBlockReviewFreshness ).toHaveBeenCalledWith(
-			'block-1',
-			{
-				clientId: 'block-1',
-				editorContext: {
-					block: {
-						name: 'core/paragraph',
-					},
-				},
-				contextSignature: JSON.stringify( {
-					block: { name: 'core/paragraph' },
-				} ),
-				prompt: 'Keep the current direction.',
-			}
-		);
-	} );
-
-	test( 'skips background revalidation when the request input is unavailable', () => {
-		mockCollectBlockContext.mockReturnValue( null );
-
-		renderComponent();
-
-		expect( mockRevalidateBlockReviewFreshness ).not.toHaveBeenCalled();
-	} );
-
-	test( 'skips background revalidation when the stored result is not ready', () => {
-		currentState = {
-			...getState(),
-			store: {
-				...getState().store,
-				blockStatus: 'loading',
-			},
-		};
-
-		renderComponent();
-
-		expect( mockRevalidateBlockReviewFreshness ).not.toHaveBeenCalled();
 	} );
 
 	test( 'keeps stale projected settings and style suggestions visible when context changes', () => {
