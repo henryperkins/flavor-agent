@@ -1,6 +1,6 @@
 # Block Recommendations
 
-Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/reference/abilities-and-routes.md` for the exact contract.
+Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/reference/abilities-and-routes.md` for the exact route/ability contract, and `docs/reference/surfaces/block-recommendations.md` for the release stop line.
 
 ## Exact Surface
 
@@ -65,6 +65,7 @@ User selects block + prompt
   -> BlockAbilities::recommend_block()
   -> ChatClient::chat()
   -> Prompt::parse_response()
+  -> Prompt::enforce_block_context_rules()
   -> BlockOperationValidator validates proposed operations
   -> store saves grouped suggestions
   -> Inspector renders apply chips, review/apply cards, and advisory cards
@@ -74,8 +75,12 @@ User selects block + prompt
 
 ## Example Request
 
+This is the normal non-structural request shape sent by the first-party block Inspector panel.
+
 ```json
 {
+  "clientId": "2b1c4f3f-1234-5678-9abc-def012345678",
+  "contextSignature": "sha256-of-client-block-context",
   "editorContext": {
     "block": {
       "name": "core/group",
@@ -94,9 +99,9 @@ User selects block + prompt
         }
       },
       "inspectorPanels": {
-        "layout": true,
-        "dimensions": true,
-        "color": true
+        "color": ["color.background", "color.text"],
+        "dimensions": ["spacing.padding"],
+        "layout": ["layout.type"]
       },
       "editingMode": "default",
       "isInsideContentOnly": false,
@@ -109,14 +114,67 @@ User selects block + prompt
     "siblingsBefore": ["core/heading"],
     "siblingsAfter": ["core/paragraph"],
     "themeTokens": {
-      "colors": ["contrast", "base"],
-      "spacing": ["40", "50", "60"]
+      "colors": ["contrast: #111111", "base: #ffffff"],
+      "colorPresets": [
+        {
+          "name": "Contrast",
+          "slug": "contrast",
+          "color": "#111111",
+          "cssVar": "var(--wp--preset--color--contrast)"
+        }
+      ],
+      "spacing": ["40: 1rem", "50: 1.5rem", "60: 2rem"],
+      "spacingPresets": [
+        {
+          "name": "60",
+          "slug": "60",
+          "size": "2rem",
+          "cssVar": "var(--wp--preset--spacing--60)"
+        }
+      ],
+      "layout": {
+        "content": "42rem",
+        "wide": "72rem",
+        "allowEditing": true,
+        "allowCustomContentAndWideSize": true
+      },
+      "enabledFeatures": {
+        "backgroundColor": true,
+        "textColor": true,
+        "padding": true,
+        "blockGap": true
+      }
     }
   },
-  "prompt": "Make this section feel more spacious and editorial.",
-  "clientId": "2b1c4f3f-1234-5678-9abc-def012345678"
+  "prompt": "Make this section feel more spacious and editorial."
 }
 ```
+
+When `window.flavorAgentData.enableBlockStructuralActions` is true, the request also carries this selected-block pattern-operation context under `editorContext.blockOperationContext`:
+
+```json
+{
+  "editorContext": {
+    "blockOperationContext": {
+      "targetClientId": "2b1c4f3f-1234-5678-9abc-def012345678",
+      "targetBlockName": "core/group",
+      "targetSignature": "sha256-of-selected-block-target",
+      "allowedPatterns": [
+        {
+          "name": "theme/editorial-section",
+          "title": "Editorial section",
+          "source": "theme",
+          "categories": ["featured"],
+          "blockTypes": ["core/group"],
+          "allowedActions": ["insert_before", "insert_after", "replace"]
+        }
+      ]
+    }
+  }
+}
+```
+
+The server normalizes that context with lock, content-only, and editing-mode defaults before `BlockOperationValidator` evaluates any proposed operation.
 
 ## Example Response
 
@@ -157,7 +215,70 @@ User selects block + prompt
     ],
     "block": [],
     "explanation": "The block already works as a section wrapper, so spacing and layout changes are the lowest-risk improvements.",
-    "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt"
+    "resolvedContextSignature": "sha256-of-surface-apply-context-and-prompt",
+    "executionContract": {
+      "inspectorPanels": {
+        "color": ["color.background", "color.text"],
+        "dimensions": ["spacing.padding"],
+        "layout": ["layout.type"]
+      },
+      "allowedPanels": ["color", "dimensions", "layout"],
+      "panelMappingKnown": true,
+      "styleSupportPaths": ["color.background", "color.text", "spacing.padding"],
+      "bindableAttributes": [],
+      "contentAttributeKeys": [],
+      "configAttributeKeys": ["layout"],
+      "supportsContentRole": true,
+      "editingMode": "default",
+      "isInsideContentOnly": false,
+      "usesInnerBlocksAsContent": true,
+      "registeredStyles": ["default", "section"],
+      "presetSlugs": {
+        "color": ["base", "contrast"],
+        "gradient": [],
+        "duotone": [],
+        "fontsize": [],
+        "fontfamily": [],
+        "spacing": ["40", "50", "60"],
+        "shadow": []
+      },
+      "enabledFeatures": {
+        "backgroundColor": true,
+        "textColor": true,
+        "padding": true,
+        "blockGap": true
+      },
+      "layout": {
+        "content": "42rem",
+        "wide": "72rem",
+        "allowEditing": true,
+        "allowCustomContentAndWideSize": true
+      }
+    },
+    "requestMeta": {
+      "selectedProvider": "openai",
+      "selectedProviderLabel": "OpenAI",
+      "connectorId": "openai",
+      "connectorLabel": "OpenAI",
+      "provider": "openai",
+      "providerLabel": "OpenAI",
+      "backendLabel": "WordPress AI Client",
+      "model": "gpt-4.1-mini",
+      "owner": "site",
+      "ownerLabel": "Site",
+      "pathLabel": "AI Client",
+      "credentialSource": "connector",
+      "credentialSourceLabel": "Connector",
+      "tokenUsage": {
+        "input": 1180,
+        "output": 430,
+        "total": 1610
+      },
+      "latencyMs": 940,
+      "usedFallback": false,
+      "ability": "flavor-agent/recommend-block",
+      "route": "/flavor-agent/v1/recommend-block"
+    }
   },
   "clientId": "2b1c4f3f-1234-5678-9abc-def012345678"
 }
@@ -218,15 +339,20 @@ User selects block + prompt
 | UI shell | `withAIRecommendations()` in `src/inspector/InspectorInjector.js` | Injects the panel into the native Inspector |
 | UI state | `BlockRecommendationsContent()` in `src/inspector/BlockRecommendationsPanel.js` | Renders intro, scope/freshness, prompt, status, featured recommendation, grouped lanes, embedded navigation, activity, and undo |
 | Context collection | `collectBlockContext()` in `src/context/collector.js` | Builds the client snapshot sent to the backend |
+| Request builder | `buildBlockRecommendationRequestData()` in `src/inspector/block-recommendation-request.js` | Carries `clientId`, prompt, live context, and top-level `contextSignature`, and computes the client request signature used for stale-result checks |
 | Store request | `fetchBlockRecommendations()` in `src/store/index.js` | Sends the recommendation request and stores the result |
 | Store apply | `applySuggestion()` in `src/store/index.js` | Applies bounded attribute updates and records activity |
 | Store structural apply | `applyBlockStructuralSuggestion()` in `src/store/index.js` | Applies reviewed structural operations after freshness and live-target checks |
+| Client structural mirror | `validateBlockOperationSequence()` and catalog helpers in `src/utils/block-operation-catalog.js` | Mirrors server-approved operation validation before review/apply and fails closed on client/server mismatch |
 | Structural operations | `applyBlockStructuralSuggestionOperations()` in `src/utils/block-structural-actions.js` | Parses patterns, applies insert/replace operations transactionally, and prepares structural signatures for activity/undo |
 | Activity undo | `undoActivity()` in `src/store/activity-undo.js` | Routes inline block undo and structural block undo through their drift validators |
 | REST handler | `Agent_Controller::handle_recommend_block()` | Adapts the REST request to the backend ability |
 | Backend ability | `BlockAbilities::recommend_block()` | Normalizes input, gathers context, and runs the prompt pipeline |
+| Execution contract | `BlockRecommendationExecutionContract::from_context()` in `inc/Context/BlockRecommendationExecutionContract.php` | Derives the server-side apply contract from normalized block context and theme tokens |
 | LLM wrapper | `ChatClient::chat()` | Uses the WordPress AI Client / Connectors runtime; direct Azure/OpenAI Native settings are not a chat fallback |
-| Prompt contract | `Prompt::build_user()` / `Prompt::parse_response()` | Builds and validates the structured block-suggestion payload |
+| Prompt contract | `Prompt::build_user()` / `Prompt::parse_response()` | Builds and parses the structured block-suggestion payload |
+| Server enforcement | `Prompt::enforce_block_context_rules()` in `inc/LLM/Prompt.php` | Filters parsed suggestions against panel, attribute, style, visibility, binding, and structural-operation rules |
+| Structural validator | `BlockOperationValidator::validate_sequence()` in `inc/Context/BlockOperationValidator.php` | Validates proposed selected-block pattern operations against the normalized operation context |
 
 ## Related Routes And Abilities
 
@@ -238,12 +364,15 @@ User selects block + prompt
 
 - `src/inspector/InspectorInjector.js`
 - `src/inspector/BlockRecommendationsPanel.js`
+- `src/inspector/block-recommendation-request.js`
 - `src/inspector/SuggestionChips.js`
 - `src/inspector/suggestion-keys.js`
 - `src/context/collector.js`
 - `src/context/block-inspector.js` — client-side block introspection (supports, attributes, styles); see `docs/reference/shared-internals.md`
 - `src/context/theme-tokens.js` — design token extraction for LLM context; see `docs/reference/shared-internals.md`
 - `src/utils/structural-identity.js` — block structural role inference for `structuralIdentity` context; see `docs/reference/shared-internals.md`
+- `src/utils/block-operation-catalog.js` — client structural-operation catalog and validation mirror
+- `src/utils/block-execution-contract.js` — client-side execution-contract normalizer for stored recommendation state
 - `src/utils/block-structural-actions.js` — transactional selected-block structural apply and drift-safe undo helpers
 - `src/store/index.js`
 - `src/store/activity-history.js`
@@ -254,5 +383,7 @@ User selects block + prompt
 - `src/components/AIStatusNotice.js` — shared contextual status feedback; see `docs/reference/shared-internals.md`
 - `inc/REST/Agent_Controller.php`
 - `inc/Abilities/BlockAbilities.php`
+- `inc/Context/BlockRecommendationExecutionContract.php`
+- `inc/Context/BlockOperationValidator.php`
 - `inc/LLM/ChatClient.php`
 - `inc/LLM/Prompt.php`

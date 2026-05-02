@@ -193,16 +193,7 @@ final class BlockAbilities {
 	}
 
 	private static function normalize_non_negative_int( mixed $value ): ?int {
-		if ( is_int( $value ) ) {
-			return $value >= 0 ? $value : null;
-		}
-
-		if ( is_numeric( $value ) ) {
-			$normalized = (int) $value;
-			return $normalized >= 0 ? $normalized : null;
-		}
-
-		return null;
+		return \FlavorAgent\Support\NonNegativeInteger::normalize( $value );
 	}
 
 	private static function build_context_from_editor_context( mixed $raw_context ): array|\WP_Error {

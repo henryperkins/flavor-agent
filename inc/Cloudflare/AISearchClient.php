@@ -838,14 +838,6 @@ final class AISearchClient {
 	// Prewarm internals
 	// ------------------------------------------------------------------
 
-	private static function resolve_config_value( ?string $value, string $option_name ): string {
-		if ( null !== $value ) {
-			return trim( $value );
-		}
-
-		return trim( (string) get_option( $option_name, '' ) );
-	}
-
 	private static function has_explicit_legacy_config_request(
 		?string $account_id = null,
 		?string $instance_id = null,

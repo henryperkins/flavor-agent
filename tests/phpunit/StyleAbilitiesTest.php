@@ -155,6 +155,105 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_recommend_style_canonicalizes_scope_key_server_side(): void {
+		$canonical_input = [
+			'scope'                => [
+				'surface'        => 'global-styles',
+				'scopeKey'       => 'global_styles:17',
+				'globalStylesId' => '17',
+			],
+			'styleContext'         => [
+				'currentConfig'         => [ 'styles' => [] ],
+				'mergedConfig'          => [ 'styles' => [] ],
+				'availableVariations'   => [],
+				'themeTokenDiagnostics' => [
+					'source'      => 'stable',
+					'settingsKey' => 'features',
+					'reason'      => 'stable-parity',
+				],
+			],
+			'prompt'               => 'Make the palette warmer.',
+			'resolveSignatureOnly' => true,
+		];
+		$forged_input    = array_merge(
+			$canonical_input,
+			[
+				'scope' => [
+					'surface'        => 'global-styles',
+					// Forged scopeKey that doesn't match the canonical form
+					// derived from globalStylesId. The server should ignore it.
+					'scopeKey'       => 'attacker-bucket-9001',
+					'globalStylesId' => '17',
+				],
+			]
+		);
+
+		$canonical = StyleAbilities::recommend_style( $canonical_input );
+		$forged    = StyleAbilities::recommend_style( $forged_input );
+
+		// Resolved signature must be identical regardless of the client's
+		// scopeKey, because the server canonicalizes it before hashing.
+		$this->assertSame(
+			$canonical['resolvedContextSignature'] ?? null,
+			$forged['resolvedContextSignature'] ?? null,
+			'Resolved signature must be deterministic across client-supplied scopeKey variants.'
+		);
+		$this->assertSame(
+			$canonical['reviewContextSignature'] ?? null,
+			$forged['reviewContextSignature'] ?? null,
+			'Review signature must be deterministic across client-supplied scopeKey variants.'
+		);
+	}
+
+	public function test_recommend_style_canonicalizes_style_book_scope_key(): void {
+		$style_context = [
+			'currentConfig'         => [ 'styles' => [] ],
+			'mergedConfig'          => [ 'styles' => [] ],
+			'styleBookTarget'       => [
+				'blockName'  => 'core/paragraph',
+				'blockTitle' => 'Paragraph',
+			],
+			'themeTokenDiagnostics' => [
+				'source'      => 'stable',
+				'settingsKey' => 'features',
+				'reason'      => 'stable-parity',
+			],
+		];
+
+		$canonical = StyleAbilities::recommend_style(
+			[
+				'scope'                => [
+					'surface'        => 'style-book',
+					'scopeKey'       => 'style_book:17:core/paragraph',
+					'globalStylesId' => '17',
+					'blockName'      => 'core/paragraph',
+				],
+				'styleContext'         => $style_context,
+				'prompt'               => 'Tighten paragraph rhythm.',
+				'resolveSignatureOnly' => true,
+			]
+		);
+		$forged    = StyleAbilities::recommend_style(
+			[
+				'scope'                => [
+					'surface'        => 'style-book',
+					'scopeKey'       => 'forged-style-book-bucket',
+					'globalStylesId' => '17',
+					'blockName'      => 'core/paragraph',
+				],
+				'styleContext'         => $style_context,
+				'prompt'               => 'Tighten paragraph rhythm.',
+				'resolveSignatureOnly' => true,
+			]
+		);
+
+		$this->assertSame(
+			$canonical['resolvedContextSignature'] ?? null,
+			$forged['resolvedContextSignature'] ?? null,
+			'Style Book resolved signature must be deterministic across client-supplied scopeKey variants.'
+		);
+	}
+
 	public function test_recommend_style_resolve_signature_only_returns_minimal_payload_and_changes_when_prompt_changes(): void {
 		$input = [
 			'scope'        => [

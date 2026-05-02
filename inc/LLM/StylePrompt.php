@@ -132,7 +132,8 @@ SYSTEM;
 			$scope_lines[] = 'Template type: ' . (string) $scope['templateType'];
 		}
 
-		$budget->add_section( 'scope', implode( "\n", $scope_lines ), 100 );
+		// Scope is the surface identity. Without it the model cannot disambiguate global-styles vs style-book.
+		$budget->add_section( 'scope', implode( "\n", $scope_lines ), 100, true );
 
 		$guidelines_context = \FlavorAgent\Guidelines::format_prompt_context(
 			'style-book' === $surface ? (string) ( $scope['blockName'] ?? '' ) : ''
@@ -141,7 +142,8 @@ SYSTEM;
 			$budget->add_section( 'site_guidelines', $guidelines_context, 88 );
 		}
 
-		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( $style_context['currentConfig'] ?? [] ), 90 );
+		// Current and merged config carry the live state the model must reason about; required so the response is grounded.
+		$budget->add_section( 'current_config', "## Current Global Styles user config\n" . wp_json_encode( $style_context['currentConfig'] ?? [] ), 90, true );
 		$budget->add_section( 'merged_config', "## Current merged style config\n" . wp_json_encode( $style_context['mergedConfig'] ?? [] ), 85 );
 
 		if ( 'style-book' === $surface && [] !== $style_book_target ) {
@@ -223,7 +225,8 @@ SYSTEM;
 
 			$supported_path_lines[] = sprintf( '- %s (%s)', $path, $value_source );
 		}
-		$budget->add_section( 'supported_style_paths', implode( "\n", $supported_path_lines ), 88 );
+		// Supported style paths are the validator contract; without them the model has no enumerated allow-list and the server drops every operation.
+		$budget->add_section( 'supported_style_paths', implode( "\n", $supported_path_lines ), 88, true );
 
 		$variations = is_array( $style_context['availableVariations'] ?? null ) ? $style_context['availableVariations'] : [];
 		if ( 'style-book' !== $surface && [] !== $variations ) {
@@ -317,6 +320,7 @@ SYSTEM;
 			}
 		}
 
+		// User instruction is the operator's intent; required so the model never recommends in the absence of a directive.
 		$budget->add_section(
 			'user_instruction',
 			"## User instruction\n" . (
@@ -328,7 +332,8 @@ SYSTEM;
 							: 'Recommend one or two safe Global Styles improvements.'
 					)
 			),
-			95
+			95,
+			true
 		);
 
 		foreach ( self::get_few_shot_examples() as $index => $example ) {

@@ -315,6 +315,30 @@ export function buildGlobalStylesActivityEntry( {
 	} );
 }
 
+// Style-book undo only needs the targeted block's branch from styles.blocks.<blockName>.
+// Storing the full user config inflates activity rows by 10-50 KB per entry; this trim
+// keeps before/after small while remaining backwards-compatible with old (full) entries
+// because every reader routes through readPath(config, ['styles', 'blocks', blockName]).
+function trimStyleBookUserConfigToBlockBranch( config, blockName ) {
+	if ( ! config || typeof config !== 'object' || ! blockName ) {
+		return {};
+	}
+
+	const branch = config?.styles?.blocks?.[ blockName ];
+
+	if ( branch === undefined ) {
+		return {};
+	}
+
+	return {
+		styles: {
+			blocks: {
+				[ blockName ]: branch,
+			},
+		},
+	};
+}
+
 export function buildStyleBookActivityEntry( {
 	operations,
 	beforeConfig,
@@ -339,10 +363,16 @@ export function buildStyleBookActivityEntry( {
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
 		before: {
-			userConfig: beforeConfig,
+			userConfig: trimStyleBookUserConfigToBlockBranch(
+				beforeConfig,
+				blockName
+			),
 		},
 		after: {
-			userConfig: afterConfig,
+			userConfig: trimStyleBookUserConfigToBlockBranch(
+				afterConfig,
+				blockName
+			),
 			operations,
 		},
 		prompt: requestPrompt,

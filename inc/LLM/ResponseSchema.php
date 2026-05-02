@@ -383,10 +383,6 @@ final class ResponseSchema {
 		return [ 'type' => [ 'boolean', 'null' ] ];
 	}
 
-	private static function nullable_number(): array {
-		return [ 'type' => [ 'number', 'null' ] ];
-	}
-
 	private static function nullable_integer(): array {
 		return [ 'type' => [ 'integer', 'null' ] ];
 	}

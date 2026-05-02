@@ -73,6 +73,11 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Surface Verdicts
 
+Per-surface next-step docs live in
+[`docs/reference/surfaces/`](surfaces/README.md). Use those files for
+surface-specific release planning while keeping this review as the overall
+product-boundary source of truth.
+
 | Surface | Release verdict | Why it belongs | Release stop |
 | --- | --- | --- | --- |
 | Block recommendations | Keep, central surface | Native block decisions benefit from immediate context-aware help. | One-click apply only for safe local attributes; structural apply default-off unless beta. |

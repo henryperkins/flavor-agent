@@ -51,22 +51,22 @@ final class StyleAbilities {
 		[
 			'path'         => [ 'border', 'color' ],
 			'valueSource'  => 'color',
-			'supportPaths' => [ [ 'border', 'color' ] ],
+			'supportPaths' => [ [ 'border', 'color' ], [ '__experimentalBorder', 'color' ] ],
 		],
 		[
 			'path'         => [ 'border', 'radius' ],
 			'valueSource'  => 'freeform',
-			'supportPaths' => [ [ 'border', 'radius' ] ],
+			'supportPaths' => [ [ 'border', 'radius' ], [ '__experimentalBorder', 'radius' ] ],
 		],
 		[
 			'path'         => [ 'border', 'style' ],
 			'valueSource'  => 'freeform',
-			'supportPaths' => [ [ 'border', 'style' ] ],
+			'supportPaths' => [ [ 'border', 'style' ], [ '__experimentalBorder', 'style' ] ],
 		],
 		[
 			'path'         => [ 'border', 'width' ],
 			'valueSource'  => 'freeform',
-			'supportPaths' => [ [ 'border', 'width' ] ],
+			'supportPaths' => [ [ 'border', 'width' ], [ '__experimentalBorder', 'width' ] ],
 		],
 		[
 			'path'         => [ 'shadow' ],
@@ -172,16 +172,18 @@ final class StyleAbilities {
 	 * @return array{scope: array<string, mixed>, styleContext: array<string, mixed>}|\WP_Error
 	 */
 	private static function build_global_styles_context( array $scope, array $style_context ): array|\WP_Error {
-		$scope_key        = sanitize_text_field( (string) ( $scope['scopeKey'] ?? '' ) );
 		$global_styles_id = sanitize_text_field( (string) ( $scope['globalStylesId'] ?? '' ) );
 
-		if ( '' === $scope_key || '' === $global_styles_id ) {
+		if ( '' === $global_styles_id ) {
 			return new \WP_Error(
 				'missing_style_scope',
 				'Style recommendations require a resolved Global Styles scope and entity id.',
 				[ 'status' => 400 ]
 			);
 		}
+
+		// Canonical scopeKey is derived server-side so signatures stay deterministic regardless of what the client sent.
+		$scope_key = self::canonical_scope_key( self::SURFACE_GLOBAL_STYLES, $global_styles_id );
 
 		return [
 			'scope'        => [
@@ -204,7 +206,6 @@ final class StyleAbilities {
 	 * @return array{scope: array<string, mixed>, styleContext: array<string, mixed>}|\WP_Error
 	 */
 	private static function build_style_book_context( array $scope, array $style_context ): array|\WP_Error {
-		$scope_key         = sanitize_text_field( (string) ( $scope['scopeKey'] ?? '' ) );
 		$global_styles_id  = sanitize_text_field( (string) ( $scope['globalStylesId'] ?? '' ) );
 		$style_book_target = self::normalize_style_book_target( $style_context['styleBookTarget'] ?? [] );
 		$block_manifest    = null;
@@ -212,7 +213,7 @@ final class StyleAbilities {
 			(string) ( $scope['blockName'] ?? ( $style_book_target['blockName'] ?? '' ) )
 		);
 
-		if ( '' === $scope_key || '' === $global_styles_id ) {
+		if ( '' === $global_styles_id ) {
 			return new \WP_Error(
 				'missing_style_scope',
 				'Style recommendations require a resolved Style Book scope and Global Styles entity id.',
@@ -227,6 +228,9 @@ final class StyleAbilities {
 				[ 'status' => 400 ]
 			);
 		}
+
+		// Canonical scopeKey is derived server-side so signatures stay deterministic regardless of what the client sent.
+		$scope_key = self::canonical_scope_key( self::SURFACE_STYLE_BOOK, $global_styles_id, $block_name );
 
 		$block_manifest = ServerCollector::introspect_block_type( $block_name );
 
@@ -666,6 +670,18 @@ final class StyleAbilities {
 		}
 
 		return implode( ', ', $summary );
+	}
+
+	/**
+	 * Build the canonical scopeKey from validated entity ids. Mirrors the JS
+	 * format in src/global-styles/GlobalStylesRecommender.js and src/style-book/StyleBookRecommender.js.
+	 */
+	private static function canonical_scope_key( string $surface, string $global_styles_id, string $block_name = '' ): string {
+		if ( self::SURFACE_STYLE_BOOK === $surface ) {
+			return sprintf( 'style_book:%s:%s', $global_styles_id, $block_name );
+		}
+
+		return sprintf( 'global_styles:%s', $global_styles_id );
 	}
 
 	private static function normalize_style_surface( string $surface ): string {

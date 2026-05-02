@@ -333,7 +333,10 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 	if (
 		tokens?.border?.color &&
 		hasColorPresets &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'color' ] ] )
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'border', 'color' ],
+			[ '__experimentalBorder', 'color' ],
+		] )
 	) {
 		supportedPaths.push( {
 			path: [ 'border', 'color' ],
@@ -343,7 +346,10 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 
 	if (
 		tokens?.border?.radius &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'radius' ] ] )
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'border', 'radius' ],
+			[ '__experimentalBorder', 'radius' ],
+		] )
 	) {
 		supportedPaths.push( {
 			path: [ 'border', 'radius' ],
@@ -354,7 +360,10 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 
 	if (
 		tokens?.border?.style &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'style' ] ] )
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'border', 'style' ],
+			[ '__experimentalBorder', 'style' ],
+		] )
 	) {
 		supportedPaths.push( {
 			path: [ 'border', 'style' ],
@@ -365,7 +374,10 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 
 	if (
 		tokens?.border?.width &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'border', 'width' ] ] )
+		hasAnyBlockSupportPath( blockSupports, [
+			[ 'border', 'width' ],
+			[ '__experimentalBorder', 'width' ],
+		] )
 	) {
 		supportedPaths.push( {
 			path: [ 'border', 'width' ],
