@@ -95,20 +95,19 @@ async function callAbility( abilityName, input ) {
 		`/wp-json/wp-abilities/v1/abilities/${ abilityName }/run`,
 		harness.baseURL
 	);
+	if ( input !== undefined && input !== null ) {
+		url.searchParams.set( 'input', JSON.stringify( input ) );
+	}
 	const credentials =
 		String( harness.adminUser ) + ':' + String( applicationPassword );
 	const request = {
-		method: 'POST',
+		method: 'GET',
 		headers: {
 			Authorization: `Basic ${ Buffer.from( credentials ).toString(
 				'base64'
 			) }`,
 			Connection: 'close',
-			'Content-Type': 'application/json',
 		},
-		body: JSON.stringify( {
-			input: input ?? {},
-		} ),
 	};
 	let response;
 
