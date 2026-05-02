@@ -1,9 +1,9 @@
 const mockCreateBlock = jest.fn();
-const mockParse = jest.fn();
+const mockRawHandler = jest.fn();
 
 jest.mock( '@wordpress/blocks', () => ( {
 	createBlock: ( ...args ) => mockCreateBlock( ...args ),
-	parse: ( ...args ) => mockParse( ...args ),
+	rawHandler: ( ...args ) => mockRawHandler( ...args ),
 } ) );
 
 import {
@@ -19,8 +19,8 @@ describe( 'resolvePatternBlocks', () => {
 			name,
 			attributes,
 		} ) );
-		mockParse.mockReset();
-		mockParse.mockReturnValue( [] );
+		mockRawHandler.mockReset();
+		mockRawHandler.mockReturnValue( [] );
 	} );
 
 	test( 'resolves synced user patterns to a core/block reference', () => {
@@ -42,6 +42,24 @@ describe( 'resolvePatternBlocks', () => {
 		const blocks = [ { name: 'core/paragraph', attributes: {} } ];
 
 		expect( resolvePatternBlocks( { blocks } ) ).toBe( blocks );
+	} );
+
+	test( 'converts pattern content through the Gutenberg raw handler', () => {
+		const blocks = [
+			{ name: 'core/paragraph', attributes: { content: 'Hero' } },
+		];
+
+		mockRawHandler.mockReturnValue( [ blocks[ 0 ], null ] );
+
+		expect(
+			resolvePatternBlocks( {
+				content:
+					'<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->',
+			} )
+		).toEqual( blocks );
+		expect( mockRawHandler ).toHaveBeenCalledWith( {
+			HTML: '<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->',
+		} );
 	} );
 } );
 
@@ -96,6 +114,36 @@ describe( 'filterInsertableRecommendedPatterns', () => {
 		expect(
 			filterInsertableRecommendedPatterns(
 				[ rejectedPair, acceptedPair ],
+				'root-a',
+				blockEditor
+			)
+		).toEqual( [ acceptedPair ] );
+	} );
+
+	test( 'drops recommendations whose pattern resolves to no blocks', () => {
+		const emptyPair = {
+			pattern: {
+				name: 'theme/empty',
+				content: '<p>Not block parseable</p>',
+			},
+			recommendation: { name: 'theme/empty', reason: 'Empty.' },
+		};
+		const acceptedPair = {
+			pattern: {
+				name: 'theme/hero',
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			},
+			recommendation: { name: 'theme/hero', reason: 'Hero.' },
+		};
+		const blockEditor = {
+			canInsertBlockType: jest.fn( () => true ),
+		};
+
+		mockRawHandler.mockReturnValue( [] );
+
+		expect(
+			filterInsertableRecommendedPatterns(
+				[ emptyPair, acceptedPair ],
 				'root-a',
 				blockEditor
 			)

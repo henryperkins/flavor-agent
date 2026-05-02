@@ -272,6 +272,7 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
 		$this->assertSame( 'wordpress-ai-client', $meta['transport']['host'] ?? null );
 		$this->assertSame( '/generate-text', $meta['transport']['path'] ?? null );
+		$this->assertSame( 90, $meta['transport']['timeoutSeconds'] ?? null );
 		$this->assertSame( strlen( $system_prompt ), $meta['requestSummary']['instructionsChars'] ?? null );
 		$this->assertSame( strlen( $user_prompt ), $meta['requestSummary']['inputChars'] ?? null );
 		$this->assertSame( 'high', $meta['requestSummary']['reasoningEffort'] ?? null );
@@ -279,6 +280,50 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertGreaterThan( 0, $meta['requestSummary']['bodyBytes'] ?? 0 );
 		$this->assertSame( 39, $meta['responseSummary']['bodyBytes'] ?? null );
 		$this->assertIsInt( $meta['responseSummary']['processingMs'] ?? null );
+	}
+
+	public function test_chat_expands_wordpress_ai_client_http_timeout_during_generation(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertSame( 90, WordPressTestState::$last_http_request_args['timeout'] ?? null );
+		$this->assertSame(
+			30,
+			apply_filters(
+				'http_request_args',
+				[ 'timeout' => 30 ],
+				'https://api.openai.com/v1/responses'
+			)['timeout'] ?? null
+		);
+	}
+
+	public function test_chat_allows_wordpress_ai_client_timeout_filter_override(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		add_filter(
+			'flavor_agent_wordpress_ai_client_request_timeout',
+			static fn ( int $timeout ): int => 45,
+			10,
+			3
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertSame( 45, WordPressTestState::$last_http_request_args['timeout'] ?? null );
+		$this->assertSame( 45, $meta['transport']['timeoutSeconds'] ?? null );
 	}
 
 	public function test_chat_normalizes_common_usage_and_provider_request_metadata(): void {

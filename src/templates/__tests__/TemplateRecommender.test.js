@@ -821,6 +821,43 @@ describe( 'TemplateRecommender', () => {
 		);
 	} );
 
+	test( 'submits the canonical Site Editor template ref when core/editor exposes a numeric template id', async () => {
+		currentState = createState( {
+			editor: {
+				postId: 42,
+				postType: 'wp_template',
+			},
+			editSite: {
+				postId: TEMPLATE_REF,
+				postType: 'wp_template',
+			},
+		} );
+		currentState = {
+			...currentState,
+			store: {
+				...currentState.store,
+				templateContextSignature:
+					buildTemplateContextSignature( currentState ),
+			},
+		};
+
+		await renderPanel();
+
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( element ) => element.textContent === 'Get Suggestions'
+				)
+				.click();
+		} );
+
+		expect( mockFetchTemplateRecommendations ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				templateRef: TEMPLATE_REF,
+			} )
+		);
+	} );
+
 	test( 'serializes empty templates with explicit live structure and slot snapshots', async () => {
 		currentState = createState( {
 			blockEditor: {

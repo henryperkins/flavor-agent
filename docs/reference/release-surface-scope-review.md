@@ -354,7 +354,7 @@ Do not add:
 - [ ] Add deterministic contrast/readability validation before executable color suggestions are treated as release-quality design recommendations.
 - [ ] Prefer paired foreground/background operations when one color change alone could create poor contrast.
 - [ ] Classify low-contrast or unsupported combined results as advisory.
-- [ ] Preserve grouped operations as one review-safe transaction when splitting would create a bad intermediate state.
+- [x] Preserve grouped operations as one review-safe transaction when splitting would create a bad intermediate state. The server parser downgrades partial validation drops to advisory, and the client applier keeps the cumulative write all-or-nothing.
 - [ ] Re-run Global Styles WP 7.0 flows after validator or copy changes.
 
 ## Style Book

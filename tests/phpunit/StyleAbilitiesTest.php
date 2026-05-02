@@ -6,6 +6,7 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\StyleAbilities;
 use FlavorAgent\Cloudflare\AISearchClient;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -19,13 +20,13 @@ final class StyleAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
-		$this->disable_public_docs_filter        = static fn(): string => '';
+		$this->disable_public_docs_filter = static fn(): string => '';
 		\add_filter(
 			'flavor_agent_cloudflare_ai_search_public_search_url',
 			$this->disable_public_docs_filter
 		);
-		WordPressTestState::$ai_client_supported = true;
-		WordPressTestState::$global_settings     = [
+		$this->configure_text_generation_connector();
+		WordPressTestState::$global_settings = [
 			'color' => [
 				'palette' => [
 					[
@@ -1227,6 +1228,27 @@ final class StyleAbilitiesTest extends TestCase {
 		$this->assertIsString( $result );
 
 		return $result;
+	}
+
+	private function configure_text_generation_connector(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME => 'openai',
+		];
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
 	}
 
 	/**

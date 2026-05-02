@@ -593,7 +593,7 @@ describe( 'PatternRecommender', () => {
 			],
 			0,
 			'root-a',
-			false
+			true
 		);
 		expect( mockCreateSuccessNotice ).toHaveBeenCalledWith(
 			'Block pattern "Hero" inserted.',
@@ -697,7 +697,7 @@ describe( 'PatternRecommender', () => {
 			],
 			0,
 			'root-a',
-			false
+			true
 		);
 	} );
 
@@ -760,7 +760,7 @@ describe( 'PatternRecommender', () => {
 			],
 			0,
 			'root-a',
-			false
+			true
 		);
 		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
 	} );

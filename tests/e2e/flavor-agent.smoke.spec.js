@@ -121,6 +121,37 @@ const GLOBAL_STYLES_RESPONSE = {
 		},
 	],
 };
+const GLOBAL_STYLES_PARTIAL_INVALID_RESPONSE = {
+	resolvedContextSignature: GLOBAL_STYLES_RESOLVED_CONTEXT_SIGNATURE,
+	explanation:
+		'This response intentionally includes one unsupported operation to verify atomic apply behavior.',
+	suggestions: [
+		{
+			label: GLOBAL_STYLES_SUGGESTION_LABEL,
+			description:
+				'The supported background update must not be written if a later grouped operation fails.',
+			category: 'color',
+			tone: 'executable',
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: GLOBAL_STYLES_BACKGROUND_VALUE,
+					valueType: 'preset',
+					presetType: 'color',
+					presetSlug: 'signal',
+					cssVar: 'var(--wp--preset--color--signal)',
+				},
+				{
+					type: 'set_styles',
+					path: [ 'customCSS' ],
+					value: 'body{color:red}',
+					valueType: 'freeform',
+				},
+			],
+		},
+	],
+};
 const STYLE_BOOK_BLOCK_NAME = 'core/paragraph';
 const STYLE_BOOK_BLOCK_TITLE = 'Paragraph';
 const STYLE_BOOK_PROMPT =
@@ -309,12 +340,16 @@ async function dismissSiteEditorWelcomeGuide( page ) {
 	await dismissWelcomeGuide( page );
 }
 
-async function mockGlobalStylesRecommendations( page, styleRequests ) {
+async function mockGlobalStylesRecommendations(
+	page,
+	styleRequests,
+	responseBody = GLOBAL_STYLES_RESPONSE
+) {
 	await mockRecommendationRoute(
 		page,
 		'**/*recommend-style*',
 		styleRequests,
-		GLOBAL_STYLES_RESPONSE
+		responseBody
 	);
 }
 
@@ -2820,6 +2855,73 @@ test( '@wp70-site-editor global styles surface previews, applies, and undoes exe
 	await expect(
 		page.locator( '.flavor-agent-activity-row' ).getByText( 'Undone' )
 	).toBeVisible();
+} );
+
+test( '@wp70-site-editor global styles surface keeps grouped apply operations all-or-nothing', async ( {
+	page,
+} ) => {
+	const styleRequests = [];
+
+	await mockGlobalStylesRecommendations(
+		page,
+		styleRequests,
+		GLOBAL_STYLES_PARTIAL_INVALID_RESPONSE
+	);
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
+	);
+	await page.waitForFunction( () =>
+		Boolean(
+			window.wp?.data
+				?.select( 'core' )
+				?.__experimentalGetCurrentGlobalStylesId?.()
+		)
+	);
+	await enableSiteEditorGlobalStylesSidebar( page );
+
+	const initialState = await getGlobalStylesState( page );
+	const recommendationsPanel = page
+		.locator( '.flavor-agent-global-styles-panel' )
+		.first();
+	const promptInput = page.getByLabel( 'Describe the style direction' );
+
+	await expect( promptInput ).toBeVisible();
+	await promptInput.fill( GLOBAL_STYLES_PROMPT );
+	await page.getByRole( 'button', { name: 'Get Style Suggestions' } ).click();
+
+	await expect.poll( () => styleRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel.getByText( GLOBAL_STYLES_SUGGESTION_LABEL ).first()
+	).toBeVisible();
+	await page.getByRole( 'button', { name: 'Review', exact: true } ).click();
+	await page
+		.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
+		.click();
+
+	await expect(
+		page
+			.locator( '.flavor-agent-status-notice__message' )
+			.getByText( 'customCSS is no longer supported', { exact: false } )
+	).toBeVisible( { timeout: 15000 } );
+	await expect
+		.poll( () => getGlobalStylesState( page ) )
+		.toEqual(
+			expect.objectContaining( {
+				globalStylesId: initialState.globalStylesId,
+				background: initialState.background,
+				lineHeight: initialState.lineHeight,
+				applyStatus: 'error',
+			} )
+		);
 } );
 
 test( '@wp70-site-editor global styles surface requests defaults when the prompt is empty', async ( {

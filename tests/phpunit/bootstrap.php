@@ -37,6 +37,8 @@ namespace FlavorAgent\Tests\Support {
 
 		public static array $last_ai_client_prompt = [];
 
+		public static array $last_http_request_args = [];
+
 		public static array $options = [];
 
 		/** @var array<string, array<string, mixed>> */
@@ -293,6 +295,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$remote_post_responses       = [];
 			self::$remote_get_responses        = [];
 			self::$last_ai_client_prompt       = [];
+			self::$last_http_request_args      = [];
 			self::$options                     = [];
 			self::$connectors                  = [];
 			self::$connector_api_errors        = [];
@@ -407,6 +410,12 @@ namespace WordPress\AI_Client {
 		}
 
 		public function generate_text(): mixed {
+			WordPressTestState::$last_http_request_args = apply_filters(
+				'http_request_args',
+				[ 'timeout' => 30 ],
+				'https://api.openai.com/v1/responses'
+			);
+
 			$explicit = WordPressTestState::$ai_client_generate_text_result;
 
 			if ( '' !== $explicit && null !== $explicit ) {
@@ -486,6 +495,11 @@ namespace {
 					case 'generate_text':
 					case 'generate_text_result':
 						$this->sync_state();
+						WordPressTestState::$last_http_request_args = apply_filters(
+							'http_request_args',
+							[ 'timeout' => 30 ],
+							'https://api.openai.com/v1/responses'
+						);
 
 						if ( (bool) apply_filters( 'wp_ai_client_prevent_prompt', false, $this ) ) {
 							throw new \WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception(

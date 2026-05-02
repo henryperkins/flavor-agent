@@ -49,6 +49,35 @@ describe( 'activity history helpers', () => {
 		} );
 	} );
 
+	test( 'getCurrentActivityScope prefers canonical Site Editor refs for template entities', () => {
+		expect(
+			getCurrentActivityScope( {
+				select: ( storeName ) => {
+					if ( storeName === 'core/editor' ) {
+						return {
+							getCurrentPostType: () => 'wp_template',
+							getCurrentPostId: () => 42,
+						};
+					}
+
+					if ( storeName === 'core/edit-site' ) {
+						return {
+							getEditedPostType: () => 'wp_template',
+							getEditedPostId: () => 'theme//home',
+						};
+					}
+
+					return {};
+				},
+			} )
+		).toEqual( {
+			key: 'wp_template:theme//home',
+			hint: 'wp_template:theme//home',
+			postType: 'wp_template',
+			entityId: 'theme//home',
+		} );
+	} );
+
 	test( 'resolveActivityScope keeps unsaved documents unscoped until they have a real entity id', () => {
 		expect( resolveActivityScope( 'post', '' ) ).toEqual( {
 			key: null,

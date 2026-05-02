@@ -417,6 +417,24 @@ final class ServerCollectorTest extends TestCase {
 		}
 	}
 
+	public function test_for_template_resolves_url_encoded_site_editor_ref(): void {
+		$result = ServerCollector::for_template( 'theme%2F%2Fhome' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'theme//home', $result['templateRef'] );
+		$this->assertSame( 'home', $result['templateType'] );
+	}
+
+	public function test_for_template_resolves_numeric_site_editor_template_post_id(): void {
+		WordPressTestState::$block_templates['wp_template'][0]->wp_id = 42;
+
+		$result = ServerCollector::for_template( '42' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'theme//home', $result['templateRef'] );
+		$this->assertSame( 'home', $result['templateType'] );
+	}
+
 	public function test_for_patterns_collects_pattern_override_metadata_from_bindings(): void {
 		\WP_Block_Type_Registry::get_instance()->register(
 			'plugin/card',

@@ -13,6 +13,7 @@ final class WordPressAIClient {
 	private const SETUP_MESSAGE            = 'Configure a text-generation provider in Settings > Connectors to enable block recommendations.';
 	private const PROMPT_PREVENTED_CODE    = 'prompt_prevented';
 	private const PROMPT_PREVENTED_MESSAGE = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
+	private const DEFAULT_REQUEST_TIMEOUT  = 90;
 	private const REASONING_EFFORTS        = [ 'low', 'medium', 'high', 'xhigh' ];
 	private const SCHEMA_UNION_LIMIT       = 16;
 
@@ -80,15 +81,26 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$request_diagnostics = self::build_request_diagnostics(
-			$system_prompt,
-			$user_prompt,
+		$request_timeout_seconds = self::request_timeout_seconds(
 			$provider,
 			$reasoning_effort,
 			$schema
 		);
-		$started_at          = microtime( true );
-		$result              = self::call_prompt_method( $prompt, 'generate_text_result' );
+		$request_diagnostics     = self::build_request_diagnostics(
+			$system_prompt,
+			$user_prompt,
+			$provider,
+			$reasoning_effort,
+			$schema,
+			$request_timeout_seconds
+		);
+		$started_at              = microtime( true );
+		$result                  = self::call_prompt_method_with_request_timeout(
+			$prompt,
+			'generate_text_result',
+			[],
+			$request_timeout_seconds
+		);
 
 		if ( is_wp_error( $result ) ) {
 			Provider::record_runtime_chat_diagnostics(
@@ -579,6 +591,49 @@ final class WordPressAIClient {
 	}
 
 	/**
+	 * @param array<string, mixed>|null $schema
+	 */
+	private static function request_timeout_seconds( ?string $provider, ?string $reasoning_effort, ?array $schema ): int {
+		$timeout = (int) apply_filters(
+			'flavor_agent_wordpress_ai_client_request_timeout',
+			self::DEFAULT_REQUEST_TIMEOUT,
+			[
+				'provider'        => is_string( $provider ) ? sanitize_key( $provider ) : '',
+				'reasoningEffort' => self::normalize_reasoning_effort_value( $reasoning_effort ),
+				'hasSchema'       => is_array( $schema ) && [] !== $schema,
+			]
+		);
+
+		return max( 1, $timeout );
+	}
+
+	private static function call_prompt_method_with_request_timeout(
+		object $prompt,
+		string $method,
+		array $arguments,
+		int $timeout_seconds
+	): mixed {
+		$timeout_seconds = max( 1, $timeout_seconds );
+		$timeout_filter  = static function ( array $args, string $_url = '' ) use ( $timeout_seconds ): array {
+			$current_timeout = $args['timeout'] ?? null;
+
+			if ( ! is_numeric( $current_timeout ) || (float) $current_timeout < $timeout_seconds ) {
+				$args['timeout'] = $timeout_seconds;
+			}
+
+			return $args;
+		};
+
+		add_filter( 'http_request_args', $timeout_filter, 10, 2 );
+
+		try {
+			return self::call_prompt_method( $prompt, $method, $arguments );
+		} finally {
+			remove_filter( 'http_request_args', $timeout_filter, 10 );
+		}
+	}
+
+	/**
 	 * @param string|array<string, mixed>|object $result
 	 * @param array<string, mixed> $request_diagnostics
 	 * @return array{text: string, metrics: array<string, mixed>|null, diagnostics: array<string, mixed>|null}
@@ -655,7 +710,8 @@ final class WordPressAIClient {
 		string $user_prompt,
 		?string $provider,
 		?string $reasoning_effort,
-		?array $schema
+		?array $schema,
+		int $timeout_seconds
 	): array {
 		$request_payload  = [
 			'provider'     => is_string( $provider ) ? sanitize_key( $provider ) : '',
@@ -679,8 +735,9 @@ final class WordPressAIClient {
 
 		return [
 			'transport'      => [
-				'host' => 'wordpress-ai-client',
-				'path' => '/generate-text',
+				'host'           => 'wordpress-ai-client',
+				'path'           => '/generate-text',
+				'timeoutSeconds' => max( 1, $timeout_seconds ),
 			],
 			'requestSummary' => array_filter(
 				[

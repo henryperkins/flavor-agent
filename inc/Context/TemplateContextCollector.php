@@ -46,8 +46,10 @@ final class TemplateContextCollector {
 			);
 		}
 
+		$resolved_template_ref = $this->template_repository->resolve_template_ref( $template_ref, $template );
+
 		if ( null === $template_type ) {
-			$template_type = $this->template_type_resolver->derive_template_type( $template_ref );
+			$template_type = $this->template_type_resolver->derive_template_type( $resolved_template_ref );
 		}
 
 		$available_parts      = $this->template_repository->for_template_parts( null, false );
@@ -63,9 +65,9 @@ final class TemplateContextCollector {
 		);
 
 		return [
-			'templateRef'               => $template_ref,
+			'templateRef'               => $resolved_template_ref,
 			'templateType'              => $template_type,
-			'title'                     => $template->title ?? $template_ref,
+			'title'                     => $template->title ?? $resolved_template_ref,
 			'assignedParts'             => $slots['assignedParts'],
 			'emptyAreas'                => $slots['emptyAreas'],
 			'allowedAreas'              => $slots['allowedAreas'],

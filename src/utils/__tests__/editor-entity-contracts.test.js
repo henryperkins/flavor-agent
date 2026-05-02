@@ -147,19 +147,45 @@ describe( 'editor-entity-contracts', () => {
 		} );
 	} );
 
-	test( 'resolves the active entity from core/editor before falling back to core/edit-site', () => {
+	test( 'resolves the active non-site-editor entity from core/editor before falling back to core/edit-site', () => {
+		const select = ( storeName ) => {
+			if ( storeName === 'core/editor' ) {
+				return {
+					getCurrentPostType: () => 'post',
+					getCurrentPostId: () => 42,
+				};
+			}
+
+			if ( storeName === 'core/edit-site' ) {
+				return {
+					getEditedPostType: () => 'page',
+					getEditedPostId: () => 7,
+				};
+			}
+
+			return {};
+		};
+
+		expect( getEditedPostTypeEntity( select, 'post' ) ).toEqual( {
+			postType: 'post',
+			entityId: '42',
+			source: 'core/editor',
+		} );
+	} );
+
+	test( 'prefers the canonical Site Editor template ref when both stores expose the same template entity', () => {
 		const select = ( storeName ) => {
 			if ( storeName === 'core/editor' ) {
 				return {
 					getCurrentPostType: () => 'wp_template',
-					getCurrentPostId: () => 'theme//home',
+					getCurrentPostId: () => 42,
 				};
 			}
 
 			if ( storeName === 'core/edit-site' ) {
 				return {
 					getEditedPostType: () => 'wp_template',
-					getEditedPostId: () => 'theme//fallback',
+					getEditedPostId: () => 'theme//home',
 				};
 			}
 
@@ -169,7 +195,29 @@ describe( 'editor-entity-contracts', () => {
 		expect( getEditedPostTypeEntity( select, 'wp_template' ) ).toEqual( {
 			postType: 'wp_template',
 			entityId: 'theme//home',
-			source: 'core/editor',
+			source: 'core/edit-site',
 		} );
+	} );
+
+	test( 'does not use a stale Site Editor template ref when the active editor entity is a different post type', () => {
+		const select = ( storeName ) => {
+			if ( storeName === 'core/editor' ) {
+				return {
+					getCurrentPostType: () => 'page',
+					getCurrentPostId: () => 42,
+				};
+			}
+
+			if ( storeName === 'core/edit-site' ) {
+				return {
+					getEditedPostType: () => 'wp_template',
+					getEditedPostId: () => 'theme//home',
+				};
+			}
+
+			return {};
+		};
+
+		expect( getEditedPostTypeEntity( select, 'wp_template' ) ).toBeNull();
 	} );
 } );

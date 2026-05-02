@@ -3,7 +3,7 @@ const mockFindInserterToggle = jest.fn();
 const mockGetAllowedPatterns = jest.fn();
 const mockCanInsertBlockType = jest.fn();
 const mockCreateBlock = jest.fn();
-const mockParse = jest.fn();
+const mockRawHandler = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -15,7 +15,7 @@ jest.mock( '@wordpress/components', () =>
 
 jest.mock( '@wordpress/blocks', () => ( {
 	createBlock: ( ...args ) => mockCreateBlock( ...args ),
-	parse: ( ...args ) => mockParse( ...args ),
+	rawHandler: ( ...args ) => mockRawHandler( ...args ),
 } ) );
 
 jest.mock( '@wordpress/data', () => ( {
@@ -93,13 +93,19 @@ describe( 'InserterBadge', () => {
 			name,
 			attributes,
 		} ) );
-		mockParse.mockReset();
-		mockParse.mockReturnValue( [] );
+		mockRawHandler.mockReset();
+		mockRawHandler.mockReturnValue( [] );
 		setSelectState( {
 			recommendations: [
 				{ name: 'theme/hero', score: 0.92, reason: 'Hero match.' },
 			],
-			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+			allowedPatterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero',
+					blocks: [ { name: 'core/paragraph', attributes: {} } ],
+				},
+			],
 		} );
 		document.body.innerHTML = '';
 		document.body.appendChild( getContainer() );
@@ -167,7 +173,13 @@ describe( 'InserterBadge', () => {
 			recommendations: [
 				{ name: 'theme/private', score: 0.95, reason: 'Private.' },
 			],
-			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+			allowedPatterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero',
+					blocks: [ { name: 'core/paragraph', attributes: {} } ],
+				},
+			],
 		} );
 
 		renderComponent();
@@ -190,7 +202,13 @@ describe( 'InserterBadge', () => {
 				{ name: 'theme/hidden', score: 0.97, reason: 'Hidden.' },
 				{ name: 'theme/hero', score: 0.91, reason: 'Hero.' },
 			],
-			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+			allowedPatterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero',
+					blocks: [ { name: 'core/paragraph', attributes: {} } ],
+				},
+			],
 		} );
 
 		renderComponent();
@@ -266,7 +284,13 @@ describe( 'InserterBadge', () => {
 					reason: 'Renderable reason.',
 				},
 			],
-			allowedPatterns: [ { name: 'theme/hero', title: 'Hero' } ],
+			allowedPatterns: [
+				{
+					name: 'theme/hero',
+					title: 'Hero',
+					blocks: [ { name: 'core/paragraph', attributes: {} } ],
+				},
+			],
 		} );
 
 		renderComponent();

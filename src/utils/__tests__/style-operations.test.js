@@ -392,6 +392,37 @@ describe( 'style-operations', () => {
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 	} );
 
+	test( 'applyGlobalStyleSuggestionOperations does not write partial config when a later operation is invalid', () => {
+		const initialRecord = JSON.parse( JSON.stringify( currentRecord ) );
+		const result = applyGlobalStyleSuggestionOperations( {
+			operations: [
+				{
+					type: 'set_styles',
+					path: [ 'color', 'background' ],
+					value: 'var:preset|color|accent',
+					valueType: 'preset',
+					presetSlug: 'accent',
+					presetType: 'color',
+				},
+				{
+					type: 'set_styles',
+					path: [ 'customCSS' ],
+					value: 'body{color:red}',
+					valueType: 'freeform',
+				},
+			],
+		} );
+
+		expect( result ).toEqual(
+			expect.objectContaining( {
+				ok: false,
+				error: expect.stringContaining( 'customCSS' ),
+			} )
+		);
+		expect( currentRecord ).toEqual( initialRecord );
+		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+	} );
+
 	test( 'applyGlobalStyleSuggestionOperations rejects missing live preset slugs', () => {
 		blockEditorSettings = {
 			...blockEditorSettings,

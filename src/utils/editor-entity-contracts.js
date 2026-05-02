@@ -23,6 +23,16 @@ function normalizePostType( postType ) {
 	return typeof postType === 'string' ? postType.trim() : '';
 }
 
+function isSiteEditorPostType( postType ) {
+	switch ( normalizePostType( postType ) ) {
+		case 'wp_template':
+		case 'wp_template_part':
+			return true;
+		default:
+			return false;
+	}
+}
+
 export function normalizeEditedEntityRef( entityId ) {
 	if ( typeof entityId === 'string' && entityId.trim() !== '' ) {
 		return entityId.trim();
@@ -38,12 +48,41 @@ export function normalizeEditedEntityRef( entityId ) {
 export function getEditedPostTypeEntity( select, expectedPostType = null ) {
 	const editor = select( 'core/editor' );
 	const currentPostType = normalizePostType( editor?.getCurrentPostType?.() );
+	const normalizedExpectedPostType = normalizePostType( expectedPostType );
 
 	if ( currentPostType ) {
-		if ( expectedPostType && currentPostType !== expectedPostType ) {
+		if (
+			normalizedExpectedPostType &&
+			currentPostType !== normalizedExpectedPostType
+		) {
 			return null;
 		}
+	}
 
+	const editSite = select( 'core/edit-site' );
+	const editedPostType = normalizePostType( editSite?.getEditedPostType?.() );
+	const shouldPreferSiteEditorEntity =
+		editedPostType &&
+		( ! normalizedExpectedPostType ||
+			editedPostType === normalizedExpectedPostType ) &&
+		isSiteEditorPostType( editedPostType ) &&
+		( ! currentPostType || currentPostType === editedPostType );
+
+	if ( shouldPreferSiteEditorEntity ) {
+		const editedPostId = normalizeEditedEntityRef(
+			editSite?.getEditedPostId?.()
+		);
+
+		if ( editedPostId ) {
+			return {
+				postType: editedPostType,
+				entityId: editedPostId,
+				source: 'core/edit-site',
+			};
+		}
+	}
+
+	if ( currentPostType ) {
 		const currentPostId = normalizeEditedEntityRef(
 			editor?.getCurrentPostId?.()
 		);
@@ -57,19 +96,18 @@ export function getEditedPostTypeEntity( select, expectedPostType = null ) {
 		}
 	}
 
-	const editSite = select( 'core/edit-site' );
-
 	if ( ! editSite?.getEditedPostType || ! editSite?.getEditedPostId ) {
 		return null;
 	}
-
-	const editedPostType = normalizePostType( editSite.getEditedPostType() );
 
 	if ( ! editedPostType ) {
 		return null;
 	}
 
-	if ( expectedPostType && editedPostType !== expectedPostType ) {
+	if (
+		normalizedExpectedPostType &&
+		editedPostType !== normalizedExpectedPostType
+	) {
 		return null;
 	}
 

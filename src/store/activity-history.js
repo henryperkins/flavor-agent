@@ -46,6 +46,32 @@ function normalizeScopeValue( value ) {
 	return String( value );
 }
 
+function resolveEditedEntityScope( editor, editSite ) {
+	const editorPostType = normalizeScopeValue( editor.getCurrentPostType?.() );
+	const sitePostType = normalizeScopeValue( editSite.getEditedPostType?.() );
+	const siteEntityId = normalizeScopeValue( editSite.getEditedPostId?.() );
+	const isSiteEditorTemplateEntity =
+		sitePostType === 'wp_template' || sitePostType === 'wp_template_part';
+
+	if (
+		isSiteEditorTemplateEntity &&
+		siteEntityId &&
+		( ! editorPostType || editorPostType === sitePostType )
+	) {
+		return {
+			postType: sitePostType,
+			entityId: siteEntityId,
+		};
+	}
+
+	const editorEntityId = normalizeScopeValue( editor.getCurrentPostId?.() );
+
+	return {
+		postType: editorPostType || sitePostType,
+		entityId: editorEntityId || siteEntityId,
+	};
+}
+
 function normalizeActivityTimestamp( value ) {
 	if ( typeof value !== 'string' || ! value ) {
 		return new Date().toISOString();
@@ -452,12 +478,7 @@ export function getCurrentActivityScope( registry ) {
 		return resolveGlobalStylesScope( globalStylesId );
 	}
 
-	const postType =
-		normalizeScopeValue( editor.getCurrentPostType?.() ) ||
-		normalizeScopeValue( editSite.getEditedPostType?.() );
-	const entityId =
-		normalizeScopeValue( editor.getCurrentPostId?.() ) ||
-		normalizeScopeValue( editSite.getEditedPostId?.() );
+	const { postType, entityId } = resolveEditedEntityScope( editor, editSite );
 
 	return resolveActivityScope( postType, entityId );
 }

@@ -189,7 +189,7 @@ function StyleBookPanel( {
 				rows={ 4 }
 				starterPrompts={ [
 					'Make this block feel more editorial',
-					'Strengthen contrast and hierarchy',
+					'Strengthen emphasis and hierarchy',
 					'Soften spacing and surfaces',
 				] }
 				fetchLabel="Get Style Suggestions"

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\ContentAbilities;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -14,6 +15,7 @@ final class ContentAbilitiesTest extends TestCase {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->configure_text_generation_connector();
 	}
 
 	public function test_recommend_content_requires_a_prompt_title_or_existing_content(): void {
@@ -631,5 +633,25 @@ final class ContentAbilitiesTest extends TestCase {
 				$payload
 			)
 		);
+	}
+
+	private function configure_text_generation_connector(): void {
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME => 'openai',
+		];
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
 	}
 }

@@ -38,12 +38,56 @@ Do not ship:
 - [ ] Prefer paired foreground/background operations when one color change alone
   could create poor contrast.
 - [ ] Classify low-contrast or unsupported combined results as advisory.
-- [ ] Preserve grouped operations as one review-safe transaction when splitting
-  would create a bad intermediate state.
+- [x] Preserve grouped operations as one review-safe transaction when splitting
+  would create a bad intermediate state. The server parser now downgrades any
+  suggestion to advisory when validation drops part of its operation sequence,
+  and the client applier still writes only after every grouped operation passes.
 - [ ] Keep design-quality claims limited until contrast/readability validation
   exists.
+
+## Stage B Design Commitments
+
+Agreed contract decisions for the contrast/readability work that closes the
+four open Next Steps above. These constrain the validator implementation; any
+deviation should update this section first.
+
+- **Authority** — `StylePrompt::validate_operations()` is the single place
+  that downgrades a suggestion from executable to advisory for contrast
+  reasons; suggestions reach the editor with their final tone already set.
+  The client re-runs the same check at apply time as a drift guard against
+  live block-editor settings, not as a duplicate validator.
+- **Threshold** — WCAG AA, single 4.5:1 ratio across body text, UI, and
+  headings. Large-text exemptions, AAA, and color-blindness simulation are
+  out of scope for v1.
+- **Pairing source** — Element pairing is sourced from
+  `themeTokens['elementStyles']` (already produced by
+  `ThemeTokenCollector::collect_element_styles()`); do not duplicate the
+  structure. Solo color ops evaluate against the merged complement at the
+  same scope; when the complement resolves only through a CSS variable
+  cascade with no recorded value, skip the check and downgrade the
+  suggestion to advisory with an explicit reason in `description`.
+- **Out of scope (v1)** — `set_theme_variation` (theme-authored, trusted),
+  custom colors outside the palette, gradients, and duotone.
+- **Implementation split** — Build a minimal PHP `StyleContrastValidator`
+  (hex → relative luminance → ratio → AA check); core ships no PHP
+  equivalent. Wrap `@wordpress/components` contrast helpers on the JS
+  drift-guard path, fed by `select( 'core/block-editor' ).getSettings().colors`,
+  matching the pattern used by core paragraph, cover, and button blocks.
+  Hex inputs are already in the prompt context at
+  `themeTokens['colorPresets'][].color`.
+- **Prompt and copy** — `StylePrompt::build_system()` should encourage
+  paired foreground/background operations whenever a color change is
+  recommended, so partial emissions trip the existing Stage A drop guard.
+  Advisory-downgraded suggestions annotate `description` with the failing
+  pair and computed ratio.
+- **Upstream alignment** — Project 240 snapshot 2026-04-28 shows no active
+  contrast, accessibility, or readability work across `WordPress/ai`,
+  `WordPress/wp-ai-client`, `WordPress/abilities-api`, or
+  `WordPress/php-ai-client`; no PHP contrast helper exists in core today.
+  Re-run the upstream check (per
+  [`../wordpress-ai-roadmap-tracking.md`](../wordpress-ai-roadmap-tracking.md))
+  before landing the validator if the snapshot is older than two weeks.
 
 ## Verification Gate
 
 - [ ] Re-run Global Styles WP 7.0 flows after validator or copy changes.
-

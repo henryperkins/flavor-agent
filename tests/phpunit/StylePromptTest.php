@@ -422,9 +422,49 @@ final class StylePromptTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertCount( 2, $result['suggestions'] );
-		$this->assertCount( 1, $result['suggestions'][0]['operations'] );
+		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [], $result['suggestions'][0]['operations'] );
 		$this->assertSame( 'advisory', $result['suggestions'][1]['tone'] );
 		$this->assertSame( [], $result['suggestions'][1]['operations'] );
+	}
+
+	public function test_parse_response_downgrades_partial_style_operation_sequences_to_advisory(): void {
+		$result = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Pair foreground and canvas',
+							'description' => 'A paired color change should not become a partial executable update.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|accent',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'accent',
+								],
+								[
+									'type'      => 'set_styles',
+									'path'      => [ 'customCSS' ],
+									'value'     => 'body{color:red}',
+									'valueType' => 'freeform',
+								],
+							],
+						],
+					],
+					'explanation' => 'Partial operation groups are not review-safe.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [], $result['suggestions'][0]['operations'] );
 	}
 
 	public function test_parse_response_preserves_camel_case_style_paths(): void {
@@ -537,11 +577,6 @@ final class StylePromptTest extends TestCase {
 									'type'           => 'set_theme_variation',
 									'variationIndex' => 1,
 									'variationTitle' => 'Midnight',
-								],
-								[
-									'type'           => 'set_theme_variation',
-									'variationIndex' => 0,
-									'variationTitle' => 'Default',
 								],
 							],
 						],

@@ -179,7 +179,7 @@ function GlobalStylesPanel( {
 				}
 				rows={ 4 }
 				starterPrompts={ [
-					'Refine contrast and hierarchy',
+					'Refine hierarchy and rhythm',
 					'Make the palette feel warmer',
 					'Tighten spacing and rhythm',
 				] }

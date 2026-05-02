@@ -481,6 +481,19 @@ export default function PatternRecommender() {
 			const blocks = resolvePatternBlocks( pattern );
 
 			if ( blocks.length === 0 ) {
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.'
+						),
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
 				return;
 			}
 
@@ -513,7 +526,7 @@ export default function PatternRecommender() {
 				blocks.map( ( block ) => cloneBlock( block ) ),
 				insertionIndex,
 				inserterRootClientId,
-				false
+				true
 			);
 			createSuccessNotice(
 				sprintf(

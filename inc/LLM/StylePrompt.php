@@ -747,12 +747,11 @@ EXAMPLE
 				continue;
 			}
 
-			$operations = self::validate_operations(
-				is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [],
-				$context
-			);
-			$tone       = sanitize_key( (string) ( $suggestion['tone'] ?? '' ) );
-			$tone       = 'executable' === $tone && [] !== $operations
+			$input_operations  = is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [];
+			$operations        = self::validate_operations( $input_operations, $context );
+			$operation_dropped = count( $input_operations ) !== count( $operations );
+			$tone              = sanitize_key( (string) ( $suggestion['tone'] ?? '' ) );
+			$tone              = 'executable' === $tone && [] !== $operations && ! $operation_dropped
 				? 'executable'
 				: 'advisory';
 

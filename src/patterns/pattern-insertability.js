@@ -1,4 +1,4 @@
-import { createBlock, parse } from '@wordpress/blocks';
+import { createBlock, rawHandler } from '@wordpress/blocks';
 
 export function resolvePatternBlocks( pattern ) {
 	if (
@@ -15,7 +15,7 @@ export function resolvePatternBlocks( pattern ) {
 
 	if ( typeof pattern?.content === 'string' && pattern.content.trim() ) {
 		try {
-			return parse( pattern.content );
+			return rawHandler( { HTML: pattern.content } ).filter( Boolean );
 		} catch ( error ) {
 			return [];
 		}
@@ -59,9 +59,13 @@ export function filterInsertableRecommendedPatterns(
 		return [];
 	}
 
-	return recommendedPatterns.filter(
-		( { pattern } ) =>
+	return recommendedPatterns.filter( ( { pattern } ) => {
+		const blocks = resolvePatternBlocks( pattern );
+
+		return (
+			blocks.length > 0 &&
 			getRejectedPatternBlockNames( pattern, rootClientId, blockEditor )
 				.length === 0
-	);
+		);
+	} );
 }
