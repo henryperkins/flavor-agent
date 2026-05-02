@@ -121,7 +121,14 @@ final class StyleAbilitiesTest extends TestCase {
 				],
 				'styleContext' => [
 					'currentConfig'         => [ 'styles' => [] ],
-					'mergedConfig'          => [ 'styles' => [] ],
+					'mergedConfig'          => [
+						'styles' => [
+							'color' => [
+								'background' => '#000000',
+								'text'       => '#000000',
+							],
+						],
+					],
 					'availableVariations'   => [
 						[
 							'title'       => 'Midnight',

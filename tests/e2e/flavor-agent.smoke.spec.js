@@ -1269,6 +1269,21 @@ async function getGlobalStylesState( page ) {
 				.reverse()
 				.find( ( entry ) => entry?.type !== 'request_diagnostic' ) ||
 			null;
+		const globalStylesSuggestions =
+			flavorAgent?.getGlobalStylesRecommendations?.() || [];
+		const visibleButtons = Array.from(
+			document.querySelectorAll( 'button' )
+		).filter( ( button ) => {
+			const style = window.getComputedStyle( button );
+			const rect = button.getBoundingClientRect();
+
+			return (
+				style.display !== 'none' &&
+				style.visibility !== 'hidden' &&
+				rect.width > 0 &&
+				rect.height > 0
+			);
+		} );
 
 		return {
 			globalStylesId: globalStylesId ? String( globalStylesId ) : null,
@@ -1276,6 +1291,19 @@ async function getGlobalStylesState( page ) {
 			styles: normalizeValue( record?.styles || {} ),
 			background: record?.styles?.color?.background || '',
 			lineHeight: record?.styles?.typography?.lineHeight ?? null,
+			advisorySuggestions: normalizeValue(
+				globalStylesSuggestions.filter(
+					( suggestion ) => suggestion?.tone !== 'executable'
+				)
+			),
+			executableSuggestions: normalizeValue(
+				globalStylesSuggestions.filter(
+					( suggestion ) => suggestion?.tone === 'executable'
+				)
+			),
+			applyButtonVisible: visibleButtons.some(
+				( button ) => button.textContent?.trim() === 'Confirm Apply'
+			),
 			applyStatus: flavorAgent?.getGlobalStylesApplyStatus?.() || '',
 			undoStatus: flavorAgent?.getUndoStatus?.() || '',
 			activityType: lastActivity?.type || '',
@@ -3089,6 +3117,79 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 			exact: true,
 		} )
 	).toBeEnabled();
+} );
+
+test( '@wp70-site-editor global styles surface renders contrast advisory annotation and disables apply', async ( {
+	page,
+} ) => {
+	const styleRequests = [];
+
+	await mockGlobalStylesRecommendations( page, styleRequests, {
+		suggestions: [
+			{
+				label: 'Soft on soft',
+				description:
+					'Use the wash on base. Contrast check: 1.2:1 between "base" and "wash" at root, below the 4.5:1 minimum.',
+				category: 'color',
+				tone: 'advisory',
+				operations: [],
+			},
+		],
+		explanation: 'Advisory because the proposed pair fails contrast.',
+		reviewContextSignature: 'mock-review-sig',
+		resolvedContextSignature: 'mock-resolved-sig',
+	} );
+
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
+	await page.waitForFunction( () =>
+		Boolean( window.flavorAgentData?.canRecommendGlobalStyles )
+	);
+	await page.waitForFunction( () =>
+		Boolean(
+			window.wp?.data
+				?.select( 'core' )
+				?.__experimentalGetCurrentGlobalStylesId?.()
+		)
+	);
+	await enableSiteEditorGlobalStylesSidebar( page );
+
+	const recommendationsPanel = page
+		.locator( '.flavor-agent-global-styles-panel' )
+		.first();
+	const promptInput = page.getByLabel( 'Describe the style direction' );
+
+	await expect( promptInput ).toBeVisible();
+	await promptInput.fill( GLOBAL_STYLES_PROMPT );
+	await recommendationsPanel
+		.getByRole( 'button', { name: 'Get Style Suggestions' } )
+		.click();
+
+	await expect.poll( () => styleRequests.length ).toBe( 1 );
+	await expect(
+		recommendationsPanel.getByText( 'Soft on soft' ).first()
+	).toBeVisible();
+	await expect(
+		recommendationsPanel
+			.getByText( 'Contrast check:', { exact: false } )
+			.first()
+	).toBeVisible();
+
+	const state = await getGlobalStylesState( page );
+
+	expect( state.advisorySuggestions ).toHaveLength( 1 );
+	expect( state.executableSuggestions ).toHaveLength( 0 );
+	expect( state.advisorySuggestions[ 0 ].description ).toContain(
+		'Contrast check:'
+	);
+	expect( state.applyButtonVisible ).toBe( false );
+	expect( styleRequests.length ).toBeGreaterThan( 0 );
 } );
 
 test( '@wp70-site-editor style book surface keeps stale results visible but disables review and apply until refresh', async ( {

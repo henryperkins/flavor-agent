@@ -4,6 +4,8 @@ Date: 2026-04-30
 
 This document defines the release stopping point for Flavor Agent across its current editor, admin, and programmatic surfaces.
 
+Companion: [`release-submission-and-review.md`](./release-submission-and-review.md) covers the WordPress.org submission, guideline audit, reviewer-cycle, and approval gates that follow once the plugin is internally release-quality.
+
 ## Core Identity
 
 Flavor Agent is a WordPress-native recommendation and review layer for editing surfaces.

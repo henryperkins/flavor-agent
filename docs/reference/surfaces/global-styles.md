@@ -33,17 +33,24 @@ Do not ship:
 
 ## Next Steps
 
-- [ ] Add deterministic contrast/readability validation before executable color
+- [x] Add deterministic contrast/readability validation before executable color
   suggestions are treated as release-quality design recommendations.
-- [ ] Prefer paired foreground/background operations when one color change alone
-  could create poor contrast.
-- [ ] Classify low-contrast or unsupported combined results as advisory.
+  `StyleContrastValidator` performs WCAG AA checks server-side per the
+  Stage B Design Commitments.
+- [x] Prefer paired foreground/background operations when one color change alone
+  could create poor contrast. `StylePrompt::build_system()` now nudges the
+  model toward paired emission, and the validator evaluates within-suggestion
+  pairs first.
+- [x] Classify low-contrast or unsupported combined results as advisory.
+  `StylePrompt::validate_suggestions()` downgrades via `$effective_operations`
+  with a canonical `Contrast check:` or `Contrast check unavailable:`
+  annotation.
 - [x] Preserve grouped operations as one review-safe transaction when splitting
   would create a bad intermediate state. The server parser now downgrades any
   suggestion to advisory when validation drops part of its operation sequence,
   and the client applier still writes only after every grouped operation passes.
-- [ ] Keep design-quality claims limited until contrast/readability validation
-  exists.
+- [x] Keep design-quality claims limited until contrast/readability validation
+  exists. WCAG AA contrast validation now ships as of Stage B.
 
 ## Stage B Design Commitments
 
@@ -51,11 +58,14 @@ Agreed contract decisions for the contrast/readability work that closes the
 four open Next Steps above. These constrain the validator implementation; any
 deviation should update this section first.
 
-- **Authority** — `StylePrompt::validate_operations()` is the single place
-  that downgrades a suggestion from executable to advisory for contrast
-  reasons; suggestions reach the editor with their final tone already set.
-  The client re-runs the same check at apply time as a drift guard against
-  live block-editor settings, not as a duplicate validator.
+- **Authority** — `StylePrompt::validate_suggestions()` is the single
+  place that downgrades a suggestion from executable to advisory for
+  contrast reasons; suggestions reach the editor with their final tone
+  already set. Apply-time freshness is enforced by the existing
+  review/resolved signature checks —
+  `StyleAbilities::build_review_context_signature()` already hashes the
+  slug:hex `colors` list, so any palette change marks the suggestion
+  stale before apply. No separate JS contrast drift guard is planned.
 - **Threshold** — WCAG AA, single 4.5:1 ratio across body text, UI, and
   headings. Large-text exemptions, AAA, and color-blindness simulation are
   out of scope for v1.
@@ -70,10 +80,11 @@ deviation should update this section first.
   custom colors outside the palette, gradients, and duotone.
 - **Implementation split** — Build a minimal PHP `StyleContrastValidator`
   (hex → relative luminance → ratio → AA check); core ships no PHP
-  equivalent. Wrap `@wordpress/components` contrast helpers on the JS
-  drift-guard path, fed by `select( 'core/block-editor' ).getSettings().colors`,
-  matching the pattern used by core paragraph, cover, and button blocks.
-  Hex inputs are already in the prompt context at
+  equivalent. No JS contrast utility is planned: contrast freshness rides
+  on the existing review/resolved signature machinery and the apply path's
+  `resolveSignatureOnly` gate, both of which already detect any palette or
+  merged-config change that would invalidate a contrast result. Hex inputs
+  for the server validator are already in the prompt context at
   `themeTokens['colorPresets'][].color`.
 - **Prompt and copy** — `StylePrompt::build_system()` should encourage
   paired foreground/background operations whenever a color change is

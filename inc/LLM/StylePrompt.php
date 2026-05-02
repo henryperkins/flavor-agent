@@ -11,6 +11,12 @@ final class StylePrompt {
 
 	use FormatsDocsGuidance;
 
+	private const DOWNGRADE_PREFIXES = [
+		'Validation:',
+		'Contrast check unavailable:',
+		'Contrast check:',
+	];
+
 	public static function build_system(): string {
 		return <<<'SYSTEM'
 You are a WordPress style surface advisor for the Site Editor.
@@ -71,7 +77,7 @@ Return ONLY a JSON object with this exact shape:
 	  border.style = one of none, solid, dashed, dotted, double, groove, ridge, inset, outset, hidden.
 	- Do not emit customCSS, background images, arbitrary hex values, or arbitrary pixel spacing when a preset-backed path exists.
 	- set_theme_variation is allowed only for the global-styles surface. Never emit it for style-book.
-	- If set_theme_variation is present, emit at most one and place it before any set_styles or set_block_styles overrides.
+	- If set_theme_variation is present, emit at most one and place it before any set_styles or set_block_styles overrides. Do not combine set_theme_variation with color overrides in the same suggestion.
 	- set_theme_variation MUST reference an Available variation by index and title.
 	- If a request cannot be executed safely, return an advisory suggestion with tone=advisory and an empty operations array.
 	- When WordPress Developer Guidance is provided, prefer recommendations that align with that guidance and avoid contradicting documented WordPress Global Styles capabilities or theme.json standards.
@@ -82,6 +88,8 @@ Return ONLY a JSON object with this exact shape:
 	- Do not invent viewport visibility constraints when none are listed.
 	- Prefer 1-4 suggestions.
 	- Keep labels under 60 characters and descriptions under 180 characters.
+	- When recommending color changes, prefer pairing foreground and background operations together at the same scope so the resulting contrast can be validated.
+	- Solo color operations remain valid but may be downgraded to advisory if the resulting pair fails contrast against the existing complement.
 SYSTEM;
 	}
 
@@ -747,20 +755,31 @@ EXAMPLE
 				continue;
 			}
 
-			$input_operations  = is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [];
-			$operations        = self::validate_operations( $input_operations, $context );
-			$operation_dropped = count( $input_operations ) !== count( $operations );
-			$tone              = sanitize_key( (string) ( $suggestion['tone'] ?? '' ) );
-			$tone              = 'executable' === $tone && [] !== $operations && ! $operation_dropped
+			$input_operations     = is_array( $suggestion['operations'] ?? null ) ? $suggestion['operations'] : [];
+			$operations           = self::validate_operations( $input_operations, $context );
+			$operation_dropped    = count( $input_operations ) !== count( $operations );
+			$contrast_result      = StyleContrastValidator::evaluate( $operations, $context );
+			$contrast_failed      = ! $contrast_result['passed'];
+			$should_downgrade     = $operation_dropped || $contrast_failed;
+			$effective_operations = $should_downgrade ? [] : $operations;
+			$tone                 = 'executable' === sanitize_key( (string) ( $suggestion['tone'] ?? '' ) )
+				&& [] !== $effective_operations
 				? 'executable'
 				: 'advisory';
+			$base_description     = sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) );
 
 			$entry = [
 				'label'       => sanitize_text_field( (string) ( $suggestion['label'] ?? '' ) ),
-				'description' => sanitize_text_field( (string) ( $suggestion['description'] ?? '' ) ),
+				'description' => self::annotate_description_for_downgrade(
+					$base_description,
+					$operation_dropped,
+					count( $input_operations ),
+					count( $operations ),
+					$contrast_result
+				),
 				'category'    => sanitize_key( (string) ( $suggestion['category'] ?? 'advisory' ) ),
 				'tone'        => $tone,
-				'operations'  => 'executable' === $tone ? $operations : [],
+				'operations'  => 'executable' === $tone ? $effective_operations : [],
 			];
 
 			$ranking_input  = is_array( $suggestion['ranking'] ?? null ) ? $suggestion['ranking'] : [];
@@ -775,7 +794,7 @@ EXAMPLE
 					0.45,
 					[
 						'is_executable'   => 'executable' === $tone ? 0.25 : 0.0,
-						'has_operations'  => [] !== $operations ? 0.15 : 0.0,
+						'has_operations'  => [] !== $effective_operations ? 0.15 : 0.0,
 						'has_description' => '' !== $entry['description'] ? 0.1 : 0.0,
 						'has_category'    => '' !== $entry['category'] ? 0.05 : 0.0,
 					]
@@ -783,7 +802,7 @@ EXAMPLE
 			}
 			$source_signals = [ 'llm_response', 'style_surface', 'tone_' . $tone ];
 
-			if ( [] !== $operations ) {
+			if ( [] !== $effective_operations ) {
 				$source_signals[] = 'has_operations';
 			}
 
@@ -799,7 +818,7 @@ EXAMPLE
 							'source'  => 'llm',
 							'surface' => 'style',
 						],
-						'operations'    => 'executable' === $tone ? $operations : [],
+						'operations'    => 'executable' === $tone ? $effective_operations : [],
 					]
 				);
 			}
@@ -837,6 +856,71 @@ EXAMPLE
 			},
 			$filtered
 		);
+	}
+
+	/**
+	 * @param array{passed: bool, kind: string|null, reason: string|null, ratio: float|null} $contrast_result
+	 */
+	private static function annotate_description_for_downgrade(
+		string $base_description,
+		bool $operation_dropped,
+		int $input_op_count,
+		int $surviving_op_count,
+		array $contrast_result
+	): string {
+		if ( ! $operation_dropped && $contrast_result['passed'] ) {
+			return $base_description;
+		}
+
+		foreach ( self::DOWNGRADE_PREFIXES as $prefix ) {
+			if ( str_contains( $base_description, $prefix ) ) {
+				return $base_description;
+			}
+		}
+
+		$reason = self::select_downgrade_reason(
+			$operation_dropped,
+			$input_op_count,
+			$surviving_op_count,
+			$contrast_result
+		);
+
+		if ( '' === $reason ) {
+			return $base_description;
+		}
+
+		if ( '' === $base_description ) {
+			return $reason;
+		}
+
+		return $base_description . ' ' . $reason;
+	}
+
+	/**
+	 * @param array{passed: bool, kind: string|null, reason: string|null, ratio: float|null} $contrast_result
+	 */
+	private static function select_downgrade_reason(
+		bool $operation_dropped,
+		int $input_op_count,
+		int $surviving_op_count,
+		array $contrast_result
+	): string {
+		if ( $operation_dropped ) {
+			return sanitize_text_field(
+				sprintf(
+					/* translators: 1: number of dropped operations, 2: total operations submitted */
+					__( 'Validation: %1$d of %2$d operations could not be applied safely at this scope.', 'flavor-agent' ),
+					max( 0, $input_op_count - $surviving_op_count ),
+					$input_op_count
+				)
+			);
+		}
+
+		if ( in_array( $contrast_result['kind'], [ 'unavailable', 'low_ratio' ], true ) && is_string( $contrast_result['reason'] ) ) {
+			return sanitize_text_field( $contrast_result['reason'] );
+		}
+
+		return '';
 	}
 
 	/**

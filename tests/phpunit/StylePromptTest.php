@@ -38,7 +38,12 @@ final class StylePromptTest extends TestCase {
 					'styles' => [],
 				],
 				'mergedConfig'          => [
-					'styles' => [],
+					'styles' => [
+						'color' => [
+							'background' => '#000000',
+							'text'       => '#000000',
+						],
+					],
 				],
 				'themeTokenDiagnostics' => [
 					'source'      => 'stable',
@@ -47,6 +52,12 @@ final class StylePromptTest extends TestCase {
 				],
 				'themeTokens'           => [
 					'colors'            => [ 'accent: #ff5500' ],
+					'colorPresets'      => [
+						[
+							'slug'  => 'accent',
+							'color' => '#ff5500',
+						],
+					],
 					'gradients'         => [ 'sunset: linear-gradient(135deg,#f60,#fc0)' ],
 					'fontSizes'         => [ 'body: 1rem' ],
 					'fontFamilies'      => [ 'display: Georgia, serif' ],
@@ -369,6 +380,13 @@ final class StylePromptTest extends TestCase {
 		$this->assertStringContainsString( 'explicitly visible on `desktop`', $prompt );
 	}
 
+	public function test_build_system_includes_pair_guidance_for_color_ops(): void {
+		$system = StylePrompt::build_system();
+
+		$this->assertStringContainsString( 'pairing foreground and background operations', $system );
+		$this->assertStringContainsString( 'downgraded to advisory', $system );
+	}
+
 	public function test_parse_response_filters_unsafe_style_operations(): void {
 		$result = StylePrompt::parse_response(
 			wp_json_encode(
@@ -560,18 +578,18 @@ final class StylePromptTest extends TestCase {
 				[
 					'suggestions' => [
 						[
-							'label'       => 'Adopt Midnight with accent background',
-							'description' => 'Start from the Midnight variation, then warm the canvas slightly.',
+							'label'       => 'Adopt Midnight with roomier text',
+							'description' => 'Start from the Midnight variation, then loosen the line height.',
 							'category'    => 'variation',
 							'tone'        => 'executable',
 							'operations'  => [
 								[
 									'type'       => 'set_styles',
-									'path'       => [ 'color', 'background' ],
-									'value'      => 'var:preset|color|accent',
-									'valueType'  => 'preset',
-									'presetType' => 'color',
-									'presetSlug' => 'accent',
+									'path'       => [ 'typography', 'lineHeight' ],
+									'value'      => '1.6',
+									'valueType'  => 'freeform',
+									'presetType' => '',
+									'presetSlug' => '',
 								],
 								[
 									'type'           => 'set_theme_variation',
@@ -595,6 +613,47 @@ final class StylePromptTest extends TestCase {
 		$this->assertSame(
 			'Midnight',
 			$result['suggestions'][0]['operations'][0]['variationTitle'] ?? null
+		);
+	}
+
+	public function test_parse_response_downgrades_theme_variation_mixed_with_color_override(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Adopt Midnight and recolor canvas',
+							'description' => 'Start from the Midnight variation, then recolor the canvas.',
+							'category'    => 'variation',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'           => 'set_theme_variation',
+									'variationIndex' => 1,
+									'variationTitle' => 'Midnight',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|accent',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'accent',
+								],
+							],
+						],
+					],
+					'explanation' => 'Use the preset-backed Midnight variation as the base.',
+				]
+			),
+			$this->build_context()
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$this->assertSame( [], $parsed['suggestions'][0]['operations'] );
+		$this->assertStringContainsString(
+			'theme variation',
+			$parsed['suggestions'][0]['description']
 		);
 	}
 
@@ -922,5 +981,336 @@ final class StylePromptTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'Fallback confidence suggestion', $result['suggestions'][0]['label'] );
 		$this->assertSame( 0.87, $result['suggestions'][0]['ranking']['score'] );
+	}
+
+	public function test_parse_response_downgrades_low_contrast_executable_suggestion_to_advisory(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Soft on soft',
+							'description' => 'Use the wash on base.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|wash',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'wash',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_global_styles_context_with_low_contrast_palette()
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$this->assertSame( [], $parsed['suggestions'][0]['operations'] );
+		$this->assertStringContainsString( 'Contrast check:', $parsed['suggestions'][0]['description'] );
+	}
+
+	public function test_parse_response_uses_validation_prefix_when_drop_and_contrast_both_fire(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Mixed bag',
+							'description' => 'Two ops, one bad.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|wash',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'wash',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|nonexistent',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'nonexistent',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_global_styles_context_with_low_contrast_palette()
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$this->assertStringStartsWith( 'Two ops, one bad. Validation:', $parsed['suggestions'][0]['description'] );
+		$this->assertStringNotContainsString( 'Contrast check', $parsed['suggestions'][0]['description'] );
+	}
+
+	public function test_parse_response_dedups_canonical_prefix_already_present(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Pre-annotated',
+							'description' => 'Soft on soft. Contrast check: already noted.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|wash',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'wash',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_global_styles_context_with_low_contrast_palette()
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$this->assertSame(
+			1,
+			substr_count( $parsed['suggestions'][0]['description'], 'Contrast check:' )
+		);
+	}
+
+	public function test_parse_response_downgraded_suggestion_has_no_has_operations_signal(): void {
+		$parsed  = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Soft on soft',
+							'description' => 'Use the wash on base.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'ranking'     => [ 'score' => 0.9 ],
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|wash',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'wash',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_global_styles_context_with_low_contrast_palette()
+		);
+		$signals = $parsed['suggestions'][0]['ranking']['sourceSignals'] ?? [];
+
+		$this->assertContains( 'tone_advisory', $signals );
+		$this->assertNotContains( 'has_operations', $signals );
+		$this->assertNotContains( 'tone_executable', $signals );
+	}
+
+	public function test_parse_response_uses_unavailable_prefix_when_contrast_inputs_unresolved(): void {
+		$context = [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'globalStylesId' => 'gs-1',
+			],
+			'styleContext' => [
+				'themeTokens'         => [
+					'colors'        => [ 'base: #ffffff' ],
+					'colorPresets'  => [
+						[
+							'slug'  => 'base',
+							'color' => '#ffffff',
+						],
+					],
+					'elementStyles' => [],
+				],
+				'mergedConfig'        => [ 'styles' => [] ],
+				'currentConfig'       => [
+					'styles'   => [],
+					'settings' => [],
+				],
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'background' ],
+						'valueSource' => 'color',
+					],
+					[
+						'path'        => [ 'color', 'text' ],
+						'valueSource' => 'color',
+					],
+				],
+			],
+		];
+		$parsed  = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Solo background',
+							'description' => 'Just background.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$context
+		);
+
+		$this->assertSame( 'advisory', $parsed['suggestions'][0]['tone'] );
+		$this->assertSame( [], $parsed['suggestions'][0]['operations'] );
+		$this->assertStringContainsString(
+			'Contrast check unavailable:',
+			$parsed['suggestions'][0]['description']
+		);
+	}
+
+	public function test_parse_response_downgraded_suggestion_score_excludes_operations_boost(): void {
+		$parsed = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Soft on soft',
+							'description' => 'Use the wash on base.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'ranking'     => [],
+							'operations'  => [
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'background' ],
+									'value'      => 'var:preset|color|wash',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'wash',
+								],
+								[
+									'type'       => 'set_styles',
+									'path'       => [ 'color', 'text' ],
+									'value'      => 'var:preset|color|base',
+									'valueType'  => 'preset',
+									'presetType' => 'color',
+									'presetSlug' => 'base',
+								],
+							],
+						],
+					],
+					'explanation' => 'demo',
+				]
+			),
+			$this->build_global_styles_context_with_low_contrast_palette()
+		);
+
+		$this->assertEqualsWithDelta(
+			0.60,
+			(float) ( $parsed['suggestions'][0]['ranking']['score'] ?? 0.0 ),
+			0.01
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function build_global_styles_context_with_low_contrast_palette(): array {
+		return [
+			'scope'        => [
+				'surface'        => 'global-styles',
+				'globalStylesId' => 'gs-1',
+			],
+			'styleContext' => [
+				'themeTokens'         => [
+					'colors'        => [ 'base: #ffffff', 'wash: #dddddd' ],
+					'colorPresets'  => [
+						[
+							'slug'  => 'base',
+							'color' => '#ffffff',
+						],
+						[
+							'slug'  => 'wash',
+							'color' => '#dddddd',
+						],
+					],
+					'elementStyles' => [],
+				],
+				'mergedConfig'        => [
+					'styles' => [
+						'color' => [
+							'background' => '#ffffff',
+							'text'       => '#000000',
+						],
+					],
+				],
+				'currentConfig'       => [
+					'styles'   => [],
+					'settings' => [],
+				],
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'background' ],
+						'valueSource' => 'color',
+					],
+					[
+						'path'        => [ 'color', 'text' ],
+						'valueSource' => 'color',
+					],
+				],
+			],
+		];
 	}
 }

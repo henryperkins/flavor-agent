@@ -55,6 +55,8 @@ Read these documents in this order:
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
    - `cross-surface-validation-gates.md` — additive hard-stop validation rules and release evidence for multi-surface or shared-subsystem changes.
+   - `release-surface-scope-review.md` — release stopping points per surface, scope-freeze checklist, and product-coherence rubric for what merits release presence.
+   - `release-submission-and-review.md` — WordPress.org submission artifacts, guideline audit, reviewer-cycle discipline, and KPIs from pre-submission through approval.
    - `pattern-recommendation-debugging.md` — operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage.
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `template-operations.md` — operation types, placements, and validation rules per surface.
@@ -95,6 +97,8 @@ Each top-level doc has one job:
    - `shared-internals.md` — Which cross-cutting store utilities, shared UI components, and context helpers do the surfaces share?
    - `recommendation-ui-consistency.md` — Which interaction model does each surface use, and which differences are intentional exceptions?
    - `cross-surface-validation-gates.md` — Which release gates does a multi-surface or shared-subsystem change trigger, and what evidence is required before sign-off?
+   - `release-surface-scope-review.md` — Which surfaces merit release presence? Which surfaces should stop, harden, or remain advisory before release?
+   - `release-submission-and-review.md` — Which artifacts and audits does WordPress.org require? Which signals indicate progress toward approval?
    - `pattern-recommendation-debugging.md` — How do you debug sync, Qdrant collection health, raw retrieval, and reranking failures?
    - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
@@ -132,7 +136,7 @@ Right now the intended doc stack is:
 2. Current state: `STATUS.md`
 3. Surface matrix: `docs/FEATURE_SURFACE_MATRIX.md`
 4. Per-surface deep dives: `docs/features/README.md`
-5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, pattern-recommendation-debugging, provider-precedence, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking)
+5. Programmatic and UI contract docs: `docs/reference/` (abilities-and-routes, shared-internals, recommendation-ui-consistency, cross-surface-validation-gates, release-surface-scope-review, release-submission-and-review, pattern-recommendation-debugging, provider-precedence, template-operations, activity-state-machine, local-environment-setup, wordpress-ai-roadmap-tracking, gutenberg-feature-tracking)
 6. Architecture companion: `docs/flavor-agent-readme.md`
 7. WordPress compatibility, migration snapshots, and overlap remediation: `docs/wordpress-7.0-developer-docs-index.md`, `docs/wordpress-7.0-gutenberg-23-impact-brief.md`, `docs/wp7-migration-opportunities.md`, and `docs/wordpress-7.0-gutenberg-overlap-remediation-plan.md`
 
