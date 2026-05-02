@@ -177,6 +177,60 @@ final class Fields {
 		}
 	}
 
+	public static function render_checkbox_field( array $args ): void {
+		$option         = (string) ( $args['option'] ?? '' );
+		$field_id       = (string) ( $args['label_for'] ?? $option );
+		$label          = (string) ( $args['label'] ?? '' );
+		$description    = (string) ( $args['description'] ?? '' );
+		$value          = self::parse_boolean_field_value( get_option( $option, false ) );
+		$description_id = '' !== $description ? $field_id . '-description' : '';
+		$attributes     = [
+			'type'  => 'checkbox',
+			'id'    => $field_id,
+			'name'  => $option,
+			'value' => '1',
+		];
+
+		if ( '' !== $description_id ) {
+			$attributes['aria-describedby'] = $description_id;
+		}
+
+		if ( $value ) {
+			$attributes['checked'] = 'checked';
+		}
+		?>
+		<input type="hidden" name="<?php echo esc_attr( $option ); ?>" value="0" />
+		<label class="flavor-agent-settings-checkbox" for="<?php echo esc_attr( $field_id ); ?>">
+			<input<?php Utils::render_html_attributes( $attributes ); ?> />
+			<?php echo esc_html( $label ); ?>
+		</label>
+		<?php
+
+		if ( '' !== $description ) {
+			printf(
+				'<p class="description" id="%s">%s</p>',
+				esc_attr( $description_id ),
+				wp_kses_post( $description )
+			);
+		}
+	}
+
+	private static function parse_boolean_field_value( mixed $value ): bool {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+
+		if ( is_int( $value ) ) {
+			return 1 === $value;
+		}
+
+		if ( is_string( $value ) ) {
+			return in_array( strtolower( trim( $value ) ), [ '1', 'true', 'yes', 'on' ], true );
+		}
+
+		return false;
+	}
+
 	private function __construct() {
 	}
 }

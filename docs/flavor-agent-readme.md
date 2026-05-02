@@ -218,7 +218,7 @@ Configured options:
 
 `flavor_agent_openai_native_api_key` is optional once the core OpenAI connector is configured. Flavor Agent still keeps the native embedding model ID in its own settings either way, but chat always uses the WordPress AI Client and `Settings > Connectors`.
 
-`flavor_agent_azure_reasoning_effort` is a legacy-named setting used as the default reasoning-effort control for Connectors-routed chat requests. The optional Cloudflare account, instance, and token fields are shown only as legacy/custom-endpoint overrides; leaving them blank uses the managed public docs endpoint.
+`flavor_agent_azure_reasoning_effort` is a legacy-named setting used as the default reasoning-effort control for supported Connectors-routed chat requests. Flavor Agent maps it to Codex `reasoningEffort` and OpenAI `reasoning.effort` model custom options today; Anthropic is intentionally left unmapped until its provider contract is documented. The optional Cloudflare account, instance, and token fields are shown only as legacy/custom-endpoint overrides; leaving them blank uses the managed public docs endpoint.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` and refreshes the live sync status panel in place.
 

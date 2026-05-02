@@ -19,6 +19,7 @@ Ship:
 
 - Draft, edit, and critique outputs.
 - Advisory notes and issue cards.
+- Clear manual copy handoff for generated draft/edit text.
 - Read-only request history.
 - Setup/capability notices.
 
@@ -32,15 +33,14 @@ Do not ship:
 ## Next Steps
 
 - [ ] Tighten copy so users understand results are editorial guidance or
-  generated text, not automatic patches.
+      generated text, not automatic patches.
 - [ ] Add or verify a clear manual handoff path for draft/edit output.
 - [ ] Keep unsupported post types hidden or clearly unavailable.
 - [ ] Confirm provider unavailability points to Connectors setup instead of
-  plugin-owned provider routing.
+      plugin-owned provider routing.
 - [ ] Avoid apply-like verbs unless a full editor-aware apply contract exists.
 
 ## Verification Gate
 
 - [ ] Re-run content panel unit coverage after copy or mode changes.
 - [ ] Re-run content panel browser smoke coverage after copy or mode changes.
-

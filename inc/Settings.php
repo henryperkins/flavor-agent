@@ -82,6 +82,10 @@ final class Settings {
 		Page::render_guidelines_section();
 	}
 
+	public static function render_experimental_features_section(): void {
+		Page::render_experimental_features_section();
+	}
+
 	public static function render_text_field( array $args ): void {
 		Fields::render_text_field( $args );
 	}
@@ -94,6 +98,10 @@ final class Settings {
 		Fields::render_select_field( $args );
 	}
 
+	public static function render_checkbox_field( array $args ): void {
+		Fields::render_checkbox_field( $args );
+	}
+
 	public static function sanitize_grounding_result_count( mixed $value ): int {
 		return Validation::sanitize_grounding_result_count( $value );
 	}
@@ -104,6 +112,10 @@ final class Settings {
 
 	public static function sanitize_pattern_max_recommendations( mixed $value ): int {
 		return Validation::sanitize_pattern_max_recommendations( $value );
+	}
+
+	public static function sanitize_block_structural_actions_enabled( mixed $value ): bool {
+		return Validation::sanitize_block_structural_actions_enabled( $value );
 	}
 
 	public static function sanitize_azure_reasoning_effort( mixed $value ): string {

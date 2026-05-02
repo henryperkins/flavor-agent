@@ -28,6 +28,10 @@ const BLOCK_STRUCTURAL_PATTERN_TITLE = 'Block Structural Hero';
 const BLOCK_STRUCTURAL_INSERTED_CONTENT =
 	'Inserted by Flavor Agent structural apply';
 const PATTERN_REASON = 'Recommended for this content block.';
+const PATTERN_SMOKE_PATTERN_NAME = 'flavor-agent/playground-hero-pattern';
+const PATTERN_SMOKE_PATTERN_TITLE = 'Playground Hero Pattern';
+const PATTERN_SMOKE_INSERTED_CONTENT =
+	'Inserted by the pattern recommendation smoke test';
 const NAVIGATION_PROMPT = 'Simplify the header navigation.';
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -68,6 +72,10 @@ const MOCKED_RECOMMENDATION_SURFACES = Object.freeze( {
 	content: {
 		flag: 'canRecommendContent',
 		capability: 'content',
+	},
+	pattern: {
+		flag: 'canRecommendPatterns',
+		capability: 'pattern',
 	},
 	template: {
 		flag: 'canRecommendTemplates',
@@ -1385,6 +1393,48 @@ async function registerTemplatePattern(
 	);
 }
 
+async function waitForAllowedPattern( page, patternName ) {
+	await page.waitForFunction( ( nextPatternName ) => {
+		const blockEditor = window.wp?.data?.select( 'core/block-editor' );
+
+		if ( ! blockEditor ) {
+			return false;
+		}
+
+		let getAllowedPatterns = null;
+
+		if ( typeof blockEditor.getAllowedPatterns === 'function' ) {
+			getAllowedPatterns = blockEditor.getAllowedPatterns.bind(
+				blockEditor
+			);
+		} else if (
+			typeof blockEditor.__experimentalGetAllowedPatterns === 'function'
+		) {
+			getAllowedPatterns =
+				blockEditor.__experimentalGetAllowedPatterns.bind(
+					blockEditor
+				);
+		}
+
+		if ( ! getAllowedPatterns ) {
+			return false;
+		}
+
+		const insertionPoint = blockEditor.getBlockInsertionPoint?.() || null;
+		const rootClientId = insertionPoint?.rootClientId ?? null;
+		const rootClientIds =
+			rootClientId === null ? [ null ] : [ rootClientId, null ];
+
+		return rootClientIds.some( ( candidateRootClientId ) => {
+			const patterns = getAllowedPatterns( candidateRootClientId ) || [];
+
+			return patterns.some(
+				( pattern ) => pattern?.name === nextPatternName
+			);
+		} );
+	}, patternName );
+}
+
 async function insertRootParagraphBlock( page, content ) {
 	await page.evaluate( ( nextContent ) => {
 		const { createBlock } = window.wp.blocks;
@@ -2431,7 +2481,7 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 
 	await ensurePanelOpen( page, 'Content Recommendations', promptInput );
 	await promptInput.fill( 'Draft from the working title.' );
-	await page.getByRole( 'button', { name: 'Generate Draft' } ).click();
+	await page.getByRole( 'button', { name: 'Generate Draft Text' } ).click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 1 );
 	expect( capturedRequests[ 0 ].mode ).toBe( 'draft' );
@@ -2443,7 +2493,7 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 
 	await page.getByRole( 'button', { name: 'Edit', exact: true } ).click();
 	await promptInput.fill( 'Tighten the existing copy.' );
-	await page.getByRole( 'button', { name: 'Revise Draft' } ).click();
+	await page.getByRole( 'button', { name: 'Generate Revision Text' } ).click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 2 );
 	expect( capturedRequests[ 1 ].mode ).toBe( 'edit' );
@@ -2454,7 +2504,7 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 
 	await page.getByRole( 'button', { name: 'Critique', exact: true } ).click();
 	await promptInput.fill( 'Find the weak lines.' );
-	await page.getByRole( 'button', { name: 'Run Critique' } ).click();
+	await page.getByRole( 'button', { name: 'Generate Critique' } ).click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 3 );
 	expect( capturedRequests[ 2 ].mode ).toBe( 'critique' );
@@ -2468,7 +2518,7 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 	await expect( page.getByText( 'Too generic.' ) ).toBeVisible();
 
 	await promptInput.fill( 'force an error' );
-	await page.getByRole( 'button', { name: 'Run Critique' } ).click();
+	await page.getByRole( 'button', { name: 'Generate Critique' } ).click();
 
 	await expect.poll( () => capturedRequests.length ).toBe( 4 );
 	await expect(
@@ -2481,6 +2531,7 @@ test( '@wp70-site-editor content recommendation surface drafts, edits, critiques
 test( 'content panel renders for a brand-new unsaved post', async ( { page } ) => {
 	test.setTimeout( 180_000 );
 
+	await enableMockedRecommendationSurfaces( page, [ 'content' ] );
 	await page.goto( '/wp-admin/post-new.php?post_type=post', {
 		waitUntil: 'domcontentloaded',
 	} );
@@ -2496,7 +2547,7 @@ test( 'content panel renders for a brand-new unsaved post', async ( { page } ) =
 	await ensurePanelOpen( page, 'Content Recommendations', promptInput );
 	await expect( promptInput ).toBeVisible();
 	await expect(
-		page.getByRole( 'button', { name: 'Generate Draft' } )
+		page.getByRole( 'button', { name: 'Generate Draft Text' } )
 	).toBeVisible();
 } );
 
@@ -2716,6 +2767,7 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		} );
 	} );
 
+	await enableMockedRecommendationSurfaces( page, [ 'pattern' ] );
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
 	} );
@@ -2727,6 +2779,12 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		Boolean( window.flavorAgentData?.canRecommendPatterns )
 	);
 	await seedParagraphBlock( page );
+	await registerTemplatePattern( page, {
+		insertedContent: PATTERN_SMOKE_INSERTED_CONTENT,
+		patternName: PATTERN_SMOKE_PATTERN_NAME,
+		patternTitle: PATTERN_SMOKE_PATTERN_TITLE,
+	} );
+	await waitForAllowedPattern( page, PATTERN_SMOKE_PATTERN_NAME );
 	const searchPrompt = 'hero';
 
 	await expect.poll( () => patternRequests.length > 0 ).toBe( true );

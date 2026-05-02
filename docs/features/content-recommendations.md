@@ -28,7 +28,7 @@ The REST + Abilities contract remains available so external agents or admin tool
 4. `ContentAbilities` normalizes the request, validates per-post edit access when `postContext.postId > 0`, and renders the current post content through `PostContentRenderer`
 5. `WritingPrompt` builds the Henry-voice system prompt plus the request-specific user prompt via `PromptBudget`. The user prompt includes the rendered current-post text under `Existing draft` and, when the author has eligible same-author published posts in the same post type, a `## Site voice samples` section with up to three openings (~1500 chars each, paragraph-snapped) drawn through `PostVoiceSampleCollector`. Voice samples is the only section the budget will drop under pressure. When rendered HTML exposes useful attribute-borne text that would otherwise be stripped from the current post, `PostContentRenderer` appends it as an `[Attribute references]` bullet list.
 6. `WritingPrompt::parse_response()` validates the returned JSON payload
-7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, without mutating post content
+7. The panel renders summary/content/notes/issues through the shared status and recommendation shell, with explicit editorial-only copy and a copy-to-clipboard handoff for generated text
 8. When document scope is available, the REST handler persists successful and failed requests as read-only `request_diagnostic` activity rows, and the panel shows them in `Recent Content Requests`
 
 ## 4. Capability Contract
@@ -58,6 +58,8 @@ Output:
 ## 5. Guardrails And Failure Modes
 
 - The lane is editorial-only. It does not mutate post content on its own.
+- The first-party UI labels results as generated content guidance, not automatic patches.
+- Generated draft/edit output includes a manual handoff: users can copy generated text and paste/selectively adapt it in the editor themselves.
 - `edit` and `critique` return a `missing_existing_content` error when no draft is provided.
 - A positive `postContext.postId` without `edit_post` access returns `rest_forbidden_context`.
 - Current-post block rendering is postId-gated. Unsaved posts and external callers that omit `postId` keep the fallback text path and do not execute block render callbacks.
@@ -67,7 +69,7 @@ Output:
 - The `## Site voice samples` section is omitted entirely when no candidates qualify: new authors, unsupported post types, all candidates filtered out, or all renders failed.
 - Sites can tune the prompt token budget via the `flavor_agent_prompt_budget_max_tokens` filter, scope `content`.
 - Invalid model JSON returns a `parse_error`.
-- The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface.
+- The first-party UI is editorial-only. There is no preview/apply/undo flow tied to this surface, and copy-to-clipboard does not mutate editor content.
 - Scoped content requests are persisted as read-only activity diagnostics when possible. They can appear in the inline request history and the admin audit page, but they are not undoable.
 
 ## 6. Primary Functions, Routes, And Abilities

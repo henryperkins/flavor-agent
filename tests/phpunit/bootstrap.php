@@ -349,6 +349,33 @@ namespace WordPress\AI_Client\Builders\Exception {
 	}
 }
 
+namespace WordPress\AiClient\Providers\Models\DTO {
+
+	if ( ! class_exists( 'WordPress\\AiClient\\Providers\\Models\\DTO\\ModelConfig' ) ) {
+		final class ModelConfig {
+
+			/**
+			 * @param array<string, mixed> $config
+			 */
+			public function __construct( private array $config = [] ) {}
+
+			/**
+			 * @param array<string, mixed> $config
+			 */
+			public static function fromArray( array $config ): self {
+				return new self( $config );
+			}
+
+			/**
+			 * @return array<string, mixed>
+			 */
+			public function toArray(): array {
+				return $this->config;
+			}
+		}
+	}
+}
+
 namespace WordPress\AI_Client {
 
 	use FlavorAgent\Tests\Support\WordPressTestState;
@@ -474,6 +501,22 @@ namespace {
 						$this->state['reasoning'] = is_array( $reasoning )
 							? (string) ( $reasoning['effort'] ?? '' )
 							: (string) $reasoning;
+						$this->sync_state();
+
+						return $this;
+					case 'using_model_config':
+						$config = $arguments[0] ?? null;
+
+						if ( is_object( $config ) && is_callable( [ $config, 'toArray' ] ) ) {
+							$config = $config->toArray();
+						}
+
+						if ( is_array( $config ) ) {
+							$this->state['model_config']  = $config;
+							$this->state['customOptions'] = is_array( $config['customOptions'] ?? null )
+								? $config['customOptions']
+								: [];
+						}
 						$this->sync_state();
 
 						return $this;

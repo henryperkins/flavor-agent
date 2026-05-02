@@ -264,6 +264,37 @@ final class ChatClientTest extends TestCase {
 		$this->assertObjectSchemasDisallowAdditionalProperties( $schema );
 	}
 
+	public function test_connector_json_schema_marks_all_object_properties_as_required_for_schema_compatible_connector(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"suggestions":[],"explanation":"Use the current structure."}';
+
+		ChatClient::chat(
+			'system prompt',
+			'user prompt',
+			ResponseSchema::get( 'template' )
+		);
+
+		$schema = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? [];
+
+		$this->assertObjectSchemasRequireAllProperties( $schema );
+	}
+
 	public function test_connector_skips_schema_that_exceeds_union_limit(): void {
 		WordPressTestState::$options                        = [
 			'flavor_agent_openai_provider' => 'anthropic',
@@ -302,6 +333,40 @@ final class ChatClientTest extends TestCase {
 			$this->assertFalse( $schema['additionalProperties'], $path );
 		}
 
+		$this->walkChildSchemas(
+			$schema,
+			$path,
+			fn ( array $child_schema, string $child_path ) => $this->assertObjectSchemasDisallowAdditionalProperties(
+				$child_schema,
+				$child_path
+			)
+		);
+	}
+
+	private function assertObjectSchemasRequireAllProperties( array $schema, string $path = '$' ): void {
+		if ( self::schema_includes_type( $schema, 'object' ) ) {
+			$properties = isset( $schema['properties'] ) && is_array( $schema['properties'] )
+				? $schema['properties']
+				: [];
+
+			$this->assertArrayHasKey( 'required', $schema, $path );
+			$this->assertSame( array_keys( $properties ), $schema['required'], $path );
+		}
+
+		$this->walkChildSchemas(
+			$schema,
+			$path,
+			fn ( array $child_schema, string $child_path ) => $this->assertObjectSchemasRequireAllProperties(
+				$child_schema,
+				$child_path
+			)
+		);
+	}
+
+	/**
+	 * @param callable(array<string, mixed>, string): void $callback
+	 */
+	private function walkChildSchemas( array $schema, string $path, callable $callback ): void {
 		foreach ( [ 'properties', 'patternProperties', 'definitions', '$defs' ] as $collection_key ) {
 			if ( ! isset( $schema[ $collection_key ] ) || ! is_array( $schema[ $collection_key ] ) ) {
 				continue;
@@ -309,20 +374,14 @@ final class ChatClientTest extends TestCase {
 
 			foreach ( $schema[ $collection_key ] as $key => $child_schema ) {
 				if ( is_array( $child_schema ) ) {
-					$this->assertObjectSchemasDisallowAdditionalProperties(
-						$child_schema,
-						$path . '.' . $collection_key . '.' . $key
-					);
+					$callback( $child_schema, $path . '.' . $collection_key . '.' . $key );
 				}
 			}
 		}
 
 		foreach ( [ 'items', 'contains', 'additionalProperties', 'propertyNames', 'not' ] as $schema_key ) {
 			if ( isset( $schema[ $schema_key ] ) && is_array( $schema[ $schema_key ] ) ) {
-				$this->assertObjectSchemasDisallowAdditionalProperties(
-					$schema[ $schema_key ],
-					$path . '.' . $schema_key
-				);
+				$callback( $schema[ $schema_key ], $path . '.' . $schema_key );
 			}
 		}
 
@@ -333,10 +392,7 @@ final class ChatClientTest extends TestCase {
 
 			foreach ( $schema[ $schema_list_key ] as $key => $child_schema ) {
 				if ( is_array( $child_schema ) ) {
-					$this->assertObjectSchemasDisallowAdditionalProperties(
-						$child_schema,
-						$path . '.' . $schema_list_key . '.' . $key
-					);
+					$callback( $child_schema, $path . '.' . $schema_list_key . '.' . $key );
 				}
 			}
 		}

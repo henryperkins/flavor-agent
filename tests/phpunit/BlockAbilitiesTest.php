@@ -521,11 +521,87 @@ final class BlockAbilitiesTest extends TestCase {
 		$this->assertSame( [], $result['styles'] ?? null );
 		$this->assertSame( [], $result['block'] ?? null );
 		$this->assertSame( '', $result['explanation'] ?? null );
+		$this->assertSame(
+			[
+				'settings' => 0,
+				'styles'   => 0,
+				'block'    => 0,
+			],
+			$result['preFilteringCounts'] ?? null
+		);
 		$this->assertIsArray( $result['executionContract'] ?? null );
 		$this->assertSame( 'disabled', $result['executionContract']['editingMode'] ?? null );
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $result['resolvedContextSignature'] ?? '' )
+		);
+	}
+
+	public function test_recommend_block_emits_pre_filtering_counts_when_server_filters_remove_block_items(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'settings'    => [],
+				'styles'      => [],
+				'block'       => [
+					[
+						'label'            => 'Add minimum height',
+						'type'             => 'attribute_change',
+						'panel'            => 'dimensions',
+						'attributeUpdates' => '{"minHeight":"200px"}',
+					],
+					[
+						'label'            => 'Set aspect ratio',
+						'type'             => 'attribute_change',
+						'panel'            => 'dimensions',
+						'attributeUpdates' => '{"aspectRatio":"16/9"}',
+					],
+				],
+				'explanation' => 'Tighten the paragraph layout.',
+			]
+		);
+
+		$result = BlockAbilities::recommend_block(
+			[
+				'editorContext' => [
+					'block' => [
+						'name'              => 'core/paragraph',
+						'currentAttributes' => [
+							'content' => 'Hello world',
+						],
+						'inspectorPanels'   => [
+							'color' => [ 'color.background' ],
+						],
+					],
+				],
+			]
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( [], $result['block'] ?? null );
+		$this->assertSame(
+			[
+				'settings' => 0,
+				'styles'   => 0,
+				'block'    => 2,
+			],
+			$result['preFilteringCounts'] ?? null
 		);
 	}
 

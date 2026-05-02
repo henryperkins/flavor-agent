@@ -9,7 +9,7 @@ import {
 	applyTemplatePartSuggestionOperations,
 	applyTemplateSuggestionOperations,
 } from '../utils/template-actions';
-import { getScopeKey } from './activity-session';
+import { getRequestDocumentFromScope, getScopeKey } from './activity-session';
 import {
 	buildGlobalStylesActivityEntryFromStore,
 	buildStyleBookActivityEntryFromStore,
@@ -492,9 +492,75 @@ function dispatchRecommendationsForSurface( def, actions, params ) {
 	);
 }
 
+function getExecutableSurfaceDocumentFromInput( input = {}, registry = null ) {
+	if ( input?.scope?.scopeKey ) {
+		const scope = { ...input.scope };
+
+		if ( ! scope.postType ) {
+			scope.postType = 'global_styles';
+		}
+
+		if ( scope.globalStylesId ) {
+			scope.entityId = scope.globalStylesId;
+		} else if ( ! scope.entityId ) {
+			scope.entityId = scope.globalStylesId || '';
+		}
+
+		if ( ! scope.entityKind ) {
+			scope.entityKind =
+				scope.surface === 'style-book' ? 'block' : 'root';
+		}
+
+		if ( ! scope.entityName ) {
+			scope.entityName =
+				scope.surface === 'style-book' ? 'styleBook' : 'globalStyles';
+		}
+
+		return getRequestDocumentFromScope( scope );
+	}
+
+	if ( input?.templateRef ) {
+		return getRequestDocumentFromScope(
+			input.document?.scopeKey
+				? input.document
+				: {
+						key: `wp_template:${ input.templateRef }`,
+						postType: 'wp_template',
+						entityId: input.templateRef,
+				  }
+		);
+	}
+
+	if ( input?.templatePartRef ) {
+		return getRequestDocumentFromScope(
+			input.document?.scopeKey
+				? input.document
+				: {
+						key: `wp_template_part:${ input.templatePartRef }`,
+						postType: 'wp_template_part',
+						entityId: input.templatePartRef,
+				  }
+		);
+	}
+
+	const editSite = registry?.select?.( 'core/edit-site' ) || {};
+	const postType = editSite?.getEditedPostType?.() || '';
+	const entityId = editSite?.getEditedPostId?.() || '';
+
+	return postType && entityId
+		? getRequestDocumentFromScope( {
+				key: `${ postType }:${ entityId }`,
+				postType,
+				entityId,
+		  } )
+		: null;
+}
+
 function createFetchConfig( def, actions ) {
 	return createExecutableSurfaceFetchConfig( {
 		abortKey: def.abortKey,
+		buildRequestDocument: ( { input, registry } ) =>
+			getExecutableSurfaceDocumentFromInput( input, registry ),
 		dispatchRecommendations: ( params ) =>
 			dispatchRecommendationsForSurface( def, actions, params ),
 		endpoint: def.endpoint,

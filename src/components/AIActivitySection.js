@@ -337,16 +337,21 @@ function getStatusLabel( entry ) {
 
 function describeActivity( entry ) {
 	if ( isDiagnosticEntry( entry ) ) {
-		if ( entry?.surface === 'content' ) {
-			return 'Content request diagnostic';
-		}
-
-		if ( entry?.surface === 'navigation' ) {
-			return 'Navigation request diagnostic';
-		}
-
-		if ( entry?.surface === 'pattern' ) {
-			return 'Pattern request diagnostic';
+		switch ( entry?.surface ) {
+			case 'content':
+				return 'Content request diagnostic';
+			case 'navigation':
+				return 'Navigation request diagnostic';
+			case 'pattern':
+				return 'Pattern request diagnostic';
+			case 'template':
+				return 'Template request diagnostic';
+			case 'template-part':
+				return 'Template part request diagnostic';
+			case 'global-styles':
+				return 'Global Styles request diagnostic';
+			case 'style-book':
+				return 'Style Book request diagnostic';
 		}
 
 		return entry?.target?.blockName

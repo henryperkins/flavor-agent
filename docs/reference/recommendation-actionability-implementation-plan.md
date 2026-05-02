@@ -35,7 +35,7 @@ Implemented in the current working branch:
 - `src/inspector/BlockRecommendationsPanel.js` surfaces eligibility labels, blocker reasons, block-keyed structural review state, and a non-mutating `Review first` lane for validator-approved operations.
 - `src/inspector/block-review-state.js` keys active block structural review state by `clientId`, request token, request signature, and suggestion key.
 - `src/utils/block-operation-catalog.js` defines a versioned block operation catalog for `insert_pattern` and `replace_block_with_pattern`.
-- `flavor-agent.php` localizes the default-off block structural actions rollout flag for JS, with strict boolean parsing for constants and filters.
+- `flavor-agent.php` localizes the default-off block structural actions rollout flag for JS from the saved admin setting, the developer constant, and the final override filter, with strict boolean parsing for each source.
 - `src/utils/block-allowed-pattern-context.js` builds deterministic allowed-pattern context for selected-block pattern actions when the rollout flag is enabled.
 - `src/context/collector.js`, `inc/Abilities/BlockAbilities.php`, and `inc/LLM/Prompt.php` carry sanitized `blockOperationContext` into the block prompt.
 - `inc/Context/BlockOperationValidator.php` is the authoritative PHP validator for the block operation catalog.
@@ -61,7 +61,7 @@ The MVP is narrow:
   - `insert_pattern` before the selected block.
   - `insert_pattern` after the selected block.
   - `replace_block_with_pattern` for the selected block.
-- Keep structural actions behind a default-off rollout flag while release hardening and rollout decisions continue.
+- Keep structural actions behind the default-off admin setting / rollout flag while release hardening and rollout decisions continue.
 - Keep pattern recommendations in the standalone pattern shelf ranking/browse-only.
 - Keep template, template-part, Global Styles, and Style Book review-first behavior intact.
 
@@ -98,12 +98,12 @@ Acceptance criteria:
 
 Goal: make structural actions impossible to accidentally expose before the complete safety pipeline exists.
 
-Recommended MVP flag source:
+Implemented flag sources:
 
-- PHP constant `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS`, default `false`.
-- Filter `flavor_agent_enable_block_structural_actions` for local/test overrides.
-- Localized JS value under `window.flavorAgentData`.
-- No settings UI in MVP; a plugin setting can be added later if beta rollout needs site-admin control.
+- Saved boolean option `flavor_agent_block_structural_actions_enabled`, exposed as the Block Structural Actions toggle in `Settings > Flavor Agent > Experimental Features`, default `false`.
+- PHP constant `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS`, default `false`, as a developer force-on.
+- Filter `flavor_agent_enable_block_structural_actions` as the final local/test override.
+- Localized JS value under `window.flavorAgentData.enableBlockStructuralActions`.
 
 Disabled behavior:
 
@@ -375,7 +375,7 @@ Completion evidence:
 
 Post-M4 release-hardening backlog:
 
-- Keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` and the `flavor_agent_enable_block_structural_actions` filter default-off until an explicit rollout decision is made.
+- Keep the Block Structural Actions admin setting off by default, keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` default false, and keep the `flavor_agent_enable_block_structural_actions` filter default-off until an explicit rollout decision is made.
 - Run a flag-enabled manual QA pass in the representative WP 7.0 runtime before any beta or site-admin exposure.
 - Decide whether exposure remains developer-only, beta opt-in by constant/filter, or graduates to a site-admin setting.
 

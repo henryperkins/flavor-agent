@@ -226,6 +226,7 @@ describe( 'AIActivitySection', () => {
 		act( () => {
 			getRoot().render(
 				<AIActivitySection
+					maxVisible={ Number.POSITIVE_INFINITY }
 					entries={ [
 						{
 							id: 'activity-1',
@@ -256,6 +257,7 @@ describe( 'AIActivitySection', () => {
 		act( () => {
 			getRoot().render(
 				<AIActivitySection
+					maxVisible={ Number.POSITIVE_INFINITY }
 					entries={ [
 						{
 							id: 'diagnostic-1',
@@ -335,10 +337,11 @@ describe( 'AIActivitySection', () => {
 		);
 	} );
 
-	test( 'renders surface-aware request diagnostic labels for request-only surfaces', () => {
+	test( 'renders surface-aware request diagnostic labels', () => {
 		act( () => {
 			getRoot().render(
 				<AIActivitySection
+					maxVisible={ Number.POSITIVE_INFINITY }
 					entries={ [
 						{
 							id: 'content-diagnostic-1',
@@ -351,6 +354,46 @@ describe( 'AIActivitySection', () => {
 								error: null,
 							},
 						},
+						{
+							id: 'template-diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion: 'Template request complete',
+							surface: 'template',
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
+						{
+							id: 'template-part-diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion: 'Template part request complete',
+							surface: 'template-part',
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
+						{
+							id: 'global-styles-diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion: 'Global Styles request complete',
+							surface: 'global-styles',
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
+						{
+							id: 'style-book-diagnostic-1',
+							type: 'request_diagnostic',
+							suggestion: 'Style Book request complete',
+							surface: 'style-book',
+							undo: {
+								canUndo: false,
+								status: 'review',
+							},
+						},
 					] }
 				/>
 			);
@@ -358,6 +401,18 @@ describe( 'AIActivitySection', () => {
 
 		expect( getContainer().textContent ).toContain(
 			'Content request diagnostic'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Template request diagnostic'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Template part request diagnostic'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Global Styles request diagnostic'
+		);
+		expect( getContainer().textContent ).toContain(
+			'Style Book request diagnostic'
 		);
 	} );
 

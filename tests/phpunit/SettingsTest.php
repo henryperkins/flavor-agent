@@ -1152,6 +1152,65 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'this field is intentionally blank', $output );
 	}
 
+	public function test_register_settings_exposes_block_structural_actions_toggle(): void {
+		Settings::register_settings();
+
+		$this->assertArrayHasKey(
+			'flavor_agent_block_structural_actions_enabled',
+			$GLOBALS['wp_registered_settings']
+		);
+		$this->assertSame(
+			'boolean',
+			$GLOBALS['wp_registered_settings']['flavor_agent_block_structural_actions_enabled']['type']
+		);
+		$this->assertSame(
+			[ Settings::class, 'sanitize_block_structural_actions_enabled' ],
+			$GLOBALS['wp_registered_settings']['flavor_agent_block_structural_actions_enabled']['sanitize_callback']
+		);
+		$this->assertArrayHasKey(
+			'flavor_agent_block_structural_actions_enabled',
+			$GLOBALS['wp_settings_fields'][ Config::PAGE_SLUG ]['flavor_agent_experimental_features']
+		);
+	}
+
+	public function test_render_page_includes_experimental_structural_actions_toggle(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_block_structural_actions_enabled' => true,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '5. Experimental Features', $output );
+		$this->assertStringContainsString( 'Block Structural Actions', $output );
+		$this->assertStringContainsString(
+			'name="flavor_agent_block_structural_actions_enabled"',
+			$output
+		);
+		$this->assertStringContainsString( 'type="checkbox"', $output );
+		$this->assertStringContainsString( 'checked="checked"', $output );
+		$this->assertStringContainsString(
+			'Enables review-first selected-block pattern insert and replace actions.',
+			$output
+		);
+	}
+
+	public function test_sanitize_block_structural_actions_does_not_mark_default_false_as_changed(): void {
+		$_POST = [
+			'option_page'                        => Config::OPTION_GROUP,
+			'flavor_agent_settings_feedback_key' => 'experiments-default',
+		];
+
+		$this->assertFalse( Settings::sanitize_block_structural_actions_enabled( '0' ) );
+		$this->assertSame( [], WordPressTestState::$transients );
+
+		$this->assertTrue( Settings::sanitize_block_structural_actions_enabled( '1' ) );
+		$feedback = array_values( WordPressTestState::$transients )[0] ?? [];
+
+		$this->assertTrue( (bool) ( $feedback['changed_sections']['experiments'] ?? false ) );
+	}
+
 	public function test_register_contextual_help_uses_native_wp_screen_help_tabs(): void {
 		$screen                             = new \WP_Screen();
 		WordPressTestState::$current_screen = $screen;

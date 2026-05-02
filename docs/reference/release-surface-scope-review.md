@@ -53,8 +53,6 @@ If a surface fails check 1 or 2, remove or hide it. If it fails check 3, keep it
 
 ## Current Release Blockers
 
-- The current worktree needs a fresh release gate. The latest saved aggregate verifier result should not be treated as current sign-off until it is rerun against the current dirty tree.
-- The current dirty tree mixes product/schema/actionability edits, local Docker/runtime fixes, docs changes, tests, and `.vscode` settings churn. Split or intentionally scope these before release.
 - Block structural apply should remain default-off unless the release explicitly labels it beta and carries fresh WP 7.0 browser evidence.
 - Style and Style Book can claim validated `theme.json` operations today, but should not make strong design-quality or accessibility-quality claims until deterministic contrast/readability validation exists.
 - Unmerged remote feature branches are behind current `master`; cherry-pick small proven changes only. Do not merge broad stale branches as-is.
@@ -127,7 +125,7 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` default-off for the release unless the release is explicitly beta.
+- [ ] Keep the Block Structural Actions admin setting off by default and keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` default false for the release unless the release is explicitly beta.
 - [ ] If structural apply ships, add release notes that it is review-first and limited to validated selected-block pattern insert/replace.
 - [ ] Confirm stale selected-block results remain visible, marked stale, and non-executable.
 - [ ] Confirm locked, content-only, missing, moved, or changed targets fail closed.
@@ -423,14 +421,32 @@ Do not add:
 - Admin row-action undo.
 - Cross-user activity intervention.
 
+Per-entry token usage and latency may remain in read-only details when they
+serve provenance or diagnostics. Do not aggregate them into dashboards, cost
+reports, provider rankings, or observability workflows.
+
 ### Release Actions
 
-- [ ] Confirm `manage_options` gates the admin page.
-- [ ] Confirm malformed filters fail closed.
-- [ ] Confirm operation filters dedupe by effective value while row labels remain specific.
-- [ ] Confirm retention/pruning expectations are documented or intentionally deferred.
-- [ ] Keep admin activity copy framed as audit/provenance, not monitoring.
-- [ ] Re-run activity PHPUnit, admin JS, and Playwright coverage after changes.
+- [x] Confirm `manage_options` gates the admin page.
+- [x] Confirm malformed filters fail closed.
+- [x] Confirm operation filters dedupe by effective value while row labels remain specific.
+- [x] Confirm retention/pruning expectations are documented or intentionally deferred.
+- [x] Keep admin activity copy framed as audit/provenance, not monitoring.
+- [x] Re-run activity PHPUnit, admin JS, and Playwright coverage after changes.
+
+Release evidence recorded 2026-05-02:
+
+- `composer run test:php -- --filter 'ActivityRepositoryTest|ActivityPermissionsTest|AgentControllerTest|ActivityPageTest|PluginLifecycleTest'`
+  passed with 94 tests and 488 assertions.
+- `npm run test:unit -- --runInBand src/admin/__tests__/activity-log.test.js src/admin/__tests__/activity-log-utils.test.js src/store/__tests__/activity-history.test.js src/store/__tests__/activity-history-state.test.js src/store/__tests__/store-actions.test.js src/components/__tests__/AIActivitySection.test.js src/components/__tests__/ActivitySessionBootstrap.test.js`
+  passed with 7 suites and 144 tests.
+- `npx playwright test tests/e2e/flavor-agent.activity.spec.js` passed with
+  2 tests.
+- `npm run check:docs` passed.
+- `node scripts/verify.js --skip-e2e` passed with
+  `VERIFY_RESULT={"status":"pass","summaryPath":"output/verify/summary.json","counts":{"total":8,"passed":6,"failed":0,"skipped":2}}`.
+- `npm run verify` passed with
+  `VERIFY_RESULT={"status":"pass","summaryPath":"output/verify/summary.json","counts":{"total":8,"passed":8,"failed":0,"skipped":0}}`.
 
 ## Settings And Pattern Sync
 

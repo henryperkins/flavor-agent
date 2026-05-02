@@ -114,6 +114,13 @@ final class Validation {
 		return $count;
 	}
 
+	public static function sanitize_block_structural_actions_enabled( mixed $value ): bool {
+		$enabled = self::parse_boolean_flag( $value );
+		Feedback::mark_section_changed_by_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, $enabled );
+
+		return $enabled;
+	}
+
 	public static function sanitize_azure_reasoning_effort( mixed $value ): string {
 		$effort = sanitize_key( (string) $value );
 		$effort = in_array( $effort, [ 'low', 'medium', 'high', 'xhigh' ], true ) ? $effort : 'medium';
@@ -1032,6 +1039,26 @@ final class Validation {
 			__( 'We kept your previous docs grounding settings because validation failed.', 'flavor-agent' )
 		);
 		self::$cloudflare_validation_error_reported = true;
+	}
+
+	private static function parse_boolean_flag( mixed $value ): bool {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+
+		if ( is_int( $value ) ) {
+			return 1 === $value;
+		}
+
+		if ( is_float( $value ) ) {
+			return 1.0 === $value;
+		}
+
+		if ( is_string( $value ) ) {
+			return in_array( strtolower( trim( $value ) ), [ '1', 'true', 'yes', 'on' ], true );
+		}
+
+		return false;
 	}
 
 	private function __construct() {

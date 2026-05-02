@@ -89,7 +89,7 @@ The client also enforces this rule before sending the request:
 
 ## Review-Only Audit Rows
 
-- Content, pattern, and navigation requests can persist scoped `request_diagnostic` rows when a document scope exists, even though those surfaces do not run Flavor Agent-owned apply/undo executors.
+- Recommendation fetches for content, pattern, navigation, block, template, template-part, Global Styles, and Style Book can persist scoped `request_diagnostic` rows when a document scope exists. These rows record the request attempt separately from any later apply/undo row; signature-only freshness probes stay quiet.
 - Those rows are stored in the same activity table and travel through the same `GET /flavor-agent/v1/activity?global=1` admin feed, but they do not participate in the executable ordered-undo lifecycle.
 - The admin page resolves them into `review` or `failed` buckets based on the recorded execution result and persisted undo payload, while inline executable surfaces continue to care only about `available`, runtime `blocked`, `undone`, and `failed`.
 

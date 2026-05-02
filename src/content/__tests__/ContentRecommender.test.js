@@ -157,12 +157,12 @@ describe( 'ContentRecommender', () => {
 
 		expect( text ).toContain( 'Post' );
 		expect( text ).toContain( 'Working draft' );
-		expect( text ).toContain( 'Start a fresh draft' );
+		expect( text ).toContain( 'Generate draft text' );
 		expect( text ).toContain(
 			'What should Flavor Agent do with this post?'
 		);
 		expect( text ).toContain(
-			'Works from a title, short brief, or rough outline.'
+			'Works from a title, short brief, or rough outline. Copy any useful text into the editor yourself.'
 		);
 
 		// The composer label must be visually rendered (not hidden off-screen).
@@ -177,7 +177,7 @@ describe( 'ContentRecommender', () => {
 		expect( labelSpan.style.position ).not.toBe( 'absolute' );
 		expect( labelSpan.style.left ).not.toBe( '-9999px' );
 
-		expect( text ).toContain( 'Generate Draft' );
+		expect( text ).toContain( 'Generate Draft Text' );
 		expect( text ).not.toContain( 'Current document' );
 
 		const textarea = getContainer().querySelector( 'textarea' );
@@ -188,7 +188,7 @@ describe( 'ContentRecommender', () => {
 
 		const fetchButton = Array.from(
 			getContainer().querySelectorAll( 'button' )
-		).find( ( button ) => button.textContent === 'Generate Draft' );
+		).find( ( button ) => button.textContent === 'Generate Draft Text' );
 
 		act( () => {
 			fetchButton.click();
@@ -237,7 +237,13 @@ describe( 'ContentRecommender', () => {
 		);
 	} );
 
-	test( 'renders ready recommendations with draft copy, notes, issues, and activity', () => {
+	test( 'renders ready recommendations with generated copy handoff, notes, issues, and activity', async () => {
+		const writeText = jest.fn().mockResolvedValue( undefined );
+		Object.defineProperty( window.navigator, 'clipboard', {
+			value: { writeText },
+			configurable: true,
+		} );
+
 		currentState = createState( {
 			store: {
 				contentStatus: 'ready',
@@ -282,7 +288,7 @@ describe( 'ContentRecommender', () => {
 
 		const text = getContainer().textContent;
 
-		expect( text ).toContain( 'Latest Content Recommendation' );
+		expect( text ).toContain( 'Generated Content Guidance' );
 		expect( text ).toContain( 'Retail floors to agent workflows' );
 		expect( text ).toContain(
 			'Lead with the concrete progression before the abstraction.'
@@ -298,6 +304,22 @@ describe( 'ContentRecommender', () => {
 			'WordPress changed. Cloud changed. The customer still needed the thing to work.'
 		);
 		expect( text ).toContain( 'Recent Content Requests' );
+		expect( text ).toContain(
+			'Editorial guidance only. Review the generated text and copy anything you want into the editor manually.'
+		);
+
+		const copyButton = Array.from(
+			getContainer().querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Copy generated text' );
+
+		await act( async () => {
+			copyButton.click();
+		} );
+
+		expect( writeText ).toHaveBeenCalledWith(
+			'Retail floors.\n\nWordPress themes.\n\nCloud platforms.'
+		);
+		expect( getContainer().textContent ).toContain( 'Copied text' );
 
 		const activityToggle = Array.from(
 			getContainer().querySelectorAll( 'button' )
@@ -429,7 +451,7 @@ describe( 'ContentRecommender', () => {
 
 		const text = getContainer().textContent;
 
-		expect( text ).toContain( 'Generate Draft' );
+		expect( text ).toContain( 'Generate Draft Text' );
 		expect( getContainer().querySelector( 'textarea' ) ).not.toBeNull();
 	} );
 } );

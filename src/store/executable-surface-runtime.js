@@ -19,6 +19,7 @@ function stripContextSignatureFromRequestInput( requestInput = null ) {
 
 export function createExecutableSurfaceFetchConfig( {
 	abortKey,
+	buildRequestDocument,
 	dispatchRecommendations,
 	endpoint,
 	getRequestToken,
@@ -27,6 +28,7 @@ export function createExecutableSurfaceFetchConfig( {
 } ) {
 	return {
 		abortKey,
+		buildRequestDocument,
 		dispatchRecommendations,
 		endpoint,
 		getRequestToken,
@@ -101,6 +103,7 @@ export function createExecutableSurfaceApplyConfig( {
 export function createExecutableSurfaceFetchAction( {
 	abortKey,
 	attachRequestMetaToRecommendationPayload,
+	buildRequestDocument,
 	dispatchRecommendations,
 	endpoint,
 	getReviewContextSignatureFromResponse,
@@ -112,27 +115,42 @@ export function createExecutableSurfaceFetchAction( {
 	setLoadingState,
 } ) {
 	return function fetchExecutableSurfaceRecommendations( input ) {
-		return ( { dispatch, select } ) =>
+		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey,
 				buildRequest: ( {
 					input: requestInput,
+					registry: requestRegistry,
 					select: registrySelect,
 				} ) => {
 					const normalizedInput =
 						normalizeRequestInput( requestInput );
 					const { contextSignature = null, ...requestData } =
 						normalizedInput;
+					const document =
+						typeof buildRequestDocument === 'function'
+							? buildRequestDocument( {
+									input: normalizedInput,
+									registry: requestRegistry,
+									requestData,
+							  } )
+							: null;
 
 					return {
 						contextSignature,
-						requestData,
+						requestData: document
+							? {
+									...requestData,
+									document,
+							  }
+							: requestData,
 						requestToken: getRequestToken( registrySelect ),
 					};
 				},
 				dispatch,
 				endpoint,
 				input,
+				registry,
 				onError: ( { dispatch: localDispatch, err, requestToken } ) => {
 					localDispatch(
 						setErrorState(

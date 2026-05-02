@@ -211,7 +211,7 @@ final class Feedback {
 			return;
 		}
 
-		$current_value = get_option( $option_name, '' );
+		$current_value = get_option( $option_name, self::get_default_option_value_for_feedback( $option_name ) );
 
 		if (
 			self::normalize_option_value_for_feedback( $current_value )
@@ -378,6 +378,7 @@ final class Feedback {
 			Guidelines::OPTION_IMAGES,
 			Guidelines::OPTION_ADDITIONAL,
 			Guidelines::OPTION_BLOCKS => [ Config::GROUP_GUIDELINES ],
+			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => [ Config::GROUP_EXPERIMENTS ],
 			'flavor_agent_azure_openai_endpoint',
 			'flavor_agent_azure_openai_key',
 			'flavor_agent_openai_native_api_key' => [ Config::GROUP_CHAT, Config::GROUP_PATTERNS ],
@@ -397,6 +398,13 @@ final class Feedback {
 		$encoded = wp_json_encode( $value );
 
 		return is_string( $encoded ) ? $encoded : '';
+	}
+
+	private static function get_default_option_value_for_feedback( string $option_name ): mixed {
+		return match ( $option_name ) {
+			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS => false,
+			default => '',
+		};
 	}
 
 	private function __construct() {

@@ -170,6 +170,16 @@ describe( 'store action thunks', () => {
 			'Tighten this copy.'
 		)( {
 			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
 			select,
 		} );
 
@@ -182,6 +192,14 @@ describe( 'store action thunks', () => {
 					editorContext: context,
 					prompt: 'Tighten this copy.',
 					clientId: 'block-1',
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+						entityKind: '',
+						entityName: '',
+						stylesheet: '',
+					},
 				},
 			} )
 		);
@@ -336,6 +354,16 @@ describe( 'store action thunks', () => {
 			'Tighten this copy.'
 		)( {
 			dispatch,
+			registry: {
+				select: jest.fn( ( storeName ) =>
+					storeName === 'core/editor'
+						? {
+								getCurrentPostType: () => 'post',
+								getCurrentPostId: () => 42,
+						  }
+						: {}
+				),
+			},
 			select,
 		} );
 
@@ -488,6 +516,14 @@ describe( 'store action thunks', () => {
 					templateRef: 'theme//home',
 					prompt: 'Tighten the structure.',
 					templateType: 'home',
+					document: {
+						scopeKey: 'wp_template:theme//home',
+						postType: 'wp_template',
+						entityId: 'theme//home',
+						entityKind: '',
+						entityName: '',
+						stylesheet: '',
+					},
 				},
 			} )
 		);
@@ -561,6 +597,14 @@ describe( 'store action thunks', () => {
 					scope: input.scope,
 					styleContext: input.styleContext,
 					prompt: input.prompt,
+					document: {
+						scopeKey: 'global_styles:17',
+						postType: 'global_styles',
+						entityId: '17',
+						entityKind: 'root',
+						entityName: 'globalStyles',
+						stylesheet: '',
+					},
 				},
 			} )
 		);
@@ -927,6 +971,14 @@ describe( 'store action thunks', () => {
 					scope: input.scope,
 					styleContext: input.styleContext,
 					prompt: input.prompt,
+					document: {
+						scopeKey: 'style_book:17:core/paragraph',
+						postType: 'global_styles',
+						entityId: '17',
+						entityKind: 'block',
+						entityName: 'styleBook',
+						stylesheet: '',
+					},
 				},
 			} )
 		);
@@ -4811,6 +4863,14 @@ describe( 'store action thunks', () => {
 					templatePartRef: 'theme//header',
 					prompt: 'Add a compact utility row.',
 					visiblePatternNames: [ 'theme/header-utility' ],
+					document: {
+						scopeKey: 'wp_template_part:theme//header',
+						postType: 'wp_template_part',
+						entityId: 'theme//header',
+						entityKind: '',
+						entityName: '',
+						stylesheet: '',
+					},
 				},
 			} )
 		);

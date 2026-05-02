@@ -1781,6 +1781,14 @@ final class Registration {
 					'items' => $block_suggestion_schema,
 				],
 				'explanation'              => [ 'type' => 'string' ],
+				'preFilteringCounts'       => [
+					'type'       => 'object',
+					'properties' => [
+						'settings' => [ 'type' => 'integer' ],
+						'styles'   => [ 'type' => 'integer' ],
+						'block'    => [ 'type' => 'integer' ],
+					],
+				],
 				'executionContract'        => [ 'type' => 'object' ],
 				'resolvedContextSignature' => [ 'type' => 'string' ],
 			],

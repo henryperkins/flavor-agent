@@ -17,7 +17,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 ## What The User Can Configure
 
 - Provider selection: direct Azure/OpenAI Native options configure plugin-owned embeddings; connector-backed options pin chat to that connector while embeddings still require a configured direct backend; OpenAI Native can also pin chat to the OpenAI connector when that connector is available
-- Azure OpenAI endpoint, API key, embedding deployment, and default reasoning effort applied to Connectors-routed chat
+- Azure OpenAI endpoint, API key, embedding deployment, and default reasoning effort for supported Connectors-routed chat providers
 - OpenAI Native API key override and embedding model ID
 - Qdrant URL and API key
 - Pattern recommendation ranking threshold and max results
@@ -27,6 +27,8 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Manual pattern sync through the `Sync Pattern Catalog` button
 
 Chat is no longer configured with plugin-owned chat credentials on this screen. After Workstream C of the WP 7.0 overlap remediation, chat traffic is owned by `Settings > Connectors` via the WordPress AI Client. Selecting `azure_openai` routes embeddings only and does not fall back to another chat provider. Selecting `openai_native` routes embeddings and can pin chat to the OpenAI connector when that connector is available. Selecting any connector-backed provider pins chat to that connector while embeddings fall back to a configured direct Azure/OpenAI Native backend.
+
+The reasoning effort setting is attached to Connectors-routed chat as provider-specific `ModelConfig::customOptions` only where Flavor Agent has a known request contract today: `codex` receives `reasoningEffort`, and `openai` receives `reasoning.effort`. `openai_native` uses the OpenAI mapping because chat resolves to the OpenAI connector. Anthropic is left unmapped until its provider plugin documents the accepted reasoning payload.
 
 ## Backend Gating Rules
 

@@ -30,10 +30,10 @@ Skipping any of these — or treating them as internal doc work rather than revi
 
 Snapshot of work that must land before the plugin can credibly enter the review queue:
 
-- `readme.txt` does not yet exist as a reviewer-facing artifact. Description, installation, FAQ, screenshots, changelog, and upgrade-notice sections need to be authored against the actual scope frozen in the surface scope review, not against an aspirational scope.
-- `lint-plugin` is currently optional in `npm run verify` (`--skip=lint-plugin` when WP-CLI or a WordPress root is unavailable). For the submission half of the plan it must be a required, weekly-tracked KPI run against a representative WordPress 7.0 environment, not a step that can silently skip.
-- An external-service disclosure inventory does not exist. A new doc, `docs/reference/external-service-disclosure.md`, should enumerate every outbound call site (OpenAI, Azure OpenAI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and user-setup gate, and stay 1:1 with the disclosure block in `readme.txt`.
-- Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`, `flavor_agent_warm_core_roadmap_guidance`) need an explicit audit confirming they cannot fire before the user has configured or explicitly enabled the relevant backend. A reviewer flagging "phones home on activation" is a high-probability rejection.
+- `readme.txt` now exists as a reviewer-facing artifact with setup, FAQ, and external-service disclosure language. Before submission it still needs final screenshot captions/assets and any final version/changelog polish against the frozen scope.
+- `lint-plugin` is currently optional in ad-hoc `npm run verify` usage (`--skip=lint-plugin` when WP-CLI or a WordPress root is unavailable). For the submission half of the plan it must be a required, weekly-tracked KPI run against a representative WordPress 7.0 environment; any skipped Plugin Check run is a recorded blocker or waiver, not a green release signal.
+- The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Azure OpenAI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
+- Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`, `flavor_agent_warm_core_roadmap_guidance`) are audited in `docs/reference/external-service-disclosure.md`. Keep tests and docs aligned so none can phone home on activation before the corresponding backend is configured or explicitly enabled.
 - No banner, icon, or screenshot assets exist yet for the WordPress.org listing. They cannot be produced until scope is fully frozen, since they show the product visually.
 
 Treat each of the above as a release stop in the same sense as the cross-surface validation gates: they are additive to product-coherence work, not part of it.
@@ -132,11 +132,12 @@ Cron events are functionally indistinguishable from "the plugin phones home peri
 - `flavor_agent_reindex_patterns` (calls Qdrant)
 - `flavor_agent_prewarm_docs` (calls Cloudflare AI Search)
 - `flavor_agent_warm_docs_context` (calls Cloudflare AI Search)
+- `flavor_agent_warm_core_roadmap_guidance` (calls GitHub when explicitly enabled)
 
 Each must be:
 
-- Scheduled only after the user has saved working credentials for the relevant backend.
-- A no-op if credentials are missing or invalid at fire time.
+- Scheduled only after the user has saved working credentials for the relevant backend, triggered a recommendation that queues follow-up warming, or explicitly enabled the optional filter-backed backend.
+- A no-op if credentials/explicit enablement are missing or invalid at fire time.
 - Documented in `readme.txt` with frequency and data sent.
 
 ### GPL Compatibility
@@ -227,28 +228,28 @@ Subsequent releases:
 
 ### Pre-Submission (Weekly Leading)
 
-| KPI | Source | Target trend |
-| --- | --- | --- |
-| Plugin Check error count | `npm run verify` with `lint-plugin` | Trending to zero |
-| Plugin Check warning count by category | `npm run verify` with `lint-plugin` | Documented disposition for each non-zero category |
-| External-service call sites disclosed in `readme.txt` | Disclosure inventory | 1:1 with code reality |
-| External-service call sites gated by user setup | Disclosure inventory | 1:1 with code reality |
-| Verifier status on master | `output/verify/summary.json` | Pass on green branches |
-| Scope-freeze unchecked items | Surface scope review | Monotonically down |
-| Stale-doc count | `npm run check:docs` | Zero before submission |
-| Mixed-scope week count | Tree hygiene log | Zero in the four weeks before submission |
+| KPI                                                   | Source                              | Target trend                                      |
+| ----------------------------------------------------- | ----------------------------------- | ------------------------------------------------- |
+| Plugin Check error count                              | `npm run verify` with `lint-plugin` | Trending to zero                                  |
+| Plugin Check warning count by category                | `npm run verify` with `lint-plugin` | Documented disposition for each non-zero category |
+| External-service call sites disclosed in `readme.txt` | Disclosure inventory                | 1:1 with code reality                             |
+| External-service call sites gated by user setup       | Disclosure inventory                | 1:1 with code reality                             |
+| Verifier status on master                             | `output/verify/summary.json`        | Pass on green branches                            |
+| Scope-freeze unchecked items                          | Surface scope review                | Monotonically down                                |
+| Stale-doc count                                       | `npm run check:docs`                | Zero before submission                            |
+| Mixed-scope week count                                | Tree hygiene log                    | Zero in the four weeks before submission          |
 
 ### In-Flight (Per-Event)
 
-| KPI | Source | What it means |
-| --- | --- | --- |
-| Days in initial queue | Submission email timestamps | Calendar context only; not actionable until first reviewer email |
-| Reviewer-email round count | Email thread | Each round = one set of requested changes |
-| Issues per round | Email content | Trending down indicates convergence |
-| Issue severity distribution | Email content | Shift from blockers to nits indicates convergence |
-| Issue category drift | Email content | Drop of policy-level concerns indicates convergence |
-| Resubmit cycle time | Email timestamps | Compression indicates convergence |
-| Open vs. resolved concerns at end of round | Email content | Should be zero open |
+| KPI                                        | Source                      | What it means                                                    |
+| ------------------------------------------ | --------------------------- | ---------------------------------------------------------------- |
+| Days in initial queue                      | Submission email timestamps | Calendar context only; not actionable until first reviewer email |
+| Reviewer-email round count                 | Email thread                | Each round = one set of requested changes                        |
+| Issues per round                           | Email content               | Trending down indicates convergence                              |
+| Issue severity distribution                | Email content               | Shift from blockers to nits indicates convergence                |
+| Issue category drift                       | Email content               | Drop of policy-level concerns indicates convergence              |
+| Resubmit cycle time                        | Email timestamps            | Compression indicates convergence                                |
+| Open vs. resolved concerns at end of round | Email content               | Should be zero open                                              |
 
 ### Binary Outcome
 

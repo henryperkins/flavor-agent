@@ -55,6 +55,21 @@ final class BlockStructuralActionsFlagTest extends TestCase {
 		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
 	}
 
+	public function test_saved_admin_setting_enables_block_structural_actions(): void {
+		WordPressTestState::reset();
+		require dirname( __DIR__, 2 ) . '/flavor-agent.php';
+
+		WordPressTestState::$options['flavor_agent_block_structural_actions_enabled'] = true;
+
+		$this->assertTrue( flavor_agent_block_structural_actions_enabled() );
+		$this->assertTrue(
+			flavor_agent_get_editor_bootstrap_data(
+				'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+				'https://example.test/wp-admin/options-connectors.php'
+			)['enableBlockStructuralActions']
+		);
+	}
+
 	/**
 	 * @return array<string, array{0: mixed}>
 	 */

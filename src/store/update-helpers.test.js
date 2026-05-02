@@ -1460,6 +1460,118 @@ describe( 'update helpers', () => {
 		);
 	} );
 
+	test( 'buildBlockRecommendationDiagnostics distinguishes server-filtered block items from empty model output', () => {
+		const rawRecommendations = {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation:
+				'Server-side rules removed every block-lane suggestion.',
+			preFilteringCounts: {
+				settings: 0,
+				styles: 0,
+				block: 2,
+			},
+		};
+		const sanitizedRecommendations = sanitizeRecommendationsForContext(
+			rawRecommendations,
+			{
+				editingMode: 'default',
+			}
+		);
+		const diagnostics = buildBlockRecommendationDiagnostics(
+			rawRecommendations,
+			sanitizedRecommendations,
+			{
+				editingMode: 'default',
+			}
+		);
+
+		expect( diagnostics ).toEqual(
+			expect.objectContaining( {
+				hasEmptyBlockResult: true,
+				title: 'No block-lane suggestions returned',
+				reasonCodes: expect.arrayContaining( [
+					'server_filters_removed_all_block_items',
+				] ),
+				detailLines: expect.arrayContaining( [
+					'Flavor Agent returned 2 block suggestions, but server-side validation filtered all of them.',
+				] ),
+			} )
+		);
+		expect( diagnostics.reasonCodes ).not.toContain(
+			'model_returned_no_block_items'
+		);
+	} );
+
+	test( 'buildBlockRecommendationDiagnostics uses singular "suggestion" when only one block item was filtered', () => {
+		const rawRecommendations = {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: '',
+			preFilteringCounts: {
+				settings: 0,
+				styles: 0,
+				block: 1,
+			},
+		};
+		const sanitizedRecommendations = sanitizeRecommendationsForContext(
+			rawRecommendations,
+			{
+				editingMode: 'default',
+			}
+		);
+
+		expect(
+			buildBlockRecommendationDiagnostics(
+				rawRecommendations,
+				sanitizedRecommendations,
+				{
+					editingMode: 'default',
+				}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				detailLines: expect.arrayContaining( [
+					'Flavor Agent returned 1 block suggestion, but server-side validation filtered all of them.',
+				] ),
+			} )
+		);
+	} );
+
+	test( 'buildBlockRecommendationDiagnostics falls back to rawCounts when preFilteringCounts is absent', () => {
+		const rawRecommendations = {
+			settings: [],
+			styles: [],
+			block: [],
+			explanation: 'Legacy payload without preFilteringCounts.',
+		};
+		const sanitizedRecommendations = sanitizeRecommendationsForContext(
+			rawRecommendations,
+			{
+				editingMode: 'default',
+			}
+		);
+
+		expect(
+			buildBlockRecommendationDiagnostics(
+				rawRecommendations,
+				sanitizedRecommendations,
+				{
+					editingMode: 'default',
+				}
+			)
+		).toEqual(
+			expect.objectContaining( {
+				hasEmptyBlockResult: true,
+				reasonCodes: expect.arrayContaining( [
+					'model_returned_no_block_items',
+				] ),
+			} )
+		);
+	} );
+
 	test( 'sanitizeRecommendationsForContext drops arbitrary metadata when bindings are disallowed', () => {
 		const recommendations = {
 			settings: [

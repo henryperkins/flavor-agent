@@ -160,6 +160,7 @@ final class AgentRoutesTest extends TestCase {
 	}
 
 	public function test_required_arguments_and_validation_are_enforced_at_the_route_boundary(): void {
+		ActivityRepository::install();
 		WordPressTestState::$capabilities = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
@@ -188,6 +189,11 @@ final class AgentRoutesTest extends TestCase {
 				'/flavor-agent/v1/recommend-template',
 				[
 					'templateRef' => '',
+					'document'    => [
+						'scopeKey' => 'wp_template:theme//home',
+						'postType' => 'wp_template',
+						'entityId' => 'theme//home',
+					],
 				]
 			)
 		);
@@ -199,8 +205,18 @@ final class AgentRoutesTest extends TestCase {
 				'/flavor-agent/v1/recommend-template-part',
 				[
 					'templatePartRef' => '',
+					'document'        => [
+						'scopeKey' => 'wp_template_part:theme//header',
+						'postType' => 'wp_template_part',
+						'entityId' => 'theme//header',
+					],
 				]
 			)
+		);
+
+		$this->assertSame(
+			[],
+			WordPressTestState::$db_tables[ ActivityRepository::table_name() ] ?? []
 		);
 
 		$this->assertRestErrorCode(

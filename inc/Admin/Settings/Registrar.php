@@ -196,6 +196,15 @@ final class Registrar {
 				'default'           => [],
 			]
 		);
+		register_setting(
+			Config::OPTION_GROUP,
+			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+			[
+				'type'              => 'boolean',
+				'sanitize_callback' => [ Settings::class, 'sanitize_block_structural_actions_enabled' ],
+				'default'           => false,
+			]
+		);
 
 		add_settings_section(
 			'flavor_agent_openai_provider',
@@ -237,6 +246,12 @@ final class Registrar {
 			'flavor_agent_guidelines',
 			'Guidelines',
 			[ Settings::class, 'render_guidelines_section' ],
+			Config::PAGE_SLUG
+		);
+		add_settings_section(
+			'flavor_agent_experimental_features',
+			'Experimental Features',
+			[ Settings::class, 'render_experimental_features_section' ],
 			Config::PAGE_SLUG
 		);
 
@@ -317,7 +332,7 @@ final class Registrar {
 					'high'   => 'High',
 					'xhigh'  => 'XHigh',
 				],
-				'description' => 'Default reasoning effort applied to Connectors-routed chat requests.',
+				'description' => 'Default reasoning effort for Connectors-routed chat when the selected provider supports a mapped option, including Codex and OpenAI.',
 			]
 		);
 		add_settings_field(
@@ -532,6 +547,19 @@ final class Registrar {
 				'label_for'   => Guidelines::OPTION_ADDITIONAL,
 				'rows'        => '5',
 				'placeholder' => 'Anything else Flavor Agent should consistently honor.',
+			]
+		);
+		add_settings_field(
+			Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+			'Block Structural Actions',
+			[ Settings::class, 'render_checkbox_field' ],
+			Config::PAGE_SLUG,
+			'flavor_agent_experimental_features',
+			[
+				'option'      => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+				'label_for'   => Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+				'label'       => 'Enable selected-block structural actions',
+				'description' => 'Enables review-first selected-block pattern insert and replace actions. Keep this off for ordinary production use unless you are intentionally testing the structural apply beta.',
 			]
 		);
 	}

@@ -18,11 +18,12 @@ const CONTENT_MODES = [ 'draft', 'edit', 'critique' ];
 const CONTENT_MODE_CONFIG = {
 	draft: {
 		label: 'Draft',
-		title: 'Start a fresh draft',
+		title: 'Generate draft text',
 		placeholder:
 			'Describe the draft you want (for example: concise launch post for store managers).',
-		helperText: 'Works from a title, short brief, or rough outline.',
-		fetchLabel: 'Generate Draft',
+		helperText:
+			'Works from a title, short brief, or rough outline. Copy any useful text into the editor yourself.',
+		fetchLabel: 'Generate Draft Text',
 		starterPrompts: [
 			'Draft an opening that gets to the point faster.',
 			'Sketch a sharper structure for this piece.',
@@ -31,11 +32,12 @@ const CONTENT_MODE_CONFIG = {
 	},
 	edit: {
 		label: 'Edit',
-		title: 'Refine what is already here',
+		title: 'Generate revision text',
 		placeholder:
 			'Describe the revision pass (for example: tighten intro and trim repetition).',
-		helperText: 'Best when this post already has copy you want to tighten.',
-		fetchLabel: 'Revise Draft',
+		helperText:
+			'Best when this post already has copy you want to tighten. The result is text to review and copy manually.',
+		fetchLabel: 'Generate Revision Text',
 		starterPrompts: [
 			'Tighten the pacing and transitions.',
 			'Cut repetition and sharpen the voice.',
@@ -47,8 +49,9 @@ const CONTENT_MODE_CONFIG = {
 		title: 'Stress-test the draft',
 		placeholder:
 			'Describe the critique focus (for example: clarity gaps and weak transitions).',
-		helperText: 'Flags weak lines, clarity gaps, and structural drift.',
-		fetchLabel: 'Run Critique',
+		helperText:
+			'Flags weak lines, clarity gaps, and structural drift without changing the post.',
+		fetchLabel: 'Generate Critique',
 		starterPrompts: [
 			'Point out the weakest lines and why they miss.',
 			'Critique the structure for drift or repetition.',
@@ -82,6 +85,28 @@ function hasRecommendationOutput( recommendation ) {
 			( Array.isArray( recommendation?.issues ) &&
 				recommendation.issues.length > 0 )
 	);
+}
+
+async function copyTextToClipboard( text = '' ) {
+	const value = String( text );
+
+	if ( ! value.trim() ) {
+		return false;
+	}
+
+	const clipboard =
+		typeof window !== 'undefined' ? window.navigator?.clipboard : null;
+
+	if ( ! clipboard || typeof clipboard.writeText !== 'function' ) {
+		return false;
+	}
+
+	try {
+		await clipboard.writeText( value );
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function ContentBody( { content = '' } ) {
@@ -125,7 +150,7 @@ function ContentIssueCard( { issue = {} } ) {
 			) }
 			{ issue?.revision && (
 				<p className="flavor-agent-card__description">
-					Suggested rewrite: { issue.revision }
+					Suggested wording: { issue.revision }
 				</p>
 			) }
 		</div>
@@ -167,6 +192,7 @@ export default function ContentRecommender() {
 	const { clearContentError, fetchContentRecommendations, setContentMode } =
 		useDispatch( STORE_NAME );
 	const [ prompt, setPrompt ] = useState( '' );
+	const [ copiedContent, setCopiedContent ] = useState( '' );
 	const hasSupportedPost = SUPPORTED_POST_TYPES.has( postContext.postType );
 	const hasResult =
 		contentStatus === 'ready' && Boolean( contentRecommendation );
@@ -202,6 +228,14 @@ export default function ContentRecommender() {
 			},
 		} );
 	}, [ contentMode, fetchContentRecommendations, postContext, prompt ] );
+	const handleCopyContent = useCallback( async () => {
+		const content = contentRecommendation?.content || '';
+		const copied = await copyTextToClipboard( content );
+
+		if ( copied ) {
+			setCopiedContent( content );
+		}
+	}, [ contentRecommendation?.content ] );
 
 	if ( ! hasSupportedPost ) {
 		return null;
@@ -216,6 +250,12 @@ export default function ContentRecommender() {
 	const documentTitle = hasDocumentTitle
 		? postContext.title.trim()
 		: `Untitled ${ documentNoun }`;
+	const generatedContent = String( contentRecommendation?.content || '' );
+	const hasGeneratedContent = generatedContent.trim() !== '';
+	const copyButtonLabel =
+		hasGeneratedContent && copiedContent === generatedContent
+			? 'Copied text'
+			: 'Copy generated text';
 
 	return (
 		<PluginDocumentSettingPanel
@@ -225,7 +265,7 @@ export default function ContentRecommender() {
 			<div className="flavor-agent-panel flavor-agent-content-recommender">
 				<SurfacePanelIntro
 					eyebrow={ documentTypeLabel }
-					introCopy="Draft from a brief, tighten the current copy, or run a critique without leaving the editor."
+					introCopy="Generate editorial guidance and text to review. Flavor Agent does not change the post; copy anything useful into the editor yourself."
 					meta={
 						documentStatusLabel ? (
 							<span className="flavor-agent-pill flavor-agent-pill--prominent">
@@ -290,7 +330,7 @@ export default function ContentRecommender() {
 
 						{ hasResult && (
 							<RecommendationHero
-								eyebrow="Latest Content Recommendation"
+								eyebrow="Generated Content Guidance"
 								title={
 									contentRecommendation?.title ||
 									`${ formatModeLabel(
@@ -304,6 +344,15 @@ export default function ContentRecommender() {
 								tone={ formatModeLabel(
 									contentRecommendation?.mode || contentMode
 								) }
+								why="Editorial guidance only. Review the generated text and copy anything you want into the editor manually."
+								primaryActionLabel={
+									hasGeneratedContent ? copyButtonLabel : ''
+								}
+								onPrimaryAction={
+									hasGeneratedContent
+										? handleCopyContent
+										: undefined
+								}
 							>
 								<ContentBody
 									content={

@@ -72,6 +72,11 @@ final class BlockAbilities {
 
 		if ( self::normalize_editing_mode( $context['block']['editingMode'] ?? 'default' ) === 'disabled' ) {
 			$payload                             = self::get_empty_recommendation_payload();
+			$payload['preFilteringCounts']       = $payload['preFilteringCounts'] ?? [
+				'settings' => 0,
+				'styles'   => 0,
+				'block'    => 0,
+			];
 			$payload['executionContract']        = $execution_contract;
 			$payload['resolvedContextSignature'] = $resolved_context_signature;
 
@@ -104,6 +109,12 @@ final class BlockAbilities {
 			return $payload;
 		}
 
+		$pre_filtering_counts = [
+			'settings' => count( $payload['settings'] ?? [] ),
+			'styles'   => count( $payload['styles'] ?? [] ),
+			'block'    => count( $payload['block'] ?? [] ),
+		];
+
 		$payload = Prompt::enforce_block_context_rules(
 			$payload,
 			$context['block'] ?? [],
@@ -115,6 +126,7 @@ final class BlockAbilities {
 			return $payload;
 		}
 
+		$payload['preFilteringCounts']       = $pre_filtering_counts;
 		$payload['executionContract']        = $execution_contract;
 		$payload['resolvedContextSignature'] = $resolved_context_signature;
 

@@ -103,6 +103,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_block_wraps_payload_with_client_id(): void {
+		ActivityRepository::install();
 		WordPressTestState::$options                        = [
 			Provider::OPTION_NAME => 'openai',
 		];
@@ -129,6 +130,14 @@ final class AgentControllerTest extends TestCase {
 						'className' => 'is-style-outline',
 					],
 				],
+			]
+		);
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
 			]
 		);
 
@@ -200,6 +209,46 @@ final class AgentControllerTest extends TestCase {
 			'WordPress Gutenberg block styling and configuration assistant.',
 			WordPressTestState::$last_ai_client_prompt['system'] ?? ''
 		);
+		$entry = $this->assertRequestDiagnosticEntry(
+			'post:42',
+			'block',
+			'flavor-agent/recommend-block',
+			'POST /flavor-agent/v1/recommend-block',
+			'review'
+		);
+		$this->assertSame( 'client-123', $entry['target']['clientId'] ?? null );
+		$this->assertSame( 'core/paragraph', $entry['target']['blockName'] ?? null );
+	}
+
+	public function test_handle_recommend_block_persists_failed_request_diagnostic_when_scoped(): void {
+		ActivityRepository::install();
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-block' );
+		$request->set_param( 'clientId', 'client-123' );
+		$request->set_param( 'prompt', 'Make it sharper' );
+		$request->set_param( 'editorContext', [ 'block' => [] ] );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'post:42',
+				'postType' => 'post',
+				'entityId' => '42',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_block( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'missing_block_name', $response->get_error_code() );
+		$entry = $this->assertRequestDiagnosticEntry(
+			'post:42',
+			'block',
+			'flavor-agent/recommend-block',
+			'POST /flavor-agent/v1/recommend-block',
+			'failed'
+		);
+		$this->assertSame( 'client-123', $entry['target']['clientId'] ?? null );
+		$this->assertSame( 'editorContext.block.name is required.', $entry['undo']['error'] ?? null );
 	}
 
 	public function test_handle_recommend_block_signature_only_wraps_minimal_payload_and_skips_model_call(): void {
@@ -241,6 +290,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_limits_patterns_to_live_template_editor_visibility(): void {
+		ActivityRepository::install();
 		$this->disable_wordpress_ai_client_runtime();
 
 		WordPressTestState::$remote_post_response = [
@@ -278,6 +328,14 @@ final class AgentControllerTest extends TestCase {
 		$request->set_param( 'templateType', 'home' );
 		$request->set_param( 'prompt', 'Make the home template feel more editorial.' );
 		$request->set_param( 'visiblePatternNames', [ 'theme/hero' ] );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'wp_template:theme//home',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//home',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_template( $request );
 
@@ -315,6 +373,50 @@ final class AgentControllerTest extends TestCase {
 		$this->assertStringNotContainsString(
 			'theme/footer-callout',
 			(string) ( $request_body['input'] ?? '' )
+		);
+		$entry = $this->assertRequestDiagnosticEntry(
+			'wp_template:theme//home',
+			'template',
+			'flavor-agent/recommend-template',
+			'POST /flavor-agent/v1/recommend-template',
+			'review'
+		);
+		$this->assertSame( 'theme//home', $entry['target']['templateRef'] ?? null );
+		$this->assertSame( 'home', $entry['target']['templateType'] ?? null );
+	}
+
+	public function test_handle_recommend_template_persists_failed_request_diagnostic_when_scoped(): void {
+		ActivityRepository::install();
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template' );
+		$request->set_param( 'templateRef', 'theme//missing' );
+		$request->set_param( 'templateType', 'home' );
+		$request->set_param( 'prompt', 'Make the home template feel more editorial.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'wp_template:theme//missing',
+				'postType' => 'wp_template',
+				'entityId' => 'theme//missing',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_template( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'template_not_found', $response->get_error_code() );
+		$entry = $this->assertRequestDiagnosticEntry(
+			'wp_template:theme//missing',
+			'template',
+			'flavor-agent/recommend-template',
+			'POST /flavor-agent/v1/recommend-template',
+			'failed'
+		);
+		$this->assertSame( 'theme//missing', $entry['target']['templateRef'] ?? null );
+		$this->assertSame( 'home', $entry['target']['templateType'] ?? null );
+		$this->assertSame(
+			'Could not resolve the current template from the Site Editor context.',
+			$entry['undo']['error'] ?? null
 		);
 	}
 
@@ -825,6 +927,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_style_forwards_global_styles_context(): void {
+		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
 		$this->disable_wordpress_ai_client_runtime();
 		WordPressTestState::$remote_post_response = [
@@ -902,6 +1005,14 @@ final class AgentControllerTest extends TestCase {
 			]
 		);
 		$request->set_param( 'prompt', 'Make the site feel more editorial.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'global_styles:17',
+				'postType' => 'global_styles',
+				'entityId' => '17',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_style( $request );
 
@@ -938,6 +1049,54 @@ final class AgentControllerTest extends TestCase {
 			$response->get_data(),
 			'flavor-agent/recommend-style',
 			'POST /flavor-agent/v1/recommend-style'
+		);
+		$entry = $this->assertRequestDiagnosticEntry(
+			'global_styles:17',
+			'global-styles',
+			'flavor-agent/recommend-style',
+			'POST /flavor-agent/v1/recommend-style',
+			'review'
+		);
+		$this->assertSame( '17', $entry['target']['globalStylesId'] ?? null );
+	}
+
+	public function test_handle_recommend_style_persists_failed_request_diagnostic_when_scoped(): void {
+		ActivityRepository::install();
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-style' );
+		$request->set_param(
+			'scope',
+			[
+				'surface'  => 'global-styles',
+				'scopeKey' => 'global_styles:17',
+			]
+		);
+		$request->set_param( 'styleContext', [] );
+		$request->set_param( 'prompt', 'Make the site feel more editorial.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'global_styles:17',
+				'postType' => 'global_styles',
+				'entityId' => '17',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_style( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'missing_style_scope', $response->get_error_code() );
+		$entry = $this->assertRequestDiagnosticEntry(
+			'global_styles:17',
+			'global-styles',
+			'flavor-agent/recommend-style',
+			'POST /flavor-agent/v1/recommend-style',
+			'failed'
+		);
+		$this->assertSame( 'global_styles:17', $entry['target']['scopeKey'] ?? null );
+		$this->assertSame(
+			'Style recommendations require a resolved Global Styles scope and entity id.',
+			$entry['undo']['error'] ?? null
 		);
 	}
 
@@ -1035,6 +1194,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_style_forwards_style_book_context(): void {
+		ActivityRepository::install();
 		WordPressTestState::$capabilities['edit_theme_options'] = true;
 		$this->disable_wordpress_ai_client_runtime();
 		WordPressTestState::$remote_post_response = [
@@ -1098,6 +1258,14 @@ final class AgentControllerTest extends TestCase {
 				],
 			]
 		);
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'style_book:17:core/paragraph',
+				'postType' => 'style_book',
+				'entityId' => '17',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_style( $request );
 
@@ -1122,6 +1290,15 @@ final class AgentControllerTest extends TestCase {
 			'## Available theme style variations',
 			(string) ( $request_body['input'] ?? '' )
 		);
+		$entry = $this->assertRequestDiagnosticEntry(
+			'style_book:17:core/paragraph',
+			'style-book',
+			'flavor-agent/recommend-style',
+			'POST /flavor-agent/v1/recommend-style',
+			'review'
+		);
+		$this->assertSame( '17', $entry['target']['globalStylesId'] ?? null );
+		$this->assertSame( 'core/paragraph', $entry['target']['blockName'] ?? null );
 	}
 
 	public function test_handle_recommend_template_prefers_live_editor_slots_over_saved_template_slots(): void {
@@ -1486,6 +1663,7 @@ final class AgentControllerTest extends TestCase {
 	}
 
 	public function test_handle_recommend_template_part_keeps_requests_part_scoped(): void {
+		ActivityRepository::install();
 		$this->disable_wordpress_ai_client_runtime();
 
 		WordPressTestState::$remote_post_response = [
@@ -1528,6 +1706,14 @@ final class AgentControllerTest extends TestCase {
 		$request->set_param( 'templatePartRef', 'theme//header' );
 		$request->set_param( 'prompt', 'Make the header feel lighter.' );
 		$request->set_param( 'visiblePatternNames', [ 'theme/header-utility' ] );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'wp_template_part:theme//header',
+				'postType' => 'wp_template_part',
+				'entityId' => 'theme//header',
+			]
+		);
 
 		$response = Agent_Controller::handle_recommend_template_part( $request );
 
@@ -1594,6 +1780,47 @@ final class AgentControllerTest extends TestCase {
 		$this->assertMatchesRegularExpression(
 			'/^[a-f0-9]{64}$/',
 			(string) ( $response->get_data()['resolvedContextSignature'] ?? '' )
+		);
+		$entry = $this->assertRequestDiagnosticEntry(
+			'wp_template_part:theme//header',
+			'template-part',
+			'flavor-agent/recommend-template-part',
+			'POST /flavor-agent/v1/recommend-template-part',
+			'review'
+		);
+		$this->assertSame( 'theme//header', $entry['target']['templatePartRef'] ?? null );
+	}
+
+	public function test_handle_recommend_template_part_persists_failed_request_diagnostic_when_scoped(): void {
+		ActivityRepository::install();
+
+		$request = new \WP_REST_Request( 'POST', '/flavor-agent/v1/recommend-template-part' );
+		$request->set_param( 'templatePartRef', 'theme//missing-header' );
+		$request->set_param( 'prompt', 'Make the header feel lighter.' );
+		$request->set_param(
+			'document',
+			[
+				'scopeKey' => 'wp_template_part:theme//missing-header',
+				'postType' => 'wp_template_part',
+				'entityId' => 'theme//missing-header',
+			]
+		);
+
+		$response = Agent_Controller::handle_recommend_template_part( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'template_part_not_found', $response->get_error_code() );
+		$entry = $this->assertRequestDiagnosticEntry(
+			'wp_template_part:theme//missing-header',
+			'template-part',
+			'flavor-agent/recommend-template-part',
+			'POST /flavor-agent/v1/recommend-template-part',
+			'failed'
+		);
+		$this->assertSame( 'theme//missing-header', $entry['target']['templatePartRef'] ?? null );
+		$this->assertSame(
+			'Could not resolve the current template part from the Site Editor context.',
+			$entry['undo']['error'] ?? null
 		);
 	}
 
@@ -2589,6 +2816,26 @@ final class AgentControllerTest extends TestCase {
 	private function assertResponseRequestMeta( array $response_data, string $ability, string $route ): void {
 		$this->assertSame( $ability, $response_data['requestMeta']['ability'] ?? null );
 		$this->assertSame( $route, $response_data['requestMeta']['route'] ?? null );
+	}
+
+	private function assertRequestDiagnosticEntry(
+		string $scope_key,
+		string $surface,
+		string $ability,
+		string $route,
+		string $undo_status
+	): array {
+		$entries = ActivityRepository::query( [ 'scopeKey' => $scope_key ] );
+		$this->assertCount( 1, $entries );
+		$entry = $entries[0];
+		$this->assertSame( 'request_diagnostic', $entry['type'] ?? null );
+		$this->assertSame( $surface, $entry['surface'] ?? null );
+		$this->assertSame( 'review', $entry['executionResult'] ?? null );
+		$this->assertSame( $undo_status, $entry['undo']['status'] ?? null );
+		$this->assertSame( $ability, $entry['request']['ai']['ability'] ?? null );
+		$this->assertSame( $route, $entry['request']['ai']['route'] ?? null );
+
+		return $entry;
 	}
 
 	private function disable_wordpress_ai_client_runtime(): void {

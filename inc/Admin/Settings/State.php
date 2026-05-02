@@ -33,21 +33,25 @@ final class State {
 		$runtime_docs_grounding  = AISearchClient::get_runtime_state();
 		$guidelines_enabled      = Guidelines::has_any();
 		$guidelines_storage      = Guidelines::storage_status();
+		$structural_actions_on   = function_exists( '\\flavor_agent_block_structural_actions_enabled' )
+			? \flavor_agent_block_structural_actions_enabled()
+			: self::parse_boolean_flag( get_option( Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, false ) );
 
 		return [
-			'selected_provider'      => $selected_provider,
-			'selected_chat'          => $selected_chat,
-			'runtime_chat'           => $runtime_chat,
-			'selected_embedding'     => $selected_embedding,
-			'runtime_embedding'      => $runtime_embedding,
-			'qdrant_configured'      => $qdrant_configured,
-			'pattern_state'          => $pattern_state,
-			'patterns_ready'         => $patterns_ready_for_sync,
-			'docs_configured'        => $docs_configured,
-			'prewarm_state'          => $prewarm_state,
-			'runtime_docs_grounding' => $runtime_docs_grounding,
-			'guidelines_enabled'     => $guidelines_enabled,
-			'guidelines_storage'     => $guidelines_storage,
+			'selected_provider'                => $selected_provider,
+			'selected_chat'                    => $selected_chat,
+			'runtime_chat'                     => $runtime_chat,
+			'selected_embedding'               => $selected_embedding,
+			'runtime_embedding'                => $runtime_embedding,
+			'qdrant_configured'                => $qdrant_configured,
+			'pattern_state'                    => $pattern_state,
+			'patterns_ready'                   => $patterns_ready_for_sync,
+			'docs_configured'                  => $docs_configured,
+			'prewarm_state'                    => $prewarm_state,
+			'runtime_docs_grounding'           => $runtime_docs_grounding,
+			'guidelines_enabled'               => $guidelines_enabled,
+			'guidelines_storage'               => $guidelines_storage,
+			'block_structural_actions_enabled' => $structural_actions_on,
 		];
 	}
 
@@ -90,9 +94,10 @@ final class State {
 	 * @return array{summary: string, badges: array<int, array{label: string, tone: string}>, status: array{label: string, tone: string}, open: bool}
 	 */
 	public static function get_group_card_meta( string $group, array $state ): array {
-		$pattern_status    = self::get_pattern_overview_status( $state );
-		$docs_status       = self::get_docs_overview_status( $state );
-		$guidelines_status = self::get_guidelines_overview_status( $state );
+		$pattern_status     = self::get_pattern_overview_status( $state );
+		$docs_status        = self::get_docs_overview_status( $state );
+		$guidelines_status  = self::get_guidelines_overview_status( $state );
+		$experiments_status = self::get_experiments_overview_status( $state );
 
 		return match ( $group ) {
 			Config::GROUP_CHAT => [
@@ -150,6 +155,15 @@ final class State {
 					)
 				),
 				'status'  => $guidelines_status,
+				'open'    => false,
+			],
+			Config::GROUP_EXPERIMENTS => [
+				'summary' => __( 'Optional beta controls for review-gated features before default rollout.', 'flavor-agent' ),
+				'badges'  => [
+					self::make_badge( __( 'Optional', 'flavor-agent' ), 'neutral' ),
+					self::make_badge( __( 'Beta', 'flavor-agent' ), 'accent' ),
+				],
+				'status'  => $experiments_status,
 				'open'    => false,
 			],
 			default => [
@@ -228,6 +242,17 @@ final class State {
 	 */
 	public static function get_guidelines_overview_status( array $state ): array {
 		if ( empty( $state['guidelines_enabled'] ) ) {
+			return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
+		}
+
+		return self::make_badge( __( 'On', 'flavor-agent' ), 'success' );
+	}
+
+	/**
+	 * @return array{label: string, tone: string}
+	 */
+	public static function get_experiments_overview_status( array $state ): array {
+		if ( empty( $state['block_structural_actions_enabled'] ) ) {
 			return self::make_badge( __( 'Off', 'flavor-agent' ), 'neutral' );
 		}
 
@@ -389,6 +414,7 @@ final class State {
 
 	public static function get_prewarm_status_label( string $status ): string {
 		return match ( $status ) {
+			'off'       => __( 'Off', 'flavor-agent' ),
 			'never'     => __( 'Never run', 'flavor-agent' ),
 			'ok'        => __( 'OK', 'flavor-agent' ),
 			'partial'   => __( 'Partial', 'flavor-agent' ),
@@ -480,6 +506,22 @@ final class State {
 		}
 
 		return Provider::label( (string) $state['selected_provider'] );
+	}
+
+	private static function parse_boolean_flag( mixed $value ): bool {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+
+		if ( is_int( $value ) ) {
+			return 1 === $value;
+		}
+
+		if ( is_string( $value ) ) {
+			return in_array( strtolower( trim( $value ) ), [ '1', 'true', 'yes', 'on' ], true );
+		}
+
+		return false;
 	}
 
 	private function __construct() {

@@ -106,6 +106,15 @@ final class Page {
 							self::render_guidelines_group( $state, $feedback );
 						}
 					);
+					self::render_settings_section_group(
+						Config::GROUP_EXPERIMENTS,
+						__( '5. Experimental Features', 'flavor-agent' ),
+						State::get_group_card_meta( Config::GROUP_EXPERIMENTS, $state ),
+						$open_group,
+						static function () use ( $state, $feedback ): void {
+							self::render_experimental_features_group( $state, $feedback );
+						}
+					);
 					?>
 					<div class="flavor-agent-settings__actions">
 						<?php
@@ -153,6 +162,13 @@ final class Page {
 
 	public static function render_guidelines_section(): void {
 		// Guidance now lives in the screen Help panel to keep the page focused on controls.
+	}
+
+	public static function render_experimental_features_section(): void {
+		printf(
+			'<p class="flavor-agent-settings-inline-meta">%s</p>',
+			esc_html__( 'Beta controls stay off by default and still require review before anything is applied.', 'flavor-agent' )
+		);
 	}
 
 	public static function render_settings_notices(): void {
@@ -216,6 +232,13 @@ final class Page {
 			$summary_lines[] = __( 'Guidelines saved.', 'flavor-agent' );
 		}
 
+		if (
+			! empty( $changed_sections[ Config::GROUP_EXPERIMENTS ] ) &&
+			! Feedback::feedback_group_has_tone( $feedback, Config::GROUP_EXPERIMENTS, 'error' )
+		) {
+			$summary_lines[] = __( 'Experimental feature settings saved.', 'flavor-agent' );
+		}
+
 		$summary_lines = array_values(
 			array_filter(
 				$summary_lines,
@@ -236,12 +259,13 @@ final class Page {
 	}
 
 	private static function render_setup_status_cards( array $state ): void {
-		$chat_status       = ! empty( $state['runtime_chat']['configured'] )
+		$chat_status        = ! empty( $state['runtime_chat']['configured'] )
 			? State::make_badge( __( 'Ready', 'flavor-agent' ), 'success' )
 			: State::make_badge( __( 'Needs setup', 'flavor-agent' ), 'warning' );
-		$pattern_status    = State::get_pattern_overview_status( $state );
-		$docs_status       = State::get_docs_overview_status( $state );
-		$guidelines_status = State::get_guidelines_overview_status( $state );
+		$pattern_status     = State::get_pattern_overview_status( $state );
+		$docs_status        = State::get_docs_overview_status( $state );
+		$guidelines_status  = State::get_guidelines_overview_status( $state );
+		$experiments_status = State::get_experiments_overview_status( $state );
 		?>
 		<div class="flavor-agent-settings__glance">
 			<?php
@@ -271,6 +295,12 @@ final class Page {
 				$guidelines_status['label'],
 				$guidelines_status['tone'],
 				'#' . State::get_section_dom_id( Config::GROUP_GUIDELINES )
+			);
+			self::render_setup_status_card(
+				__( 'Experimental Features', 'flavor-agent' ),
+				$experiments_status['label'],
+				$experiments_status['tone'],
+				'#' . State::get_section_dom_id( Config::GROUP_EXPERIMENTS )
 			);
 			?>
 		</div>
@@ -595,6 +625,20 @@ final class Page {
 		<?php
 	}
 
+	/**
+	 * @param array<string, mixed> $feedback
+	 */
+	private static function render_experimental_features_group( array $state, array $feedback ): void {
+		self::render_section_status_blocks( Config::GROUP_EXPERIMENTS, $state, $feedback );
+		self::render_registered_section_callback( 'flavor_agent_experimental_features' );
+		self::render_registered_fields_table(
+			'flavor_agent_experimental_features',
+			[
+				Config::OPTION_BLOCK_STRUCTURAL_ACTIONS,
+			]
+		);
+	}
+
 	private static function render_guidelines_blocks_panel(): void {
 		$block_guidelines = Guidelines::get_block_guidelines();
 		$block_options    = Guidelines::get_content_block_options();
@@ -863,6 +907,7 @@ final class Page {
 
 		$state = AISearchClient::get_prewarm_state();
 		$label = match ( $state['status'] ) {
+			'off'       => __( 'Off', 'flavor-agent' ),
 			'never'     => __( 'Never run', 'flavor-agent' ),
 			'ok'        => __( 'OK', 'flavor-agent' ),
 			'partial'   => __( 'Partial (some entities failed)', 'flavor-agent' ),

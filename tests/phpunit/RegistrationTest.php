@@ -118,6 +118,22 @@ final class RegistrationTest extends TestCase {
 		$this->assertSame( 6, $selected_block['properties']['structuralBranch']['maxItems'] ?? null );
 		$this->assertSame( 3, $selected_block['properties']['siblingSummariesBefore']['maxItems'] ?? null );
 		$this->assertSame( 3, $selected_block['properties']['siblingSummariesAfter']['maxItems'] ?? null );
+
+		$pre_filtering_counts = $block_ability['output_schema']['properties']['preFilteringCounts'] ?? null;
+		$this->assertIsArray( $pre_filtering_counts );
+		$this->assertSame( 'object', $pre_filtering_counts['type'] ?? null );
+		$this->assertSame(
+			'integer',
+			$pre_filtering_counts['properties']['settings']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$pre_filtering_counts['properties']['styles']['type'] ?? null
+		);
+		$this->assertSame(
+			'integer',
+			$pre_filtering_counts['properties']['block']['type'] ?? null
+		);
 	}
 
 	public function test_register_abilities_marks_ai_recommendations_public_for_mcp(): void {

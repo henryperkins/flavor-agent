@@ -8,7 +8,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/refe
 - Inline success/error notices: shared status notices for immediate post-apply, post-undo, and request/apply/undo failures in those same panels
 - Admin audit surface: `Settings > AI Activity`
 
-Navigation, pattern, and the content recommendation panel do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for content, pattern, and navigation request successes or failures when a document scope is available. Content request diagnostics also appear inline as `Recent Content Requests`; pattern and navigation diagnostics appear in the wp-admin audit page.
+Navigation, pattern, and the content recommendation panel do not create executable apply-and-undo entries because they do not run Flavor Agent-owned apply flows. The server does, however, persist scoped read-only `request_diagnostic` rows for successful and failed recommendation fetches across content, pattern, navigation, block, template, template-part, Global Styles, and Style Book when a document scope is available. On executable surfaces, those request rows are separate from any later apply-and-undo activity row. Content request diagnostics also appear inline as `Recent Content Requests`; the other diagnostics appear in the wp-admin audit page.
 
 ## Surfacing Conditions
 
@@ -30,7 +30,7 @@ Navigation, pattern, and the content recommendation panel do not create executab
 ## What This Surface Can Do
 
 - Persist block, template, template-part, Global Styles, and Style Book apply events to a shared server-backed activity store
-- Persist read-only `request_diagnostic` audit rows for scoped content, pattern, and navigation requests without pretending those surfaces now support executable apply/undo; content shows those rows inline as `Recent Content Requests`
+- Persist read-only `request_diagnostic` audit rows for scoped recommendation fetches across all recommendation surfaces without pretending advisory-only surfaces now support executable apply/undo; content shows those rows inline as `Recent Content Requests`
 - Hydrate activity back into editor-scoped history when the current entity changes
 - Preserve machine-readable AI request provenance so audit views can explain which backend actually handled a recommendation and where that configuration lives
 - Show ordered undo state: undo status values are `available`, `undone`, `blocked`, and `failed`; persistence sync states (`server`/`local` with `syncType` of `undo` or `create`) are tracked separately

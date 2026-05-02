@@ -491,7 +491,7 @@ final class AISearchClient {
 			'entities' => [],
 		];
 
-		if ( ! self::is_configured() ) {
+		if ( ! self::is_prewarm_configured() ) {
 			self::write_prewarm_state( $summary, 'not_configured' );
 
 			return $summary;
@@ -538,6 +538,21 @@ final class AISearchClient {
 		?string $instance_id = null,
 		?string $api_token = null
 	): void {
+		if ( ! self::is_prewarm_configured( $account_id, $instance_id, $api_token ) ) {
+			self::write_prewarm_state(
+				[
+					'warmed'   => 0,
+					'failed'   => 0,
+					'skipped'  => 0,
+					'entities' => [],
+				],
+				'not_configured',
+				[ 'timestamp' => '' ]
+			);
+
+			return;
+		}
+
 		if ( ! self::should_prewarm( $account_id, $instance_id, $api_token ) ) {
 			return;
 		}
@@ -557,7 +572,7 @@ final class AISearchClient {
 		?string $instance_id = null,
 		?string $api_token = null
 	): bool {
-		if ( ! self::is_configured( $account_id, $instance_id, $api_token ) ) {
+		if ( ! self::is_prewarm_configured( $account_id, $instance_id, $api_token ) ) {
 			return false;
 		}
 
@@ -854,6 +869,52 @@ final class AISearchClient {
 		return trim( (string) $account_id ) !== ''
 			&& trim( (string) $instance_id ) !== ''
 			&& trim( (string) $api_token ) !== '';
+	}
+
+	private static function is_prewarm_configured(
+		?string $account_id = null,
+		?string $instance_id = null,
+		?string $api_token = null
+	): bool {
+		if ( self::has_explicit_legacy_config_request( $account_id, $instance_id, $api_token ) ) {
+			return self::has_legacy_credentials( $account_id, $instance_id, $api_token );
+		}
+
+		$stored_account_id  = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_account_id', '' ) );
+		$stored_instance_id = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_instance_id', '' ) );
+		$stored_api_token   = trim( (string) get_option( 'flavor_agent_cloudflare_ai_search_api_token', '' ) );
+
+		if ( self::has_legacy_credentials( $stored_account_id, $stored_instance_id, $stored_api_token ) ) {
+			return true;
+		}
+
+		if ( ! self::allow_public_prewarm() ) {
+			return false;
+		}
+
+		return ! is_wp_error( self::get_config() );
+	}
+
+	private static function allow_public_prewarm(): bool {
+		$allow = false;
+
+		if ( function_exists( 'apply_filters' ) ) {
+			/**
+			 * Controls whether the built-in public Cloudflare AI Search endpoint may
+			 * run the background docs prewarm job without legacy credentials.
+			 *
+			 * Runtime docs grounding remains available for user-triggered recommendation
+			 * requests. This filter only opts into the activation/init prewarm cron path.
+			 *
+			 * @param bool $allow Whether public-endpoint prewarm may run.
+			 */
+			$allow = (bool) apply_filters(
+				'flavor_agent_cloudflare_ai_search_allow_public_prewarm',
+				$allow
+			);
+		}
+
+		return $allow;
 	}
 
 	private static function build_credentials_fingerprint(
@@ -1203,7 +1264,7 @@ final class AISearchClient {
 	 * @param array{timestamp?: string} $meta
 	 */
 	private static function write_prewarm_state( array $summary, string $fingerprint, array $meta = [] ): void {
-		$timestamp = isset( $meta['timestamp'] ) && is_string( $meta['timestamp'] ) && $meta['timestamp'] !== ''
+		$timestamp = array_key_exists( 'timestamp', $meta ) && is_string( $meta['timestamp'] )
 			? $meta['timestamp']
 			: gmdate( 'Y-m-d H:i:s' );
 
@@ -1242,6 +1303,13 @@ final class AISearchClient {
 	 * @param array<string, mixed> $state
 	 */
 	private static function resolve_prewarm_status_label( array $state ): string {
+		if (
+			'not_configured' === (string) ( $state['fingerprint'] ?? '' )
+			|| ( [] === $state && ! self::is_prewarm_configured() )
+		) {
+			return 'off';
+		}
+
 		if ( empty( $state['timestamp'] ) ) {
 			return 'never';
 		}

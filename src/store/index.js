@@ -944,10 +944,11 @@ async function runAbortableRecommendationRequest( {
 	onError,
 	onLoading,
 	onSuccess,
+	registry,
 	select,
 } ) {
 	const request = {
-		...( buildRequest( { input, select } ) || {} ),
+		...( buildRequest( { input, registry, select } ) || {} ),
 	};
 	const abortId =
 		request.abortId === null || request.abortId === undefined
@@ -1182,15 +1183,19 @@ const actions = {
 	},
 
 	fetchBlockRecommendations( clientId, context, prompt = '' ) {
-		return ( { dispatch, select } ) =>
+		return ( { dispatch, registry, select } ) =>
 			runAbortableRecommendationRequest( {
 				abortKey: '_blockRecommendationAbort',
 				buildRequest: ( {
 					input: requestInput,
+					registry: requestRegistry,
 					select: registrySelect,
 				} ) => {
 					const contextSignature =
 						requestInput?.contextSignature || null;
+					const document = getRequestDocumentFromScope(
+						getCurrentActivityScope( requestRegistry )
+					);
 
 					return {
 						abortId: requestInput?.clientId || null,
@@ -1200,6 +1205,7 @@ const actions = {
 							editorContext: requestInput?.context || {},
 							prompt: requestInput?.prompt || '',
 							clientId: requestInput?.clientId || '',
+							...( document ? { document } : {} ),
 						},
 						requestToken:
 							( registrySelect.getBlockRequestToken?.(
@@ -1216,6 +1222,7 @@ const actions = {
 						buildBlockRecommendationContextSignature( context ),
 					prompt,
 				},
+				registry,
 				onError: ( {
 					clientId: requestClientId,
 					contextSignature,
@@ -1837,6 +1844,7 @@ const actions = {
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-patterns',
 				input,
+				registry,
 				onError: ( {
 					dispatch: localDispatch,
 					err,
@@ -1931,6 +1939,7 @@ const actions = {
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-content',
 				input,
+				registry,
 				onError: ( { dispatch: localDispatch, err, requestToken } ) => {
 					localDispatch(
 						actions.setContentStatus(
@@ -2011,6 +2020,7 @@ const actions = {
 				dispatch,
 				endpoint: '/flavor-agent/v1/recommend-navigation',
 				input,
+				registry,
 				onError: ( {
 					blockClientId,
 					contextSignature,

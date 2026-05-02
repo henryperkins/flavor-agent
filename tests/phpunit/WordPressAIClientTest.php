@@ -176,6 +176,79 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
 	}
 
+	public function test_chat_passes_codex_reasoning_effort_through_model_config_custom_options(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'codex' => true,
+		];
+		WordPressTestState::$ai_client_feature_support      = [
+			'reasoning' => false,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			'codex',
+			'high'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame(
+			[ 'reasoningEffort' => 'high' ],
+			WordPressTestState::$last_ai_client_prompt['customOptions'] ?? null
+		);
+	}
+
+	public function test_chat_passes_openai_reasoning_effort_through_model_config_custom_options(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
+		WordPressTestState::$ai_client_feature_support      = [
+			'reasoning' => false,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			'openai',
+			'high'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame(
+			[
+				'reasoning' => [
+					'effort' => 'high',
+				],
+			],
+			WordPressTestState::$last_ai_client_prompt['customOptions'] ?? null
+		);
+	}
+
+	public function test_chat_does_not_guess_anthropic_reasoning_custom_options(): void {
+		WordPressTestState::$ai_client_provider_support     = [
+			'anthropic' => true,
+		];
+		WordPressTestState::$ai_client_feature_support      = [
+			'reasoning' => false,
+		];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.',
+			'anthropic',
+			'high'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
+		$this->assertArrayNotHasKey( 'customOptions', WordPressTestState::$last_ai_client_prompt );
+	}
+
 	public function test_chat_records_token_and_latency_metrics_when_the_ai_client_returns_structured_metadata(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = [

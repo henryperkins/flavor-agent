@@ -1875,6 +1875,31 @@ function getRecommendationGroupCounts( recommendations = {} ) {
 	};
 }
 
+function normalizePreFilteringCounts( counts = {} ) {
+	if ( ! isPlainObject( counts ) ) {
+		return {};
+	}
+
+	return Object.fromEntries(
+		[ 'settings', 'styles', 'block' ]
+			.map( ( key ) => {
+				const value = counts[ key ];
+				let numericValue = null;
+
+				if ( typeof value === 'number' ) {
+					numericValue = value;
+				} else if ( typeof value === 'string' && value.trim() !== '' ) {
+					numericValue = Number( value );
+				}
+
+				return Number.isFinite( numericValue )
+					? [ key, Math.max( 0, Math.floor( numericValue ) ) ]
+					: null;
+			} )
+			.filter( Boolean )
+	);
+}
+
 /**
  * Build a diagnostic summary for successful block requests whose block lane
  * ends up empty after validation.
@@ -1900,6 +1925,9 @@ export function buildBlockRecommendationDiagnostics(
 	}
 
 	const rawCounts = getRecommendationGroupCounts( rawRecommendations );
+	const preFilteringCounts = normalizePreFilteringCounts(
+		rawRecommendations.preFilteringCounts
+	);
 	const normalized = normalizeSuggestionGroups( rawRecommendations );
 	const normalizedBlockSuggestions = normalized.block.map( ( suggestion ) =>
 		normalizeBlockSuggestionForExecution( suggestion )
@@ -1960,14 +1988,16 @@ export function buildBlockRecommendationDiagnostics(
 		}
 	}
 
-	if ( rawCounts.block === 0 ) {
+	const modelBlockCount = preFilteringCounts.block ?? rawCounts.block;
+
+	if ( modelBlockCount === 0 ) {
 		reasonCodes.push( 'model_returned_no_block_items' );
 
-		if ( finalCounts.settings > 0 || finalCounts.styles > 0 ) {
+		if ( rawCounts.settings > 0 || rawCounts.styles > 0 ) {
 			reasonCodes.push( 'suggestions_routed_to_other_lanes' );
 			detailLines.push(
 				`Flavor Agent returned ${ summarizeSuggestionCounts(
-					finalCounts
+					rawCounts
 				) }, but none in the block lane.`
 			);
 		} else {
@@ -1975,6 +2005,13 @@ export function buildBlockRecommendationDiagnostics(
 				'Flavor Agent returned no block-lane suggestions for this request.'
 			);
 		}
+	} else if ( rawCounts.block === 0 ) {
+		reasonCodes.push( 'server_filters_removed_all_block_items' );
+		detailLines.push(
+			`Flavor Agent returned ${ modelBlockCount } block suggestion${
+				modelBlockCount === 1 ? '' : 's'
+			}, but server-side validation filtered all of them.`
+		);
 	} else {
 		detailLines.push(
 			`Block-lane suggestions changed from ${ rawCounts.block } raw to ${ finalCounts.block } after validation.`

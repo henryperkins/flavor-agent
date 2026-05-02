@@ -208,7 +208,13 @@ function flavor_agent_enqueue_editor(): void {
 }
 
 function flavor_agent_block_structural_actions_enabled(): bool {
-	$enabled = flavor_agent_parse_boolean_flag( FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS );
+	$enabled = flavor_agent_parse_boolean_flag(
+		get_option( FlavorAgent\Admin\Settings\Config::OPTION_BLOCK_STRUCTURAL_ACTIONS, false )
+	);
+
+	if ( flavor_agent_parse_boolean_flag( FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS ) ) {
+		$enabled = true;
+	}
 
 	return flavor_agent_parse_boolean_flag(
 		apply_filters( 'flavor_agent_enable_block_structural_actions', $enabled )

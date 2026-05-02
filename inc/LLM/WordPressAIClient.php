@@ -7,6 +7,11 @@ namespace FlavorAgent\LLM;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\MetricsNormalizer;
 use WordPress\AI_Client\Builders\Exception\Prompt_Prevented_Exception;
+use WordPress\AiClient\Providers\Models\DTO\ModelConfig;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 final class WordPressAIClient {
 
@@ -68,7 +73,7 @@ final class WordPressAIClient {
 			return $prompt;
 		}
 
-		$prompt = self::apply_reasoning_effort( $prompt, $reasoning_effort );
+		$prompt = self::apply_reasoning_effort( $prompt, $provider, $reasoning_effort );
 
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
@@ -214,7 +219,7 @@ final class WordPressAIClient {
 	/**
 	 * @return object|\WP_Error
 	 */
-	private static function apply_reasoning_effort( object $prompt, ?string $reasoning_effort ) {
+	private static function apply_reasoning_effort( object $prompt, ?string $provider, ?string $reasoning_effort ) {
 		$reasoning_effort = is_string( $reasoning_effort ) ? sanitize_key( $reasoning_effort ) : '';
 
 		if ( ! in_array( $reasoning_effort, self::REASONING_EFFORTS, true ) ) {
@@ -276,7 +281,76 @@ final class WordPressAIClient {
 			}
 		}
 
-		return $prompt;
+		return self::apply_reasoning_effort_custom_options( $prompt, $provider, $reasoning_effort );
+	}
+
+	/**
+	 * @return object|\WP_Error
+	 */
+	private static function apply_reasoning_effort_custom_options( object $prompt, ?string $provider, string $reasoning_effort ) {
+		$custom_options = self::reasoning_effort_custom_options( $provider, $reasoning_effort );
+
+		if ( null === $custom_options ) {
+			return $prompt;
+		}
+
+		if (
+			! class_exists( ModelConfig::class )
+			|| ! is_callable( [ $prompt, 'using_model_config' ] )
+			|| ! is_callable( [ ModelConfig::class, 'fromArray' ] )
+		) {
+			return $prompt;
+		}
+
+		$candidate_prompt = self::clone_prompt_for_optional_feature( $prompt );
+
+		if ( null === $candidate_prompt ) {
+			return $prompt;
+		}
+
+		try {
+			$model_config   = ModelConfig::fromArray(
+				[
+					'customOptions' => $custom_options,
+				]
+			);
+			$updated_prompt = $candidate_prompt->using_model_config( $model_config );
+		} catch ( \Throwable $throwable ) {
+			return $prompt;
+		}
+
+		if ( is_wp_error( $updated_prompt ) ) {
+			return $prompt;
+		}
+
+		if ( ! is_object( $updated_prompt ) ) {
+			return new \WP_Error(
+				'wp_ai_client_invalid_prompt',
+				'WordPress AI Client did not return a prompt builder.',
+				[ 'status' => 500 ]
+			);
+		}
+
+		return self::prompt_supports_text_generation( $updated_prompt ) ? $updated_prompt : $prompt;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private static function reasoning_effort_custom_options( ?string $provider, string $reasoning_effort ): ?array {
+		$provider = is_string( $provider ) ? sanitize_key( $provider ) : '';
+
+		return match ( $provider ) {
+			'codex' => [
+				'reasoningEffort' => $reasoning_effort,
+			],
+			'openai' => [
+				'reasoning' => [
+					'effort' => $reasoning_effort,
+				],
+			],
+			default => null,
+		};
 	}
 
 	private static function prepare_output_schema( ?array $schema ): ?array {
@@ -338,6 +412,10 @@ final class WordPressAIClient {
 		}
 
 		if ( self::schema_includes_type( $schema, 'object' ) ) {
+			$properties                     = isset( $schema['properties'] ) && is_array( $schema['properties'] )
+				? $schema['properties']
+				: [];
+			$schema['required']             = array_keys( $properties );
 			$schema['additionalProperties'] = false;
 		}
 

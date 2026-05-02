@@ -32,7 +32,8 @@ Do not ship:
 
 ## Next Steps
 
-- [ ] Keep `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` default-off unless the
+- [ ] Keep the Block Structural Actions admin setting off by default and keep
+  `FLAVOR_AGENT_ENABLE_BLOCK_STRUCTURAL_ACTIONS` default false unless the
   release is explicitly labeled beta.
 - [ ] If structural apply ships in any channel, document that it is review-first
   and limited to validated selected-block pattern insert/replace.
@@ -53,4 +54,3 @@ Do not ship:
 - [ ] Re-run targeted JS tests for block panel behavior.
 - [ ] Re-run Playground and WP 7.0 browser coverage if structural apply is
   enabled for any release channel.
-

@@ -106,6 +106,12 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					],
+					'document'             => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 					'resolveSignatureOnly' => [
 						'required'          => false,
 						'type'              => 'boolean',
@@ -282,6 +288,12 @@ final class Agent_Controller {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_textarea_field',
 					],
+					'document'             => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 					'resolveSignatureOnly' => [
 						'required'          => false,
 						'type'              => 'boolean',
@@ -333,6 +345,12 @@ final class Agent_Controller {
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
 						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
 					],
+					'document'             => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
 					'resolveSignatureOnly' => [
 						'required'          => false,
 						'type'              => 'boolean',
@@ -368,6 +386,12 @@ final class Agent_Controller {
 						'sanitize_callback' => [ __CLASS__, 'sanitize_string_array' ],
 					],
 					'editorStructure'      => [
+						'required'          => false,
+						'type'              => 'object',
+						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_structured_value' ],
+					],
+					'document'             => [
 						'required'          => false,
 						'type'              => 'object',
 						'validate_callback' => [ __CLASS__, 'validate_structured_value' ],
@@ -688,21 +712,42 @@ final class Agent_Controller {
 	public static function handle_recommend_block( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$client_id              = $request->get_param( 'clientId' );
 		$resolve_signature_only = self::is_signature_only_request( $request );
-		$result                 = BlockAbilities::recommend_block(
-			[
-				'editorContext'        => $request->get_param( 'editorContext' ),
-				'prompt'               => $request->get_param( 'prompt' ),
-				'resolveSignatureOnly' => $resolve_signature_only,
-			]
-		);
+		$input                  = [
+			'editorContext'        => $request->get_param( 'editorContext' ),
+			'prompt'               => $request->get_param( 'prompt' ),
+			'resolveSignatureOnly' => $resolve_signature_only,
+		];
+		$result                 = BlockAbilities::recommend_block( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return self::append_request_meta_to_error_for_route( $result, 'recommend-block' );
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-block' );
+
+			if ( ! $resolve_signature_only ) {
+				self::persist_request_diagnostic_failure_activity(
+					'block',
+					$result,
+					self::sanitize_activity_document( $request->get_param( 'document' ) ),
+					self::build_block_request_diagnostic_target( $request ),
+					$input
+				);
+			}
+
+			return $result;
 		}
 
 		$payload = $resolve_signature_only
 			? $result
 			: self::append_request_meta_for_route( $result, 'recommend-block' );
+
+		if ( ! $resolve_signature_only ) {
+			self::persist_request_diagnostic_activity(
+				'block',
+				$payload,
+				self::sanitize_activity_document( $request->get_param( 'document' ) ),
+				self::build_block_request_diagnostic_target( $request ),
+				$input
+			);
+		}
 
 		return new \WP_REST_Response(
 			[
@@ -1026,6 +1071,77 @@ final class Agent_Controller {
 	}
 
 	/**
+	 * @return array<string, mixed>
+	 */
+	private static function build_block_request_diagnostic_target( \WP_REST_Request $request ): array {
+		$editor_context = $request->get_param( 'editorContext' );
+		$editor_context = \is_array( $editor_context ) || \is_object( $editor_context )
+			? self::sanitize_structured_value( $editor_context )
+			: [];
+		$block          = \is_array( $editor_context['block'] ?? null ) ? $editor_context['block'] : [];
+
+		return [
+			'clientId'  => sanitize_text_field( (string) $request->get_param( 'clientId' ) ),
+			'blockName' => sanitize_text_field( (string) ( $block['name'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $input
+	 * @return array<string, mixed>
+	 */
+	private static function build_template_request_diagnostic_target( array $input ): array {
+		return [
+			'templateRef'  => sanitize_text_field( (string) ( $input['templateRef'] ?? '' ) ),
+			'templateType' => sanitize_key( (string) ( $input['templateType'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $input
+	 * @return array<string, mixed>
+	 */
+	private static function build_template_part_request_diagnostic_target( array $input ): array {
+		return [
+			'templatePartRef' => sanitize_text_field( (string) ( $input['templatePartRef'] ?? '' ) ),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $input
+	 * @param array<string, mixed>|null $document
+	 */
+	private static function resolve_style_request_diagnostic_surface( array $input, ?array $document ): string {
+		$scope   = \is_array( $input['scope'] ?? null ) ? $input['scope'] : [];
+		$surface = sanitize_key( (string) ( $scope['surface'] ?? '' ) );
+
+		if ( \in_array( $surface, [ 'global-styles', 'style-book' ], true ) ) {
+			return $surface;
+		}
+
+		$scope_key = \is_array( $document ) ? trim( (string) ( $document['scopeKey'] ?? '' ) ) : '';
+
+		return str_starts_with( $scope_key, 'style_book:' ) ? 'style-book' : 'global-styles';
+	}
+
+	/**
+	 * @param array<string, mixed> $input
+	 * @return array<string, mixed>
+	 */
+	private static function build_style_request_diagnostic_target( array $input ): array {
+		$scope         = \is_array( $input['scope'] ?? null ) ? $input['scope'] : [];
+		$style_context = \is_array( $input['styleContext'] ?? null ) ? $input['styleContext'] : [];
+		$style_target  = \is_array( $style_context['styleBookTarget'] ?? null ) ? $style_context['styleBookTarget'] : [];
+
+		return [
+			'scopeKey'       => sanitize_text_field( (string) ( $scope['scopeKey'] ?? '' ) ),
+			'globalStylesId' => sanitize_text_field( (string) ( $scope['globalStylesId'] ?? '' ) ),
+			'blockName'      => sanitize_text_field( (string) ( $scope['blockName'] ?? ( $style_target['blockName'] ?? '' ) ) ),
+			'blockTitle'     => sanitize_text_field( (string) ( $scope['blockTitle'] ?? ( $style_target['blockTitle'] ?? '' ) ) ),
+		];
+	}
+
+	/**
 	 * @param array<string, mixed> $payload
 	 * @param array<string, mixed>|null $document
 	 * @param array<string, mixed> $target
@@ -1166,6 +1282,29 @@ final class Agent_Controller {
 			return '' !== $label ? $label : 'Pattern recommendation request';
 		}
 
+		if ( 'block' === $surface ) {
+			$explanation = trim( (string) ( $payload['explanation'] ?? '' ) );
+
+			return '' !== $explanation ? $explanation : 'Block recommendation request';
+		}
+
+		if ( \in_array( $surface, [ 'template', 'template-part', 'global-styles', 'style-book' ], true ) ) {
+			$suggestions = \is_array( $payload['suggestions'] ?? null ) ? $payload['suggestions'] : [];
+			$label       = trim( (string) ( $suggestions[0]['label'] ?? $payload['explanation'] ?? '' ) );
+
+			if ( '' !== $label ) {
+				return $label;
+			}
+
+			return match ( $surface ) {
+				'template' => 'Template recommendation request',
+				'template-part' => 'Template-part recommendation request',
+				'global-styles' => 'Global Styles recommendation request',
+				'style-book' => 'Style Book recommendation request',
+				default => 'AI request diagnostic',
+			};
+		}
+
 		return 'AI request diagnostic';
 	}
 
@@ -1174,6 +1313,11 @@ final class Agent_Controller {
 			'content' => 'Content request failed',
 			'navigation' => 'Navigation request failed',
 			'pattern' => 'Pattern request failed',
+			'block' => 'Block request failed',
+			'template' => 'Template request failed',
+			'template-part' => 'Template-part request failed',
+			'global-styles' => 'Global Styles request failed',
+			'style-book' => 'Style Book request failed',
 			default => 'AI request failed',
 		};
 
@@ -1188,6 +1332,32 @@ final class Agent_Controller {
 		$scope_key = trim( (string) ( $document['scopeKey'] ?? '' ) );
 
 		return match ( $surface ) {
+			'block' => sprintf(
+				'block:%s:%s',
+				$scope_key,
+				trim( (string) ( $target['clientId'] ?? 'unknown' ) )
+			),
+			'template' => sprintf(
+				'template:%s:%s',
+				$scope_key,
+				trim( (string) ( $target['templateRef'] ?? 'unknown' ) )
+			),
+			'template-part' => sprintf(
+				'template-part:%s:%s',
+				$scope_key,
+				trim( (string) ( $target['templatePartRef'] ?? 'unknown' ) )
+			),
+			'global-styles' => sprintf(
+				'global-styles:%s:%s',
+				$scope_key,
+				trim( (string) ( $target['globalStylesId'] ?? 'unknown' ) )
+			),
+			'style-book' => sprintf(
+				'style-book:%s:%s:%s',
+				$scope_key,
+				trim( (string) ( $target['globalStylesId'] ?? 'unknown' ) ),
+				trim( (string) ( $target['blockName'] ?? 'unknown' ) )
+			),
 			'navigation' => sprintf(
 				'navigation:%s:%s',
 				$scope_key,
@@ -1207,6 +1377,10 @@ final class Agent_Controller {
 			'navigation' => \is_array( $payload['suggestions'] ?? null ) ? count( $payload['suggestions'] ) : 0,
 			'pattern' => \is_array( $payload['recommendations'] ?? null ) ? count( $payload['recommendations'] ) : 0,
 			'content' => trim( (string) ( $payload['content'] ?? '' ) ) !== '' ? 1 : 0,
+			'block' => count( \is_array( $payload['settings'] ?? null ) ? $payload['settings'] : [] )
+				+ count( \is_array( $payload['styles'] ?? null ) ? $payload['styles'] : [] )
+				+ count( \is_array( $payload['block'] ?? null ) ? $payload['block'] : [] ),
+			'template', 'template-part', 'global-styles', 'style-book' => \is_array( $payload['suggestions'] ?? null ) ? count( $payload['suggestions'] ) : 0,
 			default => 0,
 		};
 	}
@@ -1251,12 +1425,34 @@ final class Agent_Controller {
 		$result = TemplateAbilities::recommend_template( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return self::append_request_meta_to_error_for_route( $result, 'recommend-template' );
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-template' );
+
+			if ( ! $resolve_signature_only ) {
+				self::persist_request_diagnostic_failure_activity(
+					'template',
+					$result,
+					self::sanitize_activity_document( $request->get_param( 'document' ) ),
+					self::build_template_request_diagnostic_target( $input ),
+					$input
+				);
+			}
+
+			return $result;
 		}
 
 		$payload = $resolve_signature_only
 			? $result
 			: self::append_request_meta_for_route( $result, 'recommend-template' );
+
+		if ( ! $resolve_signature_only ) {
+			self::persist_request_diagnostic_activity(
+				'template',
+				$payload,
+				self::sanitize_activity_document( $request->get_param( 'document' ) ),
+				self::build_template_request_diagnostic_target( $input ),
+				$input
+			);
+		}
 
 		return new \WP_REST_Response( $payload, 200 );
 	}
@@ -1281,15 +1477,40 @@ final class Agent_Controller {
 			$input['prompt'] = $prompt;
 		}
 
-		$result = StyleAbilities::recommend_style( $input );
+		$result   = StyleAbilities::recommend_style( $input );
+		$document = self::sanitize_activity_document( $request->get_param( 'document' ) );
+		$surface  = self::resolve_style_request_diagnostic_surface( $input, $document );
+		$target   = self::build_style_request_diagnostic_target( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return self::append_request_meta_to_error_for_route( $result, 'recommend-style' );
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-style' );
+
+			if ( ! $resolve_signature_only ) {
+				self::persist_request_diagnostic_failure_activity(
+					$surface,
+					$result,
+					$document,
+					$target,
+					$input
+				);
+			}
+
+			return $result;
 		}
 
 		$payload = $resolve_signature_only
 			? $result
 			: self::append_request_meta_for_route( $result, 'recommend-style' );
+
+		if ( ! $resolve_signature_only ) {
+			self::persist_request_diagnostic_activity(
+				$surface,
+				$payload,
+				$document,
+				$target,
+				$input
+			);
+		}
 
 		return new \WP_REST_Response( $payload, 200 );
 	}
@@ -1324,12 +1545,34 @@ final class Agent_Controller {
 		$result = TemplateAbilities::recommend_template_part( $input );
 
 		if ( \is_wp_error( $result ) ) {
-			return self::append_request_meta_to_error_for_route( $result, 'recommend-template-part' );
+			$result = self::append_request_meta_to_error_for_route( $result, 'recommend-template-part' );
+
+			if ( ! $resolve_signature_only ) {
+				self::persist_request_diagnostic_failure_activity(
+					'template-part',
+					$result,
+					self::sanitize_activity_document( $request->get_param( 'document' ) ),
+					self::build_template_part_request_diagnostic_target( $input ),
+					$input
+				);
+			}
+
+			return $result;
 		}
 
 		$payload = $resolve_signature_only
 			? $result
 			: self::append_request_meta_for_route( $result, 'recommend-template-part' );
+
+		if ( ! $resolve_signature_only ) {
+			self::persist_request_diagnostic_activity(
+				'template-part',
+				$payload,
+				self::sanitize_activity_document( $request->get_param( 'document' ) ),
+				self::build_template_part_request_diagnostic_target( $input ),
+				$input
+			);
+		}
 
 		return new \WP_REST_Response( $payload, 200 );
 	}

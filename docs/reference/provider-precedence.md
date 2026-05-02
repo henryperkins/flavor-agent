@@ -39,6 +39,19 @@ If the option is missing or invalid, it defaults to `azure_openai`.
 
 `Provider::chat_configuration( $provider )` reports direct Azure providers as missing chat by design. `openai_native` resolves to the OpenAI connector when that connector is available. No other default runtime fallback is allowed.
 
+## Reasoning Effort Routing
+
+`flavor_agent_azure_reasoning_effort` is still legacy-named, but it applies to Connectors-routed chat when Flavor Agent can express the setting through the selected provider's model configuration. Flavor Agent does not read, copy, or submit connector credentials itself; authentication and final request dispatch remain owned by the WordPress AI Client and the selected provider plugin.
+
+At request time, `WordPressAIClient::chat()` first tries any standardized WP AI Client reasoning methods that may exist in a future core/client version. When those methods are unavailable, it falls back to `ModelConfig::customOptions` for provider plugins that already support the needed payload shape:
+
+| Selected chat provider | Fallback custom option                                      |
+| ---------------------- | ----------------------------------------------------------- |
+| `codex`                | `reasoningEffort: <low|medium|high|xhigh>`                  |
+| `openai`               | `reasoning: { effort: <low|medium|high|xhigh> }`            |
+
+The `openai_native` Flavor Agent setting resolves to the `openai` connector for chat, so it uses the OpenAI mapping above when the connector is available. Anthropic is intentionally unmapped until its provider plugin documents the accepted reasoning/thinking payload contract; Flavor Agent should add that mapping with provider-specific tests when the contract is known.
+
 ## Embedding Runtime Chain
 
 `Provider::embedding_configuration()` resolves the active embedding backend. Embeddings require a fully configured Azure OpenAI or OpenAI Native backend.
