@@ -45,7 +45,7 @@ Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view, `docs/referen
 3. `fetchBlockRecommendations()` in `src/store/index.js` posts that context to `POST /flavor-agent/v1/recommend-block`
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_block()` adapts the request to `FlavorAgent\Abilities\BlockAbilities::recommend_block()`
 5. `BlockAbilities::recommend_block()` normalizes the input, gathers server context, computes `resolvedContextSignature` from the server-normalized apply context plus the sanitized prompt, returns early for signature-only and disabled-block requests, and only then resolves cache-backed WordPress docs guidance before calling `FlavorAgent\LLM\ChatClient::chat()`
-6. `ChatClient::chat()` uses the selected connector-backed provider when available, otherwise uses the generic WordPress AI Client / Connectors path; if no text-generation provider is configured in Connectors, the request returns a `missing_text_generation_provider` error
+6. `ChatClient::chat()` uses the selected connector-backed provider when available, maps OpenAI Native to the OpenAI connector when that connector is available, and otherwise returns a `missing_text_generation_provider` error instead of falling back to an unselected provider
 7. `FlavorAgent\LLM\Prompt` builds the prompt, parses the response, and enforces block-context guardrails, including the PHP block operation validator when structural proposals are present
 8. The store saves the grouped `settings`, `styles`, and `block` suggestions and the Inspector renders inline apply, structural review/apply, and manual/advisory lanes in the main block panel plus passive mirrored chips in delegated native sub-panels
 9. Opening a structural review records local UI state only. The block tree is unchanged until the user chooses `Apply reviewed structure`.
@@ -224,7 +224,11 @@ The server normalizes that context with lock, content-only, and editing-mode def
       },
       "allowedPanels": ["color", "dimensions", "layout"],
       "panelMappingKnown": true,
-      "styleSupportPaths": ["color.background", "color.text", "spacing.padding"],
+      "styleSupportPaths": [
+        "color.background",
+        "color.text",
+        "spacing.padding"
+      ],
       "bindableAttributes": [],
       "contentAttributeKeys": [],
       "configAttributeKeys": ["layout"],
@@ -334,25 +338,25 @@ The server normalizes that context with lock, content-only, and editing-mode def
 
 ## Primary Functions And Handlers
 
-| Layer | Function / class | Role |
-|---|---|---|
-| UI shell | `withAIRecommendations()` in `src/inspector/InspectorInjector.js` | Injects the panel into the native Inspector |
-| UI state | `BlockRecommendationsContent()` in `src/inspector/BlockRecommendationsPanel.js` | Renders intro, scope/freshness, prompt, status, featured recommendation, grouped lanes, embedded navigation, activity, and undo |
-| Context collection | `collectBlockContext()` in `src/context/collector.js` | Builds the client snapshot sent to the backend |
-| Request builder | `buildBlockRecommendationRequestData()` in `src/inspector/block-recommendation-request.js` | Carries `clientId`, prompt, live context, and top-level `contextSignature`, and computes the client request signature used for stale-result checks |
-| Store request | `fetchBlockRecommendations()` in `src/store/index.js` | Sends the recommendation request and stores the result |
-| Store apply | `applySuggestion()` in `src/store/index.js` | Applies bounded attribute updates and records activity |
-| Store structural apply | `applyBlockStructuralSuggestion()` in `src/store/index.js` | Applies reviewed structural operations after freshness and live-target checks |
-| Client structural mirror | `validateBlockOperationSequence()` and catalog helpers in `src/utils/block-operation-catalog.js` | Mirrors server-approved operation validation before review/apply and fails closed on client/server mismatch |
-| Structural operations | `applyBlockStructuralSuggestionOperations()` in `src/utils/block-structural-actions.js` | Parses patterns, applies insert/replace operations transactionally, and prepares structural signatures for activity/undo |
-| Activity undo | `undoActivity()` in `src/store/activity-undo.js` | Routes inline block undo and structural block undo through their drift validators |
-| REST handler | `Agent_Controller::handle_recommend_block()` | Adapts the REST request to the backend ability |
-| Backend ability | `BlockAbilities::recommend_block()` | Normalizes input, gathers context, and runs the prompt pipeline |
-| Execution contract | `BlockRecommendationExecutionContract::from_context()` in `inc/Context/BlockRecommendationExecutionContract.php` | Derives the server-side apply contract from normalized block context and theme tokens |
-| LLM wrapper | `ChatClient::chat()` | Uses the WordPress AI Client / Connectors runtime; direct Azure/OpenAI Native settings are not a chat fallback |
-| Prompt contract | `Prompt::build_user()` / `Prompt::parse_response()` | Builds and parses the structured block-suggestion payload |
-| Server enforcement | `Prompt::enforce_block_context_rules()` in `inc/LLM/Prompt.php` | Filters parsed suggestions against panel, attribute, style, visibility, binding, and structural-operation rules |
-| Structural validator | `BlockOperationValidator::validate_sequence()` in `inc/Context/BlockOperationValidator.php` | Validates proposed selected-block pattern operations against the normalized operation context |
+| Layer                    | Function / class                                                                                                 | Role                                                                                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI shell                 | `withAIRecommendations()` in `src/inspector/InspectorInjector.js`                                                | Injects the panel into the native Inspector                                                                                                                      |
+| UI state                 | `BlockRecommendationsContent()` in `src/inspector/BlockRecommendationsPanel.js`                                  | Renders intro, scope/freshness, prompt, status, featured recommendation, grouped lanes, embedded navigation, activity, and undo                                  |
+| Context collection       | `collectBlockContext()` in `src/context/collector.js`                                                            | Builds the client snapshot sent to the backend                                                                                                                   |
+| Request builder          | `buildBlockRecommendationRequestData()` in `src/inspector/block-recommendation-request.js`                       | Carries `clientId`, prompt, live context, and top-level `contextSignature`, and computes the client request signature used for stale-result checks               |
+| Store request            | `fetchBlockRecommendations()` in `src/store/index.js`                                                            | Sends the recommendation request and stores the result                                                                                                           |
+| Store apply              | `applySuggestion()` in `src/store/index.js`                                                                      | Applies bounded attribute updates and records activity                                                                                                           |
+| Store structural apply   | `applyBlockStructuralSuggestion()` in `src/store/index.js`                                                       | Applies reviewed structural operations after freshness and live-target checks                                                                                    |
+| Client structural mirror | `validateBlockOperationSequence()` and catalog helpers in `src/utils/block-operation-catalog.js`                 | Mirrors server-approved operation validation before review/apply and fails closed on client/server mismatch                                                      |
+| Structural operations    | `applyBlockStructuralSuggestionOperations()` in `src/utils/block-structural-actions.js`                          | Parses patterns, applies insert/replace operations transactionally, and prepares structural signatures for activity/undo                                         |
+| Activity undo            | `undoActivity()` in `src/store/activity-undo.js`                                                                 | Routes inline block undo and structural block undo through their drift validators                                                                                |
+| REST handler             | `Agent_Controller::handle_recommend_block()`                                                                     | Adapts the REST request to the backend ability                                                                                                                   |
+| Backend ability          | `BlockAbilities::recommend_block()`                                                                              | Normalizes input, gathers context, and runs the prompt pipeline                                                                                                  |
+| Execution contract       | `BlockRecommendationExecutionContract::from_context()` in `inc/Context/BlockRecommendationExecutionContract.php` | Derives the server-side apply contract from normalized block context and theme tokens                                                                            |
+| LLM wrapper              | `ChatClient::chat()`                                                                                             | Uses the selected WordPress AI Client / Connectors provider; OpenAI Native may map to the OpenAI connector, but generic unselected-provider fallback is disabled |
+| Prompt contract          | `Prompt::build_user()` / `Prompt::parse_response()`                                                              | Builds and parses the structured block-suggestion payload                                                                                                        |
+| Server enforcement       | `Prompt::enforce_block_context_rules()` in `inc/LLM/Prompt.php`                                                  | Filters parsed suggestions against panel, attribute, style, visibility, binding, and structural-operation rules                                                  |
+| Structural validator     | `BlockOperationValidator::validate_sequence()` in `inc/Context/BlockOperationValidator.php`                      | Validates proposed selected-block pattern operations against the normalized operation context                                                                    |
 
 ## Related Routes And Abilities
 

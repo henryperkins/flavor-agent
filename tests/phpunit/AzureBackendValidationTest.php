@@ -134,7 +134,49 @@ final class AzureBackendValidationTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_rank_prefers_the_generic_wordpress_ai_client_over_a_configured_direct_backend_when_available(): void {
+	public function test_rank_maps_openai_native_to_the_openai_connector_without_generic_fallback(): void {
+		WordPressTestState::$options = [
+			'flavor_agent_openai_provider' => Provider::NATIVE,
+		];
+
+		WordPressTestState::$connectors = [
+			'openai'    => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+			'anthropic' => [
+				'name'           => 'Anthropic',
+				'description'    => 'Anthropic connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_anthropic_api_key',
+				],
+			],
+		];
+
+		WordPressTestState::$ai_client_provider_support = [
+			'openai'    => true,
+			'anthropic' => true,
+		];
+
+		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector ranked output';
+
+		$result = ResponsesClient::rank( 'connector system prompt', 'connector user prompt', 'high' );
+
+		$this->assertSame( 'OpenAI connector ranked output', $result );
+		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( 'connector system prompt', WordPressTestState::$last_ai_client_prompt['system'] ?? null );
+		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
+		$this->assertSame( [], WordPressTestState::$last_remote_post );
+	}
+
+	public function test_rank_does_not_use_generic_wordpress_ai_client_for_direct_provider(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_openai_provider'       => Provider::AZURE,
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
@@ -147,8 +189,9 @@ final class AzureBackendValidationTest extends TestCase {
 
 		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
 
-		$this->assertSame( 'WordPress AI client preferred output', $result );
-		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
@@ -288,28 +331,44 @@ final class AzureBackendValidationTest extends TestCase {
 		);
 	}
 
-	public function test_rank_falls_back_to_wordpress_ai_client_when_no_direct_provider_is_configured(): void {
+	public function test_rank_does_not_fall_back_to_wordpress_ai_client_when_no_chat_connector_is_selected(): void {
 		WordPressTestState::$ai_client_supported            = true;
-		WordPressTestState::$ai_client_generate_text_result = 'WordPress AI client fallback output';
+		WordPressTestState::$ai_client_generate_text_result = 'Unexpected generic output';
 
 		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
 
-		$this->assertSame( 'WordPress AI client fallback output', $result );
-		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 
-	public function test_rank_uses_saved_reasoning_effort_for_wordpress_ai_client_fallback(): void {
+	public function test_rank_uses_saved_reasoning_effort_for_matching_openai_connector(): void {
 		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider'        => Provider::NATIVE,
 			'flavor_agent_azure_reasoning_effort' => 'high',
 		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
 		WordPressTestState::$ai_client_supported            = true;
-		WordPressTestState::$ai_client_generate_text_result = 'WordPress AI client fallback output';
+		WordPressTestState::$ai_client_generate_text_result = 'OpenAI connector output';
 
 		$result = ResponsesClient::rank( 'fallback system prompt', 'fallback user prompt' );
 
-		$this->assertSame( 'WordPress AI client fallback output', $result );
-		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertSame( 'OpenAI connector output', $result );
+		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 		$this->assertSame( 'high', WordPressTestState::$last_ai_client_prompt['reasoning'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}

@@ -2095,7 +2095,21 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	private function configure_backends(): void {
-		WordPressTestState::$options             = array_merge(
+		WordPressTestState::$connectors                 = array_merge(
+			WordPressTestState::$connectors,
+			[
+				'openai' => [
+					'name'           => 'OpenAI',
+					'description'    => 'OpenAI connector',
+					'type'           => 'ai_provider',
+					'authentication' => [
+						'method'       => 'api_key',
+						'setting_name' => 'connectors_ai_openai_api_key',
+					],
+				],
+			]
+		);
+		WordPressTestState::$options                    = array_merge(
 			WordPressTestState::$options,
 			[
 				Provider::OPTION_NAME                => Provider::NATIVE,
@@ -2105,7 +2119,13 @@ final class PatternAbilitiesTest extends TestCase {
 				'flavor_agent_qdrant_key'            => 'qdrant-key',
 			]
 		);
-		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = array_merge(
+			WordPressTestState::$ai_client_provider_support,
+			[
+				'openai' => true,
+			]
+		);
 	}
 
 	private function disable_public_docs_grounding(): void {

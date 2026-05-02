@@ -1,6 +1,9 @@
 const mockUseSelect = jest.fn();
 const mockFindInserterToggle = jest.fn();
 const mockGetAllowedPatterns = jest.fn();
+const mockCanInsertBlockType = jest.fn();
+const mockCreateBlock = jest.fn();
+const mockParse = jest.fn();
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	store: 'core/block-editor',
@@ -9,6 +12,11 @@ jest.mock( '@wordpress/block-editor', () => ( {
 jest.mock( '@wordpress/components', () =>
 	require( '../../test-utils/wp-components' ).mockWpComponents()
 );
+
+jest.mock( '@wordpress/blocks', () => ( {
+	createBlock: ( ...args ) => mockCreateBlock( ...args ),
+	parse: ( ...args ) => mockParse( ...args ),
+} ) );
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: ( ...args ) => mockUseSelect( ...args ),
@@ -63,6 +71,8 @@ function setSelectState( {
 					getBlockInsertionPoint: jest.fn( () => ( {
 						rootClientId,
 					} ) ),
+					canInsertBlockType: ( ...args ) =>
+						mockCanInsertBlockType( ...args ),
 				};
 			}
 
@@ -76,6 +86,15 @@ describe( 'InserterBadge', () => {
 		mockUseSelect.mockReset();
 		mockFindInserterToggle.mockReset();
 		mockGetAllowedPatterns.mockReset();
+		mockCanInsertBlockType.mockReset();
+		mockCanInsertBlockType.mockReturnValue( true );
+		mockCreateBlock.mockReset();
+		mockCreateBlock.mockImplementation( ( name, attributes ) => ( {
+			name,
+			attributes,
+		} ) );
+		mockParse.mockReset();
+		mockParse.mockReturnValue( [] );
 		setSelectState( {
 			recommendations: [
 				{ name: 'theme/hero', score: 0.92, reason: 'Hero match.' },
@@ -185,6 +204,50 @@ describe( 'InserterBadge', () => {
 				.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.getAttribute( 'aria-label' )
 		).toBe( '1 pattern recommendation available' );
+	} );
+
+	test( 'hides ready badge when allowed matches are not insertable at the active root', () => {
+		const anchor = document.createElement( 'div' );
+		const button = document.createElement( 'button' );
+
+		anchor.appendChild( button );
+		document.body.appendChild( anchor );
+		mockFindInserterToggle.mockReturnValue( button );
+		mockCanInsertBlockType.mockImplementation(
+			( blockName ) => blockName !== 'core/template-part'
+		);
+		setSelectState( {
+			recommendations: [
+				{
+					name: 'theme/template-with-parts',
+					score: 0.95,
+					reason: 'Template match.',
+				},
+			],
+			allowedPatterns: [
+				{
+					name: 'theme/template-with-parts',
+					title: 'Template with parts',
+					blocks: [
+						{
+							name: 'core/template-part',
+							attributes: { slug: 'header' },
+						},
+					],
+				},
+			],
+		} );
+
+		renderComponent();
+
+		expect(
+			document.querySelector( '.flavor-agent-inserter-badge--ready' )
+		).toBeNull();
+		expect( mockFindInserterToggle ).not.toHaveBeenCalled();
+		expect( mockCanInsertBlockType ).toHaveBeenCalledWith(
+			'core/template-part',
+			'root-a'
+		);
 	} );
 
 	test( 'uses renderable high-confidence reason instead of filtered raw reason', () => {

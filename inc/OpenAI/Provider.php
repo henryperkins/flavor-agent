@@ -211,10 +211,10 @@ final class Provider {
 	}
 
 	/**
-	 * Chat is owned by Settings > Connectors via the WordPress AI Client. Direct
-	 * Azure and OpenAI Native paths no longer carry chat traffic, so this method
-	 * either resolves to the WordPress AI Client runtime or reports the chat
-	 * surface as unconfigured.
+	 * Chat is owned by Settings > Connectors via the WordPress AI Client. Flavor
+	 * Agent only routes chat to the selected connector, or to the OpenAI connector
+	 * when OpenAI Native is selected for embeddings. Other generic Connector
+	 * providers are never used as fallbacks.
 	 *
 	 * @param array<string, string> $overrides Reserved for parity with embedding_configuration().
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
@@ -232,8 +232,10 @@ final class Provider {
 
 		$provider = self::normalize_provider( $provider );
 
-		if ( self::is_connector( $provider ) ) {
-			return self::connector_chat_configuration( $provider );
+		$connector_provider = self::selected_chat_connector( $provider );
+
+		if ( '' !== $connector_provider ) {
+			return self::connector_chat_configuration( $connector_provider );
 		}
 
 		return self::missing_chat_configuration( $provider );
@@ -350,7 +352,7 @@ final class Provider {
 		$diagnostics                                = self::active_chat_diagnostics();
 		$backend_label                              = trim( (string) ( $config['label'] ?? $provider_label ) );
 		$model                                      = trim( (string) ( $config['model'] ?? '' ) );
-		$used_fallback                              = $provider !== $selected_provider;
+		$used_fallback                              = ! self::chat_provider_matches_selection( $selected_provider, $provider );
 		$owner                                      = 'flavor_agent';
 		$owner_label                                = 'Settings > Flavor Agent';
 		$path_label                                 = 'Flavor Agent chat backend';
@@ -363,10 +365,16 @@ final class Provider {
 			$path_label        = sprintf( '%s via Settings > Connectors', $provider_label );
 			$credential_source = 'provider_managed';
 			$credential_label  = 'Provider-managed';
-		} else {
+		} elseif ( self::is_wordpress_ai_client( $provider ) ) {
 			$owner             = 'connectors';
 			$owner_label       = 'Settings > Connectors';
 			$path_label        = 'WordPress AI Client via Settings > Connectors';
+			$credential_source = 'provider_managed';
+			$credential_label  = 'Provider-managed';
+		} else {
+			$owner             = 'connectors';
+			$owner_label       = 'Settings > Connectors';
+			$path_label        = sprintf( '%s has no selected chat connector', $provider_label );
 			$credential_source = 'provider_managed';
 			$credential_label  = 'Provider-managed';
 		}
@@ -650,23 +658,46 @@ final class Provider {
 
 	/**
 	 * Resolve the active chat runtime. The selected option may pin chat to a
-	 * specific connector; otherwise the generic WordPress AI Client runtime
-	 * picks whichever Connectors-backed provider is currently usable.
+	 * specific connector. OpenAI Native maps to the OpenAI connector when that
+	 * connector is available. No other Connectors-backed provider is used as a
+	 * fallback.
 	 *
 	 * @return array{provider: string, endpoint: string, api_key: string, model: string, configured: bool, headers: array<string, string>, url: string, label: string}
 	 */
 	private static function runtime_chat_configuration(): array {
-		$selected_provider = self::get();
+		$selected_provider  = self::get();
+		$connector_provider = self::selected_chat_connector( $selected_provider );
 
-		if ( self::is_connector( $selected_provider ) && WordPressAIClient::is_supported( $selected_provider ) ) {
-			return self::connector_chat_configuration( $selected_provider );
-		}
-
-		if ( WordPressAIClient::is_supported() ) {
-			return self::wordpress_ai_client_configuration();
+		if ( '' !== $connector_provider && WordPressAIClient::is_supported( $connector_provider ) ) {
+			return self::connector_chat_configuration( $connector_provider );
 		}
 
 		return self::missing_chat_configuration( $selected_provider );
+	}
+
+	private static function selected_chat_connector( string $provider ): string {
+		$provider = self::normalize_provider( $provider );
+
+		if ( self::is_connector( $provider ) ) {
+			return $provider;
+		}
+
+		if ( self::NATIVE === $provider && self::is_connector( self::OPENAI_CONNECTOR_ID ) ) {
+			return self::OPENAI_CONNECTOR_ID;
+		}
+
+		return '';
+	}
+
+	private static function chat_provider_matches_selection( string $selected_provider, string $provider ): bool {
+		$selected_provider = self::normalize_provider( $selected_provider );
+		$provider          = self::normalize_provider_for_request_meta( $provider );
+
+		if ( $provider === $selected_provider ) {
+			return true;
+		}
+
+		return self::NATIVE === $selected_provider && self::OPENAI_CONNECTOR_ID === $provider;
 	}
 
 	/**

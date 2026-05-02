@@ -76,7 +76,7 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertNotContains( 'flavor-agent/get-pattern', $status['availableAbilities'] );
 	}
 
-	public function test_check_status_marks_wordpress_ai_client_backend_as_configured(): void {
+	public function test_check_status_does_not_enable_chat_surfaces_without_selected_connector(): void {
 		WordPressTestState::$capabilities        = [
 			'edit_posts' => true,
 		];
@@ -84,10 +84,10 @@ final class InfraAbilitiesTest extends TestCase {
 
 		$status = InfraAbilities::check_status( [] );
 
-		$this->assertTrue( $status['configured'] );
-		$this->assertSame( 'provider-managed', $status['model'] );
-		$this->assertContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
-		$this->assertSame( 'ready', $status['surfaces']['block']['reason'] );
+		$this->assertFalse( $status['configured'] );
+		$this->assertNull( $status['model'] );
+		$this->assertNotContains( 'flavor-agent/recommend-block', $status['availableAbilities'] );
+		$this->assertSame( 'block_backend_unconfigured', $status['surfaces']['block']['reason'] );
 		$this->assertSame( 'connectors', $status['surfaces']['block']['owner'] );
 		$this->assertTrue( $status['backends']['wordpress_ai_client']['configured'] );
 	}
@@ -105,11 +105,11 @@ final class InfraAbilitiesTest extends TestCase {
 	}
 
 	public function test_check_status_uses_connector_key_for_openai_native_backend(): void {
-		WordPressTestState::$capabilities        = [
+		WordPressTestState::$capabilities               = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$connectors          = [
+		WordPressTestState::$connectors                 = [
 			'openai' => [
 				'name'           => 'OpenAI',
 				'description'    => 'OpenAI connector',
@@ -120,14 +120,17 @@ final class InfraAbilitiesTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$options             = [
+		WordPressTestState::$options                    = [
 			'flavor_agent_openai_provider'               => 'openai_native',
 			'connectors_ai_openai_api_key'               => 'connector-key',
 			'flavor_agent_openai_native_embedding_model' => 'text-embedding-3-large',
 			'flavor_agent_qdrant_url'                    => 'https://example.cloud.qdrant.io:6333',
 			'flavor_agent_qdrant_key'                    => 'qdrant-key',
 		];
-		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
 
 		$status = InfraAbilities::check_status( [] );
 
@@ -310,11 +313,27 @@ final class InfraAbilitiesTest extends TestCase {
 	}
 
 	public function test_check_status_marks_pattern_surface_unavailable_without_plugin_backends(): void {
-		WordPressTestState::$capabilities        = [
+		WordPressTestState::$capabilities               = [
 			'edit_posts'         => true,
 			'edit_theme_options' => true,
 		];
-		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$options                    = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
 
 		$status = InfraAbilities::check_status( [] );
 

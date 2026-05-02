@@ -16,7 +16,7 @@
  * degradation stays isolated from the settings compatibility path.
  */
 import { store as blockEditorStore } from '@wordpress/block-editor';
-import { cloneBlock, createBlock, parse } from '@wordpress/blocks';
+import { cloneBlock } from '@wordpress/blocks';
 import { Button } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
@@ -42,6 +42,11 @@ import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
+import {
+	filterInsertableRecommendedPatterns,
+	getRejectedPatternBlockNames,
+	resolvePatternBlocks,
+} from './pattern-insertability';
 import {
 	buildRecommendedPatterns,
 	getPatternRecommendationInsights,
@@ -123,30 +128,6 @@ function getPatternTitle( pattern ) {
 	return getNonEmptyString( pattern?.title ) || pattern?.name || 'Pattern';
 }
 
-function resolvePatternBlocks( pattern ) {
-	if (
-		pattern?.type === 'user' &&
-		pattern?.syncStatus !== 'unsynced' &&
-		pattern?.id
-	) {
-		return [ createBlock( 'core/block', { ref: pattern.id } ) ];
-	}
-
-	if ( Array.isArray( pattern?.blocks ) && pattern.blocks.length > 0 ) {
-		return pattern.blocks;
-	}
-
-	if ( typeof pattern?.content === 'string' && pattern.content.trim() ) {
-		try {
-			return parse( pattern.content );
-		} catch ( error ) {
-			return [];
-		}
-	}
-
-	return [];
-}
-
 function getUnreadableSyncedPatternCount( diagnostics ) {
 	const count = Number(
 		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
@@ -181,11 +162,22 @@ function PatternFilteredCandidateNotice( { diagnostics } ) {
 	);
 }
 
-function getPatternEmptyMessage( recommendations, diagnostics ) {
+function getPatternEmptyMessage(
+	recommendations,
+	diagnostics,
+	{ matchedRecommendationCount = 0, insertableRecommendationCount = 0 } = {}
+) {
 	const unreadableMessage = getUnreadableSyncedPatternMessage( diagnostics );
 
 	if ( unreadableMessage ) {
 		return unreadableMessage;
+	}
+
+	if (
+		matchedRecommendationCount > 0 &&
+		insertableRecommendationCount === 0
+	) {
+		return 'Flavor Agent found ranked patterns, but the matched pattern blocks are not allowed at this insertion point.';
 	}
 
 	return Array.isArray( recommendations ) && recommendations.length > 0
@@ -398,7 +390,8 @@ export default function PatternRecommender() {
 		}, [] );
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
 	const { insertBlocks } = useDispatch( blockEditorStore );
-	const { createSuccessNotice } = useDispatch( noticesStore );
+	const { createSuccessNotice, createErrorNotice } =
+		useDispatch( noticesStore );
 	const observerRef = useRef( null );
 	const listenerRef = useRef( null );
 	const debounceRef = useRef( null );
@@ -418,9 +411,21 @@ export default function PatternRecommender() {
 			patternStatus === 'error' ||
 			patternStatus === 'ready' ||
 			patternStatus === 'idle' );
-	const recommendedPatterns = useMemo(
+	const builtRecommendedPatterns = useMemo(
 		() => buildRecommendedPatterns( recommendations, allowedPatterns ),
 		[ allowedPatterns, recommendations ]
+	);
+	const recommendedPatterns = useSelect(
+		( select ) => {
+			const blockEditor = select( blockEditorStore );
+
+			return filterInsertableRecommendedPatterns(
+				builtRecommendedPatterns,
+				inserterRootClientId,
+				blockEditor
+			);
+		},
+		[ builtRecommendedPatterns, inserterRootClientId ]
 	);
 
 	const buildBaseInput = useCallback( () => {
@@ -479,6 +484,31 @@ export default function PatternRecommender() {
 				return;
 			}
 
+			const blockEditor = window.wp?.data?.select?.( blockEditorStore );
+			const rejected = getRejectedPatternBlockNames(
+				pattern,
+				inserterRootClientId,
+				blockEditor
+			);
+
+			if ( rejected.length > 0 ) {
+				createErrorNotice(
+					sprintf(
+						/* translators: 1: pattern title 2: comma-separated block names. */
+						__(
+							'Cannot insert pattern "%1$s" here. The following blocks are not allowed at this insertion point: %2$s.'
+						),
+						getPatternTitle( pattern ),
+						rejected.join( ', ' )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+				return;
+			}
+
 			insertBlocks(
 				blocks.map( ( block ) => cloneBlock( block ) ),
 				insertionIndex,
@@ -498,6 +528,7 @@ export default function PatternRecommender() {
 			);
 		},
 		[
+			createErrorNotice,
 			createSuccessNotice,
 			insertBlocks,
 			insertionIndex,
@@ -731,7 +762,13 @@ export default function PatternRecommender() {
 					status="empty"
 					message={ getPatternEmptyMessage(
 						recommendations,
-						patternDiagnostics
+						patternDiagnostics,
+						{
+							matchedRecommendationCount:
+								builtRecommendedPatterns.length,
+							insertableRecommendationCount:
+								recommendedPatterns.length,
+						}
 					) }
 				/>
 			);

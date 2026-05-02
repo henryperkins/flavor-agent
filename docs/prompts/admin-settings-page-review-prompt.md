@@ -88,10 +88,10 @@ Review focus areas
 
 4. Provider, credential, and runtime precedence
 - Compare settings UI and docs against `Provider::normalize_provider()`, `Provider::choices()`, `Provider::chat_configuration()`, `Provider::embedding_configuration()`, `Provider::active_chat_request_meta()`, and OpenAI Native credential-source helpers.
-- Verify the Connectors-first chat contract: connector-backed providers and generic WordPress AI Client runtime are preferred for chat when available, while direct Azure/OpenAI settings remain legacy fallback.
+- Verify the Connectors-first chat contract: connector-backed providers pin chat explicitly, OpenAI Native may map only to the OpenAI connector, and generic WordPress AI Client provider fallback stays disabled so unselected providers are not used implicitly.
 - Confirm pattern embeddings remain plugin-managed and do not accidentally use connector-only chat credentials.
 - Check OpenAI Native key-source precedence, source labels, connector registration/configuration status, env/constant/database precedence, and owner/path labels.
-- Verify dropdown choices, saved provider normalization, selected-provider diagnostics, and runtime fallback messages cannot overclaim that the selected direct provider is active when Connectors are actually serving chat.
+- Verify dropdown choices, saved provider normalization, selected-provider diagnostics, and runtime messages cannot overclaim that the selected direct provider is active when a matching connector is actually serving chat.
 
 5. Page state, status cards, and section behavior
 - Trace `State::get_page_state()`, default-open-section logic, group card metadata, section badges, setup glance cards, and section status blocks.

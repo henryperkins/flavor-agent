@@ -26,13 +26,11 @@ final class ResponsesClient {
 	): true|\WP_Error {
 		unset( $endpoint, $api_key, $deployment );
 
-		$provider = Provider::normalize_provider( $provider ?? Provider::get() );
+		$config = null === $provider
+			? Provider::chat_configuration()
+			: Provider::chat_configuration( $provider );
 
-		if ( Provider::is_connector( $provider ) && WordPressAIClient::is_supported( $provider ) ) {
-			return true;
-		}
-
-		if ( WordPressAIClient::is_supported() ) {
+		if ( $config['configured'] ) {
 			return true;
 		}
 

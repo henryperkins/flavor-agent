@@ -264,10 +264,9 @@ final class State {
 				$status_blocks[] = [
 					'tone'    => 'warning',
 					'message' => sprintf(
-						/* translators: 1: provider label, 2: runtime chat label */
-						__( '%1$s is selected, but Flavor Agent is currently using %2$s for chat until the selected path is available.', 'flavor-agent' ),
-						Provider::label( (string) $state['selected_provider'] ),
-						self::runtime_chat_label( $state )
+						/* translators: 1: provider label */
+						__( '%1$s is selected, but no matching text-generation connector is available. Select a connector-backed provider in Settings > Flavor Agent or configure the matching provider in Settings > Connectors.', 'flavor-agent' ),
+						Provider::label( (string) $state['selected_provider'] )
 					),
 				];
 			}

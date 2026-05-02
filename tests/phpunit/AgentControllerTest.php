@@ -68,7 +68,7 @@ final class AgentControllerTest extends TestCase {
 		];
 		$this->stub_successful_llm_response();
 
-		WordPressTestState::$global_settings     = [
+		WordPressTestState::$global_settings            = [
 			'color' => [
 				'palette' => [
 					[
@@ -78,17 +78,34 @@ final class AgentControllerTest extends TestCase {
 				],
 			],
 		];
-		WordPressTestState::$options             = [
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME                => 'openai',
 			'flavor_agent_azure_openai_endpoint' => 'https://example.openai.azure.com/',
 			'flavor_agent_azure_openai_key'      => 'azure-key',
 			'flavor_agent_azure_chat_deployment' => 'chat-deployment',
 		];
-		WordPressTestState::$current_user_id     = 7;
-		WordPressTestState::$ai_client_supported = true;
+		WordPressTestState::$current_user_id            = 7;
+		WordPressTestState::$ai_client_supported        = true;
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
 	}
 
 	public function test_handle_recommend_block_wraps_payload_with_client_id(): void {
-		WordPressTestState::$options                        = [];
+		WordPressTestState::$options                        = [
+			Provider::OPTION_NAME => 'openai',
+		];
 		WordPressTestState::$ai_client_generate_text_result = [
 			'text'       => '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			'tokenUsage' => [
@@ -137,18 +154,18 @@ final class AgentControllerTest extends TestCase {
 		$request_meta = $response_data['payload']['requestMeta'] ?? null;
 		$this->assertIsArray( $request_meta );
 		$expected_request_meta = [
-			'selectedProvider'      => 'azure_openai',
-			'selectedProviderLabel' => 'Azure OpenAI',
-			'connectorId'           => 'wordpress_ai_client',
-			'connectorLabel'        => 'WordPress AI Client',
+			'selectedProvider'      => 'openai',
+			'selectedProviderLabel' => 'OpenAI',
+			'connectorId'           => 'openai',
+			'connectorLabel'        => 'OpenAI',
 			'connectorPluginSlug'   => '',
-			'provider'              => 'wordpress_ai_client',
-			'providerLabel'         => 'WordPress AI Client',
-			'backendLabel'          => 'WordPress AI Client',
+			'provider'              => 'openai',
+			'providerLabel'         => 'OpenAI',
+			'backendLabel'          => 'OpenAI',
 			'model'                 => 'provider-managed',
 			'owner'                 => 'connectors',
 			'ownerLabel'            => 'Settings > Connectors',
-			'pathLabel'             => 'WordPress AI Client via Settings > Connectors',
+			'pathLabel'             => 'OpenAI via Settings > Connectors',
 			'credentialSource'      => 'provider_managed',
 			'credentialSourceLabel' => 'Provider-managed',
 			'tokenUsage'            => [
@@ -157,7 +174,7 @@ final class AgentControllerTest extends TestCase {
 				'output' => 31,
 			],
 			'latencyMs'             => 187,
-			'usedFallback'          => true,
+			'usedFallback'          => false,
 			'ability'               => 'flavor-agent/recommend-block',
 			'route'                 => 'POST /flavor-agent/v1/recommend-block',
 		];
@@ -333,7 +350,9 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_content_forwards_post_context(): void {
 		ActivityRepository::install();
-		WordPressTestState::$options                        = [];
+		WordPressTestState::$options                        = [
+			Provider::OPTION_NAME => 'openai',
+		];
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$capabilities['edit_posts']     = true;
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
@@ -410,7 +429,9 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_content_persists_ai_client_result_object_token_usage(): void {
 		ActivityRepository::install();
-		WordPressTestState::$options                    = [];
+		WordPressTestState::$options                    = [
+			Provider::OPTION_NAME => 'openai',
+		];
 		WordPressTestState::$ai_client_supported        = true;
 		WordPressTestState::$capabilities['edit_posts'] = true;
 		$usage = new class() {
@@ -486,7 +507,9 @@ final class AgentControllerTest extends TestCase {
 
 	public function test_handle_recommend_content_persists_failed_request_diagnostic_when_scoped(): void {
 		ActivityRepository::install();
-		WordPressTestState::$options                        = [];
+		WordPressTestState::$options                        = [
+			Provider::OPTION_NAME => 'openai',
+		];
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$capabilities['edit_posts']     = true;
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(

@@ -35,8 +35,24 @@ final class ChatClientTest extends TestCase {
 		);
 	}
 
-	public function test_is_supported_when_wordpress_ai_client_has_a_text_generation_provider(): void {
-		WordPressTestState::$ai_client_supported = true;
+	public function test_is_supported_when_selected_connector_provider_is_available(): void {
+		WordPressTestState::$options                    = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                 = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support = [
+			'openai' => true,
+		];
 
 		$this->assertTrue( ChatClient::is_supported() );
 	}
@@ -47,8 +63,24 @@ final class ChatClientTest extends TestCase {
 		$this->assertFalse( ChatClient::is_supported() );
 	}
 
-	public function test_chat_routes_through_the_wordpress_ai_client(): void {
-		WordPressTestState::$ai_client_supported            = true;
+	public function test_chat_routes_through_the_selected_connector_provider(): void {
+		WordPressTestState::$options                        = [
+			'flavor_agent_openai_provider' => 'openai',
+		];
+		WordPressTestState::$connectors                     = [
+			'openai' => [
+				'name'           => 'OpenAI',
+				'description'    => 'OpenAI connector',
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method'       => 'api_key',
+					'setting_name' => 'connectors_ai_openai_api_key',
+				],
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [
+			'openai' => true,
+		];
 		WordPressTestState::$ai_client_generate_text_result = '{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}';
 
 		$result = ChatClient::chat( 'system prompt', 'user prompt' );
@@ -57,7 +89,7 @@ final class ChatClientTest extends TestCase {
 			'{"settings":[],"styles":[],"block":[],"explanation":"Use the accent color."}',
 			$result
 		);
-		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+		$this->assertSame( 'openai', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 

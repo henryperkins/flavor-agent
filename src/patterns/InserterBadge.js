@@ -16,6 +16,7 @@ import { findInserterToggle } from './inserter-dom';
 import { STORE_NAME } from '../store';
 import { getInserterBadgeState } from './inserter-badge-state';
 import { getAllowedPatterns } from './pattern-settings';
+import { filterInsertableRecommendedPatterns } from './pattern-insertability';
 import {
 	buildRecommendedPatterns,
 	getPatternBadgeReason,
@@ -31,22 +32,23 @@ export default function InserterBadge() {
 			error: store.getPatternError(),
 		};
 	}, [] );
-	const allowedPatterns = useSelect( ( select ) => {
-		const editor = select( blockEditorStore );
-		const insertionPoint = editor.getBlockInsertionPoint?.() || null;
+	const renderableRecommendations = useSelect(
+		( select ) => {
+			const editor = select( blockEditorStore );
+			const insertionPoint = editor.getBlockInsertionPoint?.() || null;
+			const rootClientId = insertionPoint?.rootClientId ?? null;
+			const allowedPatterns = getAllowedPatterns( rootClientId, editor );
 
-		return getAllowedPatterns(
-			insertionPoint?.rootClientId ?? null,
-			editor
-		);
-	}, [] );
-	const renderableRecommendations = useMemo(
-		() =>
-			buildRecommendedPatterns(
-				patternState.recommendations,
-				allowedPatterns
-			).map( ( { recommendation } ) => recommendation ),
-		[ allowedPatterns, patternState.recommendations ]
+			return filterInsertableRecommendedPatterns(
+				buildRecommendedPatterns(
+					patternState.recommendations,
+					allowedPatterns
+				),
+				rootClientId,
+				editor
+			).map( ( { recommendation } ) => recommendation );
+		},
+		[ patternState.recommendations ]
 	);
 	const badgeState = useMemo(
 		() =>

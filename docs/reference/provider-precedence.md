@@ -17,11 +17,11 @@ After Workstream C of the WP 7.0 overlap remediation, Flavor Agent has two disti
 
 The `flavor_agent_openai_provider` option still exists, but its semantics narrowed:
 
-| Value | Effect on chat | Effect on embeddings |
-|---|---|---|
-| `azure_openai` | Ignored (chat goes to Connectors) | Use Azure OpenAI for embeddings |
-| `openai_native` | Ignored (chat goes to Connectors) | Use OpenAI Native for embeddings |
-| `<connector-id>` (e.g. `openai`, `anthropic`) | Pin chat to this connector | Falls back to a configured direct embedding backend |
+| Value                                         | Effect on chat                                                                                                         | Effect on embeddings                                |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `azure_openai`                                | No chat route unless a same-ID connector is selected/available; requests fail closed instead of using another provider | Use Azure OpenAI for embeddings                     |
+| `openai_native`                               | Pin chat to the `openai` connector when that connector is available; otherwise fail closed                             | Use OpenAI Native for embeddings                    |
+| `<connector-id>` (e.g. `openai`, `anthropic`) | Pin chat to this connector                                                                                             | Falls back to a configured direct embedding backend |
 
 If the option is missing or invalid, it defaults to `azure_openai`.
 
@@ -31,12 +31,13 @@ If the option is missing or invalid, it defaults to `azure_openai`.
 
 1. Flavor Agent reads the selected provider from `flavor_agent_openai_provider`.
 2. If the selected provider is a configured connector-backed provider, requests run through `wp_ai_client_prompt()->using_provider( $provider_id )` to pin chat to that connector.
-3. Otherwise the generic WordPress AI Client runtime is used. The synthetic `wordpress_ai_client` provider is reported.
-4. When no Connectors-backed runtime is available, `ChatClient::chat()` returns a `missing_text_generation_provider` `WP_Error` whose message is *"Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations."*
+3. If `openai_native` is selected, Flavor Agent pins chat to the `openai` connector when that connector is registered and supports text generation.
+4. Otherwise the request fails closed. Flavor Agent does **not** use the generic WordPress AI Client runtime as a provider fallback, so unselected providers such as Anthropic cannot handle requests implicitly.
+5. When no selected or matching Connectors-backed runtime is available, `ChatClient::chat()` returns a `missing_text_generation_provider` `WP_Error` whose message is _"Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations."_
 
-`ChatClient::is_supported()` returns `true` only when `WordPressAIClient::is_supported()` returns `true`. This is the gate for every chat-dependent ability: `flavor-agent/recommend-block`, `recommend-content`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, `recommend-style`, and the pattern-ranking phase of `flavor-agent/recommend-patterns`.
+`ChatClient::is_supported()` returns `true` only when the selected/matching chat connector is available. This is the gate for every chat-dependent ability: `flavor-agent/recommend-block`, `recommend-content`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, `recommend-style`, and the pattern-ranking phase of `flavor-agent/recommend-patterns`.
 
-`Provider::chat_configuration( $provider )` reports direct Azure/OpenAI Native providers as missing chat by design. Default runtime chat can still fall back to the generic WordPress AI Client when no connector-specific provider is pinned.
+`Provider::chat_configuration( $provider )` reports direct Azure providers as missing chat by design. `openai_native` resolves to the OpenAI connector when that connector is available. No other default runtime fallback is allowed.
 
 ## Embedding Runtime Chain
 
@@ -52,11 +53,11 @@ If the option is missing or invalid, it defaults to `azure_openai`.
 
 Requires all three options to be non-empty for embeddings:
 
-| Option | Purpose |
-|---|---|
-| `flavor_agent_azure_openai_endpoint` | Azure resource endpoint URL |
-| `flavor_agent_azure_openai_key` | API key |
-| `flavor_agent_azure_embedding_deployment` | Embedding deployment name |
+| Option                                    | Purpose                     |
+| ----------------------------------------- | --------------------------- |
+| `flavor_agent_azure_openai_endpoint`      | Azure resource endpoint URL |
+| `flavor_agent_azure_openai_key`           | API key                     |
+| `flavor_agent_azure_embedding_deployment` | Embedding deployment name   |
 
 Authentication uses the `api-key` header. Settings > Flavor Agent no longer accepts an Azure chat deployment field; existing values stored in the database from earlier releases are ignored at runtime.
 
@@ -64,10 +65,10 @@ Authentication uses the `api-key` header. Settings > Flavor Agent no longer acce
 
 Requires a non-empty API key and embedding model.
 
-| Option | Purpose |
-|---|---|
-| `flavor_agent_openai_native_api_key` | Plugin-specific API key (highest priority) |
-| `flavor_agent_openai_native_embedding_model` | Embedding model name |
+| Option                                       | Purpose                                    |
+| -------------------------------------------- | ------------------------------------------ |
+| `flavor_agent_openai_native_api_key`         | Plugin-specific API key (highest priority) |
+| `flavor_agent_openai_native_embedding_model` | Embedding model name                       |
 
 ### API Key Fallback Chain
 
@@ -91,20 +92,20 @@ Selecting a connector-backed provider pins chat to that connector but does not e
 - the active chat model is reported as `provider-managed`
 - embedding generation remains unavailable through the connector, so pattern recommendations still require Azure OpenAI or OpenAI Native to be fully configured for embeddings
 
-When no specific connector-backed provider is selected, Flavor Agent uses the generic WordPress AI Client runtime whenever `WordPressAIClient::is_supported()` returns `true`.
+When no specific connector-backed provider is selected and OpenAI Native cannot resolve the OpenAI connector, Flavor Agent reports chat as unconfigured instead of letting the generic WordPress AI Client choose another provider.
 
 ## Backend-to-Surface Map
 
-| Surface | Chat (Connectors) | Embeddings (plugin) | Qdrant | Cloudflare AI Search |
-|---|---|---|---|---|
-| Block recommendations | Yes | No | No | No |
-| Pattern recommendations | Yes | Yes | Yes | No |
-| Template recommendations | Yes | No | No | No |
-| Template-part recommendations | Yes | No | No | No |
-| Navigation recommendations | Yes | No | No | No |
-| Global Styles recommendations | Yes | No | No | No |
-| Style Book recommendations | Yes | No | No | No |
-| WordPress docs search | No | No | No | Yes |
+| Surface                       | Chat (Connectors) | Embeddings (plugin) | Qdrant | Cloudflare AI Search |
+| ----------------------------- | ----------------- | ------------------- | ------ | -------------------- |
+| Block recommendations         | Yes               | No                  | No     | No                   |
+| Pattern recommendations       | Yes               | Yes                 | Yes    | No                   |
+| Template recommendations      | Yes               | No                  | No     | No                   |
+| Template-part recommendations | Yes               | No                  | No     | No                   |
+| Navigation recommendations    | Yes               | No                  | No     | No                   |
+| Global Styles recommendations | Yes               | No                  | No     | No                   |
+| Style Book recommendations    | Yes               | No                  | No     | No                   |
+| WordPress docs search         | No                | No                  | No     | Yes                  |
 
 ## Primary Source Files
 
