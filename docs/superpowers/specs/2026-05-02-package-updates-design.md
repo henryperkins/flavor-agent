@@ -7,7 +7,7 @@
 
 ## Goal
 
-Bring `package.json`, `composer.json`, and their lockfiles up to current versions safely. Each stage is independently revertible so a future regression can be bisected to a single dependency change.
+Bring `package.json` and `package-lock.json` up to current versions safely. The composer side was in scope but its only outdated package (`squizlabs/php_codesniffer` 3 → 4) is upstream-blocked by `wp-coding-standards/wpcs` (see Deferred), so composer manifests stay unchanged. Each npm stage is independently revertible so a future regression can be bisected to a single dependency change.
 
 This is silent infrastructure — there is no new product surface, no contract change, and no user-visible behavior change beyond what the upstream packages themselves introduce.
 
@@ -23,8 +23,7 @@ This is silent infrastructure — there is no new product surface, no contract c
   - `@wordpress/block-editor` 14 → 15, `@wordpress/blocks` 13 → 15
   - `@wordpress/components` 28 → 33
 - `@wordpress/scripts` 30 → 32 (build toolchain).
-- `squizlabs/php_codesniffer` 3 → 4 (composer dev dep).
-- Lockfile updates (`package-lock.json`, `composer.lock`).
+- `package-lock.json` updates (composer.lock unchanged — see Deferred).
 - Code adjustments **only when forced by a removal/rename** in an upgraded package. Adjustments stay minimal and live in the same commit as the bump that required them.
 
 ### Out of scope
@@ -36,18 +35,21 @@ This is silent infrastructure — there is no new product surface, no contract c
 - Documentation updates beyond what `npm run check:docs` flags.
 - Plugin Check (`lint-plugin`) runs in the per-stage loop — requires WP-CLI + WP root that are not assumed present in this workflow. A final manual run is the user's call.
 
+### Deferred (upstream-blocked)
+
+- `squizlabs/php_codesniffer` 3 → 4. Blocked: `wp-coding-standards/wpcs` 3.3.0 (the latest released version) requires `squizlabs/php_codesniffer:^3.13.4`. There is no WPCS release compatible with PHPCS 4 as of 2026-05-02. Bumping PHPCS alone fails composer resolution; bumping WPCS to a non-existent version is impossible. Revisit when WPCS publishes a PHPCS 4-compatible release.
+
 ## Architecture
 
-A linear sequence of eight commits on `master` (stage 0 is a verify-only baseline, no commit). Each commit:
+A linear sequence of seven commits on `master` (stage 0 is a verify-only baseline, no commit; stage 8 is deferred per the Scope section). Each commit:
 
-1. Edits dependency manifest(s).
-2. Updates lockfile via `npm ci` or `composer install` (or `npm update` for stage 1).
-3. Includes any forced source-code adjustments.
-4. Passes `node scripts/verify.js --skip=lint-plugin --skip-e2e` in isolation.
-5. Has a commit message describing what bumped and what (if anything) needed adjusting.
+1. Edits dependency manifest(s) and updates the lockfile in the same step (commands per stage below).
+2. Includes any forced source-code adjustments.
+3. Passes `node scripts/verify.js --skip=lint-plugin --skip-e2e` in isolation.
+4. Has a commit message describing what bumped and what (if anything) needed adjusting.
 
 ```
-Stage 0  baseline verify (no commit — establishes pre-existing state)
+Stage 0  baseline verify with E2E (no commit — establishes pre-existing state)
 Stage 1  in-range minors (1 commit)
 Stage 2  @playwright/test pinned bump (1 commit)
 Stage 3  @wordpress/icons 10 → 13 (1 commit)
@@ -55,19 +57,39 @@ Stage 4  @wordpress/dataviews 13 → 14 + @wordpress/fields 0.35 → 0.37 (1 com
 Stage 5  @wordpress/block-editor 14 → 15 + @wordpress/blocks 13 → 15 (1 commit)
 Stage 6  @wordpress/components 28 → 33 (1 commit)
 Stage 7  @wordpress/scripts 30 → 32 (1 commit)
-Stage 8  squizlabs/php_codesniffer 3 → 4 (1 commit)
+Stage 8  squizlabs/php_codesniffer 3 → 4 — DEFERRED (upstream-blocked)
 Final    full verify with E2E (no commit — sign-off step)
 ```
 
-Order is risk-ascending: routine bumps validate the pipeline first; the largest deprecation surfaces (components, scripts, PHPCS) happen against an already-validated baseline so an unexpected red is attributable.
+Order is risk-ascending: routine bumps validate the pipeline first; the largest deprecation surfaces (components, scripts) happen against an already-validated baseline so an unexpected red is attributable.
+
+### Lockfile-update commands by stage type
+
+`npm ci` and `composer install` **read** the lockfile and refuse to run when the manifest disagrees — they cannot update it. Use these instead:
+
+| Stage type | Command | Why |
+|---|---|---|
+| In-range bumps (stage 1) | `npm update` | Walks all `^`/`~` ranges to latest matching version, writes lockfile. No manifest edit needed if the range already covers the target. |
+| Pinned-exact bump (stage 2) | `npm install --save-exact @playwright/test@1.59.1` | Writes the exact pin to `package.json` and updates `package-lock.json` atomically. |
+| Major bump per package (stages 3–7) | `npm install <pkg>@<version>` (one invocation per package, or one combined invocation for paired stages 4 and 5) | Writes the new caret range to `package.json` and updates `package-lock.json`. |
+| Composer dep bump (stage 8 — deferred) | `composer require --dev <pkg>:<constraint>` (would update both `composer.json` and `composer.lock`) | Documented for completeness even though stage 8 is deferred. |
+
+After any of the above, run `npm ci` (or `composer install`) once more **only** as a verification — it should now succeed cleanly because the manifest and lock are back in sync.
 
 ## Stage details
 
-### Stage 0 — Baseline verify
+### Stage 0 — Baseline verify (with E2E)
 
-Run `node scripts/verify.js --skip=lint-plugin --skip-e2e` against the current `master` (no changes). Record `output/verify/summary.json` `status`. Required: `pass` or known-good `incomplete` reason. If the baseline is already `fail`, **stop** — fix or surface to user before any upgrade work.
+Run **two** verifies against the current `master` (no changes):
 
-No commit.
+1. `node scripts/verify.js --skip=lint-plugin --skip-e2e` — fast verify; copy `output/verify/summary.json` to `output/verify/baseline-fast.json`.
+2. `node scripts/verify.js --skip=lint-plugin` — full verify including Playwright E2E suites; copy `output/verify/summary.json` to `output/verify/baseline-full.json`.
+
+Also capture a build-artifact manifest: `mkdir -p output/verify && (cd build && find . -type f \( -name '*.js' -o -name '*.asset.php' -o -name '*.css' \) -print0 | xargs -0 sha256sum) | sort > output/verify/baseline-build.sha256` (after running `npm run build` if `build/` is empty).
+
+Required: fast verify is `pass` or `incomplete` for documented reason. If fast verify is `fail`, **stop** — fix or surface to user before any upgrade work. The full E2E baseline is allowed to be partially red; we record it as the bar the final verify must match-or-beat.
+
+No commit; baselines live under `output/verify/` (gitignored) and persist for the rest of this work.
 
 ### Stage 1 — In-range minors
 
@@ -128,20 +150,24 @@ If components 33 has removed APIs the plugin uses, **stop and surface** rather t
 - ESLint config (new rules may flag existing code — fix or disable explicitly per rule, never wholesale)
 - The three webpack entry points (`src/index.js`, `src/admin/settings-page.js`, `src/admin/activity-log.js`) must continue to produce `build/index.js`, `build/admin.js`, `build/activity-log.js`
 
-### Stage 8 — PHPCS
+### Stage 8 — PHPCS (deferred)
 
-`squizlabs/php_codesniffer` 3 → 4 (composer dev). Possible new findings against existing PHP. If WPCS 3.x is still pinned in composer and incompatible with PHPCS 4, we may need to either (a) hold PHPCS at 3 and document why, or (b) bump WPCS as well. Read changelogs first.
+`squizlabs/php_codesniffer` 3 → 4 is **deferred**. `composer.lock` shows `wp-coding-standards/wpcs@3.3.0` (the latest released WPCS) requires `squizlabs/php_codesniffer:^3.13.4`. There is no WPCS release compatible with PHPCS 4, so `composer require --dev squizlabs/php_codesniffer:^4.0` would fail resolution. No code edits, no commit, no verify run for this stage. Revisit when WPCS publishes a PHPCS 4-compatible version (track upstream at `WordPress/WordPress-Coding-Standards`).
 
 ## Per-stage verification protocol
 
-1. Apply the stage's manifest edits.
-2. Reinstall: `npm ci` (stages 1–7) or `composer install` (stage 8).
+1. Apply the stage's manifest+lockfile change using the matching command from "Lockfile-update commands by stage type" above.
+2. Sanity-check that the lockfile and manifest agree by running `npm ci` (or `composer install` for any composer stage) — this should succeed without modifying anything. If it fails, the lockfile update step was wrong; **stop**.
 3. Run `node scripts/verify.js --skip=lint-plugin --skip-e2e`.
 4. Read `output/verify/summary.json`. Require `status: "pass"`.
-5. For stages 5, 6, 7: spot-check the editor in a browser if the local Docker stack is running. Concretely, exercise each webpack entry point at least once — open the post editor and confirm the Inspector recommendations panel renders (`build/index.js`), open `Settings > Flavor Agent` and confirm the settings UI hydrates (`build/admin.js`), open `Settings > AI Activity` and confirm the DataViews app loads (`build/activity-log.js`). Type checks and unit tests don't catch UI regressions. If the stack is not running, document this gap in the commit message rather than skip silently.
-6. Commit. Message format: `deps(<scope>): bump <pkg> <from> → <to>` plus a body line for any forced adjustments.
+5. Capture a post-stage build manifest: `(cd build && find . -type f \( -name '*.js' -o -name '*.asset.php' -o -name '*.css' \) -print0 | xargs -0 sha256sum) | sort > output/verify/stage-<N>-build.sha256`. Compare against the previous stage's manifest with `diff`. Expected change profile per stage type:
+   - Stages 1, 2, 3, 4, 8: minimal or no diff — chunk hashes for unrelated entry points should not move. Unexplained churn → investigate before committing.
+   - Stages 5, 6: diffs scoped to chunks that include the upgraded packages are expected.
+   - Stage 7: large diff is expected (new build toolchain). Record the diff in the commit message body but do not block on it.
+6. For stages 5, 6, 7: spot-check the editor in a browser if the local Docker stack is running. Concretely, exercise each webpack entry point at least once — open the post editor and confirm the Inspector recommendations panel renders (`build/index.js`), open `Settings > Flavor Agent` and confirm the settings UI hydrates (`build/admin.js`), open `Settings > AI Activity` and confirm the DataViews app loads (`build/activity-log.js`). Type checks and unit tests don't catch UI regressions. If the stack is not running, document this gap in the commit message rather than skip silently.
+7. Commit. Message format: `deps(<scope>): bump <pkg> <from> → <to>` plus a body line for any forced adjustments.
 
-After stage 8: one full `npm run verify` (with E2E). If E2E was already red on the stage-0 baseline, the same E2E suite must remain no-worse-than-baseline; we don't fix pre-existing E2E failures as part of this work.
+After stage 7: one full `node scripts/verify.js --skip=lint-plugin` (with E2E). Compare its summary against `output/verify/baseline-full.json` from stage 0. Per-suite E2E pass counts must be `>=` baseline; new failures (suites that passed at baseline and now fail) are blocking. Pre-existing failures that remain failing are not blocking — we are not fixing pre-existing E2E breakage as part of this work.
 
 ## Stop conditions
 
@@ -149,8 +175,9 @@ Halt the pipeline (do not proceed to the next stage, do not push past) when any 
 
 - Verify reports `fail` or unexpected `incomplete`.
 - A changelog or runtime error reveals an API removal that touches plugin code, **and** the adaptation is non-trivial (more than a rename or a single-line argument shape change). Surface to user; defer the stage.
-- Build output (`build/*.js`) diff is unexplained.
-- `npm ci` or `composer install` fails resolution.
+- Build manifest diff (per the SHA256 capture in verification step 5) shows churn outside the expected profile for the stage type — e.g. an icons-only stage moves a `build/admin.js` chunk hash.
+- `npm install <pkg>@<version>` (or composer equivalent) fails resolution — stop and report the conflict; do not retry with `--legacy-peer-deps` or `--force`.
+- Post-update sanity `npm ci` / `composer install` fails — means the lockfile update was incomplete.
 - New ESLint or PHPCS findings against existing code that aren't trivially fixable.
 
 When halted: revert the in-progress stage's working changes (do not commit a broken state), document the blocker, hand back to user.
@@ -166,24 +193,28 @@ When halted: revert the in-progress stage's working changes (do not commit a bro
 
 ## Success criteria
 
-- `package.json` and `composer.json` reflect the new versions for every in-scope package.
-- `package-lock.json` and `composer.lock` updated.
+- `package.json` reflects the new versions for every in-scope npm package.
+- `package-lock.json` updated.
+- `composer.json` / `composer.lock` unchanged (stage 8 deferred upstream).
 - Each stage commit passes `node scripts/verify.js --skip=lint-plugin --skip-e2e` in isolation.
-- Final full `npm run verify` (with E2E) passes, **or** matches the stage-0 baseline if E2E was already red there.
+- Final full `node scripts/verify.js --skip=lint-plugin` (with E2E) shows per-suite pass counts `>=` `output/verify/baseline-full.json` from stage 0. New E2E failures (passed at baseline → fail now) are blocking; same-as-baseline failures are not.
 - No source-code change beyond what an upgrade forced.
 - Commit history allows `git bisect` to attribute any future regression to a single stage.
 
 ## Artifact locations
 
-- `output/verify/summary.json` and `output/verify/<step>.{stdout,stderr}.log` per verify run (gitignored).
-- Working files: `package.json`, `package-lock.json`, `composer.json`, `composer.lock`, plus any forced source edits.
+- `output/verify/baseline-fast.json`, `output/verify/baseline-full.json`, `output/verify/baseline-build.sha256` — stage 0 baselines, kept for the duration of the work.
+- `output/verify/stage-<N>-build.sha256` — per-stage build manifests for diff comparisons.
+- `output/verify/summary.json` and `output/verify/<step>.{stdout,stderr}.log` — per verify run, overwritten each invocation (gitignored).
+- Working files: `package.json`, `package-lock.json`, plus any forced source edits.
 
 ## Estimated cost
 
-- Stages 0–4: ~10 min each end-to-end, low chance of code adjustment.
+- Stage 0: ~15 min (two verifies + build hash capture).
+- Stages 1–4: ~10 min each end-to-end, low chance of code adjustment.
 - Stage 5: probable 1–3 file adjustments; ~30 min.
 - Stage 6: highest-variance — could be 30 min or could be the multi-hour stage that triggers the stop condition.
 - Stage 7: build-config adjustment risk; ~30 min.
-- Stage 8: lint-fix risk; ~30 min.
+- Stage 8: 0 min (deferred — no work, just documented in this spec).
 
-If stage 6 or 8 hits a stop condition, the partial work (stages 1–5 and/or 7) still ships as completed commits and the deferred stage(s) become a separate brainstorm.
+If stage 6 hits a stop condition, the partial work (stages 1–5 and/or 7) still ships as completed commits and the deferred stage becomes a separate brainstorm.
