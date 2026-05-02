@@ -126,6 +126,7 @@ final class Registration {
 							'description' => 'Maximum number of variations to include per block when includeVariations is true. Defaults to 10.',
 						],
 					],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -340,6 +341,7 @@ final class Registration {
 							'description' => 'Optional offset for paginated pattern results.',
 						],
 					],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -416,6 +418,7 @@ final class Registration {
 							'description' => 'Optional offset for paginated synced-pattern results.',
 						],
 					],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -865,6 +868,7 @@ final class Registration {
 							'description' => 'When true, request template-part markup. Callers without the edit_theme_options capability receive metadata-only results.',
 						],
 					],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -1096,6 +1100,7 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -1116,6 +1121,7 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -1136,6 +1142,7 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -1156,6 +1163,7 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',
@@ -1187,6 +1195,7 @@ final class Registration {
 				'input_schema'        => [
 					'type'       => 'object',
 					'properties' => [],
+					'default'    => [],
 				],
 				'output_schema'       => [
 					'type'       => 'object',

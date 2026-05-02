@@ -209,6 +209,28 @@ final class RegistrationTest extends TestCase {
 		}
 	}
 
+	public function test_read_only_optional_object_inputs_default_to_empty_object(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		foreach ( [
+			'flavor-agent/list-allowed-blocks',
+			'flavor-agent/list-patterns',
+			'flavor-agent/list-synced-patterns',
+			'flavor-agent/list-template-parts',
+			'flavor-agent/get-active-theme',
+			'flavor-agent/get-theme-presets',
+			'flavor-agent/get-theme-styles',
+			'flavor-agent/get-theme-tokens',
+			'flavor-agent/check-status',
+		] as $ability_id ) {
+			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
+
+			$this->assertIsArray( $ability, "{$ability_id} should be registered." );
+			$this->assertSame( [], $ability['input_schema']['default'] ?? null, "{$ability_id} should support omitted GET input." );
+		}
+	}
+
 	public function test_register_abilities_annotation_expectations_cover_every_registered_ability(): void {
 		Registration::register_category();
 		Registration::register_abilities();

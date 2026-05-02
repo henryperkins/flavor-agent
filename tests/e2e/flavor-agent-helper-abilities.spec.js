@@ -1,4 +1,5 @@
 const { test, expect } = require( '@playwright/test' );
+const { buildQueryString } = require( '@wordpress/url' );
 const {
 	getWp70HarnessConfig,
 	resetSiteEditorState,
@@ -96,7 +97,7 @@ async function callAbility( abilityName, input ) {
 		harness.baseURL
 	);
 	if ( input !== undefined && input !== null ) {
-		url.searchParams.set( 'input', JSON.stringify( input ) );
+		url.search = buildQueryString( { input } );
 	}
 	const credentials =
 		String( harness.adminUser ) + ':' + String( applicationPassword );

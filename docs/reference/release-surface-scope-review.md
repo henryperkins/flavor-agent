@@ -256,6 +256,8 @@ Good enough to merit release presence: yes.
 
 Release-quality as-is: conditional. It is release-credible only if bounded operation validation, freshness, review, apply, undo, and WP 7.0 browser evidence are current.
 
+Release closeout: complete for the bounded template scope as of 2026-05-02. See [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../validation/2026-05-02-template-surface-release-closeout.md).
+
 ### Stop Line
 
 Stop at:
@@ -274,11 +276,11 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Re-run WP 7.0 template browser flows before release.
-- [ ] Confirm review, confirm-apply, activity, undo, stale refresh, and drift handling all pass with current assets.
-- [ ] Keep unsupported operations advisory and preserve useful manual guidance.
-- [ ] Confirm one operation failure leaves the template unchanged.
-- [ ] Keep entity links and preview language clear enough that the user knows where the change will land.
+- [x] Re-run WP 7.0 template browser flows before release.
+- [x] Confirm review, confirm-apply, activity, undo, stale refresh, and drift handling all pass with current assets.
+- [x] Keep unsupported operations advisory and preserve useful manual guidance.
+- [x] Confirm one operation failure leaves the template unchanged.
+- [x] Keep entity links and preview language clear enough that the user knows where the change will land.
 
 ## Template-Part Recommendations
 
