@@ -29,7 +29,7 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 4. `FlavorAgent\REST\Agent_Controller::handle_recommend_patterns()` adapts the REST request to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state
 6. `PatternIndex::sync()` maintains a Qdrant corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
-7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` without foreground AI Search warming, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, rehydrates synced candidates from current readable `wp_block` posts, reranks them through `ResponsesClient::rank()`, and filters out low-confidence results
+7. The backend builds a query string, pulls cache-backed WordPress developer guidance through `AISearchClient::maybe_search_with_cache_fallbacks()` without foreground AI Search warming, embeds the pattern query through `EmbeddingClient::embed()`, retrieves candidates from Qdrant in semantic and structural passes, rehydrates synced candidates from current readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()`, and filters out low-confidence results
 8. The store saves the recommendations and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
 9. If pattern backends are unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
 10. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
@@ -44,12 +44,14 @@ For production debugging and live Qdrant inspection, also use `docs/reference/pa
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
 - Show inserter-level status as shelf, loading, empty, unavailable, or error feedback
 - Explain missing embedding, Qdrant, or chat setup paths inside the native inserter before any recommendation request can succeed
+- Show compact "why this pattern" metadata in the inserter shelf using source signals, matched category, allowed inserter context, and nearby-block fit where those fields are available.
 
 ## Guardrails And Failure Modes
 
 - If `visiblePatternNames` is missing or present but empty, the backend returns no recommendations instead of suggesting invalid patterns
 - Synced/user pattern candidates keep their `core/block/{id}` names through indexing and recommendation output so the frontend can match them to Gutenberg's allowed-pattern data before insertion
 - Synced/user recommendation payloads are rehydrated from the current `wp_block` post and require `current_user_can( 'read_post', $id )` before ranking or response output, even though the indexed corpus is already limited to published user patterns
+- When synced/user candidates in the current visible-pattern scope are filtered because the current request cannot pass `read_post`, the response returns a de-duplicated aggregate unreadable-synced count only. The UI can explain partial or empty results without exposing pattern names, IDs, titles, or content.
 - If the pattern backends are unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins

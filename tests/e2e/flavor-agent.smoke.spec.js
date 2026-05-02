@@ -2635,8 +2635,20 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 						name: recommendationName,
 						score: 0.97,
 						reason: PATTERN_REASON,
+						categories: [ 'hero' ],
+						ranking: {
+							sourceSignals: [ 'qdrant_semantic', 'llm_ranker' ],
+							rankingHint: {
+								matchesNearbyBlock: true,
+							},
+						},
 					},
 				],
+				diagnostics: {
+					filteredCandidates: {
+						unreadableSyncedPatterns: 0,
+					},
+				},
 			} ),
 		} );
 	} );
@@ -2697,6 +2709,9 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	await expect(
 		page.getByLabel( '1 pattern recommendation available' )
 	).toBeVisible();
+	await expect( page.getByText( 'Semantic match' ).first() ).toBeVisible();
+	await expect( page.getByText( 'Model ranked' ).first() ).toBeVisible();
+	await expect( page.getByText( 'Allowed here' ).first() ).toBeVisible();
 } );
 
 test( '@wp70-site-editor global styles surface previews, applies, and undoes executable recommendations', async ( {

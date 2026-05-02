@@ -206,6 +206,13 @@ final class StyleAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_style_canonicalizes_style_book_scope_key(): void {
+		\WP_Block_Type_Registry::get_instance()->register(
+			'core/paragraph',
+			[
+				'title' => 'Paragraph',
+			]
+		);
+
 		$style_context = [
 			'currentConfig'         => [ 'styles' => [] ],
 			'mergedConfig'          => [ 'styles' => [] ],

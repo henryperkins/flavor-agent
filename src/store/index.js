@@ -111,6 +111,7 @@ const DEFAULT_STATE = {
 	undoError: null,
 	lastUndoneActivityId: null,
 	patternRecommendations: [],
+	patternDiagnostics: null,
 	patternStatus: 'idle',
 	patternError: null,
 	patternRequestToken: 0,
@@ -201,6 +202,22 @@ function normalizeRequestMeta( requestMeta = null ) {
 
 function normalizeBlockRequestDiagnostics( diagnostics = null ) {
 	return isPlainObject( diagnostics ) ? diagnostics : null;
+}
+
+function normalizePatternDiagnostics( diagnostics = null ) {
+	const unreadableSyncedPatterns = Number(
+		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
+	);
+
+	return {
+		filteredCandidates: {
+			unreadableSyncedPatterns: Number.isFinite(
+				unreadableSyncedPatterns
+			)
+				? Math.max( 0, unreadableSyncedPatterns )
+				: 0,
+		},
+	};
 }
 
 function attachRequestMetaToSuggestion( suggestion, requestMeta ) {
@@ -1716,13 +1733,15 @@ const actions = {
 	setPatternRecommendations(
 		recommendations,
 		requestToken = null,
-		requestSignature = ''
+		requestSignature = '',
+		diagnostics = null
 	) {
 		return {
 			type: 'SET_PATTERN_RECS',
 			recommendations,
 			requestToken,
 			requestSignature,
+			diagnostics,
 		};
 	},
 
@@ -1870,7 +1889,8 @@ const actions = {
 						actions.setPatternRecommendations(
 							result.recommendations || [],
 							requestToken,
-							requestSignature
+							requestSignature,
+							result.diagnostics || null
 						)
 					);
 					localDispatch(
@@ -2626,6 +2646,9 @@ function reducer( state = DEFAULT_STATE, action ) {
 			return {
 				...state,
 				patternRecommendations: action.recommendations,
+				patternDiagnostics: normalizePatternDiagnostics(
+					action.diagnostics
+				),
 				patternError: null,
 				patternRequestToken:
 					action.requestToken ?? state.patternRequestToken,
@@ -2793,6 +2816,7 @@ const selectors = {
 	isUndoing: ( state ) => state.undoStatus === 'undoing',
 	getLastUndoneActivityId: ( state ) => state.lastUndoneActivityId,
 	getPatternRecommendations: ( state ) => state.patternRecommendations,
+	getPatternDiagnostics: ( state ) => state.patternDiagnostics,
 	getPatternStatus: ( state ) => state.patternStatus,
 	getPatternError: ( state ) => state.patternError,
 	getPatternRequestToken: ( state ) => state.patternRequestToken,

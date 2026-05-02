@@ -159,6 +159,8 @@ final class PatternAbilities {
 			return [ 'recommendations' => [] ];
 		}
 
+		$diagnostics = self::empty_pattern_recommendation_diagnostics();
+
 		$configuration_error = self::validate_recommendation_backends();
 		if ( is_wp_error( $configuration_error ) ) {
 			return $configuration_error;
@@ -398,11 +400,22 @@ final class PatternAbilities {
 		}
 
 		// Union, dedupe by payload.name, keep best score.
-		$candidates                = [];
-		$retrieved_candidate_names = [];
+		$candidates                            = [];
+		$retrieved_candidate_names             = [];
+		$reported_unreadable_synced_candidates = [];
 		foreach ( array_merge( $pass_a, $pass_b ) as $point ) {
 			$payload = is_array( $point['payload'] ?? null ) ? $point['payload'] : [];
-			$payload = self::resolve_recommendation_candidate_payload( $payload );
+			$name    = self::resolve_recommendation_candidate_visible_name( $payload );
+
+			if ( $visible_lookup && $name !== '' && ! isset( $visible_lookup[ $name ] ) ) {
+				continue;
+			}
+
+			$payload = self::resolve_recommendation_candidate_payload(
+				$payload,
+				$diagnostics,
+				$reported_unreadable_synced_candidates
+			);
 
 			if ( [] === $payload ) {
 				continue;
@@ -458,7 +471,7 @@ final class PatternAbilities {
 		);
 
 		if ( empty( $candidates ) ) {
-			return [ 'recommendations' => [] ];
+			return self::pattern_recommendation_response( [], $diagnostics );
 		}
 
 		// Step 5: Rank via Responses API.
@@ -568,7 +581,7 @@ final class PatternAbilities {
 			static fn( array $left, array $right ): int => $right['score'] <=> $left['score']
 		);
 
-		return [ 'recommendations' => $recommendations ];
+		return self::pattern_recommendation_response( $recommendations, $diagnostics );
 	}
 
 	private static function validate_recommendation_backends(): true|\WP_Error {
@@ -592,10 +605,42 @@ final class PatternAbilities {
 	}
 
 	/**
-	 * @param array<string, mixed> $payload
+	 * @return array<string, array<string, int>>
+	 */
+	private static function empty_pattern_recommendation_diagnostics(): array {
+		return [
+			'filteredCandidates' => [
+				'unreadableSyncedPatterns' => 0,
+			],
+		];
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $recommendations
+	 * @param array<string, mixed>             $diagnostics
 	 * @return array<string, mixed>
 	 */
-	private static function resolve_recommendation_candidate_payload( array $payload ): array {
+	private static function pattern_recommendation_response( array $recommendations, array $diagnostics ): array {
+		return [
+			'recommendations' => $recommendations,
+			'diagnostics'     => [
+				'filteredCandidates' => [
+					'unreadableSyncedPatterns' => max(
+						0,
+						(int) ( $diagnostics['filteredCandidates']['unreadableSyncedPatterns'] ?? 0 )
+					),
+				],
+			],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 * @param array<string, mixed> $diagnostics
+	 * @param array<string, bool>  $reported_unreadable_synced_candidates
+	 * @return array<string, mixed>
+	 */
+	private static function resolve_recommendation_candidate_payload( array $payload, array &$diagnostics, array &$reported_unreadable_synced_candidates ): array {
 		if ( ! self::is_synced_candidate_payload( $payload ) ) {
 			return $payload;
 		}
@@ -609,6 +654,11 @@ final class PatternAbilities {
 		$current_pattern = ServerCollector::for_readable_synced_pattern_recommendation( $synced_pattern_id );
 
 		if ( ! is_array( $current_pattern ) ) {
+			self::record_unreadable_synced_pattern_candidate(
+				$diagnostics,
+				$reported_unreadable_synced_candidates,
+				$synced_pattern_id
+			);
 			return [];
 		}
 
@@ -621,6 +671,40 @@ final class PatternAbilities {
 		$rehydrated['traits'] = PatternIndex::infer_layout_traits( $rehydrated );
 
 		return $rehydrated;
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private static function resolve_recommendation_candidate_visible_name( array $payload ): string {
+		$synced_pattern_id = self::is_synced_candidate_payload( $payload )
+			? self::resolve_synced_pattern_id_from_payload( $payload )
+			: 0;
+
+		if ( $synced_pattern_id > 0 ) {
+			return self::SYNCED_PATTERN_NAME_PREFIX . $synced_pattern_id;
+		}
+
+		return sanitize_text_field( (string) ( $payload['name'] ?? '' ) );
+	}
+
+	/**
+	 * @param array<string, mixed> $diagnostics
+	 * @param array<string, bool>  $reported_unreadable_synced_candidates
+	 */
+	private static function record_unreadable_synced_pattern_candidate( array &$diagnostics, array &$reported_unreadable_synced_candidates, int $synced_pattern_id ): void {
+		if ( $synced_pattern_id <= 0 ) {
+			return;
+		}
+
+		$key = self::SYNCED_PATTERN_NAME_PREFIX . $synced_pattern_id;
+
+		if ( isset( $reported_unreadable_synced_candidates[ $key ] ) ) {
+			return;
+		}
+
+		$reported_unreadable_synced_candidates[ $key ] = true;
+		++$diagnostics['filteredCandidates']['unreadableSyncedPatterns'];
 	}
 
 	/**

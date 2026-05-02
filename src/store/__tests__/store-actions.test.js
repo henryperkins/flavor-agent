@@ -52,7 +52,7 @@ import {
 	createActivityEntry,
 	readPersistedActivityLog,
 } from '../activity-history';
-import { actions, reducer } from '../index';
+import { actions, reducer, selectors } from '../index';
 
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -652,6 +652,11 @@ describe( 'store action thunks', () => {
 					score: 0.97,
 				},
 			],
+			diagnostics: {
+				filteredCandidates: {
+					unreadableSyncedPatterns: 2,
+				},
+			},
 		} );
 
 		const input = {
@@ -725,13 +730,35 @@ describe( 'store action thunks', () => {
 					},
 				],
 				5,
-				requestSignature
+				requestSignature,
+				{
+					filteredCandidates: {
+						unreadableSyncedPatterns: 2,
+					},
+				}
 			)
 		);
 		expect( dispatch ).toHaveBeenNthCalledWith(
 			3,
 			actions.setPatternStatus( 'ready', null, 5, requestSignature )
 		);
+	} );
+
+	test( 'stores pattern diagnostics for selectors', () => {
+		const state = reducer(
+			undefined,
+			actions.setPatternRecommendations( [], 1, 'abc', {
+				filteredCandidates: {
+					unreadableSyncedPatterns: 3,
+				},
+			} )
+		);
+
+		expect( selectors.getPatternDiagnostics( state ) ).toEqual( {
+			filteredCandidates: {
+				unreadableSyncedPatterns: 3,
+			},
+		} );
 	} );
 
 	test( 'fetchContentRecommendations sends document scope and refreshes scoped activity', async () => {

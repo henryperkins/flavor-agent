@@ -32,20 +32,24 @@ Do not ship:
 
 ## Next Steps
 
-- [ ] Improve "why this pattern" explanation with source signal, matched
-  category, allowed context, and nearby-block fit where available.
-- [ ] Make empty-result diagnostics explicit for no visible allowed patterns,
-  unavailable index, unavailable backend, all candidates filtered, and
-  unreadable synced patterns.
-- [ ] Confirm badge counts only reflect renderable recommendations.
-- [ ] Preserve stricter request-time `read_post` checks for synced-pattern
+- [x] Improve "why this pattern" explanation with source signal, matched
+  category, allowed context, and nearby-block fit where available. The server
+  already returns `sourceSignals`, `rankingHint`, and context-aware reason text;
+  the remaining gap is surfacing that metadata in the inserter shelf without
+  adding lanes, review state, or a custom apply path.
+- [x] Make the unreadable-synced-pattern diagnostic explicit. The current
+  surface already covers no visible allowed patterns, unavailable index,
+  unavailable backend, and all-candidates-filtered states; unreadable synced
+  candidates now report a non-identifying aggregate count when request-time
+  `read_post` fails for candidates in the current visible-pattern scope.
+- [x] Confirm badge counts only reflect renderable recommendations.
+- [x] Preserve stricter request-time `read_post` checks for synced-pattern
   recommendation candidates.
-- [ ] Keep helper browse fallback behavior separate from recommendation
+- [x] Keep helper browse fallback behavior separate from recommendation
   authorization.
 
 ## Verification Gate
 
-- [ ] Re-run pattern unit tests.
-- [ ] Re-run the inserter smoke path in
+- [x] Re-run pattern unit tests.
+- [x] Re-run the inserter smoke path in
   `tests/e2e/flavor-agent.smoke.spec.js`.
-

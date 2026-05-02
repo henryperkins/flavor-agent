@@ -1550,7 +1550,12 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'core/block/91' ]
 		);
 
-		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 		$this->assertStringNotContainsString(
 			'Private Launch Banner',
@@ -1590,7 +1595,11 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'core/block/92' ]
 		);
 
-		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
 		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 	}
 
@@ -1642,7 +1651,12 @@ final class PatternAbilitiesTest extends TestCase {
 			[ 'core/block/93' ]
 		);
 
-		$this->assertSame( [ 'recommendations' => [] ], $result );
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Legacy private copy', wp_json_encode( $result ) );
 		$this->assertStringNotContainsString(
 			'Legacy Private Banner',
 			(string) ( WordPressTestState::$remote_post_calls[1]['args']['body'] ?? '' )
@@ -1699,6 +1713,157 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'Current shared copy', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'Stale Shared Banner', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'Stale shared copy', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_reports_unreadable_synced_candidates_when_readable_results_remain(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:91' => false,
+			'read_post:94' => true,
+		];
+		WordPressTestState::$posts        = [
+			91 => $this->synced_pattern_post( 91, 'Private Launch Banner', 'Private launch copy', 'private' ),
+			94 => $this->synced_pattern_post( 94, 'Current Shared Banner', 'Current shared copy', 'publish' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_point( 94, 0.94, 'Stale Shared Banner', 'Stale shared copy' ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'core/block/94',
+								'score'  => 0.91,
+								'reason' => 'Readable shared pattern fits.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/91', 'core/block/94' ],
+			],
+			[ 'core/block/91', 'core/block/94' ]
+		);
+
+		$this->assertSame( [ 'core/block/94' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
+	}
+
+	public function test_recommend_patterns_does_not_report_unreadable_synced_candidates_outside_visible_scope(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:91' => false,
+			'read_post:94' => true,
+		];
+		WordPressTestState::$posts        = [
+			91 => $this->synced_pattern_post( 91, 'Private Launch Banner', 'Private launch copy', 'private' ),
+			94 => $this->synced_pattern_post( 94, 'Current Shared Banner', 'Current shared copy', 'publish' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_point( 94, 0.94, 'Stale Shared Banner', 'Stale shared copy' ),
+				]
+			),
+			$this->ranking_response(
+				wp_json_encode(
+					[
+						'recommendations' => [
+							[
+								'name'   => 'core/block/94',
+								'score'  => 0.91,
+								'reason' => 'Readable shared pattern fits.',
+							],
+						],
+					]
+				)
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'            => 'page',
+				'visiblePatternNames' => [ 'core/block/94' ],
+			],
+			[ 'core/block/94' ]
+		);
+
+		$this->assertSame( [ 'core/block/94' ], array_column( $result['recommendations'], 'name' ) );
+		$this->assertSame(
+			0,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
+
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$this->assertStringNotContainsString( 'Private Launch Banner', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringNotContainsString( 'Private launch copy', (string) ( $ranking_request['input'] ?? '' ) );
+	}
+
+	public function test_recommend_patterns_reports_duplicate_unreadable_synced_candidate_once(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$capabilities = [
+			'read_post:91' => false,
+		];
+		WordPressTestState::$posts        = [
+			91 => $this->synced_pattern_post( 91, 'Private Launch Banner', 'Private launch copy', 'private' ),
+		];
+
+		WordPressTestState::$remote_post_responses = [
+			$this->embedding_response( [ 0.12, 0.34 ] ),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+				]
+			),
+			$this->qdrant_points_response(
+				[
+					$this->synced_pattern_point( 91, 0.94, 'Private Launch Banner', 'Private launch copy' ),
+				]
+			),
+		];
+
+		$result = $this->recommend_patterns(
+			[
+				'postType'         => 'page',
+				'insertionContext' => [
+					'rootBlock'        => 'core/group',
+					'ancestors'        => [ 'core/template-part', 'core/group' ],
+					'templatePartArea' => 'header',
+				],
+			],
+			[ 'core/block/91' ]
+		);
+
+		$this->assertSame( [], $result['recommendations'] );
+		$this->assertSame(
+			1,
+			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
+		);
+		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
+		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_recommend_patterns_uses_connector_chat_with_fallback_direct_embeddings(): void {

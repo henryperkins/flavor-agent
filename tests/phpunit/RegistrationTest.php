@@ -395,6 +395,10 @@ final class RegistrationTest extends TestCase {
 			$recommend_ability['output_schema']['properties']['recommendations']['items']['properties']['overrideCapabilities']['properties']['siblingOverrideCount']['type'] ?? null
 		);
 		$this->assertSame(
+			'integer',
+			$recommend_ability['output_schema']['properties']['diagnostics']['properties']['filteredCandidates']['properties']['unreadableSyncedPatterns']['type'] ?? null
+		);
+		$this->assertSame(
 			'object',
 			$list_ability['output_schema']['properties']['patterns']['items']['properties']['patternOverrides']['type'] ?? null
 		);

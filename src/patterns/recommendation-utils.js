@@ -30,6 +30,63 @@ export function buildRecommendedPatterns( recommendations, allowedPatterns ) {
 		.filter( Boolean );
 }
 
+const SOURCE_SIGNAL_LABELS = {
+	qdrant_semantic: 'Semantic match',
+	qdrant_structural: 'Structural fit',
+	llm_ranker: 'Model ranked',
+};
+
+function normalizeStringList( value ) {
+	if ( ! Array.isArray( value ) ) {
+		return [];
+	}
+
+	return value
+		.map( ( item ) =>
+			typeof item === 'string' && item.trim() ? item.trim() : ''
+		)
+		.filter( Boolean );
+}
+
+function addUniqueLabel( labels, label ) {
+	if ( label && ! labels.includes( label ) ) {
+		labels.push( label );
+	}
+}
+
+export function getPatternRecommendationInsights( pattern, recommendation ) {
+	const labels = [];
+	const sourceSignals = normalizeStringList(
+		recommendation?.ranking?.sourceSignals
+	);
+
+	sourceSignals.forEach( ( signal ) => {
+		addUniqueLabel( labels, SOURCE_SIGNAL_LABELS[ signal ] );
+	} );
+
+	const category =
+		normalizeStringList( recommendation?.categories )[ 0 ] ||
+		normalizeStringList( pattern?.categories )[ 0 ] ||
+		'';
+
+	if ( category ) {
+		addUniqueLabel( labels, `Category: ${ category }` );
+	}
+
+	addUniqueLabel( labels, 'Allowed here' );
+
+	const rankingHint = recommendation?.ranking?.rankingHint || {};
+	if (
+		rankingHint.matchesNearbyBlock ||
+		rankingHint.matchesNearbyCustomBlock ||
+		Number( rankingHint.siblingOverrideCount || 0 ) > 0
+	) {
+		addUniqueLabel( labels, 'Nearby block fit' );
+	}
+
+	return labels;
+}
+
 // Pick the first high-confidence recommendation reason for the toolbar badge.
 export function getPatternBadgeReason( recommendations ) {
 	const badge = recommendations.find(

@@ -65,8 +65,7 @@ export function getBlockRecommendationFreshness( {
 		storedStaleReason === 'server' || storedStaleReason === 'server-apply'
 			? storedStaleReason
 			: null;
-	const effectiveStaleReason =
-		clientStaleReason || serverStaleReason;
+	const effectiveStaleReason = clientStaleReason || serverStaleReason;
 
 	return {
 		clientStaleReason,

@@ -1,6 +1,7 @@
 import {
 	buildRecommendedPatterns,
 	getPatternBadgeReason,
+	getPatternRecommendationInsights,
 } from '../recommendation-utils';
 
 describe( 'buildRecommendedPatterns', () => {
@@ -72,5 +73,51 @@ describe( 'getPatternBadgeReason', () => {
 				},
 			] )
 		).toBeNull();
+	} );
+} );
+
+describe( 'getPatternRecommendationInsights', () => {
+	it( 'builds display-safe insight labels from ranking metadata', () => {
+		expect(
+			getPatternRecommendationInsights(
+				{ name: 'theme/hero', categories: [ 'featured' ] },
+				{
+					name: 'theme/hero',
+					categories: [ 'hero' ],
+					ranking: {
+						sourceSignals: [
+							'qdrant_semantic',
+							'qdrant_structural',
+							'llm_ranker',
+						],
+						rankingHint: {
+							matchesNearbyBlock: true,
+						},
+					},
+				}
+			)
+		).toEqual( [
+			'Semantic match',
+			'Structural fit',
+			'Model ranked',
+			'Category: hero',
+			'Allowed here',
+			'Nearby block fit',
+		] );
+	} );
+
+	it( 'falls back to pattern categories and dedupes labels', () => {
+		expect(
+			getPatternRecommendationInsights(
+				{ name: 'theme/cards', categories: [ 'cards' ] },
+				{
+					name: 'theme/cards',
+					ranking: {
+						sourceSignals: [ 'qdrant_semantic', 'qdrant_semantic' ],
+						rankingHint: {},
+					},
+				}
+			)
+		).toEqual( [ 'Semantic match', 'Category: cards', 'Allowed here' ] );
 	} );
 } );

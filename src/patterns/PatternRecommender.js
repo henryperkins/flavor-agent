@@ -42,7 +42,10 @@ import { normalizeTemplateType } from '../utils/template-types';
 import { getVisiblePatternNames } from '../utils/visible-patterns';
 import { findInserterContainer, findInserterSearchInput } from './inserter-dom';
 import { getAllowedPatterns } from './pattern-settings';
-import { buildRecommendedPatterns } from './recommendation-utils';
+import {
+	buildRecommendedPatterns,
+	getPatternRecommendationInsights,
+} from './recommendation-utils';
 
 const SEARCH_DEBOUNCE_MS = 400;
 const INSERTER_SLOT_CLASS = 'flavor-agent-pattern-inserter-slot';
@@ -144,7 +147,53 @@ function resolvePatternBlocks( pattern ) {
 	return [];
 }
 
-function PatternShelf( { items, onInsert } ) {
+function getUnreadableSyncedPatternCount( diagnostics ) {
+	const count = Number(
+		diagnostics?.filteredCandidates?.unreadableSyncedPatterns ?? 0
+	);
+
+	return Number.isFinite( count ) ? Math.max( 0, count ) : 0;
+}
+
+function getUnreadableSyncedPatternMessage( diagnostics ) {
+	const count = getUnreadableSyncedPatternCount( diagnostics );
+
+	if ( count <= 0 ) {
+		return '';
+	}
+
+	return `${ formatCount( count, 'synced pattern' ) } ${
+		count === 1 ? 'was' : 'were'
+	} skipped because current WordPress permissions do not allow read access.`;
+}
+
+function PatternFilteredCandidateNotice( { diagnostics } ) {
+	const message = getUnreadableSyncedPatternMessage( diagnostics );
+
+	if ( ! message ) {
+		return null;
+	}
+
+	return (
+		<p className="flavor-agent-pattern-summary__filtered-note">
+			{ message }
+		</p>
+	);
+}
+
+function getPatternEmptyMessage( recommendations, diagnostics ) {
+	const unreadableMessage = getUnreadableSyncedPatternMessage( diagnostics );
+
+	if ( unreadableMessage ) {
+		return unreadableMessage;
+	}
+
+	return Array.isArray( recommendations ) && recommendations.length > 0
+		? 'Flavor Agent found ranked patterns, but Gutenberg is not currently exposing those patterns for this insertion point.'
+		: '';
+}
+
+function PatternShelf( { items, onInsert, diagnostics } ) {
 	return (
 		<div
 			className="flavor-agent-pattern-summary flavor-agent-pattern-shelf"
@@ -161,31 +210,51 @@ function PatternShelf( { items, onInsert } ) {
 				AI-ranked patterns stay local to this shelf. Gutenberg&apos;s
 				native pattern registry stays unchanged.
 			</p>
+			<PatternFilteredCandidateNotice diagnostics={ diagnostics } />
 			<div className="flavor-agent-pattern-shelf__items">
-				{ items.map( ( { pattern, recommendation } ) => (
-					<div
-						key={ pattern.name }
-						className="flavor-agent-pattern-shelf__item"
-					>
-						<div className="flavor-agent-pattern-shelf__body">
-							<div className="flavor-agent-pattern-shelf__title">
-								{ getPatternTitle( pattern ) }
-							</div>
-							{ recommendation?.reason && (
-								<p className="flavor-agent-pattern-shelf__reason">
-									{ recommendation.reason }
-								</p>
-							) }
-						</div>
-						<Button
-							variant="secondary"
-							size="small"
-							onClick={ () => onInsert( pattern ) }
+				{ items.map( ( { pattern, recommendation } ) => {
+					const insights = getPatternRecommendationInsights(
+						pattern,
+						recommendation
+					);
+
+					return (
+						<div
+							key={ pattern.name }
+							className="flavor-agent-pattern-shelf__item"
 						>
-							Insert
-						</Button>
-					</div>
-				) ) }
+							<div className="flavor-agent-pattern-shelf__body">
+								<div className="flavor-agent-pattern-shelf__title">
+									{ getPatternTitle( pattern ) }
+								</div>
+								{ recommendation?.reason && (
+									<p className="flavor-agent-pattern-shelf__reason">
+										{ recommendation.reason }
+									</p>
+								) }
+								{ insights.length > 0 && (
+									<ul className="flavor-agent-pattern-shelf__insights">
+										{ insights.map( ( insight ) => (
+											<li
+												key={ insight }
+												className="flavor-agent-pattern-shelf__insight"
+											>
+												{ insight }
+											</li>
+										) ) }
+									</ul>
+								) }
+							</div>
+							<Button
+								variant="secondary"
+								size="small"
+								onClick={ () => onInsert( pattern ) }
+							>
+								Insert
+							</Button>
+						</div>
+					);
+				} ) }
 			</div>
 		</div>
 	);
@@ -316,18 +385,17 @@ export default function PatternRecommender() {
 		},
 		[ inserterRootClientId ]
 	);
-	const { patternError, patternStatus, recommendations } = useSelect(
-		( select ) => {
+	const { patternError, patternStatus, recommendations, patternDiagnostics } =
+		useSelect( ( select ) => {
 			const store = select( STORE_NAME );
 
 			return {
 				patternError: store.getPatternError?.() || '',
 				patternStatus: store.getPatternStatus(),
 				recommendations: store.getPatternRecommendations(),
+				patternDiagnostics: store.getPatternDiagnostics?.() || null,
 			};
-		},
-		[]
-	);
+		}, [] );
 	const { fetchPatternRecommendations } = useDispatch( STORE_NAME );
 	const { insertBlocks } = useDispatch( blockEditorStore );
 	const { createSuccessNotice } = useDispatch( noticesStore );
@@ -646,6 +714,7 @@ export default function PatternRecommender() {
 				<PatternShelf
 					items={ recommendedPatterns }
 					onInsert={ handleInsertPattern }
+					diagnostics={ patternDiagnostics }
 				/>
 			);
 		} else if ( patternStatus === 'error' ) {
@@ -660,12 +729,10 @@ export default function PatternRecommender() {
 			notice = (
 				<PatternInserterNotice
 					status="empty"
-					message={
-						Array.isArray( recommendations ) &&
-						recommendations.length > 0
-							? 'Flavor Agent found ranked patterns, but Gutenberg is not currently exposing those patterns for this insertion point.'
-							: ''
-					}
+					message={ getPatternEmptyMessage(
+						recommendations,
+						patternDiagnostics
+					) }
 				/>
 			);
 		} else {

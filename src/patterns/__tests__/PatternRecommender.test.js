@@ -116,6 +116,9 @@ function createSelectMap() {
 			getPatternRecommendations: jest.fn(
 				() => state.store.patternRecommendations
 			),
+			getPatternDiagnostics: jest.fn(
+				() => state.store.patternDiagnostics
+			),
 		},
 	};
 }
@@ -154,6 +157,7 @@ describe( 'PatternRecommender', () => {
 				patternError: '',
 				patternStatus: 'idle',
 				patternRecommendations: [],
+				patternDiagnostics: null,
 			},
 		};
 		mockUseDispatch.mockReset();
@@ -423,6 +427,28 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).toContain( 'No matches yet' );
 	} );
 
+	test( 'uses unreadable synced-pattern diagnostics for the empty state message', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternRecommendations = [];
+		state.store.patternDiagnostics = {
+			filteredCandidates: {
+				unreadableSyncedPatterns: 1,
+			},
+		};
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain(
+			'1 synced pattern was skipped because current WordPress permissions do not allow read access.'
+		);
+		expect( document.body.textContent ).not.toContain( 'Private' );
+	} );
+
 	test( 'shows an unavailable-native-pattern message until the allowed pattern list hydrates', () => {
 		const inserterContainer = document.createElement( 'div' );
 
@@ -560,6 +586,53 @@ describe( 'PatternRecommender', () => {
 				id: 'inserter-notice',
 			}
 		);
+	} );
+
+	test( 'shows a safe unreadable synced-pattern notice when renderable recommendations remain', () => {
+		const inserterContainer = document.createElement( 'div' );
+
+		inserterContainer.className = 'block-editor-inserter__panel-content';
+		document.body.appendChild( inserterContainer );
+		state.store.patternStatus = 'ready';
+		state.store.patternDiagnostics = {
+			filteredCandidates: {
+				unreadableSyncedPatterns: 2,
+			},
+		};
+		state.store.patternRecommendations = [
+			{
+				name: 'theme/hero',
+				score: 0.94,
+				reason: 'Recommended hero pattern.',
+				categories: [ 'hero' ],
+				ranking: {
+					sourceSignals: [ 'qdrant_semantic', 'llm_ranker' ],
+					rankingHint: {
+						matchesNearbyBlock: true,
+					},
+				},
+			},
+		];
+		state.allowedPatterns = [
+			{
+				name: 'theme/hero',
+				title: 'Hero',
+				categories: [ 'featured' ],
+				blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			},
+		];
+		mockFindInserterContainer.mockReturnValue( inserterContainer );
+
+		renderComponent();
+
+		expect( document.body.textContent ).toContain(
+			'2 synced patterns were skipped because current WordPress permissions do not allow read access.'
+		);
+		expect( document.body.textContent ).toContain( 'Semantic match' );
+		expect( document.body.textContent ).toContain( 'Model ranked' );
+		expect( document.body.textContent ).toContain( 'Category: hero' );
+		expect( document.body.textContent ).toContain( 'Allowed here' );
+		expect( document.body.textContent ).toContain( 'Nearby block fit' );
 	} );
 
 	test( 'inserts synced user patterns via a core/block reference', () => {

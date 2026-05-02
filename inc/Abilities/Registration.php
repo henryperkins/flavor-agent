@@ -283,6 +283,17 @@ final class Registration {
 								],
 							],
 						],
+						'diagnostics'     => [
+							'type'       => 'object',
+							'properties' => [
+								'filteredCandidates' => [
+									'type'       => 'object',
+									'properties' => [
+										'unreadableSyncedPatterns' => [ 'type' => 'integer' ],
+									],
+								],
+							],
+						],
 					],
 				],
 				'meta'                => self::public_recommendation_meta(),
