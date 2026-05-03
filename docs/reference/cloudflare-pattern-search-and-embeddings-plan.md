@@ -1,6 +1,6 @@
 # Cloudflare Pattern Search And Embeddings Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [docs/reference/agentic-plan-implementation-guide.md](agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add Cloudflare as a first-class pattern recommendation backend by supporting Workers AI embeddings for the existing Qdrant path and Cloudflare AI Search as a managed pattern retrieval/index path.
 

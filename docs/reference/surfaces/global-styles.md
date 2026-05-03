@@ -15,21 +15,10 @@ incomplete for strong accessibility or design-quality claims.
 
 ## Stop Line
 
-Ship:
+Canonical scope: [release-stop-lines.md](./release-stop-lines.md#global-styles)
 
-- Validated `theme.json` paths.
-- Preset-backed values where required.
-- Review-first apply.
-- Undo only while live config matches the recorded post-apply state.
-- Theme style variation handling where supported.
+No additional surface-specific deltas are currently defined.
 
-Do not ship:
-
-- Raw CSS.
-- `customCSS`.
-- Arbitrary selector mutation.
-- Full visual redesign generation.
-- Provider-driven design system ownership.
 
 ## Next Steps
 

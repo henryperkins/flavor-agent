@@ -14,21 +14,7 @@ Release quality: close; current browser evidence is captured in [`docs/validatio
 
 ## Stop Line
 
-Ship:
-
-- Review-first deterministic operations.
-- Focus-block links.
-- Pattern browse links.
-- Advisory fallback where safe operations cannot be formed.
-- Activity and undo for validated applies.
-
-Do not ship:
-
-- Full header/footer redesign automation.
-- Multi-part coordination.
-- Pattern override or block binding mutation until core APIs are stable and a
-  narrow plan exists.
-- Site-wide template-part governance.
+Follow the canonical stop lines in [../surfaces/release-stop-lines.md#template-part-recommendations](../surfaces/release-stop-lines.md#template-part-recommendations).
 
 ## Next Steps
 
@@ -46,4 +32,3 @@ Do not ship:
 - [x] Re-run the WP 7.0 Site Editor template-part harness.
 - [x] Record browser evidence or mark the missing harness as a release blocker
   or explicit waiver. Captured in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](../../validation/2026-05-02-template-surface-release-closeout.md).
-

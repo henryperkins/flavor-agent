@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## MCP Tooling
-Use the available MCP server tools liberally when they can speed up implementation, verification, or research. Prefer the `wpds` MCP server for WordPress Design System work. Use the Cloudflare AI Search MCP server liberally as a vector index of WordPress developer documentation when you need targeted WordPress API, block editor, REST API, hooks, or core-behavior lookup faster than manual browsing.
+Use the available MCP server tools liberally when they can speed up implementation, verification, or research. Prefer the `wpds` MCP server for WordPress Design System work, and Context7 for general library, API, and SDK documentation. The plugin's runtime WordPress-docs grounding through Cloudflare AI Search (see `inc/Cloudflare/AISearchClient.php` and `docs/reference/external-service-disclosure.md`) is product behavior, not an agent-facing MCP tool.
 
 ## Project Structure & Module Organization
 `flavor-agent.php` is the plugin bootstrap and hook registration entrypoint. PHP application code lives in `inc/` under the `FlavorAgent\\` namespace, with focused areas such as `Abilities/`, `REST/`, `Admin/`, `Activity/`, and provider integrations. Editor and admin UI code lives in `src/`; compiled assets are emitted to `build/`, and release-ready packages are staged in `dist/`. Tests are split between `tests/phpunit/` for PHP and `tests/e2e/` for Playwright. Product and source-of-truth docs live in `docs/` plus root files like `readme.txt` and `STATUS.md`.

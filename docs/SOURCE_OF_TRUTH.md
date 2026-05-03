@@ -102,6 +102,7 @@ flavor-agent/
       ResponsesClient.php   Provider-selected responses/chat client
     Cloudflare/
       AISearchClient.php    Cloudflare AI Search grounding, cache, and prewarm pipeline
+      WorkersAIEmbeddingConfiguration.php   Workers AI embedding configuration and validation helpers
     Context/
       ServerCollector.php               Facade for per-surface context collectors
       BlockRecommendationExecutionContract.php Server-side block execution contract builder
@@ -477,30 +478,16 @@ When OpenAI Native is selected, credential precedence is: plugin override -> `OP
 
 #### WordPress Abilities API (available on supported WordPress 7.0+ installs)
 
-All 20 abilities are registered with full JSON Schema input/output definitions:
+20 abilities are registered with full JSON Schema input/output definitions, grouped by category. The full contract — handlers, permissions, schemas, and behavior annotations (`readonly`/`destructive`/`idempotent`) — lives in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
 
-| Ability                                | Handler                  | Permission                                                                   | Status             |
-| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------- | ------------------ |
-| `flavor-agent/recommend-block`         | `BlockAbilities`         | `edit_posts`                                                                 | Working            |
-| `flavor-agent/recommend-content`       | `ContentAbilities`       | `edit_posts`; positive `postContext.postId` also requires `edit_post`        | Working            |
-| `flavor-agent/introspect-block`        | `BlockAbilities`         | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/list-allowed-blocks`     | `BlockAbilities`         | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/recommend-patterns`      | `PatternAbilities`       | `edit_posts`                                                                 | Working            |
-| `flavor-agent/list-patterns`           | `PatternAbilities`       | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/get-pattern`             | `PatternAbilities`       | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/list-synced-patterns`    | `PatternAbilities`       | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/get-synced-pattern`      | `PatternAbilities`       | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/recommend-template`      | `TemplateAbilities`      | `edit_theme_options`                                                         | Working            |
-| `flavor-agent/recommend-template-part` | `TemplateAbilities`      | `edit_theme_options`                                                         | Working            |
-| `flavor-agent/recommend-style`         | `StyleAbilities`         | `edit_theme_options`                                                         | Working            |
-| `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | `edit_theme_options`                                                         | Working            |
-| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | `edit_posts` or `edit_theme_options`; content only for theme-capable callers | Working (readonly) |
-| `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | `manage_options`                                                             | Working (readonly) |
-| `flavor-agent/get-active-theme`        | `InfraAbilities`         | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/get-theme-presets`       | `InfraAbilities`         | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/get-theme-styles`        | `InfraAbilities`         | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/get-theme-tokens`        | `InfraAbilities`         | `edit_posts`                                                                 | Working (readonly) |
-| `flavor-agent/check-status`            | `InfraAbilities`         | `edit_posts`                                                                 | Working (readonly) |
+- **Block** (`BlockAbilities`): `recommend-block`, `introspect-block`, `list-allowed-blocks`
+- **Content** (`ContentAbilities`): `recommend-content`
+- **Pattern** (`PatternAbilities`): `recommend-patterns`, `list-patterns`, `get-pattern`, `list-synced-patterns`, `get-synced-pattern`
+- **Template** (`TemplateAbilities`): `recommend-template`, `recommend-template-part`, `list-template-parts`
+- **Navigation** (`NavigationAbilities`): `recommend-navigation`
+- **Style** (`StyleAbilities`): `recommend-style`
+- **Docs** (`WordPressDocsAbilities`): `search-wordpress-docs` (`manage_options`)
+- **Infra** (`InfraAbilities`): `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`, `check-status`
 
 #### WordPress Docs Grounding (Cloudflare AI Search)
 
@@ -512,18 +499,11 @@ All 20 abilities are registered with full JSON Schema input/output definitions:
 
 #### REST API
 
-| Route                                      | Method   | Permission                                                                    | Handler                                                         |
-| ------------------------------------------ | -------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `/flavor-agent/v1/recommend-block`         | POST     | `edit_posts`                                                                  | `BlockAbilities::recommend_block`                               |
-| `/flavor-agent/v1/recommend-content`       | POST     | `edit_posts`; positive `postContext.postId` also requires `edit_post`         | `ContentAbilities::recommend_content`                           |
-| `/flavor-agent/v1/recommend-patterns`      | POST     | `edit_posts`                                                                  | `PatternAbilities::recommend_patterns`                          |
-| `/flavor-agent/v1/recommend-navigation`    | POST     | `edit_theme_options`                                                          | `NavigationAbilities::recommend_navigation`                     |
-| `/flavor-agent/v1/recommend-template`      | POST     | `edit_theme_options`                                                          | `TemplateAbilities::recommend_template`                         |
-| `/flavor-agent/v1/recommend-template-part` | POST     | `edit_theme_options`                                                          | `TemplateAbilities::recommend_template_part`                    |
-| `/flavor-agent/v1/recommend-style`         | POST     | `edit_theme_options`                                                          | `StyleAbilities::recommend_style`                               |
-| `/flavor-agent/v1/activity`                | GET/POST | editor or theme capability by context; unscoped GET requires `manage_options` | `ActivityRepository` adapters via `Agent_Controller`            |
-| `/flavor-agent/v1/activity/{id}/undo`      | POST     | editor or theme capability by context                                         | `ActivityRepository::update_undo_status` via `Agent_Controller` |
-| `/flavor-agent/v1/sync-patterns`           | POST     | `manage_options`                                                              | `PatternIndex::sync`                                            |
+10 REST routes live under `/flavor-agent/v1/`. Permissions and handler classes are documented in [`reference/abilities-and-routes.md`](reference/abilities-and-routes.md).
+
+- **7 `recommend-*` routes** (POST) mirror the corresponding abilities: `recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-navigation`, `recommend-template`, `recommend-template-part`, `recommend-style`
+- **2 activity routes** adapt the activity repository: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
+- **1 admin route**: POST `sync-patterns` (`manage_options`) — manual pattern reindex
 
 #### Admin Settings
 
@@ -569,7 +549,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 3. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
 4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
-6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path because the current Playground 7.0 beta editor runtime breaks before plugin bootstrap, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. The Docker-backed harness still pins `wordpress:beta-7.0-RC2-php8.2-apache` until an official stable `7.0` image exists and the repo intentionally switches over.
+6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path because the current Playground 7.0 beta editor runtime breaks before plugin bootstrap, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. The harness pins a pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the canonical tag and override instructions live in `docs/local-wordpress-ide.md`.
 7. **Activity history is still only a first audit slice**: The new `Settings > AI Activity` page provides a recent DataViews/DataForm timeline with request diagnostics and structured before/after state summaries for privileged users, but there are still no abilities-backed row actions/discovery layer and no broader observability workflow beyond the stored timeline.
 8. **Uninstall cleanup is narrower than the full runtime footprint**: `uninstall.php` currently removes selected legacy/provider/vector/docs options, clears the pattern/docs warm hooks, and deletes the sync lock transient. It does not drop the server-backed activity table or clear newer activity schema/backfill, guidelines, OpenAI Native, pattern tuning, docs runtime, or core-roadmap cache/lock options, so the old "clean uninstall" claim is not accurate for the live tree.
 9. **Provider-backed verification is still environment-dependent**: A fresh Azure-backed recommendation pass was recorded on 2026-04-04 and captured in `STATUS.md`, but future live verification still depends on the configured Connectors chat runtime plus plugin-owned embedding credentials and should be rerun whenever those paths change.

@@ -1,48 +1,29 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-04-30
+> Last updated: 2026-05-03
 
 ## Working
 
 ### Abilities API (WordPress 7.0+)
 
-| Ability                                | Handler                  | Description                                                                                                                                    |
-| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `flavor-agent/recommend-block`         | `BlockAbilities`         | Block recommendation pipeline using `ServerCollector`, `Prompt`, and the WordPress AI Client                                                   |
-| `flavor-agent/recommend-content`       | `ContentAbilities`       | Programmatic content drafting, editing, and critique using `WritingPrompt`, the shared chat backend, and authorized current-post block rendering |
-| `flavor-agent/introspect-block`        | `BlockAbilities`         | Block type registry introspection                                                                                                              |
-| `flavor-agent/list-allowed-blocks`     | `BlockAbilities`         | Site-wide registered block manifests with optional search, category, pagination, and variation controls                                       |
-| `flavor-agent/recommend-patterns`      | `PatternAbilities`       | Provider-selected embeddings + Qdrant retrieval + LLM reranking                                                                                |
-| `flavor-agent/list-patterns`           | `PatternAbilities`       | Pattern registry listing with optional category, block-type, template-type, search, pagination, and content controls                          |
-| `flavor-agent/get-pattern`             | `PatternAbilities`       | One registered block pattern by name                                                                                                           |
-| `flavor-agent/list-synced-patterns`    | `PatternAbilities`       | Caller-readable or published `wp_block` pattern entities filtered by syncStatus                                                               |
-| `flavor-agent/get-synced-pattern`      | `PatternAbilities`       | One caller-readable or published `wp_block` pattern entity by numeric post ID                                                                |
-| `flavor-agent/recommend-template`      | `TemplateAbilities`      | Provider-selected template composition suggestions for Site Editor templates                                                                   |
-| `flavor-agent/recommend-template-part` | `TemplateAbilities`      | Template-part composition suggestions with validated bounded composition operations for Site Editor template parts                             |
-| `flavor-agent/list-template-parts`     | `TemplateAbilities`      | Template part listing with optional area filter                                                                                                |
-| `flavor-agent/recommend-style`         | `StyleAbilities`         | Shared Global Styles and Style Book suggestions constrained to validated `theme.json` paths, theme variations, and theme-backed values         |
-| `flavor-agent/recommend-navigation`    | `NavigationAbilities`    | Navigation structure, overlay behavior, and organization recommendations                                                                       |
-| `flavor-agent/search-wordpress-docs`   | `WordPressDocsAbilities` | Official WordPress developer-doc grounding search backed by Cloudflare AI Search                                                               |
-| `flavor-agent/get-active-theme`        | `InfraAbilities`         | Active theme name, stylesheet, template, and version                                                                                          |
-| `flavor-agent/get-theme-presets`       | `InfraAbilities`         | Theme preset families from global settings                                                                                                     |
-| `flavor-agent/get-theme-styles`        | `InfraAbilities`         | Applied global theme styles plus extracted element and pseudo-state summaries                                                                  |
-| `flavor-agent/get-theme-tokens`        | `InfraAbilities`         | Theme token snapshot: colors, typography, spacing, layout, and related feature flags                                                          |
-| `flavor-agent/check-status`            | `InfraAbilities`         | Backend inventory, OpenAI Native credential metadata, available ability list, and per-surface readiness including Global Styles and Style Book |
+All 20 abilities are working. The full contract — permissions, handlers, schemas, descriptions, and behavior annotations (`readonly`/`destructive`/`idempotent`) — lives in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
+
+- **Block**: `recommend-block`, `introspect-block`, `list-allowed-blocks`
+- **Content**: `recommend-content`
+- **Pattern**: `recommend-patterns`, `list-patterns`, `get-pattern`, `list-synced-patterns`, `get-synced-pattern`
+- **Template**: `recommend-template`, `recommend-template-part`, `list-template-parts`
+- **Navigation**: `recommend-navigation`
+- **Style**: `recommend-style`
+- **Docs**: `search-wordpress-docs`
+- **Infra**: `get-active-theme`, `get-theme-presets`, `get-theme-styles`, `get-theme-tokens`, `check-status`
 
 ### REST API
 
-| Route                                           | Permission                                                                 | Description                                                                            |
-| ----------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `POST /flavor-agent/v1/recommend-block`         | `edit_posts`                                                               | Block recommendations from client-provided editor context                              |
-| `POST /flavor-agent/v1/recommend-content`       | `edit_posts`; positive `postContext.postId` also requires `edit_post`     | Programmatic content-lane scaffold for draft, edit, and critique payloads              |
-| `POST /flavor-agent/v1/recommend-patterns`      | `edit_posts`                                                               | Pattern recommendations for the inserter                                               |
-| `POST /flavor-agent/v1/recommend-navigation`    | `edit_theme_options`                                                       | Advisory navigation recommendations for selected `core/navigation` blocks              |
-| `POST /flavor-agent/v1/recommend-template`      | `edit_theme_options`                                                       | Template composition recommendations for the Site Editor                               |
-| `POST /flavor-agent/v1/recommend-template-part` | `edit_theme_options`                                                       | Template-part composition recommendations for the Site Editor                          |
-| `POST /flavor-agent/v1/recommend-style`         | `edit_theme_options`                                                       | Shared Global Styles and Style Book recommendations for the Site Editor Styles surface |
-| `GET/POST /flavor-agent/v1/activity`            | contextual editor/theme capability; sitewide GET requires `manage_options` | Activity query and persistence for AI actions                                          |
-| `POST /flavor-agent/v1/activity/{id}/undo`      | contextual editor/theme capability                                         | Persisted undo status transition for an activity entry                                 |
-| `POST /flavor-agent/v1/sync-patterns`           | `manage_options`                                                           | Manual pattern index sync                                                              |
+All 10 REST routes under `/flavor-agent/v1/` are working. Permissions and handlers are documented in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md).
+
+- **7 `recommend-*` routes** mirror the corresponding abilities: `recommend-block`, `recommend-content`, `recommend-patterns`, `recommend-navigation`, `recommend-template`, `recommend-template-part`, `recommend-style`
+- **2 activity routes**: GET/POST `activity` (contextual editor/theme capability; sitewide GET requires `manage_options`) and POST `activity/{id}/undo` (contextual)
+- **1 admin route**: POST `sync-patterns` (`manage_options`)
 
 ### Editor UI
 
@@ -62,7 +43,7 @@
 - A shape-only `src/review/notes-adapter.js` now exists for future Notes/comment projection without taking a runtime dependency on unstable editor APIs
 - Admin settings screen with Connectors-owned chat: chat normally flows through the WordPress AI Client and `Settings > Connectors`, and selecting a connector-backed provider pins chat to that connector. Plugin settings retain Azure OpenAI, OpenAI Native, and explicitly selected Cloudflare Workers AI credentials only for embeddings (Connectors does not yet expose embeddings), a legacy-named reasoning-effort default for supported Connectors-routed chat providers, Qdrant and ranking controls, managed Cloudflare AI Search docs-grounding controls with optional legacy overrides, Guidelines fields with JSON import/export, and pattern sync controls. The OpenAI Native section reports the effective credential source.
 - WP 7.0 `wp_ai_client_prevent_prompt` filter is honored: when the filter blocks a prompt with a provider already configured, recommendation REST routes return a labeled `prompt_prevented` 503 error instead of the misleading `missing_text_generation_provider` 400, and `Prompt_Prevented_Exception` is caught for the race-condition path between capability check and generation. The error code is recorded in the activity log diagnostic for audit.
-- WP 7.0 ability `meta.annotations` are populated for all 20 abilities. The 7 LLM-invoking recommend-* abilities keep WP-format `readonly` unset so core/client execution stays POST for large prompt/editor payloads while declaring direct MCP `readOnlyHint:true`, `destructive:false`, and `idempotent:false`; the 13 read abilities declare `readonly:true`, `destructive:false`, and `idempotent:true`. The MCP Adapter exposes the equivalent MCP `readOnlyHint`/`destructiveHint`/`idempotentHint`.
+- WP 7.0 ability `meta.annotations` are populated for all 20 abilities. The 7 LLM-invoking `recommend-*` abilities keep WP-format `readonly` unset to preserve POST routing while exposing MCP `readOnlyHint:true`; the 13 read abilities declare both `readonly:true` and equivalent MCP hints. Full annotation map in [`docs/reference/abilities-and-routes.md`](docs/reference/abilities-and-routes.md#ability-notes).
 - Guidelines now read through a core-first repository bridge. When the emerging core/Gutenberg `wp_guideline` storage model is present, recommendation prompts read those values first; legacy Flavor Agent guideline options remain available for fallback, migration/import-export tooling, and rollback while the public Guidelines API settles.
 - Settings saves now surface the standard Settings API success notice plus plugin-scoped Azure, OpenAI Native, Cloudflare Workers AI, Qdrant, and Cloudflare AI Search validation errors
 - WordPress docs grounding only accepts chunks sourced from `developer.wordpress.org`
@@ -87,10 +68,10 @@
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - JS tooling now defaults to Node `24.x` with npm `11.x` via `.nvmrc`, and the repo's `engine-strict` gate now accepts both the latest-LTS Node `24.x` / npm `11.x` toolchain and the previously verified Node `20.x` / npm `10.x` toolchain.
 - Browser coverage is intentionally split by harness: `npm run test:e2e:playground` stays on the stable WordPress `6.9.4` Playground smoke path for quick post-editor coverage, while `npm run test:e2e:wp70` provisions a dedicated Docker-backed WordPress `7.0` Site Editor stack plus repo-local block theme fixture for refresh/drift-sensitive flows that Playground cannot hold open reliably. The default `npm run test:e2e` command now aggregates both harnesses, and the checked-in smoke suite now covers block, navigation, pattern, template, `wp_template_part`, and Global Styles surfaces. The remaining operational prerequisite is Docker on PATH for the WP 7.0 half.
-- WordPress `7.0` is still pre-release. As of 2026-04-23, Core's updated schedule targets 2026-05-20 for the general release, with `RC3` on 2026-05-08 treated like a new Beta 1 and `RC4` on 2026-05-14 acting like a new `RC1`. The Docker-backed Site Editor harness still pins `wordpress:beta-7.0-RC2-php8.2-apache`; swap that override once the official stable `7.0` image exists and the repo intentionally moves off the pre-release image.
+- WordPress `7.0` is still pre-release. As of 2026-04-23, Core's updated schedule targets 2026-05-20 for the general release, with `RC3` on 2026-05-08 treated like a new Beta 1 and `RC4` on 2026-05-14 acting like a new `RC1`. The Docker-backed Site Editor harness pins a specific pre-release image via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the canonical tag and override instructions live in `docs/local-wordpress-ide.md`. Swap once the official stable `7.0` image exists and the repo intentionally moves off the pre-release image.
 - The 2026-04-29 Plugin Check rerun restored the full non-browser acceptance path to `pass`: [`output/verify/summary.json`](output/verify/summary.json) now reports `build`, `lint-js`, `lint-plugin`, `unit`, `lint-php`, and `test-php` as green. The correct Docker-backed WordPress root for this host is `/var/lib/docker/volumes/wordpress_wordpress_data/_data`, with `WORDPRESS_DB_HOST` set to `$(docker exec wordpress-db-1 hostname -i):3306`.
 - Playground browser proof is green again on the current checkout: `npm run test:e2e:playground` now reports `9 passed / 2 skipped / 0 failed` on 2026-04-22, covering block/pattern unavailable-provider messaging, navigation advisory recommendations, pattern fetch, and the current template stale/advisory/unavailable-provider paths.
-- The Docker-backed WP 7.0 Site Editor harness is green on the current checkout. A 2026-04-29 rerun of `npm run test:e2e:wp70` returned `14 passed / 0 failed`, clearing the previously recorded Global Styles undo-state, template-part undo availability, template refresh/undo persistence, and template inserted-pattern drift reds.
+- The Docker-backed WP 7.0 Site Editor harness is green on the current checkout. A 2026-05-02 rerun of `npm run test:e2e:wp70` returned `20 passed / 0 failed`, with full evidence captured in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](docs/validation/2026-05-02-template-surface-release-closeout.md); the earlier 2026-04-29 `14 passed` run had already cleared the previously recorded Global Styles undo-state, template-part undo availability, template refresh/undo persistence, and template inserted-pattern drift reds.
 - Full local sign-off now has green non-browser, Playground, and WP 7.0 evidence for the current checkout. Remaining manual QA is product-signoff work rather than a recorded automated-test blocker.
 - `recommend-navigation` now has a first-party inspector surface, plugin REST route, checked-in browser smoke, and scoped read-only request diagnostics when document scope is available. It is intentionally advisory-only through v1.0, and there is still no validated navigation apply contract.
 - AI activity now has a first admin audit screen in wp-admin, but the feature is still not a full observability product: there is no diff-oriented inspection view, no abilities-backed row-action layer yet, and no cross-device/operator workflows beyond the recent-activity timeline.
@@ -111,6 +92,7 @@
 
 ## Recent Verification
 
+- 2026-05-02 template surface release closeout: `npm run test:e2e:wp70` passed (`20` passed, `0` failed) on the Docker-backed WP 7.0 harness, covering template preview/apply/activity, template-part coverage, refresh-safe template undo, and drift-disabled template undo. Full evidence in [`docs/validation/2026-05-02-template-surface-release-closeout.md`](docs/validation/2026-05-02-template-surface-release-closeout.md).
 - 2026-04-29 cross-surface validation follow-up: `npm run test:e2e:wp70` passed (`14` passed, `0` failed) on the Docker-backed WP 7.0 harness. This clears the four 2026-04-22 Site Editor reds for Global Styles executable undo, template-part executable undo, template undo after refresh, and template undo disabled after inserted-pattern drift.
 - 2026-04-29 Plugin Check path follow-up: `WP_PLUGIN_CHECK_PATH=/var/lib/docker/volumes/wordpress_wordpress_data/_data WORDPRESS_DB_HOST="$(docker exec wordpress-db-1 hostname -i):3306" WORDPRESS_DB_NAME=wordpress WORDPRESS_DB_USER=wordpress WORDPRESS_DB_PASSWORD=wordpress node scripts/verify.js --skip-e2e` passed with `build`, `lint-js`, `lint-plugin`, `unit`, `lint-php`, and `test-php` green. Plugin Check emitted one non-failing `WordPress.DB.SlowDBQuery.slow_db_query_tax_query` warning.
 - 2026-04-23 helper-abilities follow-up: `php vendor/bin/phpunit --filter '(RegistrationTest|InfraAbilitiesTest|PatternAbilitiesTest|BlockAbilitiesTest|TemplateAbilitiesTest|ServerCollectorTest|PatternCatalogTest)'` passed (`130` tests, `839` assertions) after the helper-contract, permission, and payload-control updates.

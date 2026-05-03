@@ -20,20 +20,10 @@ line below; broader transaction behavior remains deferred.
 
 ## Stop Line
 
-Ship:
+Canonical scope: [release-stop-lines.md](./release-stop-lines.md#template-recommendations)
 
-- Review-first deterministic operations.
-- Explicit placement for bounded pattern insertion.
-- Advisory fallback when the operation is unsupported or ambiguous.
-- One-pattern insertion limits unless a future plan proves broader transaction
-  safety.
+No additional surface-specific deltas are currently defined.
 
-Do not ship:
-
-- Free-form template rewrite.
-- Multi-region template surgery.
-- Model-authored markup application.
-- Broad pattern placement inference without deterministic validation.
 
 ## Next Steps
 

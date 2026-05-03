@@ -110,18 +110,7 @@ The surface is coherent when it remains the direct-apply exception. It becomes i
 
 Stop at:
 
-- Safe one-click local attribute apply.
-- Review-first structural operations behind a rollout flag.
-- Passive delegated Inspector subpanel mirrors.
-- Activity and undo only for the main block-owned action path.
-
-Do not add:
-
-- General block-tree mutation.
-- Multi-block rewrite.
-- Free-form pattern insertion from model text.
-- Apply buttons in passive settings/style mirrors.
-- Site-wide block remediation.
+Follow the canonical stop lines in [surfaces/release-stop-lines.md#block-recommendations](./surfaces/release-stop-lines.md#block-recommendations).
 
 ### Release Actions
 
@@ -223,18 +212,7 @@ Release-quality as-is: yes if the nested surface stays lightweight and clearly n
 
 Stop at:
 
-- Embedded `Navigation Ideas` inside the selected navigation block recommendation surface.
-- Standalone/fallback advisory shell only where already supported.
-- Server-side freshness/signature checks.
-- Read-only diagnostic activity rows.
-
-Do not add:
-
-- Apply.
-- Undo.
-- Menu restructuring.
-- Site-wide navigation planner.
-- Separate navigation agent identity.
+Follow the canonical stop lines in [surfaces/release-stop-lines.md#navigation-recommendations](./surfaces/release-stop-lines.md#navigation-recommendations).
 
 ### Release Actions
 
@@ -262,17 +240,7 @@ Release closeout: complete for the bounded template scope as of 2026-05-02. See 
 
 Stop at:
 
-- Review-first deterministic operations.
-- Explicit placement for bounded pattern insertion.
-- Advisory fallback when the operation is unsupported or ambiguous.
-- One-pattern insertion limits unless a future plan proves broader transaction safety.
-
-Do not add:
-
-- Free-form template rewrite.
-- Multi-region template surgery.
-- Model-authored markup application.
-- Broad pattern placement inference without deterministic validation.
+Follow the canonical stop lines in [surfaces/release-stop-lines.md#template-recommendations](./surfaces/release-stop-lines.md#template-recommendations).
 
 ### Release Actions
 
@@ -298,18 +266,7 @@ Release-quality as-is: close; current browser evidence is captured in [`docs/val
 
 Stop at:
 
-- Review-first deterministic operations.
-- Focus-block links.
-- Pattern browse links.
-- Advisory fallback where safe operations cannot be formed.
-- Activity and undo for validated applies.
-
-Do not add:
-
-- Full header/footer redesign automation.
-- Multi-part coordination.
-- Pattern override or block binding mutation until core APIs are stable and a narrow plan exists.
-- Site-wide template-part governance.
+Follow the canonical stop lines in [surfaces/release-stop-lines.md#template-part-recommendations](./surfaces/release-stop-lines.md#template-part-recommendations).
 
 ### Release Actions
 

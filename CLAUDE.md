@@ -179,10 +179,11 @@ Treat the gates there as additive release stops:
 
 | Service                       | Options (Settings page)                                                                                                                                                                         |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Embeddings provider selection | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, or a connector ID that pins chat to that connector while embeddings fall back to a configured direct backend)                  |
+| Embeddings provider selection | `flavor_agent_openai_provider` (`azure_openai`, `openai_native`, `cloudflare_workers_ai`, or a connector ID that pins chat to that connector while embeddings fall back to a configured direct backend; Workers AI is never used as an implicit fallback) |
 | Chat (all surfaces)           | Owned by core `Settings > Connectors` via the WordPress AI Client. No plugin-managed chat credentials.                                                                                          |
 | Azure OpenAI (embeddings)     | `flavor_agent_azure_openai_endpoint`, `flavor_agent_azure_openai_key`, `flavor_agent_azure_embedding_deployment`                                                                                |
 | OpenAI Native (embeddings)    | `flavor_agent_openai_native_api_key`, `flavor_agent_openai_native_embedding_model`                                                                                                              |
+| Cloudflare Workers AI (embeddings) | `flavor_agent_cloudflare_workers_ai_account_id`, `flavor_agent_cloudflare_workers_ai_api_token`, `flavor_agent_cloudflare_workers_ai_embedding_model`                                      |
 | Qdrant vector DB              | `flavor_agent_qdrant_url`, `flavor_agent_qdrant_key`                                                                                                                                            |
 | Cloudflare AI Search          | `flavor_agent_cloudflare_ai_search_account_id`, `flavor_agent_cloudflare_ai_search_instance_id`, `flavor_agent_cloudflare_ai_search_api_token`, `flavor_agent_cloudflare_ai_search_max_results` |
 

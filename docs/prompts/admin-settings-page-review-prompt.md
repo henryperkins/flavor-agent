@@ -137,11 +137,5 @@ Suggested verification commands
 - `npm run check:docs`
 - `git diff --check`
 
-Output format
-1. Start with findings first, ordered by severity (`P0`, `P1`, `P2`, `P3`).
-2. For each finding include: title, exact file/line references, observed behavior, impact, and the smallest practical fix.
-3. Keep confirmed findings and open questions separate. Add an "Open Questions / Assumptions" section only if you verified a gap.
-4. Include a short "Verification Reviewed" section naming commands you ran and commands you did not run.
-- If there are no findings, say so plainly and list any remaining test or environment gaps.
-6. Keep conclusions checkout-specific and evidence-backed. Confirm behavior from live code paths and do not treat stale docs or plans as higher priority than code.
+Output format: follow [../reference/review-response-protocol.md](../reference/review-response-protocol.md).
 ```

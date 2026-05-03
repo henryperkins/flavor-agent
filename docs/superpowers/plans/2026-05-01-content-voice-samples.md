@@ -1,6 +1,6 @@
 # Layer 2 Content Voice Samples Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Follow the execution protocol in [../reference/agentic-plan-implementation-guide.md](../reference/agentic-plan-implementation-guide.md). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a bounded same-author "site voice samples" section to the content recommender's user prompt, gated by post-type allowlist, rendered through Layer 1's `PostContentRenderer`, and assembled via `PromptBudget` so voice samples is the only droppable section.
 
@@ -2312,4 +2312,3 @@ git commit -m "docs: refresh source-of-truth references for Layer 2"
 - [ ] Spec section "Frontend gate" — Task 11.
 - [ ] Spec section "Risks and mitigations" — render-failure mitigation lives in Task 6's catch block; budget-overflow mitigation lives in Task 1's `$required` flag.
 - [ ] Implementation ordering matches the spec ordering 1:1 with one consolidation: Tasks 4 and 5 split the spec's step 4-5 into "author + query" and "filtering", which is finer-grained but covers the same ground.
-
